@@ -31,6 +31,9 @@ public sealed class EmailEmbeddingTelemetry
     private readonly Counter<long> messageCount;
     private readonly Counter<long> passageCount;
     private readonly Histogram<double> messageDuration;
+    private readonly Counter<long> consumedInputCharacterCount;
+    private readonly Counter<long> truncatedMessageCount;
+    private readonly Counter<long> omittedInputCharacterCount;
 
     /// <summary>Initializes the instruments every embedded message reports through.</summary>
     public EmailEmbeddingTelemetry()
@@ -47,6 +50,22 @@ public sealed class EmailEmbeddingTelemetry
             "mailfathom.embedding.message.duration",
             unit: "s",
             description: "How long embedding one message took, by outcome.");
+
+        // A counter rather than a gauge of what is left, because the ledger's remaining figure would have to be read
+        // from the database inside a callback the meter invokes on its own schedule. Summed over a period this answers
+        // the same question, and summed over any other window it answers one a ceiling cannot.
+        this.consumedInputCharacterCount = Telemetry.Meter.CreateCounter<long>(
+            "mailfathom.embedding.budget.consumed",
+            unit: "{character}",
+            description: "Characters sent to an embedding provider and charged against the spend ceiling.");
+        this.truncatedMessageCount = Telemetry.Meter.CreateCounter<long>(
+            "mailfathom.embedding.input.truncated",
+            unit: "{message}",
+            description: "Messages whose text the per-message embedding ceiling cut short.");
+        this.omittedInputCharacterCount = Telemetry.Meter.CreateCounter<long>(
+            "mailfathom.embedding.input.omitted",
+            unit: "{character}",
+            description: "Characters the per-message embedding ceiling left out of the passages it cut.");
     }
 
     /// <summary>Records one message's turn at being embedded.</summary>
@@ -70,6 +89,29 @@ public sealed class EmailEmbeddingTelemetry
         {
             this.passageCount.Add(run.EmbeddedChunkCount);
         }
+
+        // Recorded for every outcome that sent anything, including the two that stopped part-way: what a turn spent is
+        // spent whether or not the message it was for is now whole.
+        if (run.InputCharacterCount > 0)
+        {
+            this.consumedInputCharacterCount.Add(run.InputCharacterCount);
+        }
+    }
+
+    /// <summary>Records one message the per-message input ceiling cut short.</summary>
+    /// <param name="omittedCharacterCount">The characters the ceiling left out of the passages.</param>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when the count is negative.</exception>
+    /// <remarks>
+    /// Two instruments rather than one, because the two questions differ: how many messages are being cut says whether
+    /// the ceiling is set where an operator meant it, and how much text is being left out says what raising it would
+    /// cost. A count alone would make one enormous message and a thousand slightly oversized ones look the same.
+    /// </remarks>
+    public void RecordTruncatedEmbeddingInput(int omittedCharacterCount)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(omittedCharacterCount);
+
+        this.truncatedMessageCount.Add(1);
+        this.omittedInputCharacterCount.Add(omittedCharacterCount);
     }
 
     private static string OutcomeTagOf(StoredEmailEmbeddingOutcome outcome) => outcome switch
@@ -79,6 +121,7 @@ public sealed class EmailEmbeddingTelemetry
         StoredEmailEmbeddingOutcome.GeneratorDisagreesWithProfile => "generator_disagrees_with_profile",
         StoredEmailEmbeddingOutcome.ProviderFailed => "provider_failed",
         StoredEmailEmbeddingOutcome.CallBudgetExhausted => "call_budget_exhausted",
+        StoredEmailEmbeddingOutcome.SpendCeilingReached => "spend_ceiling_reached",
         _ => "unknown",
     };
 

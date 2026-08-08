@@ -99,6 +99,17 @@ passages it embedded and how long that took, broken down by outcome and by the c
 [Automatic embedding](../features/automatic-embedding.md#what-an-operator-can-see) names each instrument and what it
 answers; the depth is the one an instance falling behind shows up in first.
 
+Three counters beside those answer what embedding is costing rather than how it is going.
+`mailfathom.embedding.budget.consumed` is the characters sent to a provider and charged against the spend ceiling,
+which summed over a period is what that period spent and summed over any other window is a question a ceiling cannot
+answer; `mailfathom.embedding.input.truncated` and `mailfathom.embedding.input.omitted` are how many messages the
+per-message ceiling cut short and how much text it left out. The consumed figure is a counter rather than a gauge of
+what is left, because a remaining figure would have to be read from the database inside a callback a meter invokes on
+its own schedule. Two instruments carry the truncation rather than one, because one enormous message and a thousand
+slightly oversized ones need different answers from an operator: how often the ceiling binds, and what raising it would
+cost. [Embedding generation](../features/embedding-generation.md#what-an-instance-is-willing-to-spend) records what each
+ceiling bounds.
+
 The backfill over mail stored before a profile existed publishes its own family beside that one, under
 `mailfathom.embedding.backfill.*`: how many messages awaited embedding when the current sweep began, how each bounded
 run ended, and how many messages it cut into passages, brought up to date, and gave vectors to. The instruments are

@@ -124,6 +124,18 @@ public sealed class StoredEmailEmbeddingBackfill
                         outstandingAtSweepStart);
                 }
 
+                // The ceiling stops the run before the position steps past this message, because unlike a refused
+                // provider call it says nothing about the message and the passages it did not reach are the ones the
+                // rolled-over period should pay for first.
+                if (turn.Outcome is StoredEmailEmbeddingOutcome.SpendCeilingReached)
+                {
+                    return Ended(
+                        StoredEmailEmbeddingBackfillOutcome.SpendCeilingReached,
+                        progress,
+                        outstandingAtSweepStart,
+                        spendPeriodEndsAt: turn.SpendPeriodEndsAt);
+                }
+
                 position = email.StoredEmailId;
                 await this.CommitPositionAsync(position, cancellationToken);
 
@@ -188,7 +200,8 @@ public sealed class StoredEmailEmbeddingBackfill
         StoredEmailEmbeddingBackfillOutcome outcome,
         RunProgress progress,
         int? outstandingAtSweepStart = null,
-        EmbeddingGenerationFailure? failure = null) =>
+        EmbeddingGenerationFailure? failure = null,
+        DateTimeOffset? spendPeriodEndsAt = null) =>
         new(
             outcome,
             progress.ChunkedEmailCount,
@@ -196,7 +209,8 @@ public sealed class StoredEmailEmbeddingBackfill
             progress.EmbeddedChunkCount,
             progress.CallBudgetExhaustedEmailCount,
             outstandingAtSweepStart,
-            failure);
+            failure,
+            spendPeriodEndsAt);
 
     /// <summary>What a run has produced so far, in counts alone.</summary>
     /// <remarks>

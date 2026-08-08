@@ -97,7 +97,7 @@ internal sealed partial class MailEmbeddingBackfillWorker : BackgroundService
             this.telemetry.RecordPass(result);
             this.Report(result);
 
-            return result.MoreWorkIsWorthTryingSoon ? this.settings.Interval : this.settings.IdleSweepInterval;
+            return this.PaceAfter(result);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -115,6 +115,30 @@ internal sealed partial class MailEmbeddingBackfillWorker : BackgroundService
 
             return this.settings.Interval;
         }
+    }
+
+    /// <summary>Chooses how long to wait before the next pass, which the spend ceiling answers exactly.</summary>
+    /// <remarks>
+    /// Neither interval applies to a pass the ceiling stopped. The short one would re-read a ceiling already known to
+    /// bind, over and over until the period ended; the long one would leave a rolled-over period idle for as much as a
+    /// quarter of an hour. The roll-over is an instant the run itself reported, so the wait is exactly it. The removal
+    /// of a superseded generation is deliberately not exempted — it reaches no provider, but it rides this same pass,
+    /// and the alternative is a loop that spends the pause deleting rows nobody is waiting for.
+    /// </remarks>
+    private TimeSpan PaceAfter(EmbeddingGenerationUpkeepResult result)
+    {
+        if (result.Sweep.SpendPeriodEndsAt is { } periodEndsAt)
+        {
+            var wait = periodEndsAt - this.timeProvider.GetUtcNow();
+            if (wait > TimeSpan.Zero)
+            {
+                this.LogSpendCeilingReached(wait);
+
+                return wait;
+            }
+        }
+
+        return result.MoreWorkIsWorthTryingSoon ? this.settings.Interval : this.settings.IdleSweepInterval;
     }
 
     /// <summary>Says what the pass means for an operator, at the level each part of it deserves.</summary>
@@ -255,6 +279,11 @@ internal sealed partial class MailEmbeddingBackfillWorker : BackgroundService
         Level = LogLevel.Warning,
         Message = "{CallBudgetExhaustedEmailCount} messages each spent every provider call a turn is allowed and are still not fully embedded; a later sweep reaches the rest. A message needing that many calls means Embeddings:MaxPassagesPerRequest is far below what one message of this length carries.")]
     private partial void LogCallBudgetExhausted(int callBudgetExhaustedEmailCount);
+
+    [LoggerMessage(
+        Level = LogLevel.Warning,
+        Message = "The embedding spend ceiling for this period is reached, so the backfill is paused for {Wait} until the period rolls over; the position it committed is where it resumes and nothing is lost by the wait. Raise Embeddings:MaxInputCharactersPerPeriod to spend more per period.")]
+    private partial void LogSpendCeilingReached(TimeSpan wait);
 
     [LoggerMessage(
         Level = LogLevel.Warning,

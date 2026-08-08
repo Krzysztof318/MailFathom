@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Application.Emails.Embeddings.Limits;
 using MailFathom.Application.Persistence;
 using MailFathom.Domain.Emails;
 
@@ -50,24 +51,34 @@ public sealed class StoredEmailEmbeddingGenerator
     private readonly IEmailEmbeddingStore embeddingStore;
     private readonly ITextEmbeddingGenerator textEmbeddingGenerator;
     private readonly OptimisticConcurrencyRetryPolicy concurrencyRetryPolicy;
+    private readonly EmbeddingSpendGate spendGate;
+    private readonly EmbeddingRequestPacer requestPacer;
 
     /// <summary>Initializes a new generator of one message's embeddings.</summary>
     /// <param name="embeddingStore">Reads which passages lack a vector, and writes the vectors that answer.</param>
     /// <param name="textEmbeddingGenerator">Turns passages into points of that space.</param>
     /// <param name="concurrencyRetryPolicy">Commits one call's vectors, retrying a conflict with a competing writer.</param>
+    /// <param name="spendGate">Says whether the period still admits a request, and is charged for the ones it does.</param>
+    /// <param name="requestPacer">Holds a call back until this deployment is allowed to send its next one.</param>
     /// <exception cref="ArgumentNullException">Thrown when any argument is <see langword="null" />.</exception>
     public StoredEmailEmbeddingGenerator(
         IEmailEmbeddingStore embeddingStore,
         ITextEmbeddingGenerator textEmbeddingGenerator,
-        OptimisticConcurrencyRetryPolicy concurrencyRetryPolicy)
+        OptimisticConcurrencyRetryPolicy concurrencyRetryPolicy,
+        EmbeddingSpendGate spendGate,
+        EmbeddingRequestPacer requestPacer)
     {
         ArgumentNullException.ThrowIfNull(embeddingStore);
         ArgumentNullException.ThrowIfNull(textEmbeddingGenerator);
         ArgumentNullException.ThrowIfNull(concurrencyRetryPolicy);
+        ArgumentNullException.ThrowIfNull(spendGate);
+        ArgumentNullException.ThrowIfNull(requestPacer);
 
         this.embeddingStore = embeddingStore;
         this.textEmbeddingGenerator = textEmbeddingGenerator;
         this.concurrencyRetryPolicy = concurrencyRetryPolicy;
+        this.spendGate = spendGate;
+        this.requestPacer = requestPacer;
     }
 
     /// <summary>Embeds whatever of one message is not yet embedded under one generation.</summary>
@@ -102,6 +113,7 @@ public sealed class StoredEmailEmbeddingGenerator
         }
 
         var embeddedChunkCount = 0;
+        var sentCharacterCount = 0;
 
         for (var call = 0; call < MaximumProviderCallsPerEmail; call++)
         {
@@ -115,8 +127,23 @@ public sealed class StoredEmailEmbeddingGenerator
             // loop instead means the budget ran out with passages still outstanding, which is a different answer.
             if (passages.Count == 0)
             {
-                return StoredEmailEmbeddingRun.Embedded(embeddedChunkCount);
+                return StoredEmailEmbeddingRun.Embedded(embeddedChunkCount, sentCharacterCount);
             }
+
+            // Asked before every call rather than once per message, because a long message spends across many calls and
+            // a ceiling consulted only at the start would be one a single message could walk straight through.
+            var period = await this.spendGate.ReadCurrentPeriodAsync(cancellationToken);
+            if (!period.AdmitsRequest)
+            {
+                return StoredEmailEmbeddingRun.SpendCeilingReached(
+                    embeddedChunkCount,
+                    sentCharacterCount,
+                    period.EndsAt);
+            }
+
+            var billedCharacterCount = CountBilledCharacters(profile, passages);
+
+            await this.requestPacer.WaitForSlotAsync(cancellationToken);
 
             IReadOnlyList<EmbeddingVector> vectors;
             try
@@ -127,12 +154,16 @@ public sealed class StoredEmailEmbeddingGenerator
             }
             catch (EmbeddingGenerationFailedException generationFailure)
             {
-                return StoredEmailEmbeddingRun.ProviderFailed(embeddedChunkCount, generationFailure.Failure);
+                return StoredEmailEmbeddingRun.ProviderFailed(
+                    embeddedChunkCount,
+                    generationFailure.Failure,
+                    sentCharacterCount);
             }
 
-            await this.CommitVectorsAsync(profile, passages, vectors, cancellationToken);
+            await this.CommitVectorsAsync(profile, passages, vectors, billedCharacterCount, cancellationToken);
 
             embeddedChunkCount += passages.Count;
+            sentCharacterCount += billedCharacterCount;
         }
 
         // The budget is spent, and that alone does not say the message is unfinished: the last call may have taken the
@@ -147,26 +178,53 @@ public sealed class StoredEmailEmbeddingGenerator
             cancellationToken);
 
         return outstanding.Count == 0
-            ? StoredEmailEmbeddingRun.Embedded(embeddedChunkCount)
-            : StoredEmailEmbeddingRun.CallBudgetExhausted(embeddedChunkCount);
+            ? StoredEmailEmbeddingRun.Embedded(embeddedChunkCount, sentCharacterCount)
+            : StoredEmailEmbeddingRun.CallBudgetExhausted(embeddedChunkCount, sentCharacterCount);
     }
 
-    /// <summary>Commits one call's vectors, so a crash leaves a whole page of passages embedded or none of it.</summary>
+    /// <summary>Counts what one batch will cost, in the characters a provider is about to be sent.</summary>
+    /// <remarks>
+    /// Measured through the profile's own input preparation rather than from the passage lengths, because the
+    /// preparation is what decides the text a provider actually receives: a passage beyond the model's input limit is
+    /// cut before it is sent, and charging a budget for characters nobody was sent would make a long-passage deployment
+    /// look like an expensive one.
+    /// </remarks>
+    private static int CountBilledCharacters(
+        RegisteredEmbeddingProfile profile,
+        IReadOnlyList<EmailChunkAwaitingEmbedding> passages) =>
+        passages.Sum(passage => profile.Identity.InputPreparation.CountBilledCharacters(passage.Text));
+
+    /// <summary>Commits one call's vectors and its cost together, so a crash leaves a whole page embedded or none of it.</summary>
+    /// <remarks>
+    /// The charge joins the same transaction as the vectors it paid for, which is what makes the ledger unable to
+    /// disagree with what was stored. A call whose commit then fails outright is the one case the ledger under-counts,
+    /// and it is left that way deliberately: the alternative is a charge in its own transaction, which would over-count
+    /// every ordinary conflict the retry policy goes on to resolve.
+    /// </remarks>
     private Task CommitVectorsAsync(
         RegisteredEmbeddingProfile profile,
         IReadOnlyList<EmailChunkAwaitingEmbedding> passages,
         IReadOnlyList<EmbeddingVector> vectors,
+        int billedCharacterCount,
         CancellationToken cancellationToken)
     {
         GeneratedChunkEmbedding[] embeddings =
             [.. passages.Zip(vectors, (passage, vector) => new GeneratedChunkEmbedding(passage.Id, vector))];
 
         return this.concurrencyRetryPolicy.CommitAsync(
-            (persistenceSession, attemptCancellationToken) => this.embeddingStore.SaveEmbeddingsAsync(
-                persistenceSession,
-                profile,
-                embeddings,
-                attemptCancellationToken),
+            async (persistenceSession, attemptCancellationToken) =>
+            {
+                await this.embeddingStore.SaveEmbeddingsAsync(
+                    persistenceSession,
+                    profile,
+                    embeddings,
+                    attemptCancellationToken);
+
+                await this.spendGate.RecordSpendAsync(
+                    persistenceSession,
+                    billedCharacterCount,
+                    attemptCancellationToken);
+            },
             cancellationToken);
     }
 }

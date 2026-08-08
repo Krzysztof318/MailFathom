@@ -5,6 +5,7 @@
 using MailFathom.Application.Emails.Embeddings;
 using MailFathom.Application.Emails.Embeddings.Backfill;
 using MailFathom.Application.Emails.Embeddings.Generation;
+using MailFathom.Application.Emails.Embeddings.Limits;
 using MailFathom.Application.Persistence;
 using MailFathom.Application.UnitTests.TestDoubles;
 using MailFathom.Domain.Emails;
@@ -17,6 +18,9 @@ namespace MailFathom.Application.UnitTests.Emails.Embeddings.Backfill;
 public sealed class StoredEmailEmbeddingBackfillTests
 {
     private static readonly EmbeddingProfileId ProfileId = EmbeddingProfileId.Create(Guid.CreateVersion7());
+
+    /// <summary>A moment the daily period places on a whole day, so an expected roll-over is arithmetic rather than a guess.</summary>
+    private static readonly DateTimeOffset PeriodStart = new(2026, 8, 8, 0, 0, 0, TimeSpan.Zero);
 
     /// <summary>A message stored before chunking existed is cut into passages before anything is asked of a provider.</summary>
     [Fact]
@@ -168,6 +172,32 @@ public sealed class StoredEmailEmbeddingBackfillTests
     }
 
     /// <summary>
+    /// A reached spend ceiling ends the run without advancing the position, unlike a refused call: it says nothing
+    /// about the message in hand, and the passages it did not reach are the ones a rolled-over period should pay for
+    /// first. The run names the instant the ceiling lifts, which is what a worker waits for instead of an interval.
+    /// </summary>
+    [Fact]
+    public async Task RunAsync_TheSpendCeilingIsReached_EndsTheRunWithoutAdvancingThePosition()
+    {
+        // Arrange
+        var world = CreateWorld(
+            spendBudget: EmbeddingSpendBudget.Create(maxInputCharactersPerPeriod: 1, TimeSpan.FromDays(1)));
+        AddMessagesAwaitingEmbedding(world, count: 3, passagesEach: 1);
+        var backfill = world.CreateBackfill();
+
+        // Act
+        var result = await backfill.RunAsync(world.Target, TestContext.Current.CancellationToken);
+
+        // Assert
+        // The first message is paid for whole and the ceiling binds on the second, so the run stops having embedded one.
+        Assert.Equal(StoredEmailEmbeddingBackfillOutcome.SpendCeilingReached, result.Outcome);
+        Assert.False(result.MoreWorkIsWorthTryingSoon);
+        Assert.Equal(PeriodStart.AddDays(1), result.SpendPeriodEndsAt);
+        Assert.Equal(1, result.EmbeddedEmailCount);
+        Assert.Single(world.BackfillStore.SavedPositions);
+    }
+
+    /// <summary>
     /// A refused call ends the run rather than the next message's turn, and the position steps past the message so
     /// nothing blocks the walk; what that turn did not reach is what the next sweep selects on.
     /// </summary>
@@ -307,7 +337,8 @@ public sealed class StoredEmailEmbeddingBackfillTests
 
     private static BackfillWorld CreateWorld(
         string generatorModelIdentifier = "a-model",
-        int maximumPassagesPerCall = 8)
+        int maximumPassagesPerCall = 8,
+        EmbeddingSpendBudget? spendBudget = null)
     {
         var embeddingStore = new InMemoryEmailEmbeddingStore();
         var backfillStore = new InMemoryStoredEmailEmbeddingBackfillStore(embeddingStore);
@@ -332,7 +363,12 @@ public sealed class StoredEmailEmbeddingBackfillTests
             new StoredEmailEmbeddingGenerator(
                 embeddingStore,
                 textEmbeddingGenerator,
-                concurrencyRetryPolicy),
+                concurrencyRetryPolicy,
+                new EmbeddingSpendGate(
+                    new InMemoryEmbeddingSpendLedger(),
+                    spendBudget ?? EmbeddingSpendBudget.Unbounded,
+                    new FakeTimeProvider(PeriodStart)),
+                EmbeddingRequestPacer.Create(maxRequestsPerMinute: 0, new FakeTimeProvider())),
             concurrencyRetryPolicy);
     }
 

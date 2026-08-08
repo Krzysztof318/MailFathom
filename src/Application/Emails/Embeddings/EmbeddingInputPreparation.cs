@@ -57,6 +57,25 @@ public sealed class EmbeddingInputPreparation
     /// <summary>Gets whether the vector is normalized to unit length before it is stored.</summary>
     public bool NormalizesVector { get; }
 
+    /// <summary>Counts the characters one passage occupies once this preparation has been applied to it.</summary>
+    /// <param name="passage">The passage as a caller supplied it.</param>
+    /// <returns>The length of the text a provider would be sent for it.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="passage" /> is <see langword="null" />.</exception>
+    /// <remarks>
+    /// What a spend ceiling is counted in. It answers without preparing the passage, because the ceiling is consulted
+    /// before a batch is assembled and building the text to measure it would allocate a copy of every passage for a
+    /// number the lengths already give. The instruction is added before the cut for the reason the preparation applies
+    /// it there, so the two agree by construction rather than by coincidence.
+    /// </remarks>
+    public int CountBilledCharacters(string passage)
+    {
+        ArgumentNullException.ThrowIfNull(passage);
+
+        var preparedLength = passage.Length + (this.PassageInstruction?.Length ?? 0);
+
+        return Math.Min(preparedLength, this.InputCharacterLimit);
+    }
+
     /// <summary>Builds a preparation, refusing one that could not produce a passage to send.</summary>
     /// <param name="inputCharacterLimit">The width a passage is cut to before it is sent.</param>
     /// <param name="passageInstruction">The instruction a model requires of a passage, or <see langword="null" />.</param>

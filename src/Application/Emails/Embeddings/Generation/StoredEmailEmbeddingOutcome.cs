@@ -43,4 +43,16 @@ public enum StoredEmailEmbeddingOutcome
     /// far below what a message of that length needs.
     /// </remarks>
     CallBudgetExhausted = 4,
+
+    /// <summary>The period's spend ceiling is reached, so nothing further is sent until it rolls over.</summary>
+    /// <remarks>
+    /// A condition of the instance rather than of the message, and the only one of them that resolves itself: the
+    /// period rolls over at <see cref="StoredEmailEmbeddingRun.SpendPeriodEndsAt" /> and work continues, with no
+    /// operator having to do anything. It is deliberately not the same outcome as
+    /// <see cref="CallBudgetExhausted" /> beside it, which bounds how many calls one message's turn may make and says
+    /// something about that message's length; this says the deployment has spent what it agreed to spend, and says
+    /// nothing about the message at all. What was committed stays durable and the rest stays outstanding, which is the
+    /// condition the backfill selects on.
+    /// </remarks>
+    SpendCeilingReached = 5,
 }

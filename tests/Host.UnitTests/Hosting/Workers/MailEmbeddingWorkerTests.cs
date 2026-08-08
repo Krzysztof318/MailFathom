@@ -2,14 +2,17 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Application.Emails.Chunking;
 using MailFathom.Application.Emails.Embeddings;
 using MailFathom.Application.Emails.Embeddings.Generation;
+using MailFathom.Application.Emails.Embeddings.Limits;
 using MailFathom.Application.Persistence;
 using MailFathom.Domain.Emails;
 using MailFathom.Host.Hosting.Workers;
 using MailFathom.Host.UnitTests.TestDoubles;
 using MailFathom.Infrastructure.Observability;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Time.Testing;
 using NSubstitute;
 using Xunit;
@@ -91,6 +94,80 @@ public sealed class MailEmbeddingWorkerTests
             Arg.Any<CancellationToken>());
     }
 
+    /// <summary>
+    /// A reached ceiling pauses the worker rather than letting it drain the backlog one refusal at a time, and the
+    /// period rolling over is what releases it — with nobody having acted, because nothing about the ceiling was wrong.
+    /// </summary>
+    [Fact]
+    public async Task ExecuteAsync_TheSpendCeilingIsReached_PausesUntilThePeriodRollsOverAndThenCarriesOn()
+    {
+        // Arrange
+        var period = TimeSpan.FromDays(1);
+        var timeProvider = new FakeTimeProvider();
+        var embeddingStore = CreateStoreWithOnePassageOutstanding();
+        var logger = new AwaitingLogger<MailEmbeddingWorker>();
+        using var worker = CreateWorker(
+            CreateMessages(2),
+            CreateProfileReader(CreateProfile()),
+            embeddingStore,
+            logger,
+            EmbeddingSpendBudget.Create(maxInputCharactersPerPeriod: 10, period),
+            consumedInputCharacterCount: 10,
+            timeProvider);
+
+        // Act
+        await worker.StartAsync(CancellationToken.None);
+        await logger.WaitForOccurrences(
+            "embedding is paused",
+            occurrences: 1,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        // Exactly one message has been taken while the clock stands still: the worker is waiting rather than working
+        // through what is behind it.
+        await embeddingStore.Received(1).GetChunksAwaitingEmbeddingAsync(
+            Arg.Any<StoredEmailId>(),
+            Arg.Any<EmbeddingProfileId>(),
+            Arg.Any<int>(),
+            Arg.Any<CancellationToken>());
+
+        await AdvanceUntilLogged(timeProvider, logger, period, "embedding is paused", occurrences: 2);
+        await worker.StopAsync(CancellationToken.None);
+
+        await embeddingStore.Received(2).GetChunksAwaitingEmbeddingAsync(
+            Arg.Any<StoredEmailId>(),
+            Arg.Any<EmbeddingProfileId>(),
+            Arg.Any<int>(),
+            Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>Moves the clock on until the worker has logged the line the given number of times.</summary>
+    /// <remarks>
+    /// A loop rather than a single advance, because the wait is created after the line that announces it is written:
+    /// an advance that arrives before the delay exists is simply lost, and the next one fires it.
+    /// </remarks>
+    private static async Task AdvanceUntilLogged(
+        FakeTimeProvider timeProvider,
+        AwaitingLogger<MailEmbeddingWorker> logger,
+        TimeSpan step,
+        string fragment,
+        int occurrences)
+    {
+        const int advanceAttempts = 200;
+        var passObservationWindow = TimeSpan.FromMilliseconds(20);
+
+        var logged = logger.WaitForOccurrences(fragment, occurrences, TestContext.Current.CancellationToken);
+
+        for (var attempt = 0; attempt < advanceAttempts && !logged.IsCompleted; attempt++)
+        {
+            timeProvider.Advance(step);
+
+            await Task.WhenAny(logged, Task.Delay(passObservationWindow, TestContext.Current.CancellationToken));
+        }
+
+        await logged;
+    }
+
     private static IReadOnlyList<StoredEmailId> CreateMessages(int count) =>
         [.. Enumerable.Range(0, count).Select(_ => StoredEmailId.Create(Guid.CreateVersion7()))];
 
@@ -126,18 +203,55 @@ public sealed class MailEmbeddingWorkerTests
         return store;
     }
 
+    private static IEmailEmbeddingStore CreateStoreWithOnePassageOutstanding()
+    {
+        var store = Substitute.For<IEmailEmbeddingStore>();
+        store.GetChunksAwaitingEmbeddingAsync(
+                Arg.Any<StoredEmailId>(),
+                Arg.Any<EmbeddingProfileId>(),
+                Arg.Any<int>(),
+                Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IReadOnlyList<EmailChunkAwaitingEmbedding>>(
+                [new EmailChunkAwaitingEmbedding(EmailChunkId.Create(Guid.CreateVersion7()), "a passage")]));
+
+        return store;
+    }
+
     private static MailEmbeddingWorker CreateWorker(
         IReadOnlyList<StoredEmailId> messages,
         IActiveEmbeddingProfileReader profileReader,
         IEmailEmbeddingStore embeddingStore,
         out RecordingLogger<MailEmbeddingWorker> logger)
     {
-        logger = new RecordingLogger<MailEmbeddingWorker>();
-        var timeProvider = new FakeTimeProvider();
+        var recordingLogger = new RecordingLogger<MailEmbeddingWorker>();
+        logger = recordingLogger;
 
+        return CreateWorker(
+            messages,
+            profileReader,
+            embeddingStore,
+            recordingLogger,
+            EmbeddingSpendBudget.Unbounded,
+            consumedInputCharacterCount: 0,
+            new FakeTimeProvider());
+    }
+
+    private static MailEmbeddingWorker CreateWorker(
+        IReadOnlyList<StoredEmailId> messages,
+        IActiveEmbeddingProfileReader profileReader,
+        IEmailEmbeddingStore embeddingStore,
+        ILogger<MailEmbeddingWorker> logger,
+        EmbeddingSpendBudget spendBudget,
+        long consumedInputCharacterCount,
+        FakeTimeProvider timeProvider)
+    {
         var textEmbeddingGenerator = Substitute.For<ITextEmbeddingGenerator>();
         textEmbeddingGenerator.Identity.Returns(Identity);
         textEmbeddingGenerator.MaximumPassagesPerCall.Returns(8);
+
+        var spendLedger = Substitute.For<IEmbeddingSpendLedger>();
+        spendLedger.ReadConsumedInputCharactersAsync(Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>())
+            .Returns(consumedInputCharacterCount);
 
         var services = new ServiceCollection();
         services.AddSingleton<TimeProvider>(timeProvider);
@@ -146,6 +260,10 @@ public sealed class MailEmbeddingWorkerTests
         services.AddSingleton(textEmbeddingGenerator);
         services.AddSingleton(Substitute.For<IPersistenceSessionFactory>());
         services.AddSingleton(new PersistenceConcurrencyOptions());
+        services.AddSingleton(spendBudget);
+        services.AddSingleton(spendLedger);
+        services.AddSingleton(EmbeddingRequestPacer.Create(maxRequestsPerMinute: 0, timeProvider));
+        services.AddScoped<EmbeddingSpendGate>();
         services.AddScoped<OptimisticConcurrencyRetryPolicy>();
         services.AddScoped<StoredEmailEmbeddingGenerator>();
 

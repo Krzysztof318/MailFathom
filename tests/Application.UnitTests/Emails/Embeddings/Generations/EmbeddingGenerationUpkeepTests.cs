@@ -7,6 +7,7 @@ using MailFathom.Application.Emails.Embeddings.Backfill;
 using MailFathom.Application.Emails.Embeddings.Generation;
 using MailFathom.Application.Emails.Embeddings.Generations;
 using MailFathom.Application.Emails.Embeddings.Indexing;
+using MailFathom.Application.Emails.Embeddings.Limits;
 using MailFathom.Application.Persistence;
 using MailFathom.Application.UnitTests.TestDoubles;
 using MailFathom.Domain.Emails;
@@ -300,7 +301,15 @@ public sealed class EmbeddingGenerationUpkeepTests
             backfillStore,
             new StoredEmailEmbeddingBackfill(
                 backfillStore,
-                new StoredEmailEmbeddingGenerator(embeddingStore, textEmbeddingGenerator, concurrencyRetryPolicy),
+                new StoredEmailEmbeddingGenerator(
+                    embeddingStore,
+                    textEmbeddingGenerator,
+                    concurrencyRetryPolicy,
+                    new EmbeddingSpendGate(
+                        new InMemoryEmbeddingSpendLedger(),
+                        EmbeddingSpendBudget.Unbounded,
+                        new FakeTimeProvider()),
+                    EmbeddingRequestPacer.Create(maxRequestsPerMinute: 0, new FakeTimeProvider())),
                 concurrencyRetryPolicy,
                 new StoredEmailEmbeddingBackfillOptions
                 {

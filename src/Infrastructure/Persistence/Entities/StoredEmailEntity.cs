@@ -173,6 +173,18 @@ internal sealed class StoredEmailEntity
     public EmailContentRepairRequestEntity? ContentRepairRequest { get; set; }
 
     /// <summary>
+    /// Gets or sets the length this email's extracted text had when the per-message embedding ceiling stopped the cut
+    /// short of its end, or <see langword="null" /> when no ceiling reached it.
+    /// </summary>
+    /// <remarks>
+    /// Recorded rather than inferred. A message cut whole and one cut to a ceiling are indistinguishable from their
+    /// passages alone, so without this column the question "could the answer have been in the part nobody embedded"
+    /// would be answered by guessing from a chunk count. The value is the length of the text, which against the ceiling
+    /// in force says exactly how much was left out.
+    /// </remarks>
+    public int? ChunkedTextTruncatedFromCharacterCount { get; set; }
+
+    /// <summary>
     /// Gets or sets the retrievable passages this email's extracted text was cut into, which are empty until chunking
     /// has run for it and stay empty for a message whose body yielded no text.
     /// </summary>

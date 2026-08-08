@@ -12,6 +12,7 @@ namespace MailFathom.Application.Emails.Embeddings.Backfill;
 /// <param name="CallBudgetExhaustedEmailCount">How many messages this run left part-way through because one turn spent every provider call a turn is allowed.</param>
 /// <param name="OutstandingEmailCountAtSweepStart">How many messages awaited embedding when this sweep began, or <see langword="null" /> when the run resumed a sweep somebody else measured.</param>
 /// <param name="Failure">Why a provider call produced nothing, present exactly when <paramref name="Outcome" /> is <see cref="StoredEmailEmbeddingBackfillOutcome.ProviderFailed" />.</param>
+/// <param name="SpendPeriodEndsAt">When the budget period rolls over, present exactly when <paramref name="Outcome" /> is <see cref="StoredEmailEmbeddingBackfillOutcome.SpendCeilingReached" />.</param>
 /// <remarks>
 /// <para>
 /// Counts and classifications only. Every message this run touched, every passage it cut, and every vector it stored is
@@ -31,7 +32,8 @@ public sealed record StoredEmailEmbeddingBackfillResult(
     int EmbeddedChunkCount,
     int CallBudgetExhaustedEmailCount,
     int? OutstandingEmailCountAtSweepStart,
-    EmbeddingGenerationFailure? Failure)
+    EmbeddingGenerationFailure? Failure,
+    DateTimeOffset? SpendPeriodEndsAt)
 {
     /// <summary>The pass an instance that has registered no generation performs, which reaches nothing and spends nothing.</summary>
     /// <remarks>
@@ -46,7 +48,8 @@ public sealed record StoredEmailEmbeddingBackfillResult(
         EmbeddedChunkCount: 0,
         CallBudgetExhaustedEmailCount: 0,
         OutstandingEmailCountAtSweepStart: null,
-        Failure: null);
+        Failure: null,
+        SpendPeriodEndsAt: null);
 
     /// <summary>Gets whether running again shortly would reach work this run could not.</summary>
     /// <remarks>
@@ -60,6 +63,12 @@ public sealed record StoredEmailEmbeddingBackfillResult(
     /// a refused request, and a vector the declared geometry does not describe all answer a repetition identically while
     /// counting against the account's request budget, so asking again in half a minute buys the same refusal at the same
     /// price. The sweep still reaches those messages later, because it starts again from the beginning.
+    /// </para>
+    /// <para>
+    /// A reached spend ceiling answers <see langword="false" /> here and is paced by neither interval. It is the one
+    /// ending that names the instant it stops applying, so the worker waits for that instead — a short interval would
+    /// re-read a ceiling already known to bind, and the long one would leave a rolled-over period idle for as much as a
+    /// quarter of an hour.
     /// </para>
     /// </remarks>
     public bool MoreWorkIsWorthTryingSoon => this.Outcome switch

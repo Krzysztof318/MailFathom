@@ -6,6 +6,7 @@ using MailFathom.AI;
 using MailFathom.Application.EmailContent;
 using MailFathom.Application.Emails.Embeddings.Backfill;
 using MailFathom.Application.Emails.Embeddings.Generation;
+using MailFathom.Application.Emails.Embeddings.Limits;
 using MailFathom.Application.Emails.Extraction;
 using MailFathom.Application.Mail;
 using MailFathom.Application.Mail.Mutations;
@@ -59,6 +60,14 @@ internal sealed class OrchestratedMailFathomServices : IAsyncDisposable
 
     /// <summary>The width a passage is cut to before the deterministic generator hashes it.</summary>
     internal const int DeterministicEmbeddingInputCharacterLimit = 8_000;
+
+    /// <summary>How much of one message's text this suite cuts into passages.</summary>
+    /// <remarks>
+    /// Small on purpose, for the reason the backfill's batch sizes are: a test that proves a message is cut to the
+    /// ceiling needs the ceiling to be reachable inside a body it can store. It stays well above the bodies the other
+    /// tests write, so their cuts are unchanged by it.
+    /// </remarks>
+    internal const int EmbeddingInputCharacterCeiling = 5_000;
 
     private readonly IHost host;
 
@@ -123,6 +132,15 @@ internal sealed class OrchestratedMailFathomServices : IAsyncDisposable
         // The bound a composition root reads from the Embeddings section. The backlog itself is registered by
         // AddInfrastructure, because every committed message is offered into it whether or not this deployment embeds.
         builder.Services.AddSingleton(new EmailEmbeddingBacklogOptions());
+        // The three ceilings a composition root reads from the same section. The suite embeds against a deterministic
+        // in-repository generator that reaches no provider, so two of them are nothing to bound here: the budget bounds
+        // nothing and the pacer delays nothing, which keeps a suite that starts a container from also waiting out a
+        // rate. The per-message bound is reachable rather than shipped, for the reason its constant states.
+        builder.Services.AddSingleton(EmbeddingInputBound.Create(EmbeddingInputCharacterCeiling));
+        builder.Services.AddSingleton(EmbeddingSpendBudget.Unbounded);
+        builder.Services.AddSingleton(EmbeddingRequestPacer.Create(
+            maxRequestsPerMinute: 0,
+            TimeProvider.System));
         // The bounds a composition root reads from the EmbeddingBackfill section. Small here on purpose: a test that
         // proves a walk is bounded needs the bound to be reachable within the mail it stored.
         builder.Services.AddSingleton(new StoredEmailEmbeddingBackfillOptions

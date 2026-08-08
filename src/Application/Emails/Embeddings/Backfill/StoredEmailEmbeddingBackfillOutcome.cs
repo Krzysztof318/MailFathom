@@ -26,4 +26,13 @@ public enum StoredEmailEmbeddingBackfillOutcome
 
     /// <summary>A provider call ended without vectors, which ends the run rather than the next message's turn.</summary>
     ProviderFailed = 4,
+
+    /// <summary>The period's spend ceiling is reached, so the run ended and the next one waits for the period to roll over.</summary>
+    /// <remarks>
+    /// The one ending that names its own resumption. Every other reason to stop is either settled by an operator or
+    /// retried on an interval chosen by how likely work is to be there; this one has an exact instant after which
+    /// sweeping is worth doing again, and <see cref="StoredEmailEmbeddingBackfillResult.SpendPeriodEndsAt" /> carries
+    /// it so the worker waits for that rather than polling a ceiling it already knows binds.
+    /// </remarks>
+    SpendCeilingReached = 5,
 }

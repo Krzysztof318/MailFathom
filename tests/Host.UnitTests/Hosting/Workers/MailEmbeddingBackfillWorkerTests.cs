@@ -8,13 +8,14 @@ using MailFathom.Application.Emails.Embeddings.Backfill;
 using MailFathom.Application.Emails.Embeddings.Generation;
 using MailFathom.Application.Emails.Embeddings.Generations;
 using MailFathom.Application.Emails.Embeddings.Indexing;
+using MailFathom.Application.Emails.Embeddings.Limits;
 using MailFathom.Application.Persistence;
 using MailFathom.Domain.Emails;
 using MailFathom.Host.Configuration.Embeddings;
 using MailFathom.Host.Hosting.Workers;
+using MailFathom.Host.UnitTests.TestDoubles;
 using MailFathom.Infrastructure.Observability;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Time.Testing;
 using NSubstitute;
@@ -24,9 +25,6 @@ namespace MailFathom.Host.UnitTests.Hosting.Workers;
 
 public sealed class MailEmbeddingBackfillWorkerTests
 {
-    /// <summary>Guards against a hung worker. No assertion depends on how long the run actually takes.</summary>
-    private static readonly TimeSpan DeadlockGuard = TimeSpan.FromSeconds(30);
-
     private static readonly TimeSpan IdleSweepInterval = TimeSpan.FromMinutes(15);
 
     [Fact]
@@ -59,7 +57,10 @@ public sealed class MailEmbeddingBackfillWorkerTests
 
         // Act
         await world.Worker.StartAsync(CancellationToken.None);
-        await world.Logger.WaitForOccurrences("reached the end of the stored mail", occurrences: 1);
+        await world.Logger.WaitForOccurrences(
+            "reached the end of the stored mail",
+            occurrences: 1,
+            TestContext.Current.CancellationToken);
         await world.AdvanceUntilLogged("reached the end of the stored mail", occurrences: 2);
 
         // Assert
@@ -76,7 +77,10 @@ public sealed class MailEmbeddingBackfillWorkerTests
 
         // Act
         await world.Worker.StartAsync(CancellationToken.None);
-        await world.Logger.WaitForOccurrences("No embedding profile is active", occurrences: 1);
+        await world.Logger.WaitForOccurrences(
+            "No embedding profile is active",
+            occurrences: 1,
+            TestContext.Current.CancellationToken);
         await world.Worker.StopAsync(CancellationToken.None);
 
         // Assert
@@ -121,7 +125,10 @@ public sealed class MailEmbeddingBackfillWorkerTests
 
         // Act
         await world.Worker.StartAsync(CancellationToken.None);
-        await world.Logger.WaitForOccurrences("spent every provider call a turn is allowed", occurrences: 1);
+        await world.Logger.WaitForOccurrences(
+            "spent every provider call a turn is allowed",
+            occurrences: 1,
+            TestContext.Current.CancellationToken);
         await world.Worker.StopAsync(CancellationToken.None);
 
         // Assert
@@ -148,7 +155,10 @@ public sealed class MailEmbeddingBackfillWorkerTests
 
         // Act
         await world.Worker.StartAsync(CancellationToken.None);
-        await world.Logger.WaitForOccurrences("backfill run failed", occurrences: 1);
+        await world.Logger.WaitForOccurrences(
+            "backfill run failed",
+            occurrences: 1,
+            TestContext.Current.CancellationToken);
 
         // Assert
         Assert.False(world.Worker.ExecuteTask!.IsCompleted);
@@ -168,13 +178,66 @@ public sealed class MailEmbeddingBackfillWorkerTests
 
         // Act
         await world.Worker.StartAsync(CancellationToken.None);
-        await world.Logger.WaitForOccurrences("optimistic concurrency conflict", occurrences: 1);
+        await world.Logger.WaitForOccurrences(
+            "optimistic concurrency conflict",
+            occurrences: 1,
+            TestContext.Current.CancellationToken);
         await world.Worker.StopAsync(CancellationToken.None);
 
         // Assert
         Assert.Contains(
             world.Logger.Messages,
             message => message.Contains("optimistic concurrency conflict", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// A reached spend ceiling is neither interval's business: the run named the instant it stops applying, and the
+    /// worker waits for exactly that rather than re-reading a ceiling it already knows binds.
+    /// </summary>
+    [Fact]
+    public async Task ExecuteAsync_TheSpendCeilingIsReached_WaitsForThePeriodToRollOverRatherThanForAnInterval()
+    {
+        // Arrange
+        using var world = CreateWorld(
+            new EmbeddingBackfillOptions { BatchSize = 1, MaxBatchesPerRun = 1 },
+            EmbeddingSpendBudget.Create(maxInputCharactersPerPeriod: 100, TimeSpan.FromDays(1)),
+            consumedInputCharacterCount: 100);
+        var message = StoredEmailId.Create(Guid.CreateVersion7());
+
+        world.BackfillStore
+            .GetEmailsAwaitingEmbeddingAsync(
+                Arg.Any<StoredEmailId?>(),
+                Arg.Any<EmbeddingProfileId>(),
+                Arg.Any<int>(),
+                Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IReadOnlyList<StoredEmailAwaitingEmbedding>>(
+                [new StoredEmailAwaitingEmbedding(message, RequiresChunking: false)]));
+        world.EmbeddingStore
+            .GetChunksAwaitingEmbeddingAsync(
+                Arg.Any<StoredEmailId>(),
+                Arg.Any<EmbeddingProfileId>(),
+                Arg.Any<int>(),
+                Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IReadOnlyList<EmailChunkAwaitingEmbedding>>(
+                [new EmailChunkAwaitingEmbedding(EmailChunkId.Create(Guid.CreateVersion7()), "a passage")]));
+
+        // Act
+        await world.Worker.StartAsync(CancellationToken.None);
+        await world.Logger.WaitForOccurrences(
+            "spend ceiling for this period is reached",
+            occurrences: 1,
+            TestContext.Current.CancellationToken);
+        await world.Worker.StopAsync(CancellationToken.None);
+
+        // Assert
+        Assert.Contains(
+            world.Logger.Messages,
+            line => line.Contains("MaxInputCharactersPerPeriod", StringComparison.Ordinal));
+        await world.EmbeddingStore.DidNotReceiveWithAnyArgs().SaveEmbeddingsAsync(
+            Arg.Any<IPersistenceSession>(),
+            Arg.Any<RegisteredEmbeddingProfile>(),
+            Arg.Any<IReadOnlyList<GeneratedChunkEmbedding>>(),
+            Arg.Any<CancellationToken>());
     }
 
     private static EmbeddingProfileIdentity CreateIdentity() =>
@@ -186,12 +249,35 @@ public sealed class MailEmbeddingBackfillWorkerTests
             EmbeddingDistanceMetric.Cosine,
             EmbeddingInputPreparation.Create(2_000, passageInstruction: null, normalizesVector: true));
 
-    private static WorkerWorld CreateWorld(EmbeddingBackfillOptions settings) =>
+    /// <summary>Reports a period as already having spent a given amount, which is what puts a run against a ceiling.</summary>
+    /// <remarks>
+    /// Substituted rather than kept in a fake ledger, because these tests are about how the worker paces itself after a
+    /// run reports the ceiling; that the ledger adds up is proved where the ledger's own arithmetic lives.
+    /// </remarks>
+    private static IEmbeddingSpendLedger CreateLedgerReporting(long consumedInputCharacterCount)
+    {
+        var ledger = Substitute.For<IEmbeddingSpendLedger>();
+        ledger.ReadConsumedInputCharactersAsync(Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>())
+            .Returns(consumedInputCharacterCount);
+
+        return ledger;
+    }
+
+    private static WorkerWorld CreateWorld(
+        EmbeddingBackfillOptions settings,
+        EmbeddingSpendBudget? spendBudget = null,
+        long consumedInputCharacterCount = 0) =>
         CreateWorld(
             settings,
-            new RegisteredEmbeddingProfile(EmbeddingProfileId.Create(Guid.CreateVersion7()), CreateIdentity()));
+            new RegisteredEmbeddingProfile(EmbeddingProfileId.Create(Guid.CreateVersion7()), CreateIdentity()),
+            spendBudget,
+            consumedInputCharacterCount);
 
-    private static WorkerWorld CreateWorld(EmbeddingBackfillOptions settings, RegisteredEmbeddingProfile? activeProfile)
+    private static WorkerWorld CreateWorld(
+        EmbeddingBackfillOptions settings,
+        RegisteredEmbeddingProfile? activeProfile,
+        EmbeddingSpendBudget? spendBudget = null,
+        long consumedInputCharacterCount = 0)
     {
         settings.IdleSweepInterval = IdleSweepInterval;
 
@@ -229,6 +315,10 @@ public sealed class MailEmbeddingBackfillWorkerTests
             BatchSize = settings.BatchSize,
             MaxBatchesPerRun = settings.MaxBatchesPerRun,
         });
+        services.AddSingleton(spendBudget ?? EmbeddingSpendBudget.Unbounded);
+        services.AddSingleton(CreateLedgerReporting(consumedInputCharacterCount));
+        services.AddSingleton(EmbeddingRequestPacer.Create(maxRequestsPerMinute: 0, world.TimeProvider));
+        services.AddScoped<EmbeddingSpendGate>();
         services.AddScoped<OptimisticConcurrencyRetryPolicy>();
         services.AddScoped<StoredEmailEmbeddingGenerator>();
         services.AddScoped<StoredEmailEmbeddingBackfill>();
@@ -287,7 +377,10 @@ public sealed class MailEmbeddingBackfillWorkerTests
             const int advanceAttempts = 200;
             var passObservationWindow = TimeSpan.FromMilliseconds(20);
 
-            var logged = this.Logger.WaitForOccurrences(fragment, occurrences);
+            var logged = this.Logger.WaitForOccurrences(
+                fragment,
+                occurrences,
+                TestContext.Current.CancellationToken);
 
             for (var attempt = 0; attempt < advanceAttempts && !logged.IsCompleted; attempt++)
             {
@@ -304,85 +397,5 @@ public sealed class MailEmbeddingBackfillWorkerTests
             this.worker?.Dispose();
             this.serviceProvider?.Dispose();
         }
-    }
-
-    /// <summary>A logger a test can wait on, so an assertion never races the run that produces the line.</summary>
-    /// <remarks>
-    /// The recording logger beside this one answers what was written once a test already knows the work is done. A
-    /// worker that never ends offers no such moment, so the log line itself is the signal here.
-    /// </remarks>
-    private sealed class AwaitingLogger<TCategory> : ILogger<TCategory>
-    {
-        private readonly Lock recordedMessages = new();
-        private readonly List<string> messages = [];
-        private readonly List<Expectation> expectations = [];
-
-        public IReadOnlyList<string> Messages
-        {
-            get
-            {
-                lock (this.recordedMessages)
-                {
-                    return [.. this.messages];
-                }
-            }
-        }
-
-        public IDisposable? BeginScope<TState>(TState state)
-            where TState : notnull => null;
-
-        public bool IsEnabled(LogLevel logLevel) => true;
-
-        public void Log<TState>(
-            LogLevel logLevel,
-            EventId eventId,
-            TState state,
-            Exception? exception,
-            Func<TState, Exception?, string> formatter)
-        {
-            ArgumentNullException.ThrowIfNull(formatter);
-
-            List<Expectation> satisfied;
-
-            lock (this.recordedMessages)
-            {
-                this.messages.Add(formatter(state, exception));
-                satisfied = [.. this.expectations.Where(this.IsSatisfied)];
-                this.expectations.RemoveAll(satisfied.Contains);
-            }
-
-            // Completed outside the lock, so a continuation that logs cannot re-enter it.
-            foreach (var expectation in satisfied)
-            {
-                expectation.Signal.TrySetResult();
-            }
-        }
-
-        /// <summary>Waits until a message containing the fragment has been logged the given number of times.</summary>
-        public Task WaitForOccurrences(string fragment, int occurrences)
-        {
-            var expectation = new Expectation(
-                fragment,
-                occurrences,
-                new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously));
-
-            lock (this.recordedMessages)
-            {
-                if (this.IsSatisfied(expectation))
-                {
-                    return Task.CompletedTask;
-                }
-
-                this.expectations.Add(expectation);
-            }
-
-            return expectation.Signal.Task.WaitAsync(DeadlockGuard, TestContext.Current.CancellationToken);
-        }
-
-        private bool IsSatisfied(Expectation expectation) => this.messages
-            .Count(message => message.Contains(expectation.Fragment, StringComparison.Ordinal))
-            >= expectation.Occurrences;
-
-        private sealed record Expectation(string Fragment, int Occurrences, TaskCompletionSource Signal);
     }
 }

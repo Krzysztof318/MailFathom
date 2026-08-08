@@ -3,8 +3,10 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.Emails.Chunking;
+using MailFathom.Application.Emails.Embeddings.Limits;
 using MailFathom.Application.Emails.Extraction;
 using MailFathom.CodeCoverage;
+using MailFathom.Infrastructure.Observability;
 using MailFathom.Infrastructure.Persistence.Entities;
 using Microsoft.EntityFrameworkCore;
 
@@ -22,6 +24,8 @@ namespace MailFathom.Infrastructure.Persistence.Emails;
 internal sealed class EmailChunkWriter(
     IEmailTextChunker chunker,
     EmailChunkingRules rules,
+    EmbeddingInputBound inputBound,
+    EmailEmbeddingTelemetry telemetry,
     TimeProvider timeProvider)
 {
     /// <summary>Saves the passages one extraction yields, leaving an unchanged message's rows untouched.</summary>
@@ -48,7 +52,8 @@ internal sealed class EmailChunkWriter(
         ArgumentNullException.ThrowIfNull(storedEmail);
         ArgumentNullException.ThrowIfNull(text);
 
-        var chunks = chunker.DeriveChunks(text, rules);
+        var cut = chunker.DeriveChunks(text, rules, inputBound);
+        var chunks = cut.Chunks;
 
         // The change-tracker pass comes first for the reason the search document's does: passages staged earlier in
         // this same uncommitted session are invisible to a set-based delete, and inserting beside them would violate
@@ -62,7 +67,7 @@ internal sealed class EmailChunkWriter(
             }
 
             dbContext.EmailChunks.RemoveRange(staged);
-            this.Insert(dbContext, storedEmail, chunks);
+            this.Insert(dbContext, storedEmail, cut);
 
             return;
         }
@@ -87,7 +92,7 @@ internal sealed class EmailChunkWriter(
                 .ExecuteDeleteAsync(cancellationToken);
         }
 
-        this.Insert(dbContext, storedEmail, chunks);
+        this.Insert(dbContext, storedEmail, cut);
     }
 
     private static EmailChunkEntity[] FindStaged(MailFathomDbContext dbContext, Guid storedEmailId) =>
@@ -104,14 +109,31 @@ internal sealed class EmailChunkWriter(
                 pair.First.Ordinal == pair.Second.Ordinal
                 && string.Equals(pair.First.ContentHash, pair.Second.ContentHash.Value, StringComparison.Ordinal));
 
+    /// <summary>Writes the passages a cut produced, and what that cut left out of the message.</summary>
+    /// <remarks>
+    /// The truncation is written on the message beside its passages rather than reported only as a metric, because a
+    /// counter says how often the ceiling bound across a deployment and this says which message it bound on. Written on
+    /// every insert, including as a clearing of a value a previous cut left behind: a message whose text shrank, or one
+    /// re-cut after the ceiling was raised past it, is no longer truncated and its row must not go on saying it is.
+    /// </remarks>
     private void Insert(
         MailFathomDbContext dbContext,
         StoredEmailEntity storedEmail,
-        IReadOnlyList<EmailTextChunk> chunks)
+        EmailChunkingResult cut)
     {
         var derivedAt = timeProvider.GetUtcNow();
 
-        dbContext.EmailChunks.AddRange(chunks.Select(chunk => new EmailChunkEntity
+        storedEmail.ChunkedTextTruncatedFromCharacterCount = cut.TruncatedFromCharacterCount;
+
+        // Measured against the ceiling rather than against the text that was kept, which the passages overlap and
+        // therefore cannot be summed to. The cut lands on the nearest text-element boundary at or below the ceiling, so
+        // the figure is short by at most one grapheme — irrelevant beside a message this ceiling reaches at all.
+        if (cut.TruncatedFromCharacterCount is { } truncatedFrom)
+        {
+            telemetry.RecordTruncatedEmbeddingInput(truncatedFrom - inputBound.MaximumCharacterCount);
+        }
+
+        dbContext.EmailChunks.AddRange(cut.Chunks.Select(chunk => new EmailChunkEntity
         {
             // Version 7 for the reason every other identifier MailFathom generates is: the passages of one message are
             // written together, so an identifier ordered by creation time keeps them on neighbouring index pages.

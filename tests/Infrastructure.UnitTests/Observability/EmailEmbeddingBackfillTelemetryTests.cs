@@ -205,7 +205,8 @@ public sealed class EmailEmbeddingBackfillTelemetryTests
         int embeddedChunkCount = 0,
         int callBudgetExhaustedEmailCount = 0,
         int? outstandingEmailCountAtSweepStart = null,
-        EmbeddingGenerationFailure? failure = null) =>
+        EmbeddingGenerationFailure? failure = null,
+        DateTimeOffset? spendPeriodEndsAt = null) =>
         new(
             outcome,
             chunkedEmailCount,
@@ -213,5 +214,6 @@ public sealed class EmailEmbeddingBackfillTelemetryTests
             embeddedChunkCount,
             callBudgetExhaustedEmailCount,
             outstandingEmailCountAtSweepStart,
-            failure);
+            failure,
+            spendPeriodEndsAt);
 }

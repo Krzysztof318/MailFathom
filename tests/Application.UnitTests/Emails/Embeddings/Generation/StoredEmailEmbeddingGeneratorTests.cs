@@ -5,6 +5,7 @@
 using MailFathom.Application.Emails.Chunking;
 using MailFathom.Application.Emails.Embeddings;
 using MailFathom.Application.Emails.Embeddings.Generation;
+using MailFathom.Application.Emails.Embeddings.Limits;
 using MailFathom.Application.Persistence;
 using MailFathom.Application.UnitTests.TestDoubles;
 using MailFathom.Domain.Emails;
@@ -19,6 +20,9 @@ public sealed class StoredEmailEmbeddingGeneratorTests
     private static readonly StoredEmailId Message = StoredEmailId.Create(Guid.CreateVersion7());
 
     private static readonly EmbeddingProfileId ProfileId = EmbeddingProfileId.Create(Guid.CreateVersion7());
+
+    /// <summary>A moment the daily period places on a whole day, so a test's expected roll-over is arithmetic rather than a guess.</summary>
+    private static readonly DateTimeOffset PeriodStart = new(2026, 8, 8, 0, 0, 0, TimeSpan.Zero);
 
     [Fact]
     public async Task EmbedAsync_ActiveProfileAndOutstandingPassages_EmbedsEveryPassage()
@@ -246,6 +250,112 @@ public sealed class StoredEmailEmbeddingGeneratorTests
         Assert.Single(textEmbeddingGenerator.RequestedBatches);
     }
 
+    /// <summary>A turn asks the ceiling before every call, so an exhausted period buys no provider request at all.</summary>
+    [Fact]
+    public async Task EmbedAsync_ThePeriodIsAlreadySpent_SendsNothingAndSaysWhenTheCeilingLifts()
+    {
+        // Arrange
+        var store = new InMemoryEmailEmbeddingStore();
+        store.AddPassages(Message, CreatePassages(3));
+        var ledger = new InMemoryEmbeddingSpendLedger();
+        ledger.Seed(PeriodStart, inputCharacterCount: 500);
+        var textEmbeddingGenerator = new ScriptedTextEmbeddingGenerator(CreateIdentity(), maximumPassagesPerCall: 8);
+        var generator = CreateGenerator(
+            store,
+            textEmbeddingGenerator,
+            CreateSpendGate(ledger, EmbeddingSpendBudget.Create(500, TimeSpan.FromDays(1))));
+
+        // Act
+        var run = await generator.EmbedAsync(Message, CreateProfile(), TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(StoredEmailEmbeddingOutcome.SpendCeilingReached, run.Outcome);
+        Assert.Equal(0, run.EmbeddedChunkCount);
+        Assert.Equal(PeriodStart.AddDays(1), run.SpendPeriodEndsAt);
+        Assert.Empty(textEmbeddingGenerator.RequestedBatches);
+        Assert.Empty(store.EmbeddedPassages);
+    }
+
+    /// <summary>
+    /// A batch is admitted whenever anything at all is left and is then paid for whole, so the ceiling binds on the
+    /// call after the one that crossed it. Weighing a batch against what remains instead would stall a deployment whose
+    /// ceiling is smaller than one batch for ever.
+    /// </summary>
+    [Fact]
+    public async Task EmbedAsync_TheCeilingIsCrossedMidTurn_PaysForThatBatchAndStopsBeforeTheNext()
+    {
+        // Arrange
+        var store = new InMemoryEmailEmbeddingStore();
+        store.AddPassages(Message, CreatePassages(4));
+        var ledger = new InMemoryEmbeddingSpendLedger();
+        var textEmbeddingGenerator = new ScriptedTextEmbeddingGenerator(CreateIdentity(), maximumPassagesPerCall: 2);
+        var generator = CreateGenerator(
+            store,
+            textEmbeddingGenerator,
+            CreateSpendGate(ledger, EmbeddingSpendBudget.Create(1, TimeSpan.FromDays(1))));
+
+        // Act
+        var run = await generator.EmbedAsync(Message, CreateProfile(), TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(StoredEmailEmbeddingOutcome.SpendCeilingReached, run.Outcome);
+        Assert.Equal(2, run.EmbeddedChunkCount);
+        Assert.Single(textEmbeddingGenerator.RequestedBatches);
+        Assert.Equal(run.InputCharacterCount, ledger.ConsumedByPeriod[PeriodStart]);
+    }
+
+    /// <summary>What a turn sent is charged to the period beside the vectors it produced, in the characters sent.</summary>
+    [Fact]
+    public async Task EmbedAsync_APassageIsEmbedded_ChargesThePeriodWhatThePreparationWouldHaveSent()
+    {
+        // Arrange
+        var store = new InMemoryEmailEmbeddingStore();
+        var passages = CreatePassages(3);
+        store.AddPassages(Message, passages);
+        var ledger = new InMemoryEmbeddingSpendLedger();
+        var profile = CreateProfile();
+        var generator = CreateGenerator(
+            store,
+            new ScriptedTextEmbeddingGenerator(CreateIdentity(), maximumPassagesPerCall: 8),
+            CreateSpendGate(ledger, EmbeddingSpendBudget.Unbounded));
+
+        // Act
+        var run = await generator.EmbedAsync(Message, profile, TestContext.Current.CancellationToken);
+
+        // Assert
+        var expected = passages.Sum(passage =>
+            profile.Identity.InputPreparation.CountBilledCharacters(passage.Text));
+        Assert.Equal(StoredEmailEmbeddingOutcome.Embedded, run.Outcome);
+        Assert.Equal(expected, run.InputCharacterCount);
+        Assert.Equal(expected, ledger.ConsumedByPeriod[PeriodStart]);
+    }
+
+    /// <summary>A refused call produced no vectors, so charging a period for it would let an outage spend the ceiling.</summary>
+    [Fact]
+    public async Task EmbedAsync_TheProviderRefuses_ChargesThePeriodNothingForTheFailedCall()
+    {
+        // Arrange
+        var store = new InMemoryEmailEmbeddingStore();
+        store.AddPassages(Message, CreatePassages(2));
+        var ledger = new InMemoryEmbeddingSpendLedger();
+        var textEmbeddingGenerator = new ScriptedTextEmbeddingGenerator(CreateIdentity(), maximumPassagesPerCall: 8)
+        {
+            Failure = EmbeddingGenerationFailure.RateLimited,
+        };
+        var generator = CreateGenerator(
+            store,
+            textEmbeddingGenerator,
+            CreateSpendGate(ledger, EmbeddingSpendBudget.Unbounded));
+
+        // Act
+        var run = await generator.EmbedAsync(Message, CreateProfile(), TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(StoredEmailEmbeddingOutcome.ProviderFailed, run.Outcome);
+        Assert.Equal(0, run.InputCharacterCount);
+        Assert.Empty(ledger.ConsumedByPeriod);
+    }
+
     private static IReadOnlyList<EmailChunkAwaitingEmbedding> CreatePassages(int count) =>
         [.. Enumerable.Range(0, count).Select(ordinal => new EmailChunkAwaitingEmbedding(
             EmailChunkId.Create(Guid.CreateVersion7()),
@@ -269,7 +379,8 @@ public sealed class StoredEmailEmbeddingGeneratorTests
 
     private static StoredEmailEmbeddingGenerator CreateGenerator(
         IEmailEmbeddingStore store,
-        ITextEmbeddingGenerator textEmbeddingGenerator)
+        ITextEmbeddingGenerator textEmbeddingGenerator,
+        EmbeddingSpendGate? spendGate = null)
     {
         var sessionFactory = Substitute.For<IPersistenceSessionFactory>();
         sessionFactory.BeginSessionAsync(Arg.Any<CancellationToken>())
@@ -281,6 +392,13 @@ public sealed class StoredEmailEmbeddingGeneratorTests
             new OptimisticConcurrencyRetryPolicy(
                 sessionFactory,
                 new PersistenceConcurrencyOptions(),
-                new FakeTimeProvider()));
+                new FakeTimeProvider()),
+            spendGate ?? CreateSpendGate(new InMemoryEmbeddingSpendLedger(), EmbeddingSpendBudget.Unbounded),
+            EmbeddingRequestPacer.Create(maxRequestsPerMinute: 0, new FakeTimeProvider()));
     }
+
+    private static EmbeddingSpendGate CreateSpendGate(
+        IEmbeddingSpendLedger ledger,
+        EmbeddingSpendBudget budget) =>
+        new(ledger, budget, new FakeTimeProvider(PeriodStart));
 }
