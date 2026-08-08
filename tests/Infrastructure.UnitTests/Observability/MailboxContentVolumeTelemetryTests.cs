@@ -140,6 +140,12 @@ public sealed class MailboxContentVolumeTelemetryTests : IDisposable
     }
 
     /// <summary>The level is the deployment's, so it carries no account dimension for a dashboard to sum.</summary>
+    /// <remarks>
+    /// The gauge is read by value rather than as the only one published, because the meter is process-wide and each
+    /// test of this class constructs a telemetry of its own: every instance registers a gauge that outlives its test,
+    /// so the collector sees one measurement per instance built so far. Only the one this test produced says anything
+    /// about it. Production builds a single instance, which is why the duplication is a property of the suite alone.
+    /// </remarks>
     [Fact]
     public void Report_AnyRun_PublishesTheMeasuredLevelWithoutAnAccountDimension()
     {
@@ -153,8 +159,10 @@ public sealed class MailboxContentVolumeTelemetryTests : IDisposable
             VolumeWith(fetchedBytes: 0, storedBytes: 0) with { StoredContentBytes = 987_654 });
 
         // Assert
-        var level = Assert.Single(collector.ReadUntagged(StoredTotalInstrumentName));
-        Assert.Equal(987_654, level.Value);
+        var level = Assert.Single(
+            collector.ReadUntagged(StoredTotalInstrumentName),
+            measurement => measurement.Value == 987_654);
+
         Assert.DoesNotContain(AccountTagName, level.Tags.Keys);
     }
 

@@ -232,6 +232,16 @@ public readonly record struct MailFathomErrorCode
     /// </remarks>
     public static MailFathomErrorCode MailAnsweringUnavailable { get; } = new(56001);
 
+    /// <summary>Gets subcategory 7, spend ceilings: answering a question would exceed a ceiling this deployment configured on what it spends.</summary>
+    /// <remarks>
+    /// Separate from the capability failure above because the deployment is working and nothing is degraded: the
+    /// operator declared how much answering may cost and that much has been spent. It is the one refusal on this
+    /// surface a caller can act on by waiting, so it is not collapsed into a code whose whole meaning is that waiting
+    /// changes nothing. One code covers the ceiling on a single run and the ceiling over a period, because the message
+    /// says which and neither names a number the caller could have influenced.
+    /// </remarks>
+    public static MailFathomErrorCode MailAnsweringBudgetExhausted { get; } = new(57001);
+
     #endregion
 
     #region Category 6 — Embedding providers
@@ -319,6 +329,7 @@ public readonly record struct MailFathomErrorCode
         McpToolFailedUnexpectedly,
         EmailContentUnavailable,
         MailAnsweringUnavailable,
+        MailAnsweringBudgetExhausted,
         EmbeddingProviderCredentialRejected,
         EmbeddingProviderUnavailable,
         EmbeddingVectorShapeUnexpected,

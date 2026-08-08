@@ -61,12 +61,11 @@ public sealed class PassageRelevanceFilterOptionsTests
         Assert.Contains(errors, error => error.Contains("no Alias", StringComparison.Ordinal));
     }
 
-    /// <summary>A count beyond what one retrieval hands over names candidates that never exist, so it is refused rather than accepted and never met.</summary>
+    /// <summary>A count below one would judge nothing while still declaring a filter, which is a pass nobody could have meant.</summary>
     [Theory]
     [InlineData(0)]
     [InlineData(-1)]
-    [InlineData(int.MaxValue)]
-    public void Validate_ACandidateBoundOutsideWhatOneRetrievalHandsOver_IsRefused(int maxCandidates)
+    public void Validate_ACandidateBoundBelowOne_IsRefused(int maxCandidates)
     {
         // Arrange
         var settings = Declared();
@@ -80,24 +79,28 @@ public sealed class PassageRelevanceFilterOptionsTests
         Assert.Contains(errors, error => error.Contains("MaxCandidates", StringComparison.Ordinal));
     }
 
+    /// <summary>
+    /// The upper bound is what a retrieval hands over, which lives in another section, so this type sees nothing wrong
+    /// with a count beyond it and <see cref="PassageRelevanceCandidateAgreement" /> is what refuses one.
+    /// </summary>
     [Fact]
-    public void Validate_ACandidateBoundOnePastTheRetrievalCeiling_IsRefused()
+    public void Validate_ACandidateBoundBeyondAnyRetrieval_IsLeftToTheRuleThatSeesBothSections()
     {
         // Arrange
         var settings = Declared();
         settings.RelevanceFilter.Enabled = true;
-        settings.RelevanceFilter.MaxCandidates = PassageRelevanceFilterPlan.GreatestCandidates + 1;
+        settings.RelevanceFilter.MaxCandidates = int.MaxValue;
 
         // Act
         var errors = Validate(settings);
 
         // Assert
-        Assert.Contains(errors, error => error.Contains("MaxCandidates", StringComparison.Ordinal));
+        Assert.Empty(errors);
     }
 
-    /// <summary>The default judges everything a retrieval hands over, which is also the greatest value that means anything.</summary>
+    /// <summary>An unwritten count means "judge everything the retrieval hands over", so the default is an absence rather than a number that could go stale.</summary>
     [Fact]
-    public void Validate_TheDefaultCandidateBound_IsTheRetrievalCeiling()
+    public void Validate_NoCandidateBoundWritten_LeavesItAbsentAndIsAccepted()
     {
         // Arrange
         var settings = Declared();
@@ -107,7 +110,7 @@ public sealed class PassageRelevanceFilterOptionsTests
         var errors = Validate(settings);
 
         // Assert
-        Assert.Equal(PassageRelevanceFilterPlan.GreatestCandidates, settings.RelevanceFilter.MaxCandidates);
+        Assert.Null(settings.RelevanceFilter.MaxCandidates);
         Assert.Empty(errors);
     }
 

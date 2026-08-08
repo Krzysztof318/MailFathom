@@ -46,8 +46,10 @@ Three properties hold for every tool and are proven by test rather than asserted
   emails it cites.
 - Every tool bounds how much mail one call can draw out of a mailbox, in the count of items and in their volume alike:
   `list_emails` pages at 100 summaries, `search_emails` windows at 50 ranked matches, `get_email_content` reads at
-  most 10 emails under a shared character budget, and `ask_mail` publishes at most 20 000 characters of answer citing at
-  most 20 emails. A caller can never raise any of them.
+  most 10 emails under a shared character budget, and `ask_mail` publishes by default at most 20 000 characters of
+  answer citing at most 20 emails, having read at most 20 000 characters of mail to write it. A caller can never raise
+  any of them, and the last set is the operator's to lower or raise in
+  [`MailAnswering`](../operations/configuration-reference.md#mailanswering).
 
 One property holds for three of the four and is stated where it stops. `list_emails`, `get_email_content`, and
 `search_emails` are advertised by every deployment, because the local mailbox copy is all they need. `ask_mail` needs two
@@ -124,8 +126,9 @@ configured name for an account and carries nothing the caller did not already wr
 | `54001` | The call failed for a reason the boundary deliberately does not describe | Anything undiagnosed; the detail is in the server log |
 | `55001` | The email exists locally and its stored content is missing, damaged, or unreadable | A local copy being repaired; the call is worth repeating once repair has run |
 | `56001` | This deployment cannot answer questions about mail, either at all or for now | `ask_mail` called on a server that declared no chat endpoint or embeds no mail, or one whose chat provider is currently refusing; the message says which |
+| `57001` | Answering would cost more than this deployment allows | `ask_mail` on a server whose current period has spent its allowance, or a run that reached what one question may spend; the message says which, and only the first becomes answerable by waiting |
 
-Codes `51001` through `53002`, `55001`, and `56001` are the use cases' own, allocated in the MCP-boundary category because that is
+Codes `51001` through `53002`, `55001`, `56001`, and `57001` are the use cases' own, allocated in the MCP-boundary category because that is
 where they surface, and every one of them is written for a caller to read. That is the whole rule the boundary applies: a
 failure whose code belongs to that category is published as it stands, and a failure from any other category — a schema
 mismatch, an IMAP authentication refusal, a concurrency conflict — describes MailFathom's internals to whoever asked and
@@ -542,6 +545,7 @@ same refusals; the section above records that rule once.
 | `citations` | The emails the run retrieved, one entry per email, in the order it first reached each |
 | `answerTruncated` | Whether the answer was cut to the length one response carries |
 | `citationsTruncated` | Whether the run reached more emails than `citations` names |
+| `retrievalTruncated` | Whether the run hit this deployment's ceiling on how much mail one question may read |
 
 Each citation carries the `storedEmailId` a content read is performed by, the account and folder alias, the subject, and
 the received time. It deliberately carries no extract: the passage the run retrieved has already reached a model, and
@@ -556,11 +560,18 @@ messages the run had in front of it.
 An empty `citations` array is an ordinary answer. The mailbox was searched and held nothing about the question, and the
 answer then says so — which is a real answer rather than a failure.
 
-Both truncation flags are part of the contract rather than diagnostics. A cut this surface made and did not report would
-leave a shortened answer indistinguishable from a complete one, and a claim traced to a message the response no longer
-names cannot be checked. Both are cut rather than refused, which is the opposite of how a request bound behaves: a
+The three truncation flags are part of the contract rather than diagnostics. A cut this surface made and did not report
+would leave a shortened answer indistinguishable from a complete one, a claim traced to a message the response no longer
+names cannot be checked, and a run that was stopped from reading further answered a narrower reading of the mailbox than
+the question asked for. All three cut rather than refuse, which is the opposite of how a request bound behaves: a
 request larger than a limit is the caller's to correct, while an answer larger than one has already been generated and
 paid for.
+
+`retrievalTruncated` is the one worth acting on differently. It does not mean the answer is wrong — it is complete for
+what the run did read — but the mailbox holds matching messages the model was never shown, so asking a narrower question
+reads a *different* part of the mailbox rather than more of it. [Mail answering § What one question may
+spend](mail-answering.md#what-one-question-may-spend) records the ceiling behind it and what the model is told when it
+is reached.
 
 **The answer and the cited subjects are untrusted text.** The answer is model output written from extracts of mail
 somebody else wrote, and a subject is that person's own words. A client that passes either into another model treats both
@@ -594,6 +605,6 @@ says whether this deployment answers no questions at all or answers them and cur
 
 The four read-only tools of the first release are complete. `list_emails`, `get_email_content`, and `search_emails` read
 the PostgreSQL read models, the lexical index, and the content store that landed with their use cases, and `ask_mail`
-answers over the retrieval and the agent composition above them. What is still pending on this surface is the spend
-ceiling an operator sets on one question and the run trace an operator reads afterwards, each its own change, and any
-tool that writes: SMTP delivery is deliberately absent from the first public tool set.
+answers over the retrieval and the agent composition above them, under the ceilings an operator sets on what one
+question and one period may spend. What is still pending on this surface is the run trace an operator reads afterwards,
+its own change, and any tool that writes: SMTP delivery is deliberately absent from the first public tool set.

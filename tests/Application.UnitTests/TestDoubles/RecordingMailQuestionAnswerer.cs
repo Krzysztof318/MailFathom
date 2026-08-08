@@ -15,7 +15,7 @@ namespace MailFathom.Application.UnitTests.TestDoubles;
 internal sealed class RecordingMailQuestionAnswerer : IMailQuestionAnswerer
 {
     private readonly List<MailQuestion> questions = [];
-    private MailAnswer answer = new("an answer", []);
+    private MailAnswer answer = new("an answer", [], RetrievalWasTruncated: false);
 
     /// <summary>Gets every question this answerer was asked, in the order it was asked them.</summary>
     public IReadOnlyList<MailQuestion> Questions => this.questions;
@@ -26,7 +26,16 @@ internal sealed class RecordingMailQuestionAnswerer : IMailQuestionAnswerer
     /// <returns>The same answerer, so a test arranges it in one expression.</returns>
     public RecordingMailQuestionAnswerer Answering(string text, params EmailKnowledgePassage[] passages)
     {
-        this.answer = new MailAnswer(text, passages);
+        this.answer = new MailAnswer(text, passages, RetrievalWasTruncated: false);
+
+        return this;
+    }
+
+    /// <summary>Scripts the next run as one that reached this deployment's ceiling on retrieved mail.</summary>
+    /// <returns>The same answerer, so a test arranges it in one expression.</returns>
+    public RecordingMailQuestionAnswerer HavingReachedTheRetrievalCeiling()
+    {
+        this.answer = this.answer with { RetrievalWasTruncated = true };
 
         return this;
     }

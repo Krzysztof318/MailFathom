@@ -29,13 +29,6 @@ public sealed class PassageRelevanceFilterPlan
     /// <summary>The relevance of an extract that answers the query.</summary>
     public const int GreatestRelevance = 100;
 
-    /// <summary>Gets the greatest candidate count a deployment may declare, which is everything one retrieval can hand over.</summary>
-    /// <remarks>
-    /// Read from the retrieval bounds rather than restated, so the two move together: the day the passage count becomes
-    /// a setting, the ceiling on what may be judged follows it instead of staying at a number that was true once.
-    /// </remarks>
-    public static int GreatestCandidates => EmailKnowledgeBounds.Default.MaximumPassages;
-
     private PassageRelevanceFilterPlan(int maximumCandidates, int minimumRelevance)
     {
         this.MaximumCandidates = maximumCandidates;
@@ -60,22 +53,28 @@ public sealed class PassageRelevanceFilterPlan
     public int MinimumRelevance { get; }
 
     /// <summary>Builds a plan, refusing a declaration no filter could run under.</summary>
+    /// <param name="retrievalBounds">What one retrieval hands over, which is the ceiling on what there is to judge.</param>
     /// <param name="maximumCandidates">The greatest number of passages one retrieval puts to the model.</param>
     /// <param name="minimumRelevance">The least relevance a judged passage may carry and still be handed over.</param>
     /// <returns>The plan.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="retrievalBounds" /> is <see langword="null" />.</exception>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when either value is outside the range this type accepts.</exception>
     /// <remarks>
-    /// The candidate count is capped by what one retrieval hands over, which is
-    /// <see cref="EmailKnowledgeBounds.MaximumPassages" /> and is a narrower number than what a search can rank. A
-    /// higher count would state a ceiling no question could reach: there is never a ninth passage to judge, so a
-    /// deployment writing one would be told it had widened a filter that had not moved.
+    /// The candidate count is capped by what one retrieval hands over rather than by a number of its own, so the two
+    /// move together: a deployment that narrows <see cref="EmailKnowledgeBounds.MaximumPassages" /> narrows what may be
+    /// judged with it. A higher count would state a ceiling no question could reach — there is never a candidate past
+    /// the last passage — so a deployment writing one would be told it had widened a filter that had not moved.
     /// The threshold starts at one rather than at zero, because a threshold of zero pays for a judgement that can drop
     /// nothing.
     /// </remarks>
-    public static PassageRelevanceFilterPlan Create(int maximumCandidates, int minimumRelevance)
+    public static PassageRelevanceFilterPlan Create(
+        EmailKnowledgeBounds retrievalBounds,
+        int maximumCandidates,
+        int minimumRelevance)
     {
+        ArgumentNullException.ThrowIfNull(retrievalBounds);
         ArgumentOutOfRangeException.ThrowIfLessThan(maximumCandidates, 1);
-        ArgumentOutOfRangeException.ThrowIfGreaterThan(maximumCandidates, GreatestCandidates);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(maximumCandidates, retrievalBounds.MaximumPassages);
         ArgumentOutOfRangeException.ThrowIfLessThan(minimumRelevance, LeastRelevance + 1);
         ArgumentOutOfRangeException.ThrowIfGreaterThan(minimumRelevance, GreatestRelevance);
 

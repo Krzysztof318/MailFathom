@@ -31,7 +31,7 @@ public sealed class RetrievedMailContextFormatterTests
             subject: "Invoice 41");
 
         // Act
-        var envelope = RetrievedMailContextFormatter.Format([passage]);
+        var envelope = RetrievedMailContextFormatter.Format([passage], retrievalLimitReached: false);
 
         // Assert
         var message = Assert.Single(MessagesIn(envelope));
@@ -56,7 +56,7 @@ public sealed class RetrievedMailContextFormatterTests
         ];
 
         // Act
-        var envelope = RetrievedMailContextFormatter.Format(passages);
+        var envelope = RetrievedMailContextFormatter.Format(passages, retrievalLimitReached: false);
 
         // Assert
         Assert.Equal(
@@ -82,7 +82,7 @@ public sealed class RetrievedMailContextFormatterTests
         var passage = KnowledgePassages.Create(Injection, subject: forgedSubject);
 
         // Act
-        var envelope = RetrievedMailContextFormatter.Format([passage]);
+        var envelope = RetrievedMailContextFormatter.Format([passage], retrievalLimitReached: false);
 
         // Assert
         var message = Assert.Single(MessagesIn(envelope));
@@ -101,7 +101,7 @@ public sealed class RetrievedMailContextFormatterTests
         var passage = KnowledgePassages.Create("nothing of interest", accountId: ForgedAccount);
 
         // Act
-        var envelope = RetrievedMailContextFormatter.Format([passage]);
+        var envelope = RetrievedMailContextFormatter.Format([passage], retrievalLimitReached: false);
 
         // Assert
         var message = Assert.Single(MessagesIn(envelope));
@@ -117,7 +117,7 @@ public sealed class RetrievedMailContextFormatterTests
         var passage = KnowledgePassages.Create("a message that arrived without one");
 
         // Act
-        var envelope = RetrievedMailContextFormatter.Format([passage]);
+        var envelope = RetrievedMailContextFormatter.Format([passage], retrievalLimitReached: false);
 
         // Assert
         var message = Assert.Single(MessagesIn(envelope));
@@ -134,7 +134,7 @@ public sealed class RetrievedMailContextFormatterTests
         var passage = KnowledgePassages.Create("the invoice is attached") with { ReceivedAt = receivedAt };
 
         // Act
-        var envelope = RetrievedMailContextFormatter.Format([passage]);
+        var envelope = RetrievedMailContextFormatter.Format([passage], retrievalLimitReached: false);
 
         // Assert
         var written = Attribute(Assert.Single(MessagesIn(envelope)), RetrievedMailContextFormatter.ReceivedAttributeName);
@@ -154,10 +154,31 @@ public sealed class RetrievedMailContextFormatterTests
     public void Format_NoPassages_StillWritesTheEnvelope()
     {
         // Act
-        var envelope = RetrievedMailContextFormatter.Format([]);
+        var envelope = RetrievedMailContextFormatter.Format([], retrievalLimitReached: false);
 
         // Assert
         Assert.Empty(MessagesIn(envelope));
+        Assert.Null(RootOf(envelope).Attribute(RetrievedMailContextFormatter.RetrievalLimitReachedAttributeName));
+    }
+
+    /// <summary>
+    /// A mailbox with no answer in it and a run with no allowance left to read one produce the same short envelope, so
+    /// only the attribute separates them — and only the second one means asking again buys nothing.
+    /// </summary>
+    [Fact]
+    public void Format_ARunThatMayBeHandedNoMoreMail_SaysSoOnTheEnvelope()
+    {
+        // Arrange
+        var passage = KnowledgePassages.Create("the last extract this run was allowed");
+
+        // Act
+        var envelope = RetrievedMailContextFormatter.Format([passage], retrievalLimitReached: true);
+
+        // Assert
+        Assert.Single(MessagesIn(envelope));
+        Assert.Equal(
+            "true",
+            RootOf(envelope).Attribute(RetrievedMailContextFormatter.RetrievalLimitReachedAttributeName)?.Value);
     }
 
     /// <summary>The same mail formats to the same text, so what a model was shown can be reasoned about.</summary>
@@ -172,20 +193,23 @@ public sealed class RetrievedMailContextFormatterTests
         ];
 
         // Act
-        var envelope = RetrievedMailContextFormatter.Format(passages);
+        var envelope = RetrievedMailContextFormatter.Format(passages, retrievalLimitReached: false);
 
         // Assert
-        Assert.Equal(envelope, RetrievedMailContextFormatter.Format(passages));
+        Assert.Equal(envelope, RetrievedMailContextFormatter.Format(passages, retrievalLimitReached: false));
     }
 
+    private static IReadOnlyList<XElement> MessagesIn(string envelope) =>
+        [.. RootOf(envelope).Elements(RetrievedMailContextFormatter.MessageElementName)];
+
     /// <summary>Reads the envelope back as the document it claims to be, which is itself part of what is asserted.</summary>
-    private static IReadOnlyList<XElement> MessagesIn(string envelope)
+    private static XElement RootOf(string envelope)
     {
         var root = XDocument.Parse(envelope).Root
             ?? throw new InvalidOperationException("The envelope carried no root element.");
 
         return root.Name.LocalName == RetrievedMailContextFormatter.RetrievalElementName
-            ? [.. root.Elements(RetrievedMailContextFormatter.MessageElementName)]
+            ? root
             : throw new InvalidOperationException($"The envelope opened with '{root.Name.LocalName}'.");
     }
 

@@ -6,6 +6,7 @@ using MailFathom.AI.Orchestration;
 using MailFathom.AI.Retrieval;
 using MailFathom.AI.UnitTests.TestDoubles;
 using MailFathom.Application.Emails.Mailboxes;
+using MailFathom.Application.Retrieval.AskMail;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Folders;
 using Microsoft.Agents.AI;
@@ -147,7 +148,10 @@ public sealed class MailAnsweringAgentCompositionTests
             "invoice",
             "The invoice was attached.");
         var plan = ChatDeclarations.Plan(maximumOutputTokens: 321, temperature: 0.25f, topP: 0.75f);
-        var retrieval = new ScopedMailKnowledgeRetrieval(knowledgeSearch, OnePrimaryAccount);
+        var retrieval = new ScopedMailKnowledgeRetrieval(
+            knowledgeSearch,
+            OnePrimaryAccount,
+            new MailAnsweringRunLedger(MailAnsweringRunBounds.Default));
         var agent = MailAnsweringAgentComposition.Compose(
             chatClient,
             plan,
@@ -233,6 +237,86 @@ public sealed class MailAnsweringAgentCompositionTests
             call => Assert.DoesNotContain(Injection, call.Options?.Instructions ?? string.Empty, StringComparison.Ordinal));
     }
 
+    /// <summary>
+    /// The payload itself, asserted as a shape rather than as an absence from a log: what one run sends is the run's own
+    /// instruction, the question as it was asked, the model's own turns, and the envelope of what it retrieved — and the
+    /// envelope is exactly the one the formatter writes from the admitted passages, so nothing about the messages travels
+    /// beyond the identity, the coordinates, the subject, and the extract it carries.
+    /// </summary>
+    [Fact]
+    public async Task Compose_WhatOneRunSends_IsTheQuestionTheInstructionAndTheRetrievedExtractsAndNothingElse()
+    {
+        // Arrange
+        var passage = KnowledgePassages.Create("the invoice is attached", subject: "Invoice 41");
+        var knowledgeSearch = new RecordingEmailKnowledgeSearch().Returning("invoice", passage);
+        using var chatClient = ScriptedChatClient.CallingTool(
+            ScopedMailKnowledgeRetrieval.SearchToolName,
+            "invoice",
+            "The invoice was attached.");
+        var agent = AgentOver(chatClient, knowledgeSearch, OnePrimaryAccount, out var retrieval);
+
+        // Act
+        await agent.RunAsync(
+            "was the invoice attached",
+            session: null,
+            options: null,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        var expectedEnvelope = RetrievedMailContextFormatter.Format(
+            [.. retrieval.Retrieved],
+            retrievalLimitReached: false);
+        var sent = chatClient.Calls[^1].Messages;
+
+        Assert.Equal(
+            [ChatRole.User, ChatRole.Assistant, ChatRole.Tool],
+            sent.Select(message => message.Role));
+        Assert.Equal("was the invoice attached", CarriedText(sent[0]));
+        Assert.Equal(expectedEnvelope, CarriedText(sent[2]));
+        Assert.All(
+            chatClient.Calls,
+            call => Assert.Equal(MailAnsweringInstructions.Text, call.Options?.Instructions));
+    }
+
+    /// <summary>
+    /// The ceiling on retrieved mail cuts rather than refuses: a lookup past it hands over nothing and the envelope says
+    /// so, which is what separates a mailbox with no answer in it from a run with no allowance left to read one.
+    /// </summary>
+    [Fact]
+    public async Task Compose_ARunWhoseRetrievalCeilingIsReached_HandsOverNothingAndSaysSoInTheEnvelope()
+    {
+        // Arrange
+        var knowledgeSearch = new RecordingEmailKnowledgeSearch()
+            .Returning("invoice", KnowledgePassages.Create(new string('a', 400)));
+        using var chatClient = ScriptedChatClient.CallingTool(
+            ScopedMailKnowledgeRetrieval.SearchToolName,
+            "invoice",
+            "I could not read the whole mailbox.");
+        var retrieval = new ScopedMailKnowledgeRetrieval(
+            knowledgeSearch,
+            OnePrimaryAccount,
+            new MailAnsweringRunLedger(MailAnsweringRunBounds.Create(100, 8, 80_000)));
+        var agent = MailAnsweringAgentComposition.Compose(
+            chatClient,
+            ChatDeclarations.Plan(),
+            retrieval,
+            NullLoggerFactory.Instance);
+
+        // Act
+        await agent.RunAsync("was it attached", session: null, options: null, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Empty(retrieval.Retrieved);
+        Assert.True(retrieval.WasTruncated);
+
+        var toolResult = chatClient.Calls[^1].Messages.Single(message => message.Role == ChatRole.Tool);
+
+        Assert.Contains(
+            RetrievedMailContextFormatter.RetrievalLimitReachedAttributeName,
+            CarriedText(toolResult),
+            StringComparison.Ordinal);
+    }
+
     /// <summary>Reads everything one message would put in front of the model, whichever content shape carries it.</summary>
     /// <remarks>
     /// A tool result is not text content, so <see cref="ChatMessage.Text" /> reports nothing for exactly the message
@@ -255,7 +339,10 @@ public sealed class MailAnsweringAgentCompositionTests
         MailboxScope scope,
         out ScopedMailKnowledgeRetrieval retrieval)
     {
-        retrieval = new ScopedMailKnowledgeRetrieval(knowledgeSearch, scope);
+        retrieval = new ScopedMailKnowledgeRetrieval(
+            knowledgeSearch,
+            scope,
+            new MailAnsweringRunLedger(MailAnsweringRunBounds.Default));
 
         return MailAnsweringAgentComposition.Compose(
             chatClient,

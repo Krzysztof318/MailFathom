@@ -354,8 +354,45 @@ describes what it drops, what it keeps, and what it does when the provider canno
 | Key | Type | Default | Constraint | Change |
 | --- | --- | --- | --- | --- |
 | `Chat:RelevanceFilter:Enabled` | bool | `false` | turning it on requires a declared `Chat:Alias`, and a `Chat:MaxMessagesPerRequest` of at least 2, because a judgement is an instruction and a candidate | restart |
-| `Chat:RelevanceFilter:MaxCandidates` | int | `8` | 1 – 8, which is everything one retrieval hands over — a higher value would name candidates that never exist and is refused rather than accepted and never met. The ceiling on what one lookup spends and how long it takes. Set below the default it buys a weaker filter rather than a shorter result: a passage nobody judged keeps its place | restart |
+| `Chat:RelevanceFilter:MaxCandidates` | int | *(unset)* | 1 – [`MailAnswering:MaxPassagesPerRetrieval`](#mailanswering), which is everything one retrieval hands over; a higher value would name candidates that never exist and is refused at startup rather than accepted and never met. Unset judges every passage the retrieval hands over, which is why there is no literal default here: one would go on saying 8 after the retrieval it follows was narrowed. The ceiling on what one lookup spends and how long it takes; set below what retrieval returns it buys a weaker filter rather than a shorter result, because a passage nobody judged keeps its place | restart |
 | `Chat:RelevanceFilter:MinimumRelevance` | int | `50` | 1 – 100, on the scale the model answers a judgement on. A threshold of 0 is refused: it would pay for a judgement that can drop nothing | restart |
+
+## `MailAnswering`
+
+What answering one question is allowed to cost, and how much of a mailbox may leave the process to do it. A root of its
+own beside `Chat` rather than a block inside it, because the two answer different questions: `Chat` says which endpoint
+generates text and what one *call* to it may carry, while this bounds a *run* — the conversation in which a model looks
+mail up, reads it, and writes an answer — and the aggregate over every run of a period.
+
+Unlike the provider sections, an absent section is not an absent capability. Every deployment has these ceilings and
+writing nothing takes the conservative defaults below, because an absent provider is a capability nobody asked for while
+an absent ceiling would be a bill nobody asked for. [Mail answering § What one question may
+spend](../features/mail-answering.md#what-one-question-may-spend) describes what each one does when it is reached, and
+what a caller is told.
+
+The period is a **fixed window anchored at the Unix epoch**, placed exactly as
+[`Embeddings:SpendPeriod`](#embeddings) places the other spend ceiling: an `AggregatePeriod` of one hour begins on the
+hour, so a refused caller has a roll-over instant to come back at. A client that spends the whole allowance at the end
+of one window and again at the start of the next has therefore spent twice the ceiling across an interval of the same
+length.
+
+Unlike the embedding ceiling, this ledger is **process-local and not durable**: a restart begins the current window with
+nothing spent. The difference is deliberate and is stated rather than implied — an embedding sweep charges inside a
+transaction that was committing vectors anyway, while answering opens no write of its own, so a durable count here would
+put a database write on the path of every provider call in every run.
+
+| Key | Type | Default | Constraint | Change |
+| --- | --- | --- | --- | --- |
+| `MailAnswering:MaxPassagesPerRetrieval` | int | `8` | 1 – 50; how many messages one lookup may draw on. Capped by what one search can rank, because a retrieval is answered from a search window | restart |
+| `MailAnswering:MaxCharactersPerPassage` | int | `1200` | 1 – 100000; how much of any single message a lookup may draw out. Separate from the count above, because one enormous extract and a spread across several messages say different things about a mailbox | restart |
+| `MailAnswering:MaxRetrievedCharactersPerRun` | int | `20000` | 1 – 10000000, and at least `MaxCharactersPerPassage` or no lookup could hand over even one passage. The ceiling on how much retrieved mail leaves the process to answer one question, whatever the model asks for. Reaching it cuts rather than refuses: the run answers from what it has and the response says the mailbox was not read in full | restart |
+| `MailAnswering:MaxProviderCallsPerRun` | int | `8` | 1 – 1000; the ceiling that holds whatever the provider reports, because a run is a tool loop whose length is the model's decision. Reaching it stops the run with `57001` | restart |
+| `MailAnswering:MaxTokensPerRun` | long | `80000` | 1 – 100000000; the cost ceiling, stated in the unit a provider bills by. Checked before each call against what the calls before it reported, so the call that crosses it is paid for — what a call will cost is not knowable until it is answered. Reaching it stops the run with `57001` | restart |
+| `MailAnswering:MaxAnswerCharacters` | int | `20000` | 1 – 1000000; how much of the model's answer one response carries. Cut rather than refused, and the response says it was cut | restart |
+| `MailAnswering:MaxCitations` | int | `20` | 1 – 1000; how many messages one response names. Cut the same way and reported the same way | restart |
+| `MailAnswering:AggregatePeriod` | TimeSpan | `01:00:00` | positive; how long one period lasts before what was spent in it is forgotten. An hour rather than a day, because a ceiling an operator only meets once a day is one they meet after the spend has happened | restart |
+| `MailAnswering:MaxRunsPerPeriod` | int | `30` | 1 – 1000000; the ceiling on how enthusiastic a client may be. Nothing about the MCP surface stops one from asking a hundred questions in a minute, and without this a per-run ceiling bounds each of those hundred and none of the total. A question over it is refused with `57001` | restart |
+| `MailAnswering:MaxTokensPerPeriod` | long | `300000` | 1 – 10000000000; the same ceiling in what a provider bills. Checked before a run begins, against what the runs of this period have consumed so far | restart |
 
 ## `EmbeddingBackfill`
 

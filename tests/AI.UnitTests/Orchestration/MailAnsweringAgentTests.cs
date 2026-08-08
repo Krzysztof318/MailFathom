@@ -14,6 +14,7 @@ using MailFathom.Application.Chat;
 using MailFathom.Application.Emails.Mailboxes;
 using MailFathom.Application.Resilience;
 using MailFathom.Application.Retrieval;
+using MailFathom.Application.Retrieval.AskMail;
 using MailFathom.Domain.Accounts;
 using MailFathom.TestSupport;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -119,13 +120,17 @@ public sealed class MailAnsweringAgentTests
         /// <summary>The health state every call this provider serves reports into, so a test can read what the run established.</summary>
         public IAiProviderHealthRecorder HealthRecorder { get; } = Substitute.For<IAiProviderHealthRecorder>();
 
+        /// <summary>The period ledger every call of the run is charged to, so a test can read what it was told the run spent.</summary>
+        public IMailAnsweringSpendLedger SpendLedger { get; } = Substitute.For<IMailAnsweringSpendLedger>();
+
         public int RequestCount { get; private set; }
 
         public static ScriptedTransport Answering(string payload) => new() { payload = payload };
 
         public MailAnsweringAgent AgentOver(
             IEmailKnowledgeSearch knowledgeSearch,
-            ChatGenerationPlan? plan = null)
+            ChatGenerationPlan? plan = null,
+            MailAnsweringRunBounds? runBounds = null)
         {
             var transportFactory = Substitute.For<IHttpClientFactory>();
             transportFactory
@@ -156,12 +161,14 @@ public sealed class MailAnsweringAgentTests
 
             return new MailAnsweringAgent(
                 plan ?? ChatDeclarations.Plan(),
+                runBounds ?? MailAnsweringRunBounds.Default,
                 credentialSource,
                 new OpenAiCompatibleClientFactory(),
                 transportFactory,
                 knowledgeSearch,
                 operationRunner,
                 this.HealthRecorder,
+                this.SpendLedger,
                 NullLoggerFactory.Instance,
                 NullLogger<MailAnsweringAgent>.Instance);
         }

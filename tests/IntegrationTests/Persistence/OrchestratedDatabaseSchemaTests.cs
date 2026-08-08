@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.Persistence;
+using MailFathom.Application.Retrieval.AskMail;
 using MailFathom.Infrastructure;
 using MailFathom.Infrastructure.Persistence.Connections;
 using MailFathom.Infrastructure.Secrets.Resolution;
@@ -88,7 +89,8 @@ public sealed class OrchestratedDatabaseSchemaTests(MailFathomOrchestrationFixtu
         builder.Services.AddSecretResolution(SecretValueInterpretation.ReferenceOnly);
         builder.Services.AddInfrastructure(
             _ => new PostgresConnectionSettings(orchestration.DatabaseConnectionString, null, null),
-            textSearchConfiguration);
+            textSearchConfiguration,
+            MailAnsweringBudget.Default);
 
         return builder.Build();
     }

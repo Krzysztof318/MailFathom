@@ -54,10 +54,12 @@ internal static class AnsweringDeployment
     /// <summary>Composes the use case the tool calls, over the capability the arguments describe.</summary>
     /// <param name="answerer">The answering port, or <see langword="null" /> for a deployment that declared no chat endpoint.</param>
     /// <param name="bounds">How much of one run's outcome a single answer publishes.</param>
+    /// <param name="spendLedger">What the current period may still spend, or <see langword="null" /> for one that admits every question.</param>
     /// <returns>The use case.</returns>
     public static MailboxQuestionReader QuestionReader(
         IMailQuestionAnswerer? answerer,
-        MailAnswerBounds? bounds = null)
+        MailAnswerBounds? bounds = null,
+        IMailAnsweringSpendLedger? spendLedger = null)
     {
         var accountCatalog = Substitute.For<IMailAccountCatalog>();
         accountCatalog.ServedAccountIds.Returns([MailAccountId.Create(ServedAccountId)]);
@@ -65,7 +67,22 @@ internal static class AnsweringDeployment
         return new MailboxQuestionReader(
             Capability(answerer),
             new MailboxScopeResolver(accountCatalog),
+            spendLedger ?? LedgerAdmitting(),
             bounds ?? MailAnswerBounds.Default);
+    }
+
+    /// <summary>Builds a ledger with an allowance for whatever a test asks it.</summary>
+    /// <returns>The ledger.</returns>
+    /// <remarks>
+    /// Configured explicitly rather than left at the substitute's default, which is <see langword="false" /> and would
+    /// silently refuse every question in a suite about what the tool publishes.
+    /// </remarks>
+    public static IMailAnsweringSpendLedger LedgerAdmitting()
+    {
+        var ledger = Substitute.For<IMailAnsweringSpendLedger>();
+        ledger.TryAdmitRun().Returns(true);
+
+        return ledger;
     }
 
     /// <summary>Builds an embedding half that has a profile, a generator agreeing with it, and a provider that answers.</summary>

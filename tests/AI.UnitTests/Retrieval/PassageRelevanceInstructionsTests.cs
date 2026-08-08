@@ -24,7 +24,7 @@ public sealed class PassageRelevanceInstructionsTests
 
         // Assert
         Assert.Equal("what was agreed", QueryIn(turn));
-        Assert.Contains(RetrievedMailContextFormatter.Format([passage]), turn, StringComparison.Ordinal);
+        Assert.Contains(RetrievedMailContextFormatter.Format([passage], retrievalLimitReached: false), turn, StringComparison.Ordinal);
     }
 
     /// <summary>The query is free text a model wrote, and a run's earlier retrieval is one of the things that shaped it, so mail reaches it indirectly.</summary>

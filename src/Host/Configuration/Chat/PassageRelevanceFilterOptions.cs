@@ -33,13 +33,15 @@ internal sealed class PassageRelevanceFilterOptions
     /// <summary>Gets or sets whether retrieval judges its candidates before handing them over.</summary>
     public bool Enabled { get; set; }
 
-    /// <summary>Gets or sets the greatest number of passages one retrieval puts to the model.</summary>
+    /// <summary>Gets or sets the greatest number of passages one retrieval puts to the model, or nothing to judge every passage it hands over.</summary>
     /// <remarks>
     /// The ceiling on what one lookup costs, in latency as much as in spend. Set below what retrieval returns it buys a
     /// weaker filter rather than a shorter result: a passage nobody judged keeps the place the fused ranking gave it.
-    /// The default judges everything a retrieval hands over, which is also the greatest value that means anything.
+    /// Absent rather than defaulted to a number, because the value it would default to is
+    /// <c>MailAnswering:MaxPassagesPerRetrieval</c> — a setting in another section, so a literal written here would go
+    /// on saying eight after an operator narrowed the retrieval it was meant to follow.
     /// </remarks>
-    public int MaxCandidates { get; set; } = PassageRelevanceFilterPlan.GreatestCandidates;
+    public int? MaxCandidates { get; set; }
 
     /// <summary>Gets or sets the least relevance a judged passage may carry and still be handed over.</summary>
     /// <remarks>Stated on the scale the model answers on. Half of it is a starting point rather than a recommendation: how much of an answer an extract has to hold depends on the mail an instance actually carries.</remarks>
@@ -50,9 +52,16 @@ internal sealed class PassageRelevanceFilterOptions
     /// <param name="maximumMessagesPerRequest">What the endpoint's own declaration allows one request to carry.</param>
     /// <returns>One result per rule this declaration breaks.</returns>
     /// <remarks>
+    /// <para>
     /// The turn count is checked here rather than left to the first judgement, because a judgement is an instruction and
     /// a candidate — two turns — and an endpoint declared to carry one would refuse every one of them. That is a pair of
     /// settings nobody reads together, which is exactly the kind of contradiction startup exists to report.
+    /// </para>
+    /// <para>
+    /// The upper bound on the candidate count is not checked here, because it is
+    /// <c>MailAnswering:MaxPassagesPerRetrieval</c> and this type sees one section.
+    /// <see cref="PassageRelevanceCandidateAgreement" /> reports it, from the composition root that holds both.
+    /// </para>
     /// </remarks>
     public IEnumerable<ValidationResult> FindConfigurationErrors(string endpointAlias, int maximumMessagesPerRequest)
     {
@@ -61,10 +70,10 @@ internal sealed class PassageRelevanceFilterOptions
             yield break;
         }
 
-        if (this.MaxCandidates < 1 || this.MaxCandidates > PassageRelevanceFilterPlan.GreatestCandidates)
+        if (this.MaxCandidates is < 1)
         {
             yield return new ValidationResult(
-                $"Chat endpoint '{endpointAlias}' enables the relevance filter with MaxCandidates outside 1 to {PassageRelevanceFilterPlan.GreatestCandidates}, which is everything one retrieval hands over. A higher count would name candidates that never exist.",
+                $"Chat endpoint '{endpointAlias}' enables the relevance filter with a MaxCandidates below 1, so every lookup would judge nothing. Remove the key to judge every passage a retrieval hands over.",
                 [nameof(this.MaxCandidates)]);
         }
 

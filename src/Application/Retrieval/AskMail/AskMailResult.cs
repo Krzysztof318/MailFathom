@@ -9,6 +9,7 @@ namespace MailFathom.Application.Retrieval.AskMail;
 /// <param name="Citations">The emails the run drew on, one per email, in the order it first reached each.</param>
 /// <param name="AnswerWasTruncated">Whether the answer is shorter than the model wrote it.</param>
 /// <param name="CitationsWereTruncated">Whether the run drew on more emails than are listed.</param>
+/// <param name="RetrievalWasTruncated">Whether the run reached its ceiling on retrieved mail while there was more to read.</param>
 /// <remarks>
 /// <para>
 /// The citations are what the run <em>retrieved</em> rather than what the model demonstrably used. Nothing outside the
@@ -16,13 +17,15 @@ namespace MailFathom.Application.Retrieval.AskMail;
 /// observe.
 /// </para>
 /// <para>
-/// Both truncation flags exist so that a cut is never silent. A shortened answer read as a complete one is the failure
-/// this shape prevents, and a citation list that lost an entry matters as much: a claim traced to a message the response
-/// no longer names cannot be checked.
+/// The three flags exist so that a cut is never silent, and they are cuts of three different things. A shortened answer
+/// read as a complete one is the failure this shape prevents; a citation list that lost an entry matters as much, since
+/// a claim traced to a message the response no longer names cannot be checked; and a run that stopped being given mail
+/// answered a narrower reading of the mailbox than the question asked for.
 /// </para>
 /// </remarks>
 public sealed record AskMailResult(
     string AnswerText,
     IReadOnlyList<MailAnswerCitation> Citations,
     bool AnswerWasTruncated,
-    bool CitationsWereTruncated);
+    bool CitationsWereTruncated,
+    bool RetrievalWasTruncated);

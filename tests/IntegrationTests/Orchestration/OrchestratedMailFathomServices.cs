@@ -14,6 +14,7 @@ using MailFathom.Application.Mail.Mutations;
 using MailFathom.Application.Mail.Mutations.Audit;
 using MailFathom.Application.Mail.Mutations.Convergence;
 using MailFathom.Application.Persistence;
+using MailFathom.Application.Retrieval.AskMail;
 using MailFathom.Application.Synchronization;
 using MailFathom.Application.Synchronization.Checkpoints;
 using MailFathom.Application.Synchronization.Reconciliation;
@@ -165,7 +166,8 @@ internal sealed class OrchestratedMailFathomServices : IAsyncDisposable
             DeterministicEmbeddingInputCharacterLimit);
         builder.Services.AddInfrastructure(
             _ => new PostgresConnectionSettings(orchestration.DatabaseConnectionString, null, null),
-            PostgresTextSearchConfiguration.Default);
+            PostgresTextSearchConfiguration.Default,
+            MailAnsweringBudget.Default);
         // Registered by a composition root for the reason the generator above is: AddInfrastructure registers neither
         // the embedding generation nor the backfill, because both resolve a text embedding generator an instance that
         // declared no chain does not have. This suite declared one, so it registers both.
