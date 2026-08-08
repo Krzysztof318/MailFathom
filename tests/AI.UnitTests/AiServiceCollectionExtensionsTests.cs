@@ -236,6 +236,39 @@ public sealed class AiServiceCollectionExtensionsTests
         Assert.Throws<ArgumentNullException>(() => AiServiceCollectionExtensions.AddMailAnsweringAgent(null!));
     }
 
+    /// <summary>
+    /// The pass decorates the retrieval rather than replacing it, so it has to be the last registration of the port and
+    /// has to share the scope the retrieval it wraps reads through. Asserted against the descriptor rather than by
+    /// resolving it, because the wrapped retrieval reaches a search reader that opens a database this suite has none of.
+    /// </summary>
+    [Fact]
+    public void AddModelJudgedRetrieval_OnAServiceCollection_TakesOverTheRetrievalPortForTheScope()
+    {
+        // Arrange
+        var services = new ServiceCollection();
+        services.AddScoped<IEmailKnowledgeSearch, RecordingEmailKnowledgeSearch>();
+
+        // Act
+        services.AddModelJudgedRetrieval();
+
+        // Assert
+        ServiceDescriptor[] registered =
+        [
+            .. services.Where(descriptor => descriptor.ServiceType == typeof(IEmailKnowledgeSearch)),
+        ];
+
+        Assert.Equal(2, registered.Length);
+        Assert.Equal(ServiceLifetime.Scoped, registered[^1].Lifetime);
+        Assert.NotNull(registered[^1].ImplementationFactory);
+    }
+
+    [Fact]
+    public void AddModelJudgedRetrieval_WithoutAServiceCollection_IsRefused()
+    {
+        // Act, Assert
+        Assert.Throws<ArgumentNullException>(() => AiServiceCollectionExtensions.AddModelJudgedRetrieval(null!));
+    }
+
     [Fact]
     public void AddDeterministicTextEmbeddings_WithoutAServiceCollection_IsRefused()
     {

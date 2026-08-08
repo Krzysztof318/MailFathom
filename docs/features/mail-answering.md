@@ -55,6 +55,81 @@ never met. Neither is configurable today; both are fixed in code.
 A query with no usable text finds nothing rather than failing. The text is written by a model rather than by a caller
 who could be told to correct it, and a run whose lookup found nothing still has an answer to give.
 
+## An optional second pass: the model decides what answers
+
+Hybrid search ranks by fusing lexical and vector similarity, which decides what *resembles* a query. Resemblance is
+cheap, deterministic, and shallow: ask "what did the insurer finally agree to pay" and a long thread about the claim
+ranks beside the one message that settles it. The fused top eight can hold one passage that answers and seven that
+mention.
+
+A deployment can turn on a second pass over that ranking. Each candidate is put to the declared chat endpoint on its
+own — one question, one extract, one query — and the model answers with a whole number from 0 to 100 saying how much of
+an answer the extract holds. Candidates below the configured threshold are dropped before the run ever reads them.
+Retrieval decides what is plausible; this decides what is relevant.
+
+**It is off by default, and off is a supported deployment.** With the pass off, retrieval hands over the fused ranking
+exactly as hybrid search produced it — cheaper, faster, fully deterministic — which is what every instance did before
+this existed. [`Chat:RelevanceFilter`](../operations/configuration-reference.md#chat) holds the keys.
+
+### What it costs
+
+One provider call per candidate, on every lookup a question makes, and a run makes several. That is why the candidate
+count is bounded rather than taken from whatever the search returned: an unbounded candidate list is an unbounded bill.
+
+The judgements are made **one after another**, so the count bounds latency as well as spend — a lookup takes as long as
+its judgements do, in sequence. That is not a tuning choice: each judgement is an ordinary call to the declared endpoint
+under the same deadline, resilience budget, and circuit as any other, and that budget's concurrency limiter admits a few
+invocations at a time and *rejects* the rest rather than queueing them. A lookup that sent its whole candidate list at
+once would have most of it refused by MailFathom's own bulkhead, and every one of those refusals would be recorded
+against a provider that is working perfectly well.
+
+Setting the candidate count below what retrieval returns buys a weaker filter rather than a shorter result. A passage
+nobody judged was never found irrelevant, so it keeps the place the fused ranking gave it.
+
+### It filters; it does not reorder
+
+What survives is a subsequence of the fused ordering. The fusion is computed across every candidate at once, while a
+judgement is made about one candidate in isolation, so sorting by judgement would replace a ranking with a set of
+unrelated opinions.
+
+### Every failure keeps the passage
+
+| What happened | What the retrieval hands over |
+| --- | --- |
+| The chat provider's last call left it unavailable or misconfigured | The fused ranking, judged by nobody |
+| A judgement timed out, was throttled, was refused, or could not be sent | That candidate and every candidate after it, kept; the pass stops there |
+| A judgement came back as anything other than a score | That candidate, kept; the pass goes on to the next |
+| Every candidate was judged and every one scored below the threshold | Nothing, which is the filter working |
+
+The first three are the same rule stated three times: a filter that failed closed would turn one degraded provider into
+a mailbox that appears to hold nothing, and the fused ranking is already a usable answer. Each of them is recorded — as
+a count and a classification, never as an extract.
+
+The second and third rows differ in how far the damage spreads, and the reason is what each says about the endpoint. A
+provider that answered something other than a score is answering, so the candidates after it are still worth asking
+about. One that failed is not, and asking it once per remaining candidate would buy the same answer while a question
+waits.
+
+The last row is not a failure and is not degraded. A question whose mail does not answer it is answered by saying so,
+and a lookup that found nothing has always been an ordinary outcome here.
+
+An answer is read strictly: a score with a word, a unit, a fence, or an explanation around it is refused rather than
+mined for the number inside it. Refusing costs one candidate its filtering, while a lenient reading would turn a model
+that answered something else into a score this system invented about somebody's mail.
+
+### The candidate is quoted, never obeyed
+
+A judgement is two turns: the instruction, and the candidate beside the query it was retrieved for. The extract reaches
+the model inside the same `<retrieved-mail>` envelope an answering run reads it in, written by the same formatter, and
+the query is enclosed in a `<query>` element of its own — it is free text a model wrote, and a run's earlier retrieval is
+one of the things that shaped it, so mail reaches it indirectly. The instruction states that everything inside both
+elements is data and that a request found there is described rather than obeyed, exactly as the run's own instruction
+does.
+
+Nothing of the run travels with a judgement: not the question the person asked, not the answer being written, and not
+the other candidates. Judging one extract against one query needs none of it, and everything sent is somebody's mail
+leaving the process.
+
 ## What a passage carries
 
 Each passage is a bounded extract plus the identity an answer is traced through:
@@ -144,8 +219,10 @@ beside it. Retrieval reaches no mail server either: it answers from what synchro
 
 ## What never reaches a log
 
-No question, no answer, no query the model wrote, and no retrieved passage. A record of a run carries the endpoint
-alias, how many passages were retrieved, and how many messages they came from — counts and a name the operator chose.
+No question, no answer, no query the model wrote, no retrieved passage, and no relevance judgement. A record of a run
+carries the endpoint alias, how many passages were retrieved, and how many messages they came from — counts and a name
+the operator chose. A record of the second pass carries how many candidates were judged, how many were dropped, and
+which classification a failed judgement had.
 
 The orchestration framework's own switch for logging queries and retrieved text is set off explicitly rather than left
 at its default, because what it would emit is somebody's question and extracts of their mail.

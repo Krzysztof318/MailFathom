@@ -1,0 +1,75 @@
+// Copyright © 2026 Krzysztof Kasprowicz
+// Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
+// Project repository: https://github.com/Krzysztof318/MailFathom
+
+using MailFathom.AI.Retrieval;
+using MailFathom.Application.Emails.Search;
+using Xunit;
+
+namespace MailFathom.AI.UnitTests.Retrieval;
+
+/// <summary>Covers what a relevance-filter declaration has to say before the pass is allowed to assume it.</summary>
+/// <remarks>
+/// The plan is built once at startup, so a value refused here is refused before any question pays for a judgement made
+/// under it.
+/// </remarks>
+public sealed class PassageRelevanceFilterPlanTests
+{
+    [Fact]
+    public void Create_ADeclaredFilter_CarriesItsBoundAndItsThreshold()
+    {
+        // Act
+        var plan = PassageRelevanceFilterPlan.Create(maximumCandidates: 6, minimumRelevance: 65);
+
+        // Assert
+        Assert.Equal(6, plan.MaximumCandidates);
+        Assert.Equal(65, plan.MinimumRelevance);
+    }
+
+    /// <summary>A retrieval is answered from a search window, so a candidate count beyond it would state a ceiling no question could reach.</summary>
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-1)]
+    [InlineData(EmailSearchResultLimit.MaximumValue + 1)]
+    public void Create_ACandidateBoundOutsideWhatOneSearchRanks_IsRefused(int maximumCandidates)
+    {
+        // Act, Assert
+        Assert.Throws<ArgumentOutOfRangeException>(
+            () => PassageRelevanceFilterPlan.Create(maximumCandidates, minimumRelevance: 50));
+    }
+
+    /// <summary>A threshold of zero would pay for a judgement that can drop nothing, and one above the scale would drop everything the model could ever answer.</summary>
+    [Theory]
+    [InlineData(PassageRelevanceFilterPlan.LeastRelevance)]
+    [InlineData(-1)]
+    [InlineData(PassageRelevanceFilterPlan.GreatestRelevance + 1)]
+    public void Create_AThresholdOffTheScale_IsRefused(int minimumRelevance)
+    {
+        // Act, Assert
+        Assert.Throws<ArgumentOutOfRangeException>(
+            () => PassageRelevanceFilterPlan.Create(maximumCandidates: 4, minimumRelevance));
+    }
+
+    /// <summary>Both ends of the scale a judgement is answered on stay reachable, so a deployment can demand a perfect score.</summary>
+    [Theory]
+    [InlineData(PassageRelevanceFilterPlan.LeastRelevance + 1)]
+    [InlineData(PassageRelevanceFilterPlan.GreatestRelevance)]
+    public void Create_AThresholdAtTheEdgeOfTheScale_IsAccepted(int minimumRelevance)
+    {
+        // Act
+        var plan = PassageRelevanceFilterPlan.Create(maximumCandidates: 4, minimumRelevance);
+
+        // Assert
+        Assert.Equal(minimumRelevance, plan.MinimumRelevance);
+    }
+
+    [Fact]
+    public void ToString_APlan_ReadsAsWhatOneQuestionMaySpendAndDemand()
+    {
+        // Act
+        var described = PassageRelevanceFilterPlan.Create(maximumCandidates: 6, minimumRelevance: 65).ToString();
+
+        // Assert
+        Assert.Equal("at most 6 candidates, each judged at least 65", described);
+    }
+}

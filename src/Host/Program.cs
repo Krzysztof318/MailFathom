@@ -384,6 +384,17 @@ try
                 "The chat endpoint was declared at registration and is absent from the validated configuration."));
         builder.Services.AddChatProviderAdapter();
         builder.Services.AddMailAnsweringAgent();
+
+        // The plan is registered here beside the endpoint it judges with; the filter itself is registered after
+        // AddInfrastructure below, because it decorates the retrieval that call registers.
+        if (declaredChat.RelevanceFilter.Enabled)
+        {
+            builder.Services.AddSingleton(provider => PassageRelevanceFilterPlanMapper.Map(
+                provider.GetRequiredService<IOptions<ChatModelOptions>>().Value)
+                ?? throw new InvalidOperationException(
+                    "The relevance filter was enabled at registration and is absent from the validated configuration."));
+        }
+
         // Readiness alone, and never worse than degraded. Neither provider serves a request path, so a failing one must
         // not take the instance out of traffic and must never reach the liveness probe: restarting the process cannot
         // fix a provider and would turn one outage into an outage plus a restart loop. The registration says all of
@@ -397,6 +408,15 @@ try
         string.IsNullOrWhiteSpace(configuredTextSearchConfiguration)
             ? PostgresTextSearchConfiguration.Default
             : PostgresTextSearchConfiguration.Create(configuredTextSearchConfiguration));
+
+    // After the retrieval it wraps, because the container resolves the last registration of a service type and the one
+    // this decorates is added by the call above. An instance that declared no chat endpoint, or left the pass off,
+    // registers nothing here and retrieves the fused ranking exactly as it did.
+    if (declaredChat?.IsConfigured is true && declaredChat.RelevanceFilter.Enabled)
+    {
+        builder.Services.AddModelJudgedRetrieval();
+    }
+
     // After the context is registered, because enrichment layers onto an existing registration rather than creating
     // one, and read from configuration directly for the same reason the text search configuration is: the value has to
     // be known before the container that would resolve an options snapshot exists. PersistenceOptions validates the

@@ -27,6 +27,12 @@ credential is needed, and every read path serves as it always did.
 A section carrying a model and a key but no `Alias` is the one shape startup refuses rather than passes over. It reads
 to an operator as a configured provider while nothing would ever call it.
 
+One declared endpoint serves more than one capability. Beside answering a question, it is what judges retrieved
+candidates for relevance where a deployment turns that pass on — a block inside this section, off by default, described
+in [Mail answering § An optional second
+pass](mail-answering.md#an-optional-second-pass-the-model-decides-what-answers). Each capability is a separate decision
+over one endpoint, and every call any of them makes carries the parameters, the deadline, and the budget declared here.
+
 ## One endpoint, not a chain
 
 The embedding declaration is an ordered chain because a fallback embedding endpoint is another route to *one vector

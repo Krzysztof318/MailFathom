@@ -161,6 +161,17 @@ is the layer rather than something MailFathom re-implements:
   pipeline sit *inside* the client rather than around a single request. [Mail
   answering](../features/mail-answering.md#a-run-is-several-calls-and-each-carries-the-bounds-of-one) states what that
   costs and what it does not change.
+
+  Where a deployment turns the relevance filter on, one lookup inside such a run also puts each retrieved candidate to
+  the endpoint through `IChatModelClient`. Those judgements add no layer and no registration — each is an ordinary chat
+  call under this pipeline, this circuit, and this alias — and they are made **one after another** precisely because of
+  the limiter above: it admits `ConcurrencyLimit` invocations and rejects the rest outright rather than queueing them,
+  so a caller that fanned a candidate list out against its own budget would collect rejections and, because a rejection
+  arrives as an unavailable dependency, would report a working provider as one having an outage. A caller whose work
+  divides into many small calls of the same class serializes them or narrows the class; it does not dispatch against the
+  bulkhead and read the refusals as facts about the remote server. [Mail answering § An optional second
+  pass](../features/mail-answering.md#an-optional-second-pass-the-model-decides-what-answers) states what a refused
+  judgement costs there, which is filtering and never the lookup.
 - **EF Core.** `EnableRetryOnFailure` is deliberately not configured. The obstacle is not the unit of work: with a
   retrying execution strategy each query and each `SaveChangesAsync` is already replayed as its own retriable unit. It
   is the *user-initiated* transaction. `PersistenceSessionFactory` opens one with `BeginTransactionAsync` for every
