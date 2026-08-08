@@ -156,7 +156,13 @@ public sealed partial class MailAnsweringSpendTracker : IMailAnsweringSpendLedge
         this.tokenCount.Add(usage.InputTokens + usage.OutputTokens);
     }
 
-    /// <inheritdoc />
+    /// <summary>Reads what the current period has cost so far, rolling the window over first when the clock has left it.</summary>
+    /// <returns>The period's start, the runs it has admitted, and the tokens they consumed.</returns>
+    /// <remarks>
+    /// This tracker's own member rather than one of the ledger port's, because nothing above that boundary acts on the
+    /// figure: a use case is told whether a question may run and never how close the period is to its ceiling. What
+    /// reads it is the pair of gauges above and a test asserting what they would publish.
+    /// </remarks>
     public MailAnsweringSpend Read()
     {
         lock (this.gate)
