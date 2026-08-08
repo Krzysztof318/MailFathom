@@ -5,6 +5,7 @@
 using MailFathom.Infrastructure.Persistence.Connections;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Design;
+using Npgsql;
 
 namespace MailFathom.Infrastructure.Persistence;
 
@@ -83,19 +84,64 @@ internal sealed class MailFathomDbContextDesignTimeFactory : IDesignTimeDbContex
     /// <param name="designTimeConnectionString">The developer's own override, or <see langword="null" />.</param>
     /// <returns>Options bound to the first configured database, or to the local development default.</returns>
     /// <remarks>
+    /// <para>
     /// The orchestrated value wins so that a stale override left in a shell cannot silently point a migration at a
     /// different database than the one the resource being migrated is running against.
+    /// </para>
+    /// <para>
+    /// An orchestrated value that is not a connection string at all is ignored rather than used. Under
+    /// <c>aspire publish</c> there is no database to name, so the variable carries the unresolved manifest expression
+    /// <c>{mailfathom.connectionString}</c> — non-empty, and therefore past the emptiness check above. Nothing had to
+    /// notice until the vector mapping arrived: it needs an <see cref="NpgsqlDataSource" />, which the provider
+    /// builds while the options are constructed, so the string is now parsed by every command rather than only by one
+    /// that opens a connection. Generating a migration script opens none, and refusing to produce the release's schema
+    /// artifact over an address nobody was going to dial is the failure this avoids.
+    /// </para>
+    /// <para>
+    /// The developer's own override is deliberately not covered by that tolerance. It is written by hand for a command
+    /// that usually does connect, so a malformed one is a typo worth failing on rather than a reason to quietly apply a
+    /// migration to <see cref="LocalDevelopmentConnectionString" /> instead of to the database that was meant.
+    /// </para>
     /// </remarks>
     internal static DbContextOptions<MailFathomDbContext> BuildOptions(
         string? orchestratedConnectionString,
         string? designTimeConnectionString)
     {
-        var connectionString = new[] { orchestratedConnectionString, designTimeConnectionString }
+        var usableOrchestratedConnectionString =
+            IsConnectionString(orchestratedConnectionString) ? orchestratedConnectionString : null;
+
+        var connectionString = new[] { usableOrchestratedConnectionString, designTimeConnectionString }
             .FirstOrDefault(candidate => !string.IsNullOrWhiteSpace(candidate))
             ?? LocalDevelopmentConnectionString;
 
         return new DbContextOptionsBuilder<MailFathomDbContext>()
             .UseNpgsql(connectionString, npgsql => npgsql.UseVector())
             .Options;
+    }
+
+    /// <summary>Reports whether a candidate is a connection string Npgsql can parse.</summary>
+    /// <param name="candidate">The value read from the environment, or <see langword="null" /> when unset.</param>
+    /// <returns><see langword="true" /> when the candidate parses; otherwise <see langword="false" />.</returns>
+    /// <remarks>
+    /// Parsing is the test rather than a pattern match on the manifest expression's braces, because what makes a value
+    /// unusable is that no connection could be opened from it, and that is exactly what the parser decides.
+    /// </remarks>
+    private static bool IsConnectionString(string? candidate)
+    {
+        if (string.IsNullOrWhiteSpace(candidate))
+        {
+            return false;
+        }
+
+        try
+        {
+            _ = new NpgsqlConnectionStringBuilder(candidate);
+
+            return true;
+        }
+        catch (ArgumentException)
+        {
+            return false;
+        }
     }
 }

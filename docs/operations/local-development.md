@@ -1,6 +1,6 @@
 # Local development
 
-<!-- describes: scripts/**, global.json, .config/dotnet-tools.json, .config/typos.toml, .config/CodeCoverage.proj, .config/testconfig.json, src/AppHost/**, .github/workflows/** -->
+<!-- describes: scripts/**, global.json, .config/dotnet-tools.json, .config/typos.toml, .config/CodeCoverage.proj, .config/testconfig.json, src/AppHost/**, src/Infrastructure/Persistence/MailFathomDbContextDesignTimeFactory.cs, .github/workflows/** -->
 
 Use the .NET SDK pinned in `global.json`. Test execution is configured for Microsoft Testing Platform through the repository-level `global.json` test runner setting.
 
@@ -333,6 +333,10 @@ That split is why generating a migration needs no Docker and takes seconds, whil
 `Host` is the startup project, because it is the resource the orchestration issues the connection string to, and it therefore carries a design-time-only reference to `Microsoft.EntityFrameworkCore.Design`. `Infrastructure` owns the context, the design-time factory, and the migrations under `src/Infrastructure/Persistence/Migrations/`.
 
 `MailFathomDbContextDesignTimeFactory` gives EF Core a context without starting the host, which matters because the host composes its connection string during startup and design-time tooling never runs that. It reads `ConnectionStrings__mailfathom` when the orchestration supplies it, then `MAILFATHOM_DESIGN_TIME_CONNECTION_STRING` for a command run outside it, and falls back to `Host=localhost;Database=mailfathom;Username=mailfathom`. The orchestrated value wins so a stale override left in a shell cannot point a migration at a different database than the one being migrated.
+
+It is used only when it is a connection string. Under `aspire publish` there is no database to name, so that variable carries the unresolved manifest expression `{mailfathom.connectionString}` — non-empty, and therefore not caught by an emptiness check — and the schema artifact the release attaches is generated in exactly that mode. A value the Npgsql parser rejects is skipped as though the variable were unset, because no connection could be opened from it and a command that opens none should not fail on it. The vector mapping is what made this observable: it needs a data source, which the provider builds while the options are constructed, so the string is parsed by every command rather than only by one that connects.
+
+`MAILFATHOM_DESIGN_TIME_CONNECTION_STRING` is deliberately not covered by that tolerance. It is written by hand for a command that usually does reach a database, so a malformed one fails rather than quietly sending `ef-database-update` to `localhost`.
 
 Every migration in the repository is permanent. A model change appends one with `scripts/add-migration.sh <MigrationName>` and never regenerates, renames, reorders, or deletes an existing one, because a migration identifier that a database has written into its `__EFMigrationsHistory` can never be reached again once it is regenerated: that database can then only be recreated, destroying whatever it held. Nothing in the repository deletes a migration, and no command offers to.
 
