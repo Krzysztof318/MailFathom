@@ -10,6 +10,7 @@ using MailFathom.AppHost;
 using MailFathom.Application.Persistence;
 using MailFathom.Application.Synchronization;
 using MailFathom.Domain.Emails;
+using MailFathom.Domain.Folders;
 using MailFathom.IntegrationTests.Orchestration;
 using MailFathom.IntegrationTests.Persistence;
 using Microsoft.Extensions.DependencyInjection;
@@ -92,7 +93,13 @@ public sealed class ComposedMcpToolContractTests(MailFathomOrchestrationFixture 
             .GetProperty("summary");
 
         Assert.Equal(OrchestrationContract.ServedMailAccountId, seeded.GetProperty("accountId").GetString());
-        Assert.Equal(FolderAlias, seeded.GetProperty("folderAlias").GetString());
+
+        // The canonical alias rather than the argument's own spelling: an alias is normalized when it is created, and
+        // what the tool publishes is the value a client matches later results against. Asserting the literal sent on
+        // the wire would say a request's casing survives into a response, which is the opposite of the contract.
+        Assert.Equal(
+            MailFolderAlias.Create(FolderAlias).Value,
+            seeded.GetProperty("folderAlias").GetString());
 
         // The field the tool's description tells a client to read in order to know how the window was ranked. Its value
         // is the deployment's rather than this test's, so what is asserted is that it is published and populated.
