@@ -57,6 +57,30 @@ by a few characters, because refusing it would leave the walk with nowhere to go
 The cut consults no clock, no random source, and no culture, and every comparison is ordinal. The same text under the
 same rules produces the same passages, with the same offsets and the same hashes, on any machine and in any order.
 
+## The per-message ceiling
+
+A message is cut only as far as `Embeddings:MaxCharactersPerEmail`, which is 200 000 characters unless a deployment
+says otherwise. That is a long report with its quoted history and far beyond what ordinary correspondence reaches; what
+it excludes is the log dump, the exported table, and the machine-generated transcript — none of which anybody asks a
+question about, and any of which would otherwise become hundreds of passages and hundreds of paid vectors. Raw MIME is
+bounded in megabytes, so without a ceiling here one message's cost would be whatever a sender attached.
+
+The message is **bounded rather than refused**. Its opening is cut, embedded, and retrievable, which is the part the
+rest of a message elaborates, and the cut lands on the nearest text-element boundary at or below the ceiling like every
+other boundary here. What the ceiling left out is recorded on the message itself — the length its text had when the cut
+stopped short — so the question "could the answer have been in the part nobody embedded" is answered from a stored fact
+rather than guessed at from a chunk count. Two metrics carry the same thing across a deployment: how many messages the
+ceiling reached, and how much text it left out.
+
+The ceiling is deliberately **not one of the boundary rules above**, and therefore not part of the hash. The rules
+decide what a passage says; the ceiling decides only how many passages there are, and a passage the ceiling leaves in
+place keeps exactly the digest it had. So moving the ceiling changes nothing about a message it does not reach, and
+leaves every stored vector as comparable as it was. What it does cost is the messages it *does* reach: those are
+re-cut, and a re-cut replaces a message's passages whole for the reason below, so an oversized message a moved ceiling
+reaches is embedded again from its first passage. [Embedding
+generation](embedding-generation.md#what-an-instance-is-willing-to-spend) states the ceiling beside the two that bound
+a deployment rather than a message.
+
 ## What the hash covers
 
 Each chunk carries a SHA-256 digest, written as sixty-four lowercase hexadecimal characters. It is computed over:
@@ -83,6 +107,11 @@ later hangs on a passage hanging on the same row.
 
 Anything else replaces the message's passages whole rather than reconciling them one by one, because a boundary change
 shifts every ordinal after the first difference and a row-by-row merge would only make that look survivable.
+
+One thing is compared outside that decision: what the [per-message ceiling](#the-per-message-ceiling) left out. Text
+that grew past the ceiling while everything up to it stayed identical yields exactly the same passages and a different
+truncation, so the record is written from the current derivation rather than from whether any passage moved. An
+unchanged message still writes nothing — the value it would be given is the value it already has.
 
 ## The rule-set version
 

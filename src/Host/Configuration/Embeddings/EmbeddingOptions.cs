@@ -6,6 +6,7 @@ using System.ComponentModel.DataAnnotations;
 using System.Diagnostics.CodeAnalysis;
 using MailFathom.AI.Embeddings;
 using MailFathom.Application.Emails.Embeddings.Generation;
+using MailFathom.Application.Emails.Embeddings.Limits;
 
 namespace MailFathom.Host.Configuration.Embeddings;
 
@@ -27,6 +28,27 @@ namespace MailFathom.Host.Configuration.Embeddings;
 [SuppressMessage("Performance", "CA1812:Avoid uninstantiated internal classes", Justification = "The options framework materializes this type during configuration binding.")]
 internal sealed class EmbeddingOptions : IValidatableObject
 {
+    /// <summary>The characters one period may send where a deployment declares no ceiling of its own.</summary>
+    /// <remarks>
+    /// Fifty million characters a day is roughly twelve million tokens, which at the price of a small embedding model
+    /// is small change and at the price of a large one is a figure worth noticing — which is the point of a default
+    /// that binds. It embeds something like sixteen thousand ordinary messages a day, so an instance keeping up with
+    /// arriving mail never meets it and one embedding a decade of archive is paced rather than surprised. An operator
+    /// who wants an initial backfill finished sooner raises it deliberately, having seen the number.
+    /// </remarks>
+    public const long DefaultMaxInputCharactersPerPeriod = 50_000_000;
+
+    /// <summary>The longest window the aggregate ceiling may be counted over.</summary>
+    /// <remarks>
+    /// A period longer than a month would let one burst spend a ceiling and leave embedding paused for weeks, which is
+    /// a budget nobody would recognize as one from the outside.
+    /// </remarks>
+    private static readonly TimeSpan LongestSpendPeriod = TimeSpan.FromDays(31);
+
+    /// <summary>The shortest window the aggregate ceiling may be counted over.</summary>
+    /// <remarks>Below a minute the roll-over is faster than the pause it causes, so the ceiling would pace work instead of bounding it.</remarks>
+    private static readonly TimeSpan ShortestSpendPeriod = TimeSpan.FromMinutes(1);
+
     /// <summary>Gets the endpoints in the order they are tried, all of them reaching one vector space.</summary>
     /// <remarks>
     /// An ordered chain rather than one endpoint, because an endpoint failing and a vector space changing are
@@ -63,12 +85,53 @@ internal sealed class EmbeddingOptions : IValidatableObject
     [Range(1, 1_000_000)]
     public int MaxQueuedEmails { get; set; } = EmailEmbeddingBacklogOptions.DefaultCapacity;
 
+    /// <summary>Gets or sets how much of one message's extracted text is cut into passages.</summary>
+    /// <remarks>
+    /// The ceiling on what one message may cost. Per-item cost is not uniform — raw MIME is bounded in megabytes, so a
+    /// single message can carry more text than a mailbox does in a month — and a message beyond this is bounded rather
+    /// than refused: its opening is embedded and retrievable, and the length its text had is recorded on the message so
+    /// that what was left out is a stored fact rather than something inferred from a chunk count.
+    /// </remarks>
+    [Range(1_000, 10_000_000)]
+    public int MaxCharactersPerEmail { get; set; } = EmbeddingInputBound.DefaultMaximumCharacterCount;
+
+    /// <summary>Gets or sets how many embedding requests one minute may carry, or zero to pace none.</summary>
+    /// <remarks>
+    /// The rate ceiling, which bounds neither cost nor concurrency. What one period may spend is
+    /// <see cref="MaxInputCharactersPerPeriod" /> and how many calls may be in flight at once is the
+    /// <c>AiProviderInvocation</c> resilience budget; this exists because a provider quota is stated per minute, and
+    /// being refused for exceeding one costs an attempt, a retry, and a place in a circuit-breaker window.
+    /// </remarks>
+    [Range(0, 100_000)]
+    public int MaxRequestsPerMinute { get; set; }
+
+    /// <summary>Gets or sets the characters one period may send to a provider, or zero to bound nothing.</summary>
+    /// <remarks>
+    /// The aggregate ceiling, counted in the characters actually sent because that is what a provider's price is
+    /// approximately proportional to and the one quantity this deployment can count exactly without carrying a model's
+    /// own tokenizer. Reaching it pauses embedding until the period rolls over; nothing is dropped, because a passage
+    /// with no vector is exactly what the backfill selects on.
+    /// </remarks>
+    public long MaxInputCharactersPerPeriod { get; set; } = DefaultMaxInputCharactersPerPeriod;
+
+    /// <summary>Gets or sets the window the aggregate ceiling is counted over.</summary>
+    /// <remarks>A fixed window anchored at the Unix epoch, so every restart agrees on where a period begins without anything being stored to say so.</remarks>
+    public TimeSpan SpendPeriod { get; set; } = TimeSpan.FromDays(1);
+
     /// <summary>Gets whether the deployment declared an embedding provider at all.</summary>
     public bool IsConfigured => this.Endpoints.Count > 0;
 
     /// <inheritdoc />
     public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
     {
+        // The ceilings are checked whether or not a chain was declared, unlike everything below them. Passages are cut
+        // for every synchronized message on an instance that has chosen no provider — they are what a later activation
+        // embeds — so a per-message ceiling nobody validated would be one an instance is already applying.
+        foreach (var error in this.FindSpendCeilingErrors())
+        {
+            yield return error;
+        }
+
         if (!this.IsConfigured)
         {
             yield break;
@@ -94,6 +157,26 @@ internal sealed class EmbeddingOptions : IValidatableObject
         foreach (var error in this.FindGeometryErrors())
         {
             yield return error;
+        }
+    }
+
+    /// <summary>Refuses an aggregate ceiling that could not bound a spend, or a period that could not carry one.</summary>
+    private IEnumerable<ValidationResult> FindSpendCeilingErrors()
+    {
+        if (this.MaxInputCharactersPerPeriod < 0)
+        {
+            yield return new ValidationResult(
+                "Embeddings MaxInputCharactersPerPeriod is zero or positive. Zero declares no aggregate ceiling at all, "
+                + "which is a supported deployment; a negative one describes no budget.",
+                [nameof(this.MaxInputCharactersPerPeriod)]);
+        }
+
+        if (this.SpendPeriod < ShortestSpendPeriod || this.SpendPeriod > LongestSpendPeriod)
+        {
+            yield return new ValidationResult(
+                $"Embeddings SpendPeriod is between {ShortestSpendPeriod} and {LongestSpendPeriod}. Below that a "
+                + "ceiling paces work rather than bounding it, and above it one burst leaves embedding paused for weeks.",
+                [nameof(this.SpendPeriod)]);
         }
     }
 

@@ -6,6 +6,7 @@ using System.ComponentModel.DataAnnotations;
 using MailFathom.AI.Embeddings;
 using MailFathom.AI.Providers;
 using MailFathom.Application.Emails.Embeddings;
+using MailFathom.Application.Emails.Embeddings.Limits;
 using MailFathom.Host.Configuration.Embeddings;
 using MailFathom.Host.Configuration.Providers;
 using MailFathom.Infrastructure.Secrets.Discovery;
@@ -370,6 +371,93 @@ public sealed class EmbeddingOptionsTests
             Address = address,
             ApiKey = new ConfiguredSecret { Name = $"{alias}-key", SecretReference = "env:PROVIDER_KEY" },
         };
+
+    /// <summary>The shipped ceilings bound a message and a period, and pace no request at all.</summary>
+    [Fact]
+    public void Validate_NoCeilingsDeclared_AcceptsTheShippedDefaults()
+    {
+        // Arrange
+        var settings = new EmbeddingOptions();
+
+        // Act
+        var errors = ValidateEveryProperty(settings);
+
+        // Assert
+        Assert.Empty(errors);
+        Assert.Equal(EmbeddingInputBound.DefaultMaximumCharacterCount, settings.MaxCharactersPerEmail);
+        Assert.Equal(EmbeddingOptions.DefaultMaxInputCharactersPerPeriod, settings.MaxInputCharactersPerPeriod);
+        Assert.Equal(TimeSpan.FromDays(1), settings.SpendPeriod);
+        Assert.Equal(0, settings.MaxRequestsPerMinute);
+    }
+
+    /// <summary>
+    /// The ceilings are checked whether or not a chain was declared, because passages are cut for every synchronized
+    /// message on an instance that has chosen no provider — so one of these left unvalidated is one already applying.
+    /// </summary>
+    [Fact]
+    public void Validate_APerMessageOrRateCeilingThatCouldBoundNothing_IsRefusedWithNoChainDeclared()
+    {
+        // Arrange
+        var settings = new EmbeddingOptions { MaxCharactersPerEmail = 0, MaxRequestsPerMinute = -1 };
+
+        // Act
+        var errors = ValidateEveryProperty(settings);
+
+        // Assert
+        Assert.False(settings.IsConfigured);
+        Assert.Contains(errors, error => error.MemberNames.Contains(nameof(EmbeddingOptions.MaxCharactersPerEmail)));
+        Assert.Contains(errors, error => error.MemberNames.Contains(nameof(EmbeddingOptions.MaxRequestsPerMinute)));
+    }
+
+    /// <summary>A negative ceiling describes no budget, and a period below a minute paces work rather than bounding it.</summary>
+    [Fact]
+    public void Validate_AnAggregateCeilingThatCouldBoundNothing_IsRefusedWithNoChainDeclared()
+    {
+        // Arrange
+        var settings = new EmbeddingOptions
+        {
+            MaxInputCharactersPerPeriod = -1,
+            SpendPeriod = TimeSpan.FromSeconds(1),
+        };
+
+        // Act
+        var errors = ValidateEveryProperty(settings);
+
+        // Assert
+        Assert.False(settings.IsConfigured);
+        Assert.Contains(
+            errors,
+            error => error.MemberNames.Contains(nameof(EmbeddingOptions.MaxInputCharactersPerPeriod)));
+        Assert.Contains(errors, error => error.MemberNames.Contains(nameof(EmbeddingOptions.SpendPeriod)));
+    }
+
+    /// <summary>A ceiling of zero declares none, which the documentation states and the operator chose.</summary>
+    [Fact]
+    public void Validate_AnAggregateCeilingOfZero_IsAccepted()
+    {
+        // Arrange
+        var settings = new EmbeddingOptions { MaxInputCharactersPerPeriod = 0 };
+
+        // Act
+        var errors = ValidateEveryProperty(settings);
+
+        // Assert
+        Assert.Empty(errors);
+    }
+
+    /// <summary>A period longer than a month would leave embedding paused for weeks after one burst.</summary>
+    [Fact]
+    public void Validate_ASpendPeriodBeyondTheLongestAllowed_IsRefused()
+    {
+        // Arrange
+        var settings = new EmbeddingOptions { SpendPeriod = TimeSpan.FromDays(60) };
+
+        // Act
+        var errors = ValidateEveryProperty(settings);
+
+        // Assert
+        Assert.Contains(errors, error => error.MemberNames.Contains(nameof(EmbeddingOptions.SpendPeriod)));
+    }
 
     private static IReadOnlyList<ValidationResult> Validate(EmbeddingOptions settings) =>
         [.. settings.Validate(new ValidationContext(settings))];

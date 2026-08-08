@@ -97,11 +97,79 @@ public sealed class OrchestratedEmailChunkTests(MailFathomOrchestrationFixture o
         Assert.Empty(await ReadPassagesAsync(services, occurrenceId, cancellationToken));
     }
 
+    /// <summary>
+    /// An oversized message is bounded rather than refused, and what the ceiling left out is written on the message in
+    /// the same transaction as the passages it did cut.
+    /// </summary>
+    /// <remarks>
+    /// Only a real database establishes the half this is about. The chunker's own truncation is proved by a unit test;
+    /// what cannot be seen through a substitute is that the column on <c>stored_emails</c> is written from inside the
+    /// session that writes the passages, so a message and the record of what was left out of it are durable together.
+    /// </remarks>
+    [Fact]
+    public async Task UpsertMetadataAsync_ABodyBeyondThePerMessageCeiling_CutsToItAndRecordsTheLengthItHad()
+    {
+        // Arrange
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var services = await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken);
+        var binding = await OrchestratedFolderBinding.CommitAsync(services, FolderAlias, cancellationToken);
+        var occurrenceId = SyntheticEmail.OccurrenceIn(binding, uid: 9003);
+        var body = BodyOfSeveralPassages("oversized", paragraphs: 24);
+
+        // Act
+        await StoreAsync(services, occurrenceId, "chunks-truncated", body, cancellationToken);
+
+        // Assert
+        var truncatedFrom = await ReadTruncatedFromAsync(services, occurrenceId, cancellationToken);
+        var passages = await ReadPassagesAsync(services, occurrenceId, cancellationToken);
+
+        Assert.Equal(body.Length, truncatedFrom);
+        Assert.True(
+            body.Length > OrchestratedMailFathomServices.EmbeddingInputCharacterCeiling,
+            "The body has to exceed the ceiling the orchestrated services declare, or nothing was truncated.");
+
+        // Bounded rather than refused: the opening is stored as passages, and the last of them begins inside the
+        // ceiling rather than anywhere in the text beyond it.
+        Assert.NotEmpty(passages);
+        Assert.True(
+            passages[^1].StartOffset < OrchestratedMailFathomServices.EmbeddingInputCharacterCeiling,
+            "The cut has to stop at the ceiling rather than run to the end of the body.");
+
+        // Text that grew only past the ceiling yields exactly the passages already stored, so the write the hashes
+        // decide is skipped — and the record of what was left out still has to follow the text rather than the rows.
+        var longer = BodyOfSeveralPassages("oversized", paragraphs: 30);
+        Assert.StartsWith(body, longer, StringComparison.Ordinal);
+
+        await StoreAsync(services, occurrenceId, "chunks-truncated", longer, cancellationToken);
+
+        Assert.Equal(passages, await ReadPassagesAsync(services, occurrenceId, cancellationToken));
+        Assert.Equal(longer.Length, await ReadTruncatedFromAsync(services, occurrenceId, cancellationToken));
+    }
+
     /// <summary>Builds a body long enough to be cut into several passages, distinct per term so no two chunks match.</summary>
-    private static string BodyOfSeveralPassages(string term) => string.Join(
+    private static string BodyOfSeveralPassages(string term, int paragraphs = 8) => string.Join(
         "\n\n",
-        Enumerable.Range(0, 8).Select(paragraph =>
+        Enumerable.Range(0, paragraphs).Select(paragraph =>
             SyntheticEmail.BodyTextContaining($"{term}{paragraph}", wordCount: 60)));
+
+    private static Task<int?> ReadTruncatedFromAsync(
+        OrchestratedMailFathomServices services,
+        EmailOccurrenceId occurrenceId,
+        CancellationToken cancellationToken) => services.InScopeAsync(
+            async (scope, token) =>
+            {
+                var alias = occurrenceId.FolderResolutionId.Alias.Value;
+
+                return await scope.GetRequiredService<MailFathomDbContext>().StoredEmails
+                    .AsNoTracking()
+                    .Where(email => email.MailFolder.MailboxAccountId == occurrenceId.AccountId.Value
+                        && email.MailFolder.Alias == alias
+                        && email.UidValidity == occurrenceId.UidValidity.Value
+                        && email.Uid == occurrenceId.Uid.Value)
+                    .Select(email => email.ChunkedTextTruncatedFromCharacterCount)
+                    .SingleAsync(token);
+            },
+            cancellationToken);
 
     private static async Task StoreAsync(
         OrchestratedMailFathomServices services,
@@ -140,6 +208,7 @@ public sealed class OrchestratedEmailChunkTests(MailFathomOrchestrationFixture o
                     .Select(chunk => new StoredPassage(
                         chunk.Id,
                         chunk.Ordinal,
+                        chunk.StartOffset,
                         chunk.ContentHash,
                         chunk.RuleSetVersion))
                     .ToArrayAsync(token);
@@ -163,5 +232,10 @@ public sealed class OrchestratedEmailChunkTests(MailFathomOrchestrationFixture o
             cancellationToken);
 
     /// <summary>What a stored passage has to report for this class's claims to be decidable.</summary>
-    private sealed record StoredPassage(Guid Id, int Ordinal, string ContentHash, int RuleSetVersion);
+    private sealed record StoredPassage(
+        Guid Id,
+        int Ordinal,
+        int StartOffset,
+        string ContentHash,
+        int RuleSetVersion);
 }

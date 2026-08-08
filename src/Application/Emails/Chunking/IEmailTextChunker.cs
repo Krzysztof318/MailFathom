@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Application.Emails.Embeddings.Limits;
 using MailFathom.Application.Emails.Extraction;
 
 namespace MailFathom.Application.Emails.Chunking;
@@ -22,14 +23,21 @@ namespace MailFathom.Application.Emails.Chunking;
 /// </remarks>
 public interface IEmailTextChunker
 {
-    /// <summary>Cuts extracted text into chunks, in reading order.</summary>
+    /// <summary>Cuts extracted text into chunks, in reading order, stopping at what one message may cost.</summary>
     /// <param name="text">The text extraction derived from one message's body.</param>
     /// <param name="rules">The boundaries to cut along.</param>
-    /// <returns>The chunks in reading order, or an empty list when the message yielded no text to cut.</returns>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="text" /> or <paramref name="rules" /> is <see langword="null" />.</exception>
+    /// <param name="bound">How much of the text to cut, beyond which the message's remainder yields no passage.</param>
+    /// <returns>The chunks in reading order and what the ceiling left out, or an empty result when the message yielded no text to cut.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when any argument is <see langword="null" />.</exception>
     /// <remarks>
-    /// The same text and the same rules produce the same chunks and the same hashes on every call, on any machine, and
-    /// in any order, which is what lets a caller decide by hash alone whether anything downstream has to be re-done.
+    /// The same text, the same rules, and the same bound produce the same chunks and the same hashes on every call, on
+    /// any machine, and in any order, which is what lets a caller decide by hash alone whether anything downstream has
+    /// to be re-done. The bound is a parameter rather than a member of the rules deliberately: the rules are covered by
+    /// each chunk's content hash because they decide what a passage says, while the bound decides only how many
+    /// passages there are and must not make an unchanged passage look like a different one.
     /// </remarks>
-    IReadOnlyList<EmailTextChunk> DeriveChunks(ExtractedEmailText text, EmailChunkingRules rules);
+    EmailChunkingResult DeriveChunks(
+        ExtractedEmailText text,
+        EmailChunkingRules rules,
+        EmbeddingInputBound bound);
 }

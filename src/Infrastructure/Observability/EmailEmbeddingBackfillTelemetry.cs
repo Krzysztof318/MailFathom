@@ -153,6 +153,7 @@ public sealed class EmailEmbeddingBackfillTelemetry
         StoredEmailEmbeddingBackfillOutcome.NoActiveProfile => "no_active_profile",
         StoredEmailEmbeddingBackfillOutcome.GeneratorDisagreesWithProfile => "generator_disagrees_with_profile",
         StoredEmailEmbeddingBackfillOutcome.ProviderFailed => "provider_failed",
+        StoredEmailEmbeddingBackfillOutcome.SpendCeilingReached => "spend_ceiling_reached",
         _ => "unknown",
     };
 

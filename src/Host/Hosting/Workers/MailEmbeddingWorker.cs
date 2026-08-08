@@ -55,8 +55,43 @@ internal sealed partial class MailEmbeddingWorker : BackgroundService
 
         await foreach (var storedEmailId in this.backlog.ReadAllAsync(stoppingToken))
         {
-            await this.EmbedOneAsync(storedEmailId, stoppingToken);
+            var run = await this.EmbedOneAsync(storedEmailId, stoppingToken);
+
+            await this.PauseUntilTheCeilingLiftsAsync(run, stoppingToken);
         }
+    }
+
+    /// <summary>Holds the worker until the budget period rolls over, when a turn ended on the spend ceiling.</summary>
+    /// <remarks>
+    /// <para>
+    /// The pause belongs here rather than inside a message's turn, because without it the ceiling would be met once per
+    /// waiting message: every one of them would be taken from the backlog, read the ledger, learn the same thing, and be
+    /// left for the backfill — a queue drained at the speed of a database read instead of work that waits.
+    /// </para>
+    /// <para>
+    /// Nothing is dropped by waiting. The message whose turn met the ceiling keeps its outstanding passages, which is
+    /// exactly the condition the backfill selects on, and the messages behind it stay in the backlog until the bound it
+    /// carries turns one away — at which point the same promise covers those too.
+    /// </para>
+    /// </remarks>
+    private async Task PauseUntilTheCeilingLiftsAsync(
+        StoredEmailEmbeddingRun? run,
+        CancellationToken cancellationToken)
+    {
+        if (run?.SpendPeriodEndsAt is not { } periodEndsAt)
+        {
+            return;
+        }
+
+        var wait = periodEndsAt - this.timeProvider.GetUtcNow();
+        if (wait <= TimeSpan.Zero)
+        {
+            return;
+        }
+
+        this.LogSpendCeilingReached(wait, this.backlog.Depth);
+
+        await Task.Delay(wait, this.timeProvider, cancellationToken);
     }
 
     /// <summary>Embeds one message and reports it, isolating whatever goes wrong from the messages behind it.</summary>
@@ -66,7 +101,9 @@ internal sealed partial class MailEmbeddingWorker : BackgroundService
     /// again here would put a second retry layer around a call that already runs under one.
     /// </remarks>
     [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "The hosted worker isolates one message's failure so the messages waiting behind it are still embedded.")]
-    private async Task EmbedOneAsync(StoredEmailId storedEmailId, CancellationToken cancellationToken)
+    private async Task<StoredEmailEmbeddingRun?> EmbedOneAsync(
+        StoredEmailId storedEmailId,
+        CancellationToken cancellationToken)
     {
         var startingTimestamp = this.timeProvider.GetTimestamp();
 
@@ -78,6 +115,8 @@ internal sealed partial class MailEmbeddingWorker : BackgroundService
 
             this.telemetry.RecordEmbeddedMessage(run, this.timeProvider.GetElapsedTime(startingTimestamp));
             this.Report(run);
+
+            return run;
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -91,6 +130,9 @@ internal sealed partial class MailEmbeddingWorker : BackgroundService
         {
             this.LogMessageFailed(exception);
         }
+
+        // A turn nobody has a result for says nothing about the ceiling, so the loop carries on to the next message.
+        return null;
     }
 
     /// <summary>Embeds one message into the generation searches are answered from, if there is one.</summary>
@@ -146,6 +188,11 @@ internal sealed partial class MailEmbeddingWorker : BackgroundService
 
                 break;
 
+            // Reported by the pause that follows rather than here, which is what says how long the wait is; saying it
+            // twice about one turn would read as two events.
+            case StoredEmailEmbeddingOutcome.SpendCeilingReached:
+                break;
+
             // The classification is matched rather than defaulted, because inventing one would report a failure the
             // provider never gave. A ProviderFailed result without it is unconstructible, so the case simply does not
             // arise.
@@ -189,6 +236,11 @@ internal sealed partial class MailEmbeddingWorker : BackgroundService
         Level = LogLevel.Warning,
         Message = "One message spent every provider call a turn is allowed after {EmbeddedChunkCount} passages and is still not fully embedded; the rest stay outstanding for the backfill. A message needing that many calls means Embeddings:MaxPassagesPerRequest is far below what one message of this length carries.")]
     private partial void LogCallBudgetExhausted(int embeddedChunkCount);
+
+    [LoggerMessage(
+        Level = LogLevel.Warning,
+        Message = "The embedding spend ceiling for this period is reached, so embedding is paused for {Wait} until the period rolls over; {BacklogDepth} messages are waiting and nothing is lost by the wait. Raise Embeddings:MaxInputCharactersPerPeriod to spend more per period.")]
+    private partial void LogSpendCeilingReached(TimeSpan wait, int backlogDepth);
 
     [LoggerMessage(
         Level = LogLevel.Warning,

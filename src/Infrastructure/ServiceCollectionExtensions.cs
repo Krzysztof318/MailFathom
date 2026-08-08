@@ -12,6 +12,7 @@ using MailFathom.Application.Emails.Embeddings.Backfill;
 using MailFathom.Application.Emails.Embeddings.Generation;
 using MailFathom.Application.Emails.Embeddings.Generations;
 using MailFathom.Application.Emails.Embeddings.Indexing;
+using MailFathom.Application.Emails.Embeddings.Limits;
 using MailFathom.Application.Emails.Extraction;
 using MailFathom.Application.Emails.GetEmailContent;
 using MailFathom.Application.Emails.ListEmails;
@@ -215,6 +216,10 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<EmailEmbeddingBackfillTelemetry>();
         services.AddScoped<IActiveEmbeddingProfileReader, ActiveEmbeddingProfileReader>();
         services.AddScoped<IEmailEmbeddingStore, EmailEmbeddingStore>();
+        // Registered whether or not this deployment embeds, for the reason the backlog is: what a period spent is a
+        // fact about the instance rather than about an activation, and an operator deciding whether to declare a
+        // ceiling reads it before there is anything to bound.
+        services.AddScoped<IEmbeddingSpendLedger, EmbeddingSpendLedger>();
         // The only registration here that changes the schema. It is scoped like every other store so that a caller
         // which has opened a persistence session gets its statement inside that session's transaction rather than
         // beside it.
@@ -403,6 +408,10 @@ public static class ServiceCollectionExtensions
     {
         ArgumentNullException.ThrowIfNull(services);
 
+        // Scoped like the generator that asks it, because the ledger it reads through is the scoped persistence
+        // context. The budget and the pacer behind it are singletons: one is a configured value and the other holds the
+        // reservation every caller of this process takes its slot from.
+        services.AddScoped<EmbeddingSpendGate>();
         services.AddScoped<StoredEmailEmbeddingGenerator>();
         services.AddScoped<StoredEmailEmbeddingBackfill>();
         services.AddScoped<EmbeddingGenerationUpkeep>();

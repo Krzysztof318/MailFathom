@@ -95,6 +95,15 @@ so the pass ends before it reads a message. An instance whose configured model i
 writes nothing and warns, for the reason
 [an edited declaration](automatic-embedding.md#an-edited-declaration-that-nobody-activated) gives.
 
+Neither interval applies to a run the deployment's spend ceiling stopped. That ending names the instant it stops
+applying — the moment the budget period rolls over — so the worker waits for exactly that: the short interval would
+re-read a ceiling already known to bind, and the long one would leave a rolled-over period idle for as much as a quarter
+of an hour. The run also stops **without advancing its position**, unlike a run a refused call ended, because a reached
+ceiling says nothing about the message in hand and the passages it did not reach are the ones a fresh period should pay
+for first. [Embedding generation](embedding-generation.md#what-an-instance-is-willing-to-spend) holds the ceiling
+itself, and an initial backfill of a large mailbox is the case for raising it deliberately rather than being paced by
+it.
+
 The removal of a superseded generation's vectors is bounded too, and it is not a setting: it deletes rows nobody reads,
 reaches no provider, and costs nothing an operator has to consent to, so what paces it is the interval between passes
 rather than a number beside the ones above. A pass that removed a full batch is followed by the short interval, because
@@ -105,7 +114,7 @@ there is more of that generation behind it.
 | Signal | What it answers |
 | --- | --- |
 | `mailfathom.embedding.backfill.outstanding` | How many messages awaited embedding when the current sweep began |
-| `mailfathom.embedding.backfill.runs` | Bounded passes, by how each ended — budget spent, sweep completed, no active profile, declaration disagrees, or provider failed |
+| `mailfathom.embedding.backfill.runs` | Bounded passes, by how each ended — batch budget spent, sweep completed, no active profile, declaration disagrees, provider failed, or the spend ceiling reached |
 | `mailfathom.embedding.backfill.chunked` | Messages that had to be cut into passages first, which is how much of the mailbox predates chunking |
 | `mailfathom.embedding.backfill.messages` | Messages brought up to date with the active profile |
 | `mailfathom.embedding.backfill.passages` | Passages given a vector |

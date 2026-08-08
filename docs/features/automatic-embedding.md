@@ -68,6 +68,23 @@ the resilience pipeline's concurrency budget; the bound that decides whether the
 how many passages one request carries, which
 [embedding generation](embedding-generation.md#bounds-every-call-carries) already applies.
 
+## What a reached ceiling does
+
+Before every provider call the turn asks what the current budget period still admits, and a period that admits nothing
+ends the turn without sending anything. The worker then **pauses until that period rolls over** rather than carrying on
+to the next message: without the pause it would take every waiting message in turn, learn the same thing from the same
+read, and drain a backlog at the speed of a database query. What it waits for is the roll-over instant the turn itself
+reported, so it neither polls a ceiling already known to bind nor sleeps past the moment it lifts.
+
+Nothing is dropped by waiting, and nothing has to be done to release it. The message whose turn met the ceiling keeps
+its outstanding passages, which is the condition the [backfill](embedding-backfill.md#why-it-sweeps-rather-than-finishes)
+selects on; the messages behind it stay in the backlog until its bound turns one away, at which point the same promise
+covers those too. The pause is logged as a warning naming how long it will last and which key raises the ceiling, and
+it is counted like any other outcome.
+
+[Embedding generation](embedding-generation.md#what-an-instance-is-willing-to-spend) states the three ceilings, what
+each is counted in, and why a batch that crosses one is paid for whole.
+
 ## An edited declaration that nobody activated
 
 Configuration can be changed to name a different model without activating it, and the vectors already stored belong to
@@ -100,9 +117,12 @@ declining to try again here.
 | --- | --- |
 | `mailfathom.embedding.backlog.depth` | How far behind embedding is right now |
 | `mailfathom.embedding.backlog.refused` | How many messages the bound turned away, which the backfill will have to reach |
-| `mailfathom.embedding.messages` | Messages taken from the backlog, by outcome — embedded, no active profile, declaration disagrees, provider failed, or one turn's calls exhausted |
+| `mailfathom.embedding.messages` | Messages taken from the backlog, by outcome — embedded, no active profile, declaration disagrees, provider failed, one turn's calls exhausted, or the spend ceiling reached |
 | `mailfathom.embedding.message.duration` | How long embedding one message took, by the same outcome |
 | `mailfathom.embedding.passages` | Passages given a vector |
+| `mailfathom.embedding.budget.consumed` | Characters sent to a provider and charged against the spend ceiling |
+| `mailfathom.embedding.input.truncated` | Messages the per-message ceiling cut short |
+| `mailfathom.embedding.input.omitted` | Characters that ceiling left out of the passages it cut |
 
 Falling behind is therefore visible as a rising depth rather than as search results that quietly stay lexical.
 

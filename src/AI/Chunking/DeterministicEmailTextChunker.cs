@@ -4,6 +4,7 @@
 
 using System.Globalization;
 using MailFathom.Application.Emails.Chunking;
+using MailFathom.Application.Emails.Embeddings.Limits;
 using MailFathom.Application.Emails.Extraction;
 
 namespace MailFathom.AI.Chunking;
@@ -30,16 +31,22 @@ namespace MailFathom.AI.Chunking;
 internal sealed class DeterministicEmailTextChunker : IEmailTextChunker
 {
     /// <inheritdoc />
-    public IReadOnlyList<EmailTextChunk> DeriveChunks(ExtractedEmailText text, EmailChunkingRules rules)
+    public EmailChunkingResult DeriveChunks(
+        ExtractedEmailText text,
+        EmailChunkingRules rules,
+        EmbeddingInputBound bound)
     {
         ArgumentNullException.ThrowIfNull(text);
         ArgumentNullException.ThrowIfNull(rules);
+        ArgumentNullException.ThrowIfNull(bound);
 
-        var source = SelectSourceForm(text, rules);
-        if (string.IsNullOrEmpty(source))
+        var selected = SelectSourceForm(text, rules);
+        if (string.IsNullOrEmpty(selected))
         {
-            return [];
+            return EmailChunkingResult.NoText;
         }
+
+        var (source, truncatedFrom) = CutToBound(selected, bound);
 
         var chunks = new List<EmailTextChunk>();
         var start = 0;
@@ -70,7 +77,23 @@ internal sealed class DeterministicEmailTextChunker : IEmailTextChunker
             start = FindNextStart(source, start, end, rules.OverlapCharacterCount);
         }
 
-        return chunks;
+        return new EmailChunkingResult(chunks, truncatedFrom);
+    }
+
+    /// <summary>Cuts the text down to what one message may cost, and reports the length it had when that happened.</summary>
+    /// <remarks>
+    /// The cut lands on a text-element boundary for the reason every boundary here does: a ceiling that fell inside a
+    /// surrogate pair or a combining sequence would hand the last chunk a character its author never wrote, and
+    /// PostgreSQL would refuse the write rather than store it.
+    /// </remarks>
+    private static (string Source, int? TruncatedFrom) CutToBound(string source, EmbeddingInputBound bound)
+    {
+        if (source.Length <= bound.MaximumCharacterCount)
+        {
+            return (source, null);
+        }
+
+        return (source[..BoundaryAtOrBefore(source, knownBoundary: 0, bound.MaximumCharacterCount)], source.Length);
     }
 
     private static string? SelectSourceForm(ExtractedEmailText text, EmailChunkingRules rules) => rules.SourceForm switch

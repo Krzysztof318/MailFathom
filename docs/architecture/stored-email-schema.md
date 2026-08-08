@@ -72,6 +72,8 @@ The key is a surrogate UUIDv7 rather than the email and the ordinal together, be
 
 Only a message that yielded text has rows here, and deleting a message cascades to them.
 
+`stored_emails.ChunkedTextTruncatedFromCharacterCount` is where the cut records what it left out: the length the extracted text had when the per-message ceiling stopped the cut short of its end, and null when no ceiling reached that message. It lives on the message rather than on a chunk because it is a fact about the message, and it is stored rather than inferred because a message cut whole and one cut to a ceiling are indistinguishable from their passages alone. [Message chunks](../features/message-chunks.md#the-per-message-ceiling) records what the ceiling is for.
+
 ## Embedding profiles
 
 `embedding_profiles` holds one row per vector space this deployment has embedded into. The row is written by the activation that takes a declared model up and starts spending against it, and its columns are what a stored vector's attribution points at.
@@ -112,6 +114,14 @@ Neither half works alone. PostgreSQL evaluates a check constraint against one ro
 The two references behave differently on delete, and that is the whole erasure story. **The chunk cascades**: a vector hangs on a chunk, a chunk hangs on a stored email, so deleting a message reaches every vector derived from it without a rule anybody has to remember. **The profile restricts**: a profile is what a stored vector's attribution points at, so the schema refuses to remove one while a vector still names it. `ix_email_embeddings_profile` is what a whole generation is read by when a superseded one is removed in bounded batches; without it that read would scan every vector in the table.
 
 `GeneratedAt` records when the vector was produced, which tells a re-embed from an original one apart.
+
+## What a budget period has spent
+
+`embedding_spend_periods` holds one row per budget period, keyed by `PeriodStartsAt` — the instant that period began, which every process derives from the configured period length and the Unix epoch rather than reading from anywhere. `ConsumedInputCharacterCount` is a `bigint` because a period of a mailbox's initial embedding passes a billion characters without difficulty. Nothing allocates a period: the first spend inside one inserts its row and every later spend adds to it.
+
+The table exists rather than the count being derived from the stored vectors, which would need no table at all. A superseded generation has its vectors removed in bounded batches, so a count taken over them would erase the record of a spend that genuinely happened — and the period in which a model change is paid for is exactly the period an operator is watching. It is durable rather than held in memory for the reason the ceiling exists: a process crashing and restarting in a loop would otherwise begin every period again from zero and spend the whole ceiling on each attempt.
+
+The one write is an increment issued as an upsert, in the same transaction as the vectors it paid for. That makes the charge and the vectors one durable fact, and it means two workers spending inside one period add to each other rather than each overwriting a total that was already stale when it was read — which is why the row carries no concurrency token. Nothing hangs off it and nothing cascades into it: a character count and an instant name no message, passage, or vector, so the record of a cost outlives every vector that cost paid for.
 
 ## Outstanding content repair requests
 
@@ -342,6 +352,8 @@ The derived search document is not a lesser classification of the same data. Bod
 The same holds for `email_chunks`, and one thing about it is deliberate: a chunk records the message it came from and the span inside it, and nothing else. The account, folder, sender, recipients, date, and subject a retrieval will want to cite are reached through that message rather than copied onto the passage, so cutting mail into chunks widens no access, export, or erasure surface — it only adds rows the same cascade erases.
 
 `email_embeddings` is the same again, one step further out. A vector is derived from mail content and inherits the source message's classification, retention, access, export, and erasure obligations whole; nothing about being a list of numbers makes it a lesser copy of the words it stands for, and it is not anonymous because it cannot be read back by eye. It carries no text and no coordinates of its own — the chunk it hangs on answers both — and the cascade from that chunk is what makes erasure structural rather than a rule somebody has to remember. No vector, no chunk text, and no digest reaches a log, a metric, a trace, or an error message.
+
+`embedding_spend_periods` holds no personal data either, and its shape is what makes that true rather than a claim about it: a character count and an instant say how much a deployment spent and when, and neither names a message, a passage, or a vector. That is also why it outlives what it recorded — nothing cascades into it, and erasing the mail a period paid to embed leaves the record that the period was paid for.
 
 `embedding_profiles` is the exception on this page: it holds no personal data at all. It describes a model, and the credential that reaches that model is configuration rather than a column here, so nothing in this table is a secret or is derived from anybody's mail.
 

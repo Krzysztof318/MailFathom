@@ -18,6 +18,12 @@ public sealed class EmailEmbeddingTelemetryTests
 
     private const string PassageCountInstrument = "mailfathom.embedding.passages";
 
+    private const string ConsumedBudgetInstrument = "mailfathom.embedding.budget.consumed";
+
+    private const string TruncatedMessageInstrument = "mailfathom.embedding.input.truncated";
+
+    private const string OmittedCharacterInstrument = "mailfathom.embedding.input.omitted";
+
     /// <summary>
     /// The tag strings are the whole value of the instrument: an operator diagnoses a falling-behind instance by
     /// splitting these series on the outcome and, when the provider refused, on the classification. A swapped or
@@ -41,6 +47,7 @@ public sealed class EmailEmbeddingTelemetryTests
                 "no_active_profile/none",
                 "generator_disagrees_with_profile/none",
                 "call_budget_exhausted/none",
+                "spend_ceiling_reached/none",
                 "provider_failed/credential_rejected",
                 "provider_failed/rate_limited",
                 "provider_failed/request_timed_out",
@@ -114,6 +121,80 @@ public sealed class EmailEmbeddingTelemetryTests
         Assert.Equal([4, 9], measurements.ValuesOf(PassageCountInstrument));
     }
 
+    /// <summary>
+    /// What a turn spent is charged whether or not the message it was for is now whole, because the characters were
+    /// sent either way. A counter that skipped the two endings that stop part-way would under-report exactly the
+    /// periods an operator watching a ceiling is looking at.
+    /// </summary>
+    [Fact]
+    public void RecordEmbeddedMessage_ATurnThatSentSomething_CountsItAgainstTheBudgetWhateverTheOutcome()
+    {
+        // Arrange
+        var telemetry = new EmailEmbeddingTelemetry();
+        using var measurements = new RecordedMailFathomMeasurements(ConsumedBudgetInstrument);
+
+        // Act
+        telemetry.RecordEmbeddedMessage(
+            StoredEmailEmbeddingRun.Embedded(3, inputCharacterCount: 30),
+            TimeSpan.FromSeconds(1));
+        telemetry.RecordEmbeddedMessage(
+            StoredEmailEmbeddingRun.SpendCeilingReached(1, inputCharacterCount: 12, DateTimeOffset.UnixEpoch),
+            TimeSpan.FromSeconds(1));
+        telemetry.RecordEmbeddedMessage(
+            StoredEmailEmbeddingRun.CallBudgetExhausted(2, inputCharacterCount: 20),
+            TimeSpan.FromSeconds(1));
+
+        // Assert
+        Assert.Equal(62, measurements.ValuesOf(ConsumedBudgetInstrument).Sum());
+    }
+
+    /// <summary>A turn that sent nothing charges nothing, so a period with no work opens no series of zeroes.</summary>
+    [Fact]
+    public void RecordEmbeddedMessage_ATurnThatSentNothing_ChargesTheBudgetNothing()
+    {
+        // Arrange
+        var telemetry = new EmailEmbeddingTelemetry();
+        using var measurements = new RecordedMailFathomMeasurements(ConsumedBudgetInstrument);
+
+        // Act
+        telemetry.RecordEmbeddedMessage(StoredEmailEmbeddingRun.NoActiveProfile(), TimeSpan.FromSeconds(1));
+
+        // Assert
+        Assert.Equal(0, measurements.ValuesOf(ConsumedBudgetInstrument).Sum());
+    }
+
+    /// <summary>
+    /// Two instruments rather than one, because one enormous message and a thousand slightly oversized ones need
+    /// different answers from an operator: how often the ceiling binds, and what raising it would cost.
+    /// </summary>
+    [Fact]
+    public void RecordTruncatedEmbeddingInput_AMessageTheCeilingCut_CountsTheMessageAndTheTextItLeftOut()
+    {
+        // Arrange
+        var telemetry = new EmailEmbeddingTelemetry();
+        using var measurements = new RecordedMailFathomMeasurements(
+            TruncatedMessageInstrument,
+            OmittedCharacterInstrument);
+
+        // Act
+        telemetry.RecordTruncatedEmbeddingInput(omittedCharacterCount: 4_000);
+        telemetry.RecordTruncatedEmbeddingInput(omittedCharacterCount: 1_000);
+
+        // Assert
+        Assert.Equal(2, measurements.ValuesOf(TruncatedMessageInstrument).Sum());
+        Assert.Equal(5_000, measurements.ValuesOf(OmittedCharacterInstrument).Sum());
+    }
+
+    [Fact]
+    public void RecordTruncatedEmbeddingInput_ANegativeCount_IsRefused()
+    {
+        // Arrange
+        var telemetry = new EmailEmbeddingTelemetry();
+
+        // Act, Assert
+        Assert.Throws<ArgumentOutOfRangeException>(() => telemetry.RecordTruncatedEmbeddingInput(-1));
+    }
+
     /// <summary>Drives one turn of every shape a run can end in, in the order the outcomes are declared.</summary>
     private static void RecordEveryOutcome(EmailEmbeddingTelemetry telemetry)
     {
@@ -123,6 +204,7 @@ public sealed class EmailEmbeddingTelemetryTests
             StoredEmailEmbeddingRun.NoActiveProfile(),
             StoredEmailEmbeddingRun.GeneratorDisagreesWithProfile(),
             StoredEmailEmbeddingRun.CallBudgetExhausted(7),
+            StoredEmailEmbeddingRun.SpendCeilingReached(2, inputCharacterCount: 40, DateTimeOffset.UnixEpoch),
             .. Enum.GetValues<EmbeddingGenerationFailure>()
                 .Select(failure => StoredEmailEmbeddingRun.ProviderFailed(1, failure)),
         ];

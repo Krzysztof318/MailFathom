@@ -5,6 +5,7 @@
 using System.Globalization;
 using MailFathom.AI.Chunking;
 using MailFathom.Application.Emails.Chunking;
+using MailFathom.Application.Emails.Embeddings.Limits;
 using MailFathom.Application.Emails.Extraction;
 using Xunit;
 
@@ -21,7 +22,7 @@ public sealed class DeterministicEmailTextChunkerTests
     public void DeriveChunks_TextWithoutABody_YieldsNoChunks(ExtractedEmailText text)
     {
         // Act
-        var chunks = this.chunker.DeriveChunks(text, EmailChunkingRules.Current);
+        var chunks = this.Chunk(text, EmailChunkingRules.Current);
 
         // Assert
         Assert.Empty(chunks);
@@ -36,7 +37,7 @@ public sealed class DeterministicEmailTextChunkerTests
         var text = ExtractedEmailText.FromPlainTextBody(body, body);
 
         // Act
-        var chunks = this.chunker.DeriveChunks(text, EmailChunkingRules.Current);
+        var chunks = this.Chunk(text, EmailChunkingRules.Current);
 
         // Assert
         var chunk = Assert.Single(chunks);
@@ -58,7 +59,7 @@ public sealed class DeterministicEmailTextChunkerTests
         var text = ExtractedEmailText.FromPlainTextBody(body, body);
 
         // Act
-        var chunks = this.chunker.DeriveChunks(text, EmailChunkingRules.Current);
+        var chunks = this.Chunk(text, EmailChunkingRules.Current);
 
         // Assert
         Assert.Equal(
@@ -75,7 +76,7 @@ public sealed class DeterministicEmailTextChunkerTests
         var text = ExtractedEmailText.FromPlainTextBody(body, body);
 
         // Act
-        var chunks = this.chunker.DeriveChunks(text, EmailChunkingRules.Current);
+        var chunks = this.Chunk(text, EmailChunkingRules.Current);
 
         // Assert
         Assert.True(chunks.Count > 1, "The sample has to be long enough to be cut into several passages.");
@@ -94,7 +95,7 @@ public sealed class DeterministicEmailTextChunkerTests
         var text = ExtractedEmailText.FromPlainTextBody(body, body);
 
         // Act
-        var chunks = this.chunker.DeriveChunks(text, EmailChunkingRules.Current);
+        var chunks = this.Chunk(text, EmailChunkingRules.Current);
 
         // Assert
         Assert.All(chunks, chunk => Assert.InRange(chunk.Text.Length, 1, EmailChunkingRules.Current.TargetCharacterCount));
@@ -109,7 +110,7 @@ public sealed class DeterministicEmailTextChunkerTests
         var text = ExtractedEmailText.FromPlainTextBody(body, body);
 
         // Act
-        var chunks = this.chunker.DeriveChunks(text, EmailChunkingRules.Current);
+        var chunks = this.Chunk(text, EmailChunkingRules.Current);
 
         // Assert
         Assert.All(
@@ -127,7 +128,7 @@ public sealed class DeterministicEmailTextChunkerTests
         var text = ExtractedEmailText.FromPlainTextBody(body, body);
 
         // Act
-        var chunks = this.chunker.DeriveChunks(text, EmailChunkingRules.Current);
+        var chunks = this.Chunk(text, EmailChunkingRules.Current);
 
         // Assert
         Assert.EndsWith("\n\n", chunks[0].Text, StringComparison.Ordinal);
@@ -146,7 +147,7 @@ public sealed class DeterministicEmailTextChunkerTests
         var text = ExtractedEmailText.FromPlainTextBody(body, body);
 
         // Act
-        var chunks = this.chunker.DeriveChunks(text, EmailChunkingRules.Current);
+        var chunks = this.Chunk(text, EmailChunkingRules.Current);
 
         // Assert
         Assert.True(
@@ -163,7 +164,7 @@ public sealed class DeterministicEmailTextChunkerTests
         var text = ExtractedEmailText.FromPlainTextBody(body, body);
 
         // Act
-        var chunks = this.chunker.DeriveChunks(text, EmailChunkingRules.Current);
+        var chunks = this.Chunk(text, EmailChunkingRules.Current);
 
         // Assert
         Assert.Equal(EmailChunkingRules.Current.TargetCharacterCount, chunks[0].Text.Length);
@@ -183,7 +184,7 @@ public sealed class DeterministicEmailTextChunkerTests
         var text = ExtractedEmailText.FromPlainTextBody(body, body);
 
         // Act
-        var chunks = this.chunker.DeriveChunks(text, EmailChunkingRules.Current);
+        var chunks = this.Chunk(text, EmailChunkingRules.Current);
 
         // Assert
         Assert.All(chunks, chunk => Assert.Equal(0, chunk.Text.Length % element.Length));
@@ -210,7 +211,7 @@ public sealed class DeterministicEmailTextChunkerTests
         var text = ExtractedEmailText.FromPlainTextBody(body, body);
 
         // Act
-        var chunks = this.chunker.DeriveChunks(text, rules);
+        var chunks = this.Chunk(text, rules);
 
         // Assert
         Assert.All(chunks, chunk => Assert.Equal(0, chunk.Text.Length % element.Length));
@@ -226,8 +227,10 @@ public sealed class DeterministicEmailTextChunkerTests
         var text = ExtractedEmailText.FromPlainTextBody(body, body);
 
         // Act
-        var first = this.chunker.DeriveChunks(text, EmailChunkingRules.Current);
-        var second = new DeterministicEmailTextChunker().DeriveChunks(text, EmailChunkingRules.Current);
+        var first = this.Chunk(text, EmailChunkingRules.Current);
+        var second = new DeterministicEmailTextChunker()
+            .DeriveChunks(text, EmailChunkingRules.Current, EmbeddingInputBound.Default)
+            .Chunks;
 
         // Assert
         Assert.Equal(first, second);
@@ -241,7 +244,7 @@ public sealed class DeterministicEmailTextChunkerTests
         var text = ExtractedEmailText.FromPlainTextBody("Quoted history.\n\nThe answer.", "The answer.");
 
         // Act
-        var chunks = this.chunker.DeriveChunks(text, EmailChunkingRules.Current);
+        var chunks = this.Chunk(text, EmailChunkingRules.Current);
 
         // Assert
         Assert.Equal("The answer.", Assert.Single(chunks).Text);
@@ -262,7 +265,7 @@ public sealed class DeterministicEmailTextChunkerTests
         var text = ExtractedEmailText.FromPlainTextBody("Quoted history.\n\nThe answer.", "The answer.");
 
         // Act
-        var chunks = this.chunker.DeriveChunks(text, rules);
+        var chunks = this.Chunk(text, rules);
 
         // Assert
         Assert.Equal("Quoted history.\n\nThe answer.", Assert.Single(chunks).Text);
@@ -277,7 +280,7 @@ public sealed class DeterministicEmailTextChunkerTests
         var text = ExtractedEmailText.DerivedFromHtmlBody(body, body);
 
         // Act
-        var chunks = this.chunker.DeriveChunks(text, EmailChunkingRules.Current);
+        var chunks = this.Chunk(text, EmailChunkingRules.Current);
 
         // Assert
         Assert.All(chunks, chunk => Assert.True(chunk.IsDerivedFromLossyHtml));
@@ -292,7 +295,7 @@ public sealed class DeterministicEmailTextChunkerTests
         var text = ExtractedEmailText.FromPlainTextBody(body, body);
 
         // Act
-        var chunks = this.chunker.DeriveChunks(text, EmailChunkingRules.Current);
+        var chunks = this.Chunk(text, EmailChunkingRules.Current);
 
         // Assert
         Assert.All(chunks, chunk => Assert.Equal(EmailChunkingRules.Current.RuleSetVersion, chunk.RuleSetVersion));
@@ -314,7 +317,7 @@ public sealed class DeterministicEmailTextChunkerTests
         var text = ExtractedEmailText.FromPlainTextBody(body, body);
 
         // Act
-        var chunks = this.chunker.DeriveChunks(text, rules);
+        var chunks = this.Chunk(text, rules);
 
         // Assert
         Assert.All(chunks, chunk => Assert.False(string.IsNullOrWhiteSpace(chunk.Text)));
@@ -335,7 +338,7 @@ public sealed class DeterministicEmailTextChunkerTests
         var text = ExtractedEmailText.FromPlainTextBody("Body.", "Body.");
 
         // Act, Assert
-        Assert.Throws<ArgumentOutOfRangeException>(() => this.chunker.DeriveChunks(text, rules));
+        Assert.Throws<ArgumentOutOfRangeException>(() => this.Chunk(text, rules));
     }
 
     /// <summary>Nothing may be cut from arguments that are not there.</summary>
@@ -346,8 +349,72 @@ public sealed class DeterministicEmailTextChunkerTests
         var text = ExtractedEmailText.FromPlainTextBody("Body.", "Body.");
 
         // Act, Assert
-        Assert.Throws<ArgumentNullException>(() => this.chunker.DeriveChunks(null!, EmailChunkingRules.Current));
-        Assert.Throws<ArgumentNullException>(() => this.chunker.DeriveChunks(text, null!));
+        Assert.Throws<ArgumentNullException>(() => this.Chunk(null!, EmailChunkingRules.Current));
+        Assert.Throws<ArgumentNullException>(() => this.Chunk(text, null!));
+        Assert.Throws<ArgumentNullException>(
+            () => this.chunker.DeriveChunks(text, EmailChunkingRules.Current, null!));
+    }
+
+    /// <summary>A message inside the ceiling is cut whole and its record says nothing was left out.</summary>
+    [Fact]
+    public void DeriveChunks_TextInsideTheInputBound_ReportsNoTruncation()
+    {
+        // Arrange
+        var body = Paragraphs(4);
+        var text = ExtractedEmailText.FromPlainTextBody(body, body);
+
+        // Act
+        var cut = this.chunker.DeriveChunks(
+            text,
+            EmailChunkingRules.Current,
+            EmbeddingInputBound.Create(body.Length));
+
+        // Assert
+        Assert.Null(cut.TruncatedFromCharacterCount);
+        Assert.Equal(body.Length, cut.Chunks[^1].EndOffset);
+    }
+
+    /// <summary>An oversized message is bounded rather than refused, and the length it had is what the cut reports.</summary>
+    [Fact]
+    public void DeriveChunks_TextBeyondTheInputBound_CutsToItAndReportsTheLengthItHad()
+    {
+        // Arrange
+        var body = Paragraphs(20);
+        var text = ExtractedEmailText.FromPlainTextBody(body, body);
+        var bound = EmbeddingInputBound.Create(body.Length / 2);
+
+        // Act
+        var cut = this.chunker.DeriveChunks(text, EmailChunkingRules.Current, bound);
+
+        // Assert
+        Assert.Equal(body.Length, cut.TruncatedFromCharacterCount);
+        Assert.NotEmpty(cut.Chunks);
+        Assert.True(cut.Chunks[^1].EndOffset <= bound.MaximumCharacterCount);
+    }
+
+    /// <summary>
+    /// A ceiling decides how many passages exist and never what one says, so every passage the bound leaves in place
+    /// keeps the hash it had — which is what stops a raised or lowered ceiling from re-embedding text nothing changed.
+    /// </summary>
+    [Fact]
+    public void DeriveChunks_TextBeyondTheInputBound_LeavesTheHashesOfTheRetainedPassagesUnchanged()
+    {
+        // Arrange
+        var body = Paragraphs(20);
+        var text = ExtractedEmailText.FromPlainTextBody(body, body);
+
+        // Act
+        var whole = this.chunker.DeriveChunks(text, EmailChunkingRules.Current, EmbeddingInputBound.Default);
+        var bounded = this.chunker.DeriveChunks(
+            text,
+            EmailChunkingRules.Current,
+            EmbeddingInputBound.Create(body.Length / 2));
+
+        // Assert
+        Assert.NotEqual(whole.Chunks.Count, bounded.Chunks.Count);
+        Assert.Equal(
+            whole.Chunks.Take(bounded.Chunks.Count - 1).Select(chunk => chunk.ContentHash),
+            bounded.Chunks.Take(bounded.Chunks.Count - 1).Select(chunk => chunk.ContentHash));
     }
 
     public static TheoryData<ExtractedEmailText> TextsWithoutABody() =>
@@ -356,6 +423,15 @@ public sealed class DeterministicEmailTextChunkerTests
         ExtractedEmailText.EncryptedBody,
         ExtractedEmailText.FromPlainTextBody(string.Empty, string.Empty),
     ];
+
+    /// <summary>Cuts through the chunker under a ceiling deliberately beyond anything these bodies reach.</summary>
+    /// <remarks>
+    /// Every test but the three about the ceiling itself is written about the boundary rules, and passing the default
+    /// bound keeps them saying what they said before one existed: the cut is decided by the separators and the target
+    /// length alone.
+    /// </remarks>
+    private IReadOnlyList<EmailTextChunk> Chunk(ExtractedEmailText text, EmailChunkingRules rules) =>
+        this.chunker.DeriveChunks(text, rules, EmbeddingInputBound.Default).Chunks;
 
     /// <summary>Builds a body of numbered sentences, long enough to be cut and varied enough that no two chunks match.</summary>
     private static string Paragraphs(int count) => string.Join(

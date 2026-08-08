@@ -236,6 +236,36 @@ next, never what a search is currently able to do; only an activation does that.
 | `Embeddings:RequestTimeout` | TimeSpan | `00:01:00` | positive; one request to one endpoint | restart |
 | `Embeddings:MaxQueuedEmails` | int | `1024` | 1 – 1000000; newly synchronized messages that may wait to be embedded at once, beyond which synchronization stops offering and the backfill reaches the rest | restart |
 
+### What an instance is willing to spend
+
+The four keys below bound cost rather than correctness, and they are validated whether or not a chain is declared:
+passages are cut for every synchronized message on an instance that has chosen no provider, so a ceiling left
+unvalidated would be one already applying. None of them is part of an embedding profile — they decide how many vectors
+exist and never what one means, so moving any of them leaves every stored vector as comparable as it was. [Embedding
+generation](../features/embedding-generation.md#what-an-instance-is-willing-to-spend) records what each bounds and why.
+
+| Key | Type | Default | Constraint | Change |
+| --- | --- | --- | --- | --- |
+| `Embeddings:MaxCharactersPerEmail` | int | `200000` | 1000 – 10000000; how much of one message's extracted text is cut into passages. A message beyond it is bounded rather than refused — its opening is embedded and the length its text had is recorded on the message | restart |
+| `Embeddings:MaxRequestsPerMinute` | int | `0` | 0 – 100000; `0` paces nothing, which is the default. For a provider whose quota is stated per minute; a caller takes the next free slot and waits for it | restart |
+| `Embeddings:MaxInputCharactersPerPeriod` | long | `50000000` | zero or positive; the characters one period may send a provider, counted as sent rather than as stored. `0` declares no ceiling at all, which is supported and means an enabled feature can produce a bill nobody agreed to | restart |
+| `Embeddings:SpendPeriod` | TimeSpan | `1.00:00:00` | 1 min – 31 days; the fixed window the ceiling is counted over, anchored at the Unix epoch so every restart places it identically | restart |
+
+Reaching `MaxInputCharactersPerPeriod` pauses embedding until the period rolls over, and resumes without anybody
+acting; nothing is dropped, because a passage with no vector is what the backfill selects on. The ceiling binds to
+within one batch: a batch is admitted whenever anything at all is left and is then paid for whole, because weighing it
+against what remains would stall a deployment whose ceiling is smaller than one batch for ever.
+
+The default is chosen to bind. Fifty million characters a day is roughly twelve million tokens and embeds something
+like sixteen thousand ordinary messages, so an instance keeping up with arriving mail never meets it and one working
+through a decade of archive is paced rather than surprised — raise it deliberately for an initial backfill, having seen
+the number.
+
+**Concurrency is not here.** How many provider calls may be in flight at once is
+`Resilience:AiProviderInvocation:ConcurrencyLimit`, which is the one setting that owns that question; [outbound
+resilience](../architecture/outbound-resilience.md) holds it, and a second limiter beside it would make two keys answer
+for one behaviour.
+
 ### One endpoint — `Embeddings:Endpoints:<n>`
 
 An ordered chain. Every entry declares the same geometry and reaches the same vector space, so a failing endpoint
