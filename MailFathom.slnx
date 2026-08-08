@@ -22,5 +22,9 @@
     <Project Path="tests/IntegrationTests/IntegrationTests.csproj" />
     <Project Path="tests/Mcp.UnitTests/Mcp.UnitTests.csproj" />
     <Project Path="tests/SharedSources.UnitTests/SharedSources.UnitTests.csproj" />
+    <Project Path="tests/SyntheticMail.UnitTests/SyntheticMail.UnitTests.csproj" />
+  </Folder>
+  <Folder Name="/tools/">
+    <Project Path="tools/SyntheticMail/SyntheticMail.csproj" />
   </Folder>
 </Solution>
