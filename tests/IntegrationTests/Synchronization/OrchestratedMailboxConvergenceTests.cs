@@ -31,12 +31,13 @@ namespace MailFathom.IntegrationTests.Synchronization;
 /// <summary>Proves that a change nobody finished converges by itself, against a real mail server and a real database.</summary>
 /// <remarks>
 /// <para>
-/// Two tests, because there are two claims no substitute can establish. The first is that a mutation a stopped process
-/// left in a non-final state completes on the next start with no operator action, which needs a server that really
-/// copied a message, a database that really kept the stage across the stop, and the production convergence pass reading
-/// both. The second is that a change whose destination folder was removed stops instead of being attempted again —
-/// which needs a server that really answers that the folder is not there, since the whole point of the translation is
-/// what a real mail library raises.
+/// Three tests, because there are three claims no substitute can establish. The first is that a mutation a stopped
+/// process left in a non-final state completes on the next start with no operator action, which needs a server that
+/// really copied a message, a database that really kept the stage across the stop, and the production convergence pass
+/// reading both. The second is that a change whose destination folder was removed stops instead of being attempted
+/// again — which needs a server that really answers that the folder is not there, since the whole point of the
+/// translation is what a real mail library raises. The third is the count only a real mailbox can settle: a copy whose
+/// answer was never read leaves one message in the destination folder and convergence leaves it at one.
 /// </para>
 /// <para>
 /// Everything else about convergence — the grace period, the counts, which stage a resumed sequence continues from — is
@@ -50,6 +51,8 @@ public sealed class OrchestratedMailboxConvergenceTests(MailFathomOrchestrationF
 
     private const string RemovedFolderName = "ConvergenceRemovedTarget";
 
+    private const string CopyFolderName = "ConvergenceCopyTarget";
+
     /// <summary>The alias this class owns, bound to the real inbox so a write session selects it.</summary>
     private static readonly MailFolderResolution Inbox = MailFolderResolution.FirstBindingOf(
         MailFolderAlias.Create("convergence-inbox"),
@@ -60,6 +63,9 @@ public sealed class OrchestratedMailboxConvergenceTests(MailFathomOrchestrationF
 
     private static readonly RemoteFolderPath RemovedPath =
         RemoteFolderPath.Create(RemovedFolderName, hierarchyDelimiter: '.');
+
+    private static readonly RemoteFolderPath CopyPath =
+        RemoteFolderPath.Create(CopyFolderName, hierarchyDelimiter: '.');
 
     private static readonly MailboxMutationRequester Requester =
         MailboxMutationRequester.Rule("converge-to-archive", 1);
@@ -158,6 +164,133 @@ public sealed class OrchestratedMailboxConvergenceTests(MailFathomOrchestrationF
         Assert.Contains(
             await mailbox.ReadAsync(OrchestratedMailbox.InboxPath, cancellationToken),
             email => email.Subject == subject);
+    }
+
+    /// <summary>
+    /// The one command that may never be repeated, left in the state that would repeat it. A process stopped between
+    /// the <c>UID COPY</c> and its answer left a message in the destination folder and a record that cannot know
+    /// whether it did; the pass settles the record without issuing anything, so the folder still holds one message and
+    /// not two.
+    /// </summary>
+    /// <remarks>
+    /// GreenMail advertises <c>UIDPLUS</c>, so the copy ran the <c>COPYUID</c> path — which is the one worth proving
+    /// here, because it is the path a deployment gets and the one on which a repeat would be indistinguishable from a
+    /// message the owner copied deliberately. The grace period is set to nothing rather than waited out: what the wait
+    /// is for is a later synchronization run settling the placement, and no such run can settle a copy at all.
+    /// </remarks>
+    [Fact]
+    public async Task ConvergeAsync_ACopyWhoseAnswerWasNeverRead_LeavesOneMessageAndStopsClaimingToKnow()
+    {
+        // Arrange
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var mailbox = new OrchestratedMailbox(orchestration.MailServer);
+        await mailbox.RecreateFolderAsync(CopyFolderName, cancellationToken);
+
+        await using var services = await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken);
+        await CommitInboxBindingAsync(services, cancellationToken);
+
+        var subject = $"converge-copy-{Guid.NewGuid():N}";
+        var occurrence = await DeliverAndLocateAsync(mailbox, subject, cancellationToken);
+        var storedEmailId = await StoreMetadataAsync(services, occurrence, subject, cancellationToken);
+        var request = MailboxMutationRequest.Copy(storedEmailId, occurrence, Requester, CopyPath);
+
+        await StopAfterTheCopyCommandAsync(services, request, occurrence, cancellationToken);
+
+        // The state a stopped process leaves: the message is in both folders, and the record says only that the command
+        // went out.
+        Assert.Single(await mailbox.ReadAsync(CopyFolderName, cancellationToken), email => email.Subject == subject);
+        Assert.Equal(
+            MailboxMutationStage.PlacementIssued,
+            (await ReadRecordRowAsync(services, occurrence, cancellationToken)).Stage);
+
+        // Act
+        var report = await services.InScopeAsync(ConvergeWithoutGraceAsync, cancellationToken);
+
+        // Assert
+        Assert.Contains(
+            report.Outstanding,
+            group => group.Lifecycle == MailboxMutationLifecycle.DeadLettered
+                && group.Mutation == MailboxMutation.Copy);
+        Assert.Single(await mailbox.ReadAsync(CopyFolderName, cancellationToken), email => email.Subject == subject);
+        Assert.Contains(
+            await mailbox.ReadAsync(OrchestratedMailbox.InboxPath, cancellationToken),
+            email => email.Subject == subject);
+
+        var row = await ReadRecordRowAsync(services, occurrence, cancellationToken);
+        Assert.Equal(MailboxMutationStage.Abandoned, row.Stage);
+        Assert.Equal(MailFathomErrorCode.MailboxMutationOutcomeUnknown.Value, row.LastFailureCode);
+    }
+
+    /// <summary>Runs the production convergence pass with nothing left to wait for.</summary>
+    /// <remarks>
+    /// Everything below the options is the production registration, including the write session factory and the pool
+    /// behind it: a copy that must not be reissued has to be proven against the connection a deployment gets rather than
+    /// against one a test assembled.
+    /// </remarks>
+    private static async Task<MailboxConvergenceReport> ConvergeWithoutGraceAsync(
+        IServiceProvider scope,
+        CancellationToken cancellationToken)
+    {
+        var commitPolicy = scope.GetRequiredService<OptimisticConcurrencyRetryPolicy>();
+        var store = scope.GetRequiredService<IMailboxMutationRecordStore>();
+        var converger = new MailboxMutationConverger(
+            store,
+            new MailboxMutationPerformer(
+                store,
+                scope.GetRequiredService<IMailboxWriteSessionFactory>(),
+                commitPolicy,
+                new MailboxMutationOptions()),
+            scope.GetRequiredService<IMailTransportSecurityPolicyReader>(),
+            commitPolicy,
+            new MailboxConvergenceOptions { UnknownOutcomeGrace = TimeSpan.Zero },
+            TimeProvider.System);
+
+        return await converger.ConvergeAsync(SyntheticMailAccount.AccountId, cancellationToken);
+    }
+
+    /// <summary>Copies the message for real and writes down only that the command went out.</summary>
+    /// <remarks>
+    /// The durable record is left at the one stage a retry may not act on, which is what a process dying between the
+    /// command and its answer produces. The session is given a journal of its own so the confirmation the server did
+    /// send reaches nothing durable.
+    /// </remarks>
+    private static async Task StopAfterTheCopyCommandAsync(
+        OrchestratedMailFathomServices services,
+        MailboxMutationRequest request,
+        EmailOccurrenceId occurrence,
+        CancellationToken cancellationToken)
+    {
+        var recordId = await RecordIntentAsync(services, request, cancellationToken);
+
+        await services.InScopeAsync(
+            async (scope, token) =>
+            {
+                var account = SyntheticMailAccount.AccountId;
+                await using var session = await scope.GetRequiredService<IMailboxWriteSessionFactory>()
+                    .OpenForWritingAsync(
+                        account,
+                        Inbox,
+                        scope.GetRequiredService<IMailTransportSecurityPolicyReader>().GetPolicy(account),
+                        token);
+
+                return await session.CopyAsync(
+                    occurrence,
+                    CopyPath,
+                    new InMemoryMailboxMutationJournal(),
+                    token);
+            },
+            cancellationToken);
+
+        Assert.Equal(
+            PersistenceCommitResult.Committed,
+            await services.CommitAsync(
+                async (scope, session, token) =>
+                {
+                    var store = scope.GetRequiredService<IMailboxMutationRecordStore>();
+                    await store.CountAttemptAsync(session, recordId, token);
+                    await store.RecordPlacementIssuedAsync(session, recordId, requiresSourceRemoval: false, token);
+                },
+                cancellationToken));
     }
 
     /// <summary>Runs the production convergence pass over a connection whose server advertises no <c>MOVE</c>.</summary>

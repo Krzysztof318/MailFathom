@@ -28,3 +28,4 @@ For background on ADRs, see <https://adr.github.io/>.
 - [0005: Seal data at rest under one deployment-wide symmetric key ring, provisioned as a secret reference the operator creates](0005-data-encryption-key-ring-and-provisioning.md)
 - [0006: Identify an embedding profile by the geometry of its vector space, keep that identity immutable, and make activation state what it is about to spend](0006-embedding-profile-identity-lifecycle-and-activation-cost.md)
 - [0007: Write to the remote mailbox through a session type no read path can obtain, and scope the never-marks-read guarantee to retrieval](0007-remote-mailbox-mutation-boundary-and-write-session.md)
+- [0008: Store a copied message as a second local email, and leave the occurrence the only identity a stored row carries](0008-copied-message-local-identity.md)

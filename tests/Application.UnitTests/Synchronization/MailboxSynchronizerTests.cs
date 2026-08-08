@@ -176,9 +176,10 @@ public sealed class MailboxSynchronizerTests
 
     /// <summary>A message MailFathom copied is stored like any other discovery, and its arrival is still MailFathom's own act.</summary>
     /// <remarks>
-    /// A copy leaves the email where it was, so nothing is carried across and whether the second live occurrence is one
-    /// local row or two stays the copy action's decision. What it must not do is set a rule off, which is a question
-    /// about provenance rather than about rows.
+    /// A copy leaves the email where it was, so nothing is carried across and the second live occurrence is a second
+    /// local email, which is what
+    /// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0008-copied-message-local-identity.md">ADR 0008</see>
+    /// decided. What it must not do is set a rule off, which is a question about provenance rather than about rows.
     /// </remarks>
     [Fact]
     public async Task SynchronizeAsync_DiscoversTheOccurrenceACopyPlaced_StoresItAndWithholdsTheArrival()
@@ -243,6 +244,83 @@ public sealed class MailboxSynchronizerTests
         // source removal stays unwritten, because a copy takes nothing out of the folder it read from.
         var observed = mutationStore.RecordOf(record.Id);
         Assert.Equal(clock.GetUtcNow(), observed.PlacementObservedAt);
+        Assert.Null(observed.SourceRemovalObservedAt);
+    }
+
+    /// <summary>A copy the server named no placement for is stored as the second email it is, and its arrival is raised.</summary>
+    /// <remarks>
+    /// A destination folder that answers without a <c>COPYUID</c> leaves nothing to join the discovery to the record
+    /// that caused it, so the new occurrence is resolved by observing the folder rather than by assuming which message
+    /// it is. Storing it costs nothing extra under
+    /// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0008-copied-message-local-identity.md">ADR 0008</see>,
+    /// because a copy is a second local email whether or not the record reaches it. What is lost is the provenance:
+    /// the arrival reaches rule evaluation as an ordinary one, which is the price
+    /// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0007-remote-mailbox-mutation-boundary-and-write-session.md">ADR 0007</see>
+    /// accepted for refusing to search the destination folder, and it is asserted here so it stays a decision rather
+    /// than becoming a surprise.
+    /// </remarks>
+    [Fact]
+    public async Task SynchronizeAsync_DiscoversACopyTheServerNamedNoPlacementFor_StoresItAndRaisesTheArrival()
+    {
+        // Arrange
+        var accountId = MailAccountId.Create("primary");
+        var uidValidity = ImapUidValidity.Create(5);
+        var uid = ImapUid.Create(10);
+        var occurrence = EmailOccurrenceId.Create(accountId, InboxFolder.Id, uidValidity, uid);
+        var copiedEmailId = StoredEmailId.Create(Guid.CreateVersion7());
+        var storedEmailId = StoredEmailId.Create(Guid.CreateVersion7());
+        var mutationStore = new InMemoryMailboxMutationReconciliationStore();
+        var record = CopyPlacedInInbox(accountId, copiedEmailId, uidValidity, uid) with
+        {
+            Placement = RemoteEmailPlacement.NotReported(),
+        };
+        mutationStore.Add(record);
+        var metadataRepository = Substitute.For<IEmailMetadataRepository>();
+        var persistenceSession = Substitute.For<IPersistenceSession>();
+        var sessionScopeFactory = Substitute.For<IPersistenceSessionFactory>();
+        sessionScopeFactory.BeginSessionAsync(Arg.Any<CancellationToken>()).Returns(persistenceSession);
+        persistenceSession.CommitAsync(Arg.Any<CancellationToken>()).Returns(PersistenceCommitResult.Committed);
+        metadataRepository
+            .UpsertMetadataAsync(
+                persistenceSession,
+                Arg.Any<RemoteEmailMetadata>(),
+                Arg.Any<ExtractedEmailMetadata?>(),
+                Arg.Any<StoredEmailContentAvailability>(),
+                Arg.Any<CancellationToken>())
+            .Returns(storedEmailId);
+        var clock = new FakeTimeProvider(new DateTimeOffset(2026, 8, 7, 12, 0, 0, TimeSpan.Zero));
+        await using var session = CreateSessionDiscovering(occurrence, uidValidity);
+        session
+            .FetchEmailContentWithoutSettingSeenAsync(occurrence, Arg.Any<long>(), Arg.Any<CancellationToken>())
+            .Returns(RemoteEmailContentFetchResult.Retrieved(
+                new RemoteEmailContent(occurrence, new ReadOnlyMemory<byte>([1, 2, 3]))));
+        var synchronizer = CreateSynchronizer(
+            CreateSessionFactoryFor(accountId, session),
+            CreateCheckpointStoreAt(accountId, uidValidity),
+            sessionScopeFactory,
+            metadataRepository,
+            contentStore: Substitute.For<IEmailContentStore>(),
+            clock,
+            new MailboxSynchronizationOptions(),
+            mutationStore: mutationStore);
+
+        // Act
+        var result = await synchronizer.SynchronizeAsync(accountId, InboxMapping, CancellationToken.None);
+
+        // Assert
+        Assert.Equal(1, result.StoredEmailCount);
+        Assert.Equal(0, result.RelocatedEmailCount);
+        Assert.Empty(result.SuppressedChanges);
+        await metadataRepository.DidNotReceiveWithAnyArgs().TryCarryToOccurrenceAsync(
+            Arg.Any<IPersistenceSession>(),
+            Arg.Any<StoredEmailId>(),
+            Arg.Any<EmailOccurrenceId>(),
+            Arg.Any<CancellationToken>());
+
+        // The record is joined to no discovery at all, so it stays visibly unobserved rather than being spent against a
+        // message nothing proved was the one it placed.
+        var observed = mutationStore.RecordOf(record.Id);
+        Assert.Null(observed.PlacementObservedAt);
         Assert.Null(observed.SourceRemovalObservedAt);
     }
 

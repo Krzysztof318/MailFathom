@@ -200,8 +200,9 @@ public sealed class MailboxSynchronizer
                     continue;
                 }
 
-                // A copy is stored like any other discovery, because the email it duplicates stays where it was and
-                // nothing is carried across. What the record settles is only whose act the arrival was.
+                // A copy is stored like any other discovery, because the email it duplicates stays where it was and a
+                // second live occurrence is a second local email under ADR 0008. What the record settles is only whose
+                // act the arrival was.
                 var copy = placement is { } candidate && candidate.Request.Mutation == MailboxMutation.Copy
                     ? candidate
                     : null;

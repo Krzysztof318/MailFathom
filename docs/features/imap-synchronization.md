@@ -874,8 +874,10 @@ is what tells the two apart, and both halves are joined to it by a recorded fact
   the message is the one already stored and its content, extracted metadata, search document, and passages are all
   keyed by the local identity being carried across. Only the occurrence identity moves, and the flags become unobserved
   so the destination folder's own window is what says what holds there now. A copy is stored like any other discovery,
-  because the message it duplicates stayed where it was; what the record settles for it is only whose act the arrival
-  was.
+  because the message it duplicates stayed where it was and a second live occurrence is a second local email; what the
+  record settles for it is only whose act the arrival was, and
+  [what a message MailFathom copied becomes locally](#what-a-message-mailfathom-copied-becomes-locally) carries the rest
+  of that answer.
 - **A disappearance** is matched against the source occurrence the record names, which was written down before the
   first IMAP command went out. A match is the relocation or the delete completing, so the disposition below is never
   reached for it: the row keeps its place and only its position in the reconciliation queue moves.
@@ -984,6 +986,37 @@ A deletion that never reaches the server changes nothing locally either. The dis
 observes the message gone from its folder, so a delete that was refused, abandoned, or is still in flight has left the
 local copy alone; and because all three values take the row out of the reconciliation queue, the disposition is applied
 once per delete however many windows pass over the folder afterwards.
+
+### What a message MailFathom copied becomes locally
+
+A copy is the one mutation that ends with the message in two places at once, and the answer to *is that one local email
+or two* is **two**. The copy is discovered by the destination folder's own forward pass and stored exactly as any other
+arrival is: its own row, its own raw MIME, its own extracted text, search document, passages, and vectors. Nothing is
+carried across, the source row keeps its occurrence and everything derived from it, and the mutation record settles only
+whose act the arrival was.
+
+That is a decision rather than the absence of one, and
+[ADR 0008](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0008-copied-message-local-identity.md)
+records why. The short of it: a stored row means one occurrence the server holds, `UID COPY` really does create a second
+message with its own UID, and a model that made the two one local email could only do so for the copies MailFathom
+itself performed — a copy the owner made in their own mail client is joined to no record, and identifying it by
+`Message-ID` or by a digest is the guess the join already refuses.
+
+What it costs an operator is worth knowing before a rule starts filing mail:
+
+- A search across folders returns the message **twice**, once per folder, each hit naming where it was found. A search
+  scoped to one folder returns one.
+- Everything is stored twice, including one vector per passage per active profile — which is a **paid** derivation.
+  Copying is a storage decision as much as a filing one.
+- Deleting one copy leaves the other, locally and on the server. That is what the mailbox holds; the two are not
+  versions of one message.
+- An export or an erasure request reaches both, because both are ordinary rows that any selection over sender,
+  recipient, subject, or content reaches. Neither hides behind the other's identity.
+
+One limit follows from where the placement comes from. The arrival is withheld from rule evaluation only where the
+destination folder answered with `COPYUID`; on a server advertising no `UIDPLUS` the copy still happens and is still
+never repeated, but the arrival reaches rule evaluation as an ordinary discovery, because nothing joins it to the record
+that caused it and searching the folder for something that looks right is refused.
 
 ### What a run reports
 
