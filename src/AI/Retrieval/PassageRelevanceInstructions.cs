@@ -85,7 +85,9 @@ internal static class PassageRelevanceInstructions
         ArgumentNullException.ThrowIfNull(queryText);
         ArgumentNullException.ThrowIfNull(candidate);
 
-        return $"{FormatQuery(queryText)}\n\n{RetrievedMailContextFormatter.Format([candidate])}";
+        // Never limit-reached, because a judgement is about one candidate rather than about a run: what the run may
+        // still send is decided after this pass, where the surviving passages are handed over.
+        return $"{FormatQuery(queryText)}\n\n{RetrievedMailContextFormatter.Format([candidate], retrievalLimitReached: false)}";
     }
 
     /// <summary>Encloses the query in an element of its own, escaping whatever would end it.</summary>

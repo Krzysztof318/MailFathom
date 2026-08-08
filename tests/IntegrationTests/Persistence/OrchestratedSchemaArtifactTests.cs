@@ -5,6 +5,7 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Security.Cryptography;
 using MailFathom.Application.Persistence;
+using MailFathom.Application.Retrieval.AskMail;
 using MailFathom.Domain.Emails;
 using MailFathom.Infrastructure;
 using MailFathom.Infrastructure.Persistence;
@@ -151,7 +152,8 @@ public sealed class OrchestratedSchemaArtifactTests(MailFathomOrchestrationFixtu
         builder.Services.AddSecretResolution(SecretValueInterpretation.ReferenceOnly);
         builder.Services.AddInfrastructure(
             _ => new PostgresConnectionSettings(connectionString, null, null),
-            PostgresTextSearchConfiguration.Default);
+            PostgresTextSearchConfiguration.Default,
+            MailAnsweringBudget.Default);
 
         return builder.Build();
     }

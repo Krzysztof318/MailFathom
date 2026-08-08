@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Application.Retrieval.AskMail;
 using MailFathom.Infrastructure;
 using MailFathom.Infrastructure.Persistence.Connections;
 using MailFathom.Infrastructure.Secrets.Resolution;
@@ -46,7 +47,8 @@ public sealed class OrchestratedDatabaseHealthTests(MailFathomOrchestrationFixtu
         builder.Services.AddSecretResolution(SecretValueInterpretation.ReferenceOnly);
         builder.Services.AddInfrastructure(
             _ => new PostgresConnectionSettings(orchestration.DatabaseConnectionString, null, null),
-            PostgresTextSearchConfiguration.Default);
+            PostgresTextSearchConfiguration.Default,
+            MailAnsweringBudget.Default);
         builder.AddDatabaseHealthAndTelemetry(
             TimeSpan.FromSeconds(HostApplicationBuilderExtensions.DefaultDatabaseCommandTimeoutSeconds),
             probeTags: [ReadinessProbeTag]);

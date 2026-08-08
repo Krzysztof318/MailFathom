@@ -12,6 +12,7 @@ using MailFathom.Application.Emails.Chunking;
 using MailFathom.Application.Emails.Embeddings;
 using MailFathom.Application.Resilience;
 using MailFathom.Application.Retrieval;
+using MailFathom.Application.Retrieval.AskMail;
 using Microsoft.Extensions.DependencyInjection;
 using NSubstitute;
 using Xunit;
@@ -208,9 +209,11 @@ public sealed class AiServiceCollectionExtensionsTests
         services.AddHttpClient();
         services.AddLogging();
         services.AddSingleton(ChatDeclarations.Plan());
+        services.AddSingleton(MailAnsweringRunBounds.Default);
         services.AddSingleton(Substitute.For<IProviderEndpointCredentialSource>());
         services.AddSingleton(Substitute.For<IOutboundOperationRunner>());
         services.AddSingleton(Substitute.For<IAiProviderHealthRecorder>());
+        services.AddSingleton(Substitute.For<IMailAnsweringSpendLedger>());
         services.AddScoped<IEmailKnowledgeSearch, RecordingEmailKnowledgeSearch>();
 
         // Beside the adapter, as the composition root registers them: a run sends over the transport that call names.

@@ -24,6 +24,7 @@ using MailFathom.Application.Synchronization.Reconciliation;
 using MailFathom.Host;
 using MailFathom.Host.Api;
 using MailFathom.Host.Configuration;
+using MailFathom.Host.Configuration.Answering;
 using MailFathom.Host.Configuration.Chat;
 using MailFathom.Host.Configuration.DataEncryption;
 using MailFathom.Host.Configuration.Embeddings;
@@ -151,6 +152,17 @@ try
     builder.Services.AddOptions<ChatModelOptions>()
         .Bind(
             builder.Configuration.GetSection("Chat"),
+            binderOptions => binderOptions.ErrorOnUnknownConfiguration = true)
+        .ValidateDataAnnotations()
+        .ValidateOnStart();
+    // A configuration root of its own beside Chat rather than a block inside it, because the two answer different
+    // questions: Chat says which endpoint generates text and what one call to it may carry, while this says what
+    // answering a question is allowed to cost and how much of a mailbox may leave the process to do it. Unlike the
+    // provider sections, an absent section is not an absent capability — every deployment has these ceilings, and
+    // writing nothing takes the conservative defaults rather than none.
+    builder.Services.AddOptions<MailAnsweringOptions>()
+        .Bind(
+            builder.Configuration.GetSection(MailAnsweringOptions.SectionName),
             binderOptions => binderOptions.ErrorOnUnknownConfiguration = true)
         .ValidateDataAnnotations()
         .ValidateOnStart();
@@ -375,6 +387,45 @@ try
     // start, where a failure reports every problem at once instead of the first one to be built.
     var declaredChat = builder.Configuration.GetSection("Chat").Get<ChatModelOptions>();
 
+    // Read the same way, and needed before the container for the same reason: the retrieval ceiling it carries is what
+    // caps the relevance filter's candidate count and what supplies that count's default, and both are decided while
+    // the services are being registered. An absent section binds to the defaults rather than to nothing, so this never
+    // has to be treated as optional the way a provider declaration is.
+    var declaredAnswering = builder.Configuration.GetSection(MailAnsweringOptions.SectionName).Get<MailAnsweringOptions>()
+        ?? new MailAnsweringOptions();
+
+    // Validated here rather than through ValidateOnStart, for the reason the endpoint sections below are: the mapping
+    // on the next line happens while the builder is being composed, so the container that would have run the pipeline
+    // does not exist yet. Without this a typo would first be noticed by an ArgumentOutOfRangeException out of a Create
+    // method and reach an operator as a framework stack trace instead of the aggregated report every other section
+    // produces.
+    var answeringConfigurationErrors = declaredAnswering.FindConfigurationErrors();
+
+    if (answeringConfigurationErrors.Count > 0)
+    {
+        throw new OptionsValidationException(
+            MailAnsweringOptions.SectionName,
+            typeof(MailAnsweringOptions),
+            answeringConfigurationErrors);
+    }
+
+    var answeringBudget = MailAnsweringBudgetMapper.Map(declaredAnswering);
+
+    // The one rule spanning two sections. A filter declared to judge more candidates than a lookup hands over states a
+    // ceiling no question could reach, and neither options type can see both numbers, so it is refused here rather than
+    // producing an instance whose filter silently judges fewer passages than its operator wrote down.
+    if (PassageRelevanceCandidateAgreement.FindUnreachableCandidateCount(declaredChat, declaredAnswering) is { } unreachableCandidateCount)
+    {
+        throw new OptionsValidationException(
+            "Chat",
+            typeof(ChatModelOptions),
+            [
+                PassageRelevanceCandidateAgreement.DescribeUnreachableCandidateCount(
+                    unreachableCandidateCount,
+                    declaredAnswering.MaxPassagesPerRetrieval),
+            ]);
+    }
+
     // An alias names one AI endpoint across the whole deployment, because it is what a credential is resolved by, what
     // a resilience circuit is keyed by, and what every log line naming an endpoint carries. Two endpoints answering to
     // one name would share all three, so a chat endpoint reusing an embedding alias is refused here rather than
@@ -423,7 +474,8 @@ try
         if (declaredChat.RelevanceFilter.Enabled)
         {
             builder.Services.AddSingleton(provider => PassageRelevanceFilterPlanMapper.Map(
-                provider.GetRequiredService<IOptions<ChatModelOptions>>().Value)
+                provider.GetRequiredService<IOptions<ChatModelOptions>>().Value,
+                answeringBudget.Retrieval)
                 ?? throw new InvalidOperationException(
                     "The relevance filter was enabled at registration and is absent from the validated configuration."));
         }
@@ -440,7 +492,8 @@ try
             .Map(provider.GetRequiredService<ISettingsSnapshot<PersistenceOptions>>().Current),
         string.IsNullOrWhiteSpace(configuredTextSearchConfiguration)
             ? PostgresTextSearchConfiguration.Default
-            : PostgresTextSearchConfiguration.Create(configuredTextSearchConfiguration));
+            : PostgresTextSearchConfiguration.Create(configuredTextSearchConfiguration),
+        answeringBudget);
 
     // After the retrieval it wraps, because the container resolves the last registration of a service type and the one
     // this decorates is added by the call above. An instance that declared no chat endpoint, or left the pass off,

@@ -278,7 +278,7 @@ public sealed class ModelJudgedKnowledgeSearchTests
             conversation[1].Text,
             StringComparison.Ordinal);
         Assert.Contains(
-            RetrievedMailContextFormatter.Format([passage]),
+            RetrievedMailContextFormatter.Format([passage], retrievalLimitReached: false),
             conversation[1].Text,
             StringComparison.Ordinal);
     }
@@ -304,7 +304,10 @@ public sealed class ModelJudgedKnowledgeSearchTests
     public void Constructor_WithoutACollaborator_IsRefused()
     {
         // Arrange
-        var plan = PassageRelevanceFilterPlan.Create(maximumCandidates: 4, minimumRelevance: 50);
+        var plan = PassageRelevanceFilterPlan.Create(
+            EmailKnowledgeBounds.Default,
+            maximumCandidates: 4,
+            minimumRelevance: 50);
         var health = Substitute.For<IAiProviderHealthReader>();
 
         // Act, Assert
@@ -359,7 +362,7 @@ public sealed class ModelJudgedKnowledgeSearchTests
             rankedSearch,
             judge,
             providerHealthReader,
-            PassageRelevanceFilterPlan.Create(maximumCandidates, minimumRelevance),
+            PassageRelevanceFilterPlan.Create(EmailKnowledgeBounds.Default, maximumCandidates, minimumRelevance),
             NullLogger<ModelJudgedKnowledgeSearch>.Instance);
     }
 

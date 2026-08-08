@@ -158,6 +158,23 @@ carries no age. Only a change is written: every provider call records a state, s
 with the mailbox instead of with what an operator would act on. A first call that succeeded is the one change that is
 not written, because it restored nothing; a first call that failed is.
 
+### Answering spend
+
+Answering a question sends mail to a model provider on demand, so what it costs is published while it is being spent
+rather than at the end of a billing period. `mailfathom.answering.runs` counts the questions this deployment was asked
+to answer, tagged with `mailfathom.answering.outcome` — `admitted` or `refused` — so a ceiling that is met constantly
+reads as a ceiling to raise or a client to look at rather than as an absence of questions. `mailfathom.answering.tokens`
+counts what the provider reported those runs consuming.
+
+Beside them, `mailfathom.answering.period.runs` and `mailfathom.answering.period.tokens` report how much of the current
+period is already spent. The counter and the gauges answer opposite questions — how often the ceiling was reached, and
+how close the deployment is to reaching it now — and neither is visible from the other.
+
+An endpoint that reports no usage advances neither token figure, which is why the run and period ceilings exist in a
+call-count form as well. [Mail answering § What one question may
+spend](../features/mail-answering.md#what-one-question-may-spend) holds the ceilings these are read against, and
+[`MailAnswering`](configuration-reference.md#mailanswering) the keys.
+
 What such a signal may carry is bounded by the same rule that governs the log lines, and it is a cardinality rule as
 much as a privacy one. Counts, sizes, durations, outcomes, error codes, and MailFathom's own configured account and
 folder aliases are permitted. Mail content, an address, a subject, a remote folder path, a message identifier, a UID, a

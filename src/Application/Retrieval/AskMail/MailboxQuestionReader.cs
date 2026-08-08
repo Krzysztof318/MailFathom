@@ -12,8 +12,9 @@ namespace MailFathom.Application.Retrieval.AskMail;
 /// <remarks>
 /// <para>
 /// The use case owns everything between an unvalidated request and a published answer: it bounds the question, refuses
-/// an account this deployment does not serve, decides whether this deployment can answer at all, and cuts what one
-/// response may carry. The agent behind the answering port does none of that, and no protocol adapter repeats it.
+/// an account this deployment does not serve, decides whether this deployment can answer at all, admits the question
+/// against what this period may still spend, and cuts what one response may carry. The agent behind the answering port
+/// does none of that, and no protocol adapter repeats it.
 /// </para>
 /// <para>
 /// The scope is resolved here and again underneath. This resolution is the access decision — an account nobody
@@ -35,24 +36,29 @@ public sealed class MailboxQuestionReader
 {
     private readonly MailAnsweringCapability capability;
     private readonly MailboxScopeResolver scopeResolver;
+    private readonly IMailAnsweringSpendLedger spendLedger;
     private readonly MailAnswerBounds answerBounds;
 
     /// <summary>Initializes the use case.</summary>
     /// <param name="capability">Decides whether a question may run, and hands over what runs it.</param>
     /// <param name="scopeResolver">Decides which accounts and folders the answer may be drawn from.</param>
+    /// <param name="spendLedger">Decides whether the current period still has an allowance for a question.</param>
     /// <param name="answerBounds">How much of one run's outcome a single answer publishes.</param>
     /// <exception cref="ArgumentNullException">Thrown when any argument is <see langword="null" />.</exception>
     public MailboxQuestionReader(
         MailAnsweringCapability capability,
         MailboxScopeResolver scopeResolver,
+        IMailAnsweringSpendLedger spendLedger,
         MailAnswerBounds answerBounds)
     {
         ArgumentNullException.ThrowIfNull(capability);
         ArgumentNullException.ThrowIfNull(scopeResolver);
+        ArgumentNullException.ThrowIfNull(spendLedger);
         ArgumentNullException.ThrowIfNull(answerBounds);
 
         this.capability = capability;
         this.scopeResolver = scopeResolver;
+        this.spendLedger = spendLedger;
         this.answerBounds = answerBounds;
     }
 
@@ -64,11 +70,19 @@ public sealed class MailboxQuestionReader
     /// <exception cref="MailboxQueryFilterInvalidException">Thrown when the question is blank, longer than one carries, or carries a control character, or when the scope names more values than it accepts.</exception>
     /// <exception cref="MailAccountNotAccessibleException">Thrown when the request names an account this deployment does not serve.</exception>
     /// <exception cref="MailAnsweringUnavailableException">Thrown when this deployment answers no questions, or answers them and currently cannot.</exception>
+    /// <exception cref="MailAnsweringBudgetExhaustedException">Thrown when the current period has spent what this deployment allows answering to cost, or when the run reached what one question may spend.</exception>
     /// <exception cref="ChatGenerationFailedException">Thrown when the run produced no answer, naming which kind of failure ended it.</exception>
     /// <remarks>
+    /// <para>
     /// The request is validated before the capability is read, so a deployment that answers questions and one that does
     /// not refuse a malformed question identically. The reverse order would let a caller learn which capabilities a
     /// server has by watching which of two refusals a broken request produces.
+    /// </para>
+    /// <para>
+    /// The period allowance is taken after the capability is read and before the run begins, which is the last point at
+    /// which nothing has been spent. Taking it earlier would count a question a deployment was never going to answer
+    /// against a ceiling on what it spends.
+    /// </para>
     /// </remarks>
     public async Task<AskMailResult> AnswerQuestionAsync(
         AskMailRequest request,
@@ -87,6 +101,11 @@ public sealed class MailboxQuestionReader
                 : MailAnsweringUnavailableException.TemporarilyUnable();
         }
 
+        if (!this.spendLedger.TryAdmitRun())
+        {
+            throw MailAnsweringBudgetExhaustedException.PeriodSpent();
+        }
+
         var answer = await answerer.AnswerAsync(new MailQuestion(questionText, scope), cancellationToken);
 
         return this.Published(answer);
@@ -103,7 +122,8 @@ public sealed class MailboxQuestionReader
             Bounded(answer.Text, maximumAnswerCharacters),
             [.. citations.Take(maximumCitations)],
             answer.Text.Length > maximumAnswerCharacters,
-            citations.Count > maximumCitations);
+            citations.Count > maximumCitations,
+            answer.RetrievalWasTruncated);
     }
 
     /// <summary>Reads the passages a run retrieved into one citation per email.</summary>

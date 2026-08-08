@@ -10,6 +10,7 @@ using MailFathom.Application.AiProviders;
 using MailFathom.Application.Chat;
 using MailFathom.Application.Resilience;
 using MailFathom.Application.Retrieval;
+using MailFathom.Application.Retrieval.AskMail;
 using Microsoft.Extensions.Logging;
 
 namespace MailFathom.AI.Orchestration;
@@ -30,54 +31,64 @@ namespace MailFathom.AI.Orchestration;
 internal sealed class MailAnsweringAgent : IMailQuestionAnswerer
 {
     private readonly ChatGenerationPlan plan;
+    private readonly MailAnsweringRunBounds runBounds;
     private readonly IProviderEndpointCredentialSource credentialSource;
     private readonly OpenAiCompatibleClientFactory clientFactory;
     private readonly IHttpClientFactory transportFactory;
     private readonly IEmailKnowledgeSearch knowledgeSearch;
     private readonly IOutboundOperationRunner operationRunner;
     private readonly IAiProviderHealthRecorder healthRecorder;
+    private readonly IMailAnsweringSpendLedger spendLedger;
     private readonly ILoggerFactory loggerFactory;
     private readonly ILogger<MailAnsweringAgent> logger;
 
     /// <summary>Initializes the answering agent over the declared endpoint, its credentials, its transport, and this deployment's retrieval.</summary>
     /// <param name="plan">The validated declaration: which endpoint answers and with which parameters.</param>
+    /// <param name="runBounds">What one run may send, call, and consume before it is stopped.</param>
     /// <param name="credentialSource">Resolves what a request presents to the endpoint.</param>
     /// <param name="clientFactory">Opens a provider client over the endpoint.</param>
     /// <param name="transportFactory">Opens the transport a run's requests are sent over.</param>
     /// <param name="knowledgeSearch">Finds the mail a run retrieves, within the scope the question carries.</param>
     /// <param name="operationRunner">Applies the provider resilience budget to every call the run makes.</param>
     /// <param name="healthRecorder">Records what each call established about the provider.</param>
+    /// <param name="spendLedger">Counts what every call of this run added to the current period.</param>
     /// <param name="loggerFactory">Creates the loggers the framework's own components record through.</param>
     /// <param name="logger">Records the outcome without recording any question, answer, or passage.</param>
     /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
     public MailAnsweringAgent(
         ChatGenerationPlan plan,
+        MailAnsweringRunBounds runBounds,
         IProviderEndpointCredentialSource credentialSource,
         OpenAiCompatibleClientFactory clientFactory,
         IHttpClientFactory transportFactory,
         IEmailKnowledgeSearch knowledgeSearch,
         IOutboundOperationRunner operationRunner,
         IAiProviderHealthRecorder healthRecorder,
+        IMailAnsweringSpendLedger spendLedger,
         ILoggerFactory loggerFactory,
         ILogger<MailAnsweringAgent> logger)
     {
         ArgumentNullException.ThrowIfNull(plan);
+        ArgumentNullException.ThrowIfNull(runBounds);
         ArgumentNullException.ThrowIfNull(credentialSource);
         ArgumentNullException.ThrowIfNull(clientFactory);
         ArgumentNullException.ThrowIfNull(transportFactory);
         ArgumentNullException.ThrowIfNull(knowledgeSearch);
         ArgumentNullException.ThrowIfNull(operationRunner);
         ArgumentNullException.ThrowIfNull(healthRecorder);
+        ArgumentNullException.ThrowIfNull(spendLedger);
         ArgumentNullException.ThrowIfNull(loggerFactory);
         ArgumentNullException.ThrowIfNull(logger);
 
         this.plan = plan;
+        this.runBounds = runBounds;
         this.credentialSource = credentialSource;
         this.clientFactory = clientFactory;
         this.transportFactory = transportFactory;
         this.knowledgeSearch = knowledgeSearch;
         this.operationRunner = operationRunner;
         this.healthRecorder = healthRecorder;
+        this.spendLedger = spendLedger;
         this.loggerFactory = loggerFactory;
         this.logger = logger;
     }
@@ -95,7 +106,8 @@ internal sealed class MailAnsweringAgent : IMailQuestionAnswerer
             this.plan.MaximumMessagesPerRequest,
             this.plan.MaximumRequestCharacters);
 
-        var retrieval = new ScopedMailKnowledgeRetrieval(this.knowledgeSearch, question.Scope);
+        var runLedger = new MailAnsweringRunLedger(this.runBounds);
+        var retrieval = new ScopedMailKnowledgeRetrieval(this.knowledgeSearch, question.Scope, runLedger);
         var endpoint = this.plan.Endpoint;
 
         // Resolved per run and released with it, so a rotated key is picked up by the next question and the material
@@ -103,13 +115,17 @@ internal sealed class MailAnsweringAgent : IMailQuestionAnswerer
         using var credential = await this.credentialSource.ResolveAsync(endpoint.Alias, cancellationToken);
         using var transport = this.transportFactory.CreateClient(ProviderChatModelClient.TransportName);
         using var providerClient = this.clientFactory.OpenChatClient(endpoint, credential, transport);
-        using var chatClient = new ResilientChatClient(
+        using var resilientClient = new ResilientChatClient(
             providerClient,
             endpoint,
             this.plan.RequestTimeout,
             this.operationRunner,
             this.healthRecorder,
             this.loggerFactory.CreateLogger<ResilientChatClient>());
+
+        // Outside the resilience decorator rather than inside it, so a call this deployment's own ceiling refused never
+        // reaches the endpoint's circuit, its concurrency budget, or its health record.
+        using var chatClient = new BudgetedChatClient(resilientClient, runLedger, this.spendLedger);
 
         var agent = MailAnsweringAgentComposition.Compose(chatClient, this.plan, retrieval, this.loggerFactory);
         var response = await agent.RunAsync(question.Text.Value, session: null, options: null, cancellationToken);
@@ -130,6 +146,11 @@ internal sealed class MailAnsweringAgent : IMailQuestionAnswerer
 
         MailAnsweringEvents.LogAnswered(this.logger, endpoint.Alias, passages.Count, emailCount);
 
-        return new MailAnswer(response.Text, passages);
+        if (retrieval.WasTruncated)
+        {
+            MailAnsweringEvents.LogRetrievalCeilingReached(this.logger, endpoint.Alias, passages.Count);
+        }
+
+        return new MailAnswer(response.Text, passages, retrieval.WasTruncated);
     }
 }

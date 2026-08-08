@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.AI.Orchestration;
 using MailFathom.Application.Emails.Mailboxes;
 using MailFathom.Application.Retrieval;
 using Microsoft.Agents.AI;
@@ -21,6 +22,12 @@ namespace MailFathom.AI.Retrieval;
 /// One instance serves one run. It records the passages it handed over so the answer can carry them, and that record is
 /// per run for the same reason the scope is: one caller's retrieved mail must never appear beside another's.
 /// </para>
+/// <para>
+/// It is also where the run's ceiling on retrieved mail is applied, and applying it here is what makes it a bound on
+/// what leaves the process rather than a bound on what a lookup returns. A model can ask for mail as many times as the
+/// tool loop allows; each answer is trimmed to what this run may still send, and once nothing may be sent the envelope
+/// says so instead of arriving as a mailbox that suddenly holds nothing.
+/// </para>
 /// </remarks>
 internal sealed class ScopedMailKnowledgeRetrieval
 {
@@ -37,23 +44,34 @@ internal sealed class ScopedMailKnowledgeRetrieval
 
     private readonly IEmailKnowledgeSearch knowledgeSearch;
     private readonly MailboxScope scope;
+    private readonly MailAnsweringRunLedger runLedger;
     private readonly Lock gate = new();
     private readonly List<EmailKnowledgePassage> retrieved = [];
 
     /// <summary>Initializes the retrieval one run may make.</summary>
     /// <param name="knowledgeSearch">Finds the mail relevant to a query.</param>
     /// <param name="scope">The accounts and folders every retrieval of this run is answered from.</param>
-    /// <exception cref="ArgumentNullException">Thrown when either argument is <see langword="null" />.</exception>
-    internal ScopedMailKnowledgeRetrieval(IEmailKnowledgeSearch knowledgeSearch, MailboxScope scope)
+    /// <param name="runLedger">Decides how much of what a lookup found this run may still send.</param>
+    /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
+    internal ScopedMailKnowledgeRetrieval(
+        IEmailKnowledgeSearch knowledgeSearch,
+        MailboxScope scope,
+        MailAnsweringRunLedger runLedger)
     {
         ArgumentNullException.ThrowIfNull(knowledgeSearch);
         ArgumentNullException.ThrowIfNull(scope);
+        ArgumentNullException.ThrowIfNull(runLedger);
 
         this.knowledgeSearch = knowledgeSearch;
         this.scope = scope;
+        this.runLedger = runLedger;
     }
 
     /// <summary>Gets the passages this run has handed over, in the order it handed them over.</summary>
+    /// <remarks>
+    /// What was handed over rather than what was found. A passage the run's ceiling would not let it send never reached
+    /// the model, so citing it would name a message the answer cannot have been drawn from.
+    /// </remarks>
     internal IReadOnlyList<EmailKnowledgePassage> Retrieved
     {
         get
@@ -64,6 +82,9 @@ internal sealed class ScopedMailKnowledgeRetrieval
             }
         }
     }
+
+    /// <summary>Gets whether a lookup found mail this run's ceiling would not let it send.</summary>
+    internal bool WasTruncated => this.runLedger.RetrievalWasTruncated;
 
     /// <summary>Builds the context provider the framework retrieves through.</summary>
     /// <param name="loggerFactory">Creates the logger the provider records its own decisions through.</param>
@@ -87,7 +108,7 @@ internal sealed class ScopedMailKnowledgeRetrieval
             // Replaces the framework's own formatting, which writes each result as a labelled paragraph between dashed
             // separators and closes with an instruction of its own. Retrieved mail written that way is prose in the same
             // voice as an instruction, and a message imitating one of those separators is indistinguishable from it.
-            ContextFormatter = FormatRetrieved,
+            ContextFormatter = this.FormatRetrieved,
 
             // The framework's own switch for putting queries and retrieved text into its logs. It defaults to off and is
             // set here anyway, because what it would emit is somebody's question and extracts of their mail, and a
@@ -98,7 +119,7 @@ internal sealed class ScopedMailKnowledgeRetrieval
         return new TextSearchProvider(this.SearchAsync, options, loggerFactory);
     }
 
-    /// <summary>Answers one lookup the model asked for.</summary>
+    /// <summary>Answers one lookup the model asked for, with as much of what it found as this run may still send.</summary>
     /// <remarks>
     /// The result carries the passage itself as its raw representation rather than only the text, so whatever formats the
     /// context reaches the message identity and the source coordinates without searching for them again.
@@ -107,16 +128,17 @@ internal sealed class ScopedMailKnowledgeRetrieval
         string query,
         CancellationToken cancellationToken)
     {
-        var passages = await this.knowledgeSearch.FindPassagesAsync(this.scope, query, cancellationToken);
+        var found = await this.knowledgeSearch.FindPassagesAsync(this.scope, query, cancellationToken);
+        var admitted = this.runLedger.AdmitPassages(found);
 
         lock (this.gate)
         {
-            this.retrieved.AddRange(passages);
+            this.retrieved.AddRange(admitted);
         }
 
         return
         [
-            .. passages.Select(static passage => new TextSearchProvider.TextSearchResult
+            .. admitted.Select(static passage => new TextSearchProvider.TextSearchResult
             {
                 Text = passage.Text,
                 SourceName = passage.StoredEmailId.ToString(),
@@ -133,7 +155,8 @@ internal sealed class ScopedMailKnowledgeRetrieval
     /// the envelope while <see cref="Retrieved" /> still recorded it, leaving the answer citing a message the model was
     /// never shown.
     /// </remarks>
-    private static string FormatRetrieved(IList<TextSearchProvider.TextSearchResult> results) =>
+    private string FormatRetrieved(IList<TextSearchProvider.TextSearchResult> results) =>
         RetrievedMailContextFormatter.Format(
-            [.. results.Select(static result => result.RawRepresentation).Cast<EmailKnowledgePassage>()]);
+            [.. results.Select(static result => result.RawRepresentation).Cast<EmailKnowledgePassage>()],
+            this.WasTruncated);
 }

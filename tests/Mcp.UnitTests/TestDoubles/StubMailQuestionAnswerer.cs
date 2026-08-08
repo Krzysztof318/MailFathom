@@ -14,7 +14,7 @@ namespace MailFathom.Mcp.UnitTests.TestDoubles;
 /// </remarks>
 internal sealed class StubMailQuestionAnswerer : IMailQuestionAnswerer
 {
-    private MailAnswer answer = new("an answer", []);
+    private MailAnswer answer = new("an answer", [], RetrievalWasTruncated: false);
 
     /// <summary>Gets the question the last run was asked, or <see langword="null" /> while no run has been asked one.</summary>
     public MailQuestion? LastQuestion { get; private set; }
@@ -25,7 +25,16 @@ internal sealed class StubMailQuestionAnswerer : IMailQuestionAnswerer
     /// <returns>The same answerer, so a test arranges it in one expression.</returns>
     public StubMailQuestionAnswerer Answering(string text, params EmailKnowledgePassage[] passages)
     {
-        this.answer = new MailAnswer(text, passages);
+        this.answer = new MailAnswer(text, passages, RetrievalWasTruncated: false);
+
+        return this;
+    }
+
+    /// <summary>Scripts the next run as one that reached this deployment's ceiling on retrieved mail.</summary>
+    /// <returns>The same answerer, so a test arranges it in one expression.</returns>
+    public StubMailQuestionAnswerer HavingReachedTheRetrievalCeiling()
+    {
+        this.answer = this.answer with { RetrievalWasTruncated = true };
 
         return this;
     }

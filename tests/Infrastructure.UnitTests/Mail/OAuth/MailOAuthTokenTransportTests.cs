@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.Net;
+using MailFathom.Application.Retrieval.AskMail;
 using MailFathom.Infrastructure.Mail.OAuth;
 using MailFathom.Infrastructure.Persistence.Connections;
 using MailFathom.TestSupport;
@@ -109,7 +110,8 @@ public sealed class MailOAuthTokenTransportTests
                 "Host=postgres.example.test;Database=mailfathom",
                 ConnectionStringSecret: null,
                 Password: null),
-            PostgresTextSearchConfiguration.Create("simple"));
+            PostgresTextSearchConfiguration.Create("simple"),
+            MailAnsweringBudget.Default);
 
         return services;
     }

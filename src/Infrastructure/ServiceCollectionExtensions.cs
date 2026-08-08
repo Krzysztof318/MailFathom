@@ -125,6 +125,7 @@ public static class ServiceCollectionExtensions
     /// <param name="services">The service collection.</param>
     /// <param name="currentConnectionSettings">Supplies where the PostgreSQL connection string and its password currently come from.</param>
     /// <param name="textSearchConfiguration">The validated PostgreSQL text search configuration the lexical index is built with.</param>
+    /// <param name="answeringBudget">The validated ceilings one question about the mailbox is subject to.</param>
     /// <returns>The service collection, for chaining.</returns>
     /// <exception cref="ArgumentNullException">Thrown when any argument is <see langword="null" />.</exception>
     /// <remarks>
@@ -151,11 +152,13 @@ public static class ServiceCollectionExtensions
     public static IServiceCollection AddInfrastructure(
         this IServiceCollection services,
         Func<IServiceProvider, PostgresConnectionSettings> currentConnectionSettings,
-        PostgresTextSearchConfiguration textSearchConfiguration)
+        PostgresTextSearchConfiguration textSearchConfiguration,
+        MailAnsweringBudget answeringBudget)
     {
         ArgumentNullException.ThrowIfNull(services);
         ArgumentNullException.ThrowIfNull(currentConnectionSettings);
         ArgumentNullException.ThrowIfNull(textSearchConfiguration);
+        ArgumentNullException.ThrowIfNull(answeringBudget);
 
         // A value rather than an accessor, unlike the connection settings beside it: this one is compiled into the
         // search vector's column definition, so it is fixed for a deployment's schema and a reload cannot adopt a new
@@ -287,7 +290,9 @@ public static class ServiceCollectionExtensions
         // Registered for every deployment rather than only where a chat endpoint was declared, because what it is is a
         // reading of the search above: an instance that answers no questions simply resolves it and never calls it, and
         // the bounds it hands passages over under are the same wherever the retrieval is reached from.
-        services.AddSingleton(EmailKnowledgeBounds.Default);
+        services.AddSingleton(answeringBudget.Retrieval);
+        services.AddSingleton(answeringBudget.Run);
+        services.AddSingleton(answeringBudget.Period);
         // Registered as itself as well as behind the port, so a deployment that turns the model-judged second pass on
         // can wrap this one rather than rebuild it. Both resolve the same scoped instance, so an instance that adds no
         // filter is unchanged by the shape.
@@ -306,7 +311,12 @@ public static class ServiceCollectionExtensions
         // Beside the retrieval bounds above and registered for every deployment for the same reason: what they bound is
         // a response rather than a provider, so an instance that answers no questions simply resolves them and never
         // publishes one.
-        services.AddSingleton(MailAnswerBounds.Default);
+        services.AddSingleton(answeringBudget.Answer);
+        // A singleton because a ceiling over a period is one answer about the deployment: a ledger per scope would let
+        // every concurrent question believe it was the first one of the period. Registered for every deployment for the
+        // reason the bounds above are — an instance that answers nothing admits nothing and spends nothing.
+        services.AddSingleton<MailAnsweringSpendTracker>();
+        services.AddSingleton<IMailAnsweringSpendLedger>(provider => provider.GetRequiredService<MailAnsweringSpendTracker>());
         // The cache outlives every scope because a token is valid for whichever work unit next needs the account,
         // while the source that fills it is scoped to the configuration snapshot it resolves settings from.
         services.AddSingleton<MailAccessTokenCache>();

@@ -116,6 +116,28 @@ public sealed class AskMailToolTests
         Assert.Empty(result.Citations);
         Assert.False(result.AnswerTruncated);
         Assert.False(result.CitationsTruncated);
+        Assert.False(result.RetrievalTruncated);
+    }
+
+    /// <summary>
+    /// A run stopped from reading further answered a narrower reading of the mailbox, and the caller is the only party
+    /// that can decide what to do about it — so the flag is published rather than kept as a diagnostic.
+    /// </summary>
+    [Fact]
+    public async Task AskMailAsync_ARunThatReachedTheDeploymentsRetrievalCeiling_PublishesThatTheMailboxWasNotReadInFull()
+    {
+        // Arrange
+        var tool = ToolOver(new StubMailQuestionAnswerer()
+            .Answering("Partly, from what I could read.", PassageOf(1))
+            .HavingReachedTheRetrievalCeiling());
+
+        // Act
+        var result = await tool.AskMailAsync(Question, cancellationToken: TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.True(result.RetrievalTruncated);
+        Assert.False(result.AnswerTruncated);
+        Assert.False(result.CitationsTruncated);
     }
 
     [Fact]

@@ -115,7 +115,8 @@ public sealed class ServiceCollectionExtensionsTests
         // Act
         services.AddInfrastructure(
             _ => new PostgresConnectionSettings("Host=localhost;Database=mailfathom", null, null),
-            PostgresTextSearchConfiguration.Default);
+            PostgresTextSearchConfiguration.Default,
+            MailAnsweringBudget.Default);
 
         // Assert
         Assert.Contains(
@@ -142,7 +143,8 @@ public sealed class ServiceCollectionExtensionsTests
         // Act
         services.AddInfrastructure(
             _ => new PostgresConnectionSettings("Host=localhost;Database=mailfathom", null, null),
-            PostgresTextSearchConfiguration.Default);
+            PostgresTextSearchConfiguration.Default,
+            MailAnsweringBudget.Default);
 
         // Assert
         Assert.Contains(
@@ -175,7 +177,8 @@ public sealed class ServiceCollectionExtensionsTests
         // Act
         services.AddInfrastructure(
             _ => new PostgresConnectionSettings("Host=localhost;Database=mailfathom", null, null),
-            PostgresTextSearchConfiguration.Default);
+            PostgresTextSearchConfiguration.Default,
+            MailAnsweringBudget.Default);
 
         // Assert
         Assert.Contains(
@@ -238,7 +241,8 @@ public sealed class ServiceCollectionExtensionsTests
             "Host=localhost;Database=mailfathom;Username=mailfathom",
             ConnectionStringSecret: null,
             Password: null),
-            PostgresTextSearchConfiguration.Default);
+            PostgresTextSearchConfiguration.Default,
+            MailAnsweringBudget.Default);
 
         return services.BuildServiceProvider();
     }

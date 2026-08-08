@@ -40,6 +40,14 @@ internal static class RetrievedMailContextFormatter
     /// <summary>Names the element every retrieved extract of one lookup is enclosed in.</summary>
     internal const string RetrievalElementName = "retrieved-mail";
 
+    /// <summary>Names the attribute saying that the run may be handed no more mail than this envelope already carries.</summary>
+    /// <remarks>
+    /// Written on the envelope rather than left for the model to infer from a short result, because the two states it
+    /// separates look identical from the inside: a lookup that found little and a lookup whose findings this run had no
+    /// allowance left to send. Only the second one means asking again buys nothing.
+    /// </remarks>
+    internal const string RetrievalLimitReachedAttributeName = "retrieval-limit-reached";
+
     /// <summary>Names the element one retrieved message occupies.</summary>
     internal const string MessageElementName = "message";
 
@@ -78,13 +86,16 @@ internal static class RetrievedMailContextFormatter
 
     /// <summary>Writes one lookup's passages into the envelope the model reads them inside.</summary>
     /// <param name="passages">The extracts the lookup found, in the order it ranked them.</param>
+    /// <param name="retrievalLimitReached">Whether this run may be handed no more mail than the envelope carries.</param>
     /// <returns>The envelope, holding one element per passage.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="passages" /> is <see langword="null" />.</exception>
     /// <remarks>
     /// A lookup that found nothing is written as an empty envelope rather than as nothing at all, so the model reads
-    /// that the mailbox was searched and held no answer instead of reading a blank result it has to guess at.
+    /// that the mailbox was searched and held no answer instead of reading a blank result it has to guess at. An
+    /// envelope emptied by the run's own ceiling says so on the element, which is the difference between a mailbox with
+    /// no answer in it and a run with no allowance left to read one.
     /// </remarks>
-    internal static string Format(IReadOnlyList<EmailKnowledgePassage> passages)
+    internal static string Format(IReadOnlyList<EmailKnowledgePassage> passages, bool retrievalLimitReached)
     {
         ArgumentNullException.ThrowIfNull(passages);
 
@@ -93,6 +104,13 @@ internal static class RetrievedMailContextFormatter
         using (var writer = XmlWriter.Create(envelope, EnvelopeSettings))
         {
             writer.WriteStartElement(RetrievalElementName);
+
+            if (retrievalLimitReached)
+            {
+                // Absent rather than written as false on an ordinary lookup, so the attribute's presence is the signal
+                // and a model reading the common case is not asked to parse a negation on every result.
+                writer.WriteAttributeString(RetrievalLimitReachedAttributeName, "true");
+            }
 
             foreach (var passage in passages)
             {

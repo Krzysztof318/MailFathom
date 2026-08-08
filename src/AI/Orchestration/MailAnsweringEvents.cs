@@ -32,4 +32,13 @@ internal static partial class MailAnsweringEvents
         ILogger logger,
         string endpointAlias,
         int passageCount);
+
+    [LoggerMessage(
+        EventId = 3,
+        Level = LogLevel.Information,
+        Message = "Chat endpoint {EndpointAlias} answered from {PassageCount} passages after the run reached this deployment's ceiling on retrieved mail; the answer states that the mailbox was not read in full.")]
+    internal static partial void LogRetrievalCeilingReached(
+        ILogger logger,
+        string endpointAlias,
+        int passageCount);
 }

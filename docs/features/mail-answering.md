@@ -7,8 +7,9 @@ composition that does it: what the model may reach, when it reaches it, how much
 answer carries back.
 
 The `ask_mail` MCP tool is how a caller reaches it, and [MCP tools § `ask_mail`](mcp-tools.md#ask_mail) documents that
-surface — the arguments, the citations, and when the tool is advertised at all. The ceilings an operator configures on
-what one question may spend are still their own change.
+surface — the arguments, the citations, and when the tool is advertised at all. What one question may spend, and how
+much of a mailbox may leave the process to answer it, is [§ What one question may spend](#what-one-question-may-spend)
+below; [`MailAnswering`](../operations/configuration-reference.md#mailanswering) holds the keys.
 
 ## The model asks for mail; nothing is pushed at it
 
@@ -40,20 +41,115 @@ Two further narrowings apply underneath, and neither can widen anything:
 
 Two bounds, applied where the passages are built rather than where they are sent:
 
-| Bound | Default | What it controls |
-| --- | --- | --- |
-| Passages per retrieval | 8 | How many messages one lookup can draw on |
-| Characters per passage | 1200 | How much of any single message it can draw out |
+| Bound | Key | Default | What it controls |
+| --- | --- | --- | --- |
+| Passages per retrieval | `MailAnswering:MaxPassagesPerRetrieval` | 8 | How many messages one lookup can draw on |
+| Characters per passage | `MailAnswering:MaxCharactersPerPassage` | 1200 | How much of any single message it can draw out |
 
 They are two numbers rather than one total on purpose. A single total would let one enormous extract satisfy the same
 ceiling as a spread across several messages, and the two say different things about a mailbox: the count is how far a
 question reaches, the size is how deeply.
 
 The passage count is capped by what one search can rank, so a bound beyond that is refused rather than accepted and
-never met. Neither is configurable today; both are fixed in code.
+never met.
+
+Neither of them bounds a *run*, and that is the point of the section below: a model decides how many lookups to make, so
+two bounds on one lookup say nothing about how much of a mailbox one question can reach.
 
 A query with no usable text finds nothing rather than failing. The text is written by a model rather than by a caller
 who could be told to correct it, and a run whose lookup found nothing still has an answer to give.
+
+## What one question may spend
+
+A run is a conversation rather than a call, and its length is the model's decision: it asks for mail, reads what comes
+back, and may ask again. Everything above bounds one lookup and the chat declaration bounds one request, so neither of
+them says anything about a run that makes twenty lookups. Three ceilings do, and each is checked **before** the next
+provider call rather than reported after the run.
+
+| Ceiling | Key | Default | What happens when it is reached |
+| --- | --- | --- | --- |
+| Retrieved characters per run | `MailAnswering:MaxRetrievedCharactersPerRun` | 20 000 | The lookup is cut and the run continues, told there is no more mail |
+| Provider calls per run | `MailAnswering:MaxProviderCallsPerRun` | 8 | The run stops with `57001` |
+| Tokens per run | `MailAnswering:MaxTokensPerRun` | 80 000 | The run stops with `57001` |
+
+Three numbers because they fail in three different ways. The retrieved-character ceiling is the privacy one — the total
+amount of somebody's mail that may leave the process to answer one question, whatever the model asks for. The token
+ceiling is the cost one, and the only one stated in the unit a provider bills by. The call ceiling is the one that
+always works: a token count is what the provider *reported*, and an endpoint that reports none would leave the cost
+ceiling unreachable while a tool loop went round.
+
+A token ceiling can only be checked against what earlier calls reported, so the call that crosses it is paid for. That
+is inherent rather than an oversight — what a call will cost is not knowable until the provider has answered, and the
+alternative is refusing calls on an estimate.
+
+### The retrieval ceiling cuts; the other two stop the run
+
+A run that may retrieve no more still has an answerable question: it has mail already, and the model is told there is
+none left. Each lookup is trimmed to what the run may still send — **whole passages**, in the order retrieval ranked
+them, because an extract cut again to fill the remaining allowance exactly would end mid-word for the sake of a few
+hundred characters, and skipping ahead to a shorter passage would silently prefer short messages to relevant ones.
+
+Once nothing may be sent, the envelope says so rather than arriving as a mailbox that suddenly holds nothing:
+
+```xml
+<retrieved-mail retrieval-limit-reached="true" />
+```
+
+That attribute is what separates a mailbox with no answer in it from a run with no allowance left to read one — the two
+produce the same short envelope, and only the second means asking again buys nothing. The instruction tells the model
+what it means: answer from what you have, and say the mailbox was not read in full.
+
+The response says the same thing to the caller, as `retrievalTruncated`. A cut nobody reports is one the reader cannot
+allow for: an answer written after the run stopped being given mail is a real answer to a *narrower* reading of the
+mailbox, and only saying so keeps the two distinguishable.
+
+A run with no allowance for another call is different, and is a failure rather than a cut: the model was stopped before
+it wrote anything, so there is no answer to trim down to. Nothing is published, and `57001` says the run reached what
+one question may spend.
+
+### And a ceiling over every run of a period
+
+A per-run ceiling makes one question cost a knowable amount, and nothing about the MCP surface stops a client from
+asking a hundred of them in a minute — so without an aggregate, an instance's provider bill is a function of how
+enthusiastic its client is rather than of what its operator agreed to.
+
+| Ceiling | Key | Default |
+| --- | --- | --- |
+| Runs per period | `MailAnswering:MaxRunsPerPeriod` | 30 |
+| Tokens per period | `MailAnswering:MaxTokensPerPeriod` | 300 000 |
+| The period itself | `MailAnswering:AggregatePeriod` | 1 hour |
+
+Two ceilings for the reason a run has three: the run count always works, and the token count is stated in what a
+provider bills. The allowance is taken when a question is **admitted** rather than when it finishes, so a run still in
+flight already occupies its place — counting them afterwards would admit every concurrent question, which is precisely
+the burst the ceiling exists to bound. It is taken after the capability is read and before the run begins, which is the
+last point at which nothing has been spent: a question a deployment was never going to answer is not charged against
+what it spends.
+
+A question over the ceiling is refused with `57001` and never held until the period turns over, because holding it would
+convert a spend ceiling into a queue of requests occupying the endpoint that serves the rest of the surface. The two
+refusals carry one code and differ in the message, because only one of them becomes answerable by waiting: a spent
+period turns over, while a run that grew past what one question may cost reaches the same ceiling by the same route if
+it is asked again.
+
+The window is **fixed and anchored at the Unix epoch**, which is where
+[embedding spend](embedding-generation.md#what-an-instance-is-willing-to-spend) places its own period too: an hour-long
+period begins on the hour, so a refused caller
+has a roll-over instant to come back at and every restart of the process agrees on where a period begins without
+anything being stored to say so. An instance that answered nothing all day is not owed the windows it skipped. What a
+fixed window costs is stated rather than hidden — a client that spends the whole allowance at the end of one window and
+again at the start of the next has spent twice the ceiling across an interval of the same length.
+
+The ledger is **process-local and not durable**, and that is where it differs from the embedding one, which keeps its
+count in a table so a crash-restart loop cannot begin every period again from zero. The reasoning applies here in kind
+and not in degree: an embedding sweep charges inside a transaction that was committing vectors anyway, while a question
+opens no write of its own, so a durable count would add a database write to the path of every provider call in every
+run. A restart therefore begins the current window with nothing spent.
+
+### What it is observable as
+
+Consumed budget is published as counts and nothing else, so an operator watches spend without any of the content it was
+spent on. [Telemetry § Answering spend](../operations/telemetry.md#answering-spend) lists the instruments.
 
 ## An optional second pass: the model decides what answers
 
@@ -215,16 +311,17 @@ exceeds the second.
 
 What a response publishes is bounded too, and here the bounds cut rather than refuse:
 
-| Bound | Default | What it controls |
-| --- | --- | --- |
-| Answer characters | 20 000 | How much of the model's answer one response carries |
-| Cited emails | 20 | How many messages one response names |
+| Bound | Key | Default | What it controls |
+| --- | --- | --- | --- |
+| Answer characters | `MailAnswering:MaxAnswerCharacters` | 20 000 | How much of the model's answer one response carries |
+| Cited emails | `MailAnswering:MaxCitations` | 20 | How many messages one response names |
 
 Cutting is right where refusing was wrong, and for one reason: a request larger than a limit is the caller's to correct,
 while an answer larger than a limit has already been generated and paid for, and refusing it would discard a real answer
-over its length. What makes cutting safe is that it is reported — a response says which of the two was cut, so a
-shortened answer is never indistinguishable from a complete one and a claim traced to a message the response no longer
-names is never presented as checkable.
+over its length. What makes cutting safe is that it is reported — a response says which of the three cuts was made, so a
+shortened answer is never indistinguishable from a complete one, a claim traced to a message the response no longer
+names is never presented as checkable, and a run that was stopped from reading further never reads as one that read
+everything.
 
 The citations are one per email rather than one per passage. A run makes several lookups and one message can answer more
 than one of them; a reader given a list of sources wants the messages, not the number of times each was found. Neither
@@ -260,7 +357,10 @@ listing of the tools a server offers.
 
 A run is a conversation with the provider: the model asks for mail, the tool answers, the model writes the answer. Every
 one of those calls carries the deployment's declared generation parameters, its request deadline, its resilience budget,
-and its health reporting — the same bounds a single chat request carries, applied per call rather than per run.
+and its health reporting — the same bounds a single chat request carries, applied per call rather than per run. What the
+*run* may spend across all of them is [§ What one question may spend](#what-one-question-may-spend) above, and that
+check sits outside the resilience one deliberately: a call this deployment's own ceiling refused never reached the
+endpoint, so recording it against the provider's circuit or its health would report an outage that is not happening.
 
 The one thing this shape gives up is stated rather than hidden: the transport underneath is opened once for the run
 instead of once per attempt, so a retried call reuses the handler chain the run began with. A run is short, and an
@@ -280,7 +380,11 @@ beside it. Retrieval reaches no mail server either: it answers from what synchro
 No question, no answer, no query the model wrote, no retrieved passage, and no relevance judgement. A record of a run
 carries the endpoint alias, how many passages were retrieved, and how many messages they came from — counts and a name
 the operator chose. A record of the second pass carries how many candidates were judged, how many were dropped, and
-which classification a failed judgement had.
+which classification a failed judgement had. A record of a spend ceiling carries the counts the period reached and the
+length of the period, and a run that reached its retrieval ceiling is recorded as a passage count.
+
+The same rule reaches the meter: what a period consumed is published as runs and tokens, which describe the size of what
+left without describing any of it.
 
 The orchestration framework's own switch for logging queries and retrieved text is set off explicitly rather than left
 at its default, because what it would emit is somebody's question and extracts of their mail.

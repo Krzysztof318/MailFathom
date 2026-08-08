@@ -1445,7 +1445,10 @@ smaller window.
 
 `ask_mail` reads that same retrieval and then spends provider calls on top of it, which makes it the one tool whose
 latency and cost an operator has to think about: a run is a conversation, so one question is several calls to the
-declared chat endpoint, each under that endpoint's own deadline and resilience budget. A failure inside the run reaches
+declared chat endpoint, each under that endpoint's own deadline and resilience budget. What the run may spend across all
+of them, and what every run of a period may spend between them, is
+[`MailAnswering`](configuration-reference.md#mailanswering); a question the current period has no allowance left for and
+a run that reached what one question may cost are both refused with `57001`, whose message says which. A failure inside the run reaches
 the client as `54001` and reaches the log as the chat-provider code it actually was — `71001` for a refused credential,
 `72001` for an endpoint that did not answer, `73001` for a call that produced no text. Nothing on this path logs the
 question, the answer, the query the model wrote, or any retrieved passage; what a record carries is the endpoint alias,

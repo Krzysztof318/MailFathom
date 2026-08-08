@@ -161,6 +161,81 @@ public sealed class MailboxQuestionReaderTests
         Assert.Empty(answerer.Questions);
     }
 
+    /// <summary>The period's allowance is what a deployment agreed to spend, and reaching it refuses the question rather than degrading it.</summary>
+    [Fact]
+    public async Task AnswerQuestionAsync_APeriodWithNoAllowanceLeft_RefusesTheQuestionWithoutStartingARun()
+    {
+        // Arrange
+        var answerer = new RecordingMailQuestionAnswerer();
+        var spentLedger = Substitute.For<IMailAnsweringSpendLedger>();
+        spentLedger.TryAdmitRun().Returns(false);
+        var reader = ReaderOver(answerer, spendLedger: spentLedger);
+
+        // Act
+        var failure = await Assert.ThrowsAsync<MailAnsweringBudgetExhaustedException>(
+            () => AnswerAsync(reader, new AskMailRequest { QuestionText = "what was agreed" }));
+
+        // Assert
+        Assert.Equal(MailAnsweringBudgetScope.Period, failure.Scope);
+        Assert.Empty(answerer.Questions);
+    }
+
+    /// <summary>
+    /// A question a deployment was never going to answer must not be charged against a ceiling on what it spends, so the
+    /// capability is read first and the allowance is taken only once a run is about to begin.
+    /// </summary>
+    [Fact]
+    public async Task AnswerQuestionAsync_ADeploymentThatAnswersNoQuestions_TakesNoAllowanceFromThePeriod()
+    {
+        // Arrange
+        var ledger = Substitute.For<IMailAnsweringSpendLedger>();
+        ledger.TryAdmitRun().Returns(true);
+        var reader = ReaderOver(answerer: null, spendLedger: ledger);
+
+        // Act
+        await Assert.ThrowsAsync<MailAnsweringUnavailableException>(
+            () => AnswerAsync(reader, new AskMailRequest { QuestionText = "was the invoice attached" }));
+
+        // Assert
+        ledger.DidNotReceive().TryAdmitRun();
+    }
+
+    /// <summary>A run stopped from reading further answered a narrower reading of the mailbox, and only saying so keeps that distinguishable.</summary>
+    [Fact]
+    public async Task AnswerQuestionAsync_ARunThatReachedItsRetrievalCeiling_PublishesThatTheMailboxWasNotReadInFull()
+    {
+        // Arrange
+        var answerer = new RecordingMailQuestionAnswerer()
+            .Answering("Partly, from what I could read.", PassageOf(1, "the claim was filed"))
+            .HavingReachedTheRetrievalCeiling();
+        var reader = ReaderOver(answerer);
+
+        // Act
+        var result = await AnswerAsync(reader, new AskMailRequest { QuestionText = "what was agreed" });
+
+        // Assert
+        Assert.True(result.RetrievalWasTruncated);
+        Assert.False(result.AnswerWasTruncated);
+        Assert.False(result.CitationsWereTruncated);
+    }
+
+    [Fact]
+    public async Task AnswerQuestionAsync_ARunInsideEveryCeiling_PublishesNoTruncationAtAll()
+    {
+        // Arrange
+        var answerer = new RecordingMailQuestionAnswerer()
+            .Answering("The insurer agreed to pay 400.", PassageOf(1, "we will pay 400"));
+        var reader = ReaderOver(answerer);
+
+        // Act
+        var result = await AnswerAsync(reader, new AskMailRequest { QuestionText = "what was agreed" });
+
+        // Assert
+        Assert.False(result.RetrievalWasTruncated);
+        Assert.False(result.AnswerWasTruncated);
+        Assert.False(result.CitationsWereTruncated);
+    }
+
     /// <summary>A run makes several lookups and one message can answer more than one, so the sources are the messages rather than the findings.</summary>
     [Fact]
     public async Task AnswerQuestionAsync_AMessageRetrievedTwice_IsCitedOnceInTheOrderItWasFirstReached()
@@ -288,7 +363,8 @@ public sealed class MailboxQuestionReaderTests
     private static MailboxQuestionReader ReaderOver(
         IMailQuestionAnswerer? answerer,
         AiProviderHealthState chatState = AiProviderHealthState.Serving,
-        MailAnswerBounds? bounds = null)
+        MailAnswerBounds? bounds = null,
+        IMailAnsweringSpendLedger? spendLedger = null)
     {
         var healthReader = Substitute.For<IAiProviderHealthReader>();
         healthReader.Read(AiProviderRole.Embedding)
@@ -322,7 +398,21 @@ public sealed class MailboxQuestionReaderTests
                 timeProvider,
                 answerer),
             new MailboxScopeResolver(CatalogServing(MailAccountId.Create(ServedAccountId))),
+            spendLedger ?? LedgerAdmitting(),
             bounds ?? MailAnswerBounds.Default);
+    }
+
+    /// <summary>A ledger with an allowance for whatever a test asks it.</summary>
+    /// <remarks>
+    /// Configured explicitly rather than left at the substitute's default, which is <see langword="false" /> and would
+    /// silently refuse every question in a suite about what a question produces.
+    /// </remarks>
+    private static IMailAnsweringSpendLedger LedgerAdmitting()
+    {
+        var ledger = Substitute.For<IMailAnsweringSpendLedger>();
+        ledger.TryAdmitRun().Returns(true);
+
+        return ledger;
     }
 
     private static IMailAccountCatalog CatalogServing(params MailAccountId[] servedAccountIds)
