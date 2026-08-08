@@ -575,7 +575,9 @@ is reached.
 
 **The answer and the cited subjects are untrusted text.** The answer is model output written from extracts of mail
 somebody else wrote, and a subject is that person's own words. A client that passes either into another model treats both
-as data, as it would any other message content.
+as data, as it would any other message content. What a message written to manipulate the run cannot do to it — and what
+it still can do to the words of an answer — is [Mail answering § What is actually tried, and what it
+settles](mail-answering.md#what-is-actually-tried-and-what-it-settles).
 
 ### When the tool is advertised
 

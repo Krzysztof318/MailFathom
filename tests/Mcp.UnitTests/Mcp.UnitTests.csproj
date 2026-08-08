@@ -6,6 +6,8 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Compile Include="..\shared\AdversarialMailCorpus.cs" Link="AdversarialMailCorpus.cs" />
+    <Compile Include="..\shared\AdversarialMessage.cs" Link="AdversarialMessage.cs" />
     <Compile Include="..\shared\ExceptionHierarchyAssertion.cs" Link="ExceptionHierarchyAssertion.cs" />
     <Compile Include="..\shared\RecordingLoggerProvider.cs" Link="RecordingLoggerProvider.cs" />
   </ItemGroup>
