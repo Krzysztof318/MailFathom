@@ -61,10 +61,10 @@ A connected agent can list, read, and search your mail. It cannot send, delete, 
 
 ## Project status
 
-`0.3.0` is the current release, and it builds on `0.2.0` — OAuth mailbox authentication, push synchronization, and the administrative endpoint an operator reaches with the `mfctl` command.
+`0.4.0` is the current release, and it builds on `0.3.0` — OAuth mailbox authentication, push synchronization, the administrative endpoint an operator reaches with the `mfctl` command, and a deployment behind a TLS-terminating reverse proxy.
 
-- **What it adds** is what stands in front of the service: a trusted reverse proxy the public scheme and host are read from, a clear-text listener that redirects to HTTPS on both endpoints, and rate limiting on the administrative surface.
-- **Upgrading from `0.2.0`** is a new image and no schema step, because its database schema is `0.2.0`'s.
+- **What it adds** is a key pair as a third way to authenticate, with the deployment holding only the public half; `mfctl` from the Windows Package Manager; and the metrics and traces the libraries underneath it emit.
+- **Upgrading from `0.3.0`** is a schema step and a configuration edit. Every surface now states where it is served in its own section, and an endpoint's accepted credentials are a list rather than a flag set; both previous forms fail startup naming what replaces them. [The changelog](https://krzysztof318.github.io/MailFathom/CHANGELOG.html) states each break against the surface it breaks.
 - **What it ships** is a container image, a Helm chart, the SQL script that creates the schema it expects, and an `mfctl` binary per platform — [where the artifacts are published](https://github.com/Krzysztof318/MailFathom#where-the-artifacts-are-published) has the references. There is no binary artifact for the service itself, so a native installation starts from a checkout of this repository.
 - **What it promises** across the MCP tool contract, the configuration schema, the database schema, and the deployment contract is stated in [the changelog](https://krzysztof318.github.io/MailFathom/CHANGELOG.html).
 

@@ -29,6 +29,159 @@ previous tag, and that same pull request is the one whose merge commit is tagged
 registries. `CHANGELOG.md` is a protected path for the same reason: an edit to it outside that flow changes what a
 release claims it shipped.
 
+## [0.4.0] - 2026-08-07
+
+The fourth release, and the first that asks every deployment to edit its configuration before it will start. Two things
+every installation states have moved: **where each surface is served, and how a credential is configured.** Neither
+previous form is ignored — both fail startup naming what replaces them — so an upgrade that skips the edit stops rather
+than quietly serving something you did not configure. **The database schema moves as well**, by five migrations that
+add three tables and then refine one of the three, and that touch nothing `0.3.0` reads — so the schema step belongs to
+this upgrade, it applies while `0.3.0` is still running, and `0.3.0` serves the result unchanged if you go back.
+
+Nothing else `0.3.0` promised is withdrawn. The MCP tool contract is untouched — `list_emails`, `get_email_content`,
+and `search_emails` answer exactly as they did — and every setting not named below still means what it meant.
+
+**The defect `0.3.0` shipped with is gone.** A deployment that set `HealthEndpoints:Enabled` to `false` and enabled the
+administrative endpoint lost its application listener and refused every MCP client. There is no application listener to
+lose now, because every surface binds the socket its own section names.
+
+### Added
+
+**A key pair as a third way to authenticate, on both endpoints.** The client holds the private key and the deployment
+holds only the public half, so nothing this host stores in order to verify a request is worth stealing from it — not
+from the configuration, not from a backup of it, and not from the deployment tool that wrote it
+([#527](https://github.com/Krzysztof318/MailFathom/pull/527)).
+
+- Configure a `PublicKey` entry under `Authentication` exactly as you would a key: one named secret, reached through
+  every reference scheme the deployment already has, with a `Name` diagnostics correlate on and a `Lifetime` that is
+  enforced. Startup refuses material that is not a PEM public key, an RSA key below 2048 bits, a curve outside P-256,
+  P-384, and P-521, and — explicitly — material carrying a private key.
+- The client mints a short-lived JSON Web Token, signs it with the private half, and presents it as an ordinary bearer
+  credential: the arrangement RFC 7523 describes and OpenID Connect deploys as `private_key_jwt`. It carries `typ:
+  mailfathom-client-assertion+jwt`, an audience of `urn:mailfathom:mcp` or `urn:mailfathom:admin`, an expiry no more
+  than five minutes ahead, and a fresh identifier the endpoint refuses to serve twice — so a captured assertion stops
+  working on its own, and cannot be replayed even inside its remaining seconds.
+- `mfctl login --mode keypair --private-key <file>` mints all of it and stores no credential; every command signs its
+  own assertion.
+- Rotating a key is an overlap with no secret to coordinate across two machines: add the new public key as a second
+  entry, move the client to the new private key, remove the old entry.
+  [Key pairs](https://krzysztof318.github.io/MailFathom/operations/mcp-endpoint.html#key-pairs) is the page.
+
+**`mfctl` from the Windows Package Manager.** Each release submits its own manifest, so `winget install
+MailFathom.mfctl` becomes a packaged path beside the download and `winget upgrade` carries you to the next release
+([#498](https://github.com/Krzysztof318/MailFathom/pull/498)). The manifest names the same release asset the releases
+page does and carries the same hash the checksum file does, so both paths install the same bytes and check them the
+same way. A version is offered a little after it is attached here, because the community repository reviews the
+submission; until one is accepted, the releases page is where the command comes from on every platform.
+
+**The metrics and traces the libraries underneath MailFathom already emit.** Where `OTEL_EXPORTER_OTLP_ENDPOINT` names
+a destination, four more meters now reach it: `Npgsql` for connection-pool state and command durations and counts,
+`Microsoft.EntityFrameworkCore` for contexts, queries, saves, compiled-query cache hits, and concurrency failures,
+`Experimental.ModelContextProtocol` for MCP session duration and per-operation duration broken down by protocol method
+and tool name, and `Polly` for every outbound pipeline's attempts, outcomes, timeouts, and circuit-breaker transitions
+([#521](https://github.com/Krzysztof318/MailFathom/pull/521)). Database commands and MCP protocol operations are
+spanned as well and correlated with the request that caused them; the probe paths stay untraced, because a probe
+arrives every few seconds and says the same thing every time.
+
+- Every tag on them is a bounded set — a protocol method, a transport, one of the three tool names, an outcome — so
+  none of them opens a time series per message or per person.
+- What MailFathom publishes under a name of its own goes under exactly one: **`MailFathom`**, serving as both activity
+  source and meter, which is what a dashboard filters on to see this process and nothing a library emits
+  ([#510](https://github.com/Krzysztof318/MailFathom/pull/510)).
+  [Telemetry](https://krzysztof318.github.io/MailFathom/operations/telemetry.html) records each of them.
+
+### Changed
+
+- **Breaking (configuration schema)** — **every surface states where it is served, and the host's own ways of naming a
+  listener are refused.** `ASPNETCORE_URLS`, `ASPNETCORE_HTTP_PORTS`, `ASPNETCORE_HTTPS_PORTS`, `--urls`, and any entry
+  under `Kestrel:Endpoints` each fail startup with a message naming the setting that replaces them. Write
+  `McpEndpoint:BindAddress`, `McpEndpoint:Port`, and `McpEndpoint:Transport`; the administrative endpoint and the probes
+  take the same three. **A deployment of your own that sets `ASPNETCORE_HTTP_PORTS` sets `McpEndpoint__Port` instead** —
+  the published image and the packaged chart already do, so an upgrade that takes both as they ship needs no edit here
+  ([#459](https://github.com/Krzysztof318/MailFathom/pull/459)). They are refused rather than ignored because ignoring
+  them is silent: Kestrel drops URL-shaped addresses as soon as a listener is bound in code, which every surface now
+  does, and a configured endpoint would otherwise be bound beside them on a socket no section describes and no
+  credential guards. A deployment that enables no surface at all is refused for the same reason.
+- **Breaking (configuration schema)** — **the administrative endpoint's default port is `8080`, the MCP endpoint's**,
+  where `0.3.0` gave it `8090`. Two surfaces may deliberately share one socket now — the posture a single-node
+  deployment behind one ingress wants — so a deployment that enabled the administrative endpoint without stating a port
+  publishes it wherever `8080` is published rather than on a port of its own. State `AdminEndpoint:Port`, where `8090`
+  restores what you had, unless sharing is what you want; the socket serves each surface's own paths either way, and a
+  path a surface does not own is still refused there with a `404`
+  ([#459](https://github.com/Krzysztof318/MailFathom/pull/459)).
+- **Breaking (configuration schema)** — **`Transport` decides what a surface's clear-text socket does**, where `0.3.0`
+  inferred that from whether HTTPS profiles were configured. `Http` serves the routes and refuses profiles,
+  `HttpAndHttps` binds the profiles and redirects the clear-text socket to them, and `HttpsOnly` does not open it at
+  all. `Http` is the default, so adopting this release costs no certificate work
+  ([#459](https://github.com/Krzysztof318/MailFathom/pull/459)).
+- **Breaking (configuration schema)** — **`Https:Redirect` no longer binds a port of its own.** `0.3.0` gave it `8080`
+  beside the MCP profiles and `8091` beside the administrative ones; the redirect now answers on the surface's own
+  `BindAddress` and `Port`. A deployment that published `8091` to reach the administrative redirect publishes that
+  surface's own port instead ([#459](https://github.com/Krzysztof318/MailFathom/pull/459)).
+- **Breaking (configuration schema)** — **authentication is a list of the credentials an endpoint accepts**, where
+  `0.3.0` named methods in a flag set and configured each in a sibling section. `McpEndpoint:Authentication` and
+  `AdminEndpoint:Authentication` each take entries, and the block an entry carries is what selects the method that
+  judges it — there is no setting naming the method any more. `Authentication: "ApiKey"` beside an `ApiKeys` list
+  becomes one entry per key, each carrying an `ApiKey` block; `Authentication: "OAuth"` beside an `OAuth` section
+  becomes an entry carrying that section. An entry carrying no block fails startup, named by its position
+  ([#515](https://github.com/Krzysztof318/MailFathom/pull/515)).
+  - **`RequiredScopes` is per entry** rather than per endpoint, so two authorization servers one endpoint accepts may
+    demand different scopes. Every OAuth entry still names the same `Resource`, because the endpoint publishes one
+    metadata document.
+  - An empty list warns at startup exactly as `None` did, and a value written where the list belongs fails it rather
+    than being read as a method name.
+- **Breaking (configuration schema)** — **a setting only the process environment can deliver, written anywhere else,
+  fails startup** naming every such variable at once, with error code `12002`. `OPENSSL_CONF`, `OTEL_SERVICE_NAME`, and
+  every `OTEL_*`, `ASPNETCORE_*`, and `DOTNET_*` variable are read before MailFathom's configuration exists or by a
+  library that never consults it, so a value written into an appsettings file, a provisioned configuration file, or a
+  command-line argument reached nobody — while the file read it back happily and nothing said which of the two you were
+  looking at. Set each on the host process, or remove it
+  ([#509](https://github.com/Krzysztof318/MailFathom/pull/509)).
+- **Every synchronized message is also cut into passages and stored**, in the same transaction that stores what was
+  extracted from it, so a mailbox costs more storage per message than it did under `0.3.0` — roughly its extracted text
+  again, in overlapping windows ([#488](https://github.com/Krzysztof318/MailFathom/pull/488)). A message that yielded no
+  text is cut into nothing, mail stored before this release is not revisited, and nothing else in this release reads a
+  passage.
+
+### Removed
+
+- **Breaking (deployment contract)** — **`GET /` no longer answers.** `0.3.0` served
+  `{"service":"MailFathom","status":"ready"}` at the root of the application listener; the MCP endpoint's port serves
+  `/mcp` and answers everything else with `404`. An external check pointed at `/` moves to the probes on their own
+  listener — `/alive` for liveness, `/health` for readiness, `/started` for startup, on `HealthEndpoints:Port` unless
+  you moved it ([#459](https://github.com/Krzysztof318/MailFathom/pull/459)).
+
+### Fixed
+
+- **A `file:` secret reference pointing at a FIFO or a stalled mount hung the host indefinitely.** Opening the file is
+  bounded now, so an unreachable mount is reported as one line of the startup failure report rather than as a process
+  that never finishes starting and never says why
+  ([#511](https://github.com/Krzysztof318/MailFathom/pull/511)).
+- **The device sign-in prompt raced the rest of `mfctl`'s output.** Both device-code flows handed the verification
+  address and the short code to the console through a type that marshals onto a synchronization context a console
+  process does not have, so nothing ordered the printing of the code against the wait for you to type it. The prompt now
+  reaches the terminal before polling begins, on the thread that asked for it
+  ([#418](https://github.com/Krzysztof318/MailFathom/pull/418)).
+- **`HealthEndpoints:Enabled: false` beside an enabled administrative endpoint no longer costs the application
+  listener** — the defect `0.3.0`'s notes named as shipped with it
+  ([#419](https://github.com/Krzysztof318/MailFathom/pull/419)), and one that cannot recur now that each surface binds
+  its own socket ([#459](https://github.com/Krzysztof318/MailFathom/pull/459)).
+
+### Security
+
+- **A key pair leaves nothing on the host worth stealing.** An API key is a shared secret, so a copy of every credential
+  that reaches the mailbox sits in the configuration and in whatever produced it; a public key verifies the same client
+  and is not a secret at all. It is the method for a scheduled job, which has no person to sign in as
+  ([#527](https://github.com/Krzysztof318/MailFathom/pull/527)).
+- **The administrative endpoint shares the MCP endpoint's port unless you say otherwise.** Administering the service is
+  a different authority from reading the mailbox, and the probes answer without a credential, so putting either on the
+  endpoint's port publishes it wherever that port is published. The ports exist so the decision is yours; take it rather
+  than inherit it ([#459](https://github.com/Krzysztof318/MailFathom/pull/459)).
+- **A listener nothing configured can no longer be bound.** Refusing the host's own address settings closes the case
+  where a `Kestrel:Endpoints` entry survived beside a listener bound in code and served the routes on a socket no
+  section describes, no credential guards, and no isolation middleware was composed for
+  ([#459](https://github.com/Krzysztof318/MailFathom/pull/459)).
+
 ## [0.3.0] - 2026-08-04
 
 The third release, and the first whose upgrade is a new image and nothing else: **the database schema does not move.**
@@ -395,6 +548,7 @@ is the whole surface, key by key, including which keys reload and which need a r
   [`THIRD_PARTY_LICENSES.md`](https://github.com/Krzysztof318/MailFathom/blob/main/THIRD_PARTY_LICENSES.md) registers
   every dependency it ships beside ([#173](https://github.com/Krzysztof318/MailFathom/pull/173)).
 
+[0.4.0]: https://github.com/Krzysztof318/MailFathom/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/Krzysztof318/MailFathom/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/Krzysztof318/MailFathom/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/Krzysztof318/MailFathom/releases/tag/v0.1.0

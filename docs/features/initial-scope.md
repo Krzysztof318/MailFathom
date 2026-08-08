@@ -4,7 +4,7 @@
 
 The initial scaffold creates the project boundaries needed for the first release without implementing mail, persistence, retrieval, or MCP behavior yet.
 
-The ASP.NET Core host exposes a root readiness response. It also serves three probes — `/started`, `/health`, and `/alive` — on a listener of their own, on port 8081 unless a deployment configures another, in every environment; `docs/operations/health-endpoints.md` states what each one consults, why they are kept off the port that serves `/` and `/mcp`, and how a deployment turns them off or puts TLS in front of them, and `docs/architecture/solution-structure.md` records why the service defaults belong to `Host`. Those defaults wire OpenTelemetry, HTTP resilience, and service discovery. The Aspire AppHost wires the host to a PostgreSQL resource for future persistence work.
+The ASP.NET Core host serves three probes — `/started`, `/health`, and `/alive` — on a listener of their own, on port 8081 unless a deployment configures another, in every environment; `docs/operations/health-endpoints.md` states what each one consults, why they are kept off the port that serves `/mcp`, and how a deployment turns them off or puts TLS in front of them, and `docs/architecture/solution-structure.md` records why the service defaults belong to `Host`. Those defaults wire OpenTelemetry, HTTP resilience, and service discovery. The Aspire AppHost wires the host to a PostgreSQL resource for future persistence work.
 
 
 ## IMAP synchronization status
