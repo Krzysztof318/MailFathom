@@ -53,7 +53,7 @@ public interface IEmailVectorSearchIndexReader
     /// </remarks>
     Task<IReadOnlyList<RankedEmailCandidate>> ReadNearestCandidatesAsync(
         MailboxEmailSelection selection,
-        ActiveEmbeddingProfile profile,
+        RegisteredEmbeddingProfile profile,
         EmbeddingVector queryVector,
         int limit,
         CancellationToken cancellationToken);

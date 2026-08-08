@@ -4,11 +4,13 @@
 
 namespace MailFathom.Application.Emails.Embeddings;
 
-/// <summary>The profile vectors are currently produced and read under, and the geometry it fixed when it was registered.</summary>
+/// <summary>One profile row, with the geometry it fixed when it was registered.</summary>
 /// <remarks>
 /// <para>
-/// Its absence is what "this instance does not embed" means. There is no configuration flag beside it: an active profile
-/// row exists, or it does not, and
+/// Lifecycle-neutral by design, because a profile is a generation and two of them coexist while a new one is built: the
+/// one retrieval reads and the one being embedded into are the same shape and are told apart by
+/// <see cref="EmbeddingProfileLifecycleState" /> rather than by their type. Its absence is what "this instance does not
+/// embed" means — a profile row exists, or it does not, and
 /// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0006-embedding-profile-identity-lifecycle-and-activation-cost.md">ADR 0006</see>
 /// records why the switch is an activation rather than a setting.
 /// </para>
@@ -20,4 +22,4 @@ namespace MailFathom.Application.Emails.Embeddings;
 /// </remarks>
 /// <param name="Id">Which registered profile this is.</param>
 /// <param name="Identity">The geometry the profile fixed at registration.</param>
-public sealed record ActiveEmbeddingProfile(EmbeddingProfileId Id, EmbeddingProfileIdentity Identity);
+public sealed record RegisteredEmbeddingProfile(EmbeddingProfileId Id, EmbeddingProfileIdentity Identity);

@@ -243,6 +243,6 @@ public sealed class SemanticEmailSearch
     /// </remarks>
     private sealed record SemanticSearchGate(
         SemanticSearchCapability Capability,
-        ActiveEmbeddingProfile? Profile,
+        RegisteredEmbeddingProfile? Profile,
         ITextEmbeddingGenerator? Generator);
 }

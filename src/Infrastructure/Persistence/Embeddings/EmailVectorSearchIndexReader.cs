@@ -47,7 +47,7 @@ internal sealed class EmailVectorSearchIndexReader(MailFathomDbContext dbContext
     /// <inheritdoc />
     public async Task<IReadOnlyList<RankedEmailCandidate>> ReadNearestCandidatesAsync(
         MailboxEmailSelection selection,
-        ActiveEmbeddingProfile profile,
+        RegisteredEmbeddingProfile profile,
         EmbeddingVector queryVector,
         int limit,
         CancellationToken cancellationToken)
@@ -81,7 +81,7 @@ internal sealed class EmailVectorSearchIndexReader(MailFathomDbContext dbContext
     /// </remarks>
     internal IQueryable<StoredEmailVectorHitRow> NearestHitsQuery(
         MailboxEmailSelection selection,
-        ActiveEmbeddingProfile profile,
+        RegisteredEmbeddingProfile profile,
         EmbeddingVector queryVector,
         int limit)
     {

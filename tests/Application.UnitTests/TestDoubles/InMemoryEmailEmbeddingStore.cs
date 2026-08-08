@@ -34,6 +34,28 @@ internal sealed class InMemoryEmailEmbeddingStore : IEmailEmbeddingStore
     public IReadOnlyDictionary<(EmailChunkId ChunkId, EmbeddingProfileId ProfileId), EmbeddingVector> StoredVectors =>
         this.vectors;
 
+    /// <summary>Removes a bounded batch of one generation's vectors, the way the superseded-vector sweep does.</summary>
+    /// <returns>How many vectors the batch removed.</returns>
+    public int RemoveVectors(EmbeddingProfileId profileId, int batchSize)
+    {
+        var batch = this.vectors.Keys
+            .Where(key => key.ProfileId == profileId)
+            .Take(batchSize)
+            .ToArray();
+
+        // A loop rather than a projection, because removing an entry is a side effect on the dictionary being read.
+        foreach (var key in batch)
+        {
+            this.vectors.Remove(key);
+        }
+
+        return batch.Length;
+    }
+
+    /// <summary>Counts the vectors one generation currently holds.</summary>
+    public int CountVectors(EmbeddingProfileId profileId) =>
+        this.vectors.Keys.Count(key => key.ProfileId == profileId);
+
     /// <summary>Gives one message the passages a chunker would have derived for it.</summary>
     public void AddPassages(StoredEmailId storedEmailId, params IReadOnlyList<EmailChunkAwaitingEmbedding> chunks)
     {
@@ -76,7 +98,7 @@ internal sealed class InMemoryEmailEmbeddingStore : IEmailEmbeddingStore
     /// <inheritdoc />
     public Task SaveEmbeddingsAsync(
         IPersistenceSession session,
-        ActiveEmbeddingProfile profile,
+        RegisteredEmbeddingProfile profile,
         IReadOnlyList<GeneratedChunkEmbedding> embeddings,
         CancellationToken cancellationToken)
     {

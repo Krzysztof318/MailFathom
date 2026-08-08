@@ -107,6 +107,12 @@ started are different questions about one provider bill.
 [Embedding backfill](../features/embedding-backfill.md#what-an-operator-can-see) names each of them, and says why the
 outstanding figure is a sweep old rather than live.
 
+A model change publishes two more, `mailfathom.embedding.generation.switches` and
+`mailfathom.embedding.generation.removed`: the moment a generation being built became the one searches are answered
+from, and the vectors of the one it replaced going away in bounded batches. Both are counters rather than a gauge over
+which generation is current, because an identifier is a dimension of unbounded cardinality for a value the switch's own
+log line already carries. [Changing the embedding model](embedding-profiles.md) is what those two are read against.
+
 Each outbound AI provider publishes what its last call established about it, as `mailfathom.ai.provider.health` tagged
 with `mailfathom.ai.provider.role` — `embedding` or `chat`. The two roles carry one measurement each rather than one
 combined figure, because an instance may hold a working embedding provider and a failing chat one and the two ask

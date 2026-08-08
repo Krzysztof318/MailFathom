@@ -30,6 +30,19 @@ internal static class OrchestratedEmbeddingProfile
                 var context = scope.GetRequiredService<MailFathomDbContext>();
                 var activatedAt = TimeProvider.System.GetUtcNow();
 
+                // The partial unique index admits one serving generation and one being built, so whatever an earlier
+                // class left in either state is stood down before this one takes the position. Issued as a set-based
+                // update ahead of the tracked write below, because the index is checked per statement and promoting
+                // this row first would collide with the row it is replacing.
+                await context.EmbeddingProfiles
+                    .Where(profile => profile.IdentityFingerprint != fingerprint)
+                    .Where(profile => profile.LifecycleState != EmbeddingProfileLifecycleState.Superseded)
+                    .ExecuteUpdateAsync(
+                        setters => setters
+                            .SetProperty(profile => profile.LifecycleState, EmbeddingProfileLifecycleState.Superseded)
+                            .SetProperty(profile => profile.SupersededAt, activatedAt),
+                        token);
+
                 var registered = await context.EmbeddingProfiles
                     .SingleOrDefaultAsync(profile => profile.IdentityFingerprint == fingerprint, token);
 
@@ -57,11 +70,11 @@ internal static class OrchestratedEmbeddingProfile
                 else
                 {
                     // Re-activated rather than left alone even when it is already active, because other classes in this
-                    // suite register active profiles of their own and the reader serves whichever was activated last.
-                    // Without this, a caller would get the deterministic geometry only when nothing else had claimed
-                    // that position since — which is a dependency on the order xUnit happened to choose.
+                    // suite move this row through its lifecycle and a caller must get the deterministic geometry
+                    // serving whatever the order xUnit happened to choose.
                     registered.LifecycleState = EmbeddingProfileLifecycleState.Active;
                     registered.ActivatedAt = activatedAt;
+                    registered.SupersededAt = null;
                 }
 
                 await context.SaveChangesAsync(token);

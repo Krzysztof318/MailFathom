@@ -78,7 +78,7 @@ public sealed class OrchestratedEmbeddingVectorIndexTests(MailFathomOrchestratio
 
     private static async Task EnsureBuiltAsync(
         OrchestratedMailFathomServices services,
-        ActiveEmbeddingProfile profile,
+        RegisteredEmbeddingProfile profile,
         CancellationToken cancellationToken) => await services.InScopeAsync(
             async (scope, token) =>
             {
@@ -100,7 +100,7 @@ public sealed class OrchestratedEmbeddingVectorIndexTests(MailFathomOrchestratio
             },
             cancellationToken);
 
-    private static async Task<ActiveEmbeddingProfile> RegisterProfileAsync(
+    private static async Task<RegisteredEmbeddingProfile> RegisterProfileAsync(
         OrchestratedMailFathomServices services,
         int dimension,
         string modelIdentifier,
@@ -132,16 +132,15 @@ public sealed class OrchestratedEmbeddingVectorIndexTests(MailFathomOrchestratio
                     PassageInstruction = identity.InputPreparation.PassageInstruction,
                     NormalizesVector = identity.InputPreparation.NormalizesVector,
                     IdentityFingerprint = EmbeddingProfileFingerprint.Compute(identity).Value,
-                    LifecycleState = EmbeddingProfileLifecycleState.Active,
+                    LifecycleState = EmbeddingProfileLifecycleState.Superseded,
                     RegisteredAt = TimeProvider.System.GetUtcNow(),
-                    ActivatedAt = TimeProvider.System.GetUtcNow(),
                 });
 
                 return await context.SaveChangesAsync(token);
             },
             cancellationToken);
 
-        return new ActiveEmbeddingProfile(EmbeddingProfileId.Create(profileId), identity);
+        return new RegisteredEmbeddingProfile(EmbeddingProfileId.Create(profileId), identity);
     }
 
     /// <summary>Reads what PostgreSQL says the index is, which is the only account of it a test can trust.</summary>

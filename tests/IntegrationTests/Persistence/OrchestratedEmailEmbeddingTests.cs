@@ -213,7 +213,7 @@ public sealed class OrchestratedEmailEmbeddingTests(MailFathomOrchestrationFixtu
                     PassageInstruction = identity.InputPreparation.PassageInstruction,
                     NormalizesVector = identity.InputPreparation.NormalizesVector,
                     IdentityFingerprint = EmbeddingProfileFingerprint.Compute(identity).Value,
-                    LifecycleState = EmbeddingProfileLifecycleState.Building,
+                    LifecycleState = EmbeddingProfileLifecycleState.Superseded,
                     RegisteredAt = TimeProvider.System.GetUtcNow(),
                 });
 

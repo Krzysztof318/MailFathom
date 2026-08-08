@@ -49,7 +49,7 @@ public sealed class OrchestratedEmailVectorSearchTests(MailFathomOrchestrationFi
         await using var services = await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken);
         var binding = await OrchestratedFolderBinding.CommitAsync(services, FolderAlias, cancellationToken);
         var profileId = await OrchestratedEmbeddingProfile.EnsureActiveDeterministicAsync(services, cancellationToken);
-        var profile = new ActiveEmbeddingProfile(profileId, await ActiveIdentityAsync(services, cancellationToken));
+        var profile = new RegisteredEmbeddingProfile(profileId, await ActiveIdentityAsync(services, cancellationToken));
 
         var nearest = await StoreOneMessageAsync(services, binding, uid: 9601, cancellationToken);
         var farther = await StoreOneMessageAsync(services, binding, uid: 9602, cancellationToken);

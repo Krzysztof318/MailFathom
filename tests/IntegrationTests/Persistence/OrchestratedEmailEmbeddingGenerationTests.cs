@@ -94,9 +94,16 @@ public sealed class OrchestratedEmailEmbeddingGenerationTests(MailFathomOrchestr
         OrchestratedMailFathomServices services,
         StoredEmailId storedEmailId,
         CancellationToken cancellationToken) => services.InScopeAsync(
-            (scope, token) => scope.GetRequiredService<StoredEmailEmbeddingGenerator>().EmbedAsync(
-                storedEmailId,
-                token),
+            async (scope, token) =>
+            {
+                var serving = await scope.GetRequiredService<IActiveEmbeddingProfileReader>()
+                    .FindActiveProfileAsync(token);
+
+                return await scope.GetRequiredService<StoredEmailEmbeddingGenerator>().EmbedAsync(
+                    storedEmailId,
+                    Assert.IsType<RegisteredEmbeddingProfile>(serving),
+                    token);
+            },
             cancellationToken);
 
     private static Task<IReadOnlyList<EmailChunkAwaitingEmbedding>> ReadOutstandingAsync(
@@ -186,7 +193,7 @@ public sealed class OrchestratedEmailEmbeddingGenerationTests(MailFathomOrchestr
                     OrchestratedMailFathomServices.DeterministicEmbeddingInputCharacterLimit,
                     passageInstruction: null,
                     normalizesVector: true)),
-            EmbeddingProfileLifecycleState.Building,
+            EmbeddingProfileLifecycleState.Superseded,
             cancellationToken);
 
     private static Task<EmbeddingProfileId> InsertProfileAsync(

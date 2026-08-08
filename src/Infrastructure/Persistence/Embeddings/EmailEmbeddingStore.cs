@@ -55,7 +55,7 @@ internal sealed class EmailEmbeddingStore(MailFathomDbContext dbContext, TimePro
     /// </remarks>
     public async Task SaveEmbeddingsAsync(
         IPersistenceSession session,
-        ActiveEmbeddingProfile profile,
+        RegisteredEmbeddingProfile profile,
         IReadOnlyList<GeneratedChunkEmbedding> embeddings,
         CancellationToken cancellationToken)
     {

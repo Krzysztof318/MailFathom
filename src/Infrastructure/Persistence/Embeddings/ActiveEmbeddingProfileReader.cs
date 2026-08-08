@@ -8,11 +8,13 @@ using Microsoft.EntityFrameworkCore;
 
 namespace MailFathom.Infrastructure.Persistence.Embeddings;
 
-/// <summary>Reads the one profile row this instance currently embeds into and reads from.</summary>
+/// <summary>Reads the one profile row searches are answered from, which is also where arriving mail is embedded.</summary>
 /// <remarks>
-/// At most one profile is <see cref="EmbeddingProfileLifecycleState.Active" /> at a time, which the activation command
-/// is what enforces. This reads whichever row is there and takes the most recently activated one if a defect ever left
-/// two, because serving the newer generation is the safer reading of an ambiguous state than picking arbitrarily.
+/// At most one profile is <see cref="EmbeddingProfileLifecycleState.Active" /> at a time, which a partial unique index
+/// over the lifecycle column is what enforces. The generation being built is deliberately out of reach here: a caller
+/// on this port is serving a search or embedding mail that has just arrived, and both of those belong to the
+/// generation that is complete. The ordering is what makes an ambiguous state readable anyway — serving the newer
+/// generation is the safer reading of two rows than picking arbitrarily.
 /// </remarks>
 [RequiresIntegrationCoverage]
 internal sealed class ActiveEmbeddingProfileReader(MailFathomDbContext dbContext) : IActiveEmbeddingProfileReader
@@ -23,7 +25,7 @@ internal sealed class ActiveEmbeddingProfileReader(MailFathomDbContext dbContext
     /// fingerprint are not what a caller does anything with, and the row must not be tracked by a context a write will
     /// later join.
     /// </remarks>
-    public async Task<ActiveEmbeddingProfile?> FindActiveProfileAsync(CancellationToken cancellationToken)
+    public async Task<RegisteredEmbeddingProfile?> FindActiveProfileAsync(CancellationToken cancellationToken)
     {
         var profile = await dbContext.EmbeddingProfiles
             .AsNoTracking()
@@ -44,7 +46,7 @@ internal sealed class ActiveEmbeddingProfileReader(MailFathomDbContext dbContext
         return profile is null ? null : Map(profile);
     }
 
-    private static ActiveEmbeddingProfile Map(ActiveProfileRow profile) => new(
+    private static RegisteredEmbeddingProfile Map(ActiveProfileRow profile) => new(
         EmbeddingProfileId.Create(profile.Id),
         EmbeddingProfileIdentity.Create(
             profile.Provider,

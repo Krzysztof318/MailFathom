@@ -40,7 +40,7 @@ internal sealed class InMemoryEmailVectorSearchIndex : IEmailVectorSearchIndexRe
     /// <inheritdoc />
     public Task<IReadOnlyList<RankedEmailCandidate>> ReadNearestCandidatesAsync(
         MailboxEmailSelection selection,
-        ActiveEmbeddingProfile profile,
+        RegisteredEmbeddingProfile profile,
         EmbeddingVector queryVector,
         int limit,
         CancellationToken cancellationToken)
@@ -82,7 +82,7 @@ internal sealed class InMemoryEmailVectorSearchIndex : IEmailVectorSearchIndexRe
     /// <param name="Limit">How many candidates the caller asked for.</param>
     internal sealed record ReadNearestCandidatesCall(
         MailboxEmailSelection Selection,
-        ActiveEmbeddingProfile Profile,
+        RegisteredEmbeddingProfile Profile,
         EmbeddingVector QueryVector,
         int Limit);
 

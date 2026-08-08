@@ -370,9 +370,9 @@ try
             ?? throw new InvalidOperationException(
                 "The embedding chain was declared at registration and is absent from the validated configuration."));
         builder.Services.AddEmbeddingProviderAdapter();
-        // Beside the adapter rather than inside AddInfrastructure, because these two resolve the generator that call
-        // registers. An instance that declared no chain registers neither and starts; one that declared one registers
-        // both and the workers below have something to resolve.
+        // Beside the adapter rather than inside AddInfrastructure, because the units of work it registers resolve the
+        // generator that call registers. An instance that declared no chain registers none of them and starts; one that
+        // declared a chain registers them all and the workers below have something to resolve.
         builder.Services.AddEmailEmbeddingGeneration();
         builder.Services.AddHealthChecks()
             .Add(AiProviderHealthCheck.RegistrationFor(AiProviderRole.Embedding));

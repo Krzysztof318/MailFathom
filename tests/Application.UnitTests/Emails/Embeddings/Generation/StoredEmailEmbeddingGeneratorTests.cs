@@ -27,10 +27,10 @@ public sealed class StoredEmailEmbeddingGeneratorTests
         var store = new InMemoryEmailEmbeddingStore();
         var passages = CreatePassages(3);
         store.AddPassages(Message, passages);
-        var generator = CreateGenerator(store, CreateProfile(), maximumPassagesPerCall: 8);
+        var generator = CreateGenerator(store, maximumPassagesPerCall: 8);
 
         // Act
-        var run = await generator.EmbedAsync(Message, TestContext.Current.CancellationToken);
+        var run = await generator.EmbedAsync(Message, CreateProfile(), TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(StoredEmailEmbeddingOutcome.Embedded, run.Outcome);
@@ -46,10 +46,10 @@ public sealed class StoredEmailEmbeddingGeneratorTests
         var store = new InMemoryEmailEmbeddingStore();
         store.AddPassages(Message, CreatePassages(5));
         var textEmbeddingGenerator = new ScriptedTextEmbeddingGenerator(CreateIdentity(), maximumPassagesPerCall: 2);
-        var generator = CreateGenerator(store, CreateProfile(), textEmbeddingGenerator);
+        var generator = CreateGenerator(store, textEmbeddingGenerator);
 
         // Act
-        var run = await generator.EmbedAsync(Message, TestContext.Current.CancellationToken);
+        var run = await generator.EmbedAsync(Message, CreateProfile(), TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(5, run.EmbeddedChunkCount);
@@ -64,11 +64,11 @@ public sealed class StoredEmailEmbeddingGeneratorTests
         var store = new InMemoryEmailEmbeddingStore();
         store.AddPassages(Message, CreatePassages(2));
         var textEmbeddingGenerator = new ScriptedTextEmbeddingGenerator(CreateIdentity(), maximumPassagesPerCall: 8);
-        var generator = CreateGenerator(store, CreateProfile(), textEmbeddingGenerator);
-        await generator.EmbedAsync(Message, TestContext.Current.CancellationToken);
+        var generator = CreateGenerator(store, textEmbeddingGenerator);
+        await generator.EmbedAsync(Message, CreateProfile(), TestContext.Current.CancellationToken);
 
         // Act
-        var repeat = await generator.EmbedAsync(Message, TestContext.Current.CancellationToken);
+        var repeat = await generator.EmbedAsync(Message, CreateProfile(), TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(StoredEmailEmbeddingOutcome.Embedded, repeat.Outcome);
@@ -77,23 +77,29 @@ public sealed class StoredEmailEmbeddingGeneratorTests
         Assert.Equal(2, store.StoredVectors.Count);
     }
 
+    /// <summary>
+    /// The generation is the caller's decision, which is what lets a reindex fill a new one while the live path goes on
+    /// embedding arriving mail into the one still answering searches. A generator that resolved it itself could serve
+    /// only one of the two, and the vectors of the other would silently land under the wrong attribution.
+    /// </summary>
     [Fact]
-    public async Task EmbedAsync_NoProfileActivated_EmbedsNothingAndReachesNoProvider()
+    public async Task EmbedAsync_GenerationBeingBuilt_AttributesEveryVectorToThatGenerationAlone()
     {
         // Arrange
         var store = new InMemoryEmailEmbeddingStore();
         store.AddPassages(Message, CreatePassages(2));
-        var textEmbeddingGenerator = new ScriptedTextEmbeddingGenerator(CreateIdentity(), maximumPassagesPerCall: 8);
-        var generator = CreateGenerator(store, activeProfile: null, textEmbeddingGenerator);
+        var generator = CreateGenerator(store, maximumPassagesPerCall: 8);
+        var building = new RegisteredEmbeddingProfile(
+            EmbeddingProfileId.Create(Guid.CreateVersion7()),
+            CreateIdentity());
 
         // Act
-        var run = await generator.EmbedAsync(Message, TestContext.Current.CancellationToken);
+        var run = await generator.EmbedAsync(Message, building, TestContext.Current.CancellationToken);
 
         // Assert
-        Assert.Equal(StoredEmailEmbeddingOutcome.NoActiveProfile, run.Outcome);
-        Assert.Equal(0, run.EmbeddedChunkCount);
-        Assert.Empty(textEmbeddingGenerator.RequestedBatches);
-        Assert.Equal(0, store.ReadCount);
+        Assert.Equal(StoredEmailEmbeddingOutcome.Embedded, run.Outcome);
+        Assert.Equal([building.Id, building.Id], store.StoredVectors.Keys.Select(key => key.ProfileId).ToArray());
+        Assert.DoesNotContain(ProfileId, store.StoredVectors.Keys.Select(key => key.ProfileId));
     }
 
     [Fact]
@@ -105,10 +111,10 @@ public sealed class StoredEmailEmbeddingGeneratorTests
         var textEmbeddingGenerator = new ScriptedTextEmbeddingGenerator(
             CreateIdentity(modelIdentifier: "a-newer-model"),
             maximumPassagesPerCall: 8);
-        var generator = CreateGenerator(store, CreateProfile(), textEmbeddingGenerator);
+        var generator = CreateGenerator(store, textEmbeddingGenerator);
 
         // Act
-        var run = await generator.EmbedAsync(Message, TestContext.Current.CancellationToken);
+        var run = await generator.EmbedAsync(Message, CreateProfile(), TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(StoredEmailEmbeddingOutcome.GeneratorDisagreesWithProfile, run.Outcome);
@@ -133,10 +139,10 @@ public sealed class StoredEmailEmbeddingGeneratorTests
         {
             Failure = failure,
         };
-        var generator = CreateGenerator(store, CreateProfile(), textEmbeddingGenerator);
+        var generator = CreateGenerator(store, textEmbeddingGenerator);
 
         // Act
-        var run = await generator.EmbedAsync(Message, TestContext.Current.CancellationToken);
+        var run = await generator.EmbedAsync(Message, CreateProfile(), TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(StoredEmailEmbeddingOutcome.ProviderFailed, run.Outcome);
@@ -156,10 +162,10 @@ public sealed class StoredEmailEmbeddingGeneratorTests
             Failure = EmbeddingGenerationFailure.RateLimited,
             FailingCallNumber = 2,
         };
-        var generator = CreateGenerator(store, CreateProfile(), textEmbeddingGenerator);
+        var generator = CreateGenerator(store, textEmbeddingGenerator);
 
         // Act
-        var run = await generator.EmbedAsync(Message, TestContext.Current.CancellationToken);
+        var run = await generator.EmbedAsync(Message, CreateProfile(), TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(StoredEmailEmbeddingOutcome.ProviderFailed, run.Outcome);
@@ -181,10 +187,10 @@ public sealed class StoredEmailEmbeddingGeneratorTests
         var store = new InMemoryEmailEmbeddingStore();
         store.AddPassages(Message, CreatePassages(callBudget + 5));
         var textEmbeddingGenerator = new ScriptedTextEmbeddingGenerator(CreateIdentity(), maximumPassagesPerCall: 1);
-        var generator = CreateGenerator(store, CreateProfile(), textEmbeddingGenerator);
+        var generator = CreateGenerator(store, textEmbeddingGenerator);
 
         // Act
-        var run = await generator.EmbedAsync(Message, TestContext.Current.CancellationToken);
+        var run = await generator.EmbedAsync(Message, CreateProfile(), TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(StoredEmailEmbeddingOutcome.CallBudgetExhausted, run.Outcome);
@@ -207,10 +213,10 @@ public sealed class StoredEmailEmbeddingGeneratorTests
         var store = new InMemoryEmailEmbeddingStore();
         store.AddPassages(Message, CreatePassages(callBudget));
         var textEmbeddingGenerator = new ScriptedTextEmbeddingGenerator(CreateIdentity(), maximumPassagesPerCall: 1);
-        var generator = CreateGenerator(store, CreateProfile(), textEmbeddingGenerator);
+        var generator = CreateGenerator(store, textEmbeddingGenerator);
 
         // Act
-        var run = await generator.EmbedAsync(Message, TestContext.Current.CancellationToken);
+        var run = await generator.EmbedAsync(Message, CreateProfile(), TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(StoredEmailEmbeddingOutcome.Embedded, run.Outcome);
@@ -229,11 +235,11 @@ public sealed class StoredEmailEmbeddingGeneratorTests
         {
             CancelOnCall = cancellation,
         };
-        var generator = CreateGenerator(store, CreateProfile(), textEmbeddingGenerator);
+        var generator = CreateGenerator(store, textEmbeddingGenerator);
 
         // Act
         var cancelled = await Assert.ThrowsAnyAsync<OperationCanceledException>(
-            () => generator.EmbedAsync(Message, cancellation.Token));
+            () => generator.EmbedAsync(Message, CreateProfile(), cancellation.Token));
 
         // Assert
         Assert.Equal(cancellation.Token, cancelled.CancellationToken);
@@ -254,31 +260,22 @@ public sealed class StoredEmailEmbeddingGeneratorTests
             EmbeddingDistanceMetric.Cosine,
             EmbeddingInputPreparation.Create(2_000, passageInstruction: null, normalizesVector: true));
 
-    private static ActiveEmbeddingProfile CreateProfile() => new(ProfileId, CreateIdentity());
+    private static RegisteredEmbeddingProfile CreateProfile() => new(ProfileId, CreateIdentity());
 
     private static StoredEmailEmbeddingGenerator CreateGenerator(
         IEmailEmbeddingStore store,
-        ActiveEmbeddingProfile? activeProfile,
         int maximumPassagesPerCall) =>
-        CreateGenerator(
-            store,
-            activeProfile,
-            new ScriptedTextEmbeddingGenerator(CreateIdentity(), maximumPassagesPerCall));
+        CreateGenerator(store, new ScriptedTextEmbeddingGenerator(CreateIdentity(), maximumPassagesPerCall));
 
     private static StoredEmailEmbeddingGenerator CreateGenerator(
         IEmailEmbeddingStore store,
-        ActiveEmbeddingProfile? activeProfile,
         ITextEmbeddingGenerator textEmbeddingGenerator)
     {
-        var profileReader = Substitute.For<IActiveEmbeddingProfileReader>();
-        profileReader.FindActiveProfileAsync(Arg.Any<CancellationToken>()).Returns(activeProfile);
-
         var sessionFactory = Substitute.For<IPersistenceSessionFactory>();
         sessionFactory.BeginSessionAsync(Arg.Any<CancellationToken>())
             .Returns(_ => Substitute.For<IPersistenceSession>());
 
         return new StoredEmailEmbeddingGenerator(
-            profileReader,
             store,
             textEmbeddingGenerator,
             new OptimisticConcurrencyRetryPolicy(

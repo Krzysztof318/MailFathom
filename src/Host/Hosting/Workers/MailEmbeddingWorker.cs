@@ -74,8 +74,7 @@ internal sealed partial class MailEmbeddingWorker : BackgroundService
         {
             using var scope = this.scopeFactory.CreateScope();
 
-            var generator = scope.ServiceProvider.GetRequiredService<StoredEmailEmbeddingGenerator>();
-            var run = await generator.EmbedAsync(storedEmailId, cancellationToken);
+            var run = await EmbedIntoServingGenerationAsync(scope.ServiceProvider, storedEmailId, cancellationToken);
 
             this.telemetry.RecordEmbeddedMessage(run, this.timeProvider.GetElapsedTime(startingTimestamp));
             this.Report(run);
@@ -92,6 +91,29 @@ internal sealed partial class MailEmbeddingWorker : BackgroundService
         {
             this.LogMessageFailed(exception);
         }
+    }
+
+    /// <summary>Embeds one message into the generation searches are answered from, if there is one.</summary>
+    /// <remarks>
+    /// The generation serving searches rather than one being built, which is what keeps mail arriving during a reindex
+    /// searchable the moment it is stored. The reindex reaches the same message for the new generation before the count
+    /// that completes it can read zero, so nothing is lost by leaving it to the sweep.
+    /// </remarks>
+    private static async Task<StoredEmailEmbeddingRun> EmbedIntoServingGenerationAsync(
+        IServiceProvider scopedServices,
+        StoredEmailId storedEmailId,
+        CancellationToken cancellationToken)
+    {
+        var profileReader = scopedServices.GetRequiredService<IActiveEmbeddingProfileReader>();
+        var serving = await profileReader.FindActiveProfileAsync(cancellationToken);
+        if (serving is null)
+        {
+            return StoredEmailEmbeddingRun.NoActiveProfile();
+        }
+
+        var generator = scopedServices.GetRequiredService<StoredEmailEmbeddingGenerator>();
+
+        return await generator.EmbedAsync(storedEmailId, serving, cancellationToken);
     }
 
     /// <summary>Says what the outcome means for an operator, at the level that outcome deserves.</summary>

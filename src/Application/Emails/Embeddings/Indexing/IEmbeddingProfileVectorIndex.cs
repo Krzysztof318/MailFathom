@@ -33,7 +33,7 @@ public interface IEmbeddingProfileVectorIndex
     /// </remarks>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="profile" /> is <see langword="null" />.</exception>
     /// <exception cref="EmbeddingVectorIndexFailedException">Thrown when the database refused to build the index.</exception>
-    Task EnsureBuiltAsync(ActiveEmbeddingProfile profile, CancellationToken cancellationToken);
+    Task EnsureBuiltAsync(RegisteredEmbeddingProfile profile, CancellationToken cancellationToken);
 
     /// <summary>Removes the approximate index belonging to one profile, if it has one.</summary>
     /// <param name="profileId">The profile whose index is to go.</param>

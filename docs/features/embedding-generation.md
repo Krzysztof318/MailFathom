@@ -34,6 +34,9 @@ decision nobody was shown.
 **An operator who edits the model and expects the change to take effect has to know that it did not.** The activation
 command is what makes it so, and it is deliberately not automatic.
 
+What an activation then does — build a new generation beside the one still answering searches, switch to it once, and
+remove what it replaced — is [changing the embedding model](../operations/embedding-profiles.md).
+
 ## What a declaration says
 
 Each entry of `Embeddings:Endpoints` declares a whole geometry — provider, model, model version, dimension, distance

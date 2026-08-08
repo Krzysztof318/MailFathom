@@ -304,7 +304,7 @@ public sealed class SemanticEmailSearchTests
 
     private static SemanticEmailSearch SearchOver(
         InMemoryEmailVectorSearchIndex vectorIndex,
-        ActiveEmbeddingProfile? profile,
+        RegisteredEmbeddingProfile? profile,
         ScriptedTextEmbeddingGenerator? generator,
         AiProviderHealthState providerState = AiProviderHealthState.Serving) => new(
         ProfileReaderReturning(profile),
@@ -313,9 +313,9 @@ public sealed class SemanticEmailSearchTests
         new FakeTimeProvider(Now),
         generator);
 
-    private static ActiveEmbeddingProfile ActiveProfile() => new(ProfileId, Identity());
+    private static RegisteredEmbeddingProfile ActiveProfile() => new(ProfileId, Identity());
 
-    private static IActiveEmbeddingProfileReader ProfileReaderReturning(ActiveEmbeddingProfile? profile)
+    private static IActiveEmbeddingProfileReader ProfileReaderReturning(RegisteredEmbeddingProfile? profile)
     {
         var reader = Substitute.For<IActiveEmbeddingProfileReader>();
         reader.FindActiveProfileAsync(Arg.Any<CancellationToken>()).Returns(profile);

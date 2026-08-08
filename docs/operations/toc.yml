@@ -25,6 +25,8 @@
       href: deployment-kubernetes.md
     - name: Applying the database schema
       href: database-schema.md
+    - name: Changing the embedding model
+      href: embedding-profiles.md
 - name: Endpoints
   items:
     - name: The MCP endpoint

@@ -175,6 +175,36 @@ public sealed class EmbeddingSchemaModelTests
             index.Properties.Select(property => property.Name));
     }
 
+    /// <summary>
+    /// Two rows claiming to serve would leave retrieval reading whichever one a query returned, with half the vectors
+    /// in the table unreachable and nothing about the answers saying so. The index is partial to the two states that
+    /// admit one row each, because a deployment accumulates one superseded row per model it has ever used.
+    /// </summary>
+    [Fact]
+    public void EmbeddingProfileModel_Lifecycle_AdmitsOneGenerationBeingBuiltAndOneBeingRead()
+    {
+        // Arrange
+        using var context = CreateContext();
+
+        // Act
+        var index = EntityType<EmbeddingProfileEntity>(context)
+            .GetIndexes()
+            .FirstOrDefault(candidate =>
+                candidate.GetDatabaseName() == MailFathomDbContext.EmbeddingProfileLifecycleUniqueIndexName);
+
+        // Assert
+        Assert.NotNull(index);
+        Assert.True(index.IsUnique);
+        Assert.Equal(
+            [nameof(EmbeddingProfileEntity.LifecycleState)],
+            index.Properties.Select(property => property.Name));
+
+        // The filter names the values the column stores, which are the enum member names rather than their numbers.
+        Assert.Equal(
+            "\"LifecycleState\" IN ('Building', 'Active')",
+            index.GetFilter());
+    }
+
     /// <summary>The fingerprint column is the digest's own shape, so a value of any other width cannot be written at all.</summary>
     [Fact]
     public void EmbeddingProfileModel_Fingerprint_IsFixedAtTheDigestLength()
