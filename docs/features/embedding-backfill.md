@@ -1,6 +1,6 @@
 # Embedding backfill
 
-<!-- describes: src/Application/Emails/Embeddings/Backfill/**, src/Infrastructure/Persistence/Embeddings/StoredEmailEmbeddingBackfillStore.cs, src/Infrastructure/Observability/EmailEmbeddingBackfillTelemetry.cs, src/Host/Configuration/Embeddings/EmbeddingBackfillOptions.cs, src/Host/Hosting/Workers/MailEmbeddingBackfillWorker.cs -->
+<!-- describes: src/Application/Emails/Embeddings/Backfill/**, src/Application/Emails/Embeddings/Generations/EmbeddingGenerationUpkeep.cs, src/Infrastructure/Persistence/Embeddings/StoredEmailEmbeddingBackfillStore.cs, src/Infrastructure/Observability/EmailEmbeddingBackfillTelemetry.cs, src/Host/Configuration/Embeddings/EmbeddingBackfillOptions.cs, src/Host/Hosting/Workers/MailEmbeddingBackfillWorker.cs -->
 
 [Automatic embedding](automatic-embedding.md) covers mail as it arrives. An instance that has been synchronizing for
 months has everything else, and for that mail the live path never runs at all — nothing revisits a message that was
@@ -9,6 +9,18 @@ provider was full.
 
 This is the walk that reaches it. Nothing here is a command anybody runs either: activating a profile is what starts
 it, the same fact that starts the live path.
+
+## Which generation it walks towards
+
+One, and the caller decides which: the generation being built where a model change is under way, and otherwise the one
+searches are answered from. The same walk therefore does both jobs — filling the gaps in the generation that is serving,
+and building a new one from nothing beside it — because they are the same question asked of two profiles.
+[Changing the embedding model](../operations/embedding-profiles.md) is the operator's view of the second.
+
+Two more things ride the same pass, in the same order every time it runs. When the sweep finishes and nothing is
+outstanding for a generation that is being built, that generation becomes the one searches are answered from, in one
+transaction. And a generation that a switch replaced has its vectors removed, a bounded batch per pass, until it holds
+none.
 
 ## What it reaches, and in which order
 
@@ -19,9 +31,9 @@ Two conditions select a message, and they are the two halves of what a pre-exist
   already stored, which costs a database write and no provider call and reaches no mail server. The rules applied are
   the ones synchronization applies, so a message this walk reaches ends up cut exactly as the same message arriving
   today would be.
-- **A message with a passage that carries no vector** under the active profile was stored before the profile was
-  activated, or was turned away by `Embeddings:MaxQueuedEmails`, or was left part-way through by a provider call that
-  failed.
+- **A message with a passage that carries no vector** under the generation being walked towards was stored before that
+  generation existed, or was turned away by `Embeddings:MaxQueuedEmails`, or was left part-way through by a provider
+  call that failed. For a generation being built from nothing, that is every message the instance holds.
 
 A message a tombstone hides is in neither group. Vectors nothing may retrieve are a provider bill with no reader. A
 message whose local copy was deliberately kept after MailFathom deleted it on the server is not that: nothing may
@@ -78,10 +90,15 @@ every passage the instance holds.
 embedded, and what has not is found again by the same question whenever it is turned back on.
 [Configuration reference](../operations/configuration-reference.md#embeddingbackfill) holds the defaults and the ranges.
 
-An instance that has activated no profile runs the walk and reaches no mail: there is no vector space for a passage to
-be missing from, so the run ends before it reads a message. An instance whose configured model is not the one the
-active profile records writes nothing and warns, for the reason
+An instance that has activated no profile reaches no mail: there is no vector space for a passage to be missing from,
+so the pass ends before it reads a message. An instance whose configured model is not the one the generation records
+writes nothing and warns, for the reason
 [an edited declaration](automatic-embedding.md#an-edited-declaration-that-nobody-activated) gives.
+
+The removal of a superseded generation's vectors is bounded too, and it is not a setting: it deletes rows nobody reads,
+reaches no provider, and costs nothing an operator has to consent to, so what paces it is the interval between passes
+rather than a number beside the ones above. A pass that removed a full batch is followed by the short interval, because
+there is more of that generation behind it.
 
 ## What an operator can see
 
@@ -93,12 +110,18 @@ active profile records writes nothing and warns, for the reason
 | `mailfathom.embedding.backfill.messages` | Messages brought up to date with the active profile |
 | `mailfathom.embedding.backfill.passages` | Passages given a vector |
 | `mailfathom.embedding.backfill.exhausted` | Messages left part-way through because one turn spent every provider call it is allowed |
+| `mailfathom.embedding.generation.switches` | Generations that finished being built and became the one searches are answered from |
+| `mailfathom.embedding.generation.removed` | Vectors of a superseded generation removed after a switch |
 
 The outstanding count is measured once at the start of a sweep and held until the next sweep measures again, so the
 gauge is a figure a sweep established rather than a live one. That is deliberate: an exact live count is an unbounded
 scan over every passage, and making it a gauge would put that scan on whatever interval a collector happened to be
 configured with. The counters beside it are what move in between, so progress is read as those rising against the
 figure the sweep started from.
+
+The switch is counted rather than published as a state, because what an operator asks of it afterwards is when it
+happened and how many have. A gauge naming the generation now serving would be a dimension of unbounded cardinality for
+a value the log line about the switch already carries.
 
 Nothing on that list is derived from mail. The tags are an outcome name and a failure classification, both of them
 MailFathom's own closed sets; no message identity, passage, or vector reaches a log, a metric, or a trace, and a log

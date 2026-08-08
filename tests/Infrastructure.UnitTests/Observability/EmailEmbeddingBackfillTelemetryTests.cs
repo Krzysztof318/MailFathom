@@ -4,6 +4,7 @@
 
 using MailFathom.Application.Emails.Embeddings;
 using MailFathom.Application.Emails.Embeddings.Backfill;
+using MailFathom.Application.Emails.Embeddings.Generations;
 using MailFathom.Infrastructure.Observability;
 using MailFathom.Infrastructure.UnitTests.TestDoubles;
 using Xunit;
@@ -24,13 +25,17 @@ public sealed class EmailEmbeddingBackfillTelemetryTests
 
     private const string OutstandingGauge = "mailfathom.embedding.backfill.outstanding";
 
+    private const string SwitchCountInstrument = "mailfathom.embedding.generation.switches";
+
+    private const string RemovedVectorInstrument = "mailfathom.embedding.generation.removed";
+
     /// <summary>
     /// The tag strings are what an operator splits the series on to tell a sweep that finished from one a provider
     /// refused, so a swapped or mistyped value would mislabel that split rather than fail. Every value of both closed
     /// sets is driven through the mapping here.
     /// </summary>
     [Fact]
-    public void RecordRun_EveryOutcomeAndFailure_TagsTheSeriesWithTheNameThatOutcomeIsReadBy()
+    public void RecordPass_EveryOutcomeAndFailure_TagsTheSeriesWithTheNameThatOutcomeIsReadBy()
     {
         // Arrange
         var telemetry = new EmailEmbeddingBackfillTelemetry();
@@ -58,7 +63,7 @@ public sealed class EmailEmbeddingBackfillTelemetryTests
 
     /// <summary>Every run counts as exactly one, whatever it produced, or the series would count work instead of runs.</summary>
     [Fact]
-    public void RecordRun_AnyOutcome_CountsTheRunOnce()
+    public void RecordPass_AnyOutcome_CountsTheRunOnce()
     {
         // Arrange
         var telemetry = new EmailEmbeddingBackfillTelemetry();
@@ -77,7 +82,7 @@ public sealed class EmailEmbeddingBackfillTelemetryTests
     /// that is working through a mailbox.
     /// </summary>
     [Fact]
-    public void RecordRun_ProgressCounters_RecordWhatMovedAndNothingForARunThatProducedNone()
+    public void RecordPass_ProgressCounters_RecordWhatMovedAndNothingForARunThatProducedNone()
     {
         // Arrange
         var telemetry = new EmailEmbeddingBackfillTelemetry();
@@ -88,13 +93,13 @@ public sealed class EmailEmbeddingBackfillTelemetryTests
             ExhaustedCountInstrument);
 
         // Act
-        telemetry.RecordRun(CreateResult(
+        RecordSweep(telemetry, CreateResult(
             StoredEmailEmbeddingBackfillOutcome.BatchBudgetSpent,
             chunkedEmailCount: 2,
             embeddedEmailCount: 5,
             embeddedChunkCount: 31,
             callBudgetExhaustedEmailCount: 1));
-        telemetry.RecordRun(CreateResult(StoredEmailEmbeddingBackfillOutcome.SweepCompleted));
+        RecordSweep(telemetry, CreateResult(StoredEmailEmbeddingBackfillOutcome.SweepCompleted));
 
         // Assert
         Assert.Equal([2], measurements.ValuesOf(ChunkedCountInstrument));
@@ -110,19 +115,19 @@ public sealed class EmailEmbeddingBackfillTelemetryTests
     /// established and a run resuming one leaves it alone rather than publishing nothing.
     /// </summary>
     [Fact]
-    public void RecordRun_ASweepStarts_HoldsItsOutstandingCountUntilTheNextSweepMeasuresAgain()
+    public void RecordPass_ASweepStarts_HoldsItsOutstandingCountUntilTheNextSweepMeasuresAgain()
     {
         // Arrange
         var telemetry = new EmailEmbeddingBackfillTelemetry();
         using var measurements = new RecordedMailFathomMeasurements(OutstandingGauge);
 
         // Act
-        telemetry.RecordRun(CreateResult(
+        RecordSweep(telemetry, CreateResult(
             StoredEmailEmbeddingBackfillOutcome.BatchBudgetSpent,
             outstandingEmailCountAtSweepStart: 412));
         measurements.ObserveGauges();
 
-        telemetry.RecordRun(CreateResult(StoredEmailEmbeddingBackfillOutcome.BatchBudgetSpent));
+        RecordSweep(telemetry, CreateResult(StoredEmailEmbeddingBackfillOutcome.BatchBudgetSpent));
         measurements.ObserveGauges();
 
         // Assert
@@ -130,6 +135,33 @@ public sealed class EmailEmbeddingBackfillTelemetryTests
         // of this name that is still alive on the process-wide meter and still answers for its own sweep, so one
         // observation records several numbers and only this one's is the figure under test.
         Assert.Equal(2, measurements.ValuesOf(OutstandingGauge).Count(outstanding => outstanding == 412));
+    }
+
+    /// <summary>
+    /// The switch and the removal are what an operator watching a model change reads, and they are counted rather than
+    /// published as a state: a gauge naming the current generation would be a dimension of unbounded cardinality for a
+    /// value one log line already carries.
+    /// </summary>
+    [Fact]
+    public void RecordPass_APassThatSwitchedAndRemoved_CountsBothAgainstTheirOwnInstruments()
+    {
+        // Arrange
+        var telemetry = new EmailEmbeddingBackfillTelemetry();
+        using var measurements = new RecordedMailFathomMeasurements(SwitchCountInstrument, RemovedVectorInstrument);
+
+        // Act
+        telemetry.RecordPass(new EmbeddingGenerationUpkeepResult(
+            CreateResult(StoredEmailEmbeddingBackfillOutcome.SweepCompleted),
+            EmbeddingGenerationTransition.Switched,
+            RemovedSupersededVectorCount: 4_000));
+        telemetry.RecordPass(new EmbeddingGenerationUpkeepResult(
+            CreateResult(StoredEmailEmbeddingBackfillOutcome.SweepCompleted),
+            EmbeddingGenerationTransition.None,
+            RemovedSupersededVectorCount: 0));
+
+        // Assert
+        Assert.Equal([1], measurements.ValuesOf(SwitchCountInstrument));
+        Assert.Equal([4_000], measurements.ValuesOf(RemovedVectorInstrument));
     }
 
     /// <summary>Drives one run of every shape the backfill can end in, in the order the outcomes are declared.</summary>
@@ -149,9 +181,22 @@ public sealed class EmailEmbeddingBackfillTelemetryTests
 
         foreach (var result in results)
         {
-            telemetry.RecordRun(result);
+            RecordSweep(telemetry, result);
         }
     }
+
+    /// <summary>Records a pass whose sweep is the one under test and which changed no generation.</summary>
+    /// <remarks>
+    /// The sweep's own instruments are what most of these tests are about, and wrapping the result here keeps each of
+    /// them stating the sweep it drives rather than the two fields it does not care about.
+    /// </remarks>
+    private static void RecordSweep(
+        EmailEmbeddingBackfillTelemetry telemetry,
+        StoredEmailEmbeddingBackfillResult sweep) =>
+        telemetry.RecordPass(new EmbeddingGenerationUpkeepResult(
+            sweep,
+            EmbeddingGenerationTransition.None,
+            RemovedSupersededVectorCount: 0));
 
     private static StoredEmailEmbeddingBackfillResult CreateResult(
         StoredEmailEmbeddingBackfillOutcome outcome,

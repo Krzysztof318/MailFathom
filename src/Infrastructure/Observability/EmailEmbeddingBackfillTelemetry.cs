@@ -6,6 +6,7 @@ using System.Diagnostics;
 using System.Diagnostics.Metrics;
 using MailFathom.Application.Emails.Embeddings;
 using MailFathom.Application.Emails.Embeddings.Backfill;
+using MailFathom.Application.Emails.Embeddings.Generations;
 using MailFathom.Common.Observability;
 
 namespace MailFathom.Infrastructure.Observability;
@@ -40,6 +41,8 @@ public sealed class EmailEmbeddingBackfillTelemetry
     private readonly Counter<long> embeddedEmailCount;
     private readonly Counter<long> passageCount;
     private readonly Counter<long> callBudgetExhaustedEmailCount;
+    private readonly Counter<long> generationSwitchCount;
+    private readonly Counter<long> removedSupersededVectorCount;
     private int outstandingEmailCount;
 
     /// <summary>Initializes the instruments every backfill run reports through.</summary>
@@ -65,6 +68,14 @@ public sealed class EmailEmbeddingBackfillTelemetry
             "mailfathom.embedding.backfill.exhausted",
             unit: "{message}",
             description: "Messages the backfill left part-way through because one turn spent every provider call it is allowed.");
+        this.generationSwitchCount = Telemetry.Meter.CreateCounter<long>(
+            "mailfathom.embedding.generation.switches",
+            unit: "{switch}",
+            description: "Generations that finished being built and became the one searches are answered from.");
+        this.removedSupersededVectorCount = Telemetry.Meter.CreateCounter<long>(
+            "mailfathom.embedding.generation.removed",
+            unit: "{vector}",
+            description: "Vectors of a superseded generation removed after a switch.");
         Telemetry.Meter.CreateObservableGauge(
             "mailfathom.embedding.backfill.outstanding",
             () => Volatile.Read(ref this.outstandingEmailCount),
@@ -72,13 +83,33 @@ public sealed class EmailEmbeddingBackfillTelemetry
             description: "Messages awaiting embedding when the current sweep began.");
     }
 
-    /// <summary>Records one bounded pass of the backfill.</summary>
-    /// <param name="result">What the pass produced and why it ended.</param>
+    /// <summary>Records one bounded upkeep pass: its sweep, its switch, and what it removed.</summary>
+    /// <param name="result">What the pass produced.</param>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="result" /> is <see langword="null" />.</exception>
-    public void RecordRun(StoredEmailEmbeddingBackfillResult result)
+    /// <remarks>
+    /// The switch is a counter rather than a state, because what an operator asks of it afterwards is when it happened
+    /// and how many have — and a gauge of the current generation would publish an identifier, which is a dimension of
+    /// unbounded cardinality for a value one log line already carries.
+    /// </remarks>
+    public void RecordPass(EmbeddingGenerationUpkeepResult result)
     {
         ArgumentNullException.ThrowIfNull(result);
 
+        this.RecordSweep(result.Sweep);
+
+        if (result.Transition == EmbeddingGenerationTransition.Switched)
+        {
+            this.generationSwitchCount.Add(1);
+        }
+
+        if (result.RemovedSupersededVectorCount > 0)
+        {
+            this.removedSupersededVectorCount.Add(result.RemovedSupersededVectorCount);
+        }
+    }
+
+    private void RecordSweep(StoredEmailEmbeddingBackfillResult result)
+    {
         var tags = new TagList
         {
             { OutcomeTagName, OutcomeTagOf(result.Outcome) },

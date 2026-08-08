@@ -45,8 +45,36 @@ public sealed class OptimisticConcurrencyRetryPolicy
     /// <returns>A task that completes once one attempt has committed.</returns>
     /// <exception cref="PersistenceConcurrencyConflictException">Thrown when every allowed attempt conflicted.</exception>
     /// <exception cref="OperationCanceledException">Thrown when the caller cancels before or between attempts.</exception>
-    public async Task CommitAsync(
+    public Task CommitAsync(
         Func<IPersistenceSession, CancellationToken, Task> stageChangesAsync,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(stageChangesAsync);
+
+        return this.CommitAsync<object?>(
+            async (session, attemptCancellationToken) =>
+            {
+                await stageChangesAsync(session, attemptCancellationToken);
+
+                return null;
+            },
+            cancellationToken);
+    }
+
+    /// <summary>Stages and commits a complete local write that answers with what it wrote.</summary>
+    /// <typeparam name="TResult">What the write answers with.</typeparam>
+    /// <param name="stageChangesAsync">Stages the complete idempotent local write in the supplied session and answers with its result.</param>
+    /// <param name="cancellationToken">Cancels session creation, staging, commit, or a subsequent retry.</param>
+    /// <returns>What the attempt that committed produced.</returns>
+    /// <exception cref="PersistenceConcurrencyConflictException">Thrown when every allowed attempt conflicted.</exception>
+    /// <exception cref="OperationCanceledException">Thrown when the caller cancels before or between attempts.</exception>
+    /// <remarks>
+    /// The result of an attempt that did not commit is discarded, which is the whole reason this exists rather than a
+    /// caller assigning to a captured local: a variable written by the losing attempt keeps its value, so code reading
+    /// it after a conflict would be reading a row that was rolled back.
+    /// </remarks>
+    public async Task<TResult> CommitAsync<TResult>(
+        Func<IPersistenceSession, CancellationToken, Task<TResult>> stageChangesAsync,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(stageChangesAsync);
@@ -56,11 +84,11 @@ public sealed class OptimisticConcurrencyRetryPolicy
             cancellationToken.ThrowIfCancellationRequested();
 
             await using var session = await this.sessionFactory.BeginSessionAsync(cancellationToken);
-            await stageChangesAsync(session, cancellationToken);
+            var result = await stageChangesAsync(session, cancellationToken);
 
             if (await session.CommitAsync(cancellationToken) == PersistenceCommitResult.Committed)
             {
-                return;
+                return result;
             }
 
             if (attemptNumber < this.maximumAttempts)

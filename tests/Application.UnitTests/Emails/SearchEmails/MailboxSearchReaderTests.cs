@@ -542,7 +542,7 @@ public sealed class MailboxSearchReaderTests
         var identity = ProfileIdentity();
         var profileReader = Substitute.For<IActiveEmbeddingProfileReader>();
         profileReader.FindActiveProfileAsync(Arg.Any<CancellationToken>())
-            .Returns(new ActiveEmbeddingProfile(ProfileId, identity));
+            .Returns(new RegisteredEmbeddingProfile(ProfileId, identity));
 
         return new SemanticEmailSearch(
             profileReader,

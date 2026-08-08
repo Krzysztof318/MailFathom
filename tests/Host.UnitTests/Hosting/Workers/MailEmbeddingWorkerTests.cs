@@ -50,7 +50,7 @@ public sealed class MailEmbeddingWorkerTests
         profileReader.FindActiveProfileAsync(Arg.Any<CancellationToken>())
             .Returns(
                 _ => throw new InvalidOperationException("the database is unavailable"),
-                _ => Task.FromResult<ActiveEmbeddingProfile?>(CreateProfile()));
+                _ => Task.FromResult<RegisteredEmbeddingProfile?>(CreateProfile()));
         var embeddingStore = CreateStoreWithNothingOutstanding();
         using var worker = CreateWorker(messages, profileReader, embeddingStore, out var logger);
 
@@ -102,10 +102,10 @@ public sealed class MailEmbeddingWorkerTests
         EmbeddingDistanceMetric.Cosine,
         EmbeddingInputPreparation.Create(2_000, passageInstruction: null, normalizesVector: true));
 
-    private static ActiveEmbeddingProfile CreateProfile() =>
+    private static RegisteredEmbeddingProfile CreateProfile() =>
         new(EmbeddingProfileId.Create(Guid.CreateVersion7()), Identity);
 
-    private static IActiveEmbeddingProfileReader CreateProfileReader(ActiveEmbeddingProfile? profile)
+    private static IActiveEmbeddingProfileReader CreateProfileReader(RegisteredEmbeddingProfile? profile)
     {
         var reader = Substitute.For<IActiveEmbeddingProfileReader>();
         reader.FindActiveProfileAsync(Arg.Any<CancellationToken>()).Returns(profile);

@@ -33,6 +33,21 @@ public sealed record StoredEmailEmbeddingBackfillResult(
     int? OutstandingEmailCountAtSweepStart,
     EmbeddingGenerationFailure? Failure)
 {
+    /// <summary>The pass an instance that has registered no generation performs, which reaches nothing and spends nothing.</summary>
+    /// <remarks>
+    /// Reported by whatever decides which generation a pass walks towards rather than by the walk, which is never
+    /// started without one. It is a result rather than an absence of one because the worker records and paces every
+    /// pass alike, and a pass that found no generation is a fact about the instance an operator reads here.
+    /// </remarks>
+    public static StoredEmailEmbeddingBackfillResult NoActiveProfile { get; } = new(
+        StoredEmailEmbeddingBackfillOutcome.NoActiveProfile,
+        ChunkedEmailCount: 0,
+        EmbeddedEmailCount: 0,
+        EmbeddedChunkCount: 0,
+        CallBudgetExhaustedEmailCount: 0,
+        OutstandingEmailCountAtSweepStart: null,
+        Failure: null);
+
     /// <summary>Gets whether running again shortly would reach work this run could not.</summary>
     /// <remarks>
     /// <para>

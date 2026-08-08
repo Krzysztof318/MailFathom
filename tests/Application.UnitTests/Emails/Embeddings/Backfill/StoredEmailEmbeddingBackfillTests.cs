@@ -29,7 +29,7 @@ public sealed class StoredEmailEmbeddingBackfillTests
         var backfill = world.CreateBackfill();
 
         // Act
-        var result = await backfill.RunAsync(TestContext.Current.CancellationToken);
+        var result = await backfill.RunAsync(world.Target, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(StoredEmailEmbeddingBackfillOutcome.SweepCompleted, result.Outcome);
@@ -53,7 +53,7 @@ public sealed class StoredEmailEmbeddingBackfillTests
         var backfill = world.CreateBackfill();
 
         // Act
-        var result = await backfill.RunAsync(TestContext.Current.CancellationToken);
+        var result = await backfill.RunAsync(world.Target, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(0, result.ChunkedEmailCount);
@@ -72,7 +72,7 @@ public sealed class StoredEmailEmbeddingBackfillTests
         var backfill = world.CreateBackfill(batchSize: 3, maxBatchesPerRun: 2);
 
         // Act
-        var result = await backfill.RunAsync(TestContext.Current.CancellationToken);
+        var result = await backfill.RunAsync(world.Target, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(StoredEmailEmbeddingBackfillOutcome.BatchBudgetSpent, result.Outcome);
@@ -91,9 +91,9 @@ public sealed class StoredEmailEmbeddingBackfillTests
         var backfill = world.CreateBackfill(batchSize: 3, maxBatchesPerRun: 1);
 
         // Act
-        var firstRun = await backfill.RunAsync(TestContext.Current.CancellationToken);
+        var firstRun = await backfill.RunAsync(world.Target, TestContext.Current.CancellationToken);
         var positionAfterFirstRun = world.BackfillStore.SavedPositions[^1];
-        var secondRun = await backfill.RunAsync(TestContext.Current.CancellationToken);
+        var secondRun = await backfill.RunAsync(world.Target, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.True(firstRun.MoreWorkIsWorthTryingSoon);
@@ -113,9 +113,9 @@ public sealed class StoredEmailEmbeddingBackfillTests
         var backfill = world.CreateBackfill();
 
         // Act
-        var firstRun = await backfill.RunAsync(TestContext.Current.CancellationToken);
+        var firstRun = await backfill.RunAsync(world.Target, TestContext.Current.CancellationToken);
         var callsAfterFirstRun = world.TextEmbeddingGenerator.RequestedBatches.Count;
-        var secondRun = await backfill.RunAsync(TestContext.Current.CancellationToken);
+        var secondRun = await backfill.RunAsync(world.Target, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(8, firstRun.EmbeddedChunkCount);
@@ -134,7 +134,7 @@ public sealed class StoredEmailEmbeddingBackfillTests
         var backfill = world.CreateBackfill();
 
         // Act
-        var result = await backfill.RunAsync(TestContext.Current.CancellationToken);
+        var result = await backfill.RunAsync(world.Target, TestContext.Current.CancellationToken);
         var resumePosition = await world.BackfillStore.FindResumePositionAsync(TestContext.Current.CancellationToken);
 
         // Assert
@@ -142,26 +142,6 @@ public sealed class StoredEmailEmbeddingBackfillTests
         Assert.False(result.MoreWorkIsWorthTryingSoon);
         Assert.Null(world.BackfillStore.SavedPositions[^1]);
         Assert.Null(resumePosition);
-    }
-
-    /// <summary>An instance that has activated no profile has no vector space to work towards, so nothing is spent.</summary>
-    [Fact]
-    public async Task RunAsync_NoActiveProfile_ReadsNoMailAndSpendsNothing()
-    {
-        // Arrange
-        var world = CreateWorld(profileActive: false);
-        AddMessagesAwaitingEmbedding(world, count: 3, passagesEach: 1);
-        var backfill = world.CreateBackfill();
-
-        // Act
-        var result = await backfill.RunAsync(TestContext.Current.CancellationToken);
-
-        // Assert
-        Assert.Equal(StoredEmailEmbeddingBackfillOutcome.NoActiveProfile, result.Outcome);
-        Assert.False(result.MoreWorkIsWorthTryingSoon);
-        Assert.Empty(world.BackfillStore.RequestedResumePositions);
-        Assert.Empty(world.TextEmbeddingGenerator.RequestedBatches);
-        Assert.Empty(world.BackfillStore.SavedPositions);
     }
 
     /// <summary>
@@ -177,7 +157,7 @@ public sealed class StoredEmailEmbeddingBackfillTests
         var backfill = world.CreateBackfill();
 
         // Act
-        var result = await backfill.RunAsync(TestContext.Current.CancellationToken);
+        var result = await backfill.RunAsync(world.Target, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(StoredEmailEmbeddingBackfillOutcome.GeneratorDisagreesWithProfile, result.Outcome);
@@ -215,7 +195,7 @@ public sealed class StoredEmailEmbeddingBackfillTests
         var backfill = world.CreateBackfill();
 
         // Act
-        var result = await backfill.RunAsync(TestContext.Current.CancellationToken);
+        var result = await backfill.RunAsync(world.Target, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(StoredEmailEmbeddingBackfillOutcome.ProviderFailed, result.Outcome);
@@ -245,7 +225,7 @@ public sealed class StoredEmailEmbeddingBackfillTests
         var backfill = world.CreateBackfill();
 
         // Act
-        var result = await backfill.RunAsync(TestContext.Current.CancellationToken);
+        var result = await backfill.RunAsync(world.Target, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(1, result.CallBudgetExhaustedEmailCount);
@@ -269,7 +249,7 @@ public sealed class StoredEmailEmbeddingBackfillTests
 
         // Act
         var cancelled = await Assert.ThrowsAnyAsync<OperationCanceledException>(
-            () => backfill.RunAsync(cancellation.Token));
+            () => backfill.RunAsync(world.Target, cancellation.Token));
 
         // Assert
         Assert.Equal(cancellation.Token, cancelled.CancellationToken);
@@ -290,8 +270,8 @@ public sealed class StoredEmailEmbeddingBackfillTests
         var backfill = world.CreateBackfill(batchSize: 2, maxBatchesPerRun: 1);
 
         // Act
-        var firstRun = await backfill.RunAsync(TestContext.Current.CancellationToken);
-        var secondRun = await backfill.RunAsync(TestContext.Current.CancellationToken);
+        var firstRun = await backfill.RunAsync(world.Target, TestContext.Current.CancellationToken);
+        var secondRun = await backfill.RunAsync(world.Target, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(5, firstRun.OutstandingEmailCountAtSweepStart);
@@ -327,20 +307,13 @@ public sealed class StoredEmailEmbeddingBackfillTests
 
     private static BackfillWorld CreateWorld(
         string generatorModelIdentifier = "a-model",
-        bool profileActive = true,
         int maximumPassagesPerCall = 8)
     {
-        var activeProfile = profileActive
-            ? new ActiveEmbeddingProfile(ProfileId, CreateIdentity("a-model"))
-            : null;
         var embeddingStore = new InMemoryEmailEmbeddingStore();
         var backfillStore = new InMemoryStoredEmailEmbeddingBackfillStore(embeddingStore);
         var textEmbeddingGenerator = new ScriptedTextEmbeddingGenerator(
             CreateIdentity(generatorModelIdentifier),
             maximumPassagesPerCall);
-
-        var profileReader = Substitute.For<IActiveEmbeddingProfileReader>();
-        profileReader.FindActiveProfileAsync(Arg.Any<CancellationToken>()).Returns(activeProfile);
 
         var sessionFactory = Substitute.For<IPersistenceSessionFactory>();
         sessionFactory.BeginSessionAsync(Arg.Any<CancellationToken>())
@@ -352,29 +325,27 @@ public sealed class StoredEmailEmbeddingBackfillTests
             new FakeTimeProvider());
 
         return new BackfillWorld(
+            new RegisteredEmbeddingProfile(ProfileId, CreateIdentity("a-model")),
             embeddingStore,
             backfillStore,
             textEmbeddingGenerator,
             new StoredEmailEmbeddingGenerator(
-                profileReader,
                 embeddingStore,
                 textEmbeddingGenerator,
                 concurrencyRetryPolicy),
-            profileReader,
             concurrencyRetryPolicy);
     }
 
     /// <summary>The mail, the vectors, and the collaborators one backfill run works against.</summary>
     private sealed record BackfillWorld(
+        RegisteredEmbeddingProfile Target,
         InMemoryEmailEmbeddingStore EmbeddingStore,
         InMemoryStoredEmailEmbeddingBackfillStore BackfillStore,
         ScriptedTextEmbeddingGenerator TextEmbeddingGenerator,
         StoredEmailEmbeddingGenerator EmbeddingGenerator,
-        IActiveEmbeddingProfileReader ProfileReader,
         OptimisticConcurrencyRetryPolicy ConcurrencyRetryPolicy)
     {
         public StoredEmailEmbeddingBackfill CreateBackfill(int batchSize = 50, int maxBatchesPerRun = 10) => new(
-            this.ProfileReader,
             this.BackfillStore,
             this.EmbeddingGenerator,
             this.ConcurrencyRetryPolicy,

@@ -19,5 +19,5 @@ public interface IActiveEmbeddingProfileReader
     /// <see langword="null" /> is an ordinary answer rather than a failure. An instance that has activated no profile
     /// embeds nothing, serves lexical search, and is a supported deployment.
     /// </remarks>
-    Task<ActiveEmbeddingProfile?> FindActiveProfileAsync(CancellationToken cancellationToken);
+    Task<RegisteredEmbeddingProfile?> FindActiveProfileAsync(CancellationToken cancellationToken);
 }

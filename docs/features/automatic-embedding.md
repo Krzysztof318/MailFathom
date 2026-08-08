@@ -40,15 +40,20 @@ question a restart, a repeat, and the backfill all ask.
 
 The worker takes one message at a time and, for that message:
 
-1. reads the active profile, and stops if there is none;
+1. reads the generation searches are answered from, and stops if there is none;
 2. refuses to write if the configured model is not the one that was activated — see below;
-3. reads the passages that have no vector under that profile, at most one provider call's worth;
+3. reads the passages that have no vector under that generation, at most one provider call's worth;
 4. asks the generator for their vectors;
 5. commits those vectors, and repeats from step 3 until nothing is outstanding or the turn's calls run out.
 
 Each call's vectors are committed together, so a crash leaves a whole page of passages embedded or none of it — never a
 message that looks finished and is not. Nothing about the message is remembered between turns, which is what makes
 offering one twice free: a message already current reads no passages, calls no provider, and writes nothing.
+
+**While a model change is under way, this path keeps writing into the generation that is serving** rather than into the
+one being built, so mail arriving during a reindex is searchable the moment it is stored. The reindex reaches the same
+message for the new generation before the count that completes it can read zero, so nothing is lost by leaving that to
+the sweep. [Changing the embedding model](../operations/embedding-profiles.md) describes the rest of the sequence.
 
 One turn is allowed a bounded number of provider calls. The bound exists so that a store reporting passages as
 outstanding and then storing nothing for them ends the turn instead of spending in a loop, and it is not claimed to be

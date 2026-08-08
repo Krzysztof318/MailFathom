@@ -5,6 +5,7 @@
 using System.Diagnostics.CodeAnalysis;
 using MailFathom.Application.Emails.Embeddings;
 using MailFathom.Application.Emails.Embeddings.Backfill;
+using MailFathom.Application.Emails.Embeddings.Generations;
 using MailFathom.Application.Persistence;
 using MailFathom.Host.Configuration.Embeddings;
 using MailFathom.Infrastructure.Observability;
@@ -12,8 +13,13 @@ using Microsoft.Extensions.Options;
 
 namespace MailFathom.Host.Hosting.Workers;
 
-/// <summary>Runs the embedding backfill in scoped work units, pacing itself by what the last run found.</summary>
+/// <summary>Runs the embedding upkeep pass in scoped work units, pacing itself by what the last one found.</summary>
 /// <remarks>
+/// <para>
+/// The pass is the backfill sweep and the two things that ride it: completing a generation the sweep has finished
+/// filling, and removing the vectors of one it replaced. They share this loop and its interval because they are one
+/// pipeline, and because each is bounded — the worker's job is to keep starting passes, not to decide what a pass does.
+/// </para>
 /// <para>
 /// Unlike the extraction backfill, this worker never ends itself. Its walk is a repeating sweep, because a message the
 /// live backlog's bound turned away and a message a refused provider call left part-way through both keep passages with
@@ -85,10 +91,10 @@ internal sealed partial class MailEmbeddingBackfillWorker : BackgroundService
         {
             using var scope = this.scopeFactory.CreateScope();
 
-            var backfill = scope.ServiceProvider.GetRequiredService<StoredEmailEmbeddingBackfill>();
-            var result = await backfill.RunAsync(cancellationToken);
+            var upkeep = scope.ServiceProvider.GetRequiredService<EmbeddingGenerationUpkeep>();
+            var result = await upkeep.RunAsync(cancellationToken);
 
-            this.telemetry.RecordRun(result);
+            this.telemetry.RecordPass(result);
             this.Report(result);
 
             return result.MoreWorkIsWorthTryingSoon ? this.settings.Interval : this.settings.IdleSweepInterval;
@@ -111,13 +117,33 @@ internal sealed partial class MailEmbeddingBackfillWorker : BackgroundService
         }
     }
 
-    /// <summary>Says what the run means for an operator, at the level that outcome deserves.</summary>
+    /// <summary>Says what the pass means for an operator, at the level each part of it deserves.</summary>
+    /// <remarks>
+    /// The switch and the removal are reported before the sweep, because they are the events an operator watching a
+    /// model change is waiting for and the sweep's own counters are what they have been reading in the meantime.
+    /// </remarks>
+    private void Report(EmbeddingGenerationUpkeepResult result)
+    {
+        if (result.Transition == EmbeddingGenerationTransition.Switched)
+        {
+            this.LogGenerationSwitched();
+        }
+
+        if (result.RemovedSupersededVectorCount > 0)
+        {
+            this.LogSupersededVectorsRemoved(result.RemovedSupersededVectorCount);
+        }
+
+        this.ReportSweep(result.Sweep);
+    }
+
+    /// <summary>Says what the walk part of the pass means for an operator, at the level that outcome deserves.</summary>
     /// <remarks>
     /// Progress and a completed sweep are ordinary, and an instance that has activated no profile is the state ADR 0006
     /// makes supported, so none of the three is a warning. The two that need an operator are a declaration disagreeing
     /// with what was activated and a provider that refused.
     /// </remarks>
-    private void Report(StoredEmailEmbeddingBackfillResult result)
+    private void ReportSweep(StoredEmailEmbeddingBackfillResult result)
     {
         switch (result.Outcome)
         {
@@ -199,6 +225,16 @@ internal sealed partial class MailEmbeddingBackfillWorker : BackgroundService
         Level = LogLevel.Information,
         Message = "The embedding backfill has reached the end of the stored mail; the next sweep starts from the beginning to pick up whatever a refused call or a full queue left behind.")]
     private partial void LogSweepCompleted();
+
+    [LoggerMessage(
+        Level = LogLevel.Information,
+        Message = "The generation being built is complete and is now the one searches are answered from; the generation it replaced is superseded and its vectors are being removed.")]
+    private partial void LogGenerationSwitched();
+
+    [LoggerMessage(
+        Level = LogLevel.Information,
+        Message = "Removed {RemovedVectorCount} vectors of a superseded generation; they are derived personal data whose purpose ended at the switch, so none of them is kept for a rollback.")]
+    private partial void LogSupersededVectorsRemoved(int removedVectorCount);
 
     [LoggerMessage(
         Level = LogLevel.Debug,

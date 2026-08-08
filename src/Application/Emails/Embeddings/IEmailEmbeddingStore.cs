@@ -48,7 +48,7 @@ public interface IEmailEmbeddingStore
     /// </remarks>
     Task SaveEmbeddingsAsync(
         IPersistenceSession session,
-        ActiveEmbeddingProfile profile,
+        RegisteredEmbeddingProfile profile,
         IReadOnlyList<GeneratedChunkEmbedding> embeddings,
         CancellationToken cancellationToken);
 }

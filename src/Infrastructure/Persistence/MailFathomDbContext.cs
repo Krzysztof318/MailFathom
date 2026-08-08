@@ -58,6 +58,15 @@ internal sealed class MailFathomDbContext : DbContext
     /// </remarks>
     internal const string EmbeddingProfileFingerprintUniqueIndexName = "ix_embedding_profiles_identity_fingerprint";
 
+    /// <summary>The index that admits one generation being built and one being read, and no second of either.</summary>
+    /// <remarks>
+    /// The guarantee is structural because the failure it prevents is silent: two rows claiming to serve would leave
+    /// retrieval reading whichever one a query happened to return, with half the vectors in the table unreachable and
+    /// nothing about the answers saying so. Superseded rows are outside the filter, because a deployment accumulates
+    /// one per model it has ever used.
+    /// </remarks>
+    internal const string EmbeddingProfileLifecycleUniqueIndexName = "ix_embedding_profiles_lifecycle_state";
+
     /// <summary>The alternate key a vector row's dimension is checked against.</summary>
     internal const string EmbeddingProfileDimensionAlternateKeyName = "ak_embedding_profiles_id_dimension";
 
@@ -608,6 +617,14 @@ internal sealed class MailFathomDbContext : DbContext
             entity.HasIndex(profile => profile.IdentityFingerprint)
                 .IsUnique()
                 .HasDatabaseName(EmbeddingProfileFingerprintUniqueIndexName);
+
+            // Unique over the state itself and partial to the two states that admit one row each, which is how one
+            // index expresses both halves of the invariant: at most one generation being built, and at most one being
+            // read. The literals are the enum member names because the column stores those names.
+            entity.HasIndex(profile => profile.LifecycleState)
+                .IsUnique()
+                .HasFilter($"\"LifecycleState\" IN ('{nameof(EmbeddingProfileLifecycleState.Building)}', '{nameof(EmbeddingProfileLifecycleState.Active)}')")
+                .HasDatabaseName(EmbeddingProfileLifecycleUniqueIndexName);
 
             entity.HasAlternateKey(profile => new { profile.Id, profile.Dimension })
                 .HasName(EmbeddingProfileDimensionAlternateKeyName);

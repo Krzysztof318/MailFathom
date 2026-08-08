@@ -8,7 +8,7 @@ using MailFathom.Domain.Emails;
 
 namespace MailFathom.Application.Emails.Embeddings.Backfill;
 
-/// <summary>Walks the mail an instance already had, giving it the passages and the vectors the live path never produced.</summary>
+/// <summary>Walks the stored mail, giving one generation the passages and the vectors it does not yet have.</summary>
 /// <remarks>
 /// <para>
 /// The work is bounded, idempotent, and restartable, and it is deliberately the same shape as the extraction backfill:
@@ -16,6 +16,11 @@ namespace MailFathom.Application.Emails.Embeddings.Backfill;
 /// message's turn commits is what the next run resumes from. What is outstanding is decided by the absence of a vector
 /// rather than remembered anywhere, so a run interrupted between two provider calls re-embeds nothing it already paid
 /// for.
+/// </para>
+/// <para>
+/// Which generation it walks towards is the caller's decision and never this type's. The same walk fills the mail a
+/// live path never reached under the generation now serving, and fills a new generation from nothing while the old one
+/// goes on answering searches — one mechanism, because the two are the same question asked of two profiles.
 /// </para>
 /// <para>
 /// Two things are outstanding here rather than one, and the order between them is the whole point: a message stored
@@ -33,61 +38,58 @@ namespace MailFathom.Application.Emails.Embeddings.Backfill;
 /// </remarks>
 public sealed class StoredEmailEmbeddingBackfill
 {
-    private readonly IActiveEmbeddingProfileReader profileReader;
     private readonly IStoredEmailEmbeddingBackfillStore backfillStore;
     private readonly StoredEmailEmbeddingGenerator embeddingGenerator;
     private readonly OptimisticConcurrencyRetryPolicy concurrencyRetryPolicy;
     private readonly StoredEmailEmbeddingBackfillOptions options;
 
     /// <summary>Initializes a new embedding backfill.</summary>
-    /// <param name="profileReader">Answers whether this instance embeds at all, and into which vector space.</param>
     /// <param name="backfillStore">Reads what remains and writes both the passages and the position a run produced.</param>
     /// <param name="embeddingGenerator">Brings one message up to date, which is the same unit of work the live worker performs.</param>
     /// <param name="concurrencyRetryPolicy">Commits a write, retrying a conflict with a competing writer.</param>
     /// <param name="options">Bounds one run.</param>
     /// <exception cref="ArgumentNullException">Thrown when any argument is <see langword="null" />.</exception>
     public StoredEmailEmbeddingBackfill(
-        IActiveEmbeddingProfileReader profileReader,
         IStoredEmailEmbeddingBackfillStore backfillStore,
         StoredEmailEmbeddingGenerator embeddingGenerator,
         OptimisticConcurrencyRetryPolicy concurrencyRetryPolicy,
         StoredEmailEmbeddingBackfillOptions options)
     {
-        ArgumentNullException.ThrowIfNull(profileReader);
         ArgumentNullException.ThrowIfNull(backfillStore);
         ArgumentNullException.ThrowIfNull(embeddingGenerator);
         ArgumentNullException.ThrowIfNull(concurrencyRetryPolicy);
         ArgumentNullException.ThrowIfNull(options);
 
-        this.profileReader = profileReader;
         this.backfillStore = backfillStore;
         this.embeddingGenerator = embeddingGenerator;
         this.concurrencyRetryPolicy = concurrencyRetryPolicy;
         this.options = options;
     }
 
-    /// <summary>Runs one bounded pass of the backfill.</summary>
+    /// <summary>Runs one bounded pass of the backfill towards one generation.</summary>
+    /// <param name="target">The generation whose missing vectors this run produces.</param>
     /// <param name="cancellationToken">Cancels the run between messages, between batches, and inside a message's turn.</param>
     /// <returns>What this run produced, and why it ended.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="target" /> is <see langword="null" />.</exception>
     /// <exception cref="PersistenceConcurrencyConflictException">
     /// Thrown when a competing writer wins a race that the bounded retries could not resolve. Passages and vectors
     /// already committed stay durable, and the next run resumes from the committed position.
     /// </exception>
     /// <exception cref="OperationCanceledException">Thrown when the caller cancels. Committed passages, vectors, and positions stay durable.</exception>
-    public async Task<StoredEmailEmbeddingBackfillResult> RunAsync(CancellationToken cancellationToken)
+    /// <remarks>
+    /// The target is taken once for the whole walk rather than per message, because it is what the outstanding-work
+    /// query is expressed against: a run that changed generation half way through would leave two prefixes of two
+    /// generations and a position that describes neither.
+    /// </remarks>
+    public async Task<StoredEmailEmbeddingBackfillResult> RunAsync(
+        RegisteredEmbeddingProfile target,
+        CancellationToken cancellationToken)
     {
-        // Read before the walk rather than per message, because the profile is what the outstanding-work query is
-        // expressed against: with no active profile there is no vector space for a passage to be missing from, and the
-        // question the walk asks would have no subject.
-        var profile = await this.profileReader.FindActiveProfileAsync(cancellationToken);
-        if (profile is null)
-        {
-            return Ended(StoredEmailEmbeddingBackfillOutcome.NoActiveProfile, RunProgress.Empty);
-        }
+        ArgumentNullException.ThrowIfNull(target);
 
         var position = await this.backfillStore.FindResumePositionAsync(cancellationToken);
         var outstandingAtSweepStart = position is null
-            ? await this.backfillStore.CountEmailsAwaitingEmbeddingAsync(profile.Id, cancellationToken)
+            ? await this.backfillStore.CountEmailsAwaitingEmbeddingAsync(target.Id, cancellationToken)
             : (int?)null;
 
         var progress = RunProgress.Empty;
@@ -96,7 +98,7 @@ public sealed class StoredEmailEmbeddingBackfill
         {
             var batch = await this.backfillStore.GetEmailsAwaitingEmbeddingAsync(
                 position,
-                profile.Id,
+                target.Id,
                 this.options.BatchSize,
                 cancellationToken);
 
@@ -109,15 +111,17 @@ public sealed class StoredEmailEmbeddingBackfill
 
             foreach (var email in batch)
             {
-                var turn = await this.BringUpToDateAsync(email, cancellationToken);
+                var turn = await this.BringUpToDateAsync(email, target, cancellationToken);
                 progress = progress.Add(email, turn);
 
-                // Neither of these says anything about this message, so stepping past it would skip a message for a
-                // reason that has nothing to do with it. The position stays where it was and an operator settles it.
-                if (turn.Outcome is StoredEmailEmbeddingOutcome.NoActiveProfile
-                    or StoredEmailEmbeddingOutcome.GeneratorDisagreesWithProfile)
+                // This says nothing about the message, so stepping past it would skip one for a reason that has nothing
+                // to do with it. The position stays where it was and an operator settles it.
+                if (turn.Outcome is StoredEmailEmbeddingOutcome.GeneratorDisagreesWithProfile)
                 {
-                    return Ended(OutcomeOf(turn.Outcome), progress, outstandingAtSweepStart);
+                    return Ended(
+                        StoredEmailEmbeddingBackfillOutcome.GeneratorDisagreesWithProfile,
+                        progress,
+                        outstandingAtSweepStart);
                 }
 
                 position = email.StoredEmailId;
@@ -155,6 +159,7 @@ public sealed class StoredEmailEmbeddingBackfill
     /// </remarks>
     private async Task<StoredEmailEmbeddingRun> BringUpToDateAsync(
         StoredEmailAwaitingEmbedding email,
+        RegisteredEmbeddingProfile target,
         CancellationToken cancellationToken)
     {
         if (email.RequiresChunking)
@@ -167,7 +172,7 @@ public sealed class StoredEmailEmbeddingBackfill
                 cancellationToken);
         }
 
-        return await this.embeddingGenerator.EmbedAsync(email.StoredEmailId, cancellationToken);
+        return await this.embeddingGenerator.EmbedAsync(email.StoredEmailId, target, cancellationToken);
     }
 
     /// <summary>Commits how far the sweep has come, or that it has ended.</summary>
@@ -192,13 +197,6 @@ public sealed class StoredEmailEmbeddingBackfill
             progress.CallBudgetExhaustedEmailCount,
             outstandingAtSweepStart,
             failure);
-
-    /// <summary>Names the run's ending after the message turn that caused it.</summary>
-    private static StoredEmailEmbeddingBackfillOutcome OutcomeOf(StoredEmailEmbeddingOutcome outcome) => outcome switch
-    {
-        StoredEmailEmbeddingOutcome.NoActiveProfile => StoredEmailEmbeddingBackfillOutcome.NoActiveProfile,
-        _ => StoredEmailEmbeddingBackfillOutcome.GeneratorDisagreesWithProfile,
-    };
 
     /// <summary>What a run has produced so far, in counts alone.</summary>
     /// <remarks>

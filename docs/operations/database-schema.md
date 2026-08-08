@@ -112,9 +112,14 @@ index as it is stored. Building one over a generation that is already embedded t
 in it, and a non-concurrent `CREATE INDEX` blocks writes to `email_embeddings` for that time — the same caution
 [Locks and timeouts](#locks-and-timeouts) states for the script.
 
+**The same ownership covers dropping one.** A generation that a model change replaced has its index removed before its
+vectors are, so a batched deletion is not maintaining an index nothing will read. That `DROP INDEX` needs the same
+right the `CREATE INDEX` does, and a deployment that has arranged the ownership above has already granted it.
+
 **A refusal costs performance and nothing else.** Where the privilege is missing, or the build fails for any other
 reason, MailFathom reports which profile and why, and the vectors are untouched. Vector search over that profile stays
-exact until an index exists: correct, and linear in the number of vectors it reads.
+exact until an index exists: correct, and linear in the number of vectors it reads. A removal that is refused leaves an
+index occupying storage for a generation nothing reads, which the next pass over that generation tries again.
 
 ## Applying it
 

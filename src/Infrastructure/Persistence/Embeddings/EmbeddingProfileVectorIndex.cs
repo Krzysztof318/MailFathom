@@ -35,7 +35,7 @@ internal sealed partial class EmbeddingProfileVectorIndex(
     ILogger<EmbeddingProfileVectorIndex> logger) : IEmbeddingProfileVectorIndex
 {
     /// <inheritdoc />
-    public async Task EnsureBuiltAsync(ActiveEmbeddingProfile profile, CancellationToken cancellationToken)
+    public async Task EnsureBuiltAsync(RegisteredEmbeddingProfile profile, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(profile);
 

@@ -7,7 +7,7 @@ using MailFathom.Domain.Emails;
 
 namespace MailFathom.Application.Emails.Embeddings.Generation;
 
-/// <summary>Gives every passage of one stored message a vector under the profile this instance embeds into.</summary>
+/// <summary>Gives every passage of one stored message a vector under one of this instance's generations.</summary>
 /// <remarks>
 /// <para>
 /// The operation reads committed state and writes committed state, and the provider call between the two happens with
@@ -47,52 +47,51 @@ public sealed class StoredEmailEmbeddingGenerator
     /// </remarks>
     private const int MaximumProviderCallsPerEmail = 512;
 
-    private readonly IActiveEmbeddingProfileReader profileReader;
     private readonly IEmailEmbeddingStore embeddingStore;
     private readonly ITextEmbeddingGenerator textEmbeddingGenerator;
     private readonly OptimisticConcurrencyRetryPolicy concurrencyRetryPolicy;
 
     /// <summary>Initializes a new generator of one message's embeddings.</summary>
-    /// <param name="profileReader">Answers which vector space this instance embeds into.</param>
     /// <param name="embeddingStore">Reads which passages lack a vector, and writes the vectors that answer.</param>
     /// <param name="textEmbeddingGenerator">Turns passages into points of that space.</param>
     /// <param name="concurrencyRetryPolicy">Commits one call's vectors, retrying a conflict with a competing writer.</param>
     /// <exception cref="ArgumentNullException">Thrown when any argument is <see langword="null" />.</exception>
     public StoredEmailEmbeddingGenerator(
-        IActiveEmbeddingProfileReader profileReader,
         IEmailEmbeddingStore embeddingStore,
         ITextEmbeddingGenerator textEmbeddingGenerator,
         OptimisticConcurrencyRetryPolicy concurrencyRetryPolicy)
     {
-        ArgumentNullException.ThrowIfNull(profileReader);
         ArgumentNullException.ThrowIfNull(embeddingStore);
         ArgumentNullException.ThrowIfNull(textEmbeddingGenerator);
         ArgumentNullException.ThrowIfNull(concurrencyRetryPolicy);
 
-        this.profileReader = profileReader;
         this.embeddingStore = embeddingStore;
         this.textEmbeddingGenerator = textEmbeddingGenerator;
         this.concurrencyRetryPolicy = concurrencyRetryPolicy;
     }
 
-    /// <summary>Embeds whatever of one message is not yet embedded under the active profile.</summary>
+    /// <summary>Embeds whatever of one message is not yet embedded under one generation.</summary>
     /// <param name="storedEmailId">The message to bring up to date.</param>
+    /// <param name="profile">The generation the vectors belong to, which the caller decides and this never reads.</param>
     /// <param name="cancellationToken">Cancels the turn between calls and between commits.</param>
     /// <returns>How the turn ended, and how many passages it committed vectors for.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="profile" /> is <see langword="null" />.</exception>
     /// <exception cref="PersistenceConcurrencyConflictException">
     /// Thrown when a competing writer wins a race the bounded retries could not resolve. Vectors already committed stay
     /// durable and the passages they cover are no longer outstanding.
     /// </exception>
     /// <exception cref="OperationCanceledException">Thrown when the caller cancels or the host is shutting down. Committed vectors stay durable.</exception>
+    /// <remarks>
+    /// The generation is a parameter rather than something read here, because the live path and a reindex write into
+    /// different ones at the same moment: mail arriving is embedded into the generation serving searches, and the sweep
+    /// fills the one being built. A generator that resolved it itself could only ever serve one of the two.
+    /// </remarks>
     public async Task<StoredEmailEmbeddingRun> EmbedAsync(
         StoredEmailId storedEmailId,
+        RegisteredEmbeddingProfile profile,
         CancellationToken cancellationToken)
     {
-        var profile = await this.profileReader.FindActiveProfileAsync(cancellationToken);
-        if (profile is null)
-        {
-            return StoredEmailEmbeddingRun.NoActiveProfile();
-        }
+        ArgumentNullException.ThrowIfNull(profile);
 
         // Compared through the fingerprint rather than property by property, because that digest is what the profile
         // table is unique on: agreeing here is the same statement as resolving to this row at activation.
@@ -154,7 +153,7 @@ public sealed class StoredEmailEmbeddingGenerator
 
     /// <summary>Commits one call's vectors, so a crash leaves a whole page of passages embedded or none of it.</summary>
     private Task CommitVectorsAsync(
-        ActiveEmbeddingProfile profile,
+        RegisteredEmbeddingProfile profile,
         IReadOnlyList<EmailChunkAwaitingEmbedding> passages,
         IReadOnlyList<EmbeddingVector> vectors,
         CancellationToken cancellationToken)

@@ -143,7 +143,7 @@ public sealed class EmbeddingVectorIndexStatementsTests
             statement);
     }
 
-    private static ActiveEmbeddingProfile ProfileOf(
+    private static RegisteredEmbeddingProfile ProfileOf(
         int dimension,
         EmbeddingDistanceMetric distanceMetric,
         string provider = "mailfathom-test-vendor",

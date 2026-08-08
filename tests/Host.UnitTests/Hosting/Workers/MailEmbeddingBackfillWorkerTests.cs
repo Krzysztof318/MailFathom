@@ -6,6 +6,8 @@ using MailFathom.Application.Emails.Chunking;
 using MailFathom.Application.Emails.Embeddings;
 using MailFathom.Application.Emails.Embeddings.Backfill;
 using MailFathom.Application.Emails.Embeddings.Generation;
+using MailFathom.Application.Emails.Embeddings.Generations;
+using MailFathom.Application.Emails.Embeddings.Indexing;
 using MailFathom.Application.Persistence;
 using MailFathom.Domain.Emails;
 using MailFathom.Host.Configuration.Embeddings;
@@ -187,9 +189,9 @@ public sealed class MailEmbeddingBackfillWorkerTests
     private static WorkerWorld CreateWorld(EmbeddingBackfillOptions settings) =>
         CreateWorld(
             settings,
-            new ActiveEmbeddingProfile(EmbeddingProfileId.Create(Guid.CreateVersion7()), CreateIdentity()));
+            new RegisteredEmbeddingProfile(EmbeddingProfileId.Create(Guid.CreateVersion7()), CreateIdentity()));
 
-    private static WorkerWorld CreateWorld(EmbeddingBackfillOptions settings, ActiveEmbeddingProfile? activeProfile)
+    private static WorkerWorld CreateWorld(EmbeddingBackfillOptions settings, RegisteredEmbeddingProfile? activeProfile)
     {
         settings.IdleSweepInterval = IdleSweepInterval;
 
@@ -203,8 +205,11 @@ public sealed class MailEmbeddingBackfillWorkerTests
                 Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<IReadOnlyList<StoredEmailAwaitingEmbedding>>([]));
 
-        var profileReader = Substitute.For<IActiveEmbeddingProfileReader>();
-        profileReader.FindActiveProfileAsync(Arg.Any<CancellationToken>()).Returns(activeProfile);
+        // Only a serving generation, because what a reindex adds beside it is the upkeep pass's own behavior and is
+        // covered where that lives; these tests are about the loop the worker runs around it.
+        var generationStore = Substitute.For<IEmbeddingGenerationStore>();
+        generationStore.ReadGenerationsAsync(Arg.Any<CancellationToken>())
+            .Returns(new EmbeddingGenerations(activeProfile, Building: null));
 
         var textEmbeddingGenerator = Substitute.For<ITextEmbeddingGenerator>();
         textEmbeddingGenerator.Identity.Returns(CreateIdentity());
@@ -213,7 +218,8 @@ public sealed class MailEmbeddingBackfillWorkerTests
         var services = new ServiceCollection();
         services.AddSingleton<TimeProvider>(world.TimeProvider);
         services.AddSingleton(world.BackfillStore);
-        services.AddSingleton(profileReader);
+        services.AddSingleton(generationStore);
+        services.AddSingleton(Substitute.For<IEmbeddingProfileVectorIndex>());
         services.AddSingleton(world.EmbeddingStore);
         services.AddSingleton(textEmbeddingGenerator);
         services.AddSingleton(Substitute.For<IPersistenceSessionFactory>());
@@ -226,6 +232,7 @@ public sealed class MailEmbeddingBackfillWorkerTests
         services.AddScoped<OptimisticConcurrencyRetryPolicy>();
         services.AddScoped<StoredEmailEmbeddingGenerator>();
         services.AddScoped<StoredEmailEmbeddingBackfill>();
+        services.AddScoped<EmbeddingGenerationUpkeep>();
 
         var serviceProvider = services.BuildServiceProvider();
         world.Attach(
@@ -268,10 +275,17 @@ public sealed class MailEmbeddingBackfillWorkerTests
         /// A loop rather than a single advance, because a run's delay is created after the line that ends it is written:
         /// an advance that arrives before the delay exists is simply lost, and the next one fires it. What the loop
         /// proves is that the worker starts another sweep at all, which is the claim this worker's shape rests on.
+        /// <para>
+        /// Each attempt waits on the line as well as on a short window rather than merely yielding, because yielding
+        /// hands the loop straight back to itself on a busy machine: every advance would then be spent while the pass
+        /// that creates the next delay is still running, and the worker would be left waiting on a clock nothing moves
+        /// again. The window bounds one attempt and never the wait — the line completing ends it immediately.
+        /// </para>
         /// </remarks>
         public async Task AdvanceUntilLogged(string fragment, int occurrences)
         {
-            const int advanceAttempts = 1000;
+            const int advanceAttempts = 200;
+            var passObservationWindow = TimeSpan.FromMilliseconds(20);
 
             var logged = this.Logger.WaitForOccurrences(fragment, occurrences);
 
@@ -279,7 +293,7 @@ public sealed class MailEmbeddingBackfillWorkerTests
             {
                 this.TimeProvider.Advance(IdleSweepInterval);
 
-                await Task.Yield();
+                await Task.WhenAny(logged, Task.Delay(passObservationWindow, TestContext.Current.CancellationToken));
             }
 
             await logged;

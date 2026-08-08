@@ -74,7 +74,7 @@ Only a message that yielded text has rows here, and deleting a message cascades 
 
 ## Embedding profiles
 
-`embedding_profiles` holds one row per vector space this deployment has embedded into. Nothing writes one yet — the row is created by the activation that takes a declared model up and starts spending against it — but the columns are what a stored vector's attribution will point at, and they are permanent from this migration onwards.
+`embedding_profiles` holds one row per vector space this deployment has embedded into. The row is written by the activation that takes a declared model up and starts spending against it, and its columns are what a stored vector's attribution points at.
 
 A profile is **the geometry of a vector space and nothing else**: `Provider`, `ModelIdentifier`, `ModelVersion` where the provider exposes one, `Dimension`, `DistanceMetric`, and the three columns that make up the input preparation — `InputCharacterLimit`, `PassageInstruction`, and `NormalizesVector`. Those are exactly the properties that decide whether two vectors can be compared. [ADR 0006](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0006-embedding-profile-identity-lifecycle-and-activation-cost.md) is where each of them was argued.
 
@@ -89,6 +89,8 @@ Three things about that list are decisions rather than defaults.
 `IdentityFingerprint` is a SHA-256 digest over every column above, written as sixty-four lowercase hexadecimal characters, and `ix_embedding_profiles_identity_fingerprint` is unique over it. That index is what makes activation idempotent: re-declaring a geometry that is already registered resolves to the row that exists rather than inserting a second one whose vectors would be produced from scratch for nothing, so returning to a previous model is a switch rather than a duplicate. Every field of the digest is length-prefixed and every number is big-endian, and an absent optional value is written as a presence marker rather than skipped, so the encoding is one-to-one.
 
 What stays mutable is the lifecycle: `LifecycleState` — building, active, or superseded — with `RegisteredAt`, and `ActivatedAt` and `SupersededAt`, each null until its event has happened. **There is no generation counter.** The profile *is* the generation, so two generations coexisting while a new one is built are two rows, and no read path has a second field it must remember to consult.
+
+`ix_embedding_profiles_lifecycle_state` is unique over `LifecycleState` and partial to the two states that admit one row each, which is how one index expresses both halves of that: at most one generation being built, and at most one being read. Superseded rows are outside its predicate, because a deployment accumulates one for every model it has ever used. It is enforced by the database rather than by the code that writes, for the same reason the vector's width is: two rows claiming to serve would leave retrieval reading whichever one a query returned, with half the vectors in the table unreachable and nothing about the answers saying so. The one consequence for a writer is that the switch has to supersede the old row before it promotes the new one, which is why those two statements are issued in order rather than staged together. [Changing the embedding model](../operations/embedding-profiles.md) is the operator's view of that transition.
 
 Nothing operational reaches this table. The endpoint address, the credential, the batch size, the request rate, the concurrency, and the spending ceilings are configuration, which is what makes rotating a key or raising a rate limit an edit rather than a re-embed — and what means no column here can be edited into disagreeing with the vectors it describes.
 
@@ -283,6 +285,7 @@ of the message it came from.
 | `ix_email_search_documents_search_vector` | `(search_vector)`, GIN | Lexical search over subject, participants, and body text |
 | `ix_email_chunks_email_ordinal` | `(StoredEmailId, Ordinal)`, unique | One message's passages in reading order, and the constraint a re-cut cannot write an ordinal twice past |
 | `ix_embedding_profiles_identity_fingerprint` | `(IdentityFingerprint)`, unique | One row per vector space, which is what makes activation idempotent |
+| `ix_embedding_profiles_lifecycle_state` | `(LifecycleState)`, unique, where the state is building or active | At most one generation being built and at most one being read |
 | `ix_email_embeddings_profile` | `(EmbeddingProfileId, Dimension)` | Reading a whole generation, which is how a superseded one is removed |
 | `ix_mailbox_mutations_identity` | `(MailFolderId, UidValidity, Uid, RequesterOrigin, RequesterIdentity, Mutation)`, unique | A mutation's idempotency identity, which is what makes the same request twice perform one change |
 | `ix_mailbox_mutations_outstanding` | `(MailboxAccountId, RecordedAt)` where the stage is not `Completed` | The changes an operator asks about: those in flight and those given up on |

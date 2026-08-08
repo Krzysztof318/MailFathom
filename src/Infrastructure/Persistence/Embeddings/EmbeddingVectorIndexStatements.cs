@@ -59,7 +59,7 @@ internal static class EmbeddingVectorIndexStatements
     /// <returns>A <c>CREATE INDEX</c> statement, idempotent in the profile it is for.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="profile" /> is <see langword="null" />.</exception>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when the profile records a metric pgvector has no operator class for.</exception>
-    internal static string CreateIndexFor(ActiveEmbeddingProfile profile)
+    internal static string CreateIndexFor(RegisteredEmbeddingProfile profile)
     {
         ArgumentNullException.ThrowIfNull(profile);
 

@@ -5,6 +5,7 @@
 using MailFathom.Application.Emails.Embeddings;
 using MailFathom.Application.Emails.Embeddings.Backfill;
 using MailFathom.Application.Emails.Embeddings.Generation;
+using MailFathom.Application.Emails.Embeddings.Generations;
 using MailFathom.Application.Persistence;
 using MailFathom.Application.Synchronization;
 using MailFathom.Domain.Emails;
@@ -152,17 +153,22 @@ public sealed class OrchestratedEmailEmbeddingBackfillTests(MailFathomOrchestrat
         CancellationToken cancellationToken,
         int batchSize = 20,
         int maxBatchesPerRun = 25) => services.InScopeAsync(
-            (scope, token) => new StoredEmailEmbeddingBackfill(
-                scope.GetRequiredService<IActiveEmbeddingProfileReader>(),
-                scope.GetRequiredService<IStoredEmailEmbeddingBackfillStore>(),
-                scope.GetRequiredService<StoredEmailEmbeddingGenerator>(),
-                scope.GetRequiredService<OptimisticConcurrencyRetryPolicy>(),
-                new StoredEmailEmbeddingBackfillOptions
-                {
-                    BatchSize = batchSize,
-                    MaxBatchesPerRun = maxBatchesPerRun,
-                })
-                .RunAsync(token),
+            async (scope, token) =>
+            {
+                var generations = await scope.GetRequiredService<IEmbeddingGenerationStore>()
+                    .ReadGenerationsAsync(token);
+
+                return await new StoredEmailEmbeddingBackfill(
+                    scope.GetRequiredService<IStoredEmailEmbeddingBackfillStore>(),
+                    scope.GetRequiredService<StoredEmailEmbeddingGenerator>(),
+                    scope.GetRequiredService<OptimisticConcurrencyRetryPolicy>(),
+                    new StoredEmailEmbeddingBackfillOptions
+                    {
+                        BatchSize = batchSize,
+                        MaxBatchesPerRun = maxBatchesPerRun,
+                    })
+                    .RunAsync(Assert.IsType<RegisteredEmbeddingProfile>(generations.Target), token);
+            },
             cancellationToken);
 
     private static Task<StoredEmailId?> ReadResumePositionAsync(

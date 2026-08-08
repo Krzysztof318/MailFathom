@@ -10,6 +10,7 @@ using MailFathom.Application.EmailContent.Storage;
 using MailFathom.Application.Emails.Embeddings;
 using MailFathom.Application.Emails.Embeddings.Backfill;
 using MailFathom.Application.Emails.Embeddings.Generation;
+using MailFathom.Application.Emails.Embeddings.Generations;
 using MailFathom.Application.Emails.Embeddings.Indexing;
 using MailFathom.Application.Emails.Extraction;
 using MailFathom.Application.Emails.GetEmailContent;
@@ -218,6 +219,12 @@ public static class ServiceCollectionExtensions
         // beside it.
         services.AddScoped<IEmbeddingProfileVectorIndex, EmbeddingProfileVectorIndex>();
         services.AddScoped<IStoredEmailEmbeddingBackfillStore, StoredEmailEmbeddingBackfillStore>();
+        services.AddScoped<IEmbeddingGenerationStore, EmbeddingGenerationStore>();
+        // The two operator acts on a generation, registered here rather than beside the generation work because neither
+        // resolves an `ITextEmbeddingGenerator`: they move a profile row and maintain an index, so they build in every
+        // container. What decides that there is anything to activate is the declaration the caller reads, not this.
+        services.AddScoped<EmbeddingProfileActivation>();
+        services.AddScoped<EmbeddingReindexCancellation>();
         services.AddScoped<IEmailMetadataRepository, StoredEmailMetadataRepository>();
         services.AddScoped<IDatabaseSchemaInspector, EfCoreDatabaseSchemaInspector>();
         services.AddScoped<IEmailContentStore, EmailContentStore>();
@@ -366,8 +373,9 @@ public static class ServiceCollectionExtensions
     /// registration rather than by making one that would fail.
     /// </para>
     /// <para>
-    /// The two are one call because they are one decision: the backfill's unit of work is one message brought up to
-    /// date by that same generator, so a deployment that resolves neither is the only other shape.
+    /// The three are one call because they are one decision: the backfill's unit of work is one message brought up to
+    /// date by that same generator, the upkeep pass is that walk plus the transitions it completes, so a deployment
+    /// that resolves none of them is the only other shape.
     /// </para>
     /// <para>
     /// Semantic retrieval reads the same generator and is deliberately <em>not</em> here. It is asked for through a
@@ -382,6 +390,7 @@ public static class ServiceCollectionExtensions
 
         services.AddScoped<StoredEmailEmbeddingGenerator>();
         services.AddScoped<StoredEmailEmbeddingBackfill>();
+        services.AddScoped<EmbeddingGenerationUpkeep>();
 
         return services;
     }
