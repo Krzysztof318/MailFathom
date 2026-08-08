@@ -134,6 +134,16 @@ public sealed class OrchestratedEmailChunkTests(MailFathomOrchestrationFixture o
         Assert.True(
             passages[^1].StartOffset < OrchestratedMailFathomServices.EmbeddingInputCharacterCeiling,
             "The cut has to stop at the ceiling rather than run to the end of the body.");
+
+        // Text that grew only past the ceiling yields exactly the passages already stored, so the write the hashes
+        // decide is skipped — and the record of what was left out still has to follow the text rather than the rows.
+        var longer = BodyOfSeveralPassages("oversized", paragraphs: 30);
+        Assert.StartsWith(body, longer, StringComparison.Ordinal);
+
+        await StoreAsync(services, occurrenceId, "chunks-truncated", longer, cancellationToken);
+
+        Assert.Equal(passages, await ReadPassagesAsync(services, occurrenceId, cancellationToken));
+        Assert.Equal(longer.Length, await ReadTruncatedFromAsync(services, occurrenceId, cancellationToken));
     }
 
     /// <summary>Builds a body long enough to be cut into several passages, distinct per term so no two chunks match.</summary>

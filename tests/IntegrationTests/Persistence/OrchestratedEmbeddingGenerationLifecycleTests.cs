@@ -51,6 +51,15 @@ public sealed class OrchestratedEmbeddingGenerationLifecycleTests(MailFathomOrch
         var cancellationToken = TestContext.Current.CancellationToken;
         await using var services = await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken);
         var chunkIds = await StorePassagesAsync(services, uid: 9301, cancellationToken);
+
+        // Every claim below reads a question the database answers about the whole instance — which superseded
+        // generation is still holding vectors — while what this test is about is the one generation it supersedes
+        // itself. Another class that embedded under the deterministic profile leaves exactly such a row behind, and
+        // the switch below is what supersedes it, so the reading would name that class's generation rather than this
+        // one's for no reason except the order xUnit chose. Draining first states the precondition instead of
+        // inheriting it.
+        await DrainSupersededVectorsAsync(services, cancellationToken);
+
         var previous = await RegisterAsync(services, "generation-previous", cancellationToken);
         await SwitchToAsync(services, previous.Id, cancellationToken);
         await StoreVectorsAsync(services, chunkIds, previous.Id, cancellationToken);
@@ -204,6 +213,32 @@ public sealed class OrchestratedEmbeddingGenerationLifecycleTests(MailFathomOrch
         CancellationToken cancellationToken) => services.InScopeAsync(
             (scope, token) => scope.GetRequiredService<IEmbeddingGenerationStore>().ReadGenerationsAsync(token),
             cancellationToken);
+
+    /// <summary>Empties whatever superseded generation another class left holding vectors.</summary>
+    /// <remarks>
+    /// Bounded rather than looped until the query is quiet on its own: a removal that reports nothing removed while the
+    /// same generation is still named would be an unbounded loop, so it fails the test instead of hanging it.
+    /// </remarks>
+    private static async Task DrainSupersededVectorsAsync(
+        OrchestratedMailFathomServices services,
+        CancellationToken cancellationToken)
+    {
+        const int maximumBatches = 100;
+
+        for (var batch = 0; batch < maximumBatches; batch++)
+        {
+            if (await FindSupersededHoldingVectorsAsync(services, cancellationToken) is not { } leftover)
+            {
+                return;
+            }
+
+            Assert.True(
+                await RemoveVectorsAsync(services, leftover, batchSize: 500, cancellationToken) > 0,
+                "A superseded generation reported as holding vectors has to give some up when it is asked.");
+        }
+
+        Assert.Fail("A superseded generation went on holding vectors after every batch this test is allowed.");
+    }
 
     private static Task<EmbeddingProfileId?> FindSupersededHoldingVectorsAsync(
         OrchestratedMailFathomServices services,

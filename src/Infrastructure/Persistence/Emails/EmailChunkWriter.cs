@@ -55,6 +55,13 @@ internal sealed class EmailChunkWriter(
         var cut = chunker.DeriveChunks(text, rules, inputBound);
         var chunks = cut.Chunks;
 
+        // Recorded before the passages are compared, because the two answers are independent: text that grew past the
+        // ceiling while everything up to it stayed identical yields the same passages and a different truncation, and a
+        // record written only where rows changed would go on reporting the length the text used to have. Assigning an
+        // unchanged value marks nothing modified, so the promise below — that an unchanged message writes nothing at
+        // all — survives it.
+        this.RecordTruncation(storedEmail, cut);
+
         // The change-tracker pass comes first for the reason the search document's does: passages staged earlier in
         // this same uncommitted session are invisible to a set-based delete, and inserting beside them would violate
         // the ordinal index at commit rather than replace them.
@@ -109,20 +116,15 @@ internal sealed class EmailChunkWriter(
                 pair.First.Ordinal == pair.Second.Ordinal
                 && string.Equals(pair.First.ContentHash, pair.Second.ContentHash.Value, StringComparison.Ordinal));
 
-    /// <summary>Writes the passages a cut produced, and what that cut left out of the message.</summary>
+    /// <summary>Records what this cut left out of the message, on the message.</summary>
     /// <remarks>
-    /// The truncation is written on the message beside its passages rather than reported only as a metric, because a
-    /// counter says how often the ceiling bound across a deployment and this says which message it bound on. Written on
-    /// every insert, including as a clearing of a value a previous cut left behind: a message whose text shrank, or one
+    /// Written on the row beside its passages rather than reported only as a metric, because a counter says how often
+    /// the ceiling bound across a deployment and this says which message it bound on. It is written on every
+    /// derivation, including as a clearing of a value a previous cut left behind: a message whose text shrank, or one
     /// re-cut after the ceiling was raised past it, is no longer truncated and its row must not go on saying it is.
     /// </remarks>
-    private void Insert(
-        MailFathomDbContext dbContext,
-        StoredEmailEntity storedEmail,
-        EmailChunkingResult cut)
+    private void RecordTruncation(StoredEmailEntity storedEmail, EmailChunkingResult cut)
     {
-        var derivedAt = timeProvider.GetUtcNow();
-
         storedEmail.ChunkedTextTruncatedFromCharacterCount = cut.TruncatedFromCharacterCount;
 
         // Measured against the ceiling rather than against the text that was kept, which the passages overlap and
@@ -132,6 +134,14 @@ internal sealed class EmailChunkWriter(
         {
             telemetry.RecordTruncatedEmbeddingInput(truncatedFrom - inputBound.MaximumCharacterCount);
         }
+    }
+
+    private void Insert(
+        MailFathomDbContext dbContext,
+        StoredEmailEntity storedEmail,
+        EmailChunkingResult cut)
+    {
+        var derivedAt = timeProvider.GetUtcNow();
 
         dbContext.EmailChunks.AddRange(cut.Chunks.Select(chunk => new EmailChunkEntity
         {

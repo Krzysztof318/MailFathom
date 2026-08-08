@@ -108,6 +108,11 @@ later hangs on a passage hanging on the same row.
 Anything else replaces the message's passages whole rather than reconciling them one by one, because a boundary change
 shifts every ordinal after the first difference and a row-by-row merge would only make that look survivable.
 
+One thing is compared outside that decision: what the [per-message ceiling](#the-per-message-ceiling) left out. Text
+that grew past the ceiling while everything up to it stayed identical yields exactly the same passages and a different
+truncation, so the record is written from the current derivation rather than from whether any passage moved. An
+unchanged message still writes nothing — the value it would be given is the value it already has.
+
 ## The rule-set version
 
 Every chunk records the version of the rules it was cut to, in a column beside its hash. Nothing reads it to decide
