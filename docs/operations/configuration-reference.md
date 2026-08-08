@@ -297,6 +297,24 @@ The same block, with the same keys, defaults, and rules as
 [`Embeddings:Endpoints:<n>:EntraCredential`](#microsoft-entra-credential--embeddingsendpointsnentracredential) above.
 One credential source resolves both sections, which is why the alias uniqueness rule spans them.
 
+### Relevance filter — `Chat:RelevanceFilter`
+
+The optional second pass over a retrieval: each candidate the fused ranking produced is put to the declared chat
+endpoint on its own, and the ones the model scores below the threshold are dropped before an answer is written. A block
+inside `Chat` rather than a root of its own, because the pass judges with that endpoint and has nowhere to send a
+question without one — removing the chat section removes this with it.
+
+Off by default, and off is a supported deployment: retrieval then hands over the fused ranking exactly as hybrid search
+produced it. Turning it on is a spend decision as much as a quality one — it costs one provider call per candidate on
+every lookup a question makes. [Mail answering § An optional second pass](../features/mail-answering.md#an-optional-second-pass-the-model-decides-what-answers)
+describes what it drops, what it keeps, and what it does when the provider cannot tell it.
+
+| Key | Type | Default | Constraint | Change |
+| --- | --- | --- | --- | --- |
+| `Chat:RelevanceFilter:Enabled` | bool | `false` | turning it on requires a declared `Chat:Alias`, and a `Chat:MaxMessagesPerRequest` of at least 2, because a judgement is an instruction and a candidate | restart |
+| `Chat:RelevanceFilter:MaxCandidates` | int | `8` | 1 – 8, which is everything one retrieval hands over — a higher value would name candidates that never exist and is refused rather than accepted and never met. The ceiling on what one lookup spends and how long it takes. Set below the default it buys a weaker filter rather than a shorter result: a passage nobody judged keeps its place | restart |
+| `Chat:RelevanceFilter:MinimumRelevance` | int | `50` | 1 – 100, on the scale the model answers a judgement on. A threshold of 0 is refused: it would pay for a judgement that can drop nothing | restart |
+
 ## `EmbeddingBackfill`
 
 The sweep that gives mail stored before the active profile its passages and its vectors. A root of its own rather than

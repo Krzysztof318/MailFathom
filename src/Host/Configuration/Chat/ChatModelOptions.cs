@@ -98,6 +98,10 @@ internal sealed class ChatModelOptions : IValidatableObject
     /// <remarks>Absent for an endpoint authenticated with a key. Exactly one of the two is declared, and startup refuses both or neither.</remarks>
     public ProviderEntraCredentialOptions? EntraCredential { get; set; }
 
+    /// <summary>Gets or sets whether retrieval puts its candidates to this endpoint before handing them over, and what that pass may spend.</summary>
+    /// <remarks>Present rather than nullable, because every member of it has a usable default and the block's own <c>Enabled</c> is what says whether the pass runs. Off is the default and is a supported deployment.</remarks>
+    public PassageRelevanceFilterOptions RelevanceFilter { get; set; } = new();
+
     /// <summary>Gets whether the deployment declared a chat provider at all.</summary>
     /// <remarks>Read from the alias because it is the one member with no usable default: a section an operator began writing but left without a name is not a declaration, and a section they never wrote has none either.</remarks>
     public bool IsConfigured => this.Alias.Trim().Length > 0;
@@ -115,7 +119,8 @@ internal sealed class ChatModelOptions : IValidatableObject
             if (this.Model.Trim().Length > 0
                 || this.Address.Trim().Length > 0
                 || this.ApiKey is not null
-                || this.EntraCredential is not null)
+                || this.EntraCredential is not null
+                || this.RelevanceFilter.Enabled)
             {
                 yield return new ValidationResult(
                     "The Chat section declares settings but no Alias, so no chat provider is configured and nothing in it is read. Give the endpoint an alias, or remove the section.",
@@ -156,6 +161,11 @@ internal sealed class ChatModelOptions : IValidatableObject
         }
 
         foreach (var error in this.EntraCredential?.FindConfigurationErrors(alias) ?? [])
+        {
+            yield return error;
+        }
+
+        foreach (var error in this.RelevanceFilter.FindConfigurationErrors(alias, this.MaxMessagesPerRequest))
         {
             yield return error;
         }

@@ -8,12 +8,15 @@ using MailFathom.AI.Embeddings;
 using MailFathom.AI.Orchestration;
 using MailFathom.AI.ProviderAdapters;
 using MailFathom.AI.Providers;
+using MailFathom.AI.Retrieval;
+using MailFathom.Application.AiProviders;
 using MailFathom.Application.Chat;
 using MailFathom.Application.Emails.Chunking;
 using MailFathom.Application.Emails.Embeddings;
 using MailFathom.Application.Retrieval;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Logging;
 
 namespace MailFathom.AI;
 
@@ -163,6 +166,37 @@ public static class AiServiceCollectionExtensions
 
         services.TryAddSingleton<OpenAiCompatibleClientFactory>();
         services.AddScoped<IMailQuestionAnswerer, MailAnsweringAgent>();
+
+        return services;
+    }
+
+    /// <summary>Registers the second retrieval pass that puts the fused ranking's own candidates to the model.</summary>
+    /// <param name="services">The service collection to add to.</param>
+    /// <returns>The same service collection, so registration reads as one expression.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="services" /> is <see langword="null" />.</exception>
+    /// <remarks>
+    /// <para>
+    /// Called only where a chat endpoint was declared and the deployment turned the pass on, which is why the plan and
+    /// the chat client are resolved rather than checked for: an instance that declared neither registers nothing here
+    /// and retrieves exactly as it did, which is the default and the cheaper path.
+    /// </para>
+    /// <para>
+    /// It decorates rather than replaces, and must therefore be registered after the retrieval it wraps: the container
+    /// resolves the last registration of a service type, and the one this wraps is added by <c>AddInfrastructure</c>.
+    /// The wrapped search is resolved by its own type, so both this and anything else resolving it within one scope get
+    /// the one instance reading through that scope's persistence context.
+    /// </para>
+    /// </remarks>
+    public static IServiceCollection AddModelJudgedRetrieval(this IServiceCollection services)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+
+        services.AddScoped<IEmailKnowledgeSearch>(provider => new ModelJudgedKnowledgeSearch(
+            provider.GetRequiredService<MailboxKnowledgeSearch>(),
+            provider.GetRequiredService<IChatModelClient>(),
+            provider.GetRequiredService<IAiProviderHealthReader>(),
+            provider.GetRequiredService<PassageRelevanceFilterPlan>(),
+            provider.GetRequiredService<ILogger<ModelJudgedKnowledgeSearch>>()));
 
         return services;
     }

@@ -273,7 +273,11 @@ public static class ServiceCollectionExtensions
         // reading of the search above: an instance that answers no questions simply resolves it and never calls it, and
         // the bounds it hands passages over under are the same wherever the retrieval is reached from.
         services.AddSingleton(EmailKnowledgeBounds.Default);
-        services.AddScoped<IEmailKnowledgeSearch, MailboxKnowledgeSearch>();
+        // Registered as itself as well as behind the port, so a deployment that turns the model-judged second pass on
+        // can wrap this one rather than rebuild it. Both resolve the same scoped instance, so an instance that adds no
+        // filter is unchanged by the shape.
+        services.AddScoped<MailboxKnowledgeSearch>();
+        services.AddScoped<IEmailKnowledgeSearch>(provider => provider.GetRequiredService<MailboxKnowledgeSearch>());
         // The cache outlives every scope because a token is valid for whichever work unit next needs the account,
         // while the source that fills it is scoped to the configuration snapshot it resolves settings from.
         services.AddSingleton<MailAccessTokenCache>();

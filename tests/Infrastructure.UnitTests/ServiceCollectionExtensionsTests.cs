@@ -148,6 +148,12 @@ public sealed class ServiceCollectionExtensionsTests
             services,
             descriptor => descriptor.ServiceType == typeof(IEmailKnowledgeSearch)
                 && descriptor.Lifetime == ServiceLifetime.Scoped);
+        // As itself as well, which is what a deployment that judges its candidates with the model wraps rather than
+        // rebuilds.
+        Assert.Contains(
+            services,
+            descriptor => descriptor.ServiceType == typeof(MailboxKnowledgeSearch)
+                && descriptor.Lifetime == ServiceLifetime.Scoped);
         Assert.Contains(
             services,
             descriptor => descriptor.ServiceType == typeof(EmailKnowledgeBounds)
