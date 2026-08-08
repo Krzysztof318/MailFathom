@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using System.Collections.Concurrent;
 using System.Diagnostics.Metrics;
 using System.Globalization;
 using MailFathom.Application.Synchronization;
@@ -193,10 +194,21 @@ public sealed class MailboxContentVolumeTelemetryTests : IDisposable
         RefilledEmailCount: 0,
         StoppedForContentBudget: false);
 
+    /// <summary>Collects what the application's meter publishes while one test runs.</summary>
+    /// <remarks>
+    /// The collection is concurrent because the writer and the reader are not the same thread. This listener enables
+    /// every instrument of the process-wide meter, so a test in another class reporting its own telemetry calls
+    /// <see cref="Record" /> from whatever thread it runs on, and xUnit runs classes in parallel. A plain
+    /// <see cref="List{T}" /> here failed with <c>Collection was modified</c> out of the reading query rather than out
+    /// of anything the failing test did — the kind of defect that reports itself against whichever test happened to be
+    /// reading. Enumerating a <see cref="ConcurrentQueue{T}" /> takes a moment-in-time snapshot instead, which is also
+    /// why a read may see a measurement another test produced: the reads below filter by instrument, and the assertions
+    /// select by value, for the reason the class remark already gives.
+    /// </remarks>
     private sealed class MeasurementCollector : IDisposable
     {
         private readonly MeterListener listener = new();
-        private readonly List<PublishedMeasurement> measurements = [];
+        private readonly ConcurrentQueue<PublishedMeasurement> measurements = new();
 
         internal MeasurementCollector()
         {
@@ -242,7 +254,7 @@ public sealed class MailboxContentVolumeTelemetryTests : IDisposable
             ReadOnlySpan<KeyValuePair<string, object?>> tags,
             object? state)
             where TMeasurement : struct =>
-            this.measurements.Add(new PublishedMeasurement(
+            this.measurements.Enqueue(new PublishedMeasurement(
                 instrument.Name,
                 Convert.ToDouble(measurement, CultureInfo.InvariantCulture),
                 tags.ToArray().ToDictionary(tag => tag.Key, tag => tag.Value, StringComparer.Ordinal)));

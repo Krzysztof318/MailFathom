@@ -71,7 +71,9 @@ and its result would read as an answer about the mailbox.
   exception rather than as a stable failure, and no subject anyone searches part of contains one.
 - **A received range** may be unbounded at either end; only an unbounded page is disallowed. A range whose end is not
   after its start selects nothing and is refused. An email whose received timestamp is unknown falls inside neither
-  bound, so naming either one excludes undated mail.
+  bound, so naming either one excludes undated mail. Each bound names an instant, so it may be written at any UTC offset
+  and the offset chosen changes neither what is selected nor which walk a cursor belongs to: `2026-07-01T10:00:00+02:00`
+  and `2026-07-01T08:00:00Z` are one range asked for twice.
 - **The scope** accepts at most 64 accounts and 64 folder aliases, counting what a request names rather than what is left
   after deduplication — that is what lets the limit be enforced while the caller's list is read instead of after it has
   been materialized. Both lists are then deduplicated and ordered, so two spellings of one scope are one query with one
