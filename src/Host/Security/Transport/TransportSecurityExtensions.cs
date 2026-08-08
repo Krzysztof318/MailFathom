@@ -45,7 +45,7 @@ internal static class TransportSecurityExtensions
     /// <param name="apiKeys">The keys a request may present one of, empty where the surface accepts none.</param>
     /// <param name="publicKeys">The client public keys a signed assertion may be verified against, empty where the surface accepts no assertion.</param>
     /// <param name="oauthMethods">What a token must prove, one entry per configured OAuth block, empty where the surface accepts no access token.</param>
-    /// <param name="challengeSchemeName">The scheme answering a request that presented no credential at all.</param>
+    /// <param name="challengeSchemeName">The scheme answering a request that presented no credential this surface can place, which is both what authenticates it and what challenges it.</param>
     /// <returns>The authentication builder, so a surface can add schemes only it needs.</returns>
     /// <exception cref="ArgumentNullException">Thrown when any reference argument is <see langword="null" />.</exception>
     /// <exception cref="ArgumentException">Thrown when <paramref name="surface" /> is the struct default.</exception>
@@ -204,6 +204,9 @@ internal static class TransportSecurityExtensions
 
                 // A challenge is answered by one scheme whichever credential was presented, because a request that has
                 // nothing to authenticate with has told us nothing about which kind of credential it was going to use.
+                // That is the same scheme the selector above routes such a request to, which is what obliges it to
+                // authenticate nobody: authenticating and challenging are different jobs, and a scheme that forwarded
+                // the first somewhere would answer a fault where the pipeline expects a refusal it can challenge.
                 policyOptions.ForwardChallenge = challengeSchemeName;
             });
     }
