@@ -6,6 +6,7 @@ using System.Diagnostics.CodeAnalysis;
 using MailFathom.AppHost;
 using MailFathom.Application.Mail;
 using MailFathom.Application.Mail.Mutations;
+using MailFathom.Application.Mail.Mutations.Audit;
 using MailFathom.Application.Synchronization.Checkpoints;
 using MailFathom.Application.Synchronization.Reconciliation;
 using MailFathom.Domain.Accounts;
@@ -35,15 +36,26 @@ namespace MailFathom.IntegrationTests.Orchestration;
 internal sealed class SyntheticMailAccount(
     OrchestratedMailServerEndpoints endpoints,
     RemotelyDeletedEmailDisposition remotelyDeletedEmailDisposition =
-        RemotelyDeletedEmailDisposition.RetainTombstone)
+        RemotelyDeletedEmailDisposition.RetainTombstone,
+    bool auditTrailEnabled = false)
     : IImapAccountSettingsProvider,
     IMailTransportSecurityPolicyReader,
     IMailSynchronizationWindowReader,
     IRemotelyDeletedEmailDispositionReader,
-    IAuthoredDeleteEmailDispositionReader
+    IAuthoredDeleteEmailDispositionReader,
+    IMailboxMutationAuditSettingsReader
 {
     /// <summary>Gets the account identifier every occurrence this suite stores belongs to.</summary>
     public static MailAccountId AccountId { get; } = MailAccountId.Create("integration");
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Off unless a test asks for it, which is the deployed default and the state every other test needs: an audit
+    /// entry per finished mutation would otherwise accumulate across a suite that authors many of them. The retention
+    /// is long enough that no orchestrated run erases what it just wrote.
+    /// </remarks>
+    public MailboxMutationAuditSettings GetAuditSettings(MailAccountId accountId) =>
+        new(auditTrailEnabled, TimeSpan.FromDays(90));
 
     /// <inheritdoc />
     /// <remarks>

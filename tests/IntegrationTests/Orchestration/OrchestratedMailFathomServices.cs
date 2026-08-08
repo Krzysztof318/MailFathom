@@ -9,6 +9,7 @@ using MailFathom.Application.Emails.Embeddings.Generation;
 using MailFathom.Application.Emails.Extraction;
 using MailFathom.Application.Mail;
 using MailFathom.Application.Mail.Mutations;
+using MailFathom.Application.Mail.Mutations.Audit;
 using MailFathom.Application.Mail.Mutations.Convergence;
 using MailFathom.Application.Persistence;
 using MailFathom.Application.Synchronization;
@@ -71,15 +72,24 @@ internal sealed class OrchestratedMailFathomServices : IAsyncDisposable
     /// everywhere but the one class proving that this setting does not decide the outcome of a deletion MailFathom
     /// itself performed.
     /// </param>
+    /// <param name="auditTrailEnabled">
+    /// Whether the account keeps a durable record of the changes MailFathom made to it. Off everywhere but the class
+    /// proving what the trail holds, which is the deployed default and keeps every other test from accumulating a
+    /// history it never asked about.
+    /// </param>
     /// <returns>The composed services, which the caller owns and must dispose.</returns>
     internal static async Task<OrchestratedMailFathomServices> StartAsync(
         MailFathomOrchestrationFixture orchestration,
         CancellationToken cancellationToken,
         RemotelyDeletedEmailDisposition remotelyDeletedEmailDisposition =
-            RemotelyDeletedEmailDisposition.RetainTombstone)
+            RemotelyDeletedEmailDisposition.RetainTombstone,
+        bool auditTrailEnabled = false)
     {
         var builder = new HostApplicationBuilder();
-        var account = new SyntheticMailAccount(orchestration.MailServer, remotelyDeletedEmailDisposition);
+        var account = new SyntheticMailAccount(
+            orchestration.MailServer,
+            remotelyDeletedEmailDisposition,
+            auditTrailEnabled);
 
         builder.Services.AddSingleton(TimeProvider.System);
         builder.Services.AddSecretResolution(SecretValueInterpretation.ReferenceOnly);
@@ -90,6 +100,7 @@ internal sealed class OrchestratedMailFathomServices : IAsyncDisposable
         builder.Services.AddSingleton<IMailSynchronizationWindowReader>(account);
         builder.Services.AddSingleton<IRemotelyDeletedEmailDispositionReader>(account);
         builder.Services.AddSingleton<IAuthoredDeleteEmailDispositionReader>(account);
+        builder.Services.AddSingleton<IMailboxMutationAuditSettingsReader>(account);
         builder.Services.AddSingleton(new MailboxSynchronizationOptions
         {
             MaxMetadataBatchSize = 50,

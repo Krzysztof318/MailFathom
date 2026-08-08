@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.Mail.Mutations;
+using MailFathom.Application.Mail.Mutations.Audit;
 using MailFathom.Application.Mail.Mutations.Convergence;
 using MailFathom.Application.Persistence;
 using MailFathom.CodeCoverage;
@@ -30,7 +31,10 @@ namespace MailFathom.Infrastructure.Persistence.Mutations;
 /// </para>
 /// </remarks>
 [RequiresIntegrationCoverage]
-internal sealed class MailboxMutationRecordStore(MailFathomDbContext readContext, TimeProvider timeProvider)
+internal sealed class MailboxMutationRecordStore(
+    MailFathomDbContext readContext,
+    IMailboxMutationAuditSettingsReader auditSettingsReader,
+    TimeProvider timeProvider)
     : IMailboxMutationRecordStore
 {
     /// <inheritdoc />
@@ -77,6 +81,10 @@ internal sealed class MailboxMutationRecordStore(MailFathomDbContext readContext
             DestinationHierarchyDelimiter = request.DestinationPath?.HierarchyDelimiter?.ToString(),
             DesiredSeenState = request.DesiredSeenState,
             LocalDisposition = request.LocalDisposition,
+
+            // Resolved here, with the row, so a trail switched on or off while this mutation is in flight decides
+            // nothing about a change already begun.
+            AuditTrailEnabled = auditSettingsReader.GetAuditSettings(request.Occurrence.AccountId).IsEnabled,
             Stage = MailboxMutationStage.Recorded,
             RequiresSourceRemoval = false,
             AttemptCount = 0,

@@ -52,6 +52,7 @@ internal static class MailboxMutationRecordMapping
                 entity.DesiredSeenState,
                 ToLocalDisposition(entity, mutation)),
             Stage = entity.Stage,
+            IsAudited = entity.AuditTrailEnabled,
             RequiresSourceRemoval = entity.RequiresSourceRemoval,
             Placement = ToPlacement(entity),
             AttemptCount = entity.AttemptCount,

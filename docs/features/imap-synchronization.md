@@ -1,6 +1,6 @@
 # IMAP synchronization
 
-<!-- describes: src/Application/Synchronization/**, src/Domain/Synchronization/**, src/Infrastructure/Mail/** -->
+<!-- describes: src/Application/Synchronization/**, src/Domain/Synchronization/**, src/Infrastructure/Mail/**, src/Application/Mail/Mutations/**, src/Domain/Mutations/** -->
 
 MailFathom synchronizes mailboxes read-only, on a bounded schedule, and — for an account that asks for it — the moment the mail server says something changed. Both mechanisms run the same synchronization pass over the same read-only session; what differs is only what starts one.
 
@@ -302,6 +302,59 @@ The record holds no mail. A folder path, a UID, a mutation name, a requester ide
 all it carries, and it is removed with the email it describes — including when the change it recorded was that email's
 deletion. [Stored email schema](../architecture/stored-email-schema.md#recorded-mailbox-mutations) states the columns and
 the stages in full.
+
+### An account can keep a record of what was done to it, and none does by default
+
+The record above exists to make a change correct, and its useful life ends when the change does. A durable answer to
+"why is this message in this folder" months later is a different artifact with a different lifetime, so it is a second
+table: `mailbox_mutation_audit_entries`, written once when a mutation reaches a terminal stage and read by nothing the
+mechanism depends on.
+
+**It is off by default and enabled per account.** An audit trail of mail movements is derived personal data — it says
+where a person's mail has been, when, and at whose instruction — so a deployment that never asked for it never
+accumulates one. An account turns it on and states how long it keeps entries:
+
+```yaml
+Mail:
+  Synchronization:
+    Accounts:
+      - AccountId: work
+        AuditTrail:
+          Enabled: true
+          Retention: 90.00:00:00
+```
+
+The answer is resolved when a change is written down and travels on its record, so switching the trail on or off while a
+change is in flight decides nothing about a change already begun. Turning it off stops new entries and leaves the
+existing ones to age out under the window that was configured for them.
+
+**One entry per finished change, of every kind.** A relocation, a delete, a `\Seen` change, and a copy each leave one,
+naming the change, the local email, the source folder path with its UIDVALIDITY and UID, the destination folder path and
+the UID the server reported where there was one, the flag direction where the change was one, who asked — a rule with
+its revision, or one invocation — when it was asked for, when it ended, and whether it was performed or given up on with
+the failure code it was given up on for.
+
+**It holds no mail content and it outlives the mail.** No subject, no address, no body fragment, no filename: folder
+paths, identifiers, and MailFathom's own configured names are what an entry carries. It references the email by its
+local identifier rather than hanging on it, so erasing that email leaves the entry standing — including when the change
+recorded *was* the deletion, which is exactly the entry an audit of deletions exists to hold.
+
+**Writing an entry never costs a change.** The append is a commit of its own, made after the terminal stage is already
+durable, so it can neither roll back a mailbox somebody's mail server has already changed nor fail the operation that
+changed it. An append that does not happen is reported as a warning naming the account and the mutation, and counted by
+`mailfathom.mailbox.mutation.audit.refused_appends`, so a deployment that undertook to hold this history can see the
+moment it stops holding it.
+
+**Retention rides the account's own run.** Every account run erases the entries that have outlived the window the
+account configured, which makes the window honored as often as the account comes round rather than to the minute. One
+pass erases at most five thousand entries, oldest first, so an operator shortening a long window clears the backlog over
+several runs instead of one delete that locks the trail against every append behind it. A failure there never puts the
+account into backoff: retention is a storage-limitation obligation rather than a mail operation, and the next run erases
+what this one did not.
+
+The trail is read through the administrative endpoint, in bounded keyset-paginated pages filterable by account, by
+mutation, and by time; [Administrative endpoint](../operations/admin-endpoint.md#reading-what-mailfathom-changed) states
+the route, and it also states the erasure path a data-subject request is answered through.
 
 ### Marking mail read is an act, never a side effect of reading
 

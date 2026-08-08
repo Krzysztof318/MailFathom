@@ -440,6 +440,7 @@ public sealed class MailboxMutationConvergerTests
                 this.Store,
                 this.WriteSessionFactory,
                 commitPolicy,
+                this.AuditTrail,
                 new MailboxMutationOptions { MaximumAttempts = maximumAttempts });
 
             var transportSecurityPolicyReader = Substitute.For<IMailTransportSecurityPolicyReader>();
@@ -450,6 +451,7 @@ public sealed class MailboxMutationConvergerTests
                 this.Performer,
                 transportSecurityPolicyReader,
                 commitPolicy,
+                this.AuditTrail,
                 new MailboxConvergenceOptions
                 {
                     MaxMutationsPerPass = maxMutationsPerPass,
@@ -459,6 +461,8 @@ public sealed class MailboxMutationConvergerTests
         }
 
         internal InMemoryMailboxMutationRecordStore Store { get; } = new();
+
+        internal RecordingMailboxMutationAuditTrail AuditTrail { get; } = new();
 
         internal FakeTimeProvider Clock { get; } = new(new DateTimeOffset(2026, 8, 7, 12, 0, 0, TimeSpan.Zero));
 

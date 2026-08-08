@@ -64,6 +64,21 @@ public sealed record MailboxMutationRecord
     /// </remarks>
     public required bool RequiresSourceRemoval { get; init; }
 
+    /// <summary>Gets whether this mutation leaves an entry in the account's audit trail when it ends.</summary>
+    /// <remarks>
+    /// <para>
+    /// It is resolved from the account's configuration when the record is opened and written down with it, so a trail
+    /// switched on or off while a mutation is in flight decides nothing about a change already begun. Without that, an
+    /// operator turning the trail on halfway through a backlog would produce a history whose gaps look like changes that
+    /// never happened.
+    /// </para>
+    /// <para>
+    /// The trail is off by default and enabled per account, which is data minimization applied to derived personal data:
+    /// an installation that never asked for a record of where its mail has been never accumulates one.
+    /// </para>
+    /// </remarks>
+    public required bool IsAudited { get; init; }
+
     /// <summary>Gets how many times this mutation has been attempted, counted before each attempt rather than after it.</summary>
     /// <remarks>
     /// Counting first is what makes the bound survive a crash loop: an attempt that kills the process still counted, so a

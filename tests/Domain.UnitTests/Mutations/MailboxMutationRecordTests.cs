@@ -510,6 +510,7 @@ public sealed class MailboxMutationRecordTests
         Id = MailboxMutationRecordId.Create(Guid.CreateVersion7(RecordedAt)),
         Request = MailboxMutationRequest.Relocate(LocalEmail, SourceOccurrence(), Requester, Archive),
         Stage = MailboxMutationStage.Completed,
+        IsAudited = false,
         RequiresSourceRemoval = true,
         Placement = RemoteEmailPlacement.Reported(DestinationUidValidity, PlacedUid),
         AttemptCount = 1,

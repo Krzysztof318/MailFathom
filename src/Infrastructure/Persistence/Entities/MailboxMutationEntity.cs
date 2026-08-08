@@ -71,6 +71,15 @@ internal sealed class MailboxMutationEntity
     /// </remarks>
     public AuthoredDeleteEmailDisposition? LocalDisposition { get; set; }
 
+    /// <summary>Gets or sets whether this mutation leaves an entry in the account's audit trail when it ends.</summary>
+    /// <remarks>
+    /// Resolved from the account's configuration when the row is written and never rewritten, which is the whole reason
+    /// it is stored rather than read where the mutation ends. A mutation ends in a later run — sometimes days later —
+    /// and reading the setting there would apply whatever the operator had changed it to in the meantime, producing a
+    /// history whose gaps look like changes that never happened.
+    /// </remarks>
+    public bool AuditTrailEnabled { get; set; }
+
     public MailboxMutationStage Stage { get; set; }
 
     /// <summary>Gets or sets whether the placement left a source occurrence that still has to be removed separately.</summary>

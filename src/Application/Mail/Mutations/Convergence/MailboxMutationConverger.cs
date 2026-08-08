@@ -3,10 +3,10 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.Diagnostics.CodeAnalysis;
+using MailFathom.Application.Mail.Mutations.Audit;
 using MailFathom.Application.Persistence;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Failures;
-using MailFathom.Domain.Mutations;
 using MailFathom.Domain.Transport;
 
 namespace MailFathom.Application.Mail.Mutations.Convergence;
@@ -44,6 +44,7 @@ public sealed class MailboxMutationConverger
     private readonly IMailboxMutationPerformer performer;
     private readonly IMailTransportSecurityPolicyReader transportSecurityPolicyReader;
     private readonly OptimisticConcurrencyRetryPolicy commitPolicy;
+    private readonly IMailboxMutationAuditTrail auditTrail;
     private readonly MailboxConvergenceOptions options;
     private readonly TimeProvider timeProvider;
 
@@ -52,6 +53,7 @@ public sealed class MailboxMutationConverger
     /// <param name="performer">Resumes a mutation from the stage its record names.</param>
     /// <param name="transportSecurityPolicyReader">Supplies the connection and authentication policy every attempt obeys.</param>
     /// <param name="commitPolicy">Commits the record movements this class makes without the performer.</param>
+    /// <param name="auditTrail">Keeps the history a finished mutation leaves behind, where the account asked for one.</param>
     /// <param name="options">Bounds one pass and carries the unknown-outcome grace period.</param>
     /// <param name="timeProvider">Measures how long an unresolved outcome has been unresolved.</param>
     /// <exception cref="ArgumentNullException">Thrown when a required collaborator is <see langword="null" />.</exception>
@@ -61,6 +63,7 @@ public sealed class MailboxMutationConverger
         IMailboxMutationPerformer performer,
         IMailTransportSecurityPolicyReader transportSecurityPolicyReader,
         OptimisticConcurrencyRetryPolicy commitPolicy,
+        IMailboxMutationAuditTrail auditTrail,
         MailboxConvergenceOptions options,
         TimeProvider timeProvider)
     {
@@ -68,6 +71,7 @@ public sealed class MailboxMutationConverger
         ArgumentNullException.ThrowIfNull(performer);
         ArgumentNullException.ThrowIfNull(transportSecurityPolicyReader);
         ArgumentNullException.ThrowIfNull(commitPolicy);
+        ArgumentNullException.ThrowIfNull(auditTrail);
         ArgumentNullException.ThrowIfNull(options);
         ArgumentNullException.ThrowIfNull(timeProvider);
         ArgumentOutOfRangeException.ThrowIfLessThan(options.MaxMutationsPerPass, 1, nameof(options));
@@ -77,6 +81,7 @@ public sealed class MailboxMutationConverger
         this.performer = performer;
         this.transportSecurityPolicyReader = transportSecurityPolicyReader;
         this.commitPolicy = commitPolicy;
+        this.auditTrail = auditTrail;
         this.options = options;
         this.timeProvider = timeProvider;
     }
@@ -153,7 +158,7 @@ public sealed class MailboxMutationConverger
         {
             if (candidate.Record.HasUnknownOutcome)
             {
-                await this.SettleUnknownOutcomeAsync(candidate.Record, tally, cancellationToken);
+                await this.SettleUnknownOutcomeAsync(candidate, tally, cancellationToken);
 
                 return;
             }
@@ -207,11 +212,17 @@ public sealed class MailboxMutationConverger
     /// </para>
     /// </remarks>
     private async Task SettleUnknownOutcomeAsync(
-        MailboxMutationRecord record,
+        OutstandingMailboxMutation candidate,
         ConvergenceTally tally,
         CancellationToken cancellationToken)
     {
-        var journal = new MailboxMutationJournal(this.store, this.commitPolicy, record);
+        var record = candidate.Record;
+        var journal = new MailboxMutationJournal(
+            this.store,
+            this.commitPolicy,
+            this.auditTrail,
+            record,
+            candidate.Folder);
 
         if (record.IsUnknownPlacementSettledBySourceRemoval)
         {

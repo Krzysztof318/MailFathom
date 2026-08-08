@@ -109,7 +109,16 @@ shape the coordinator loop itself, which are read once at start and marked *rest
 | `…:EarliestEmailReceivedDate` | date | unset (everything) | Not in the future (compared in UTC) | reload |
 | `…:RemotelyDeletedEmailDisposition` | enum | `RetainTombstone` | `RetainTombstone`, `EraseLocalCopy` | reload; governs disappearances observed from then on |
 | `…:AuthoredDeleteEmailDisposition` | enum | `RetainLocalCopy` | `RetainLocalCopy`, `RetainTombstone`, `EraseLocalCopy`; what becomes of the local copy of mail MailFathom itself deleted, and it takes precedence over the key above for those | reload; governs deletes authored from then on |
+| `…:AuditTrail:Enabled` | bool | `false` | Whether a finished change to this account's mailbox leaves a durable audit entry | reload; governs changes authored from then on |
+| `…:AuditTrail:Retention` | TimeSpan | `90.00:00:00` | 1 day – 3650 days; how long this account's audit entries are kept | reload; the next account run erases against the new window |
 | `…:Folders` | list | inbox by role | Aliases unique; each entry below | reload |
+
+`AuditTrail` is off by default because the record it keeps is derived personal data: it says where a person's mail has
+been, when, and at whose instruction. Turning it on commits the deployment to holding that history, describing it, and
+erasing it — which is why the retention is configured beside the switch rather than left unbounded, and why turning the
+switch back off stops new entries while leaving the existing ones to age out under the window they were written under.
+[An account can keep a record of what was done to it](../features/imap-synchronization.md#an-account-can-keep-a-record-of-what-was-done-to-it-and-none-does-by-default)
+states what an entry holds and what it deliberately does not.
 
 A folder entry names `Alias` (required — your stable name for the folder) and **exactly one** of `RemotePath` (the
 server's own path) or `SpecialUse` (a role discovery resolves: `Inbox`, `Archive`, `Drafts`, `Sent`, `Junk`, `Trash`,

@@ -4,6 +4,7 @@
 
 using System.Collections.Concurrent;
 using System.Diagnostics.CodeAnalysis;
+using MailFathom.Application.Mail.Mutations.Audit;
 using MailFathom.Application.Mail.Mutations.Convergence;
 using MailFathom.Application.Persistence;
 using MailFathom.Application.Synchronization;
@@ -228,6 +229,11 @@ internal sealed partial class AccountSynchronizationSupervisor
                         Interlocked.Increment(ref failedFolderCount);
                     }
                 });
+
+            if (!schedulingToken.IsCancellationRequested)
+            {
+                await this.EraseExpiredAuditEntriesAsync(runSettings, workUnitToken);
+            }
         }
         finally
         {
@@ -288,6 +294,50 @@ internal sealed partial class AccountSynchronizationSupervisor
             this.LogMutationConvergenceFailed(exception, this.accountId.Value);
 
             return true;
+        }
+    }
+
+    /// <summary>Erases whatever in this account's audit trail has outlived the window the account configured.</summary>
+    /// <remarks>
+    /// <para>
+    /// It rides the account's own run for the reason convergence does: an account already has a loop that comes round,
+    /// and a second schedule would be another thing to configure and watch for work that is one bounded delete. It runs
+    /// after the folders rather than before them, because holding data a day longer than the window is a smaller wrong
+    /// than delaying the mail this run exists to fetch.
+    /// </para>
+    /// <para>
+    /// A failure never fails the run. Retention is a storage-limitation obligation rather than a mail operation, and
+    /// putting an account into backoff — which is to say fetching its mail less often — because a delete did not run
+    /// would answer the wrong problem with the wrong remedy. The next run erases what this one did not.
+    /// </para>
+    /// </remarks>
+    [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "Retention is not a mail operation; an erasure that failed is logged and repeated by the next run rather than putting the account into backoff.")]
+    private async Task EraseExpiredAuditEntriesAsync(
+        MailSynchronizationOptions runSettings,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            using var scope = this.scopeFactory.CreateScope();
+
+            scope.ServiceProvider.GetRequiredService<ScopedMailSynchronizationSettings>().UseRunSnapshot(runSettings);
+
+            var erasedCount = await scope.ServiceProvider
+                .GetRequiredService<MailboxMutationAuditTrailRetention>()
+                .EraseExpiredAsync(this.accountId, cancellationToken);
+
+            if (erasedCount > 0)
+            {
+                this.LogAuditEntriesErased(this.accountId.Value, erasedCount);
+            }
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception exception)
+        {
+            this.LogAuditRetentionFailed(exception, this.accountId.Value);
         }
     }
 
@@ -596,6 +646,17 @@ internal sealed partial class AccountSynchronizationSupervisor
         Level = LogLevel.Warning,
         Message = "Converging the outstanding mailbox mutations of account {AccountId} ended unexpectedly; its folders still synchronized and its next run is backed off, and every change keeps the record of how far it got.")]
     private partial void LogMutationConvergenceFailed(Exception exception, string accountId);
+
+    [LoggerMessage(
+        Level = LogLevel.Information,
+        Message = "Account {AccountId} erased {ErasedCount} audit entries that had outlived its configured retention.")]
+    private partial void LogAuditEntriesErased(string accountId, int erasedCount);
+
+    /// <summary>Separates a retention pass that did not run from the ordinary case of it having nothing to erase.</summary>
+    [LoggerMessage(
+        Level = LogLevel.Warning,
+        Message = "Erasing the expired audit entries of account {AccountId} ended unexpectedly; the account is not backed off for it and its next run erases what this one did not.")]
+    private partial void LogAuditRetentionFailed(Exception exception, string accountId);
 
     [LoggerMessage(
         Level = LogLevel.Warning,

@@ -22,8 +22,16 @@ namespace MailFathom.Host.Api;
 /// client needs to tell "signed in" from "reached something else that answers HTTP".
 /// </para>
 /// <para>
-/// The second is the surface's only write, and <see cref="MailboxRefreshTokenEndpoint" /> states what that costs. Both
-/// are mapped into one group so a route cannot be added outside the requirement the endpoint attaches to it.
+/// The second is the surface's only write, and <see cref="MailboxRefreshTokenEndpoint" /> states what that costs.
+/// </para>
+/// <para>
+/// The third reads one account's record of the changes MailFathom made to its mailbox, which
+/// <see cref="MailboxMutationAuditEndpoint" /> describes. It is here rather than on the MCP surface because its answer
+/// is an operator's accountability evidence rather than anything a model reasons over, and because the credential that
+/// bounds administrative access is what bounds who may read where a person's mail has been.
+/// </para>
+/// <para>
+/// All three are mapped into one group so a route cannot be added outside the requirement the endpoint attaches to it.
 /// </para>
 /// </remarks>
 internal static class AdminApiEndpoints
@@ -40,6 +48,7 @@ internal static class AdminApiEndpoints
 
         api.MapGet("/session", (ClaimsPrincipal caller) => Results.Ok(AdminSessionResponse.For(caller)));
         api.MapMailboxRefreshToken();
+        api.MapMailboxMutationAudit();
 
         return api;
     }
