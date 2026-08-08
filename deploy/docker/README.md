@@ -17,13 +17,16 @@ Two properties hold everywhere:
 - **Reading is local.** A tool call answers from your copy and never contacts a mail server, so it is fast, it works while the server is down, and it cannot change anything remotely.
 - **Synchronization never writes to your mailbox.** Fetching mail never sets the remote `\Seen` flag, so mail MailFathom has copied still shows as unread in your own mail client.
 
-An agent gets three tools, and they are the whole surface:
+An agent gets four tools, and they are the whole surface:
 
 | Tool | What it answers |
 | --- | --- |
 | `list_emails` | A page of the timeline, newest first, filtered by account, folder, sender, recipient, subject, date range, seen state, or attachment presence |
 | `search_emails` | Ranked matches for a text query across subjects, participants, and body text, each with short extracts around what matched |
 | `get_email_content` | Up to ten messages in full: normalized headers, plain-text body, optionally sanitized HTML, and attachment names, types, and sizes — never attachment bytes |
+| `ask_mail` | A question answered from the mail a chat model looks up while answering, citing the identifiers of every message it drew on |
+
+The first three are always there. `ask_mail` needs a chat model and an embedding model you configure and point at, so a deployment with neither does not advertise it at all.
 
 There is no write tool to enable. An agent cannot send, delete, move, or mark anything.
 
@@ -108,7 +111,7 @@ Before a release is pushed it is built, unit-tested, format-checked, proven agai
 | --- | --- |
 | [Installing MailFathom](https://krzysztof318.github.io/MailFathom/users/installation.html) | Which deployment shape fits, and what each one needs |
 | [Getting started](https://krzysztof318.github.io/MailFathom/users/getting-started.html) | From an installed instance to a first successful tool call |
-| [Using the tools](https://krzysztof318.github.io/MailFathom/users/usage.html) | What the three tools do, what they bound, and how to read a failure |
+| [Using the tools](https://krzysztof318.github.io/MailFathom/users/usage.html) | What the four tools do, what they bound, and how to read a failure |
 | [Configuration reference](https://krzysztof318.github.io/MailFathom/operations/configuration-reference.html) | Every user-settable option, its default, and whether changing it needs a restart |
 | [The MCP endpoint](https://krzysztof318.github.io/MailFathom/operations/mcp-endpoint.html) | Authentication, TLS, browser origins, client certificates, rate limits |
 | [The container image](https://krzysztof318.github.io/MailFathom/operations/container-image.html) | This page's subject, in full |

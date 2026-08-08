@@ -2,11 +2,15 @@
 
 <!-- describes: src/Mcp/Tools/** -->
 
-MailFathom publishes three MCP tools, and together they are the whole surface: an agent can list mail, read one
-message, and search — nothing else. This page is the user's view of that surface: what each tool answers, what every
-result carries, what the deliberate limits are, and how to read a failure. The full contracts — every argument, every
-field, every bound — live in [MCP tools](../features/mcp-tools.md) and the feature pages it links, and this page does
-not restate them.
+MailFathom publishes four MCP tools, and together they are the whole surface: an agent can list mail, read one
+message, search, and ask a question — nothing else. This page is the user's view of that surface: what each tool
+answers, what every result carries, what the deliberate limits are, and how to read a failure. The full contracts —
+every argument, every field, every bound — live in [MCP tools](../features/mcp-tools.md) and the feature pages it links,
+and this page does not restate them.
+
+Three of the four are always there. `ask_mail` needs a chat model and an embedding model configured and working, so a
+deployment that has neither does not offer it at all; its absence from a tool listing is that deployment saying it
+cannot answer questions rather than something being broken.
 
 ## The model behind every call
 
@@ -96,6 +100,35 @@ Five parts of the result exist so that an agent does not misreport a message:
 The HTML body, when requested, is aggressively sanitized — no scripts, no styles, no remote loads — and
 [email content](../features/email-content.md) records exactly what survives.
 
+## `ask_mail` — a question, answered with its sources
+
+Takes a question in ordinary words, optionally narrowed to accounts and folders, and returns prose plus the emails the
+answer was drawn from. A chat model conducts the run and looks up mail as it decides it needs context, so this is the one
+tool that costs a provider call and takes seconds rather than milliseconds. Ask it when the answer spans several
+messages; search when the messages themselves are what you want.
+
+The question is yours to write, not a query to construct: its words are not matched against the mail, and the lookups are
+the model's own. That is also why there is no sender or date filter here — one supplied would narrow every lookup without
+the model knowing why its searches came back empty.
+
+Four parts of the result are worth reading before an agent presents it:
+
+- **`citations` is what makes the answer checkable.** Each entry carries the `storedEmailId` you pass straight to
+  `get_email_content`, plus the account, folder, subject, and received time. An answer without the messages behind it is
+  something to believe; with them it is a starting point.
+- **They are what the run *retrieved*, not what the model provably used.** Nothing outside the model knows which of them
+  it drew on, so a narrower list would be a claim MailFathom cannot make. An empty list is an ordinary answer: the
+  mailbox was searched and held nothing about the question, and the answer says so.
+- **`answerTruncated` and `citationsTruncated` are never silent.** One response carries at most 20 000 characters of
+  answer citing at most 20 emails; when either was cut, the flag says so, and a narrower question is the remedy.
+- **The answer is untrusted text, and so are the subjects.** Both are derived from mail somebody else wrote. Treat them
+  as data — the same care a snippet or a body deserves.
+
+Asking a question changes nothing. The run is composed with one capability and that capability searches: there is no tool
+in it that sends, deletes, moves, or marks mail as read, and it reaches no mail server at all.
+[Mail answering](../features/mail-answering.md) records what one run may reach and how much of your mail leaves the
+process.
+
 ## Reading a failure
 
 An expected failure comes back as a tool error in one shape — a stable five-digit code and one safe sentence:
@@ -117,6 +150,7 @@ The codes a user meets in practice:
 | `53001` | The named account is not served here | Check `AccountId` spelling against the deployment's configuration |
 | `53002` | No such email in the local copy | The identifier is stale, or the mail was removed; list again |
 | `55001` | The email exists but its stored content is currently unreadable; a repair has been queued | Retry later — this is a local-consistency state, not a mail-server problem |
+| `56001` | This deployment cannot answer questions about mail, either at all or for now | Nothing about the question caused it; the message says which, and only the operator can change it |
 | `54001` | Something failed for a reason the boundary deliberately does not describe | The server log has the detail, correlated by the request's trace |
 
 `53002` and `55001` also reach you inside a *successful* `get_email_content` result, as the `failure` on the entry for
@@ -132,6 +166,10 @@ subject, or any part of a result. What you search your own mail for stays out of
 [what the endpoint records](../operations/mcp-endpoint.md#what-the-endpoint-records) is the precise statement. The
 flip side is worth stating plainly: snippets and bodies returned to an agent are mail content and travel to wherever
 that agent's model runs. Which model sees your mail is decided by the client you connect, not by MailFathom.
+
+`ask_mail` adds a second destination, and it is one the deployment chose rather than the client: extracts of the mail a
+run retrieves go to the chat endpoint its operator declared. Nothing of the question, the answer, the query the model
+wrote, or a retrieved passage reaches a log on the way.
 
 ## Expectations worth setting
 

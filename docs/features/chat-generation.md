@@ -7,8 +7,9 @@ deployment declares to enable it, what one call is allowed to spend, what a fail
 operator sees whether the provider is working.
 
 It is the transport and nothing above it. Nothing here composes a prompt, retrieves anything, offers the model tools, or
-keeps a conversation — what to say is decided by whoever calls, and this is what says it. No MCP tool reaches this
-boundary yet.
+keeps a conversation — what to say is decided by whoever calls, and this is what says it. What calls it is the answering
+run behind the `ask_mail` tool, described in [Mail answering](mail-answering.md), and the optional second retrieval pass
+beside it.
 
 ## A chat provider and an embedding provider are separate choices
 
@@ -175,11 +176,16 @@ in the log, not this state. Every other classification in the table above moves 
 every scrape, and the answer would be about a request nobody asked for. What is reported is the outcome of the last real
 call.
 
-One consequence is worth knowing before reading a `Degraded` probe: **the state carries no age.** The moment the last
-call ended is recorded, but nothing reads it, so a provider that failed once during a deployment and has not been called
-since reports exactly what one that failed a moment ago reports. On an instance that embeds continuously the state is as
-current as the work; on one whose chat provider nothing calls, a stale failure can sit there indefinitely. Read the log
-records for when it happened.
+One consequence is worth knowing before reading a `Degraded` probe: **the probe reports the state without its age.** The
+moment the last call ended is recorded, and the health check does not read it, so a provider that failed once during a
+deployment and has not been called since probes exactly as one that failed a moment ago does. On an instance that embeds
+continuously the state is as current as the work; on one whose chat provider nothing calls, a stale failure can sit there
+indefinitely. Read the log records for when it happened.
+
+What does read the age is whatever has to decide whether calling again now would buy anything. Semantic search lets one
+query through after a minute without a fresh observation, and the answering capability behind `ask_mail` does the same
+for the chat endpoint, so a repaired credential is discovered without a restart even though the probe would still be
+reporting the old state until something calls.
 
 Three things make the states readable:
 

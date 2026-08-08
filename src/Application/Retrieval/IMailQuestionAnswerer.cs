@@ -30,7 +30,7 @@ public interface IMailQuestionAnswerer
     /// <param name="cancellationToken">Cancels the run and every provider call remaining in it.</param>
     /// <returns>The answer and the passages the run retrieved.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="question" /> is <see langword="null" />.</exception>
-    /// <exception cref="ArgumentException">Thrown when the question carries no text.</exception>
+    /// <exception cref="ArgumentException">Thrown when the conversation the question composes into is larger than one call may send.</exception>
     /// <exception cref="ChatGenerationFailedException">Thrown when the run produced no answer, naming which kind of failure ended it.</exception>
     /// <exception cref="OperationCanceledException">Thrown when the caller cancelled, which is never reported as a provider failure.</exception>
     Task<MailAnswer> AnswerAsync(MailQuestion question, CancellationToken cancellationToken);

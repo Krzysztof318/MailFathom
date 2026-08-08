@@ -6,9 +6,9 @@ A question about the mailbox, answered from the mail the model looks up while an
 composition that does it: what the model may reach, when it reaches it, how much of it leaves the process, and what an
 answer carries back.
 
-**No MCP tool reaches this yet.** The composition is in place and is exercised by its own tests; the tool that would
-expose it and the ceilings an operator configures are each their own change. What is described below is what the code
-does today.
+The `ask_mail` MCP tool is how a caller reaches it, and [MCP tools § `ask_mail`](mcp-tools.md#ask_mail) documents that
+surface — the arguments, the citations, and when the tool is advertised at all. The ceilings an operator configures on
+what one question may spend are still their own change.
 
 ## The model asks for mail; nothing is pushed at it
 
@@ -201,6 +201,60 @@ it drew on, so claiming the narrower set would state something this system canno
 An answer with no text at all is a failure rather than an empty answer, classified the same way any other empty
 generation is. [Chat generation § What a failing call is classified
 as](chat-generation.md#what-a-failing-call-is-classified-as) holds the table.
+
+## What a caller may ask, and what one response publishes
+
+The use case between a caller and the run owns three things the composition does not: what a question may be, whether
+this deployment can answer one at all, and how much of what a run produced a single response carries.
+
+A question is bounded before anything is sent — at most 1000 characters, not blank, and carrying no control character —
+and it is refused rather than truncated, because a cut question is a different question and the answer to it would come
+back looking like the answer to the one that was asked. That bound is the caller's; the deployment's declared ceiling on
+what one conversation may carry is a separate and much larger number, and a question that fits the first cannot be what
+exceeds the second.
+
+What a response publishes is bounded too, and here the bounds cut rather than refuse:
+
+| Bound | Default | What it controls |
+| --- | --- | --- |
+| Answer characters | 20 000 | How much of the model's answer one response carries |
+| Cited emails | 20 | How many messages one response names |
+
+Cutting is right where refusing was wrong, and for one reason: a request larger than a limit is the caller's to correct,
+while an answer larger than a limit has already been generated and paid for, and refusing it would discard a real answer
+over its length. What makes cutting safe is that it is reported — a response says which of the two was cut, so a
+shortened answer is never indistinguishable from a complete one and a claim traced to a message the response no longer
+names is never presented as checkable.
+
+The citations are one per email rather than one per passage. A run makes several lookups and one message can answer more
+than one of them; a reader given a list of sources wants the messages, not the number of times each was found. Neither
+one carries an extract: the passage has already reached a provider, and returning it to the caller as well would publish
+mail content from a call whose result is an answer.
+
+## When a deployment answers questions at all
+
+Answering needs both halves of the AI configuration at once — an embedding profile a question can be retrieved against,
+and a chat endpoint the run is conducted through. Either one absent makes answering something this deployment does not
+do; either one failing makes it something it currently cannot do. The reading is made in one place, so the surface that
+advertises the tool and the one that runs a question cannot disagree about it.
+
+- **Inactive** — no chat endpoint was declared, or this instance embeds no mail. Nothing is wrong and nothing changes on
+  its own.
+- **Available** — both halves are configured and neither is currently refusing.
+- **Degraded** — both are configured and one of them cannot serve: a refused credential, an unreachable endpoint, or an
+  active embedding profile whose space nothing can place a query in.
+
+It is a decision about now rather than a report of the last call, which is the difference from the capability
+[Email search](email-search.md#what-the-three-capability-states-mean) publishes. A recorded chat failure withholds
+answering for a minute and then stops withholding it, so one question is let through to find out whether the credential
+has been rotated. Nothing else in the process calls the chat endpoint once the second retrieval pass is off, so a reading
+that stayed degraded for as long as the last failure was on record would leave a repaired deployment permanently unable
+to demonstrate it. The embedding half needs no such window: synchronization and the search path call that provider as a
+by-product of work they were doing anyway, so its record renews itself.
+
+Reading the capability costs one committed read of local state and one read of process-local health. It calls no
+provider, deliberately: a capability that spent a paid call to be reported would put an operator's money behind every
+listing of the tools a server offers.
 
 ## A run is several calls, and each carries the bounds of one
 

@@ -7,6 +7,7 @@ using MailFathom.Application.Emails.Embeddings.Generation;
 using MailFathom.Application.Emails.Search;
 using MailFathom.Application.Emails.SearchEmails;
 using MailFathom.Application.Retrieval;
+using MailFathom.Application.Retrieval.AskMail;
 using MailFathom.Infrastructure.Persistence.Connections;
 using MailFathom.Infrastructure.Secrets.Resolution;
 using Microsoft.Extensions.DependencyInjection;
@@ -158,6 +159,40 @@ public sealed class ServiceCollectionExtensionsTests
             services,
             descriptor => descriptor.ServiceType == typeof(EmailKnowledgeBounds)
                 && descriptor.Lifetime == ServiceLifetime.Singleton);
+    }
+
+    /// <summary>
+    /// The tool surface asks whether this deployment answers questions, so the capability that decides it and the use
+    /// case behind it are registered whether or not a chat endpoint was declared. Requiring the answering agent here
+    /// would make the deployment that has to report "no questions" the one deployment unable to report anything.
+    /// </summary>
+    [Fact]
+    public void AddInfrastructure_WithoutAChatEndpoint_StillRegistersWhatReportsThatItAnswersNoQuestions()
+    {
+        // Arrange
+        var services = new ServiceCollection();
+
+        // Act
+        services.AddInfrastructure(
+            _ => new PostgresConnectionSettings("Host=localhost;Database=mailfathom", null, null),
+            PostgresTextSearchConfiguration.Default);
+
+        // Assert
+        Assert.Contains(
+            services,
+            descriptor => descriptor.ServiceType == typeof(MailAnsweringCapability)
+                && descriptor.Lifetime == ServiceLifetime.Scoped);
+        Assert.Contains(
+            services,
+            descriptor => descriptor.ServiceType == typeof(MailboxQuestionReader)
+                && descriptor.Lifetime == ServiceLifetime.Scoped);
+        Assert.Contains(
+            services,
+            descriptor => descriptor.ServiceType == typeof(MailAnswerBounds)
+                && descriptor.Lifetime == ServiceLifetime.Singleton);
+        // The answering agent belongs to the AI boundary and arrives only where a chat endpoint was declared, which is
+        // what the capability above resolves optionally rather than requires.
+        Assert.DoesNotContain(services, descriptor => descriptor.ServiceType == typeof(IMailQuestionAnswerer));
     }
 
     /// <summary>

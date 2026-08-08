@@ -4,6 +4,7 @@
 
 using System.Net;
 using System.Text;
+using MailFathom.AI.Chat;
 using MailFathom.AI.Orchestration;
 using MailFathom.AI.ProviderAdapters;
 using MailFathom.AI.Providers;
@@ -30,7 +31,7 @@ namespace MailFathom.AI.UnitTests.Orchestration;
 public sealed class MailAnsweringAgentTests
 {
     private static readonly MailQuestion Question = new(
-        "was the invoice attached",
+        MailQuestionText.Create("was the invoice attached"),
         MailboxScope.Create([MailAccountId.Create("primary")], []));
 
     [Fact]
@@ -68,33 +69,23 @@ public sealed class MailAnsweringAgentTests
     }
 
     /// <summary>The question is one turn, so what bounds a turn bounds the question, and it is refused before anything is sent.</summary>
-    [Theory]
-    [InlineData("")]
-    [InlineData("   ")]
-    public async Task AnswerAsync_AQuestionWithNoText_IsRefusedWithoutReachingTheProvider(string text)
-    {
-        // Arrange
-        using var provider = ScriptedTransport.Answering(Completion("never reached"));
-        var agent = provider.AgentOver(new RecordingEmailKnowledgeSearch());
-
-        // Act
-        await Assert.ThrowsAsync<ArgumentException>(() =>
-            agent.AnswerAsync(Question with { Text = text }, TestContext.Current.CancellationToken));
-
-        // Assert
-        Assert.Equal(0, provider.RequestCount);
-    }
-
+    /// <remarks>
+    /// A question this large is one a deployment declared a smaller conversation than, rather than one no caller could
+    /// write: the question's own bound is the use case's and is far below this. Both exist because they answer different
+    /// questions — what a caller may ask, and what this endpoint may be sent.
+    /// </remarks>
     [Fact]
     public async Task AnswerAsync_AQuestionLargerThanOneCallSends_IsRefusedWithoutReachingTheProvider()
     {
         // Arrange
         using var provider = ScriptedTransport.Answering(Completion("never reached"));
-        var agent = provider.AgentOver(new RecordingEmailKnowledgeSearch());
+        var agent = provider.AgentOver(
+            new RecordingEmailKnowledgeSearch(),
+            ChatDeclarations.Plan(maximumRequestCharacters: 100));
 
         // Act
         await Assert.ThrowsAsync<ArgumentException>(() => agent.AnswerAsync(
-            Question with { Text = new string('a', 5000) },
+            Question with { Text = MailQuestionText.Create(new string('a', 500)) },
             TestContext.Current.CancellationToken));
 
         // Assert
@@ -132,7 +123,9 @@ public sealed class MailAnsweringAgentTests
 
         public static ScriptedTransport Answering(string payload) => new() { payload = payload };
 
-        public MailAnsweringAgent AgentOver(IEmailKnowledgeSearch knowledgeSearch)
+        public MailAnsweringAgent AgentOver(
+            IEmailKnowledgeSearch knowledgeSearch,
+            ChatGenerationPlan? plan = null)
         {
             var transportFactory = Substitute.For<IHttpClientFactory>();
             transportFactory
@@ -162,7 +155,7 @@ public sealed class MailAnsweringAgentTests
                 });
 
             return new MailAnsweringAgent(
-                ChatDeclarations.Plan(),
+                plan ?? ChatDeclarations.Plan(),
                 credentialSource,
                 new OpenAiCompatibleClientFactory(),
                 transportFactory,

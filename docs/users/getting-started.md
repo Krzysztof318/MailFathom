@@ -193,8 +193,10 @@ bearer credential. Any client that supports Streamable HTTP connects with two fa
 | Server URL | `http://127.0.0.1:8080/mcp` under the Compose defaults; your proxy's HTTPS address otherwise |
 | Header | `Authorization: Bearer <the key material>` |
 
-A connected client's tool listing should show exactly three tools — `list_emails`, `get_email_content`,
-`search_emails` — each advertising itself as read-only, non-destructive, and idempotent.
+A connected client's tool listing should show at least three tools — `list_emails`, `get_email_content`,
+`search_emails` — each advertising itself as read-only, non-destructive, and idempotent. A fourth, `ask_mail`, appears
+only once you have configured a chat model and an embedding model and both are working; until then its absence is the
+deployment telling you it cannot answer questions yet rather than a fault.
 [Verifying an enabled endpoint](../operations/mcp-endpoint.md#verifying-an-enabled-endpoint) is the checklist form of
 this, including what the refusals look like when the key or the origin is wrong.
 

@@ -91,7 +91,7 @@ internal sealed class MailAnsweringAgent : IMailQuestionAnswerer
         // retrieval adds beside it is bounded where the passages are built, and the run's instruction is a constant of
         // this build rather than anything a caller composes.
         ChatRequestBounds.Require(
-            [new ChatMessage(ChatRole.User, question.Text)],
+            [new ChatMessage(ChatRole.User, question.Text.Value)],
             this.plan.MaximumMessagesPerRequest,
             this.plan.MaximumRequestCharacters);
 
@@ -112,7 +112,7 @@ internal sealed class MailAnsweringAgent : IMailQuestionAnswerer
             this.loggerFactory.CreateLogger<ResilientChatClient>());
 
         var agent = MailAnsweringAgentComposition.Compose(chatClient, this.plan, retrieval, this.loggerFactory);
-        var response = await agent.RunAsync(question.Text, session: null, options: null, cancellationToken);
+        var response = await agent.RunAsync(question.Text.Value, session: null, options: null, cancellationToken);
         var passages = retrieval.Retrieved;
 
         if (string.IsNullOrWhiteSpace(response.Text))

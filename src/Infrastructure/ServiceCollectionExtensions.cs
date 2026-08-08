@@ -26,6 +26,7 @@ using MailFathom.Application.Mail.Mutations.Convergence;
 using MailFathom.Application.Persistence;
 using MailFathom.Application.Resilience;
 using MailFathom.Application.Retrieval;
+using MailFathom.Application.Retrieval.AskMail;
 using MailFathom.Application.Synchronization;
 using MailFathom.Application.Synchronization.Checkpoints;
 using MailFathom.Application.Synchronization.Reconciliation;
@@ -286,6 +287,20 @@ public static class ServiceCollectionExtensions
         // filter is unchanged by the shape.
         services.AddScoped<MailboxKnowledgeSearch>();
         services.AddScoped<IEmailKnowledgeSearch>(provider => provider.GetRequiredService<MailboxKnowledgeSearch>());
+        // Built by hand for the reason the semantic search above is: the answering agent is the one dependency a
+        // supported deployment may not have, and a constructor injection of it would leave an instance that declared no
+        // chat endpoint unable to resolve the capability at all — which is the very instance that has to be able to
+        // report that it answers no questions.
+        services.AddScoped(provider => new MailAnsweringCapability(
+            provider.GetRequiredService<SemanticEmailSearch>(),
+            provider.GetRequiredService<IAiProviderHealthReader>(),
+            provider.GetRequiredService<TimeProvider>(),
+            provider.GetService<IMailQuestionAnswerer>()));
+        services.AddScoped<MailboxQuestionReader>();
+        // Beside the retrieval bounds above and registered for every deployment for the same reason: what they bound is
+        // a response rather than a provider, so an instance that answers no questions simply resolves them and never
+        // publishes one.
+        services.AddSingleton(MailAnswerBounds.Default);
         // The cache outlives every scope because a token is valid for whichever work unit next needs the account,
         // while the source that fills it is scoped to the configuration snapshot it resolves settings from.
         services.AddSingleton<MailAccessTokenCache>();

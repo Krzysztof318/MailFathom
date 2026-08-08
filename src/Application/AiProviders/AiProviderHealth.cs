@@ -10,15 +10,15 @@ namespace MailFathom.Application.AiProviders;
 /// <param name="ObservedAt">When that call ended, or <see langword="null" /> while nothing has been observed.</param>
 /// <remarks>
 /// <para>
-/// <paramref name="ObservedAt" /> records when the state was established and nothing reads it to decide anything yet.
-/// The health check reports <paramref name="State" /> alone, so a provider that failed once during a deployment and has
-/// not been called since reports exactly what one that failed a moment ago reports. It is carried because the state is
-/// otherwise undatable — a reader that wants to tell a stale failure from a current one has no way to derive the moment
-/// afterwards — and treating that distinction as already made is the mistake to avoid, not the one to describe.
+/// <paramref name="ObservedAt" /> records when the state was established, and what reads it is whatever has to decide
+/// whether calling the provider again now would buy anything: the semantic read path for the embedding role, and the
+/// answering capability for the chat one. The health check reads <paramref name="State" /> alone, so a provider that
+/// failed once during a deployment and has not been called since probes exactly as one that failed a moment ago does.
 /// </para>
 /// <para>
-/// Anything that does come to act on it owes a staleness window, which is a deployment's decision rather than this
-/// type's: how long a provider may go unasked before its last failure stops being news.
+/// A reader acting on the moment owes a staleness window of its own, because how long a provider may go unasked before
+/// its last failure stops being news depends on what else calls it. Absence of a moment is treated as old rather than
+/// fresh by both readers today, so an unstamped state can never be what withholds a capability indefinitely.
 /// </para>
 /// </remarks>
 public sealed record AiProviderHealth(AiProviderRole Role, AiProviderHealthState State, DateTimeOffset? ObservedAt);

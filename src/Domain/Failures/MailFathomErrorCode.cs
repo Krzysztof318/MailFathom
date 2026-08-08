@@ -221,6 +221,17 @@ public readonly record struct MailFathomErrorCode
     /// </remarks>
     public static MailFathomErrorCode EmailContentUnavailable { get; } = new(55001);
 
+    /// <summary>Gets subcategory 6, capability: a request asked for something this deployment does not currently serve.</summary>
+    /// <remarks>
+    /// A subcategory of its own because it is about the deployment rather than about the request: nothing the caller
+    /// wrote caused it, and no rewriting of the request reaches an answer. It is separate from the access failures for
+    /// the same reason — an account this deployment does not serve is a refusal about that caller's request, while this
+    /// says the capability is absent for everyone. One code covers a capability that was never configured and one that
+    /// is momentarily unable to run, because the message says which and neither is something a client can act on beyond
+    /// deciding whether to ask again.
+    /// </remarks>
+    public static MailFathomErrorCode MailAnsweringUnavailable { get; } = new(56001);
+
     #endregion
 
     #region Category 6 — Embedding providers
@@ -307,6 +318,7 @@ public readonly record struct MailFathomErrorCode
         StoredEmailNotFound,
         McpToolFailedUnexpectedly,
         EmailContentUnavailable,
+        MailAnsweringUnavailable,
         EmbeddingProviderCredentialRejected,
         EmbeddingProviderUnavailable,
         EmbeddingVectorShapeUnexpected,
