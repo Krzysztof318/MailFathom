@@ -5,6 +5,8 @@
 using MailFathom.AI.Orchestration;
 using MailFathom.Application.Emails.Mailboxes;
 using MailFathom.Application.Retrieval;
+using MailFathom.Application.Retrieval.AskMail;
+using MailFathom.Domain.Answering.Audit;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.Logging;
 
@@ -47,6 +49,9 @@ internal sealed class ScopedMailKnowledgeRetrieval
     private readonly MailAnsweringRunLedger runLedger;
     private readonly Lock gate = new();
     private readonly List<EmailKnowledgePassage> retrieved = [];
+    private int candidateCount;
+    private int relevantCandidateCount;
+    private bool relevanceFilterFellBack;
 
     /// <summary>Initializes the retrieval one run may make.</summary>
     /// <param name="knowledgeSearch">Finds the mail relevant to a query.</param>
@@ -67,18 +72,33 @@ internal sealed class ScopedMailKnowledgeRetrieval
         this.runLedger = runLedger;
     }
 
-    /// <summary>Gets the passages this run has handed over, in the order it handed them over.</summary>
+    /// <summary>Gets what this run's retrieval has reached so far, across every lookup it has made.</summary>
     /// <remarks>
-    /// What was handed over rather than what was found. A passage the run's ceiling would not let it send never reached
-    /// the model, so citing it would name a message the answer cannot have been drawn from.
+    /// <para>
+    /// The passages are what was handed over rather than what was found. A passage the run's ceiling would not let it
+    /// send never reached the model, so citing it would name a message the answer cannot have been drawn from — while
+    /// the counts beside them do say what was found, which is the only place the difference is visible.
+    /// </para>
+    /// <para>
+    /// Readable at any point rather than only once the run has ended, because a run that failed part way through has
+    /// retrieved what it retrieved and that is exactly what its record has to state.
+    /// </para>
     /// </remarks>
-    internal IReadOnlyList<EmailKnowledgePassage> Retrieved
+    internal MailAnsweringRetrievalReport Report
     {
         get
         {
+            // Read before the gate is taken, so this type never holds its own lock while asking for the ledger's. The
+            // only other path between the two runs the same way round, which is what keeps the pair deadlock-free.
+            var truncated = this.runLedger.RetrievalWasTruncated;
+
             lock (this.gate)
             {
-                return [.. this.retrieved];
+                return new MailAnsweringRetrievalReport(
+                    [.. this.retrieved],
+                    this.candidateCount,
+                    this.relevantCandidateCount,
+                    Degraded(truncated, this.relevanceFilterFellBack));
             }
         }
     }
@@ -129,11 +149,17 @@ internal sealed class ScopedMailKnowledgeRetrieval
         CancellationToken cancellationToken)
     {
         var found = await this.knowledgeSearch.FindPassagesAsync(this.scope, query, cancellationToken);
-        var admitted = this.runLedger.AdmitPassages(found);
+        var admitted = this.runLedger.AdmitPassages(found.Passages);
 
         lock (this.gate)
         {
             this.retrieved.AddRange(admitted);
+
+            // Summed across the run rather than kept per lookup, because a model decides how many lookups to make and
+            // a per-lookup figure would describe a decision nobody took.
+            this.candidateCount += found.CandidateCount;
+            this.relevantCandidateCount += found.Passages.Count;
+            this.relevanceFilterFellBack |= found.RelevanceFilterFellBack;
         }
 
         return
@@ -152,11 +178,16 @@ internal sealed class ScopedMailKnowledgeRetrieval
     /// Every result of this run was built above and carries its passage, so the formatter reaches the message identity
     /// and the source coordinates rather than the flattened strings the framework's own result type carries. The cast
     /// asserts that rather than filtering on it: a result arriving from anywhere else would otherwise be dropped from
-    /// the envelope while <see cref="Retrieved" /> still recorded it, leaving the answer citing a message the model was
+    /// the envelope while <see cref="Report" /> still recorded it, leaving the answer citing a message the model was
     /// never shown.
     /// </remarks>
     private string FormatRetrieved(IList<TextSearchProvider.TextSearchResult> results) =>
         RetrievedMailContextFormatter.Format(
             [.. results.Select(static result => result.RawRepresentation).Cast<EmailKnowledgePassage>()],
             this.WasTruncated);
+
+    /// <summary>Names the ways this run read less of the mailbox than an undegraded run of the same question would.</summary>
+    private static MailAnsweringRunDegradation Degraded(bool truncated, bool filterFellBack) =>
+        (truncated ? MailAnsweringRunDegradation.RetrievalCeilingReached : MailAnsweringRunDegradation.None)
+        | (filterFellBack ? MailAnsweringRunDegradation.RelevanceFilterFellBack : MailAnsweringRunDegradation.None);
 }

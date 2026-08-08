@@ -9,6 +9,7 @@ using MailFathom.Application.Emails.Mailboxes;
 using MailFathom.Application.Emails.Search;
 using MailFathom.Application.Retrieval;
 using MailFathom.Application.Retrieval.AskMail;
+using MailFathom.Application.Retrieval.AskMail.Audit;
 using MailFathom.Domain.Accounts;
 using Microsoft.Extensions.Time.Testing;
 using NSubstitute;
@@ -68,7 +69,13 @@ internal static class AnsweringDeployment
             Capability(answerer),
             new MailboxScopeResolver(accountCatalog),
             spendLedger ?? LedgerAdmitting(),
-            bounds ?? MailAnswerBounds.Default);
+            bounds ?? MailAnswerBounds.Default,
+
+            // Both are substituted because this suite is about what the tool converts and publishes: what a run reports
+            // and what it records are the use case's own contract, asserted where that contract lives.
+            Substitute.For<IMailAnsweringRunTelemetry>(),
+            Substitute.For<IMailAnsweringAuditTrail>(),
+            new FakeTimeProvider(Now));
     }
 
     /// <summary>Builds a ledger with an allowance for whatever a test asks it.</summary>

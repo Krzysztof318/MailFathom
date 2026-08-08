@@ -11,6 +11,7 @@ using MailFathom.Application.Chat;
 using MailFathom.Application.Resilience;
 using MailFathom.Application.Retrieval;
 using MailFathom.Application.Retrieval.AskMail;
+using MailFathom.Domain.Answering.Audit;
 using Microsoft.Extensions.Logging;
 
 namespace MailFathom.AI.Orchestration;
@@ -94,9 +95,19 @@ internal sealed class MailAnsweringAgent : IMailQuestionAnswerer
     }
 
     /// <inheritdoc />
-    public async Task<MailAnswer> AnswerAsync(MailQuestion question, CancellationToken cancellationToken)
+    public async Task<MailAnswer> AnswerAsync(
+        MailQuestion question,
+        MailAnsweringRunObservation observation,
+        CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(question);
+        ArgumentNullException.ThrowIfNull(observation);
+
+        var endpoint = this.plan.Endpoint;
+
+        // Recorded before anything that can fail, so a run stopped on its first call is still attributable to the
+        // profile and the policy that produced it rather than leaving both blank in its own record.
+        observation.RecordComposition(endpoint.Alias, MailAnsweringInstructions.Version);
 
         // The question is one turn, so the bound on what one call may carry is the bound on the question. What the
         // retrieval adds beside it is bounded where the passages are built, and the run's instruction is a constant of
@@ -108,8 +119,29 @@ internal sealed class MailAnsweringAgent : IMailQuestionAnswerer
 
         var runLedger = new MailAnsweringRunLedger(this.runBounds);
         var retrieval = new ScopedMailKnowledgeRetrieval(this.knowledgeSearch, question.Scope, runLedger);
-        var endpoint = this.plan.Endpoint;
 
+        try
+        {
+            return await this.ConductAsync(question, endpoint, retrieval, runLedger, cancellationToken);
+        }
+        finally
+        {
+            // Whatever ended the run, what it retrieved before that is what its record has to state: a run that failed
+            // on its third provider call has already read somebody's mail, and reporting only on the way out through
+            // an answer would say it read nothing.
+            observation.RecordRetrieval(retrieval.Report);
+        }
+    }
+
+    /// <summary>Opens the run's own credential, transport, client, and agent, and answers through them.</summary>
+    /// <remarks>All four are released with the run, which is the same lifetime the single-request chat adapter uses and for the same reasons.</remarks>
+    private async Task<MailAnswer> ConductAsync(
+        MailQuestion question,
+        ChatEndpoint endpoint,
+        ScopedMailKnowledgeRetrieval retrieval,
+        MailAnsweringRunLedger runLedger,
+        CancellationToken cancellationToken)
+    {
         // Resolved per run and released with it, so a rotated key is picked up by the next question and the material
         // exists for one run rather than for process uptime.
         using var credential = await this.credentialSource.ResolveAsync(endpoint.Alias, cancellationToken);
@@ -129,28 +161,28 @@ internal sealed class MailAnsweringAgent : IMailQuestionAnswerer
 
         var agent = MailAnsweringAgentComposition.Compose(chatClient, this.plan, retrieval, this.loggerFactory);
         var response = await agent.RunAsync(question.Text.Value, session: null, options: null, cancellationToken);
-        var passages = retrieval.Retrieved;
+        var report = retrieval.Report;
 
         if (string.IsNullOrWhiteSpace(response.Text))
         {
             // Logged before the failure is raised, because the failure names only that no text arrived, while the count
             // says whether the run had anything to answer from.
-            MailAnsweringEvents.LogRunProducedNoAnswer(this.logger, endpoint.Alias, passages.Count);
+            MailAnsweringEvents.LogRunProducedNoAnswer(this.logger, endpoint.Alias, report.Passages.Count);
 
             throw new ChatGenerationFailedException(endpoint.Alias, ChatGenerationFailure.AnswerEmpty);
         }
 
         // Smaller than the passage count wherever one message answered two of the model's queries, which is what makes
         // the pair worth recording: it says how much of the mailbox one question actually reached.
-        var emailCount = passages.DistinctBy(static passage => passage.StoredEmailId).Count();
+        var emailCount = report.Passages.DistinctBy(static passage => passage.StoredEmailId).Count();
 
-        MailAnsweringEvents.LogAnswered(this.logger, endpoint.Alias, passages.Count, emailCount);
+        MailAnsweringEvents.LogAnswered(this.logger, endpoint.Alias, report.Passages.Count, emailCount);
 
-        if (retrieval.WasTruncated)
+        if (report.Degradation.HasFlag(MailAnsweringRunDegradation.RetrievalCeilingReached))
         {
-            MailAnsweringEvents.LogRetrievalCeilingReached(this.logger, endpoint.Alias, passages.Count);
+            MailAnsweringEvents.LogRetrievalCeilingReached(this.logger, endpoint.Alias, report.Passages.Count);
         }
 
-        return new MailAnswer(response.Text, passages, retrieval.WasTruncated);
+        return new MailAnswer(response.Text);
     }
 }

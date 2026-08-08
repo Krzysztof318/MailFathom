@@ -3,6 +3,8 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.Retrieval;
+using MailFathom.Application.Retrieval.AskMail;
+using MailFathom.Domain.Answering.Audit;
 
 namespace MailFathom.Mcp.UnitTests.TestDoubles;
 
@@ -14,18 +16,25 @@ namespace MailFathom.Mcp.UnitTests.TestDoubles;
 /// </remarks>
 internal sealed class StubMailQuestionAnswerer : IMailQuestionAnswerer
 {
-    private MailAnswer answer = new("an answer", [], RetrievalWasTruncated: false);
+    private MailAnswer answer = new("an answer");
+    private MailAnsweringRetrievalReport retrieval = MailAnsweringRetrievalReport.Empty;
 
     /// <summary>Gets the question the last run was asked, or <see langword="null" /> while no run has been asked one.</summary>
     public MailQuestion? LastQuestion { get; private set; }
 
-    /// <summary>Scripts what the next run answers with.</summary>
+    /// <summary>Scripts what the next run answers with, and the mail it reports having retrieved.</summary>
     /// <param name="text">The answer text.</param>
     /// <param name="passages">The passages the run is to report having retrieved.</param>
     /// <returns>The same answerer, so a test arranges it in one expression.</returns>
     public StubMailQuestionAnswerer Answering(string text, params EmailKnowledgePassage[] passages)
     {
-        this.answer = new MailAnswer(text, passages, RetrievalWasTruncated: false);
+        this.answer = new MailAnswer(text);
+        this.retrieval = this.retrieval with
+        {
+            Passages = passages,
+            CandidateCount = passages.Length,
+            RelevantCandidateCount = passages.Length,
+        };
 
         return this;
     }
@@ -34,17 +43,27 @@ internal sealed class StubMailQuestionAnswerer : IMailQuestionAnswerer
     /// <returns>The same answerer, so a test arranges it in one expression.</returns>
     public StubMailQuestionAnswerer HavingReachedTheRetrievalCeiling()
     {
-        this.answer = this.answer with { RetrievalWasTruncated = true };
+        this.retrieval = this.retrieval with
+        {
+            Degradation = this.retrieval.Degradation | MailAnsweringRunDegradation.RetrievalCeilingReached,
+        };
 
         return this;
     }
 
     /// <inheritdoc />
-    public Task<MailAnswer> AnswerAsync(MailQuestion question, CancellationToken cancellationToken)
+    public Task<MailAnswer> AnswerAsync(
+        MailQuestion question,
+        MailAnsweringRunObservation observation,
+        CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(question);
+        ArgumentNullException.ThrowIfNull(observation);
 
         this.LastQuestion = question;
+
+        observation.RecordComposition("stub-endpoint", "stub-instructions");
+        observation.RecordRetrieval(this.retrieval);
 
         return Task.FromResult(this.answer);
     }

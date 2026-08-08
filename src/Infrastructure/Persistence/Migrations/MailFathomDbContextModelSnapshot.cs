@@ -294,6 +294,78 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                     b.ToTable("embedding_spend_periods", (string)null);
                 });
 
+            modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.MailAnsweringAuditEntryEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ChatEndpointAlias")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<DateTimeOffset>("CompletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Degradation")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<string>("InstructionsVersion")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("MailboxAccountId")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<string>("Outcome")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<Guid>("RunId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("StartedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("RunId", "MailboxAccountId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_mail_answering_audit_entries_run_account");
+
+                    b.HasIndex("MailboxAccountId", "CompletedAt", "Id")
+                        .HasDatabaseName("ix_mail_answering_audit_entries_account_completed");
+
+                    b.ToTable("mail_answering_audit_entries", (string)null);
+                });
+
+            modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.MailAnsweringAuditedEmailEntity", b =>
+                {
+                    b.Property<Guid>("MailAnsweringAuditEntryId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("StoredEmailId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Position")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("WasCited")
+                        .HasColumnType("boolean");
+
+                    b.HasKey("MailAnsweringAuditEntryId", "StoredEmailId");
+
+                    b.HasIndex("StoredEmailId");
+
+                    b.ToTable("mail_answering_audited_emails", (string)null);
+                });
+
             modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.MailFolderEntity", b =>
                 {
                     b.Property<long>("Id")
@@ -835,6 +907,21 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                     b.Navigation("StoredEmail");
                 });
 
+            modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.MailAnsweringAuditedEmailEntity", b =>
+                {
+                    b.HasOne("MailFathom.Infrastructure.Persistence.Entities.MailAnsweringAuditEntryEntity", null)
+                        .WithMany("Emails")
+                        .HasForeignKey("MailAnsweringAuditEntryId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("MailFathom.Infrastructure.Persistence.Entities.StoredEmailEntity", null)
+                        .WithMany()
+                        .HasForeignKey("StoredEmailId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.MailFolderEntity", b =>
                 {
                     b.HasOne("MailFathom.Infrastructure.Persistence.Entities.MailboxAccountEntity", "MailboxAccount")
@@ -895,6 +982,11 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
             modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.EmbeddingProfileEntity", b =>
                 {
                     b.Navigation("Embeddings");
+                });
+
+            modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.MailAnsweringAuditEntryEntity", b =>
+                {
+                    b.Navigation("Emails");
                 });
 
             modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.MailFolderEntity", b =>

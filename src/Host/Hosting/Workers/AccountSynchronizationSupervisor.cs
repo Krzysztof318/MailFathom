@@ -7,6 +7,7 @@ using System.Diagnostics.CodeAnalysis;
 using MailFathom.Application.Mail.Mutations.Audit;
 using MailFathom.Application.Mail.Mutations.Convergence;
 using MailFathom.Application.Persistence;
+using MailFathom.Application.Retrieval.AskMail.Audit;
 using MailFathom.Application.Synchronization;
 using MailFathom.Application.Synchronization.Reconciliation;
 using MailFathom.Application.Synchronization.Sessions;
@@ -297,18 +298,24 @@ internal sealed partial class AccountSynchronizationSupervisor
         }
     }
 
-    /// <summary>Erases whatever in this account's audit trail has outlived the window the account configured.</summary>
+    /// <summary>Erases whatever in this account's two audit records has outlived the window the account configured.</summary>
     /// <remarks>
     /// <para>
-    /// It rides the account's own run for the reason convergence does: an account already has a loop that comes round,
-    /// and a second schedule would be another thing to configure and watch for work that is one bounded delete. It runs
-    /// after the folders rather than before them, because holding data a day longer than the window is a smaller wrong
-    /// than delaying the mail this run exists to fetch.
+    /// Both records age out here — the trail of the changes MailFathom made to the mailbox, and the record of the
+    /// questions answered from it. They are separate operator decisions with separate windows, and one pass because the
+    /// pass is what the account's own loop already provides: a second schedule would be another thing to configure and
+    /// watch for work that is two bounded deletes.
+    /// </para>
+    /// <para>
+    /// It rides the account's own run for the reason convergence does, and runs after the folders rather than before
+    /// them, because holding data a day longer than the window is a smaller wrong than delaying the mail this run
+    /// exists to fetch.
     /// </para>
     /// <para>
     /// A failure never fails the run. Retention is a storage-limitation obligation rather than a mail operation, and
     /// putting an account into backoff — which is to say fetching its mail less often — because a delete did not run
-    /// would answer the wrong problem with the wrong remedy. The next run erases what this one did not.
+    /// would answer the wrong problem with the wrong remedy. The next run erases what this one did not, including the
+    /// second record where a failure in the first stopped this pass from reaching it.
     /// </para>
     /// </remarks>
     [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "Retention is not a mail operation; an erasure that failed is logged and repeated by the next run rather than putting the account into backoff.")]
@@ -329,6 +336,15 @@ internal sealed partial class AccountSynchronizationSupervisor
             if (erasedCount > 0)
             {
                 this.LogAuditEntriesErased(this.accountId.Value, erasedCount);
+            }
+
+            var erasedAnsweringCount = await scope.ServiceProvider
+                .GetRequiredService<MailAnsweringAuditTrailRetention>()
+                .EraseExpiredAsync(this.accountId, cancellationToken);
+
+            if (erasedAnsweringCount > 0)
+            {
+                this.LogAnsweringAuditEntriesErased(this.accountId.Value, erasedAnsweringCount);
             }
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -661,6 +677,11 @@ internal sealed partial class AccountSynchronizationSupervisor
         Level = LogLevel.Information,
         Message = "Account {AccountId} erased {ErasedCount} audit entries that had outlived its configured retention.")]
     private partial void LogAuditEntriesErased(string accountId, int erasedCount);
+
+    [LoggerMessage(
+        Level = LogLevel.Information,
+        Message = "Account {AccountId} erased {ErasedCount} answering audit entries that had outlived its configured retention.")]
+    private partial void LogAnsweringAuditEntriesErased(string accountId, int erasedCount);
 
     /// <summary>Separates a retention pass that did not run from the ordinary case of it having nothing to erase.</summary>
     [LoggerMessage(

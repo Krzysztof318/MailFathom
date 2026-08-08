@@ -32,14 +32,21 @@ public interface IEmailKnowledgeSearch
     /// <param name="scope">The accounts and folders the passages may be drawn from, decided by the caller.</param>
     /// <param name="queryText">What to look for, which is free text a model may have written.</param>
     /// <param name="cancellationToken">Propagates caller cancellation.</param>
-    /// <returns>The passages, most relevant first, bounded in number and in the size of each.</returns>
+    /// <returns>The passages, most relevant first, bounded in number and in the size of each, beside what the lookup considered to produce them.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="scope" /> is <see langword="null" />.</exception>
     /// <remarks>
+    /// <para>
     /// A query that finds nothing, and one that carries no usable text, both produce an empty list. Neither is a failure:
     /// the text is written by a model rather than by a caller who can be told to correct it, and a run whose retrieval
     /// found nothing still has an answer to give.
+    /// </para>
+    /// <para>
+    /// The counts travel with the passages rather than being logged where they arise, because what an operator and an
+    /// audit both ask about is a <em>run</em>, and a run makes several lookups. Only a caller that owns the run can add
+    /// them up, so an implementation reports its own and adds nothing up itself.
+    /// </para>
     /// </remarks>
-    Task<IReadOnlyList<EmailKnowledgePassage>> FindPassagesAsync(
+    Task<EmailKnowledgeLookup> FindPassagesAsync(
         MailboxScope scope,
         string queryText,
         CancellationToken cancellationToken);

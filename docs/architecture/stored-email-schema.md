@@ -281,6 +281,40 @@ subject, no address, no body fragment, no filename. What makes this table's vers
 separately is that this one outlives the mail, so an entry that carried content would be content kept past the erasure
 of the message it came from.
 
+## The record of what a question read
+
+`mail_answering_audit_entries` holds one row per account per `ask_mail` run, written once when the run has ended and its
+answer has already been produced. It is the same artifact as the trail above for a different act — that one answers "why
+is this message in this folder", this one answers "which of my messages did that answer come from" — and it is kept for
+the same reason: an answer produced by a model is not reproducible, so the only way to explain one later is to have
+recorded what produced it.
+
+| Column | What it records |
+|---|---|
+| `RunId`, `MailboxAccountId`, unique together | Which question this was and whose mailbox it reached; the uniqueness is what makes a repeated append leave one entry, and the run identifier is what joins the entries a multi-account question left |
+| `ChatEndpointAlias`, `InstructionsVersion` | The profile and the policy the answer was produced under, as MailFathom's own names for both |
+| `StartedAt`, `CompletedAt` | When the run began and when it ended |
+| `Outcome` | How it ended: answered, or one of the endings that published no answer |
+| `Degradation` | Which ways it read less of the mailbox than an undegraded run of the same question would, as a set of names |
+
+`mail_answering_audited_emails` holds one row per message an entry names, keyed by the entry and the message together —
+one run names one message once, however many of its lookups found it. Beside that pair it carries `Position`, the order
+the run first reached the message in, and `WasCited`, whether the published answer named it as a source. The difference
+between the two is the point: retrieval is what the run *read*, a citation is what the response *published*, and a
+response bounded to fewer citations than the run retrieved messages is exactly where the two diverge.
+
+**This is the one place a record follows the mail it names rather than outliving it.** The row cascades from
+`stored_emails`, so erasing a message erases it from every run that read it, and it cascades from the entry, so
+retention erasing an entry takes its messages with it. That is the deliberate opposite of the mutation trail above,
+where the act recorded may have *been* the deletion; nothing of the sort applies to reading a message, so a message
+nobody may hold any more is not one this record goes on naming. The account stays a value rather than an association for
+the reason it does there: a deployment that stopped serving an account still answered questions from it.
+
+No mail content is here, and the omission is stronger than elsewhere on this page: no extract, no subject, no address,
+and no query. A record that stored the retrieved passages would be a second copy of the mailbox with its own retention,
+access, export, and erasure obligations — for the sake of a debugging convenience. What the identifier buys instead is
+that the message can be fetched and read whole through the reads that already serve it.
+
 ## Indexes
 
 | Index | Columns | Purpose |
@@ -303,6 +337,9 @@ of the message it came from.
 | `ix_mailbox_mutations_placement` | `(MailboxAccountId, DestinationFolderPath, PlacementUidValidity, PlacementUid)` where `PlacementObservedAt` is null | The question the forward pass asks of every batch it discovers: is one of these UIDs where a relocation or a copy put an email |
 | `ix_mailbox_mutation_audit_entries_mutation` | `(MutationRecordId)`, unique | One audit entry per mutation ending, whatever a repeated append attempts |
 | `ix_mailbox_mutation_audit_entries_account_completed` | `(MailboxAccountId, CompletedAt, Id)` | The two ways the trail is worked: a keyset-paginated page of an account's history, and the retention pass that erases what ended before a cutoff |
+| `ix_mail_answering_audit_entries_run_account` | `(RunId, MailboxAccountId)`, unique | One entry per run per account, whatever a repeated append attempts |
+| `ix_mail_answering_audit_entries_account_completed` | `(MailboxAccountId, CompletedAt, Id)` | The same two readers the trail above has: a keyset-paginated page of an account's runs, and the retention pass beside it |
+| `IX_mail_answering_audited_emails_StoredEmailId` | `(StoredEmailId)` | The foreign key back to the message, which is what makes erasing one reach the runs that read it without scanning the table |
 
 The recipient and search-vector indexes are GIN rather than B-tree because both serve containment tests. A B-tree over an array column serves only equality against a whole array, and over a `tsvector` it serves nothing search asks for; a GIN index is what turns either into an index scan.
 
@@ -348,7 +385,9 @@ The derived search document is not a lesser classification of the same data. Bod
 
 `mailbox_mutations` is derived personal data too, and for a reason worth stating plainly: a mutation history says where a person's mail has been and what was done to it. It therefore inherits the retention and deletion obligations of the email it describes rather than outliving it, and the cascade from `stored_emails` is what makes that structural — including where the recorded mutation was the deletion itself.
 
-`mailbox_mutation_audit_entries` is the one table on this page that deliberately does **not** inherit those obligations, and it is the only one that needs an operator's decision before it holds anything at all. It is derived personal data by the same reading — where a person's mail has been, when, and at whose instruction — and the reason it outlives the mail is that an audit of deletions whose entries are erased by the deletions they record holds nothing. What replaces the cascade is a bound of its own: the trail is off unless an account turns it on, each account states how long its entries are kept, and every account run erases what has outlived that window. A data-subject erasure reaches it separately for the same reason, and [Administrative endpoint](../operations/admin-endpoint.md#reading-what-mailfathom-changed) states that path.
+`mailbox_mutation_audit_entries` is the one table on this page that deliberately does **not** inherit those obligations. It is derived personal data by the same reading — where a person's mail has been, when, and at whose instruction — and the reason it outlives the mail is that an audit of deletions whose entries are erased by the deletions they record holds nothing. What replaces the cascade is a bound of its own: the trail is off unless an account turns it on, each account states how long its entries are kept, and every account run erases what has outlived that window. A data-subject erasure reaches it separately for the same reason, and [Administrative endpoint](../operations/admin-endpoint.md#reading-what-mailfathom-changed) states that path.
+
+`mail_answering_audit_entries` and `mail_answering_audited_emails` are the other table that needs an operator's decision before either holds anything, and the comparison between the two is the whole design. The entry is derived personal data of a different kind — what a person's mail was read for, and when — and it is bounded the same way: off unless an account turns it on, with a stated retention every account run erases against. Where it differs is the cascade, which it keeps: the messages an entry names hang on `stored_emails` and go with them, because recording that mail was *read* survives that mail's erasure no better than the extract itself would. Retention and the cascade therefore both reach it, and neither replaces the other.
 
 The same holds for `email_chunks`, and one thing about it is deliberate: a chunk records the message it came from and the span inside it, and nothing else. The account, folder, sender, recipients, date, and subject a retrieval will want to cite are reached through that message rather than copied onto the passage, so cutting mail into chunks widens no access, export, or erasure surface — it only adds rows the same cascade erases.
 

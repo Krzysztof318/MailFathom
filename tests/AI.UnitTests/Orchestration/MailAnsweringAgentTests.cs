@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.Net;
+using System.Security.Cryptography;
 using System.Text;
 using MailFathom.AI.Chat;
 using MailFathom.AI.Orchestration;
@@ -16,6 +17,7 @@ using MailFathom.Application.Resilience;
 using MailFathom.Application.Retrieval;
 using MailFathom.Application.Retrieval.AskMail;
 using MailFathom.Domain.Accounts;
+using MailFathom.Domain.Answering.Audit;
 using MailFathom.TestSupport;
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
@@ -35,19 +37,22 @@ public sealed class MailAnsweringAgentTests
         MailQuestionText.Create("was the invoice attached"),
         MailboxScope.Create([MailAccountId.Create("primary")], []));
 
+    private static readonly DateTimeOffset RunStartedAt = new(2026, 8, 8, 12, 0, 0, TimeSpan.Zero);
+
     [Fact]
     public async Task AnswerAsync_AProviderThatAnswered_ReturnsTheAnswerAndWhatTheRunRetrieved()
     {
         // Arrange
         using var provider = ScriptedTransport.Answering(Completion("The invoice was attached."));
         var agent = provider.AgentOver(new RecordingEmailKnowledgeSearch());
+        var observation = Observation();
 
         // Act
-        var answer = await agent.AnswerAsync(Question, TestContext.Current.CancellationToken);
+        var answer = await agent.AnswerAsync(Question, observation, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal("The invoice was attached.", answer.Text);
-        Assert.Empty(answer.Passages);
+        Assert.Empty(observation.Retrieval.Passages);
         provider.HealthRecorder.Received(1).RecordServed(AiProviderRole.Chat);
     }
 
@@ -63,10 +68,45 @@ public sealed class MailAnsweringAgentTests
 
         // Act
         var failure = await Assert.ThrowsAsync<ChatGenerationFailedException>(() =>
-            agent.AnswerAsync(Question, TestContext.Current.CancellationToken));
+            agent.AnswerAsync(Question, Observation(), TestContext.Current.CancellationToken));
 
         // Assert
         Assert.Equal(ChatGenerationFailure.AnswerEmpty, failure.Failure);
+    }
+
+    /// <summary>
+    /// The record of a run that failed is the one most worth having, so what the run was conducted with is written down
+    /// before anything that can fail and the retrieval is reported however the run ended.
+    /// </summary>
+    [Fact]
+    public async Task AnswerAsync_ARunThatProducedNoAnswer_StillReportsWhatItWasConductedWith()
+    {
+        // Arrange
+        using var provider = ScriptedTransport.Answering(Completion(string.Empty));
+        var agent = provider.AgentOver(new RecordingEmailKnowledgeSearch());
+        var observation = Observation();
+
+        // Act
+        await Assert.ThrowsAsync<ChatGenerationFailedException>(() =>
+            agent.AnswerAsync(Question, observation, TestContext.Current.CancellationToken));
+
+        // Assert
+        Assert.Equal("answering", observation.ChatEndpointAlias);
+        Assert.Equal(MailAnsweringInstructions.Version, observation.InstructionsVersion);
+        Assert.Empty(observation.Retrieval.Passages);
+    }
+
+    /// <summary>The version has to move with the text, or a record would name a policy an answer was not produced under.</summary>
+    [Fact]
+    public void InstructionsVersion_IsDerivedFromTheInstructionItNames()
+    {
+        // Arrange, Act
+        var version = MailAnsweringInstructions.Version;
+
+        // Assert
+        Assert.Equal(
+            Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(MailAnsweringInstructions.Text)))[..12],
+            version);
     }
 
     /// <summary>The question is one turn, so what bounds a turn bounds the question, and it is refused before anything is sent.</summary>
@@ -87,11 +127,18 @@ public sealed class MailAnsweringAgentTests
         // Act
         await Assert.ThrowsAsync<ArgumentException>(() => agent.AnswerAsync(
             Question with { Text = MailQuestionText.Create(new string('a', 500)) },
+            Observation(),
             TestContext.Current.CancellationToken));
 
         // Assert
         Assert.Equal(0, provider.RequestCount);
     }
+
+    /// <summary>Opens the record of one run, over the same scope every question here carries.</summary>
+    private static MailAnsweringRunObservation Observation() => new(
+        MailAnsweringRunId.Create(Guid.CreateVersion7()),
+        Question.Scope,
+        RunStartedAt);
 
     /// <summary>Builds the chat-completion payload a provider answers with.</summary>
     private static string Completion(string content) =>

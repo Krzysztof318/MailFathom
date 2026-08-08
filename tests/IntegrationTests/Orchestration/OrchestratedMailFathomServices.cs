@@ -15,6 +15,7 @@ using MailFathom.Application.Mail.Mutations.Audit;
 using MailFathom.Application.Mail.Mutations.Convergence;
 using MailFathom.Application.Persistence;
 using MailFathom.Application.Retrieval.AskMail;
+using MailFathom.Application.Retrieval.AskMail.Audit;
 using MailFathom.Application.Synchronization;
 using MailFathom.Application.Synchronization.Checkpoints;
 using MailFathom.Application.Synchronization.Reconciliation;
@@ -83,6 +84,11 @@ internal sealed class OrchestratedMailFathomServices : IAsyncDisposable
     /// everywhere but the one class proving that this setting does not decide the outcome of a deletion MailFathom
     /// itself performed.
     /// </param>
+    /// <param name="answeringAuditTrailEnabled">
+    /// Whether the account keeps a durable record of the questions answered from its mailbox. Off everywhere but the
+    /// class proving what that record holds, which is the deployed default and keeps every other test from
+    /// accumulating one it never asked about.
+    /// </param>
     /// <param name="auditTrailEnabled">
     /// Whether the account keeps a durable record of the changes MailFathom made to it. Off everywhere but the class
     /// proving what the trail holds, which is the deployed default and keeps every other test from accumulating a
@@ -94,13 +100,15 @@ internal sealed class OrchestratedMailFathomServices : IAsyncDisposable
         CancellationToken cancellationToken,
         RemotelyDeletedEmailDisposition remotelyDeletedEmailDisposition =
             RemotelyDeletedEmailDisposition.RetainTombstone,
-        bool auditTrailEnabled = false)
+        bool auditTrailEnabled = false,
+        bool answeringAuditTrailEnabled = false)
     {
         var builder = new HostApplicationBuilder();
         var account = new SyntheticMailAccount(
             orchestration.MailServer,
             remotelyDeletedEmailDisposition,
-            auditTrailEnabled);
+            auditTrailEnabled,
+            answeringAuditTrailEnabled);
 
         builder.Services.AddSingleton(TimeProvider.System);
         builder.Services.AddSecretResolution(SecretValueInterpretation.ReferenceOnly);
@@ -112,6 +120,7 @@ internal sealed class OrchestratedMailFathomServices : IAsyncDisposable
         builder.Services.AddSingleton<IRemotelyDeletedEmailDispositionReader>(account);
         builder.Services.AddSingleton<IAuthoredDeleteEmailDispositionReader>(account);
         builder.Services.AddSingleton<IMailboxMutationAuditSettingsReader>(account);
+        builder.Services.AddSingleton<IMailAnsweringAuditSettingsReader>(account);
         builder.Services.AddSingleton(new MailboxSynchronizationOptions
         {
             MaxMetadataBatchSize = 50,

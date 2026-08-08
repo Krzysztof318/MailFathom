@@ -44,10 +44,10 @@ public sealed class MailboxKnowledgeSearchTests
         var search = SearchOver(index);
 
         // Act
-        var passages = await search.FindPassagesAsync(
+        var passages = (await search.FindPassagesAsync(
             MailboxScope.Unrestricted,
             "invoice",
-            TestContext.Current.CancellationToken);
+            TestContext.Current.CancellationToken)).Passages;
 
         // Assert
         Assert.Equal(
@@ -69,10 +69,10 @@ public sealed class MailboxKnowledgeSearchTests
         var search = SearchOver(index);
 
         // Act
-        var passages = await search.FindPassagesAsync(
+        var passages = (await search.FindPassagesAsync(
             MailboxScope.Unrestricted,
             "invoice",
-            TestContext.Current.CancellationToken);
+            TestContext.Current.CancellationToken)).Passages;
 
         // Assert
         var passage = Assert.Single(passages);
@@ -99,10 +99,10 @@ public sealed class MailboxKnowledgeSearchTests
         var search = SearchOver(index, EmailKnowledgeBounds.Create(maximumPassages: 3, maximumCharactersPerPassage: 100));
 
         // Act
-        var passages = await search.FindPassagesAsync(
+        var passages = (await search.FindPassagesAsync(
             MailboxScope.Unrestricted,
             "invoice",
-            TestContext.Current.CancellationToken);
+            TestContext.Current.CancellationToken)).Passages;
 
         // Assert
         Assert.Equal(3, passages.Count);
@@ -118,10 +118,10 @@ public sealed class MailboxKnowledgeSearchTests
         var search = SearchOver(index, EmailKnowledgeBounds.Create(maximumPassages: 4, maximumCharactersPerPassage: 120));
 
         // Act
-        var passages = await search.FindPassagesAsync(
+        var passages = (await search.FindPassagesAsync(
             MailboxScope.Unrestricted,
             "invoice",
-            TestContext.Current.CancellationToken);
+            TestContext.Current.CancellationToken)).Passages;
 
         // Assert
         Assert.Equal(120, Assert.Single(passages).Text.Length);
@@ -140,10 +140,10 @@ public sealed class MailboxKnowledgeSearchTests
         var search = SearchOver(index, EmailKnowledgeBounds.Create(maximumPassages: 4, maximumCharactersPerPassage: 10));
 
         // Act
-        var passages = await search.FindPassagesAsync(
+        var passages = (await search.FindPassagesAsync(
             MailboxScope.Unrestricted,
             "invoice",
-            TestContext.Current.CancellationToken);
+            TestContext.Current.CancellationToken)).Passages;
 
         // Assert
         var text = Assert.Single(passages).Text;
@@ -167,10 +167,10 @@ public sealed class MailboxKnowledgeSearchTests
         var search = SearchOver(index);
 
         // Act
-        var passages = await search.FindPassagesAsync(
+        var passages = (await search.FindPassagesAsync(
             MailboxScope.Unrestricted,
             "invoice",
-            TestContext.Current.CancellationToken);
+            TestContext.Current.CancellationToken)).Passages;
 
         // Assert
         Assert.Equal(withText.StoredEmailId, Assert.Single(passages).StoredEmailId);
@@ -194,10 +194,10 @@ public sealed class MailboxKnowledgeSearchTests
         var search = SearchOver(index);
 
         // Act
-        var passages = await search.FindPassagesAsync(
+        var passages = (await search.FindPassagesAsync(
             MailboxScope.Unrestricted,
             queryText,
-            TestContext.Current.CancellationToken);
+            TestContext.Current.CancellationToken)).Passages;
 
         // Assert
         Assert.Empty(passages);
@@ -213,10 +213,10 @@ public sealed class MailboxKnowledgeSearchTests
         var search = SearchOver(index);
 
         // Act
-        var passages = await search.FindPassagesAsync(
+        var passages = (await search.FindPassagesAsync(
             MailboxScope.Unrestricted,
             new string('a', EmailSearchQueryText.MaximumLength + 1),
-            TestContext.Current.CancellationToken);
+            TestContext.Current.CancellationToken)).Passages;
 
         // Assert
         Assert.Empty(passages);
@@ -234,7 +234,7 @@ public sealed class MailboxKnowledgeSearchTests
         var scope = MailboxScope.Create([MailAccountId.Create(SyntheticEmailSummaries.DefaultAccountId)], []);
 
         // Act
-        var passages = await search.FindPassagesAsync(scope, "invoice", TestContext.Current.CancellationToken);
+        var passages = (await search.FindPassagesAsync(scope, "invoice", TestContext.Current.CancellationToken)).Passages;
 
         // Assert
         Assert.Empty(passages);
@@ -252,7 +252,7 @@ public sealed class MailboxKnowledgeSearchTests
         var scope = MailboxScope.Create([], [MailFolderAlias.Create("ARCHIVE")]);
 
         // Act
-        var passages = await search.FindPassagesAsync(scope, "invoice", TestContext.Current.CancellationToken);
+        var passages = (await search.FindPassagesAsync(scope, "invoice", TestContext.Current.CancellationToken)).Passages;
 
         // Assert
         Assert.Equal(inArchive.StoredEmailId, Assert.Single(passages).StoredEmailId);

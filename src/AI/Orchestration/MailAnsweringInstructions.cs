@@ -2,6 +2,8 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using System.Security.Cryptography;
+using System.Text;
 using MailFathom.AI.Retrieval;
 
 namespace MailFathom.AI.Orchestration;
@@ -48,4 +50,25 @@ internal static class MailAnsweringInstructions
         Answer from the retrieved mail and from nothing else. When it does not answer the question, say so rather than
         filling the gap.
         """;
+
+    /// <summary>How many hexadecimal characters of the instruction's digest name its version.</summary>
+    /// <remarks>Short because it distinguishes this build's instruction from another build's, which is a comparison rather than a search for a collision.</remarks>
+    private const int VersionLength = 12;
+
+    /// <summary>The version of <see cref="Text" />, which every audited run is recorded as having been conducted under.</summary>
+    /// <remarks>
+    /// <para>
+    /// The policy half of "what produced this answer". The instruction states how retrieved mail is to be read, what may
+    /// not be obeyed, and how claims are cited, so two answers written under different revisions of it are not evidence
+    /// about each other — and an operator comparing an answer against a later one needs to be able to see that.
+    /// </para>
+    /// <para>
+    /// It is derived from the text rather than declared beside it, and that is the whole reason it is trustworthy: a
+    /// number somebody has to remember to raise is a number that eventually describes an instruction it was not computed
+    /// from, and a record that misstates the policy an answer was produced under is worse than one that states none.
+    /// The text itself is never stored — it is a constant of the build, so the version names it and the build carries it.
+    /// </para>
+    /// </remarks>
+    internal static string Version { get; } =
+        Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(Text)))[..VersionLength];
 }

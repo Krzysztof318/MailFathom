@@ -81,14 +81,15 @@ internal sealed class ModelJudgedKnowledgeSearch : IEmailKnowledgeSearch
     }
 
     /// <inheritdoc />
-    public async Task<IReadOnlyList<EmailKnowledgePassage>> FindPassagesAsync(
+    public async Task<EmailKnowledgeLookup> FindPassagesAsync(
         MailboxScope scope,
         string queryText,
         CancellationToken cancellationToken)
     {
         var ranked = await this.rankedSearch.FindPassagesAsync(scope, queryText, cancellationToken);
+        var rankedPassages = ranked.Passages;
 
-        if (ranked.Count is 0)
+        if (rankedPassages.Count is 0)
         {
             return ranked;
         }
@@ -100,31 +101,39 @@ internal sealed class ModelJudgedKnowledgeSearch : IEmailKnowledgeSearch
             // No staleness window is needed here, which is the difference from the semantic search gate. A retrieval
             // happens inside an answering run, and that run reached this point by making a chat call of its own, so the
             // state read here was established moments ago by the very conversation being answered.
-            PassageRelevanceEvents.LogProviderUnusable(this.logger, health.State, ranked.Count);
+            PassageRelevanceEvents.LogProviderUnusable(this.logger, health.State, rankedPassages.Count);
 
-            return ranked;
+            // Reported as a fallback for the same reason a failure part way through the pass is: what the caller
+            // received is the ranking nobody judged, and a run recorded as filtered when it was not would say a
+            // deployment's second pass decided something it never saw.
+            return ranked with { RelevanceFilterFellBack = true };
         }
 
-        IReadOnlyList<EmailKnowledgePassage> candidates = ranked.Count <= this.plan.MaximumCandidates
-            ? ranked
-            : [.. ranked.Take(this.plan.MaximumCandidates)];
+        IReadOnlyList<EmailKnowledgePassage> candidates = rankedPassages.Count <= this.plan.MaximumCandidates
+            ? rankedPassages
+            : [.. rankedPassages.Take(this.plan.MaximumCandidates)];
 
         var judged = await this.JudgeInTurnAsync(queryText, candidates, cancellationToken);
 
         // The unjudged remainder keeps the position the fused ranking gave it. A candidate count below what the search
         // returned bounds what a question spends, and spending less must not silently drop mail nobody looked at.
-        IReadOnlyList<EmailKnowledgePassage> kept = [.. judged.Kept, .. ranked.Skip(candidates.Count)];
+        IReadOnlyList<EmailKnowledgePassage> kept = [.. judged.Kept, .. rankedPassages.Skip(candidates.Count)];
 
         // The count the pass reached rather than the pool it was given, which differ whenever a provider failure ended
         // it early: a record saying it judged the whole pool in the same breath as one saying it stopped part way
         // through would leave neither believable.
         PassageRelevanceEvents.LogJudged(
             this.logger,
-            ranked.Count,
+            rankedPassages.Count,
             judged.JudgedCount,
-            ranked.Count - kept.Count);
+            rankedPassages.Count - kept.Count);
 
-        return kept;
+        // The candidate count is the ranking's own, unchanged: this pass narrows what is handed over and never what was
+        // considered, so the pair says how much of a lookup the filter dropped.
+        return new EmailKnowledgeLookup(
+            kept,
+            ranked.CandidateCount,
+            judged.JudgedCount < candidates.Count);
     }
 
     /// <summary>Judges the candidates in the order retrieval ranked them, and stops the moment the provider refuses.</summary>

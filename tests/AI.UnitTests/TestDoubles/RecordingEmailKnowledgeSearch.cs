@@ -33,7 +33,7 @@ internal sealed class RecordingEmailKnowledgeSearch : IEmailKnowledgeSearch
     }
 
     /// <inheritdoc />
-    public Task<IReadOnlyList<EmailKnowledgePassage>> FindPassagesAsync(
+    public Task<EmailKnowledgeLookup> FindPassagesAsync(
         MailboxScope scope,
         string queryText,
         CancellationToken cancellationToken)
@@ -43,7 +43,8 @@ internal sealed class RecordingEmailKnowledgeSearch : IEmailKnowledgeSearch
 
         this.calls.Add(new KnowledgeSearchCall(scope, queryText));
 
-        return Task.FromResult(this.passagesByQuery.GetValueOrDefault(queryText, []));
+        return Task.FromResult(
+            EmailKnowledgeLookup.Unfiltered(this.passagesByQuery.GetValueOrDefault(queryText, [])));
     }
 
     /// <summary>What one lookup asked for.</summary>

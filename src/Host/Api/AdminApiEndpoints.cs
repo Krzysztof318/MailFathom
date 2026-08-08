@@ -31,6 +31,12 @@ namespace MailFathom.Host.Api;
 /// bounds administrative access is what bounds who may read where a person's mail has been.
 /// </para>
 /// <para>
+/// The fourth reads one account's record of the questions this deployment answered from its mailbox, which
+/// <see cref="MailAnsweringAuditEndpoint" /> describes. It is here beside the third for the same reasons and one more:
+/// the two together are what an operator answers "why is this message here" and "why did it answer that" from, and
+/// keeping them on one credential means one thing to provision and one thing to revoke.
+/// </para>
+/// <para>
 /// The rest are what an operator does to this deployment's embedding profile, which
 /// <see cref="EmbeddingProfileEndpoints" /> describes: reading where semantic search stands, taking up what
 /// configuration declares, and stopping a reindex. They are here because starting a provider bill should be bounded by
@@ -57,6 +63,7 @@ internal static class AdminApiEndpoints
         api.MapGet("/session", (ClaimsPrincipal caller) => Results.Ok(AdminSessionResponse.For(caller)));
         api.MapMailboxRefreshToken();
         api.MapMailboxMutationAudit();
+        api.MapMailAnsweringAudit();
         api.MapEmbeddingProfile();
 
         return api;

@@ -4,26 +4,17 @@
 
 namespace MailFathom.Application.Retrieval;
 
-/// <summary>What one run produced: the answer, the mail it was written from, and whether it was allowed all the mail it asked for.</summary>
+/// <summary>What one run produced: the answer, in the words the model wrote it in.</summary>
 /// <param name="Text">The answer, which is never empty.</param>
-/// <param name="Passages">The passages the run retrieved, in the order it retrieved them.</param>
-/// <param name="RetrievalWasTruncated">Whether a lookup found mail the run's retrieval ceiling would not let it send.</param>
 /// <remarks>
 /// <para>
-/// The passages travel with the answer because they are what makes it checkable: each carries the stable identifier of
-/// the message it was cut from, so a reader can fetch that message rather than take the answer's word for it.
+/// The text alone, because everything else a run produced is on the observation the caller handed in. The mail it was
+/// written from, how much of the mailbox it reached, and how its retrieval degraded are facts about the run rather than
+/// about the answer, and a run that ends without an answer has all of them and none of this.
 /// </para>
 /// <para>
-/// They are what the run retrieved rather than what the model demonstrably used. Nothing outside the model knows which
-/// of them it drew on, so claiming the narrower set would be stating something this system cannot observe.
-/// </para>
-/// <para>
-/// The truncation flag exists because the ceiling on retrieved mail cuts rather than refuses, and a cut nobody reports
-/// is one the reader cannot allow for: an answer written after the run stopped being given mail is a real answer to a
-/// narrower reading of the mailbox, and only saying so keeps the two distinguishable.
+/// Splitting them that way is what lets one caller publish citations and record a run from the same place, whether the
+/// run reached this type or threw instead.
 /// </para>
 /// </remarks>
-public sealed record MailAnswer(
-    string Text,
-    IReadOnlyList<EmailKnowledgePassage> Passages,
-    bool RetrievalWasTruncated);
+public sealed record MailAnswer(string Text);

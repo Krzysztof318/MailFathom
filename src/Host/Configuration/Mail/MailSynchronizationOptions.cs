@@ -9,6 +9,7 @@ using MailFathom.Application.Accounts;
 using MailFathom.Application.Mail;
 using MailFathom.Application.Mail.Mutations;
 using MailFathom.Application.Mail.Mutations.Audit;
+using MailFathom.Application.Retrieval.AskMail.Audit;
 using MailFathom.Application.Synchronization;
 using MailFathom.Application.Synchronization.Checkpoints;
 using MailFathom.Application.Synchronization.Reconciliation;
@@ -33,6 +34,7 @@ internal sealed class MailSynchronizationOptions
         IRemotelyDeletedEmailDispositionReader,
         IAuthoredDeleteEmailDispositionReader,
         IMailboxMutationAuditSettingsReader,
+        IMailAnsweringAuditSettingsReader,
         IMailAccountCatalog
 {
     /// <summary>The shutdown budget the .NET Generic Host applies when nothing configures one.</summary>
@@ -422,6 +424,10 @@ internal sealed class MailSynchronizationOptions
         this.FindConfiguredAccount(accountId)?.CreateAuditSettings() ?? MailboxMutationAuditSettings.Disabled;
 
     /// <inheritdoc />
+    public MailAnsweringAuditSettings GetAnsweringAuditSettings(MailAccountId accountId) =>
+        this.FindConfiguredAccount(accountId)?.CreateAnsweringAuditSettings() ?? MailAnsweringAuditSettings.Disabled;
+
+    /// <inheritdoc />
     /// <remarks>
     /// Configuration is what defines the set of accounts, so this answers from the same bound options every other
     /// per-account reader does. It deliberately ignores <see cref="Enabled" />: that switch stops runs from fetching
@@ -612,6 +618,15 @@ internal sealed class MailSynchronizationAccountOptions : IValidatableObject
     /// </remarks>
     public MailboxMutationAuditTrailOptions AuditTrail { get; set; } = new();
 
+    /// <summary>Gets or sets whether and for how long this account keeps a record of the questions answered from it.</summary>
+    /// <remarks>
+    /// A block of its own beside <see cref="AuditTrail" /> rather than the same switch, because the two records answer
+    /// different questions: one says where a person's mail has been, this says what it was read for. Omitting it leaves
+    /// the record off, for the reason the privacy rules require — it is derived personal data, so a deployment that
+    /// never asked for it never accumulates it.
+    /// </remarks>
+    public MailAnsweringAuditTrailOptions AnsweringAuditTrail { get; set; } = new();
+
     /// <summary>Gets or sets what starts this account's next synchronization pass.</summary>
     /// <remarks>
     /// <para>
@@ -693,6 +708,23 @@ internal sealed class MailSynchronizationAccountOptions : IValidatableObject
             yield return new ValidationResult(
                 $"Account '{this.AccountId}': the audit trail retention must be between {MailboxMutationAuditTrailOptions.MinimumRetention} and {MailboxMutationAuditTrailOptions.MaximumRetention}.",
                 [nameof(this.AuditTrail)]);
+        }
+
+        // Checked here for the reason the block above is, and separately from it because the two are separate operator
+        // decisions: an account may keep one record and not the other, and a typo in either window decides when
+        // personal data is destroyed.
+        if (this.AnsweringAuditTrail is null)
+        {
+            yield return new ValidationResult(
+                $"Account '{this.AccountId}': the answering audit trail configuration must be a block.",
+                [nameof(this.AnsweringAuditTrail)]);
+        }
+        else if (this.AnsweringAuditTrail.Retention < MailAnsweringAuditTrailOptions.MinimumRetention
+            || this.AnsweringAuditTrail.Retention > MailAnsweringAuditTrailOptions.MaximumRetention)
+        {
+            yield return new ValidationResult(
+                $"Account '{this.AccountId}': the answering audit trail retention must be between {MailAnsweringAuditTrailOptions.MinimumRetention} and {MailAnsweringAuditTrailOptions.MaximumRetention}.",
+                [nameof(this.AnsweringAuditTrail)]);
         }
 
         if (this.Folders is null)
@@ -872,6 +904,11 @@ internal sealed class MailSynchronizationAccountOptions : IValidatableObject
     /// <returns>The settings the account's block names.</returns>
     internal MailboxMutationAuditSettings CreateAuditSettings() =>
         new(this.AuditTrail.Enabled, this.AuditTrail.Retention);
+
+    /// <summary>Builds the account's configured answering record settings.</summary>
+    /// <returns>The settings the account's block names.</returns>
+    internal MailAnsweringAuditSettings CreateAnsweringAuditSettings() =>
+        new(this.AnsweringAuditTrail.Enabled, this.AnsweringAuditTrail.Retention);
 
     /// <summary>Builds the account's configured synchronization window.</summary>
     /// <returns>The window the account's bound names, or an unbounded one when it configured none.</returns>

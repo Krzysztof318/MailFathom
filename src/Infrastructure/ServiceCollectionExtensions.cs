@@ -29,6 +29,7 @@ using MailFathom.Application.Persistence;
 using MailFathom.Application.Resilience;
 using MailFathom.Application.Retrieval;
 using MailFathom.Application.Retrieval.AskMail;
+using MailFathom.Application.Retrieval.AskMail.Audit;
 using MailFathom.Application.Synchronization;
 using MailFathom.Application.Synchronization.Checkpoints;
 using MailFathom.Application.Synchronization.Reconciliation;
@@ -45,6 +46,7 @@ using MailFathom.Infrastructure.Mail.OAuth;
 using MailFathom.Infrastructure.Observability;
 using MailFathom.Infrastructure.Persistence;
 using MailFathom.Infrastructure.Persistence.Accounts;
+using MailFathom.Infrastructure.Persistence.Answering;
 using MailFathom.Infrastructure.Persistence.Connections;
 using MailFathom.Infrastructure.Persistence.Emails;
 using MailFathom.Infrastructure.Persistence.Embeddings;
@@ -319,6 +321,15 @@ public static class ServiceCollectionExtensions
             provider.GetRequiredService<TimeProvider>(),
             provider.GetService<IMailQuestionAnswerer>()));
         services.AddScoped<MailboxQuestionReader>();
+        // The two halves of what a run leaves behind, registered for every deployment because both decide for
+        // themselves whether they have anything to publish: the span exists only where something is listening, and the
+        // record only for an account whose operator turned it on. A singleton for the span because it holds one
+        // activity source, and scoped for the record because it commits through the scoped persistence session.
+        services.AddSingleton<MailAnsweringAuditTelemetry>();
+        services.AddSingleton<IMailAnsweringRunTelemetry, MailAnsweringRunTelemetry>();
+        services.AddScoped<IMailAnsweringAuditEntryStore, MailAnsweringAuditEntryStore>();
+        services.AddScoped<IMailAnsweringAuditTrail, MailAnsweringAuditTrail>();
+        services.AddScoped<MailAnsweringAuditTrailRetention>();
         // Beside the retrieval bounds above and registered for every deployment for the same reason: what they bound is
         // a response rather than a provider, so an instance that answers no questions simply resolves them and never
         // publishes one.
