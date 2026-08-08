@@ -86,11 +86,15 @@ public sealed record MailboxEmailSelection
     /// <summary>Gets the fragment the subject must contain, compared without regard to case, or <see langword="null" /> when any subject matches.</summary>
     public string? SubjectFragment { get; }
 
-    /// <summary>Gets the inclusive start of the received range, or <see langword="null" /> when the range has no start.</summary>
-    /// <remarks>An email whose received timestamp is unknown matches neither bound, so naming either one excludes undated mail.</remarks>
+    /// <summary>Gets the inclusive start of the received range in UTC, or <see langword="null" /> when the range has no start.</summary>
+    /// <remarks>
+    /// An email whose received timestamp is unknown matches neither bound, so naming either one excludes undated mail.
+    /// A caller may write the bound at any offset and it is held here as the instant that names, so which offset was
+    /// written never changes what is selected.
+    /// </remarks>
     public DateTimeOffset? ReceivedOnOrAfter { get; }
 
-    /// <summary>Gets the exclusive end of the received range, or <see langword="null" /> when the range has no end.</summary>
+    /// <summary>Gets the exclusive end of the received range in UTC, or <see langword="null" /> when the range has no end.</summary>
     /// <remarks>The end is exclusive so consecutive ranges tile a timeline without overlapping on the instant they meet.</remarks>
     public DateTimeOffset? ReceivedBefore { get; }
 
@@ -148,13 +152,17 @@ public sealed record MailboxEmailSelection
             throw MailboxQueryFilterInvalidException.EmptyRange("received date range");
         }
 
+        // Held as an instant rather than as the offset a caller happened to write it in. Npgsql refuses to bind a
+        // DateTimeOffset at any offset but zero to a timestamptz parameter, so a bound written as local time would fail
+        // the whole listing rather than select from it — and the canonical text below already reads both bounds through
+        // UtcTicks, so two requests naming one instant were a single walk before they were a single query.
         return new MailboxEmailSelection(
             scope,
             NormalizedAddress(senderAddress, "sender address"),
             NormalizedAddress(recipientAddress, "recipient address"),
             BoundedSubjectFragment(subjectFragment),
-            receivedOnOrAfter,
-            receivedBefore,
+            receivedOnOrAfter?.ToUniversalTime(),
+            receivedBefore?.ToUniversalTime(),
             isRemotelySeen,
             hasAttachments);
     }

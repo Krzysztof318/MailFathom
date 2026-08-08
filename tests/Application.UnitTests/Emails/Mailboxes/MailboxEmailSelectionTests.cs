@@ -141,6 +141,45 @@ public sealed class MailboxEmailSelectionTests
         Assert.Null(openStarted.ReceivedOnOrAfter);
     }
 
+    /// <summary>A bound is an instant, so the offset it was written in reaches neither the query nor the cursor.</summary>
+    /// <remarks>
+    /// The offset matters beyond tidiness: a <c>timestamptz</c> parameter accepts offset zero and nothing else, so a
+    /// bound left at the offset a caller wrote fails the listing instead of selecting from it.
+    /// </remarks>
+    [Theory]
+    [InlineData(2)]
+    [InlineData(-8)]
+    public void Create_ReceivedRangeWrittenAtANonZeroOffset_IsHeldAsTheSameInstantInUtc(int offsetHours)
+    {
+        // Arrange
+        var offset = TimeSpan.FromHours(offsetHours);
+
+        // Act
+        var written = SelectionWith(
+            receivedOnOrAfter: FirstJuly.ToOffset(offset),
+            receivedBefore: FirstJuly.AddDays(1).ToOffset(offset));
+        var inUtc = SelectionWith(receivedOnOrAfter: FirstJuly, receivedBefore: FirstJuly.AddDays(1));
+
+        // Assert
+        Assert.Equal(TimeSpan.Zero, written.ReceivedOnOrAfter?.Offset);
+        Assert.Equal(TimeSpan.Zero, written.ReceivedBefore?.Offset);
+        Assert.Equal(inUtc.ReceivedOnOrAfter, written.ReceivedOnOrAfter);
+        Assert.Equal(inUtc.ReceivedBefore, written.ReceivedBefore);
+
+        // The canonical text is what a cursor is authenticated against, so the two requests have to be one walk.
+        Assert.Equal(inUtc.CanonicalText, written.CanonicalText);
+    }
+
+    /// <summary>The empty-range refusal compares instants, so it survives two bounds written at different offsets.</summary>
+    [Fact]
+    public void Create_ReceivedRangeEndingBeforeItStartsAcrossOffsets_IsStillRejected()
+    {
+        // Act, Assert
+        Assert.Throws<MailboxQueryFilterInvalidException>(() => SelectionWith(
+            receivedOnOrAfter: FirstJuly.ToOffset(TimeSpan.FromHours(2)),
+            receivedBefore: FirstJuly.AddHours(-1).ToOffset(TimeSpan.FromHours(-8))));
+    }
+
     [Fact]
     public void Create_NoScope_IsRejected()
     {

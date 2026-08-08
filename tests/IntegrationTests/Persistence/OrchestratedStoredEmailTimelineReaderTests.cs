@@ -160,6 +160,53 @@ public sealed class OrchestratedStoredEmailTimelineReaderTests(MailFathomOrchest
         Assert.All(unseen, email => Assert.False(email.RemoteFlags.WasObserved));
     }
 
+    /// <summary>Reads the same range twice, written once in UTC and once at a non-zero offset, against the real driver.</summary>
+    /// <remarks>
+    /// <para>
+    /// Only this suite can make the claim, because the defect it covers lives in the driver rather than in the
+    /// expression: Npgsql refuses to bind a <see cref="DateTimeOffset" /> at any offset but zero to a
+    /// <c>timestamptz</c> parameter, and throws while the reader is already enumerating. A substituted timeline reader
+    /// binds no parameter at all, so every unit test over these filters passes whether the bound was normalized or not.
+    /// </para>
+    /// <para>
+    /// The two reads are one test rather than two because the UTC read is the control: an offset read returning the
+    /// same rows would prove nothing if the range selected nothing in either form, which is why the count is asserted
+    /// to be non-empty before the two are compared.
+    /// </para>
+    /// </remarks>
+    [Theory]
+    [InlineData(2)]
+    [InlineData(-8)]
+    public async Task ReadPageAsync_ReceivedRangeWrittenAtANonZeroOffset_SelectsWhatTheSameInstantInUtcSelects(
+        int offsetHours)
+    {
+        // Arrange
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var services = await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken);
+        _ = await SeededFilterAsync(services, EmailTimelineDirection.NewestFirst, cancellationToken);
+
+        var rangeEnd = FirstReceivedAt.AddMinutes(3);
+        var offset = TimeSpan.FromHours(offsetHours);
+
+        // Act
+        var inUtc = await ReadFilteredAsync(
+            services,
+            receivedOnOrAfter: FirstReceivedAt,
+            receivedBefore: rangeEnd,
+            cancellationToken: cancellationToken);
+        var atOffset = await ReadFilteredAsync(
+            services,
+            receivedOnOrAfter: FirstReceivedAt.ToOffset(offset),
+            receivedBefore: rangeEnd.ToOffset(offset),
+            cancellationToken: cancellationToken);
+
+        // Assert
+        Assert.NotEmpty(inUtc);
+        Assert.Equal(
+            inUtc.Select(email => email.StoredEmailId),
+            atOffset.Select(email => email.StoredEmailId));
+    }
+
     /// <summary>Reads one page and proves the projection leaves the scoped context with nothing to save.</summary>
     /// <remarks>
     /// A listing that tracked its rows would let a later unrelated commit in the same scope write mail metadata nobody
