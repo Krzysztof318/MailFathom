@@ -145,9 +145,10 @@ that only deletes, because the groundwork for a capability nobody can invoke is 
 onto. Write the action, and no more of the feature than the case above allows.
 
 **A parent left open is the expected shape here rather than a fault to correct.** A release never waits for one to
-close, and `cross-milestone` beside `Queue: Parent` says that feature was always going to arrive in stages. Nothing in
-this reading blocks the release or moves an issue either: step 3 is what carries whatever is still open into the next
-milestone, and it does so for every open item rather than for a parent's children in particular.
+close, and `Queue: Parent` says that feature was always going to arrive in stages. Nothing in this reading blocks the
+release or moves an issue either: step 3 is what carries whatever is still open into the next milestone, and it does so
+for every open item rather than for a parent's children in particular — a parent aimed at the release being cut and
+still open when it is cut moves with them, which is the target correcting itself rather than a judgement to make here.
 
 **The withheld sentence is not lost, it is early.** The release that closes the last child is where the capability is
 named, in the reader's terms and truthfully, and that is the release they would act on anyway. Writing it sooner buys
@@ -164,13 +165,14 @@ afterwards. Nothing here is inferred: **what is still open in the milestone is s
 ask before moving anything unless they already said what to do with it.
 
 1. **Create the next milestone if it does not exist.** Its name is the version being bumped to, per the table under
-   **What the version is**. `docs/operations/issue-tracking.md` forbids opening a further milestone beside the open
-   one — the next is created *when that one closes*, which is this step and nowhere else, so creating it here
-   satisfies that rule rather than bending it.
+   **What the version is**. It may well exist already: `docs/operations/issue-tracking.md` opens a milestone further
+   out whenever a parent issue needs it as the target of the release that completes it, so finding one standing there
+   is the ordinary case rather than a leftover to investigate, and this step adds nothing to it.
 2. **Open the next release's tracking issue in it, unless one already exists.** `Cut and publish the <next> release`
    is what the next run of this skill closes, and this is the moment it has a milestone to belong to — a milestone
-   created without it is a release nothing tracks until somebody remembers. It is a no-op when the issue exists, which
-   is what makes running this step against a milestone opened before this rule existed safe.
+   created without it is a release nothing tracks until somebody remembers. It is a no-op when the issue exists, and
+   the search is what makes both this and a milestone opened earlier as a parent's target safe: a target carries the
+   work aimed at that release and never the issue that closes it, which arrives here.
 3. **Move what is still open into it, except the issue tracking this release.** A release cut over an open milestone
    item releases the gap; moving the item says the work is still accepted and names the release it now belongs to. An
    item the owner would rather drop is closed as `not planned` on its own issue instead, which is their call and not

@@ -133,16 +133,18 @@ it — because when a version becomes real is a decision rather than a consequen
 **Settling the milestones comes before the pull requests**, because the milestone is the release's gate: the next
 milestone is created if it does not exist, the issue tracking the *next* release is opened in it unless one already is,
 whatever is still open in the one being released moves into it *except the issue tracking this release*, and the one
-being released is closed. That is the one place a milestone is opened, which is what keeps exactly one open at a time;
-`docs/operations/issue-tracking.md` holds the rule and the reasoning. The tracking issue is open and in that milestone
-at this point, so it is what a query for what to move returns; it stays where it is and stays open, because the last of
-the three steps below closes it.
+being released is closed. It is created *if it does not exist* because a parent issue targeting a later release opens
+that milestone earlier, which is the other place one comes from and the reason the release being worked is the lowest
+version among the open milestones rather than the only one; `docs/operations/issue-tracking.md` holds the rule and the
+reasoning. The tracking issue is open and in that milestone at this point, so it is what a query for what to move
+returns; it stays where it is and stays open, because the last of the three steps below closes it.
 
-A milestone and the issue that tracks its release are therefore opened together, which is what keeps a release from
-depending on somebody remembering to open one. The issue is deliberately short: it states the ordering, what gets
-published, and what follows the tag, and leaves what the release *carries* to the changelog section written when it is
-cut. Nothing about it is a precondition either — what is still open in the milestone moves as part of this same step,
-so a release never waits on a cleared milestone.
+A release and the issue that tracks it therefore arrive together, which is what keeps a release from depending on
+somebody remembering to open one: the step above opens that issue whether it created the milestone or found one a
+parent had already opened as its target. The issue is deliberately short: it states the ordering, what gets published,
+and what follows the tag, and leaves what the release *carries* to the changelog section written when it is cut.
+Nothing about it is a precondition either — what is still open in the milestone moves as part of this same step, so a
+release never waits on a cleared milestone.
 
 The sequence the skill prints is the whole of what follows, and it is recorded here so it survives the skill being
 unavailable:
