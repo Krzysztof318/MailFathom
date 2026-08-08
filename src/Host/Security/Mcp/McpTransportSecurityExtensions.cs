@@ -99,7 +99,19 @@ internal static class McpTransportSecurityExtensions
     }
 
     /// <summary>Names the registered scheme that answers a request presenting no credential at all.</summary>
-    /// <remarks>It has to be a scheme this endpoint actually registered, or the challenge forwards to nothing. All three challenge with a bearer scheme, so which one answers decides what a client is told only in the OAuth case, where the challenge carries the metadata document.</remarks>
+    /// <remarks>
+    /// <para>
+    /// It has to be a scheme this endpoint actually registered, or the challenge forwards to nothing. All three
+    /// challenge with a bearer scheme, so which one answers decides what a client is told only in the OAuth case, where
+    /// the challenge carries the metadata document.
+    /// </para>
+    /// <para>
+    /// It is also what a credential this endpoint cannot place authenticates against, so whichever scheme is named here
+    /// must authenticate nobody rather than judge something. All three do: the API key and assertion handlers read no
+    /// credential out of such a request, and the MCP scheme performs no authentication at all once
+    /// <see cref="AddProtectedResourceMetadataScheme" /> has cleared the forwarding the SDK sets by default.
+    /// </para>
+    /// </remarks>
     private static string ChallengeSchemeFor(McpEndpointOptions endpointSettings)
     {
         if (endpointSettings.AllowsOAuth)
@@ -126,6 +138,14 @@ internal static class McpTransportSecurityExtensions
 
         authentication.AddMcp(mcpOptions =>
         {
+            // This scheme answers the challenge and publishes the document; it judges no credential, and its handler
+            // authenticates nobody by design. The SDK's options nevertheless forward authentication to JwtBearer's own
+            // default scheme name, which this host never registers — its validators are named for the authorization
+            // server each one speaks for. Every request that presents nothing this endpoint can place is routed here,
+            // starting with the unauthenticated request every MCP client opens with, so leaving the forwarding in place
+            // answers discovery with a fault instead of the refusal that carries the pointer below.
+            mcpOptions.ForwardAuthenticate = null;
+
             // Absolute and configured, never derived from the request. Left unset, the SDK composes both this address
             // and the resource it advertises from the request's scheme and Host header, so a deployment behind a proxy
             // would tell each client to authenticate for whichever name that client arrived under.
