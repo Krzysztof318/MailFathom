@@ -460,6 +460,37 @@ public sealed class MailKitImapMailboxSessionTests
         await folder.DidNotReceive().StoreAsync(Arg.Any<IList<UniqueId>>(), Arg.Any<IStoreFlagsRequest>(), Arg.Any<CancellationToken>());
     }
 
+    /// <summary>A UID the folder no longer holds is an answer the caller acts on, not a failure that ends its run.</summary>
+    /// <remarks>
+    /// The translation is the whole of that behavior, and it is a claim about which exception MailKit raises. Asserting
+    /// it here is what keeps the claim honest: were the library to report a missing UID as something else, the catch
+    /// would never fire, the exception would propagate, and the folder's run would fail exactly the way translating it
+    /// exists to prevent — with every test above still green, because they all substitute the session itself.
+    /// </remarks>
+    [Fact]
+    public async Task FetchEmailContentWithoutSettingSeenAsync_FolderNoLongerHoldsTheUid_ReportsItRatherThanRaising()
+    {
+        // Arrange
+        using var resilience = CreateSingleAttemptResilience();
+        var client = new FakeImapClient();
+        var folder = CreateSelectedFolder();
+        folder
+            .GetStreamAsync(new UniqueId(10), Arg.Any<CancellationToken>())
+            .Returns<Stream>(_ => throw new MessageNotFoundException("The folder no longer holds that message."));
+        await using var session = await OpenSessionAsync(resilience, client, folder);
+
+        // Act
+        var fetch = await session.FetchEmailContentWithoutSettingSeenAsync(
+            CreateOccurrenceId(10),
+            1024,
+            CancellationToken.None);
+
+        // Assert
+        Assert.Equal(RemoteEmailContentFetchOutcome.NoLongerHeld, fetch.Outcome);
+        Assert.Null(fetch.Content);
+        await folder.DidNotReceive().StoreAsync(Arg.Any<IList<UniqueId>>(), Arg.Any<IStoreFlagsRequest>(), Arg.Any<CancellationToken>());
+    }
+
     [Fact]
     public async Task GetEmailBatchAfterAsync_CheckpointAtHighestPossibleUid_StopsWithoutSearchingBeyondTheUidSpace()
     {
