@@ -88,7 +88,8 @@ internal sealed class MailAnsweringAgent : IMailQuestionAnswerer
         ArgumentNullException.ThrowIfNull(question);
 
         // The question is one turn, so the bound on what one call may carry is the bound on the question. What the
-        // retrieval adds beside it is bounded where the passages are built.
+        // retrieval adds beside it is bounded where the passages are built, and the run's instruction is a constant of
+        // this build rather than anything a caller composes.
         ChatRequestBounds.Require(
             [new ChatMessage(ChatRole.User, question.Text)],
             this.plan.MaximumMessagesPerRequest,

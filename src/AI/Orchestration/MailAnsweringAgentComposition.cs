@@ -23,9 +23,10 @@ namespace MailFathom.AI.Orchestration;
 /// mutating tool, and this composes none.
 /// </para>
 /// <para>
-/// The agent is given no instructions. What separates retrieved mail from the instructions the system writes belongs to
-/// the context formatter rather than to the composition, so the framework's own context prompt stands until that formatter
-/// exists.
+/// Retrieved mail and the instructions the system writes reach the model in two different positions, and this is where
+/// that is decided. The instruction is the agent's, carried on every turn; an extract is the result of a tool call,
+/// written into the envelope the retrieval formats. Neither is ever composed into the other, so no message can arrive
+/// where an instruction is read.
 /// </para>
 /// </remarks>
 internal static class MailAnsweringAgentComposition
@@ -56,6 +57,9 @@ internal static class MailAnsweringAgentComposition
             Name = AgentName,
             ChatOptions = new ChatOptions
             {
+                // Carried as the run's instruction rather than written into a message, which is what keeps it in a
+                // position no retrieved extract can be placed in.
+                Instructions = MailAnsweringInstructions.Text,
                 MaxOutputTokens = plan.MaximumOutputTokens,
                 Temperature = plan.Temperature,
                 TopP = plan.TopP,

@@ -84,6 +84,11 @@ internal sealed class ScopedMailKnowledgeRetrieval
             FunctionToolName = SearchToolName,
             FunctionToolDescription = SearchToolDescription,
 
+            // Replaces the framework's own formatting, which writes each result as a labelled paragraph between dashed
+            // separators and closes with an instruction of its own. Retrieved mail written that way is prose in the same
+            // voice as an instruction, and a message imitating one of those separators is indistinguishable from it.
+            ContextFormatter = FormatRetrieved,
+
             // The framework's own switch for putting queries and retrieved text into its logs. It defaults to off and is
             // set here anyway, because what it would emit is somebody's question and extracts of their mail, and a
             // default is a thing a package update may change.
@@ -119,4 +124,16 @@ internal sealed class ScopedMailKnowledgeRetrieval
             }),
         ];
     }
+
+    /// <summary>Writes what one lookup found into the envelope the model reads it inside.</summary>
+    /// <remarks>
+    /// Every result of this run was built above and carries its passage, so the formatter reaches the message identity
+    /// and the source coordinates rather than the flattened strings the framework's own result type carries. The cast
+    /// asserts that rather than filtering on it: a result arriving from anywhere else would otherwise be dropped from
+    /// the envelope while <see cref="Retrieved" /> still recorded it, leaving the answer citing a message the model was
+    /// never shown.
+    /// </remarks>
+    private static string FormatRetrieved(IList<TextSearchProvider.TextSearchResult> results) =>
+        RetrievedMailContextFormatter.Format(
+            [.. results.Select(static result => result.RawRepresentation).Cast<EmailKnowledgePassage>()]);
 }

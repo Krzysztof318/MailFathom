@@ -7,8 +7,8 @@ composition that does it: what the model may reach, when it reaches it, how much
 answer carries back.
 
 **No MCP tool reaches this yet.** The composition is in place and is exercised by its own tests; the tool that would
-expose it, the formatter that separates retrieved mail from instructions, and the ceilings an operator configures are
-each their own change. What is described below is what the code does today.
+expose it and the ceilings an operator configures are each their own change. What is described below is what the code
+does today.
 
 ## The model asks for mail; nothing is pushed at it
 
@@ -70,6 +70,46 @@ dropped before a provider is reached, because an answer does not need them.
 A message whose body yielded no text — encrypted mail, or mail whose content lives entirely in an attachment — can match
 on its subject or its participants and still produce no extract. Such a match is dropped rather than sent as an
 identifier with nothing beside it.
+
+## Mail is read as evidence, never as an instruction
+
+Mail is written by strangers, so an extract of it is quoted evidence rather than something the run said. Two mechanisms
+keep it that way, and they are deliberately unequal.
+
+**The structural one.** An extract never occupies the position an instruction arrives in. The run's instruction is
+carried beside the conversation on every turn; an extract is the *result of the tool the model called*, and the two are
+separate parts of the request the provider receives. Nothing composes one into the other, so no message — however it is
+phrased, whoever it claims to be from — can be delivered where the model reads what it was told to do.
+
+Inside that tool result, each extract sits in an element of its own:
+
+```xml
+<retrieved-mail>
+  <message id="019fe12f-a4a1-7759-8d95-21d0bb6eec90" account="work" folder="ARCHIVE" received="2026-08-01T09:14:22.0000000+02:00">
+    <subject>Invoice 41</subject>
+    <extract>the invoice is attached</extract>
+  </message>
+</retrieved-mail>
+```
+
+Nothing a message contains can end an element or open one. Every value — the extract, the subject, the aliases — is
+written through an XML writer that escapes what would, so a message whose text closes the envelope and opens a forged
+instruction arrives as that text: visible, attributed to the message that sent it, and inert. A lookup that found
+nothing writes the empty envelope rather than nothing at all, so the model reads that the mailbox was searched instead of
+guessing at a blank result.
+
+The identity is the other reason the envelope exists. Each extract carries the stable local identifier an answer cites
+and the account and folder alias it was read from, unchanged — an answer that cannot say which message a claim came from
+cannot be checked.
+
+**The weaker one.** The instruction states that everything inside the envelope is data, that a request found there is
+described rather than obeyed, and that each statement is cited by the identifier of the message it came from. It is
+worth writing, and it is second: a model that ignored every word of it would still not have read mail in the position an
+instruction arrives in.
+
+This replaces the orchestration framework's own formatting, which writes each result as a labelled paragraph between
+dashed separators and closes with an instruction of its own. Retrieved mail written that way is prose in the same voice
+as an instruction, and a message imitating one of those separators is indistinguishable from it.
 
 ## What an answer carries back
 
