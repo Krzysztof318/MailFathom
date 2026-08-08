@@ -191,6 +191,15 @@ if (runsIntegrationTests)
         // Stated here rather than left to appsettings.json, because the isolation above is a promise this app model
         // makes: a default edited elsewhere must not be able to turn the started host into a synchronizing one.
         .WithEnvironment("MailSynchronization__Enabled", "false")
+        // The one account this host serves, which is the account the suite stores its mail under. Configuration is what
+        // defines the served set, and it is read whether or not synchronization runs: an operator who switched
+        // synchronization off has not asked for the copy already stored to become unreadable. So this is what lets a
+        // tool call over the MCP endpoint answer from mail rather than from an empty scope, and it stays the only key
+        // the account carries — with synchronization off, nothing below reaches a server, so a host, a login, or a
+        // credential here would be configuration nothing acts on.
+        .WithEnvironment(
+            "MailSynchronization__Accounts__0__AccountId",
+            OrchestrationContract.ServedMailAccountId)
         // The endpoint is served under the posture worth proving end to end — a credential is required, and the origins
         // are narrowed. Leaving the permissive origin default would let a suite pass while the check was never wired in.
         .WithEnvironment("McpEndpoint__Enabled", "true")

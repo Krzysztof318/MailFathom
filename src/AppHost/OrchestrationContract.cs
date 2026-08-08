@@ -284,6 +284,16 @@ public static class OrchestrationContract
     /// </remarks>
     public const string MailServerAccountPassword = "integration-tests-only";
 
+    /// <summary>The MailFathom account identifier every occurrence the integration-test topology stores belongs to.</summary>
+    /// <remarks>
+    /// Declared here because two sides have to agree on it: the suite writes its mail under this identifier, and the
+    /// composed host is configured to serve it so that a tool call over the MCP endpoint reads the mail the suite
+    /// stored. A deployment serves the accounts configuration names, so a host that named none would answer every
+    /// mailbox read with an empty window over a database that was not empty — which reads as the query being wrong
+    /// rather than as the account being absent.
+    /// </remarks>
+    public const string ServedMailAccountId = "integration";
+
     /// <summary>The whole app host argument that selects the integration-test topology.</summary>
     /// <remarks>
     /// Matched against the argument list itself rather than read through <c>IDistributedApplicationBuilder.Configuration</c>,
