@@ -96,6 +96,10 @@ So the worker compares the two before it spends anything, and refuses the messag
 warning naming both directions an operator can take it: activate the current declaration, or restore the one the stored
 vectors belong to. It is not a provider failure and it costs no call.
 
+`mfctl embedding status` reports the same disagreement without waiting for a message to arrive, and
+`mfctl embedding activate` is the first of those two directions;
+[administering the embedding profile](../operations/admin-endpoint.md#administering-the-embedding-profile) holds both.
+
 ## What a failure does
 
 A provider call that ends without vectors ends that message's turn. The classification decides what an operator does
@@ -124,7 +128,10 @@ declining to try again here.
 | `mailfathom.embedding.input.truncated` | Messages the per-message ceiling cut short |
 | `mailfathom.embedding.input.omitted` | Characters that ceiling left out of the passages it cut |
 
-Falling behind is therefore visible as a rising depth rather than as search results that quietly stay lexical.
+Falling behind is therefore visible as a rising depth rather than as search results that quietly stay lexical. On a
+deployment with no metrics backend to read them from, `mfctl embedding status` answers the same question from the
+database directly: how much of the mailbox each generation covers, what the provider last did, and what the period has
+spent.
 
 Nothing on that list is derived from mail. The tags are an outcome name and a failure classification, both of them
 MailFathom's own closed sets; no message identity, passage, or vector reaches a log, a metric, or a trace, and a log

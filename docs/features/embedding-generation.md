@@ -31,8 +31,11 @@ answer to a hazard worth naming: embedding is the first thing MailFathom does th
 configuration edit that re-embedded a mailbox at the next restart would be an invoice arriving a month later for a
 decision nobody was shown.
 
-**An operator who edits the model and expects the change to take effect has to know that it did not.** The activation
-command is what makes it so, and it is deliberately not automatic.
+**An operator who edits the model and expects the change to take effect has to know that it did not.** `mfctl embedding
+status` is where they find out — it says outright that a declaration is waiting for an activation nobody has performed
+— and `mfctl embedding activate` is what performs one. Neither is automatic, and
+[administering the embedding profile](../operations/admin-endpoint.md#administering-the-embedding-profile) is where
+both are documented, with the estimate the second one states before it spends.
 
 What an activation then does — build a new generation beside the one still answering searches, switch to it once, and
 remove what it replaced — is [changing the embedding model](../operations/embedding-profiles.md).

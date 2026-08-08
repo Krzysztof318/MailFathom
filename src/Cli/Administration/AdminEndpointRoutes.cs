@@ -23,6 +23,19 @@ internal static class AdminEndpointRoutes
     /// <summary>Where a deployment accepts the refresh token it should keep for one of its mail accounts.</summary>
     internal const string MailboxRefreshTokenPath = $"{Prefix}/mailbox/refresh-token";
 
+    /// <summary>Where a deployment reports whether semantic search is working and how far behind it is.</summary>
+    internal const string EmbeddingStatusPath = $"{Prefix}/embeddings";
+
+    /// <summary>Where a deployment reports what activating its declaration would cost, and where that activation is performed.</summary>
+    /// <remarks>
+    /// One path read with <c>GET</c> and performed with <c>POST</c>, which is what keeps the figure an operator confirms
+    /// and the figure the deployment weighs the same figure rather than two counts that happen to agree.
+    /// </remarks>
+    internal const string EmbeddingActivationPath = $"{Prefix}/embeddings/activation";
+
+    /// <summary>Where a deployment is asked to stop the reindex it has under way.</summary>
+    internal const string EmbeddingReindexCancellationPath = $"{Prefix}/embeddings/reindex/cancellation";
+
     /// <summary>Where a deployment publishes the document naming its authorization servers, resource, and required scopes.</summary>
     /// <remarks>
     /// Composed rather than discovered from a challenge, because a client that knows which routes it is about to call

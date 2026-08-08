@@ -71,6 +71,10 @@ reverse proxy, write the public URL and keep the path: `https://mail.example.tes
 | `GET /api/admin/session` | Reports the credential that authenticated and the running version. This is what `login` and `status` ask. |
 | `POST /api/admin/mailbox/refresh-token` | Stores a mailbox refresh token for one configured account, sealed under the deployment's data-encryption key. This is what [`mfctl mailbox authorize --account`](mailbox-oauth.md#sending-the-token-to-the-deployment) sends. |
 | `GET /api/admin/mailbox/mutations/audit` | Reads one account's record of the changes MailFathom made to its mailbox, where that account [keeps one](../features/imap-synchronization.md#an-account-can-keep-a-record-of-what-was-done-to-it-and-none-does-by-default). |
+| `GET /api/admin/embeddings` | Reports whether semantic search is working and how far behind it is. This is what [`mfctl embedding status`](#administering-the-embedding-profile) asks. |
+| `GET /api/admin/embeddings/activation` | Reports what activating the declared model would do and what it would cost, writing nothing. |
+| `POST /api/admin/embeddings/activation` | Takes up the declared model and begins embedding under it. **This is the one route that starts a provider bill.** |
+| `POST /api/admin/embeddings/reindex/cancellation` | Stops the reindex under way, leaving the generation that is serving where it is. |
 
 The write route's body carries a long-lived credential for a named mailbox owner, which is what makes the clear-text
 warning below matter more here than it does for a session probe. It refuses, with `400` and a sentence naming what was
@@ -132,6 +136,63 @@ The identifiers are the local email identifiers the entries name, which the same
 the messages in scope; erasing the whole of one account's trail is the same statement without the second predicate.
 Take it as a deliberate administrative act on a database you have a backup of: nothing here replays an erasure, and the
 entries it removes are the accountability evidence for the changes they recorded.
+
+### Administering the embedding profile
+
+Three commands, and none of them takes a model, a provider, or a vector width as an argument. Configuration declares
+what this deployment embeds with and [ADR
+0006](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0006-embedding-profile-identity-lifecycle-and-activation-cost.md)
+leaves these the imperative half: the act that takes a declaration up, the act that stops it, and the reading that says
+where it got to. Editing a configuration file costs nothing; activating is the first thing MailFathom does that costs
+money per unit of mail.
+
+```console
+$ mfctl embedding status
+production (https://mail.example.test:8443)
+Declared:  openai text-embedding-3-small, 1536 dimensions, Cosine
+Serving:   openai text-embedding-3-small, 1536 dimensions, Cosine — 4,120 of 4,120 messages embedded; nothing outstanding
+Reindex:   none running.
+Provider:  Serving, as of 2026-08-08 11:59:00Z
+Spend:     1,200 of 50,000,000 characters; the period rolls over at 2026-08-09 00:00:00Z
+```
+
+**`mfctl embedding status` is the command to run when semantic search is not returning what you expected.** It answers
+that question five ways at once, because it has five answers that look nothing alike: no provider declared, a
+declaration nobody activated, a provider refusing the credential, a reindex still running, and a budget period spent.
+The line to read first is `Declared`, which says so outright when an activation is outstanding — an edited
+configuration file changes nothing until one happens, and this is where you find that out rather than from search
+results that stayed the same.
+
+**`mfctl embedding activate` reads the estimate, states it, and asks.** The deployment counts the passages the run
+would send and expresses them as characters and approximate tokens, weighs them against `Embeddings:MaxInputCharactersPerPeriod`,
+and the command puts both numbers on the screen before the question:
+
+```console
+$ mfctl embedding activate
+Declared:  openai text-embedding-3-small, 1536 dimensions, Cosine
+Forecast:  This deployment is not embedding under that model, so activating starts a reindex.
+Estimate:  41,208 passages to send (18,700,412 characters, roughly 4,675,103 tokens).
+Spend:     0 of 50,000,000 characters; the period rolls over at 2026-08-09 00:00:00Z
+Embed the mailbox under that model? [y/N]
+```
+
+The prompt is the default and `--yes` is the exception, for scripted use. An invocation whose input is redirected and
+which passes no flag is refused rather than answered out of whatever was piped in. Activating what is already serving
+spends nothing and is performed without a question; activating while a *different* reindex is running is refused with
+`409`, naming the cancellation as what makes it possible.
+
+**An estimate above the ceiling is refused outright, with `409` naming both numbers.** It is not started and paced:
+ADR 0006 takes a budget that only slows a run down to be a schedule rather than a budget. Raising
+`Embeddings:MaxInputCharactersPerPeriod`, or setting it to zero to declare no ceiling at all, is what gets past it.
+
+**`mfctl embedding cancel-reindex` stops a run you have changed your mind about.** The generation being built is
+abandoned and its partial vectors are removed; nothing about search results changes, because that generation was never
+read. A cancellation arriving after the run finished reports that nothing was building and changes nothing — this
+command never takes a serving generation out of service. [Changing the embedding model](embedding-profiles.md) is the
+whole procedure these three commands drive, including what a switch and a rollback cost.
+
+Nothing any of the four routes answers with is mail: model names, counts, character totals, timestamps, and a profile
+identifier are the whole of it.
 
 ## Rate limiting
 

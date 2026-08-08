@@ -6,6 +6,8 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
+using System.Text.Json.Serialization.Metadata;
+using MailFathom.Cli.Administration.Embeddings;
 using MailFathom.Cli.Transport;
 
 namespace MailFathom.Cli.Administration;
@@ -124,6 +126,139 @@ internal sealed class AdminApiClient
         if (!response.IsSuccessStatusCode)
         {
             throw new CliFailure($"The deployment answered {(int)response.StatusCode} rather than storing the token.");
+        }
+    }
+
+    /// <summary>Asks the deployment where its semantic search stands.</summary>
+    /// <param name="token">The bearer credential to present.</param>
+    /// <param name="cancellationToken">Cancels the request.</param>
+    /// <returns>What the deployment reports about its embedding profile, its provider, and its budget.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="token" /> is <see langword="null" />.</exception>
+    /// <exception cref="CliFailure">Thrown when the deployment refused the credential, could not be reached, or answered with something that is not a status.</exception>
+    internal Task<EmbeddingStatus> ReadEmbeddingStatusAsync(string token, CancellationToken cancellationToken) =>
+        this.RequestAsync(
+            HttpMethod.Get,
+            AdminEndpointRoutes.EmbeddingStatusPath,
+            token,
+            CliJsonContext.Default.EmbeddingStatus,
+            cancellationToken);
+
+    /// <summary>Asks the deployment what activating its declaration would do, without activating anything.</summary>
+    /// <param name="token">The bearer credential to present.</param>
+    /// <param name="cancellationToken">Cancels the request.</param>
+    /// <returns>The assessment the operator is asked to confirm against.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="token" /> is <see langword="null" />.</exception>
+    /// <exception cref="CliFailure">Thrown when the deployment declares no provider, refused the credential, could not be reached, or answered with something that is not an assessment.</exception>
+    internal Task<EmbeddingActivationAssessment> ReadEmbeddingActivationAsync(
+        string token,
+        CancellationToken cancellationToken) =>
+        this.RequestAsync(
+            HttpMethod.Get,
+            AdminEndpointRoutes.EmbeddingActivationPath,
+            token,
+            CliJsonContext.Default.EmbeddingActivationAssessment,
+            cancellationToken);
+
+    /// <summary>Tells the deployment to take up its declaration and begin embedding under it.</summary>
+    /// <param name="token">The bearer credential to present.</param>
+    /// <param name="cancellationToken">Cancels the request.</param>
+    /// <returns>What the activation did, and the estimate it was weighed as.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="token" /> is <see langword="null" />.</exception>
+    /// <exception cref="CliFailure">Thrown when the deployment refused the activation, refused the credential, could not be reached, or answered with something that is not an activation.</exception>
+    /// <remarks>
+    /// The one request this command sends that starts a provider bill. It carries no body: what is activated is what the
+    /// deployment's own configuration declares, so there is nothing here a caller could get wrong or a proxy could
+    /// alter.
+    /// </remarks>
+    internal Task<EmbeddingActivation> ActivateEmbeddingProfileAsync(
+        string token,
+        CancellationToken cancellationToken) =>
+        this.RequestAsync(
+            HttpMethod.Post,
+            AdminEndpointRoutes.EmbeddingActivationPath,
+            token,
+            CliJsonContext.Default.EmbeddingActivation,
+            cancellationToken);
+
+    /// <summary>Tells the deployment to stop the reindex it has under way.</summary>
+    /// <param name="token">The bearer credential to present.</param>
+    /// <param name="cancellationToken">Cancels the request.</param>
+    /// <returns>Whether a reindex was abandoned, or none was running.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="token" /> is <see langword="null" />.</exception>
+    /// <exception cref="CliFailure">Thrown when the deployment refused the credential, could not be reached, or answered with something that is not a cancellation.</exception>
+    internal Task<EmbeddingReindexCancellation> CancelEmbeddingReindexAsync(
+        string token,
+        CancellationToken cancellationToken) =>
+        this.RequestAsync(
+            HttpMethod.Post,
+            AdminEndpointRoutes.EmbeddingReindexCancellationPath,
+            token,
+            CliJsonContext.Default.EmbeddingReindexCancellation,
+            cancellationToken);
+
+    /// <summary>Sends one credentialed request and reads the answer, or turns the refusal into a sentence.</summary>
+    /// <remarks>
+    /// <para>
+    /// Written once for every route that answers with a document, because the four refusals are the same four
+    /// everywhere: a credential this deployment does not accept, a port serving no administrative endpoint, a request
+    /// this deployment states a reason for refusing, and anything else. Repeating them per operation is how they drift
+    /// into saying different things about the same situation.
+    /// </para>
+    /// <para>
+    /// A stated refusal is repeated rather than replaced. The deployment knows why it refused — no provider declared, a
+    /// reindex already running, an estimate above the ceiling — and inventing a sentence here would lose the two numbers
+    /// the operator needs.
+    /// </para>
+    /// </remarks>
+    private async Task<TAnswer> RequestAsync<TAnswer>(
+        HttpMethod method,
+        string path,
+        string token,
+        JsonTypeInfo<TAnswer> answerContract,
+        CancellationToken cancellationToken)
+        where TAnswer : class
+    {
+        ArgumentNullException.ThrowIfNull(token);
+
+        using var request = new HttpRequestMessage(method, path);
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+        using var response = await this.SendAsync(request, cancellationToken);
+
+        if (response.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden)
+        {
+            throw new CliFailure(
+                "The deployment refused the credential. Check that it is one the administrative endpoint is configured with, and that it has not expired.");
+        }
+
+        if (response.StatusCode is HttpStatusCode.NotFound)
+        {
+            throw new CliFailure(
+                $"The address answered, but serves no administrative endpoint at {path}. Check the port: the administrative endpoint binds a listener of its own, and it is disabled unless the deployment enabled it.");
+        }
+
+        if (response.StatusCode is HttpStatusCode.BadRequest or HttpStatusCode.Conflict)
+        {
+            throw new CliFailure(
+                await ReadRefusalAsync(response, cancellationToken)
+                ?? "The deployment refused the request without saying why.");
+        }
+
+        if (!response.IsSuccessStatusCode)
+        {
+            throw new CliFailure($"The deployment answered {(int)response.StatusCode} and said nothing this command could act on.");
+        }
+
+        try
+        {
+            return await response.Content.ReadFromJsonAsync(answerContract, cancellationToken)
+                ?? throw new CliFailure("The deployment answered successfully with an empty body, which no operation here sends.");
+        }
+        catch (Exception failure) when (failure is JsonException or NotSupportedException)
+        {
+            throw new CliFailure(
+                "The address answered, but not with anything MailFathom would send. Check that it is the administrative endpoint rather than another service on the same host.",
+                failure);
         }
     }
 

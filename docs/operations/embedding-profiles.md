@@ -34,12 +34,16 @@ Configuration declares the model, and editing it starts nothing —
 split is argued. Activation is the explicit act that takes the declaration up, and from there the deployment runs the
 rest on its own.
 
-1. **Activation registers the generation.** The declared geometry is fingerprinted and resolved against
-   `embedding_profiles`: an identity already registered resolves to the row that exists, and a new one is inserted. The
-   row starts as *building*, and its approximate vector index is created immediately — while the generation is empty,
-   which is the cheapest moment it can be built. Activating what is already serving reports that and spends nothing;
-   activating while a *different* generation is being built is refused rather than started beside it, because one walk
-   between two partial generations would finish neither.
+1. **Activation registers the generation.** `mfctl embedding activate` is the act, and it counts before it spends: the
+   deployment reports the passages the run would send as characters and approximate tokens, refuses outright where that
+   estimate exceeds `Embeddings:MaxInputCharactersPerPeriod`, and otherwise asks. Past the confirmation, the declared
+   geometry is fingerprinted and resolved against `embedding_profiles`: an identity already registered resolves to the
+   row that exists, and a new one is inserted. The row starts as *building*, and its approximate vector index is
+   created immediately — while the generation is empty, which is the cheapest moment it can be built. Activating what
+   is already serving reports that and spends nothing; activating while a *different* generation is being built is
+   refused rather than started beside it, because one walk between two partial generations would finish neither.
+   [Administering the embedding profile](admin-endpoint.md#administering-the-embedding-profile) holds the command, its
+   flag, and each refusal.
 2. **The reindex fills it.** The same bounded, resumable sweep that backfills mail now walks towards the new
    generation, at the pace `EmbeddingBackfill:*` sets. [Embedding backfill](../features/embedding-backfill.md) describes
    the walk, what one pass costs, and how to slow it down. Searches are answered from the old generation throughout,
@@ -57,6 +61,8 @@ rest on its own.
 While the reindex is running, `mailfathom.embedding.backfill.outstanding` is how much of the mailbox the new
 generation is still missing, and the counters beside it are what move in between.
 [What an operator can see](../features/embedding-backfill.md#what-an-operator-can-see) lists all of them.
+`mfctl embedding status` is the same picture without a metrics backend: it names both generations, how much of the
+mailbox each covers, what the provider last did, and what the budget period has spent.
 
 ## What it costs
 
@@ -70,10 +76,10 @@ a profile's identity — so a model change pays for provider calls and local wri
 
 ## Stopping one, and going back
 
-**Cancelling a reindex** abandons the generation being built and leaves the one serving exactly where it is. The
-abandoned row becomes superseded, its index is dropped, and whatever partial vectors it accumulated are removed in the
-same bounded batches. What was spent on those vectors is spent; nothing about the search results changes, because that
-generation was never read.
+**Cancelling a reindex** — `mfctl embedding cancel-reindex` — abandons the generation being built and leaves the one
+serving exactly where it is. The abandoned row becomes superseded, its index is dropped, and whatever partial vectors it
+accumulated are removed in the same bounded batches. What was spent on those vectors is spent; nothing about the search
+results changes, because that generation was never read.
 
 A cancellation that arrives after the reindex has already completed reports that nothing was being built, and changes
 nothing: the generation it names is the one searches are now answered from, and this command never takes that out of

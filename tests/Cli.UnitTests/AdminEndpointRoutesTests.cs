@@ -26,6 +26,21 @@ public sealed class AdminEndpointRoutesTests
         Assert.Equal("/api/admin/session", AdminEndpointRoutes.SessionPath);
 
     /// <summary>
+    /// The three embedding paths, pinned as literals for the reason the prefix is: the deployment's own suite pins the
+    /// same three, and a rename on either side would otherwise compile cleanly and leave every embedding command
+    /// reaching a 404 that reads exactly like an administrative endpoint nobody enabled.
+    /// </summary>
+    [Fact]
+    public void EmbeddingPaths_AreTheRoutesTheDeploymentServesThemAt()
+    {
+        Assert.Equal("/api/admin/embeddings", AdminEndpointRoutes.EmbeddingStatusPath);
+        Assert.Equal("/api/admin/embeddings/activation", AdminEndpointRoutes.EmbeddingActivationPath);
+        Assert.Equal(
+            "/api/admin/embeddings/reindex/cancellation",
+            AdminEndpointRoutes.EmbeddingReindexCancellationPath);
+    }
+
+    /// <summary>
     /// RFC 9728 places the document under a well-known segment with the resource's path appended, and the deployment
     /// refuses to start unless its resource path is the route prefix. Composing it here rather than reading it from a
     /// challenge is what makes a sign-in one request instead of two, and this is the assertion that keeps the
