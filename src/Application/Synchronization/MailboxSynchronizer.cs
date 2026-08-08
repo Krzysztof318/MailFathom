@@ -420,11 +420,18 @@ public sealed class MailboxSynchronizer
                 budget,
                 cancellationToken);
 
-            // The ceiling filled up again while this pass ran, or the occurrence has left the folder. Either way the
-            // rest of the queue is in the same position, so the pass ends rather than asking about each of them.
-            if (occurrence.Availability != StoredEmailContentAvailability.Available)
+            // The ceiling filled up again while this pass ran, which is true of the whole queue rather than of this
+            // occurrence, so the pass ends instead of asking about each of the rest in turn.
+            if (occurrence.Availability == StoredEmailContentAvailability.AwaitingStorageHeadroom)
             {
                 break;
+            }
+
+            // Anything else is about this occurrence alone — it has left the folder, or its payload turned out to be
+            // above the size limit — and says nothing about the ones behind it, which may still be fetchable now.
+            if (occurrence.Availability != StoredEmailContentAvailability.Available)
+            {
+                continue;
             }
 
             refilledCount++;

@@ -233,22 +233,10 @@ public sealed class EmailContentReader
         attachments.CarriesUnverifiedSignature,
         attachments.ContainsUnexpandedTnefPart);
 
-    /// <summary>Builds the content of an email whose raw MIME the size limit kept out of local storage.</summary>
-    /// <remarks>
-    /// Everything answerable is still answered, and nothing else is. The headers come from the columns the listing is
-    /// served out of, which are narrower than a parse would produce but are what exists. Both the per-attachment list
-    /// and the attachment counts are absent, because nobody has ever read this message's parts: the row carries what
-    /// the server's envelope reported, and an envelope says nothing about attachments, so its zero counts are unset
-    /// defaults rather than a finding. The body state says why all of it is missing.
-    /// <para>
-    /// The empty list a caller that asked for attachment descriptions receives is therefore about this message's
-    /// content being unread rather than about it carrying no files, which the absent counts beside it state.
-    /// </para>
-    /// </remarks>
     /// <summary>Names the body to report for an occurrence whose content was never stored, or nothing when it was.</summary>
     /// <remarks>
     /// A row recorded as available and holding no content is a different thing entirely — that is a local copy that has
-    /// gone missing, and the caller below answers it with a repair request rather than with a body state.
+    /// gone missing, and the caller answers it with a repair request rather than with a body state.
     /// </remarks>
     private static EmailContentBody? BodyOfUnstoredContent(StoredEmailContentAvailability availability) =>
         availability switch
@@ -258,6 +246,19 @@ public sealed class EmailContentReader
             _ => null,
         };
 
+    /// <summary>Builds the content of an email whose raw MIME synchronization deliberately kept out of local storage.</summary>
+    /// <remarks>
+    /// Everything answerable is still answered, and nothing else is. The headers come from the columns the listing is
+    /// served out of, which are narrower than a parse would produce but are what exists. Both the per-attachment list
+    /// and the attachment counts are absent, because nobody has ever read this message's parts: the row carries what
+    /// the server's envelope reported, and an envelope says nothing about attachments, so its zero counts are unset
+    /// defaults rather than a finding. The body state says why all of it is missing, and which of the two reasons it
+    /// was.
+    /// <para>
+    /// The empty list a caller that asked for attachment descriptions receives is therefore about this message's
+    /// content being unread rather than about it carrying no files, which the absent counts beside it state.
+    /// </para>
+    /// </remarks>
     private static ReadEmailContent ContentWithoutStoredMime(
         EmailSummary summary,
         GetEmailContentRequest request,

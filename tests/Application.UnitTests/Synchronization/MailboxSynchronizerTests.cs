@@ -2453,6 +2453,44 @@ public sealed class MailboxSynchronizerTests
             Arg.Any<CancellationToken>());
     }
 
+    /// <summary>One departed message ends that message and not the rest of the queue waiting behind it.</summary>
+    /// <remarks>
+    /// A message leaving its folder is a fact about that message. The occurrences behind it in the queue may still be
+    /// on the server with room to store them, so treating one departure as evidence about the batch would make them
+    /// wait a whole run for nothing — and would do it again on the next run, since the departed one is still first.
+    /// </remarks>
+    [Fact]
+    public async Task SynchronizeAsync_DeferredMessageHasLeftTheFolder_StillRefillsTheOnesBehindIt()
+    {
+        // Arrange
+        var accountId = MailAccountId.Create("primary");
+        var uidValidity = ImapUidValidity.Create(5);
+        var departed = EmailOccurrenceId.Create(accountId, InboxFolder.Id, uidValidity, ImapUid.Create(7));
+        var behindIt = EmailOccurrenceId.Create(accountId, InboxFolder.Id, uidValidity, ImapUid.Create(8));
+        var options = new MailboxSynchronizationOptions { MaxMetadataBatchSize = 25, MaxRawMimeBytes = 1024 };
+        var inventory = new InMemoryStoredEmailContentInventory { StoredContentBytes = 100 };
+        inventory.AddAwaitingContent(MetadataOf(departed, 600));
+        inventory.AddAwaitingContent(MetadataOf(behindIt, 600));
+        var arrangement = ArrangeContentRun(
+            options,
+            uidValidity,
+            [],
+            inspectedThroughUid: null,
+            inventory: inventory,
+            storedContentCeiling: new StoredContentCeiling(100_000));
+        arrangement.Session
+            .FetchEmailContentWithoutSettingSeenAsync(departed, options.MaxRawMimeBytes, CancellationToken.None)
+            .Returns(RemoteEmailContentFetchResult.NoLongerHeld());
+        StubRetrievedContent(arrangement.Session, options, behindIt, 600);
+
+        // Act
+        var result = await arrangement.Synchronizer.SynchronizeAsync(accountId, InboxMapping, CancellationToken.None);
+
+        // Assert
+        Assert.Equal(1, result.ContentVolume.RefilledEmailCount);
+        await arrangement.Session.Received(1).FetchEmailContentWithoutSettingSeenAsync(behindIt, options.MaxRawMimeBytes, CancellationToken.None);
+    }
+
     /// <summary>A deployment still at its ceiling leaves the deferred content exactly where it is.</summary>
     [Fact]
     public async Task SynchronizeAsync_StorageStillAtItsCeiling_LeavesTheDeferredContentUnfetched()
