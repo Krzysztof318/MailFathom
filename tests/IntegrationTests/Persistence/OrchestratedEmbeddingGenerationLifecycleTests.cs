@@ -51,17 +51,18 @@ public sealed class OrchestratedEmbeddingGenerationLifecycleTests(MailFathomOrch
         var cancellationToken = TestContext.Current.CancellationToken;
         await using var services = await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken);
         var chunkIds = await StorePassagesAsync(services, uid: 9301, cancellationToken);
-
-        // Every claim below reads a question the database answers about the whole instance — which superseded
-        // generation is still holding vectors — while what this test is about is the one generation it supersedes
-        // itself. Another class that embedded under the deterministic profile leaves exactly such a row behind, and
-        // the switch below is what supersedes it, so the reading would name that class's generation rather than this
-        // one's for no reason except the order xUnit chose. Draining first states the precondition instead of
-        // inheriting it.
-        await DrainSupersededVectorsAsync(services, cancellationToken);
-
         var previous = await RegisterAsync(services, "generation-previous", cancellationToken);
         await SwitchToAsync(services, previous.Id, cancellationToken);
+
+        // Drained after this switch rather than before it, because the residue this test has to be free of is not
+        // superseded until the switch supersedes it. Any class that embedded under the deterministic profile leaves it
+        // serving and holding vectors, and the claims below read a question the database answers about the whole
+        // instance — which superseded generation still holds vectors — while what this test is about is the one
+        // generation it supersedes itself. Without this, the reading names that class's generation rather than this
+        // one's, for no reason except the order xUnit chose. Nothing this test created can be taken by it: `previous`
+        // is serving here and holds no vector yet.
+        await DrainSupersededVectorsAsync(services, cancellationToken);
+
         await StoreVectorsAsync(services, chunkIds, previous.Id, cancellationToken);
 
         // Act
