@@ -212,6 +212,12 @@ run_test() {
   fi
 }
 
+# One repairing pass and no verifying one. The verifying pass would restate the Release build two
+# lines above it: `EnforceCodeStyleInBuild` and `TreatWarningsAsErrors` turn every IDE rule the
+# `.editorconfig` sets to `warning` into a build error, so a diagnostic with no code fix has already
+# failed the run before formatting is reached. What the repairing pass is here for is the part no
+# build reports — the ordering of using directives, a missing final newline — and repairing it is
+# something only this script does.
 verify_fast_runs_restore_build_tests_and_formatting() {
   : > "$invocation_log"
 
@@ -221,10 +227,14 @@ verify_fast_runs_restore_build_tests_and_formatting() {
   )
 
   assert_file_content \
-    $'restore MailFathom.slnx --locked-mode\nbuild MailFathom.slnx --configuration Release --no-restore\ntest --solution MailFathom.slnx --configuration Release --no-build\nformat MailFathom.slnx --no-restore --include src/Sample.cs\nformat MailFathom.slnx --no-restore --verify-no-changes --verbosity diagnostic --include src/Sample.cs' \
+    $'restore MailFathom.slnx --locked-mode\nbuild MailFathom.slnx --configuration Release --no-restore\ntest --solution MailFathom.slnx --configuration Release --no-build\nformat MailFathom.slnx --no-restore --include src/Sample.cs' \
     "$invocation_log"
 }
 
+# The fixture branch changes one C# file and nothing else, which is also the case the scoped
+# verification below is about: the gate verifies the file the branch wrote rather than the 1113 the
+# solution holds, because formatting is a property of a file and every other one was verified by
+# whatever change last touched it.
 verify_full_runs_tests_once_through_coverage() {
   : > "$invocation_log"
 
@@ -234,36 +244,150 @@ verify_full_runs_tests_once_through_coverage() {
   )
 
   assert_file_content \
-    $'tool restore\nrestore MailFathom.slnx --locked-mode\nbuild MailFathom.slnx --configuration Release --no-restore\nmsbuild .config/CodeCoverage.proj -t:Collect -p:Configuration=Release\nformat MailFathom.slnx --no-restore --verify-no-changes --verbosity diagnostic' \
+    $'tool restore\nrestore MailFathom.slnx --locked-mode\nbuild MailFathom.slnx --configuration Release --no-restore\nmsbuild .config/CodeCoverage.proj -t:Collect -p:Configuration=Release\nformat MailFathom.slnx --no-restore --verify-no-changes --verbosity diagnostic --include src/Sample.cs' \
     "$invocation_log"
 }
 
-verify_full_runs_workflow_contracts() {
+# The full gate reads what the branch changed to decide what it still has to check, so a contract
+# about either decision has to say so. A documentation file is the shortest way to state a change no
+# build reads and every whole-tree contract does; it is staged rather than left untracked, because
+# the gate rejects untracked files before it decides anything.
+stage_documentation_change() {
+  printf 'note\n' > "$repository_root/docs/note.md"
+  git -C "$repository_root" add docs/note.md
+}
+
+discard_documentation_change() {
+  git -C "$repository_root" rm --quiet --force --cached docs/note.md
+  rm -f "$repository_root/docs/note.md"
+}
+
+verify_full_runs_workflow_contracts_for_a_change_beyond_csharp() {
   : > "$workflow_invocation_log"
+  stage_documentation_change
 
   (
     cd "$repository_root"
     "$scripts_directory/verify-full.sh"
   )
 
+  discard_documentation_change
+  assert_file_content 'workflow-contracts' "$workflow_invocation_log"
+}
+
+# Every invariant the suite asserts is carried by a file no C# change can move: a licensing header
+# outside `.cs`, a `describes:` marker, a table-of-contents entry. `CI` runs it on every pull request
+# including a draft, so what is skipped here is an earlier verdict rather than the verdict.
+verify_full_skips_workflow_contracts_for_a_csharp_only_change() {
+  : > "$workflow_invocation_log"
+  : > "$invocation_log"
+
+  (
+    cd "$repository_root"
+    "$scripts_directory/verify-full.sh"
+  )
+
+  assert_file_content '' "$workflow_invocation_log"
+  assert_contains 'msbuild .config/CodeCoverage.proj' "$invocation_log"
+}
+
+# A marker and a table-of-contents entry name a path, so a file that stops being where it was is what
+# leaves one of them resolving to nothing — and the files that remain say nothing about it. The
+# deletion is staged for the same reason the documentation change is.
+verify_full_runs_workflow_contracts_when_the_branch_removed_a_path() {
+  : > "$workflow_invocation_log"
+  git -C "$repository_root" rm --quiet tracked.txt
+
+  (
+    cd "$repository_root"
+    "$scripts_directory/verify-full.sh"
+  )
+
+  git -C "$repository_root" checkout --quiet HEAD -- tracked.txt
   assert_file_content 'workflow-contracts' "$workflow_invocation_log"
 }
 
 verify_full_stops_when_workflow_contracts_fail() {
   : > "$invocation_log"
   : > "$workflow_invocation_log"
+  stage_documentation_change
 
   if (
     export FAKE_WORKFLOW_FAIL=1
     cd "$repository_root"
     "$scripts_directory/verify-full.sh"
   ); then
+    discard_documentation_change
     printf 'verify-full.sh succeeded despite failing workflow contracts\n' >&2
     return 1
   fi
 
+  discard_documentation_change
   assert_file_content 'workflow-contracts' "$workflow_invocation_log"
   assert_file_content '' "$invocation_log"
+}
+
+# The one change that can move the formatting verdict on a file it never opened. `.editorconfig`
+# carries the rules themselves, and the shared MSBuild files, the SDK pin, and the solution decide
+# which of them run and over what — so this is where the whole solution is still worth its cost.
+verify_full_formats_the_whole_solution_when_a_shared_style_input_changed() {
+  : > "$invocation_log"
+  printf 'root = true\n' > "$repository_root/.editorconfig"
+  git -C "$repository_root" add .editorconfig
+
+  (
+    cd "$repository_root"
+    "$scripts_directory/verify-full.sh"
+  )
+
+  git -C "$repository_root" rm --quiet --force --cached .editorconfig
+  rm -f "$repository_root/.editorconfig"
+
+  assert_contains 'format MailFathom.slnx --no-restore --verify-no-changes --verbosity diagnostic' "$invocation_log"
+  assert_excludes '--include' "$invocation_log"
+}
+
+# A deleted style input decides as much as an edited one, and it is the case a list of the files that
+# still exist cannot see. The rules a nested `.editorconfig` carried stop applying the moment it is
+# gone, so every file beneath it is read against the ones above from that commit on — without any of
+# them having been touched.
+verify_full_formats_the_whole_solution_when_a_shared_style_input_was_removed() {
+  : > "$invocation_log"
+  printf 'root = true\n' > "$repository_root/src/.editorconfig"
+  git -C "$repository_root" add src/.editorconfig
+  git -C "$repository_root" commit --quiet -m 'nested editorconfig'
+  git -C "$repository_root" rm --quiet src/.editorconfig
+
+  (
+    cd "$repository_root"
+    "$scripts_directory/verify-full.sh"
+  )
+
+  git -C "$repository_root" reset --quiet --hard HEAD~1
+
+  assert_contains 'format MailFathom.slnx --no-restore --verify-no-changes --verbosity diagnostic' "$invocation_log"
+  assert_excludes '--include' "$invocation_log"
+}
+
+# A change that wrote no C# file has nothing for `dotnet format` to be asked about, in either
+# direction: there is no file to verify and no shared input that would widen the scope to the
+# solution. The suite still runs, because that change is exactly what it reads.
+verify_full_formats_nothing_when_no_csharp_file_changed() {
+  : > "$invocation_log"
+  : > "$workflow_invocation_log"
+  git -C "$repository_root" checkout --quiet --detach origin/main
+  stage_documentation_change
+
+  (
+    cd "$repository_root"
+    "$scripts_directory/verify-full.sh"
+  )
+
+  discard_documentation_change
+  git -C "$repository_root" checkout --quiet "$fixture_branch"
+
+  assert_file_content 'workflow-contracts' "$workflow_invocation_log"
+  assert_excludes 'format MailFathom.slnx' "$invocation_log"
 }
 
 verify_full_checks_committed_staged_and_unstaged_changes() {
@@ -493,7 +617,7 @@ verify_fast_accepts_a_detached_head() {
   fi
 
   assert_file_content \
-    $'restore MailFathom.slnx --locked-mode\nbuild MailFathom.slnx --configuration Release --no-restore\ntest --solution MailFathom.slnx --configuration Release --no-build\nformat MailFathom.slnx --no-restore --include src/Sample.cs\nformat MailFathom.slnx --no-restore --verify-no-changes --verbosity diagnostic --include src/Sample.cs' \
+    $'restore MailFathom.slnx --locked-mode\nbuild MailFathom.slnx --configuration Release --no-restore\ntest --solution MailFathom.slnx --configuration Release --no-build\nformat MailFathom.slnx --no-restore --include src/Sample.cs' \
     "$invocation_log"
 }
 
@@ -694,6 +818,11 @@ verify_full_verifies_a_fork_against_its_upstream_remote() {
   : > "$workflow_invocation_log"
   create_fork_fixture "$fork_root"
   git -C "$fork_root" remote add upstream "$remote_repository_root"
+  # The branch carries a documentation change so the gate reaches the whole-tree contracts, which is
+  # what the assertion below reads as evidence that the run went through rather than stopping early.
+  printf 'note\n' > "$fork_root/NOTES.md"
+  git -C "$fork_root" add NOTES.md
+  git -C "$fork_root" commit --quiet -m 'fork documentation change'
 
   (
     cd "$fork_root"
@@ -3480,8 +3609,13 @@ every_skill_declares_its_license() {
 
 run_test verify_fast_runs_restore_build_tests_and_formatting
 run_test verify_full_runs_tests_once_through_coverage
-run_test verify_full_runs_workflow_contracts
+run_test verify_full_runs_workflow_contracts_for_a_change_beyond_csharp
+run_test verify_full_skips_workflow_contracts_for_a_csharp_only_change
+run_test verify_full_runs_workflow_contracts_when_the_branch_removed_a_path
 run_test verify_full_stops_when_workflow_contracts_fail
+run_test verify_full_formats_the_whole_solution_when_a_shared_style_input_changed
+run_test verify_full_formats_the_whole_solution_when_a_shared_style_input_was_removed
+run_test verify_full_formats_nothing_when_no_csharp_file_changed
 run_test verify_full_checks_committed_staged_and_unstaged_changes
 run_test verify_full_rejects_untracked_files
 run_test verify_full_fetches_the_remote_base_before_verifying

@@ -16,6 +16,8 @@ cd "$repository_root"
 # workflow contract suite runs the committed scripts against a fixture checkout that carries none.
 # shellcheck source=scripts/resolve-base-remote.sh
 source "$(dirname "${BASH_SOURCE[0]}")/resolve-base-remote.sh"
+# shellcheck source=scripts/list-branch-changes.sh
+source "$(dirname "${BASH_SOURCE[0]}")/list-branch-changes.sh"
 
 # The integration branch is never the subject of a change, so a run there reports on code nobody is
 # about to modify. verify-full.sh cannot catch this through its base check: origin/main is trivially
@@ -27,48 +29,6 @@ if [[ "$current_branch" == 'main' || "$current_branch" == 'master' ]]; then
   exit 1
 fi
 
-# The branch base, preferred as the remote-tracking ref of whichever remote is the upstream
-# repository and falling back to the local branch, so the loop keeps working offline. Printing
-# nothing when neither exists widens the scope below to the uncommitted work alone rather than
-# failing the run: this loop only decides which files to format, so a missing base costs a narrower
-# scope rather than a wrong verdict, and the full gate refuses the same state outright.
-resolve_branch_base() {
-  local base_remote
-  local candidate_ref
-
-  if base_remote="$(resolve_base_remote)"; then
-    candidate_ref="refs/remotes/$base_remote/main"
-
-    if git rev-parse --verify --quiet "$candidate_ref" > /dev/null; then
-      printf '%s\n' "$candidate_ref"
-      return 0
-    fi
-  fi
-
-  if git rev-parse --verify --quiet 'refs/heads/main' > /dev/null; then
-    printf 'refs/heads/main\n'
-  fi
-}
-
-# Every path this branch touches: committed since the base, staged, modified, or newly added.
-# Deletions are filtered out because a removed file cannot be formatted. Each command reports its
-# own failure, because errexit does not apply to a function called in a condition and the caller
-# would otherwise read a truncated list as "nothing to format": a shallow clone whose merge base
-# with origin/main is unavailable fails exactly that way, and the loop would silently format
-# nothing rather than saying it could not tell what changed.
-list_changed_paths() {
-  local branch_base
-
-  branch_base="$(resolve_branch_base)"
-
-  git diff --name-only --diff-filter=ACMR HEAD || return 1
-  git ls-files --others --exclude-standard || return 1
-
-  if [[ -n "$branch_base" ]]; then
-    git diff --name-only --diff-filter=ACMR "$branch_base...HEAD" || return 1
-  fi
-}
-
 # Locked mode here and not only in the final gate, for the same reason formatting runs here: a pin
 # moved without regenerating the lock files fails restore with NU1004, and discovering that after the
 # whole coverage collection has already run wastes the loop this script exists to shorten. Regenerate
@@ -77,15 +37,23 @@ dotnet restore MailFathom.slnx --locked-mode
 dotnet build MailFathom.slnx --configuration Release --no-restore
 dotnet test --solution MailFathom.slnx --configuration Release --no-build
 
-# Formatting runs in the fast loop as well as the final gate. Style diagnostics such as IDE0005 are
-# reported by `dotnet format` rather than by the build, so leaving them to full verification means
-# discovering them only after tool restore and the whole coverage collection have already run.
+# One pass, and a repairing one, because this is the only step in either gate that rewrites a file
+# rather than reporting on it. What it repairs is the part of formatting the build cannot see:
+# `Directory.Build.props` sets `EnforceCodeStyleInBuild` beside `TreatWarningsAsErrors` and
+# `.editorconfig` gives the IDE rules severity `warning`, so the Release build above already fails on
+# `IDE0055`, `IDE0005`, and `IDE0073` with the file and line — while the ordering of using directives
+# and a missing final newline are `dotnet format`'s own passes and appear nowhere in a build.
+#
+# So a second `--verify-no-changes` pass here would restate the build's verdict at the cost of
+# another full workspace load. Anything it could still report is a diagnostic with no code fix, which
+# is exactly what the build has already turned into an error a few lines above — the script would
+# never have reached this point. The full gate verifies instead of repairing, which is where a change
+# that was never run through this loop is caught.
 #
 # The loop formats only what the branch changed. `dotnet format` reloads the MSBuild workspace on
-# every invocation and analyzes whatever is in scope, so the whole solution costs about 70 seconds
-# here while a handful of files costs about 30. Splitting the run into the `whitespace`, `style`,
-# and `analyzers` subcommands does not help: it pays that workspace load three times. The final gate
-# still formats the whole solution, so a defect outside the changed files cannot merge.
+# every invocation and analyzes whatever is in scope, so the whole solution costs several times what
+# a handful of files costs. Splitting the run into the `whitespace`, `style`, and `analyzers`
+# subcommands does not help: it pays that workspace load three times.
 if ! changed_paths="$(list_changed_paths)"; then
   printf 'verify-fast.sh cannot determine which files the branch changed. Formatting the wrong scope proves nothing, so fix the repository state instead.\n' >&2
   exit 1
@@ -94,10 +62,5 @@ fi
 mapfile -t changed_csharp_files < <(printf '%s\n' "$changed_paths" | grep -E '\.cs$' | sort --unique)
 
 if ((${#changed_csharp_files[@]} > 0)); then
-  # Two passes, because neither reports what the other does. The first rewrites everything that has
-  # a code fix, but exits 0 and names no file when a diagnostic has none. The second turns whatever
-  # survived into the `file(line,col): error IDEnnnn` the loop can act on, and fails the run.
   dotnet format MailFathom.slnx --no-restore --include "${changed_csharp_files[@]}"
-  dotnet format MailFathom.slnx --no-restore --verify-no-changes --verbosity diagnostic \
-    --include "${changed_csharp_files[@]}"
 fi

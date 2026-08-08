@@ -112,7 +112,7 @@ bash scripts/verify-fast.sh
 
 It restores, builds, runs the unit tests, and then formats the C# files your branch changed. **It rewrites working-tree files by design** — that is how a style diagnostic reaches you in seconds rather than after the full gate has run. Review what it changed.
 
-Do not invoke `dotnet format` by hand. Both of its modes already run where they belong, and a hand-run pass over the whole solution costs over a minute to report what the loop just told you.
+Do not invoke `dotnet format` by hand. Both of its modes already run where they belong — the loop repairs the files you changed, the full gate verifies them — and a hand-run pass over the whole solution costs minutes to report what the build has already told you: a style rule with no automatic fix fails the Release build above, naming its file and line.
 
 Before you commit, stage your files and run the full gate:
 
@@ -121,7 +121,7 @@ git add <your files>
 bash scripts/verify-full.sh
 ```
 
-The full gate fetches `origin main` and refuses a branch that does not contain that freshly fetched base, so rebase when it complains; verifying against a stale base proves nothing about the branch that will actually merge. It then runs the workflow contract suite, builds, runs the complete unit-test and coverage gate, verifies formatting across the solution, and checks the diff. It rejects remaining untracked files, so a newly added file cannot slip past diff validation.
+The full gate fetches `origin main` and refuses a branch that does not contain that freshly fetched base, so rebase when it complains; verifying against a stale base proves nothing about the branch that will actually merge. It then runs the workflow contract suite where your change can have moved something it asserts, builds, runs the complete unit-test and coverage gate, verifies formatting over the C# files you changed — over the whole solution when you touched an `.editorconfig` or one of the shared build files — and checks the diff. It rejects remaining untracked files, so a newly added file cannot slip past diff validation.
 
 Both scripts refuse to run on `main` or `master`. Check out your branch rather than working around the refusal.
 

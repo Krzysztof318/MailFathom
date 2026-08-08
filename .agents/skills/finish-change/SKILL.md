@@ -28,8 +28,9 @@ where it came from.
    release pull request alone, so a diff that edits it here is a defect rather than diligence.
 4. Run `scripts/verify-full.sh`. Fix failures and rerun the complete script; earlier or partial
    results do not replace a fresh successful run. Repair a formatting failure through
-   `scripts/verify-fast.sh`, which rewrites the changed files and reports what has no code fix,
-   rather than through a hand-run `dotnet format` over the whole solution.
+   `scripts/verify-fast.sh`, which rewrites the changed files, rather than through a hand-run
+   `dotnet format` over the whole solution; a diagnostic no rewrite fixes is a build error there and
+   names its own file and line.
 5. Inspect status and the full diff for secrets, generated artifacts, unrelated edits, architecture
    violations, and missing tests or documentation. `scripts/review-obligations.sh` is what answers the
    last of those without reading the whole tree: it names the tests and pages the change obliges and
