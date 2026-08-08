@@ -35,8 +35,8 @@ The fourth release, and the first that asks every deployment to edit its configu
 every installation states have moved: **where each surface is served, and how a credential is configured.** Neither
 previous form is ignored — both fail startup naming what replaces them — so an upgrade that skips the edit stops rather
 than quietly serving something you did not configure. **The database schema moves as well**, by five migrations that
-only add tables, so the schema step belongs to this upgrade; it applies while `0.3.0` is still running, and `0.3.0`
-serves the result unchanged if you go back.
+add three tables and then refine one of the three, and that touch nothing `0.3.0` reads — so the schema step belongs to
+this upgrade, it applies while `0.3.0` is still running, and `0.3.0` serves the result unchanged if you go back.
 
 Nothing else `0.3.0` promised is withdrawn. The MCP tool contract is untouched — `list_emails`, `get_email_content`,
 and `search_emails` answer exactly as they did — and every setting not named below still means what it meant.
