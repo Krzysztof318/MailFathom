@@ -28,6 +28,11 @@ namespace MailFathom.Application.Emails.SearchEmails;
 /// know it.
 /// </para>
 /// <para>
+/// Beside the mode it reports what semantic retrieval can do at all, so a lexical answer says whether this instance
+/// never embeds or is currently unable to. A search never fails because an embedding provider did, and never returns an
+/// empty window in place of one it could not rank semantically.
+/// </para>
+/// <para>
 /// Because the index covers body text only, a word that appears solely inside an attachment payload matches nothing
 /// here. That is the deliberate limit the extraction specification records rather than something this use case works
 /// around, and the feature documentation states it so the behavior is not surprising.
@@ -113,10 +118,15 @@ public sealed class MailboxSearchReader
         // refusals a deployment that serves several does, and only then reports that it holds nothing to search.
         if (selection.Scope.AccountIds.Count is 0)
         {
-            return new SearchEmailsResult([], EmailSearchRetrievalMode.Lexical, []);
+            // The capability is still read and still reported. It describes the instance rather than the window, so an
+            // empty answer that claimed semantic retrieval was inactive would be wrong about a hybrid deployment for
+            // the one request least able to tell.
+            var capability = await this.semanticSearch.ReadCapabilityAsync(cancellationToken);
+
+            return new SearchEmailsResult([], EmailSearchRetrievalMode.Lexical, capability, []);
         }
 
-        var (rankedCandidates, retrievalMode) =
+        var (rankedCandidates, retrievalMode, semanticSearchCapability) =
             await this.RankAsync(selection, queryText, resultLimit.Value, cancellationToken);
 
         var matches = await this.searchIndexReader.ReadMatchesAsync(
@@ -130,7 +140,7 @@ public sealed class MailboxSearchReader
         // one operation at a time, so starting them together would fault instead of overlapping.
         var folderFreshness = await this.freshnessReader.ReadAsync(selection.Scope, cancellationToken);
 
-        return new SearchEmailsResult(matches, retrievalMode, folderFreshness);
+        return new SearchEmailsResult(matches, retrievalMode, semanticSearchCapability, folderFreshness);
     }
 
     /// <summary>Ranks the eligible mail by whichever method this instance can apply to this query.</summary>
@@ -140,7 +150,10 @@ public sealed class MailboxSearchReader
     /// for the fusion to mean anything. Asking the other way round would either rank four times too much mail on every
     /// lexical-only instance or discover the fused window was drawn from a truncated ranking.
     /// </remarks>
-    private async Task<(IReadOnlyList<RankedEmailCandidate> Candidates, EmailSearchRetrievalMode RetrievalMode)>
+    private async Task<(
+        IReadOnlyList<RankedEmailCandidate> Candidates,
+        EmailSearchRetrievalMode RetrievalMode,
+        SemanticSearchCapability SemanticSearch)>
         RankAsync(
             MailboxEmailSelection selection,
             EmailSearchQueryText queryText,
@@ -149,13 +162,13 @@ public sealed class MailboxSearchReader
     {
         var candidateDepth = resultLimit * FusionCandidateDepthMultiplier;
 
-        var semanticCandidates = await this.semanticSearch.FindNearestCandidatesAsync(
+        var semantic = await this.semanticSearch.FindNearestCandidatesAsync(
             selection,
             queryText,
             candidateDepth,
             cancellationToken);
 
-        if (semanticCandidates is null)
+        if (semantic.Candidates is not { } semanticCandidates)
         {
             var lexicalWindow = await this.searchIndexReader.ReadRankedCandidatesAsync(
                 selection,
@@ -163,7 +176,7 @@ public sealed class MailboxSearchReader
                 resultLimit,
                 cancellationToken);
 
-            return (lexicalWindow, EmailSearchRetrievalMode.Lexical);
+            return (lexicalWindow, EmailSearchRetrievalMode.Lexical, semantic.Capability);
         }
 
         var lexicalCandidates = await this.searchIndexReader.ReadRankedCandidatesAsync(
@@ -174,7 +187,7 @@ public sealed class MailboxSearchReader
 
         var fused = ReciprocalRankFusion.Fuse(lexicalCandidates, semanticCandidates, resultLimit);
 
-        return (fused, EmailSearchRetrievalMode.Hybrid);
+        return (fused, EmailSearchRetrievalMode.Hybrid, semantic.Capability);
     }
 
     /// <summary>Validates the request's structured filters and restricts the search to the accounts this deployment serves.</summary>

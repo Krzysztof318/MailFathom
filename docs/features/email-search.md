@@ -96,6 +96,9 @@ produced them, and `SearchEmailsResult` adds the retrieval mode the whole window
   the two scales are unrelated — reading it without reading the mode says nothing.
 - **The snippets** are extracts of the body text around the matched words, each matched run wrapped in `**`.
 - **The retrieval mode** is `Lexical` or `Hybrid`, and it describes this one call rather than the deployment.
+- **The semantic capability** is `Inactive`, `Available`, or `Degraded`, and it describes the instance. It is what
+  separates a lexical answer that is exactly what the deployment intends from one that is narrower than intended; the
+  section below states what each value means.
 
 The search vector carries no lexeme weights, so the lexical rank reflects how often and how densely a message's document
 mentions the query's words rather than where in the message they appear. A subject match and a body match count the
@@ -137,6 +140,8 @@ for two instances to disagree about what "most relevant" means while both report
   generator disagrees with the active profile's identity. None of those is an error: a provider outage costs a search
   its second ranking rather than turning a mailbox read into a failure, and the mode is what makes that visible instead
   of silent.
+- **A search also says whether it could have answered hybridly at all**, which the mode alone cannot. The capability
+  below is what distinguishes the three cases in that sentence.
 - **Semantic recall follows the backfill.** A mailbox that is still being embedded reports `Hybrid` and finds only what
   already carries vectors. [Embedding backfill](embedding-backfill.md) records how that catches up.
 - **The vector ranking is exact rather than approximate**, because the caller's filters join it and an approximate index
@@ -149,6 +154,65 @@ for two instances to disagree about what "most relevant" means while both report
   both, or with none.
 - **Nothing about a query is recorded.** The query text is not logged, the vector it produces is held for one call and
   published to nobody, and no snippet reaches a log, a metric, or a trace.
+
+### What the three capability states mean
+
+The retrieval mode answers *how was this call ranked*. It cannot answer *should it have been*, and that is the question
+an operator whose API key expired is actually asking: their instance still answers every search, just with a worse
+ranking, and nothing about a `Lexical` mode says whether that is the deployment working as configured. The capability is
+that second answer, and it is part of every result.
+
+| Capability | What is true | What an operator does |
+|---|---|---|
+| `Inactive` | No embedding profile is active. This instance does not embed mail at all | Nothing. It is a supported deployment. Activating a declared profile is what changes it |
+| `Available` | A profile is active, a generator declares the same identity, and the provider answered the last call made to it | Nothing |
+| `Degraded` | A profile is active and a query cannot be placed in its space | Restore the credential, the endpoint, or the model declaration. Recovery is automatic afterwards |
+
+An instance reaches `Degraded` in four ways, and every one of them needs a person rather than time alone:
+
+- the last embedding call was refused for a reason no later attempt changes — an expired or revoked credential, a
+  rejected request;
+- the last embedding call failed for a reason that may pass — the whole endpoint chain unreachable, a rate limit, a
+  timeout. [ADR 0006](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0006-embedding-profile-identity-lifecycle-and-activation-cost.md)
+  makes the chain one vector space reached several ways, so falling from one endpoint to the next is the declaration
+  working rather than ill health; only the chain being exhausted is;
+- no endpoint chain is declared any more while a profile is still active, so vectors exist and nothing can place a query
+  beside them;
+- the declared model is not the one the active profile records, which is the same disagreement the embedding workers
+  report and refuse to write under.
+
+Two properties make the signal cheap enough to consult on every search.
+
+**No query establishes health.** What the capability reads is the outcome of calls the embedding worker and the backfill
+already made and paid for. A health check that called the provider would spend an operator's money on every scrape and
+would report on a request nobody asked for.
+
+**A failing provider is not asked again by every search.** While the recorded failure is less than a minute old, a query
+reports `Degraded` and returns the lexical ranking without opening a connection. That is what keeps an outage from
+turning every arriving search into one more call against a provider that is already saying no. A rejected credential in
+particular is not a transient failure, so nothing in the resilience budget stops it from being retried — without this
+gate, an expired key would buy one refused request per search for as long as it stayed expired.
+
+**Recovery needs no restart and no operator action beyond the fix itself**, and it does not depend on there being mail
+left to embed. The workers restore the state as a by-product of work they had to do anyway, which covers an instance
+that is still catching up — but an instance whose mail is fully embedded and whose mailbox is quiet calls the provider
+for nothing at all, and a gate that trusted the recorded state unconditionally would leave it lexical indefinitely after
+the cause was gone. So the gate is a window rather than a latch: once a minute has passed with no fresher observation,
+one search is let through to find out. A provider still refusing costs that one call and re-stamps the window; a
+repaired one is picked up on it, and every search after it is `Hybrid` again.
+
+That minute is a fixed constant rather than a setting, for the reason the fusion depth is: its whole range sits between
+*immediately* and *within a minute*, so there is nothing for an operator to gain by tuning it and one more number to
+reason about if they could.
+
+Every transition is logged with the provider role and the classification, at `Warning` when a capability is withdrawn
+and at `Information` when it returns. Only transitions are logged — every provider call records a state, so a line per
+call would put the log's volume on the size of the mailbox — and a first call that succeeded is not one, because it
+restored nothing. `mailfathom.ai.provider.health` publishes the same state as
+a gauge per role, and the `ai-embedding-provider` health check reports it on the readiness probe as `Degraded`, never
+worse: an instance whose embedding provider is down still answers every search, and taking it out of traffic for that
+would be a worse outage than the one being reported. [Health endpoints](../operations/health-endpoints.md) documents the
+probe and [Telemetry](../operations/telemetry.md) the instrument.
 
 ### Snippets
 
@@ -234,8 +298,12 @@ caller cannot tell a folder that holds nothing matching from one whose synchroni
 - `MailFathom.Application.Emails.Search` — `EmailSearchQueryText`, `EmailSearchResultLimit`, and
   `EmailSearchSnippetBounds`; `EmailSearchMatch`, `RankedEmailCandidate`, and `EmailSearchRetrievalMode`;
   `ReciprocalRankFusion`, which combines two rankings and reaches nothing at all; `SemanticEmailSearch`, which decides
-  whether a search can be ranked semantically and embeds the query when it can; and `IEmailSearchIndexReader` and
-  `IEmailVectorSearchIndexReader`, the two ports the adapters implement.
+  whether a search can be ranked semantically and embeds the query when it can, together with the
+  `SemanticSearchCapability` it reports and the `SemanticEmailSearchOutcome` the two travel in; and
+  `IEmailSearchIndexReader` and `IEmailVectorSearchIndexReader`, the two ports the adapters implement.
+- `MailFathom.Application.AiProviders` — `IAiProviderHealthReader` and `AiProviderHealthState`, the recorded outcome of
+  the last provider call that the capability is read from. `MailFathom.Infrastructure.Observability` holds
+  `AiProviderHealthTracker`, which is what records it, publishes the gauge, and logs a transition.
 - `MailFathom.Application.Emails.Mailboxes` — `MailboxEmailSelection`, the validated structural filters both read models
   share, and `MailboxScopeResolver`, which resolves the accounts a read runs against and refuses one this deployment does
   not serve, once, for every read model.
@@ -248,8 +316,8 @@ caller cannot tell a folder that holds nothing matching from one whose synchroni
 - `MailFathom.Host.Configuration.Mail.MailboxSearchOptions` — the snippet bounds, bound strictly and validated on start.
 - `MailFathom.Mcp.Tools` — `SearchEmailsTool`, the protocol adapter, and `MailboxScopeArguments`, the conversion of
   caller-supplied text into account identifiers and folder aliases that it shares with the listing tool.
-- `MailFathom.Mcp.Tools.Results` — `SearchEmailsToolResult`, `SearchedEmailMatch`, and `EmailRetrievalMode`, the
-  published contract.
+- `MailFathom.Mcp.Tools.Results` — `SearchEmailsToolResult`, `SearchedEmailMatch`, `EmailRetrievalMode`, and
+  `SemanticSearchAvailability`, the published contract.
 
 ## How the guarantees are verified
 
@@ -265,6 +333,11 @@ Each claim this feature rests on is checked where it is observable.
 - **Everything the use case decides** — the refusals, the window bound, the tie-breaking, the empty-result case, which
   mode answers a call, and how deep each ranking is asked — is asserted in `Application.UnitTests` against in-memory
   indexes.
+- **Each of the three capability states, and both transitions between them**, are asserted there too, against a
+  substituted health reader: that a provider already recorded as failing is reported degraded without the generator
+  being called at all, and that the same instance ranks semantically again once the recorded state says the provider
+  answered. That a transition is logged once, with the role and the classification and nothing else, is asserted in
+  `Infrastructure.UnitTests` against the captured records.
 - **The fusion itself** is asserted against known rank inputs, with no provider and no database anywhere near it: what
   it promises is a function of where two rankings placed a message and of nothing else, so a test that needed vectors to
   state it would be testing something other than the method.

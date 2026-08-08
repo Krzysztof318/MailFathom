@@ -10,6 +10,7 @@ namespace MailFathom.Application.Emails.SearchEmails;
 /// <summary>One ranked window of search results, together with how it was ranked and how current the mail behind it is.</summary>
 /// <param name="Matches">The matches, most relevant first, holding no more than the effective result limit.</param>
 /// <param name="RetrievalMode">How the window was ranked, which can differ between two searches of one instance.</param>
+/// <param name="SemanticSearch">What semantic retrieval can do on this instance, which is what says why a lexical answer was lexical.</param>
 /// <param name="FolderFreshness">How current the local copy of each folder in the request's scope is.</param>
 /// <remarks>
 /// <para>
@@ -24,6 +25,12 @@ namespace MailFathom.Application.Emails.SearchEmails;
 /// why a message it expected is absent.
 /// </para>
 /// <para>
+/// The capability travels beside it and answers the other half of the question. The mode alone cannot separate an
+/// instance that deliberately does not embed from one whose credential expired an hour ago: both answer
+/// <see cref="EmailSearchRetrievalMode.Lexical" />, and only one of them is something to fix. Reading the two together
+/// is what turns a quietly narrower result into a stated degradation.
+/// </para>
+/// <para>
 /// Freshness travels with every result for the reason it travels with every page: a search is answered from the local
 /// copy whether or not a mail server is reachable, and a folder whose synchronization has been failing for a week
 /// otherwise looks exactly like a folder holding nothing that matched.
@@ -32,4 +39,5 @@ namespace MailFathom.Application.Emails.SearchEmails;
 public sealed record SearchEmailsResult(
     IReadOnlyList<EmailSearchMatch> Matches,
     EmailSearchRetrievalMode RetrievalMode,
+    SemanticSearchCapability SemanticSearch,
     IReadOnlyList<MailboxFolderFreshness> FolderFreshness);

@@ -212,6 +212,14 @@ semantic search is unavailable, and lexical search serves exactly as before. Dec
 spending — an activation does. [Embedding generation](../features/embedding-generation.md) records what a declaration
 means and what it costs.
 
+Nothing here is a switch for semantic search, and none of these keys turns it on. What a search reports as its semantic
+capability follows from three facts this section does not hold: whether a profile has been activated, whether the
+declaration below still names that profile's identity, and whether the last call to the endpoint chain was answered.
+A search never fails because one of them is not true — it answers lexically and says which of the three states it is in.
+[Email search](../features/email-search.md#what-the-three-capability-states-mean) states what each means for a caller
+and what an operator does about it. Editing a key in this section and restarting therefore changes what is embedded
+next, never what a search is currently able to do; only an activation does that.
+
 | Key | Type | Default | Constraint | Change |
 | --- | --- | --- | --- | --- |
 | `Embeddings:AllowTrimVectors` | bool | `false` | with it off, a declared dimension above 2000 is refused at startup; with it on, a wider answer is cut to the declared width and renormalized | restart |

@@ -382,6 +382,7 @@ because an argument added later would be the one thing that quietly changes what
 |---|---|
 | `matches` | The matched emails, most relevant first, ties broken by the newest received. Empty when nothing matched |
 | `retrievalMode` | How this call's results were ranked — `lexical` or `hybrid` |
+| `semanticSearch` | What this server can do with embeddings — `inactive`, `available`, or `degraded` |
 | `folderFreshness` | How current the local copy of each covered folder is, exactly as a listing reports it |
 
 Each match carries `summary`, which is the same shape `list_emails` publishes and is documented above, together with
@@ -416,6 +417,27 @@ thing about why a message it expected is missing.
 Neither mode reaches a chat model, rewrites the query, or expands it; under `hybrid` the query is embedded and compared,
 never interpreted. Words that appear only inside an attachment payload are not searchable under either mode, which is a
 limit of what is indexed rather than of this tool.
+
+### `semanticSearch` says why a lexical answer was lexical
+
+`retrievalMode` says what happened to this call and `semanticSearch` says what the server is able to do, which is the
+half a client cannot infer. A server that deliberately does not embed and a server whose embedding credential expired an
+hour ago both answer `lexical`, and only the second is returning less than its operator intends.
+
+- **`inactive`** — this server does not embed mail, so `lexical` is the intended and only mode. Nothing is wrong and
+  nothing is going to change on its own.
+- **`available`** — this server embeds mail and its provider is answering. An individual call can still report
+  `lexical`, and it then reports `degraded` beside it, because the call that failed is the freshest evidence about the
+  provider there is.
+- **`degraded`** — this server embeds mail but currently cannot place a query in that vector space: a refused
+  credential, an unreachable endpoint chain, or a configured model that is not the one the active profile records. The
+  results are narrower than the server intends.
+
+`degraded` is not an error and is not caused by the request, so **retrying buys nothing**. A client that surfaces it
+tells the user the results may be incomplete and leaves the fix — a credential, an endpoint, a model declaration — with
+the server's operator. Recovery is automatic and needs no restart: the next embedding call that succeeds restores the
+state, and the search after it is `hybrid` again. [Email search](email-search.md#what-the-three-capability-states-mean)
+records what each state means on the server side and how a call arrives at one.
 
 ### What the boundary bounds, and why it bounds it again
 

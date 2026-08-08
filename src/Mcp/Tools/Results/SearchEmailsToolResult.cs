@@ -32,6 +32,10 @@ internal sealed record SearchEmailsToolResult
     [Description("How these results were retrieved. 'lexical' means full-text matching over the words the mail is written in: a query term that appears nowhere in a message will not find it however close its meaning. 'hybrid' means that ranking was combined with a search by embedding similarity, so a message can appear without carrying the query's words. Read this field on every response rather than assuming a mode: the same server answers 'lexical' when its embedding provider is unavailable, and neither mode involves a chat model or rewrites the query.")]
     public required EmailRetrievalMode RetrievalMode { get; init; }
 
+    /// <summary>Gets what semantic retrieval can do on this server.</summary>
+    [Description("What this server can do with embeddings, which is what tells you why a 'lexical' answer was lexical. 'inactive' means the server does not embed mail at all, so lexical is the intended and only mode. 'available' means it does and its provider is answering. 'degraded' means it does, but it currently cannot reach the embedding provider or its configuration is wrong, so these results are narrower than the server intends: say so rather than retrying, because nothing about the request caused it and the server's operator has to fix it.")]
+    public required SemanticSearchAvailability SemanticSearch { get; init; }
+
     /// <summary>Gets how current the local copy of each folder in the request's scope is.</summary>
     [Description("How current the local copy of each folder in the request's scope is, one entry per folder. Read this before concluding that a mailbox holds no matching mail.")]
     public required IReadOnlyList<FolderCopyFreshness> FolderFreshness { get; init; }
@@ -47,7 +51,7 @@ internal sealed record SearchEmailsToolResult
     /// defective adapter could widen is not one. The bound applied is the absolute maximum rather than the count this
     /// request asked for, which stays the use case's to decide and to refuse.
     /// </remarks>
-    /// <exception cref="ArgumentOutOfRangeException">Thrown when the result reports a retrieval mode this contract has no wire value for.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when the result reports a retrieval mode or a semantic capability this contract has no wire value for.</exception>
     public static SearchEmailsToolResult From(SearchEmailsResult result, EmailSearchSnippetBounds snippetBounds)
     {
         ArgumentNullException.ThrowIfNull(result);
@@ -62,6 +66,7 @@ internal sealed record SearchEmailsToolResult
                     .Select(match => SearchedEmailMatch.From(match, snippetBounds)),
             ],
             RetrievalMode = Published(result.RetrievalMode),
+            SemanticSearch = Published(result.SemanticSearch),
             FolderFreshness = [.. result.FolderFreshness.Select(FolderCopyFreshness.From)],
         };
     }
@@ -80,5 +85,18 @@ internal sealed record SearchEmailsToolResult
             nameof(retrievalMode),
             retrievalMode,
             "The retrieval mode has no published wire value."),
+    };
+
+    /// <summary>Maps the use case's semantic capability onto the value this contract publishes.</summary>
+    /// <remarks>Closed for the reason the mapping above is closed: a state the application grew without a published name has to fail here rather than reach a client as a number nobody documented.</remarks>
+    private static SemanticSearchAvailability Published(SemanticSearchCapability capability) => capability switch
+    {
+        SemanticSearchCapability.Inactive => SemanticSearchAvailability.Inactive,
+        SemanticSearchCapability.Available => SemanticSearchAvailability.Available,
+        SemanticSearchCapability.Degraded => SemanticSearchAvailability.Degraded,
+        _ => throw new ArgumentOutOfRangeException(
+            nameof(capability),
+            capability,
+            "The semantic search capability has no published wire value."),
     };
 }

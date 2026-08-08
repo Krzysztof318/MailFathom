@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.Accounts;
+using MailFathom.Application.AiProviders;
 using MailFathom.Application.Emails.Embeddings;
 using MailFathom.Application.Emails.Mailboxes;
 using MailFathom.Application.Emails.Search;
@@ -16,6 +17,7 @@ using MailFathom.Domain.Folders;
 using MailFathom.Mcp.Tools;
 using MailFathom.Mcp.Tools.Results;
 using MailFathom.Mcp.UnitTests.TestDoubles;
+using Microsoft.Extensions.Time.Testing;
 using NSubstitute;
 using Xunit;
 
@@ -321,6 +323,24 @@ public sealed class SearchEmailsToolTests
     }
 
     /// <summary>
+    /// The mode says what this call did and the capability says what the server can do. A client that read only the mode
+    /// could not tell a server that never embeds from one whose embedding credential has expired, and only the second is
+    /// worth telling a user about.
+    /// </summary>
+    [Fact]
+    public async Task SearchEmailsAsync_AServerThatDoesNotEmbed_PublishesSemanticRetrievalAsInactive()
+    {
+        // Arrange
+        var tool = ToolOver(new StubEmailSearchIndexReader(MatchWith(rank: 0.5f, snippets: ["**invoice**"])));
+
+        // Act
+        var result = await tool.SearchEmailsAsync(Query, cancellationToken: TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(SemanticSearchAvailability.Inactive, result.SemanticSearch);
+    }
+
+    /// <summary>
     /// Matching nothing is an ordinary answer, and it is a fully shaped one: a client reads the same fields it reads
     /// from a window that matched, so a search cannot be used to establish which accounts or folders exist.
     /// </summary>
@@ -499,6 +519,8 @@ public sealed class SearchEmailsToolTests
     private static SemanticEmailSearch LexicalOnlySemanticSearch() => new(
         Substitute.For<IActiveEmbeddingProfileReader>(),
         Substitute.For<IEmailVectorSearchIndexReader>(),
+        Substitute.For<IAiProviderHealthReader>(),
+        new FakeTimeProvider(),
         textEmbeddingGenerator: null);
 
     private static SearchEmailsTool ToolOver(

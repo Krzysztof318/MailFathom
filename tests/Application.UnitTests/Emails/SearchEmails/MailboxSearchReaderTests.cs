@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.Accounts;
+using MailFathom.Application.AiProviders;
 using MailFathom.Application.Emails.Embeddings;
 using MailFathom.Application.Emails.Mailboxes;
 using MailFathom.Application.Emails.Search;
@@ -11,6 +12,7 @@ using MailFathom.Application.Synchronization.Checkpoints;
 using MailFathom.Application.UnitTests.TestDoubles;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Folders;
+using Microsoft.Extensions.Time.Testing;
 using NSubstitute;
 using Xunit;
 
@@ -20,6 +22,8 @@ namespace MailFathom.Application.UnitTests.Emails.SearchEmails;
 public sealed class MailboxSearchReaderTests
 {
     private static readonly DateTimeOffset FirstJuly = new(2026, 7, 1, 8, 0, 0, TimeSpan.Zero);
+
+    private static readonly DateTimeOffset SearchedAt = new(2026, 8, 8, 12, 0, 0, TimeSpan.Zero);
 
     private static readonly EmbeddingProfileId ProfileId =
         EmbeddingProfileId.Create(new Guid("6f2f1f0e-6a1a-4a2a-9d1f-0f5a1b2c3d4e"));
@@ -468,7 +472,45 @@ public sealed class MailboxSearchReaderTests
 
         // Assert
         Assert.Equal(EmailSearchRetrievalMode.Lexical, result.RetrievalMode);
+        Assert.Equal(SemanticSearchCapability.Degraded, result.SemanticSearch);
         Assert.Equal(matched.StoredEmailId, Assert.Single(result.Matches).Summary.StoredEmailId);
+    }
+
+    /// <summary>
+    /// The mode alone cannot separate a deployment that never embeds from one whose provider just refused. Both answer
+    /// lexically, and only the capability says which of the two the caller is looking at.
+    /// </summary>
+    [Fact]
+    public async Task SearchEmailsAsync_NoEmbeddingProviderConfigured_ReportsSemanticRetrievalInactive()
+    {
+        // Arrange
+        var index = new InMemoryEmailSearchIndex().With(SyntheticEmailSummaries.Create(FirstJuly));
+        var reader = ReaderOver(index);
+
+        // Act
+        var result = await reader.SearchEmailsAsync(RequestFor("invoice"), TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(EmailSearchRetrievalMode.Lexical, result.RetrievalMode);
+        Assert.Equal(SemanticSearchCapability.Inactive, result.SemanticSearch);
+    }
+
+    /// <summary>A hybrid instance says so, which is what lets a caller read a lexical answer from it as an exception.</summary>
+    [Fact]
+    public async Task SearchEmailsAsync_AnActiveProfileAndAServingProvider_ReportsSemanticRetrievalAvailable()
+    {
+        // Arrange
+        var matched = SyntheticEmailSummaries.Create(FirstJuly);
+        var index = new InMemoryEmailSearchIndex().With(matched);
+        var vectorIndex = new InMemoryEmailVectorSearchIndex().With(matched, distance: 0.1f);
+        var reader = ReaderOver(index, semanticSearch: SemanticSearchOver(vectorIndex));
+
+        // Act
+        var result = await reader.SearchEmailsAsync(RequestFor("invoice"), TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(EmailSearchRetrievalMode.Hybrid, result.RetrievalMode);
+        Assert.Equal(SemanticSearchCapability.Available, result.SemanticSearch);
     }
 
     private static SearchEmailsRequest RequestFor(string? queryText) => new() { QueryText = queryText };
@@ -484,10 +526,12 @@ public sealed class MailboxSearchReaderTests
         new MailboxScopeResolver(accountCatalog ?? CatalogServing(EveryAccountTheSyntheticIndexUses)),
         snippetBounds ?? EmailSearchSnippetBounds.Default);
 
-    /// <summary>Builds the semantic half of a deployment that configured no embedding provider.</summary>
+    /// <summary>Builds the semantic half of a deployment that configured no embedding provider and activated nothing.</summary>
     private static SemanticEmailSearch LexicalOnlySemanticSearch() => new(
         Substitute.For<IActiveEmbeddingProfileReader>(),
         new InMemoryEmailVectorSearchIndex(),
+        ServingProviderHealth(),
+        new FakeTimeProvider(SearchedAt),
         textEmbeddingGenerator: null);
 
     /// <summary>Builds the semantic half of a deployment that has activated a profile its generator agrees with.</summary>
@@ -500,7 +544,25 @@ public sealed class MailboxSearchReaderTests
         profileReader.FindActiveProfileAsync(Arg.Any<CancellationToken>())
             .Returns(new ActiveEmbeddingProfile(ProfileId, identity));
 
-        return new SemanticEmailSearch(profileReader, vectorIndex, generator ?? GeneratorOf(identity));
+        return new SemanticEmailSearch(
+            profileReader,
+            vectorIndex,
+            ServingProviderHealth(),
+            new FakeTimeProvider(SearchedAt),
+            generator ?? GeneratorOf(identity));
+    }
+
+    /// <summary>Reports every provider as answering, so a test decides retrieval through the profile and the generator alone.</summary>
+    private static IAiProviderHealthReader ServingProviderHealth()
+    {
+        var reader = Substitute.For<IAiProviderHealthReader>();
+        reader.Read(Arg.Any<AiProviderRole>())
+            .Returns(call => new AiProviderHealth(
+                call.Arg<AiProviderRole>(),
+                AiProviderHealthState.Serving,
+                SearchedAt));
+
+        return reader;
     }
 
     private static ScriptedTextEmbeddingGenerator GeneratorOf(EmbeddingProfileIdentity identity) =>

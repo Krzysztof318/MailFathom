@@ -109,6 +109,13 @@ always means a provider that is being watched rather than one nobody configured.
 generation](../features/chat-generation.md#provider-health-is-tracked-per-provider) records what each state means and
 why nothing probes a provider to produce one.
 
+A change between two of those states is also written to the log — at `Warning` when a provider stops answering and at
+`Information` when it answers again — carrying the role and the two states and nothing else. The gauge says what is true
+now and the record says when it stopped being true, which is the question the state itself cannot answer because it
+carries no age. Only a change is written: every provider call records a state, so a record per call would scale the log
+with the mailbox instead of with what an operator would act on. A first call that succeeded is the one change that is
+not written, because it restored nothing; a first call that failed is.
+
 What such a signal may carry is bounded by the same rule that governs the log lines, and it is a cardinality rule as
 much as a privacy one. Counts, sizes, durations, outcomes, error codes, and MailFathom's own configured account and
 folder aliases are permitted. Mail content, an address, a subject, a remote folder path, a message identifier, a UID, a
