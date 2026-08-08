@@ -104,6 +104,12 @@ The search vector carries no lexeme weights, so the lexical rank reflects how of
 mentions the query's words rather than where in the message they appear. A subject match and a body match count the
 same.
 
+A message that exists in two folders — because the mailbox owner copied it, or because MailFathom did — is **two
+results**, one per folder, ranked independently and each naming where it was found. Nothing collapses them, because
+nothing joins them: a stored row is one occurrence, which is the decision
+[ADR 0008](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0008-copied-message-local-identity.md)
+records. A query scoped to one folder returns one.
+
 ## Hybrid retrieval
 
 An instance that has activated an embedding profile ranks twice and combines the two orderings.

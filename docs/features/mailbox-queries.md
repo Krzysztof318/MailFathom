@@ -42,6 +42,12 @@ Accounts and folders are named by their domain identities rather than as text, s
 once at its own boundary. A folder alias is MailFathom's own name for a folder and is normalized to upper case, which is why
 naming `archive` and `ARCHIVE` is naming one folder.
 
+A listing that names no folder reads every folder, so a message that exists in two of them — because it was copied, by
+the mailbox owner or by MailFathom — is two entries, one per folder. Nothing collapses them, because a stored row is one
+occurrence and no identity spans two;
+[what a message MailFathom copied becomes locally](imap-synchronization.md#what-a-message-mailfathom-copied-becomes-locally)
+states what that costs and why.
+
 ### What each filter accepts, and what it refuses
 
 Refusing beats absorbing throughout: a filter that was truncated or silently dropped would run as a query nobody wrote,

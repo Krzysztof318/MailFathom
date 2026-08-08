@@ -137,9 +137,10 @@ public sealed record MailboxMutationRecord
     /// <summary>Gets whether this mutation puts the email somewhere synchronization will later discover it.</summary>
     /// <remarks>
     /// A copy places an occurrence exactly as a relocation does, and is included for that reason: the discovery is
-    /// MailFathom's own act either way. What a copy does not do is carry the local row across — whether a second live
-    /// occurrence of one message is one local row or two is the copy action's decision rather than this join's — which
-    /// is why <see cref="IsPlacementOf" /> narrows to a relocation and this does not.
+    /// MailFathom's own act either way. What a copy does not do is carry the local row across, because a second live
+    /// occurrence of one message is a second local email — which
+    /// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0008-copied-message-local-identity.md">ADR 0008</see>
+    /// decided and which is why <see cref="IsPlacementOf" /> narrows to a relocation and this does not.
     /// </remarks>
     public bool ExpectsPlacementObservation =>
         this.Request.Mutation == MailboxMutation.Relocate || this.Request.Mutation == MailboxMutation.Copy;
