@@ -3370,12 +3370,14 @@ no_channel_builds_an_artifact_before_the_commit_has_verified() {
   fi
 }
 
-# Embedding is the first thing MailFathom does that costs money per unit of mail, and ADR 0006 makes
-# a paid call never the default — in the running service and in verification alike. Three properties
-# carry that in the pipeline, and none of them is visible in a diff that only reads the input's name:
-# the dispatch input defaults to off, the environment falls back to `false` when no input supplied a
-# value, and `workflow_call` declares no such input at all. The third is what keeps a release from
-# ever spending provider credit, because `release.yml` reaches this suite through that trigger.
+# Calling an AI provider is what costs MailFathom money per unit of mail, and ADR 0006 makes a paid
+# call never the default — in the running service and in verification alike. One switch covers every
+# provider the suite reaches, embeddings and chat alike, so a provider added later cannot arrive with
+# a gate of its own that nobody turns off. Three properties carry that in the pipeline, and none of
+# them is visible in a diff that only reads the input's name: the dispatch input defaults to off, the
+# environment falls back to `false` when no input supplied a value, and `workflow_call` declares no
+# such input at all. The third is what keeps a release from ever spending provider credit, because
+# `release.yml` reaches this suite through that trigger.
 a_paid_provider_run_is_never_the_default() {
   local workflow="$source_repository_root/.github/workflows/integration-tests.yml"
   local dispatch_inputs
@@ -3387,19 +3389,19 @@ a_paid_provider_run_is_never_the_default() {
   dispatch_inputs="$(sed -n '/^  workflow_dispatch:/,/^  workflow_call:/p' "$workflow")"
   call_inputs="$(sed -n '/^  workflow_call:/,/^concurrency:/p' "$workflow")"
 
-  if [[ "$dispatch_inputs" != *'run_provider_contract_tests:'* ]]; then
-    failures+='workflow_dispatch declares no run_provider_contract_tests input. '
+  if [[ "$dispatch_inputs" != *'run_ai_provider_contract_tests:'* ]]; then
+    failures+='workflow_dispatch declares no run_ai_provider_contract_tests input. '
   elif ! printf '%s' "$dispatch_inputs" |
-    sed -n '/run_provider_contract_tests:/,/type:/p' | grep -qE '^[[:space:]]*default:[[:space:]]*false[[:space:]]*$'; then
-    failures+='run_provider_contract_tests does not default to false, so a dispatch spends provider credit unless the operator turns it off. '
+    sed -n '/run_ai_provider_contract_tests:/,/type:/p' | grep -qE '^[[:space:]]*default:[[:space:]]*false[[:space:]]*$'; then
+    failures+='run_ai_provider_contract_tests does not default to false, so a dispatch spends provider credit unless the operator turns it off. '
   fi
 
-  if [[ "$call_inputs" == *'run_provider_contract_tests:'* ]]; then
-    failures+='workflow_call declares run_provider_contract_tests, so a calling workflow — release.yml among them — can spend provider credit. '
+  if [[ "$call_inputs" == *'run_ai_provider_contract_tests:'* ]]; then
+    failures+='workflow_call declares run_ai_provider_contract_tests, so a calling workflow — release.yml among them — can spend provider credit. '
   fi
 
-  if ! grep -qF "MAILFATHOM_EMBEDDING_CONTRACT_TESTS: \${{ inputs.run_provider_contract_tests || 'false' }}" "$workflow"; then
-    failures+='MAILFATHOM_EMBEDDING_CONTRACT_TESTS does not fall back to false, so a trigger that supplies no input leaves it unset rather than off. '
+  if ! grep -qF "MAILFATHOM_AI_CONTRACT_TESTS: \${{ inputs.run_ai_provider_contract_tests || 'false' }}" "$workflow"; then
+    failures+='MAILFATHOM_AI_CONTRACT_TESTS does not fall back to false, so a trigger that supplies no input leaves it unset rather than off. '
   fi
 
   if [[ -n "$failures" ]]; then

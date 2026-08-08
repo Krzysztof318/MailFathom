@@ -1,6 +1,6 @@
 # Local development
 
-<!-- describes: scripts/**, global.json, .config/dotnet-tools.json, .config/typos.toml, .config/CodeCoverage.proj, .config/testconfig.json, src/AppHost/**, src/Infrastructure/Persistence/MailFathomDbContextDesignTimeFactory.cs, .github/workflows/** -->
+<!-- describes: scripts/**, global.json, .config/dotnet-tools.json, .config/typos.toml, .config/CodeCoverage.proj, .config/testconfig.json, src/AppHost/**, src/Infrastructure/Persistence/MailFathomDbContextDesignTimeFactory.cs, .github/workflows/**, tests/IntegrationTests/ProviderAdapters/** -->
 
 Use the .NET SDK pinned in `global.json`. Test execution is configured for Microsoft Testing Platform through the repository-level `global.json` test runner setting.
 
@@ -507,6 +507,23 @@ Two behaviors of this server are worth knowing when reading a failure:
 
 smtp4dev was evaluated first and rejected. It advertises no SASL mechanism at all, which is workable, but its INBOX reports a hard-coded UIDVALIDITY that can never change, so the specification's UIDVALIDITY scenario would have been unverifiable. Separately, a `UID SEARCH UID 1:*` against it exhausts the container's memory and kills the process; MailFathom never sends that shape, because it computes a concrete upper bound from `UIDNEXT`, but it is worth recording for anyone who reaches for that image again.
 
+### The provider-contract tests
+
+`tests/IntegrationTests/ProviderAdapters` holds the tests that call a real AI provider — the embedding adapter's and the chat adapter's — and they are the only part of this suite that costs money. Everything else runs against the containers the run starts, so it costs runner time and nothing else.
+
+They are skipped unless somebody asks. One switch covers both adapters, `MAILFATHOM_AI_CONTRACT_TESTS`, and nothing sets it: a developer's run and every ordinary pipeline run spend no provider credit. Which half of the AI boundary a test bills against is not a distinction the operator turning them on makes, which is why there is one switch rather than one per provider.
+
+A run that was asked for and finds a variable missing fails rather than skipping, because a run somebody requested and which then quietly proved nothing is worse than one that never started. What each adapter needs beside the switch:
+
+| Adapter | Variables |
+|---|---|
+| Embedding | `MAILFATHOM_EMBEDDING_API_KEY`, `MAILFATHOM_EMBEDDING_MODEL`, `MAILFATHOM_EMBEDDING_DIMENSION`, and optionally `MAILFATHOM_EMBEDDING_ADDRESS` and `MAILFATHOM_EMBEDDING_ROUTED_MODEL` |
+| Chat | `MAILFATHOM_CHAT_API_KEY`, `MAILFATHOM_CHAT_MODEL`, and optionally `MAILFATHOM_CHAT_ADDRESS` |
+
+An absent address means the provider library's own default, which is what a first-party OpenAI endpoint needs; a cloud deployment sets the resource's OpenAI-compatible address. Turning the switch on with only one adapter's variables configured therefore fails the other adapter's tests, which is the same asymmetry rather than a separate rule.
+
+[ADR 0006](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0006-embedding-profile-identity-lifecycle-and-activation-cost.md) holds the reasoning, and `tests/AGENTS.md` states how such a test is written.
+
 ### Coverage
 
 The suite collects its own coverage report, and nothing enforces it. The 85% gate above stays the repository's only coverage threshold, and this report never merges into it.
@@ -521,7 +538,9 @@ A covered class keeps its marker. The marker records where a class's verificatio
 
 ### Continuous integration
 
-The `Integration tests` workflow runs the same script and is `workflow_dispatch` only, with an optional `ref` input. It is not a required status check and never runs on a pull request. Start it from the Actions tab when a change is one this suite can speak to; it uploads the TRX results and the coverage report as artifacts, and enforces no threshold on either.
+The `Integration tests` workflow runs the same script. It is not a required status check and never runs on a pull request. Start it from the Actions tab when a change is one this suite can speak to; it uploads the TRX results and the coverage report as artifacts, and enforces no threshold on either.
+
+A dispatch takes an optional `ref` to run against and `run_ai_provider_contract_tests`, which turns on [the provider-contract tests](#the-provider-contract-tests) above and defaults to off. The workflow supplies the credentials with it, from the `EMBEDDING_PROVIDER_*` and `CHAT_PROVIDER_*` repository secrets and variables. `Release` reaches this suite through `workflow_call` instead, and that trigger declares no such input at all, which is what keeps a release from ever spending provider credit.
 
 ## Pull request checks
 
