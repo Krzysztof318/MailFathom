@@ -9,8 +9,8 @@
   href: imap-synchronization.md
 - name: Mailbox queries
   href: mailbox-queries.md
-- name: Lexical email search
-  href: lexical-email-search.md
+- name: Email search
+  href: email-search.md
 - name: Email content
   href: email-content.md
 - name: Message chunks

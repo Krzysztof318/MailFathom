@@ -32,8 +32,9 @@ namespace MailFathom.Mcp.Tools;
 /// <para>
 /// It reaches no mail server, because the use case it calls speaks no mail protocol. A protocol request therefore cannot
 /// wait on IMAP and cannot set the remote <c>\Seen</c> flag. It reaches no chat model either, and cannot: the
-/// <c>Mcp</c> project depends on <c>Domain</c> and <c>Application</c> and on nothing that could embed, rewrite, or
-/// summarize a query.
+/// <c>Mcp</c> project depends on <c>Domain</c> and <c>Application</c> and on nothing that could rewrite or summarize a
+/// query. A hybrid search does embed the query text, which is a comparison rather than an interpretation and happens
+/// behind an application port this project cannot see.
 /// </para>
 /// <para>
 /// The query text is the most revealing argument any MailFathom tool takes — what somebody is looking for in their own
@@ -79,9 +80,11 @@ internal sealed class SearchEmailsTool(
         UseStructuredContent = true)]
     [Description(
         "Searches the emails already synchronized into MailFathom's local mailbox copy for text, and returns the best "
-        + "matches ranked by relevance with bounded extracts of the body around the matched words. Retrieval is lexical: "
-        + "it finds the words a query contains rather than what they mean, and words that appear only inside an "
-        + "attachment are not searchable. Narrows by account, folder, sender address, recipient address, subject text, "
+        + "matches ranked by relevance with bounded extracts of the body around the matched words. Retrieval is lexical "
+        + "or hybrid depending on how this server is configured, and every response says which in its retrievalMode "
+        + "field: lexical finds the words a query contains rather than what they mean, while hybrid also finds mail "
+        + "whose meaning is close and combines the two rankings. Words that appear only inside an attachment are never "
+        + "searchable either way. Narrows by account, folder, sender address, recipient address, subject text, "
         + "received date range, remote seen state, and attachment presence. Reads the local copy only: it never contacts "
         + "a mail server, never marks mail as read, and never returns whole bodies, raw MIME, or attachment content. "
         + "Returns one window of at most 50 results that nothing continues, so narrow the filters or write a different "

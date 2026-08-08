@@ -134,7 +134,7 @@ public sealed class OrchestratedEmailSearchIndexReaderTests(MailFathomOrchestrat
 
     /// <summary>A search that tracked its rows would let an unrelated commit in the same scope write mail nobody changed.</summary>
     [Fact]
-    public async Task ReadRankedMatchesAsync_AnyWindow_TracksNoEntities()
+    public async Task ReadMatchesAsync_AnyWindow_TracksNoEntities()
     {
         // Arrange
         var cancellationToken = TestContext.Current.CancellationToken;
@@ -145,13 +145,12 @@ public sealed class OrchestratedEmailSearchIndexReaderTests(MailFathomOrchestrat
         var trackedEntityCount = await services.InScopeAsync(
             async (scope, token) =>
             {
-                var matches = await scope.GetRequiredService<IEmailSearchIndexReader>()
-                    .ReadRankedMatchesAsync(
-                        selection,
-                        EmailSearchQueryText.Create(SharedTerm),
-                        EmailSearchSnippetBounds.Default,
-                        SeededEmailCount,
-                        token);
+                var matches = await RankedWindowAsync(
+                    scope.GetRequiredService<IEmailSearchIndexReader>(),
+                    selection,
+                    SharedTerm,
+                    EmailSearchSnippetBounds.Default,
+                    token);
 
                 Assert.Equal(SeededEmailCount, matches.Count);
 
@@ -181,14 +180,37 @@ public sealed class OrchestratedEmailSearchIndexReaderTests(MailFathomOrchestrat
         CancellationToken cancellationToken,
         MailboxEmailSelection? selection = null,
         EmailSearchSnippetBounds? snippetBounds = null) => services.InScopeAsync(
-            (scope, token) => scope.GetRequiredService<IEmailSearchIndexReader>()
-                .ReadRankedMatchesAsync(
-                    selection ?? SeededSelection(),
-                    EmailSearchQueryText.Create(queryText),
-                    snippetBounds ?? EmailSearchSnippetBounds.Default,
-                    SeededEmailCount,
-                    token),
+            (scope, token) => RankedWindowAsync(
+                scope.GetRequiredService<IEmailSearchIndexReader>(),
+                selection ?? SeededSelection(),
+                queryText,
+                snippetBounds ?? EmailSearchSnippetBounds.Default,
+                token),
             cancellationToken);
+
+    /// <summary>Runs both halves of the port the way the use case does: rank the mail, then read the window it chose.</summary>
+    private static async Task<IReadOnlyList<EmailSearchMatch>> RankedWindowAsync(
+        IEmailSearchIndexReader reader,
+        MailboxEmailSelection selection,
+        string queryText,
+        EmailSearchSnippetBounds snippetBounds,
+        CancellationToken cancellationToken)
+    {
+        var validatedQueryText = EmailSearchQueryText.Create(queryText);
+
+        var candidates = await reader.ReadRankedCandidatesAsync(
+            selection,
+            validatedQueryText,
+            SeededEmailCount,
+            cancellationToken);
+
+        return await reader.ReadMatchesAsync(
+            selection,
+            validatedQueryText,
+            snippetBounds,
+            candidates,
+            cancellationToken);
+    }
 
     private static MailboxEmailSelection SeededSelection() => MailboxEmailSelection.Create(
         MailboxScope.Create([SyntheticMailAccount.AccountId], [MailFolderAlias.Create(FolderAlias)]),

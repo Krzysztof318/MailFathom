@@ -4,6 +4,8 @@
 
 using MailFathom.Application.Emails.Embeddings.Backfill;
 using MailFathom.Application.Emails.Embeddings.Generation;
+using MailFathom.Application.Emails.Search;
+using MailFathom.Application.Emails.SearchEmails;
 using MailFathom.Infrastructure.Persistence.Connections;
 using MailFathom.Infrastructure.Secrets.Resolution;
 using Microsoft.Extensions.DependencyInjection;
@@ -92,6 +94,36 @@ public sealed class ServiceCollectionExtensionsTests
         // Act, Assert
         Assert.Null(provider.GetService<StoredEmailEmbeddingGenerator>());
         Assert.Null(provider.GetService<StoredEmailEmbeddingBackfill>());
+    }
+
+    /// <summary>
+    /// The other side of that rule, and the one it is easy to get backwards. Semantic retrieval reads the same
+    /// generator, but it asks for one through a factory instead of injecting it, so its descriptor builds without one —
+    /// and it has to be registered whether or not a chain was declared, because a search is served by every deployment
+    /// and <c>MailboxSearchReader</c> injects it. Moving it beside the units of work above would leave a lexical-only
+    /// instance unable to resolve a search at all, which is the failure that rule exists to prevent rather than one it
+    /// permits.
+    /// </summary>
+    [Fact]
+    public void AddInfrastructure_WithoutAnEmbeddingChain_StillRegistersTheSearchThatFallsBackToLexical()
+    {
+        // Arrange
+        var services = new ServiceCollection();
+
+        // Act
+        services.AddInfrastructure(
+            _ => new PostgresConnectionSettings("Host=localhost;Database=mailfathom", null, null),
+            PostgresTextSearchConfiguration.Default);
+
+        // Assert
+        Assert.Contains(
+            services,
+            descriptor => descriptor.ServiceType == typeof(SemanticEmailSearch)
+                && descriptor.Lifetime == ServiceLifetime.Scoped);
+        Assert.Contains(
+            services,
+            descriptor => descriptor.ServiceType == typeof(MailboxSearchReader)
+                && descriptor.Lifetime == ServiceLifetime.Scoped);
     }
 
     /// <summary>

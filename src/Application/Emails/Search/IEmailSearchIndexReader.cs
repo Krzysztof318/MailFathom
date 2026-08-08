@@ -8,7 +8,7 @@ using MailFathom.Domain.Emails;
 
 namespace MailFathom.Application.Emails.Search;
 
-/// <summary>Reads one bounded, ranked window of locally stored emails out of the lexical index.</summary>
+/// <summary>Ranks locally stored emails against free text, and reads the window a ranking selected.</summary>
 /// <remarks>
 /// <para>
 /// The port is read-only and joins no transaction, per
@@ -21,6 +21,12 @@ namespace MailFathom.Application.Emails.Search;
 /// documents in relevance order, which has no total ordering of its own and no cursor into it.
 /// </para>
 /// <para>
+/// Ranking and reading are two operations rather than one because a hybrid search ranks twice and reads once. Cutting
+/// snippets is the expensive half — a pass over a message body per row — so it happens after the window is closed, for
+/// the results a caller actually receives rather than for every candidate a fusion considered and dropped. A lexical
+/// search pays exactly what it paid when it was one operation, because the projection was already a second query.
+/// </para>
+/// <para>
 /// Two obligations belong to every implementation rather than to its callers. The query text reaches the database as a
 /// parameter and never as concatenated SQL, and the text search configuration is the deployment's validated setting
 /// rather than anything the request carried. Both are what keep a caller's operators and metacharacters data instead of
@@ -30,14 +36,13 @@ namespace MailFathom.Application.Emails.Search;
 /// </remarks>
 public interface IEmailSearchIndexReader
 {
-    /// <summary>Reads the highest-ranked emails matching a query, among those the structured filters select.</summary>
+    /// <summary>Ranks the emails matching a query, among those the structured filters select.</summary>
     /// <param name="selection">Which emails are eligible before the text is considered.</param>
     /// <param name="queryText">The validated free text to match against the index.</param>
-    /// <param name="snippetBounds">How many extracts one result may carry, and how long each may be.</param>
-    /// <param name="limit">The greatest number of ranked results to return, at least one.</param>
+    /// <param name="limit">The greatest number of ranked candidates to return, at least one.</param>
     /// <param name="cancellationToken">Propagates caller cancellation.</param>
-    /// <returns>At most <paramref name="limit" /> matches, most relevant first, empty when nothing matched.</returns>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="selection" />, <paramref name="queryText" />, or <paramref name="snippetBounds" /> is <see langword="null" />.</exception>
+    /// <returns>At most <paramref name="limit" /> candidates, most relevant first, empty when nothing matched.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="selection" /> or <paramref name="queryText" /> is <see langword="null" />.</exception>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="limit" /> is below one.</exception>
     /// <remarks>
     /// <para>
@@ -51,10 +56,38 @@ public interface IEmailSearchIndexReader
     /// mail" and "no such folder" would answer questions about accounts and folders the caller was never told about.
     /// </para>
     /// </remarks>
-    Task<IReadOnlyList<EmailSearchMatch>> ReadRankedMatchesAsync(
+    Task<IReadOnlyList<RankedEmailCandidate>> ReadRankedCandidatesAsync(
+        MailboxEmailSelection selection,
+        EmailSearchQueryText queryText,
+        int limit,
+        CancellationToken cancellationToken);
+
+    /// <summary>Reads the summaries and snippets of an already ranked window, in the order it was ranked.</summary>
+    /// <param name="selection">The same filters the candidates were ranked under.</param>
+    /// <param name="queryText">The validated free text the snippets are cut around.</param>
+    /// <param name="snippetBounds">How many extracts one result may carry, and how long each may be.</param>
+    /// <param name="rankedCandidates">The window to read, best first, each carrying the score the result publishes.</param>
+    /// <param name="cancellationToken">Propagates caller cancellation.</param>
+    /// <returns>One match per candidate that is still eligible, in the candidates' order.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when any reference argument is <see langword="null" />.</exception>
+    /// <remarks>
+    /// <para>
+    /// The filters are re-applied rather than trusted from the ranking, because the two statements read different
+    /// snapshots: a run committing between them can leave a message the ranking admitted outside the request's scope, or
+    /// delete it outright. Such a candidate is absent from the result rather than published, so a window never
+    /// contradicts the request that produced it.
+    /// </para>
+    /// <para>
+    /// Snippets are cut around <paramref name="queryText" /> whether the candidate was ranked lexically or by
+    /// similarity. A semantically ranked message that carries none of the query's words therefore carries no snippets,
+    /// which is the honest answer: there is no extract of it that shows why it matched, and returning its opening words
+    /// would present the start of a body as though it were a match.
+    /// </para>
+    /// </remarks>
+    Task<IReadOnlyList<EmailSearchMatch>> ReadMatchesAsync(
         MailboxEmailSelection selection,
         EmailSearchQueryText queryText,
         EmailSearchSnippetBounds snippetBounds,
-        int limit,
+        IReadOnlyList<RankedEmailCandidate> rankedCandidates,
         CancellationToken cancellationToken);
 }

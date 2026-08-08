@@ -45,11 +45,17 @@ Takes `queryText` — the words to find — plus the same structured filters a l
 matches ranked by relevance, each carrying the summary a listing would show and short extracts of the body around what
 matched, the matched runs wrapped in `**`.
 
-What it searches is the **lexical index**: subject, normalized participant addresses, and the extracted body text. The
-match is by words, not meaning — a query term that appears nowhere in a message will not find it — and text inside
-attachment payloads is not indexed at all. Encrypted mail has no indexed body either. `subjectFragment` and
+What it searches is the **lexical index**: subject, normalized participant addresses, and the extracted body text. Text
+inside attachment payloads is not indexed at all, and encrypted mail has no indexed body either. `subjectFragment` and
 `queryText` are different arguments doing different work: the fragment narrows which emails are eligible, the query
 text is what the eligible ones are ranked against.
+
+**Read `retrievalMode` on the result to know how the match was made.** `lexical` means by words rather than by meaning,
+so a query term that appears nowhere in a message will not find it. `hybrid` means the same ranking was combined with a
+search by embedding similarity, so mail whose meaning is close is found too — a search for a roof leak reaching the
+message that said water damage. Which one you get depends on whether the server has an embedding provider configured and
+reachable, and it can differ between two calls, which is why the field is on every response rather than something to
+look up once.
 
 There is deliberately no search cursor. Relevance order moves as mail keeps arriving and indexing catches up, so a
 second page could silently skip or repeat matches; ask a narrower question instead of a longer window.

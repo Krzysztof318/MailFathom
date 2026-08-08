@@ -1,12 +1,16 @@
-# Lexical email search
+# Email search
 
 <!-- describes: src/Application/Emails/SearchEmails/**, src/Application/Emails/Search/**, src/Infrastructure/Persistence/** -->
 
-MailFathom searches its local copy for text. `SearchEmails` is the second read use case: it takes a free-text query plus
+MailFathom searches its local copy. `SearchEmails` is the second read use case: it takes a free-text query plus
 the same structured filters a listing takes, and returns a bounded window of matched emails ordered by relevance, each
 carrying the summary a listing would show, a relevance rank, and highlighted extracts of the body around what matched.
 It reaches no mail server, so a search behaves the same whether or not IMAP is available — and it never touches the
 remote `\Seen` flag, because it speaks no mail protocol at all.
+
+How it ranks depends on what the instance can do at the moment of the call: full-text ranking alone, or that ranking
+combined with a search by embedding similarity. Every result says which, and [Hybrid retrieval](#hybrid-retrieval)
+records what the combination does and what it does not promise. Everything else on this page holds under both.
 
 This page documents the use case. `MailboxSearchReader` is where every rule below is enforced, so a second entrypoint
 cannot reach the query without them; the `search_emails` MCP tool maps protocol arguments onto it and publishes what it
@@ -14,8 +18,9 @@ returns, and [MCP tools](mcp-tools.md#search_emails) documents that surface.
 
 ## What is searchable, and what is not
 
-The index covers the subject, the normalized participant addresses, and the trimmed body text of each stored message.
-[Extracted text and the full-text index](imap-synchronization.md) records how that document is derived.
+The lexical index covers the subject, the normalized participant addresses, and the trimmed body text of each stored
+message. [Extracted text and the full-text index](imap-synchronization.md) records how that document is derived, and
+[Message chunks](message-chunks.md) records the passages the vectors hang on.
 
 **Words that appear only inside an attachment payload are not searchable.** Text extraction never opens an attachment, so
 a PDF, a spreadsheet, or a scanned image contributes nothing, and a message whose information lives entirely in an
@@ -84,15 +89,66 @@ content one query can draw out of a mailbox.
 ## What a result carries
 
 `EmailSearchMatch` pairs the `EmailSummary` a listing would show with two values that exist only for the query that
-produced them.
+produced them, and `SearchEmailsResult` adds the retrieval mode the whole window was ranked by.
 
-- **The relevance rank** is PostgreSQL's `ts_rank` of the message's search vector against the parsed query. It is
-  comparable within one result set and means nothing across two.
+- **The relevance rank** is the score of the ranking that produced the window: PostgreSQL's `ts_rank` under lexical
+  retrieval, a fused rank score under hybrid. It is comparable within one result set and means nothing across two, and
+  the two scales are unrelated — reading it without reading the mode says nothing.
 - **The snippets** are extracts of the body text around the matched words, each matched run wrapped in `**`.
+- **The retrieval mode** is `Lexical` or `Hybrid`, and it describes this one call rather than the deployment.
 
-The search vector carries no lexeme weights, so the rank reflects how often and how densely a message's document
+The search vector carries no lexeme weights, so the lexical rank reflects how often and how densely a message's document
 mentions the query's words rather than where in the message they appear. A subject match and a body match count the
 same.
+
+## Hybrid retrieval
+
+An instance that has activated an embedding profile ranks twice and combines the two orderings.
+[Embedding generation](embedding-generation.md) records what activating a profile means and
+[Automatic embedding](automatic-embedding.md) what fills the vectors.
+
+- **Lexical ranking** is the full-text ranking above, unchanged.
+- **Semantic ranking** embeds the query text through the active profile's generator and orders the eligible mail by how
+  near its nearest embedded passage sits, under that profile's own distance metric. A message with no vector under the
+  active profile is absent from this ranking rather than ranked as distant.
+- **Fusion** combines the two by Reciprocal Rank Fusion: a message scores `1 / (60 + rank)` in each ranking that
+  returned it, counting from one, and the fused score is the sum. Each ranking is asked for four times the window being
+  returned, so agreement between them can be observed at all rather than only inside the window.
+
+The method reads **where** each ranking placed a message and never **what** it scored it. That is the point: a full-text
+rank and a vector distance are not on one scale and never will be, so any weighted combination of the two numbers would
+be a constant that a change of embedding model silently invalidates. Fusion by rank asks nothing of the numbers, which
+is why changing the model changes what is found and never how the two findings are weighed. `60` is the published
+constant from the method's own paper and is not configurable, because a deployment-tunable value would be a second way
+for two instances to disagree about what "most relevant" means while both reported the same mode.
+
+### What it does and does not promise
+
+- **A message can rank without carrying any of the query's words.** That is the feature: mail about water damage is
+  found by a search for a roof leak.
+- **A message both rankings found outranks one only one of them did.** An exact phrase that was already ranking first
+  keeps ranking first; nothing displaces it in favour of a merely related message.
+- **The structured filters apply before either ranking**, so a message outside the caller's scope never takes part in
+  the fusion and never influences the order of a message that is inside it.
+- **Nothing is re-ranked, rewritten, or expanded.** No chat model is reachable from this path at all: the query is
+  embedded and compared, never interpreted. Draft section 13.3 is explicit about that and it stays true here.
+- **A search says which mode answered it, on every call.** An instance configured for hybrid retrieval answers
+  `Lexical` when its embedding provider is unreachable, when it has activated no profile, or when the configured
+  generator disagrees with the active profile's identity. None of those is an error: a provider outage costs a search
+  its second ranking rather than turning a mailbox read into a failure, and the mode is what makes that visible instead
+  of silent.
+- **Semantic recall follows the backfill.** A mailbox that is still being embedded reports `Hybrid` and finds only what
+  already carries vectors. [Embedding backfill](embedding-backfill.md) records how that catches up.
+- **The vector ranking is exact rather than approximate**, because the caller's filters join it and an approximate index
+  scan cannot carry a filter on a joined table. That is what makes the fused order deterministic for a given index
+  state, which is the property the whole method rests on.
+- **The query is prepared exactly as a passage is.** A profile's `PassageInstruction` is applied to the query text too,
+  because the preparation is part of the profile's identity and a search that prepared its query differently would be
+  measuring against a space the stored vectors do not belong to. A model that asks for a different prefix on a query
+  than on a passage therefore gets the passage one; configure such a model's profile with the instruction that suits
+  both, or with none.
+- **Nothing about a query is recorded.** The query text is not logged, the vector it produces is held for one call and
+  published to nobody, and no snippet reaches a log, a metric, or a trace.
 
 ### Snippets
 
@@ -152,6 +208,10 @@ received timestamp descending with undated mail last, then the stable local iden
 an unchanged index return the same sequence.
 [Mailbox queries](mailbox-queries.md#the-order) documents that key, which is the same one a listing pages over.
 
+The same key settles a fused tie, and there ties are not rare: two messages at symmetric places — first lexically and
+fifth semantically against fifth and first — score identically by construction. Both rankings the fusion consumes are
+ordered by that key too, so one search applies one tiebreaker rather than three that happen to agree.
+
 A search returns a **window**, not a page, and nothing continues it. Relevance order is recomputed per query and moves as
 mail is indexed, so a boundary into it would name a position that had stopped meaning what it meant when it was handed
 out — unlike a timeline, where a keyset boundary stays valid because the order it names is a property of the data rather
@@ -172,13 +232,19 @@ caller cannot tell a folder that holds nothing matching from one whose synchroni
 
 - `MailFathom.Application.Emails.SearchEmails` — the use case, its request, and its result.
 - `MailFathom.Application.Emails.Search` — `EmailSearchQueryText`, `EmailSearchResultLimit`, and
-  `EmailSearchSnippetBounds`; `EmailSearchMatch`; and `IEmailSearchIndexReader`, the port the adapter implements.
+  `EmailSearchSnippetBounds`; `EmailSearchMatch`, `RankedEmailCandidate`, and `EmailSearchRetrievalMode`;
+  `ReciprocalRankFusion`, which combines two rankings and reaches nothing at all; `SemanticEmailSearch`, which decides
+  whether a search can be ranked semantically and embeds the query when it can; and `IEmailSearchIndexReader` and
+  `IEmailVectorSearchIndexReader`, the two ports the adapters implement.
 - `MailFathom.Application.Emails.Mailboxes` — `MailboxEmailSelection`, the validated structural filters both read models
   share, and `MailboxScopeResolver`, which resolves the accounts a read runs against and refuses one this deployment does
   not serve, once, for every read model.
-- `MailFathom.Infrastructure.Persistence.Emails` — `StoredEmailSearchIndexReader`, which composes the ranking query, and
-  `StoredEmailSelectionPredicate`, the filter predicate it shares with the listing read model, and
-  `StoredEmailSummaryRow`, the projection and mapping it shares with every other read that publishes a summary.
+- `MailFathom.Infrastructure.Persistence.Emails` — `StoredEmailSearchIndexReader`, which composes the lexical ranking
+  query and the extract query, and `StoredEmailSelectionPredicate`, the filter predicate it shares with the listing read
+  model, and `StoredEmailSummaryRow`, the projection and mapping it shares with every other read that publishes a
+  summary.
+- `MailFathom.Infrastructure.Persistence.Embeddings` — `EmailVectorSearchIndexReader`, which composes the vector ranking
+  query over the same filter predicate.
 - `MailFathom.Host.Configuration.Mail.MailboxSearchOptions` — the snippet bounds, bound strictly and validated on start.
 - `MailFathom.Mcp.Tools` — `SearchEmailsTool`, the protocol adapter, and `MailboxScopeArguments`, the conversion of
   caller-supplied text into account identifiers and folder aliases that it shares with the listing tool.
@@ -187,12 +253,18 @@ caller cannot tell a folder that holds nothing matching from one whose synchroni
 
 ## How the guarantees are verified
 
-The three claims this feature rests on are each checked where they are observable.
+Each claim this feature rests on is checked where it is observable.
 
-- **That the query text is a parameter** is asserted against the SQL EF Core generates, in `Infrastructure.UnitTests`. An
-  in-memory repository generates no SQL, so a test feeding one metacharacters would pass against a vulnerable adapter and
-  prove nothing.
-- **That PostgreSQL then treats it as search terms**, that the composed command runs at all, and that the snippets come
-  back bounded and marked are asserted against a real database in the integration suite.
-- **Everything the use case decides** — the refusals, the window bound, the tie-breaking, the empty-result case — is
-  asserted in `Application.UnitTests` against an in-memory index.
+- **That the query text and the query vector are parameters**, that each ranking narrows by the caller's filters, and
+  that the vector ranking measures with the operator its profile's metric names are asserted against the SQL EF Core
+  generates, in `Infrastructure.UnitTests`. An in-memory repository generates no SQL, so a test feeding one
+  metacharacters would pass against a vulnerable adapter and prove nothing — and a query that fails to translate at all
+  fails there rather than at the first search a deployment runs.
+- **That PostgreSQL then treats the text as search terms**, that the composed commands run at all, and that the snippets
+  come back bounded and marked are asserted against a real database in the integration suite.
+- **Everything the use case decides** — the refusals, the window bound, the tie-breaking, the empty-result case, which
+  mode answers a call, and how deep each ranking is asked — is asserted in `Application.UnitTests` against in-memory
+  indexes.
+- **The fusion itself** is asserted against known rank inputs, with no provider and no database anywhere near it: what
+  it promises is a function of where two rankings placed a message and of nothing else, so a test that needed vectors to
+  state it would be testing something other than the method.

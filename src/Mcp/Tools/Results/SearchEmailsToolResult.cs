@@ -29,7 +29,7 @@ internal sealed record SearchEmailsToolResult
     public required IReadOnlyList<SearchedEmailMatch> Matches { get; init; }
 
     /// <summary>Gets how the results were retrieved.</summary>
-    [Description("How these results were retrieved. 'lexical' means full-text matching over the words the mail is written in, with no embedding and no model involved; a query term that appears nowhere in a message will not find it however close its meaning. Read this field rather than assuming a retrieval method, because later releases may add others.")]
+    [Description("How these results were retrieved. 'lexical' means full-text matching over the words the mail is written in: a query term that appears nowhere in a message will not find it however close its meaning. 'hybrid' means that ranking was combined with a search by embedding similarity, so a message can appear without carrying the query's words. Read this field on every response rather than assuming a mode: the same server answers 'lexical' when its embedding provider is unavailable, and neither mode involves a chat model or rewrites the query.")]
     public required EmailRetrievalMode RetrievalMode { get; init; }
 
     /// <summary>Gets how current the local copy of each folder in the request's scope is.</summary>
@@ -47,6 +47,7 @@ internal sealed record SearchEmailsToolResult
     /// defective adapter could widen is not one. The bound applied is the absolute maximum rather than the count this
     /// request asked for, which stays the use case's to decide and to refuse.
     /// </remarks>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when the result reports a retrieval mode this contract has no wire value for.</exception>
     public static SearchEmailsToolResult From(SearchEmailsResult result, EmailSearchSnippetBounds snippetBounds)
     {
         ArgumentNullException.ThrowIfNull(result);
@@ -60,8 +61,24 @@ internal sealed record SearchEmailsToolResult
                     .Take(EmailSearchResultLimit.MaximumValue)
                     .Select(match => SearchedEmailMatch.From(match, snippetBounds)),
             ],
-            RetrievalMode = EmailRetrievalMode.Lexical,
+            RetrievalMode = Published(result.RetrievalMode),
             FolderFreshness = [.. result.FolderFreshness.Select(FolderCopyFreshness.From)],
         };
     }
+
+    /// <summary>Maps the use case's retrieval mode onto the value this contract publishes.</summary>
+    /// <remarks>
+    /// A closed mapping rather than a cast, because the two enumerations are separate on purpose: the wire values are
+    /// this boundary's to decide, and a mode the application grew without a published name has to fail here rather than
+    /// reach a client as a number nobody documented.
+    /// </remarks>
+    private static EmailRetrievalMode Published(EmailSearchRetrievalMode retrievalMode) => retrievalMode switch
+    {
+        EmailSearchRetrievalMode.Lexical => EmailRetrievalMode.Lexical,
+        EmailSearchRetrievalMode.Hybrid => EmailRetrievalMode.Hybrid,
+        _ => throw new ArgumentOutOfRangeException(
+            nameof(retrievalMode),
+            retrievalMode,
+            "The retrieval mode has no published wire value."),
+    };
 }

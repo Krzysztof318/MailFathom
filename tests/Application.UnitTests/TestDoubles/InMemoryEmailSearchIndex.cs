@@ -23,15 +23,25 @@ namespace MailFathom.Application.UnitTests.TestDoubles;
 /// fake that returned bounded extracts would report a bound the real adapter might not apply. That claim belongs to the
 /// suites that observe the generated command and run it against a real database.
 /// </para>
+/// <para>
+/// Reading matches ignores the query text when deciding which snippets a candidate carries, because the arrangement
+/// already named them. What it does honor is the port's rule that a candidate the filters no longer admit is absent
+/// from the result rather than published.
+/// </para>
 /// </remarks>
 internal sealed class InMemoryEmailSearchIndex : IEmailSearchIndexReader
 {
     private readonly List<IndexedEmail> indexed = [];
 
-    private readonly List<ReadRankedMatchesCall> calls = [];
+    private readonly List<ReadRankedCandidatesCall> rankedCandidatesCalls = [];
 
-    /// <summary>Gets what each call to the port asked for, in order.</summary>
-    public IReadOnlyList<ReadRankedMatchesCall> Calls => this.calls;
+    private readonly List<ReadMatchesCall> matchesCalls = [];
+
+    /// <summary>Gets what each ranking call asked for, in order.</summary>
+    public IReadOnlyList<ReadRankedCandidatesCall> RankedCandidatesCalls => this.rankedCandidatesCalls;
+
+    /// <summary>Gets what each window read asked for, in order.</summary>
+    public IReadOnlyList<ReadMatchesCall> MatchesCalls => this.matchesCalls;
 
     /// <summary>Adds one email to the index.</summary>
     /// <param name="summary">The summary a match would return.</param>
@@ -51,48 +61,95 @@ internal sealed class InMemoryEmailSearchIndex : IEmailSearchIndexReader
     }
 
     /// <inheritdoc />
-    public Task<IReadOnlyList<EmailSearchMatch>> ReadRankedMatchesAsync(
+    public Task<IReadOnlyList<RankedEmailCandidate>> ReadRankedCandidatesAsync(
         MailboxEmailSelection selection,
         EmailSearchQueryText queryText,
-        EmailSearchSnippetBounds snippetBounds,
         int limit,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(selection);
         ArgumentNullException.ThrowIfNull(queryText);
-        ArgumentNullException.ThrowIfNull(snippetBounds);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(limit);
         cancellationToken.ThrowIfCancellationRequested();
 
-        this.calls.Add(new ReadRankedMatchesCall(selection, queryText, snippetBounds, limit));
+        this.rankedCandidatesCalls.Add(new ReadRankedCandidatesCall(selection, queryText, limit));
 
-        var timelineOrder = EmailTimelinePosition.ComparerFor(EmailTimelineDirection.NewestFirst);
-
-        IReadOnlyList<EmailSearchMatch> window =
+        IReadOnlyList<RankedEmailCandidate> ranking =
         [
             .. this.indexed
                 .Where(candidate => candidate.Matches(selection, queryText))
-                .Select(candidate => new EmailSearchMatch(
-                    candidate.Email.Summary,
-                    candidate.RelevanceRank,
-                    candidate.Snippets))
-                .Order(new RankThenTimelineComparer(timelineOrder))
+                .Select(candidate => new RankedEmailCandidate(
+                    candidate.Email.Summary.Position,
+                    candidate.RelevanceRank))
+                .Order(Comparer<RankedEmailCandidate>.Create(RankThenTimeline))
                 .Take(limit),
         ];
 
-        return Task.FromResult(window);
+        return Task.FromResult(ranking);
     }
 
-    /// <summary>What one call to the port asked for.</summary>
+    /// <inheritdoc />
+    public Task<IReadOnlyList<EmailSearchMatch>> ReadMatchesAsync(
+        MailboxEmailSelection selection,
+        EmailSearchQueryText queryText,
+        EmailSearchSnippetBounds snippetBounds,
+        IReadOnlyList<RankedEmailCandidate> rankedCandidates,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(selection);
+        ArgumentNullException.ThrowIfNull(queryText);
+        ArgumentNullException.ThrowIfNull(snippetBounds);
+        ArgumentNullException.ThrowIfNull(rankedCandidates);
+        cancellationToken.ThrowIfCancellationRequested();
+
+        this.matchesCalls.Add(new ReadMatchesCall(selection, queryText, snippetBounds, rankedCandidates));
+
+        var eligible = this.indexed
+            .Where(candidate => candidate.Email.Matches(selection))
+            .ToDictionary(candidate => candidate.Email.Summary.StoredEmailId);
+
+        IReadOnlyList<EmailSearchMatch> matches =
+        [
+            .. rankedCandidates
+                .Where(candidate => eligible.ContainsKey(candidate.StoredEmailId))
+                .Select(candidate => new EmailSearchMatch(
+                    eligible[candidate.StoredEmailId].Email.Summary,
+                    candidate.Score,
+                    eligible[candidate.StoredEmailId].Snippets)),
+        ];
+
+        return Task.FromResult(matches);
+    }
+
+    /// <summary>Orders as the port promises: rank descending, then the newest-first timeline order.</summary>
+    private static int RankThenTimeline(RankedEmailCandidate left, RankedEmailCandidate right)
+    {
+        var byRank = right.Score.CompareTo(left.Score);
+
+        return byRank is not 0
+            ? byRank
+            : EmailTimelinePosition.NewestFirst.Compare(left.Position, right.Position);
+    }
+
+    /// <summary>What one ranking call asked for.</summary>
+    /// <param name="Selection">The validated structural filters the use case built.</param>
+    /// <param name="QueryText">The validated free text the use case built.</param>
+    /// <param name="Limit">How many ranked candidates the use case asked for.</param>
+    internal sealed record ReadRankedCandidatesCall(
+        MailboxEmailSelection Selection,
+        EmailSearchQueryText QueryText,
+        int Limit);
+
+    /// <summary>What one window read asked for.</summary>
     /// <param name="Selection">The validated structural filters the use case built.</param>
     /// <param name="QueryText">The validated free text the use case built.</param>
     /// <param name="SnippetBounds">The bounds the use case applied.</param>
-    /// <param name="Limit">How many ranked results the use case asked for.</param>
-    internal sealed record ReadRankedMatchesCall(
+    /// <param name="RankedCandidates">The window the use case had already ranked.</param>
+    internal sealed record ReadMatchesCall(
         MailboxEmailSelection Selection,
         EmailSearchQueryText QueryText,
         EmailSearchSnippetBounds SnippetBounds,
-        int Limit);
+        IReadOnlyList<RankedEmailCandidate> RankedCandidates);
 
     private sealed record IndexedEmail(
         InMemoryStoredEmail Email,
@@ -104,17 +161,5 @@ internal sealed class InMemoryEmailSearchIndex : IEmailSearchIndexReader
             this.Email.Matches(selection)
             && (this.MatchedText is not { } text
                 || text.Contains(queryText.Value, StringComparison.OrdinalIgnoreCase));
-    }
-
-    /// <summary>Orders as the port promises: rank descending, then the newest-first timeline order.</summary>
-    private sealed class RankThenTimelineComparer(IComparer<EmailTimelinePosition> timelineOrder)
-        : IComparer<EmailSearchMatch>
-    {
-        public int Compare(EmailSearchMatch? x, EmailSearchMatch? y)
-        {
-            var byRank = y!.RelevanceRank.CompareTo(x!.RelevanceRank);
-
-            return byRank is not 0 ? byRank : timelineOrder.Compare(x.Position, y.Position);
-        }
     }
 }

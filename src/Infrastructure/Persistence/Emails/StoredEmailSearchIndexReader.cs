@@ -7,12 +7,13 @@ using MailFathom.Application.Emails.Mailboxes;
 using MailFathom.Application.Emails.Search;
 using MailFathom.Application.Emails.Summaries;
 using MailFathom.CodeCoverage;
+using MailFathom.Domain.Emails;
 using MailFathom.Infrastructure.Persistence.Connections;
 using Microsoft.EntityFrameworkCore;
 
 namespace MailFathom.Infrastructure.Persistence.Emails;
 
-/// <summary>Reads bounded, ranked windows of matching mail out of the PostgreSQL lexical index.</summary>
+/// <summary>Ranks matching mail against free text in the PostgreSQL lexical index, and reads the window a ranking chose.</summary>
 /// <remarks>
 /// <para>
 /// The query text reaches PostgreSQL as a parameter and nothing else. <c>websearch_to_tsquery</c> parses it into a
@@ -73,71 +74,88 @@ internal sealed class StoredEmailSearchIndexReader(
     private const string SnippetSeparator = "\u001f";
 
     /// <inheritdoc />
-    public async Task<IReadOnlyList<EmailSearchMatch>> ReadRankedMatchesAsync(
+    public async Task<IReadOnlyList<RankedEmailCandidate>> ReadRankedCandidatesAsync(
         MailboxEmailSelection selection,
         EmailSearchQueryText queryText,
-        EmailSearchSnippetBounds snippetBounds,
         int limit,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(selection);
         ArgumentNullException.ThrowIfNull(queryText);
-        ArgumentNullException.ThrowIfNull(snippetBounds);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(limit);
 
-        var hits = await this.RankedHitsQuery(selection, queryText, snippetBounds, limit)
+        var hits = await this.RankedHitsQuery(selection, queryText, limit)
             .ToArrayAsync(cancellationToken);
 
-        if (hits.Length is 0)
+        return
+        [
+            .. hits.Select(static hit => new RankedEmailCandidate(
+                new EmailTimelinePosition(hit.ReceivedAt, StoredEmailId.Create(hit.StoredEmailId)),
+                hit.RelevanceRank)),
+        ];
+    }
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<EmailSearchMatch>> ReadMatchesAsync(
+        MailboxEmailSelection selection,
+        EmailSearchQueryText queryText,
+        EmailSearchSnippetBounds snippetBounds,
+        IReadOnlyList<RankedEmailCandidate> rankedCandidates,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(selection);
+        ArgumentNullException.ThrowIfNull(queryText);
+        ArgumentNullException.ThrowIfNull(snippetBounds);
+        ArgumentNullException.ThrowIfNull(rankedCandidates);
+
+        if (rankedCandidates.Count is 0)
         {
             return [];
         }
 
-        var summariesById = await this.SummariesByIdAsync(selection, hits, cancellationToken);
+        Guid[] rankedIds = [.. rankedCandidates.Select(static candidate => candidate.StoredEmailId.Value)];
 
-        // The ranking query's order is the result's order, so the summaries are looked up rather than re-sorted. A hit
-        // the second query did not return is dropped: its email was deleted, or a run committed between the two
-        // statements and left it outside the filter this search was issued for. Publishing it either way would put a row
-        // in the result that contradicts the request that produced it.
+        var summariesById = await this.SummariesByIdAsync(selection, rankedIds, cancellationToken);
+
+        // Nothing is worth a second statement once the first found nothing eligible, and the headline query is the
+        // expensive one: it cuts a highlighted extract out of a message body per row.
+        var headlinesById = summariesById.Count is 0
+            ? []
+            : await this.HeadlinesByIdAsync(selection, queryText, snippetBounds, rankedIds, cancellationToken);
+
+        // The candidates' order is the result's order, so the two lookups are keyed rather than re-sorted. A candidate
+        // neither query returned is dropped: its email was deleted, or a run committed between the statements and left
+        // it outside the filter this search was issued for. Publishing it either way would put a row in the result that
+        // contradicts the request that produced it.
         return
         [
-            .. hits
-                .Where(hit => summariesById.ContainsKey(hit.StoredEmailId))
-                .Select(hit => new EmailSearchMatch(
-                    summariesById[hit.StoredEmailId],
-                    hit.RelevanceRank,
-                    SnippetsFrom(hit.Headline, snippetBounds))),
+            .. rankedCandidates
+                .Where(candidate => summariesById.ContainsKey(candidate.StoredEmailId.Value))
+                .Select(candidate => new EmailSearchMatch(
+                    summariesById[candidate.StoredEmailId.Value],
+                    candidate.Score,
+                    SnippetsFrom(headlinesById.GetValueOrDefault(candidate.StoredEmailId.Value), snippetBounds))),
         ];
     }
 
-    /// <summary>Composes the query that ranks the matching emails and cuts their snippets.</summary>
+    /// <summary>Composes the query that ranks the matching emails.</summary>
     /// <param name="selection">The validated structural filters.</param>
     /// <param name="queryText">The validated free text.</param>
-    /// <param name="snippetBounds">How many extracts one result may carry, and how long each may be.</param>
-    /// <param name="limit">The greatest number of ranked results to return.</param>
+    /// <param name="limit">The greatest number of ranked candidates to return.</param>
     /// <returns>The composed query, which nothing has executed yet.</returns>
     /// <remarks>
-    /// <para>
     /// Exposed rather than inlined because the command this composes is itself the contract: that the query text arrives
     /// as a parameter cannot be observed from the application side, and a test asserting it against anything but the
     /// generated SQL would pass whatever this method did. Reading the composed query is the only place that claim is
     /// checkable without a database.
-    /// </para>
-    /// <para>
-    /// The window is closed before the snippets are cut, which is why <c>Take</c> precedes the projection: cutting a
-    /// highlighted extract costs a pass over a message body, and doing it for every match of a common word rather than
-    /// for the results being returned would make a broad query arbitrarily expensive.
-    /// </para>
     /// </remarks>
     internal IQueryable<StoredEmailSearchHitRow> RankedHitsQuery(
         MailboxEmailSelection selection,
         EmailSearchQueryText queryText,
-        EmailSearchSnippetBounds snippetBounds,
         int limit)
     {
         var configuration = textSearchConfiguration.Value;
         var text = queryText.Value;
-        var headlineOptions = HeadlineOptions(snippetBounds);
 
         var matching = StoredEmailSelectionPredicate
             .Matching(dbContext.StoredEmails.AsNoTracking(), selection)
@@ -156,7 +174,45 @@ internal sealed class StoredEmailSearchIndexReader(
             .Take(limit)
             .Select(email => new StoredEmailSearchHitRow(
                 email.Id,
-                email.SearchDocument!.SearchVector.Rank(EF.Functions.WebSearchToTsQuery(configuration, text)),
+                email.ReceivedAt,
+                email.SearchDocument!.SearchVector.Rank(EF.Functions.WebSearchToTsQuery(configuration, text))));
+    }
+
+    /// <summary>Composes the query that cuts the snippets of an already ranked window.</summary>
+    /// <param name="selection">The validated structural filters.</param>
+    /// <param name="queryText">The validated free text the extracts are cut around.</param>
+    /// <param name="snippetBounds">How many extracts one result may carry, and how long each may be.</param>
+    /// <param name="rankedIds">The window's identities.</param>
+    /// <returns>The composed query, which nothing has executed yet.</returns>
+    /// <remarks>
+    /// <para>
+    /// Exposed for the reason the ranking query is: that the query text reaches <c>ts_headline</c> as a parameter and
+    /// the option list is composed from validated deployment configuration alone are both claims about the generated
+    /// command rather than about anything observable from the application side.
+    /// </para>
+    /// <para>
+    /// It runs over the window rather than over everything that matched, which is what keeps a broad query from costing
+    /// a pass over every matching message body. A candidate that ranked semantically and carries none of the query's
+    /// words yields a fragment with no highlight marker, and the caller drops it — the same treatment a lexical match on
+    /// a subject alone already receives.
+    /// </para>
+    /// </remarks>
+    internal IQueryable<StoredEmailHeadlineRow> HeadlinesQuery(
+        MailboxEmailSelection selection,
+        EmailSearchQueryText queryText,
+        EmailSearchSnippetBounds snippetBounds,
+        IReadOnlyList<Guid> rankedIds)
+    {
+        var configuration = textSearchConfiguration.Value;
+        var text = queryText.Value;
+        var headlineOptions = HeadlineOptions(snippetBounds);
+        var identities = rankedIds.ToArray();
+
+        return StoredEmailSelectionPredicate
+            .Matching(dbContext.StoredEmails.AsNoTracking(), selection)
+            .Where(email => identities.Contains(email.Id) && email.SearchDocument != null)
+            .Select(email => new StoredEmailHeadlineRow(
+                email.Id,
                 EF.Functions.WebSearchToTsQuery(configuration, text)
                     .GetResultHeadline(configuration, email.SearchDocument!.BodyText!, headlineOptions)));
     }
@@ -164,10 +220,10 @@ internal sealed class StoredEmailSearchIndexReader(
     /// <summary>Reads the summaries of the ranked emails through the projection every read model publishes them by.</summary>
     /// <remarks>
     /// <para>
-    /// A second query rather than a wider first one. The summary projection is the control that decides what a mailbox
-    /// read can return at all, and restating its columns beside the ranking expressions would put a second copy of that
-    /// control in the codebase. This one is keyed by at most a window's worth of identifiers, so what it costs is one
-    /// index lookup per result.
+    /// A query of its own rather than a wider ranking one. The summary projection is the control that decides what a
+    /// mailbox read can return at all, and restating its columns beside the ranking expressions would put a second copy
+    /// of that control in the codebase. This one is keyed by at most a window's worth of identifiers, so what it costs
+    /// is one index lookup per result.
     /// </para>
     /// <para>
     /// It narrows by the selection as well as by those identifiers, which is what keeps two statements from publishing
@@ -179,20 +235,36 @@ internal sealed class StoredEmailSearchIndexReader(
     /// </remarks>
     private async Task<Dictionary<Guid, EmailSummary>> SummariesByIdAsync(
         MailboxEmailSelection selection,
-        IReadOnlyList<StoredEmailSearchHitRow> hits,
+        IReadOnlyList<Guid> rankedIds,
         CancellationToken cancellationToken)
     {
-        var rankedIds = hits.Select(static hit => hit.StoredEmailId).ToArray();
+        var identities = rankedIds.ToArray();
 
         var rows = await StoredEmailSelectionPredicate
             .Matching(dbContext.StoredEmails.AsNoTracking(), selection)
-            .Where(email => rankedIds.Contains(email.Id))
+            .Where(email => identities.Contains(email.Id))
             .Select(StoredEmailSummaryRow.Projection)
             .ToArrayAsync(cancellationToken);
 
         return rows.ToDictionary(
             static row => row.Id,
             static row => row.ToSummary());
+    }
+
+    /// <summary>Reads the highlighted extracts of the ranked emails, which PostgreSQL rather than this process cuts.</summary>
+    private async Task<Dictionary<Guid, string?>> HeadlinesByIdAsync(
+        MailboxEmailSelection selection,
+        EmailSearchQueryText queryText,
+        EmailSearchSnippetBounds snippetBounds,
+        IReadOnlyList<Guid> rankedIds,
+        CancellationToken cancellationToken)
+    {
+        var rows = await this.HeadlinesQuery(selection, queryText, snippetBounds, rankedIds)
+            .ToArrayAsync(cancellationToken);
+
+        return rows.ToDictionary(
+            static row => row.StoredEmailId,
+            static row => row.Headline);
     }
 
     /// <summary>Writes the bounds as the option list <c>ts_headline</c> reads them.</summary>
