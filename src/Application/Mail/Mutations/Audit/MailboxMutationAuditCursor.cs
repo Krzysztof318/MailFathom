@@ -67,9 +67,29 @@ public readonly record struct MailboxMutationAuditCursor
     public static MailboxMutationAuditCursor After(MailboxMutationAuditEntry entry, string filterFingerprint)
     {
         ArgumentNullException.ThrowIfNull(entry);
+
+        return After(entry.CompletedAt, entry.Id, filterFingerprint);
+    }
+
+    /// <summary>Creates the cursor that continues a walk after one position in the trail.</summary>
+    /// <param name="completedAt">The completion instant the page ended on.</param>
+    /// <param name="entryId">The identity of the entry at that instant.</param>
+    /// <param name="filterFingerprint">The fingerprint of the filters the page was read under.</param>
+    /// <returns>The cursor.</returns>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="filterFingerprint" /> is blank.</exception>
+    /// <remarks>
+    /// The position is taken rather than an entry, because a page advances by the rows it read rather than by the
+    /// entries it could present. A row this build cannot interpret is left out of the page and still passed, so a walk
+    /// never stalls on one and never repeats the rows either side of it.
+    /// </remarks>
+    public static MailboxMutationAuditCursor After(
+        DateTimeOffset completedAt,
+        MailboxMutationAuditEntryId entryId,
+        string filterFingerprint)
+    {
         ArgumentException.ThrowIfNullOrWhiteSpace(filterFingerprint);
 
-        return new MailboxMutationAuditCursor(entry.CompletedAt, entry.Id, filterFingerprint);
+        return new MailboxMutationAuditCursor(completedAt, entryId, filterFingerprint);
     }
 
     /// <summary>Reads a cursor a caller presented.</summary>

@@ -315,13 +315,12 @@ where a person's mail has been, when, and at whose instruction — so a deployme
 accumulates one. An account turns it on and states how long it keeps entries:
 
 ```yaml
-Mail:
-  Synchronization:
-    Accounts:
-      - AccountId: work
-        AuditTrail:
-          Enabled: true
-          Retention: 90.00:00:00
+MailSynchronization:
+  Accounts:
+    - AccountId: work
+      AuditTrail:
+        Enabled: true
+        Retention: 90.00:00:00
 ```
 
 The answer is resolved when a change is written down and travels on its record, so switching the trail on or off while a

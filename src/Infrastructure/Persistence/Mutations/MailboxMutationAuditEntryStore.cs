@@ -7,6 +7,7 @@ using MailFathom.Application.Persistence;
 using MailFathom.CodeCoverage;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Mutations.Audit;
+using MailFathom.Infrastructure.Observability;
 using MailFathom.Infrastructure.Persistence.Entities;
 using MailFathom.Infrastructure.Persistence.Sessions;
 using Microsoft.EntityFrameworkCore;
@@ -26,7 +27,10 @@ namespace MailFathom.Infrastructure.Persistence.Mutations;
 /// </para>
 /// </remarks>
 [RequiresIntegrationCoverage]
-internal sealed class MailboxMutationAuditEntryStore(MailFathomDbContext readContext) : IMailboxMutationAuditEntryStore
+internal sealed class MailboxMutationAuditEntryStore(
+    MailFathomDbContext readContext,
+    MailboxMutationAuditTelemetry telemetry)
+    : IMailboxMutationAuditEntryStore
 {
     /// <inheritdoc />
     public async Task AppendAsync(
@@ -78,12 +82,35 @@ internal sealed class MailboxMutationAuditEntryStore(MailFathomDbContext readCon
             .ToArrayAsync(cancellationToken);
 
         var pageEntities = entities.Take(query.PageSize).ToArray();
-        var entries = pageEntities.Select(MailboxMutationAuditEntryMapping.ToEntry).ToArray();
+        var entries = new List<MailboxMutationAuditEntry>(pageEntities.Length);
+        var unreadableCount = 0;
 
+        foreach (var entity in pageEntities)
+        {
+            if (MailboxMutationAuditEntryMapping.TryToEntry(entity, out var entry))
+            {
+                entries.Add(entry);
+            }
+            else
+            {
+                unreadableCount++;
+            }
+        }
+
+        if (unreadableCount > 0)
+        {
+            telemetry.RecordUnreadableEntries(query.AccountId, unreadableCount);
+        }
+
+        // The boundary is the last row read rather than the last entry presented, so a row this build cannot interpret
+        // costs its own place in the page and nothing else: the walk neither stalls on it nor repeats the rows around it.
         return new MailboxMutationAuditPage(
             entries,
-            entities.Length > query.PageSize && entries.Length > 0
-                ? MailboxMutationAuditCursor.After(entries[^1], query.FilterFingerprint)
+            entities.Length > query.PageSize && pageEntities.Length > 0
+                ? MailboxMutationAuditCursor.After(
+                    pageEntities[^1].CompletedAt,
+                    MailboxMutationAuditEntryId.Create(pageEntities[^1].Id),
+                    query.FilterFingerprint)
                 : null);
     }
 

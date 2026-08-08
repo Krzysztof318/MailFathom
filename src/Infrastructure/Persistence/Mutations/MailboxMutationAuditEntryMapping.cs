@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using System.Diagnostics.CodeAnalysis;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Failures;
@@ -42,35 +43,49 @@ internal static class MailboxMutationAuditEntryMapping
         FailureCode = entry.Failure?.Value,
     };
 
-    /// <summary>Rebuilds the entry one stored row states.</summary>
+    /// <summary>Rebuilds the entry one stored row states, or reports a row this build cannot interpret.</summary>
     /// <param name="entity">The stored row.</param>
-    /// <returns>The entry that row states.</returns>
-    /// <exception cref="InvalidOperationException">Thrown when the row names a mutation or a folder path that no longer parses.</exception>
-    internal static MailboxMutationAuditEntry ToEntry(MailboxMutationAuditEntryEntity entity)
+    /// <param name="entry">The entry that row states, when this build can read it.</param>
+    /// <returns><see langword="true" /> when the row was rebuilt; otherwise <see langword="false" />.</returns>
+    /// <remarks>
+    /// <para>
+    /// A row is refused rather than approximated when it names a mutation or a folder path this build does not
+    /// recognize — which is version skew rather than corruption: a later build that permits a fifth mutation writes
+    /// entries this one has no value for, and a rollback then reads them.
+    /// </para>
+    /// <para>
+    /// It is reported rather than thrown for the reason <see cref="ToFailure" /> degrades an unrecognized failure code:
+    /// this trail is read a page at a time and paginated by position, so one unreadable row thrown out of the mapping
+    /// would fail the whole page and every page after it. The caller leaves the row out, says so, and walks on.
+    /// </para>
+    /// </remarks>
+    internal static bool TryToEntry(
+        MailboxMutationAuditEntryEntity entity,
+        [NotNullWhen(true)] out MailboxMutationAuditEntry? entry)
     {
-        if (!MailboxMutation.TryParseName(entity.Mutation, out var mutation))
+        entry = null;
+
+        if (!MailboxMutation.TryParseName(entity.Mutation, out var mutation)
+            || !TryToFolderPath(entity.SourceFolderPath, entity.SourceHierarchyDelimiter, out var sourceFolderPath)
+            || !TryToOptionalFolderPath(
+                entity.DestinationFolderPath,
+                entity.DestinationHierarchyDelimiter,
+                out var destinationFolderPath))
         {
-            throw new InvalidOperationException(
-                $"Mailbox mutation audit entry {entity.Id} names '{entity.Mutation}', which is not a permitted mutation.");
+            return false;
         }
 
-        return new MailboxMutationAuditEntry
+        entry = new MailboxMutationAuditEntry
         {
             Id = MailboxMutationAuditEntryId.Create(entity.Id),
             MutationRecordId = MailboxMutationRecordId.Create(entity.MutationRecordId),
             AccountId = MailAccountId.Create(entity.MailboxAccountId),
             StoredEmailId = StoredEmailId.Create(entity.StoredEmailId),
             Mutation = mutation,
-            SourceFolderPath = ToFolderPath(
-                entity.Id,
-                entity.SourceFolderPath,
-                entity.SourceHierarchyDelimiter),
+            SourceFolderPath = sourceFolderPath,
             SourceUidValidity = ImapUidValidity.Create(entity.SourceUidValidity),
             SourceUid = ImapUid.Create(entity.SourceUid),
-            DestinationFolderPath = ToOptionalFolderPath(
-                entity.Id,
-                entity.DestinationFolderPath,
-                entity.DestinationHierarchyDelimiter),
+            DestinationFolderPath = destinationFolderPath,
             Placement = ToPlacement(entity),
             DesiredSeenState = entity.DesiredSeenState,
             Requester = MailboxMutationRequester.Create(entity.RequesterOrigin, entity.RequesterIdentity),
@@ -79,6 +94,8 @@ internal static class MailboxMutationAuditEntryMapping
             Outcome = entity.Outcome,
             Failure = ToFailure(entity),
         };
+
+        return true;
     }
 
     /// <summary>Restores a stored folder path exactly as it was written.</summary>
@@ -86,20 +103,30 @@ internal static class MailboxMutationAuditEntryMapping
     /// The text is not trimmed on the way back, for the reason it was not trimmed on the way in: IMAP permits a quoted
     /// mailbox name bounded by a space, and normalizing one would name a different mailbox or none at all.
     /// </remarks>
-    private static RemoteFolderPath ToFolderPath(Guid entryId, string storedPath, string? storedDelimiter)
-    {
-        return RemoteFolderPath.TryCreate(
+    private static bool TryToFolderPath(string storedPath, string? storedDelimiter, out RemoteFolderPath folderPath) =>
+        RemoteFolderPath.TryCreate(
             storedPath,
             storedDelimiter is { Length: > 0 } delimiter ? delimiter[0] : null,
-            out var folderPath)
-            ? folderPath
-            : throw new InvalidOperationException(
-                $"Mailbox mutation audit entry {entryId} carries a folder path that names no folder.");
-    }
+            out folderPath);
 
     /// <summary>Restores a folder path only a relocation or a copy carries.</summary>
-    private static RemoteFolderPath? ToOptionalFolderPath(Guid entryId, string? storedPath, string? storedDelimiter) =>
-        storedPath is null ? null : ToFolderPath(entryId, storedPath, storedDelimiter);
+    private static bool TryToOptionalFolderPath(
+        string? storedPath,
+        string? storedDelimiter,
+        out RemoteFolderPath? folderPath)
+    {
+        if (storedPath is null)
+        {
+            folderPath = null;
+
+            return true;
+        }
+
+        var parsed = TryToFolderPath(storedPath, storedDelimiter, out var storedFolderPath);
+        folderPath = parsed ? storedFolderPath : null;
+
+        return parsed;
+    }
 
     private static RemoteEmailPlacement ToPlacement(MailboxMutationAuditEntryEntity entity) =>
         entity is { PlacementUidValidity: { } uidValidity, PlacementUid: { } uid }

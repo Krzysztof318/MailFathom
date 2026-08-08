@@ -99,7 +99,7 @@ instruction, so a caller names whose history they are reading rather than asking
 
 ```console
 $ curl -sS -H "X-API-Key: $MAILFATHOM_ADMIN_KEY" \
-    "http://127.0.0.1:8081/api/admin/mailbox/mutations/audit?account=work&mutation=delete&pageSize=2"
+    "http://127.0.0.1:8090/api/admin/mailbox/mutations/audit?account=work&mutation=delete&pageSize=2"
 ```
 
 The response carries the entries and, while more remain, the cursor the next page is asked with. **A walk ends when no
@@ -111,6 +111,11 @@ the range, a range that ends where it begins, and a cursor this deployment did n
 
 Nothing in the answer is mail. Folder paths, UIDs, the local email identifier, the requester, the two timestamps, and
 the outcome are what an entry holds, which is what makes the route readable without exposing the message it is about.
+
+An entry a later build wrote and this one cannot interpret — one naming a change this version does not permit — is left
+out of the page rather than failing it, and a warning names the account and how many were left out. The rows stay in the
+trail and a build that permits the change reads them; what the warning exists for is that a page quietly short of
+entries would be worse than one that says so, on a surface whose whole value is being complete.
 
 **Erasing entries for a data-subject request.** Retention erases what has outlived each account's configured window, and
 that is the ordinary path. A request that reaches further — erase everything held about one person's mail now — is

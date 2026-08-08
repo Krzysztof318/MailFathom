@@ -4,6 +4,7 @@
 
 using System.Diagnostics.Metrics;
 using MailFathom.Common.Observability;
+using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Mutations.Audit;
 using Microsoft.Extensions.Logging;
 
@@ -65,6 +66,16 @@ public sealed partial class MailboxMutationAuditTelemetry
             entry.MutationRecordId.Value);
     }
 
+    /// <summary>Says that a page left out entries this build cannot interpret.</summary>
+    /// <param name="accountId">The account whose trail was read.</param>
+    /// <param name="unreadableCount">How many rows of the page were left out.</param>
+    /// <remarks>
+    /// The rows are still in the trail and a later build reads them; what is reported is that this build's answer is
+    /// short of them, because an audit page that quietly omits entries is worse than one that says it did.
+    /// </remarks>
+    internal void RecordUnreadableEntries(MailAccountId accountId, int unreadableCount) =>
+        this.LogAuditEntriesUnreadable(accountId.Value, unreadableCount);
+
     [LoggerMessage(
         Level = LogLevel.Warning,
         Message = "The audit trail did not keep the {Mutation} mutation {MutationRecordId} of {AccountId}; the change was made and this history of it is missing.")]
@@ -73,4 +84,9 @@ public sealed partial class MailboxMutationAuditTelemetry
         string mutation,
         string accountId,
         Guid mutationRecordId);
+
+    [LoggerMessage(
+        Level = LogLevel.Warning,
+        Message = "Account {AccountId} holds {UnreadableCount} audit entries this build cannot interpret, which were left out of the page it served; a build that permits the mutation they name reads them.")]
+    private partial void LogAuditEntriesUnreadable(string accountId, int unreadableCount);
 }

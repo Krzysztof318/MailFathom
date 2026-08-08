@@ -106,8 +106,18 @@ public sealed class MailboxMutationAuditTrailTests : IDisposable
         // Assert
         var entry = Assert.Single(appended);
         Assert.Equal(
-            (MailboxMutation.Relocate, Account, Inbox.RemotePath, MailboxMutationAuditOutcome.Performed, RecordedAt),
-            (entry.Mutation, entry.AccountId, entry.SourceFolderPath, entry.Outcome, entry.RequestedAt));
+            (MailboxMutation.Relocate,
+                Account,
+                Inbox.RemotePath,
+                MailboxMutationAuditOutcome.Performed,
+                RecordedAt,
+                RecordedAt.AddMinutes(4)),
+            (entry.Mutation,
+                entry.AccountId,
+                entry.SourceFolderPath,
+                entry.Outcome,
+                entry.RequestedAt,
+                entry.CompletedAt));
     }
 
     /// <summary>A trail that cannot be written costs the history and never the change that had already been made.</summary>
