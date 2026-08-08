@@ -122,10 +122,17 @@ public static class ServiceCollectionExtensions
     /// <returns>The service collection, for chaining.</returns>
     /// <exception cref="ArgumentNullException">Thrown when any argument is <see langword="null" />.</exception>
     /// <remarks>
+    /// <para>
     /// The settings arrive already read rather than as an <c>IConfiguration</c> this method reaches into, so which key
     /// holds them stays a host decision and this assembly gains no configuration dependency. They arrive as an
     /// accessor rather than as a value because a secret reference can be repointed by a configuration reload, and a
     /// value captured at registration would keep authenticating with the reference the operator replaced.
+    /// </para>
+    /// <para>
+    /// The embedding stores registered here are the tables; the units of work that write vectors into them are not,
+    /// and belong to <see cref="AddEmailEmbeddingGeneration" /> for the reason that method states. A registration
+    /// added here that resolves an <see cref="ITextEmbeddingGenerator" /> belongs there instead.
+    /// </para>
     /// </remarks>
     public static IServiceCollection AddInfrastructure(
         this IServiceCollection services,
@@ -193,15 +200,6 @@ public static class ServiceCollectionExtensions
         // beside it.
         services.AddScoped<IEmbeddingProfileVectorIndex, EmbeddingProfileVectorIndex>();
         services.AddScoped<IStoredEmailEmbeddingBackfillStore, StoredEmailEmbeddingBackfillStore>();
-        // Registered here beside the store it writes through, for the reason the chunk writer above is: its
-        // `ITextEmbeddingGenerator` comes from the AI boundary, which this project may not reference, so a composition
-        // root that registers persistence without an embedding provider resolves nothing — which is correct, because
-        // such a deployment starts no worker to ask for one.
-        services.AddScoped<StoredEmailEmbeddingGenerator>();
-        // Beside the generator it drives, and conditional on the same thing: the backfill's unit of work is one message
-        // brought up to date, which is the generator's, so a deployment that resolves no generator starts no backfill
-        // either.
-        services.AddScoped<StoredEmailEmbeddingBackfill>();
         services.AddScoped<IEmailMetadataRepository, StoredEmailMetadataRepository>();
         services.AddScoped<IDatabaseSchemaInspector, EfCoreDatabaseSchemaInspector>();
         services.AddScoped<IEmailContentStore, EmailContentStore>();
@@ -300,6 +298,35 @@ public static class ServiceCollectionExtensions
             provider.GetRequiredService<IMailAccessTokenSource>(),
             provider.GetRequiredService<OutboundOperationExecutor>(),
             provider.GetRequiredService<ITransientFailureClassifier>()));
+
+        return services;
+    }
+
+    /// <summary>Registers the units of work that turn a message's passages into vectors.</summary>
+    /// <param name="services">The service collection.</param>
+    /// <returns>The service collection, for chaining.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="services" /> is <see langword="null" />.</exception>
+    /// <remarks>
+    /// <para>
+    /// Separate from <see cref="AddInfrastructure" /> because both of these resolve an
+    /// <see cref="ITextEmbeddingGenerator" />, which comes from the AI boundary and exists only where a deployment
+    /// declared an embedding chain. Registering them beside the stores they write through would put a descriptor in
+    /// every container that cannot be constructed in most of them, and a container that validates its descriptors on
+    /// build — which is what a Development run does — then fails to start an instance that was never going to embed
+    /// anything. Serving lexical search alone is a supported state, so the condition is expressed by not making the
+    /// registration rather than by making one that would fail.
+    /// </para>
+    /// <para>
+    /// The two are one call because they are one decision: the backfill's unit of work is one message brought up to
+    /// date by that same generator, so a deployment that resolves neither is the only other shape.
+    /// </para>
+    /// </remarks>
+    public static IServiceCollection AddEmailEmbeddingGeneration(this IServiceCollection services)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+
+        services.AddScoped<StoredEmailEmbeddingGenerator>();
+        services.AddScoped<StoredEmailEmbeddingBackfill>();
 
         return services;
     }

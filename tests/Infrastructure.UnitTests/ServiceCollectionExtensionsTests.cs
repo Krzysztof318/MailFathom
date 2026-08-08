@@ -2,6 +2,8 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Application.Emails.Embeddings.Backfill;
+using MailFathom.Application.Emails.Embeddings.Generation;
 using MailFathom.Infrastructure.Persistence.Connections;
 using MailFathom.Infrastructure.Secrets.Resolution;
 using Microsoft.Extensions.DependencyInjection;
@@ -73,6 +75,56 @@ public sealed class ServiceCollectionExtensionsTests
 
         // Act, Assert
         Assert.Throws<InvalidOperationException>(provider.GetRequiredService<NpgsqlDataSource>);
+    }
+
+    /// <summary>
+    /// Serving lexical search alone is a supported state, so an instance that declared no embedding chain resolves no
+    /// text embedding generator. A descriptor needing one would then be registered and unconstructable, which is a
+    /// different thing from being absent: the container reports the first by throwing and the second by answering
+    /// nothing, and only the second survives the build-time validation a Development run performs.
+    /// </summary>
+    [Fact]
+    public async Task AddInfrastructure_WithoutAnEmbeddingChain_RegistersNeitherTheGenerationNorItsBackfill()
+    {
+        // Arrange
+        await using var provider = BuildConfiguredProvider();
+
+        // Act, Assert
+        Assert.Null(provider.GetService<StoredEmailEmbeddingGenerator>());
+        Assert.Null(provider.GetService<StoredEmailEmbeddingBackfill>());
+    }
+
+    /// <summary>
+    /// The other half of the same decision: an instance that declared a chain registers both units of work. Asserted
+    /// against the descriptors rather than by resolving them, because constructing either reaches the stores they
+    /// write through and those open a database this suite has none of.
+    /// </summary>
+    [Fact]
+    public void AddEmailEmbeddingGeneration_OnAServiceCollection_RegistersTheGenerationAndTheBackfillItDrives()
+    {
+        // Arrange
+        var services = new ServiceCollection();
+
+        // Act
+        services.AddEmailEmbeddingGeneration();
+
+        // Assert
+        Assert.Contains(
+            services,
+            descriptor => descriptor.ServiceType == typeof(StoredEmailEmbeddingGenerator)
+                && descriptor.Lifetime == ServiceLifetime.Scoped);
+        Assert.Contains(
+            services,
+            descriptor => descriptor.ServiceType == typeof(StoredEmailEmbeddingBackfill)
+                && descriptor.Lifetime == ServiceLifetime.Scoped);
+    }
+
+    [Fact]
+    public void AddEmailEmbeddingGeneration_WithoutAServiceCollection_IsRefused()
+    {
+        // Act, Assert
+        Assert.Throws<ArgumentNullException>(
+            () => ServiceCollectionExtensions.AddEmailEmbeddingGeneration(null!));
     }
 
     private static ServiceProvider BuildConfiguredProvider()

@@ -60,7 +60,7 @@ public sealed class OrchestratedEmailEmbeddingGenerationTests(MailFathomOrchestr
         Assert.Equal(passageCount, first.EmbeddedChunkCount);
         Assert.Equal(StoredEmailEmbeddingOutcome.Embedded, repeat.Outcome);
         Assert.Equal(0, repeat.EmbeddedChunkCount);
-        Assert.Equal(passageCount, await CountVectorsAsync(services, profileId, cancellationToken));
+        Assert.Equal(passageCount, await CountVectorsAsync(services, storedEmailId, profileId, cancellationToken));
     }
 
     /// <summary>
@@ -151,13 +151,23 @@ public sealed class OrchestratedEmailEmbeddingGenerationTests(MailFathomOrchestr
                 .CountAsync(chunk => chunk.StoredEmailId == storedEmailId.Value, token),
             cancellationToken);
 
+    /// <summary>Counts the vectors one message holds under one profile.</summary>
+    /// <remarks>
+    /// Narrowed to the message rather than counting the profile's whole table, because the suite shares one database
+    /// and every class embedding into the deterministic geometry writes into the same profile. A count of everything
+    /// would report whatever the classes before this one happened to leave behind.
+    /// </remarks>
     private static Task<int> CountVectorsAsync(
         OrchestratedMailFathomServices services,
+        StoredEmailId storedEmailId,
         EmbeddingProfileId profileId,
         CancellationToken cancellationToken) => services.InScopeAsync(
             (scope, token) => scope.GetRequiredService<MailFathomDbContext>().EmailEmbeddings
                 .AsNoTracking()
-                .CountAsync(embedding => embedding.EmbeddingProfileId == profileId.Value, token),
+                .CountAsync(
+                    embedding => embedding.EmbeddingProfileId == profileId.Value
+                        && embedding.EmailChunk!.StoredEmailId == storedEmailId.Value,
+                    token),
             cancellationToken);
 
     /// <summary>Registers a geometry no generator in this process produces, which is what a superseded one looks like.</summary>

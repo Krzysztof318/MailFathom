@@ -252,11 +252,41 @@ internal sealed class OrchestratedMailbox(OrchestratedMailServerEndpoints endpoi
         return uidValidity;
     }
 
+    /// <summary>Puts an empty folder under a name the server does not hold, without selecting it.</summary>
+    /// <param name="folderName">The folder to create beneath the personal namespace root.</param>
+    /// <param name="cancellationToken">Cancels the connection and the command.</param>
+    /// <returns>A task that completes once the server holds the folder.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when the server accepts the creation without answering with the folder.</exception>
+    /// <remarks>
+    /// The folder is deliberately never opened, which is what separates this from <see cref="RecreateFolderAsync" />
+    /// and what makes it the one creation a later <see cref="DeleteFolderAsync" /> may be paired with: the remarks on
+    /// that method record why a selected folder cannot be deleted here. Nothing is retired out of the way either, so a
+    /// name the server already holds fails the creation rather than being silently replaced.
+    /// </remarks>
+    internal async Task CreateFolderAsync(string folderName, CancellationToken cancellationToken)
+    {
+        using var client = await this.ConnectAndAuthenticateAsync(cancellationToken);
+
+        var personalNamespace = await client.GetFolderAsync(client.PersonalNamespaces[0].Path, cancellationToken);
+
+        _ = await personalNamespace.CreateAsync(folderName, isMessageFolder: true, cancellationToken)
+            ?? throw new InvalidOperationException(
+                $"The mail server accepted CREATE for '{folderName}' without returning the folder it created.");
+
+        await client.DisconnectAsync(quit: true, cancellationToken);
+    }
+
     /// <summary>Removes one folder from the mailbox, so a test can model a destination somebody deleted.</summary>
     /// <param name="folderName">The folder to remove; it must exist, because a test that removed nothing proves nothing.</param>
     /// <param name="cancellationToken">Cancels the connection and the command.</param>
     /// <returns>A task that completes once the server no longer holds the folder.</returns>
     /// <exception cref="InvalidOperationException">Thrown when the mailbox holds no folder of that name.</exception>
+    /// <remarks>
+    /// Only a folder no session has selected may be removed this way. GreenMail 2.1.11 drops the connection when it
+    /// deletes a folder an earlier session selected, for the reason <see cref="RecreateFolderAsync" /> records at
+    /// length — which is why that method retires a folder by renaming it and why pairing it with this one reaches the
+    /// defect rather than avoiding it. <see cref="CreateFolderAsync" /> is the creation this is paired with.
+    /// </remarks>
     internal async Task DeleteFolderAsync(string folderName, CancellationToken cancellationToken)
     {
         using var client = await this.ConnectAndAuthenticateAsync(cancellationToken);
