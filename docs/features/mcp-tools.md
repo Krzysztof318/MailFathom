@@ -219,9 +219,11 @@ Three parts of it are worth reading before a caller writes against them:
   beside the total size and the encrypted, unverified-signature, and unexpanded-TNEF markers, because MailFathom's
   classification rule does not count an embedded logo or a signature part as an attachment. Without the second count a
   caller could not tell an email carrying a document from one carrying a picture in its signature block.
-- **`contentAvailability` rather than a bare flag.** An email deliberately stored without its MIME because it exceeded the
-  configured size limit reports `exceededSizeLimit`, so a caller sees why a later content read will not succeed instead of
-  discovering it by making the call.
+- **`contentAvailability` rather than a bare flag.** An email deliberately stored without its MIME reports why, so a
+  caller sees that a later content read will not succeed instead of discovering it by making the call — and sees whether
+  that is permanent. `exceededSizeLimit` is an email larger than the configured per-message limit, which every later run
+  will refuse in the same way; `awaitingStorageHeadroom` is one that arrived while local storage stood at its ceiling,
+  whose content a later synchronization run fetches once there is room.
 
 The remote flags carry `wasObserved` beside `observedAt`. Reconciliation has not landed, so every row currently reports
 flags nobody has read, and a caller that ignored the distinction would read "no flag set" where the truth is "nobody has
@@ -326,10 +328,12 @@ Five parts of it are worth reading before a caller writes against them:
   more. A message can exceed a bound in one representation and not in the other, which is why the metadata is not shared
   between them.
 - **`availability` rather than an empty body.** `readable` means the text is the message, and an empty body under it
-  means the message displayed nothing. `encryptedNotReadableLocally` is mail this deployment cannot decrypt, and
-  `notStoredExceededSizeLimit` is mail whose bytes the configured limit deliberately kept out of storage. The last two
-  return an empty text because nothing could be read, and a caller that ignored the distinction would report an empty
-  message.
+  means the message displayed nothing. `encryptedNotReadableLocally` is mail this deployment cannot decrypt,
+  `notStoredExceededSizeLimit` is mail whose bytes the configured size limit deliberately kept out of storage, and
+  `notStoredAwaitingStorageHeadroom` is mail that arrived while local storage stood at its ceiling and whose content a
+  later synchronization run fetches once there is room. The last three return an empty text because nothing could be
+  read, and a caller that ignored the distinction would report an empty message — or would give up on the one state
+  where asking again later actually returns the body.
 - **`attachments` is `null` unless it was asked for, which is not an empty list.** A file name is text the sender chose
   and is often the most identifying string an email carries, so an ordinary read of a body publishes none. `null` means
   the call did not ask; `[]` means the email carries none. `attachmentCounts` answers how many either way, so a caller

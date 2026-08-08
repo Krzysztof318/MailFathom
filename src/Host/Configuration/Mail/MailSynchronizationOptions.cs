@@ -227,6 +227,65 @@ internal sealed class MailSynchronizationOptions
     [Range(1, 1000)]
     public int MaxMetadataBatchesPerRun { get; set; } = 10;
 
+    /// <summary>Gets or sets how many bytes of raw MIME one folder run may fetch before it ends at its checkpoint.</summary>
+    /// <remarks>
+    /// <para>
+    /// The batch settings above bound a run in messages and say nothing about its volume: a thousand occurrences of
+    /// <see cref="MaxRawMimeBytes" /> each is a legal run under them and tens of gigabytes in practice. This is what
+    /// bounds the volume, so a mailbox full of large attachments fills local storage gradually and observably instead
+    /// of in one pass. A run that spends it commits what it stored, ends at the message it reached, reports that it
+    /// stopped for the budget, and the next run resumes from the committed checkpoint.
+    /// </para>
+    /// <para>
+    /// Raise it to backfill faster on a deployment with room; lower it to spread ingestion over more runs. It may not
+    /// be lower than <see cref="MaxRawMimeBytes" />, which would leave a run unable to afford a single large message
+    /// and stop the folder in front of it forever, and startup refuses that combination.
+    /// </para>
+    /// </remarks>
+    [Range(1024, 1099511627776)]
+    public long MaxContentBytesPerRun { get; set; } = 1024L * 1024L * 1024L;
+
+    /// <summary>Gets or sets how much local storage stored mail content may occupy, or nothing for no ceiling.</summary>
+    /// <remarks>
+    /// <para>
+    /// Reaching it degrades ingestion instead of failing it. Occurrences keep being discovered, recorded, and indexed
+    /// from their envelopes, and their payloads are left unstored and marked as awaiting room; a later run with room
+    /// fetches exactly those. Nothing is lost and nothing is duplicated, so raising the ceiling or freeing space is all
+    /// it takes to fill the gap in.
+    /// </para>
+    /// <para>
+    /// It is compared against what PostgreSQL reports the content table occupies — heap, indexes, and the out-of-line
+    /// storage the payloads live in — rather than against the sum of the message sizes, because that is the quantity a
+    /// disk fills with. Space a deletion freed is therefore still counted as occupied until the database reclaims it.
+    /// </para>
+    /// <para>
+    /// There is deliberately no default. No value MailFathom could choose would describe an operator's disk, and one
+    /// guessed too low would stop a healthy deployment from storing mail; leaving it unset means content storage is
+    /// bounded only by the disk, which is what every deployment does until it says otherwise. It may not be lower than
+    /// <see cref="MaxRawMimeBytes" />, which would leave no message storable at all.
+    /// </para>
+    /// </remarks>
+    [Range(1024, long.MaxValue)]
+    public long? MaxStoredContentBytes { get; set; }
+
+    /// <summary>Gets or sets how many bytes of raw MIME every folder work unit together may hold in memory at once.</summary>
+    /// <remarks>
+    /// <para>
+    /// A payload is buffered whole between the fetch that reads it and the commit that stores it, so peak memory is one
+    /// payload per work unit in flight. <see cref="MaxRawMimeBytes" /> bounds one of those and says nothing about their
+    /// sum, which without this bound would make the peak a product of <see cref="MaxConcurrentAccounts" /> and
+    /// <see cref="MaxConcurrentFoldersPerAccount" />: raising either would silently raise the memory ceiling with it.
+    /// </para>
+    /// <para>
+    /// A work unit that cannot reserve its share waits for one that can, so this slows ingestion rather than refusing
+    /// it. It may not be lower than <see cref="MaxRawMimeBytes" />, since a message larger than the whole budget could
+    /// never be admitted, and startup refuses that combination. It is read once at startup, so changing it needs a
+    /// restart.
+    /// </para>
+    /// </remarks>
+    [Range(1024, 4294967296)]
+    public long MaxInFlightRawMimeBytes { get; set; } = 128L * 1024L * 1024L;
+
     /// <summary>Gets or sets how many already-stored emails one folder run re-checks against the mail server.</summary>
     /// <remarks>
     /// It bounds the backward pass that notices a deletion or a flag change, in the same way the batch settings above
@@ -392,6 +451,30 @@ internal sealed class MailSynchronizationOptions
             yield return new ValidationResult(
                 $"The maximum failure backoff {this.MaxFailureBackoff} is shorter than the synchronization interval {this.Interval}, so a failing account would run more often than a healthy one.",
                 [nameof(this.MaxFailureBackoff)]);
+        }
+
+        // Each of the three states the same thing about a different limit: a bound below the size of one message would
+        // make that message unfetchable rather than merely rare, and the folder holding it would stop in front of it on
+        // every run. The size limit is the floor of all three because it is what one message may cost.
+        if (this.MaxContentBytesPerRun < this.MaxRawMimeBytes)
+        {
+            yield return new ValidationResult(
+                $"The per-run content budget of {this.MaxContentBytesPerRun} bytes is below the {this.MaxRawMimeBytes} bytes one message may occupy, so no run could ever fetch a message of that size.",
+                [nameof(this.MaxContentBytesPerRun)]);
+        }
+
+        if (this.MaxStoredContentBytes is { } storageCeiling && storageCeiling < this.MaxRawMimeBytes)
+        {
+            yield return new ValidationResult(
+                $"The stored content ceiling of {storageCeiling} bytes is below the {this.MaxRawMimeBytes} bytes one message may occupy, so no message could ever be stored.",
+                [nameof(this.MaxStoredContentBytes)]);
+        }
+
+        if (this.MaxInFlightRawMimeBytes < this.MaxRawMimeBytes)
+        {
+            yield return new ValidationResult(
+                $"The in-flight content budget of {this.MaxInFlightRawMimeBytes} bytes is below the {this.MaxRawMimeBytes} bytes one message may occupy, so a work unit fetching a message of that size would wait for room that can never exist.",
+                [nameof(this.MaxInFlightRawMimeBytes)]);
         }
 
         if (this.Accounts is null)

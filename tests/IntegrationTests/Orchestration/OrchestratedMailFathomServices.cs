@@ -4,6 +4,7 @@
 
 using MailFathom.AI;
 using MailFathom.Application.EmailContent;
+using MailFathom.Application.EmailContent.Storage;
 using MailFathom.Application.Emails.Embeddings.Backfill;
 using MailFathom.Application.Emails.Embeddings.Generation;
 using MailFathom.Application.Emails.Embeddings.Limits;
@@ -126,6 +127,9 @@ internal sealed class OrchestratedMailFathomServices : IAsyncDisposable
         // Registered by the composition root rather than by AddInfrastructure, so the write-connection pool would fail
         // to resolve here for the same reason every bound setting above is supplied: the suite does not start the host.
         builder.Services.AddSingleton(new MailboxWriteSessionOptions());
+        // The process-wide buffer bound, registered by the composition root for the same reason. It is generous here
+        // because the suite runs one work unit at a time and nothing it asserts is about waiting for the budget.
+        builder.Services.AddSingleton(new RawMimeMemoryBudget(64L * 1024L * 1024L));
         builder.Services.AddSingleton(new MailboxMutationOptions());
         builder.Services.AddSingleton(new MailboxConvergenceOptions());
         builder.Services.AddSingleton(new PersistenceConcurrencyOptions { MaximumCommitAttempts = 3 });

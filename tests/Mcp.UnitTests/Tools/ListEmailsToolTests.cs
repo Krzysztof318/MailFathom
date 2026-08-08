@@ -389,6 +389,30 @@ public sealed class ListEmailsToolTests
         Assert.True(published.RemoteFlags.WasObserved);
     }
 
+    /// <summary>An email waiting for storage room is published as waiting, rather than ending the listing.</summary>
+    /// <remarks>
+    /// The mapping refuses a stored state it has no wire value for, which is the right refusal for a value nobody
+    /// decided how to publish and the wrong thing to happen to a whole page of mail. This is what proves the decision
+    /// was made.
+    /// </remarks>
+    [Fact]
+    public async Task ListEmailsAsync_EmailAwaitingStorageHeadroom_PublishesThatItsContentIsNotStoredYet()
+    {
+        // Arrange
+        var summary = SummaryReceivedAt(null) with
+        {
+            ContentAvailability = StoredEmailContentAvailability.AwaitingStorageHeadroom,
+        };
+        var tool = ToolOver(new StubStoredEmailTimelineReader(summary));
+
+        // Act
+        var result = await tool.ListEmailsAsync(cancellationToken: TestContext.Current.CancellationToken);
+
+        // Assert
+        var published = Assert.Single(result.Emails);
+        Assert.Equal(ListedEmailContentAvailability.AwaitingStorageHeadroom, published.ContentAvailability);
+    }
+
     /// <summary>Flags nobody has read are published as such, so a caller cannot read them as a server reporting no flag set.</summary>
     [Fact]
     public async Task ListEmailsAsync_EmailWhoseFlagsWereNeverObserved_PublishesThatNobodyHasLooked()

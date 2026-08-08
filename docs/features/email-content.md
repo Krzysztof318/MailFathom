@@ -165,6 +165,7 @@ discipline, and a unit test asserts it.
 | `Readable` | The body was read; an empty one means the message displayed nothing |
 | `EncryptedNotReadableLocally` | The body arrived inside a cryptographic envelope and nothing here can read it |
 | `NotStoredExceededSizeLimit` | The raw MIME exceeded `MailSynchronization:MaxRawMimeBytes`, so it was never stored |
+| `NotStoredAwaitingStorageHeadroom` | Local content storage was at `MailSynchronization:MaxStoredContentBytes` when the message arrived, so its content is not stored yet |
 
 An encrypted body is a state rather than an empty string, because merging the two would make mail this deployment holds
 and cannot decrypt indistinguishable from mail that genuinely said nothing. Decrypting it is out of scope and is tracked
@@ -181,11 +182,17 @@ emails named before it spent the budget — and reporting that as the encrypted 
 never be read locally when naming it alone returns the readable alternative in full. It stays readable, with
 `readCharacterBudget` saying what cut it.
 
-`NotStoredExceededSizeLimit` is not a defect and schedules no repair: synchronization recorded the occurrence and
-deliberately stored no content for it, and asking for repair would ask a later run to store what the same limit refuses
-again. Everything answerable is still answered — the headers from the stored row, the attachment counts from the summary
-written when the occurrence was recorded — and only the per-attachment list is absent, because nothing local can derive
-it.
+Neither of the two unstored states is a defect and neither schedules a repair: synchronization recorded the occurrence
+and deliberately stored no content for it, so asking for repair would ask a later run to store what it already decided
+not to. Everything answerable is still answered — the headers from the stored row, the attachment counts from the
+summary written when the occurrence was recorded — and only the per-attachment list is absent, because nothing local can
+derive it.
+
+What separates them is whether asking again is worth anything. `NotStoredExceededSizeLimit` is permanent: the same limit
+refuses the same message on every run. `NotStoredAwaitingStorageHeadroom` is a queue — the message was discovered while
+content storage stood at its ceiling, and the [refill pass](imap-synchronization.md#the-storage-ceiling-degrades-ingestion-rather-than-failing-it)
+of a later run fetches it as soon as there is room, after which this same read returns the body. A caller that collapses
+the two would either give up on mail that is arriving or keep asking about mail that never will.
 
 Plain text is the default representation and is always present, empty in each of the states where nothing could be read.
 A genuine `text/plain` part wins over every HTML alternative; HTML is read only when the message offered no plain-text

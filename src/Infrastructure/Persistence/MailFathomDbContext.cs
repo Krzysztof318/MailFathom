@@ -39,6 +39,8 @@ internal sealed class MailFathomDbContext : DbContext
 
     internal const string StoredEmailReconciliationQueueIndexName = "ix_stored_emails_reconciliation_queue";
 
+    internal const string StoredEmailAwaitingContentIndexName = "ix_stored_emails_awaiting_content";
+
     internal const string StoredEmailSenderIndexName = "ix_stored_emails_sender";
 
     internal const string StoredEmailToAddressesIndexName = "ix_stored_emails_to_addresses";
@@ -748,6 +750,22 @@ internal sealed class MailFathomDbContext : DbContext
         entity.HasIndex(email => new { email.MailFolderId, email.RemoteFlagsObservedAt, email.Uid })
             .HasDatabaseName(StoredEmailReconciliationQueueIndexName)
             .HasFilter($"\"{nameof(StoredEmailEntity.RemoteExpungeObservedAt)}\" IS NULL");
+
+        // The queue of occurrences recorded without their payload, read once per folder run and almost always empty.
+        // The filter is what makes that read cost nothing on a deployment that has never reached its storage ceiling:
+        // without it the query would walk a folder's whole occurrence index to discover that none of its rows qualify,
+        // on every run of every folder. It is keyed by folder and UID because the pass fetches within one open folder
+        // and asks in UID order, which is the order the mailbox itself is walked in.
+        // The model name is given explicitly because an index is identified in the model by the properties it covers,
+        // and these are the same three the unique occurrence index above covers. Without a name of its own this
+        // declaration would reconfigure that index rather than add one — which generates a migration that drops the
+        // constraint holding occurrence identity unique and replaces it with a filtered index.
+        entity.HasIndex(
+                email => new { email.MailFolderId, email.UidValidity, email.Uid },
+                StoredEmailAwaitingContentIndexName)
+            .HasDatabaseName(StoredEmailAwaitingContentIndexName)
+            .HasFilter(
+                $"\"{nameof(StoredEmailEntity.ContentAvailability)}\" = '{nameof(StoredEmailContentAvailability.AwaitingStorageHeadroom)}'");
 
         entity.HasIndex(email => email.SenderNormalizedAddress)
             .HasDatabaseName(StoredEmailSenderIndexName);

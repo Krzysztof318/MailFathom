@@ -48,6 +48,81 @@ public sealed class MailSynchronizationOptionsTests
         Assert.Contains("At least one account", result.ErrorMessage, StringComparison.Ordinal);
     }
 
+    /// <summary>A run budget below what one message may cost leaves that message unfetchable on every later run too.</summary>
+    /// <remarks>
+    /// The folder would stop in front of it permanently rather than occasionally, so this is refused at startup instead
+    /// of being discovered as a checkpoint that never advances.
+    /// </remarks>
+    [Fact]
+    public void ValidateForSynchronization_PerRunContentBudgetBelowTheMessageSizeLimit_IsRejected()
+    {
+        // Arrange
+        var options = new MailSynchronizationOptions
+        {
+            MaxRawMimeBytes = 25L * 1024L * 1024L,
+            MaxContentBytesPerRun = 1024L * 1024L,
+        };
+
+        // Act
+        var results = options.ValidateForSynchronization().ToArray();
+
+        // Assert
+        var result = Assert.Single(results);
+        Assert.Contains("per-run content budget", result.ErrorMessage, StringComparison.Ordinal);
+    }
+
+    /// <summary>A storage ceiling that cannot hold one message would leave nothing storable at all.</summary>
+    [Fact]
+    public void ValidateForSynchronization_StoredContentCeilingBelowTheMessageSizeLimit_IsRejected()
+    {
+        // Arrange
+        var options = new MailSynchronizationOptions
+        {
+            MaxRawMimeBytes = 25L * 1024L * 1024L,
+            MaxStoredContentBytes = 1024L * 1024L,
+        };
+
+        // Act
+        var results = options.ValidateForSynchronization().ToArray();
+
+        // Assert
+        var result = Assert.Single(results);
+        Assert.Contains("stored content ceiling", result.ErrorMessage, StringComparison.Ordinal);
+    }
+
+    /// <summary>An in-flight budget smaller than one message is a wait for room that can never exist.</summary>
+    [Fact]
+    public void ValidateForSynchronization_InFlightContentBudgetBelowTheMessageSizeLimit_IsRejected()
+    {
+        // Arrange
+        var options = new MailSynchronizationOptions
+        {
+            MaxRawMimeBytes = 25L * 1024L * 1024L,
+            MaxInFlightRawMimeBytes = 1024L * 1024L,
+        };
+
+        // Act
+        var results = options.ValidateForSynchronization().ToArray();
+
+        // Assert
+        var result = Assert.Single(results);
+        Assert.Contains("in-flight content budget", result.ErrorMessage, StringComparison.Ordinal);
+    }
+
+    /// <summary>No ceiling is the default, and it is a configuration rather than an omission to complain about.</summary>
+    [Fact]
+    public void ValidateForSynchronization_NoStoredContentCeilingConfigured_ReportsNoError()
+    {
+        // Arrange
+        var options = new MailSynchronizationOptions { MaxStoredContentBytes = null };
+
+        // Act
+        var results = options.ValidateForSynchronization().ToArray();
+
+        // Assert
+        Assert.Empty(results);
+    }
+
     /// <summary>A ceiling below the interval would defer a failing account by less than a healthy one waits.</summary>
     [Fact]
     public void ValidateForSynchronization_FailureBackoffCeilingBelowTheInterval_IsRejected()

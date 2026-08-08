@@ -87,13 +87,23 @@ public interface IMailboxSession : IAsyncDisposable
     /// <param name="occurrenceId">The occurrence to fetch, which must belong to this session's account, folder, and UIDVALIDITY.</param>
     /// <param name="maxRawMimeBytes">The size beyond which the payload is abandoned rather than buffered.</param>
     /// <param name="cancellationToken">Cancels the fetch and every remaining attempt.</param>
-    /// <returns>The raw MIME content of the occurrence, or the statement that it exceeded <paramref name="maxRawMimeBytes" />.</returns>
+    /// <returns>
+    /// The raw MIME content of the occurrence, the statement that it exceeded <paramref name="maxRawMimeBytes" />, or
+    /// the statement that the folder no longer holds it.
+    /// </returns>
     /// <exception cref="MailboxUnavailableException">Thrown when the mail server did not serve the fetch within its configured resilience budget.</exception>
     /// <exception cref="MailboxFolderRecreatedException">Thrown when a recovered connection reselected the folder with a different UIDVALIDITY.</exception>
     /// <remarks>
+    /// <para>
     /// An oversized payload is a result rather than a failure, because a caller records the occurrence and steps over it
     /// instead of stopping the run. The preservation guarantee holds on every attempt: an implementation that recovers a
     /// lost connection must reselect the folder read-only before it fetches again.
+    /// </para>
+    /// <para>
+    /// So is an occurrence the folder has stopped holding. A message can leave between the moment a run learned of it
+    /// and the moment its body is asked for, and every later attempt would receive the same answer, so an implementation
+    /// reports it rather than failing the caller's whole run on a message that no longer exists.
+    /// </para>
     /// </remarks>
     Task<RemoteEmailContentFetchResult> FetchEmailContentWithoutSettingSeenAsync(
         EmailOccurrenceId occurrenceId,

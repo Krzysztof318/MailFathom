@@ -19,4 +19,11 @@ internal enum ListedEmailContentAvailability
 
     /// <summary>The email was deliberately stored without its content because it exceeded the configured size limit.</summary>
     ExceededSizeLimit = 1,
+
+    /// <summary>The email was stored without its content because local storage was at its ceiling, and it is fetched once there is room.</summary>
+    /// <remarks>
+    /// A caller reading it is told a different thing from the state above: the content is absent for now rather than for
+    /// good, so asking again later is worth doing where asking again about an oversized message never is.
+    /// </remarks>
+    AwaitingStorageHeadroom = 2,
 }

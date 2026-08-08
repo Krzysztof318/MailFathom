@@ -3,6 +3,7 @@ using System;
 using MailFathom.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using NpgsqlTypes;
@@ -13,9 +14,11 @@ using Pgvector;
 namespace MailFathom.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(MailFathomDbContext))]
-    partial class MailFathomDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260808145001_AddStoredEmailAwaitingContentIndex")]
+    partial class AddStoredEmailAwaitingContentIndex
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -271,27 +274,7 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                         .IsUnique()
                         .HasDatabaseName("ix_embedding_profiles_identity_fingerprint");
 
-                    b.HasIndex("LifecycleState")
-                        .IsUnique()
-                        .HasDatabaseName("ix_embedding_profiles_lifecycle_state")
-                        .HasFilter("\"LifecycleState\" IN ('Building', 'Active')");
-
                     b.ToTable("embedding_profiles", (string)null);
-                });
-
-            modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.EmbeddingSpendPeriodEntity", b =>
-                {
-                    b.Property<DateTimeOffset>("PeriodStartsAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("PeriodStartsAt");
-
-                    b.Property<long>("ConsumedInputCharacterCount")
-                        .HasColumnType("bigint")
-                        .HasColumnName("ConsumedInputCharacterCount");
-
-                    b.HasKey("PeriodStartsAt");
-
-                    b.ToTable("embedding_spend_periods", (string)null);
                 });
 
             modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.MailFolderEntity", b =>
@@ -589,9 +572,6 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                     b.PrimitiveCollection<string[]>("CcAddresses")
                         .IsRequired()
                         .HasColumnType("text[]");
-
-                    b.Property<int?>("ChunkedTextTruncatedFromCharacterCount")
-                        .HasColumnType("integer");
 
                     b.Property<uint>("ConcurrencyVersion")
                         .IsConcurrencyToken()

@@ -22,4 +22,7 @@ internal enum EmailBodyAvailabilityState
 
     /// <summary>The message exceeded the configured size limit, so its content was never stored locally.</summary>
     NotStoredExceededSizeLimit = 2,
+
+    /// <summary>Local content storage was at its ceiling when the message arrived, so its content is not stored yet.</summary>
+    NotStoredAwaitingStorageHeadroom = 3,
 }

@@ -95,6 +95,10 @@ internal static class SynchronizationTestHost
         services.AddSingleton(Substitute.For<IPersistenceSessionFactory>());
         services.AddSingleton(Substitute.For<IEmailMetadataRepository>());
         services.AddSingleton(Substitute.For<IEmailContentStore>());
+        services.AddSingleton(Substitute.For<IStoredEmailContentInventory>());
+        // Bounded generously, so no test here waits on a budget it never meant to exercise: what these tests are about
+        // is the supervisor's scheduling and failure isolation, and the budget itself is asserted where it lives.
+        services.AddSingleton(new RawMimeMemoryBudget(long.MaxValue));
         services.AddSingleton(CreateMimeReaderThatExtractsEverything());
         services.AddSingleton(CreateReconciliationStoreWithNothingToDo());
         services.AddSingleton(CreateMutationStoreWithNothingRecorded());
@@ -122,6 +126,7 @@ internal static class SynchronizationTestHost
         services.AddSingleton(new MailboxConvergenceOptions());
         services.AddSingleton(Substitute.For<IMailboxWriteSessionFactory>());
         services.AddSingleton<MailboxConvergenceTelemetry>();
+        services.AddSingleton<MailboxContentVolumeTelemetry>();
         services.AddScoped<IMailboxMutationPerformer, MailboxMutationPerformer>();
         services.AddScoped<MailboxMutationConverger>();
 

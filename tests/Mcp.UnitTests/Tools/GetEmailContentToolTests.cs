@@ -268,6 +268,30 @@ public sealed class GetEmailContentToolTests
         Assert.Equal(0, contentStore.ReadCount);
     }
 
+    /// <summary>An email whose content storage had no room yet reports a state a caller can come back to.</summary>
+    [Fact]
+    public async Task GetEmailContentAsync_EmailAwaitingStorageHeadroom_PublishesThatItsContentIsNotStoredYet()
+    {
+        // Arrange
+        var contentStore = new StubEmailContentStore(IntactContent());
+        var tool = ToolOver(
+            new StubStoredEmailSummaryReader(
+                SummaryOf(contentAvailability: StoredEmailContentAvailability.AwaitingStorageHeadroom)),
+            contentStore: contentStore);
+
+        // Act
+        var result = await tool.GetEmailContentAsync(
+            [Guid.CreateVersion7().ToString()],
+            includeAttachmentDetails: true,
+            cancellationToken: TestContext.Current.CancellationToken);
+
+        // Assert
+        var content = ContentOf(Assert.Single(result.Emails));
+        Assert.Equal(EmailBodyAvailabilityState.NotStoredAwaitingStorageHeadroom, content.Body.Availability);
+        Assert.Empty(content.Body.PlainText.Text);
+        Assert.Equal(0, contentStore.ReadCount);
+    }
+
     /// <summary>A file name is sender-chosen mail content, so an ordinary read is told how many attachments there are and not what they are called.</summary>
     [Fact]
     public async Task GetEmailContentAsync_AttachmentDetailsNotRequested_PublishesTheCountsAndNoAttachmentList()

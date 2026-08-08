@@ -6,9 +6,10 @@ namespace MailFathom.Application.EmailContent.Rendering;
 
 /// <summary>States whether a reader was given the message body, or why it could not be.</summary>
 /// <remarks>
-/// The two unreadable cases stay apart because a caller acts on them differently and neither is an empty message. One
-/// is mail this deployment holds and cannot decrypt, the other is mail whose bytes were deliberately never stored, and
-/// only the second can be changed by configuration.
+/// The three unreadable cases stay apart because a caller acts on each differently and none of them is an empty
+/// message. One is mail this deployment holds and cannot decrypt; one is mail whose bytes a configured limit will
+/// refuse on every run, so asking again is pointless; and one is mail whose bytes are simply not stored yet, so asking
+/// again once storage has room is exactly the right thing to do.
 /// </remarks>
 public enum EmailBodyAvailability
 {
@@ -25,6 +26,13 @@ public enum EmailBodyAvailability
     /// content for it, and requesting repair would ask a later run to store what the same limit will refuse again.
     /// </remarks>
     NotStoredExceededSizeLimit = 2,
+
+    /// <summary>Local content storage was at its configured ceiling when the message arrived, so its content is not stored yet.</summary>
+    /// <remarks>
+    /// This is not a defect and schedules no repair either, and unlike the state above it is temporary: a later
+    /// synchronization run fetches the content as soon as the ceiling has room, and the same read then returns the body.
+    /// </remarks>
+    NotStoredAwaitingStorageHeadroom = 3,
 }
 
 /// <summary>Carries the body representations a reader receives, or the reason there are none.</summary>
@@ -63,6 +71,12 @@ public sealed record EmailContentBody
     /// <summary>Gets the body of a message whose raw MIME exceeded the size limit and was never stored.</summary>
     public static EmailContentBody NotStoredExceededSizeLimit { get; } = new(
         EmailBodyAvailability.NotStoredExceededSizeLimit,
+        EmailBodyRepresentation.Empty,
+        sanitizedHtml: null);
+
+    /// <summary>Gets the body of a message whose content storage had no room for it yet.</summary>
+    public static EmailContentBody NotStoredAwaitingStorageHeadroom { get; } = new(
+        EmailBodyAvailability.NotStoredAwaitingStorageHeadroom,
         EmailBodyRepresentation.Empty,
         sanitizedHtml: null);
 

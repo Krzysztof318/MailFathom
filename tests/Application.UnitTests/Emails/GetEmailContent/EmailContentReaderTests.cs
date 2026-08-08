@@ -417,6 +417,40 @@ public sealed class EmailContentReaderTests
         await contentStore.DidNotReceive().FindStoredContentAsync(Arg.Any<StoredEmailId>(), Arg.Any<CancellationToken>());
     }
 
+    /// <summary>Mail waiting for storage room reports that it is waiting, rather than reading as a damaged local copy.</summary>
+    /// <remarks>
+    /// Both halves matter. Recording a repair request would put a deliberate gap into the queue of copies that need
+    /// re-fetching, and reporting the size-limit state would tell a caller that asking again is pointless when a later
+    /// run is going to fetch exactly this message.
+    /// </remarks>
+    [Fact]
+    public async Task ReadContentAsync_ContentNotStoredWhileStorageWasFull_ReportsItAsWaitingAndRequestsNoRepair()
+    {
+        // Arrange
+        var summary = SyntheticEmailSummaries.Create(
+            subject: "Quarterly report",
+            senderAddress: "sender@example.test",
+            toAddresses: ["recipient@example.test"]) with
+        {
+            ContentAvailability = StoredEmailContentAvailability.AwaitingStorageHeadroom,
+        };
+        var repairRequests = new RecordingEmailContentRepairRequestStore();
+        var contentStore = Substitute.For<IEmailContentStore>();
+        var reader = ReaderOver(summary, RendererReturning(RenderingOf()), repairRequests, contentStore);
+
+        // Act
+        var result = await reader.ReadContentAsync(
+            RequestFor([summary.StoredEmailId], includeAttachmentDetails: true),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        var content = ContentOf(Assert.Single(result.Emails));
+        Assert.Equal(EmailBodyAvailability.NotStoredAwaitingStorageHeadroom, content.Body.Availability);
+        Assert.Equal("Quarterly report", content.Headers.Subject);
+        Assert.Empty(repairRequests.Recorded);
+        await contentStore.DidNotReceive().FindStoredContentAsync(Arg.Any<StoredEmailId>(), Arg.Any<CancellationToken>());
+    }
+
     [Fact]
     public async Task ReadContentAsync_UnknownEmail_ReportsItAsNotFoundRatherThanRaising()
     {

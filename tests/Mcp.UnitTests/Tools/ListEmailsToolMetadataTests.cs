@@ -148,7 +148,7 @@ public sealed class ListEmailsToolMetadataTests
         var advertisedValues = AdvertisedEnumValues(outputSchema.Value, "contentAvailability");
 
         // Assert
-        Assert.Equal(["available", "exceededSizeLimit"], advertisedValues);
+        Assert.Equal(["available", "exceededSizeLimit", "awaitingStorageHeadroom"], advertisedValues);
     }
 
     [Fact]

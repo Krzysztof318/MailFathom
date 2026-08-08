@@ -7,6 +7,7 @@ using MailFathom.AI.Providers;
 using MailFathom.Application.Accounts;
 using MailFathom.Application.AiProviders;
 using MailFathom.Application.EmailContent;
+using MailFathom.Application.EmailContent.Storage;
 using MailFathom.Application.Emails.Embeddings.Backfill;
 using MailFathom.Application.Emails.Embeddings.Generation;
 using MailFathom.Application.Emails.Embeddings.Limits;
@@ -246,8 +247,15 @@ try
             MaxRawMimeBytes = synchronizationSettings.MaxRawMimeBytes,
             MaxMetadataBatchesPerRun = synchronizationSettings.MaxMetadataBatchesPerRun,
             MaxReconciledEmailsPerRun = synchronizationSettings.MaxReconciledEmailsPerRun,
+            MaxContentBytesPerRun = synchronizationSettings.MaxContentBytesPerRun,
+            MaxStoredContentBytes = synchronizationSettings.MaxStoredContentBytes,
         };
     });
+    // A singleton, because what it bounds is the memory of the whole process rather than of any one run: a budget read
+    // per scope would give every concurrent work unit a budget of its own, which is the sum this exists to bound. That
+    // is also why the capacity is read once at startup, which the configuration reference marks as needing a restart.
+    builder.Services.AddSingleton(provider => new RawMimeMemoryBudget(
+        provider.GetRequiredService<ISettingsSnapshot<MailSynchronizationOptions>>().Current.MaxInFlightRawMimeBytes));
     builder.Services.AddScoped(provider =>
     {
         var synchronizationSettings = provider.GetRequiredService<MailSynchronizationOptions>();

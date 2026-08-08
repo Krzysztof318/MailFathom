@@ -133,9 +133,11 @@ public sealed class EmailContentReader
             return EmailContentReadOutcome.NotFound(storedEmailId);
         }
 
-        if (summary.ContentAvailability is StoredEmailContentAvailability.ExceededSizeLimit)
+        // Both states are content synchronization deliberately did not store, so neither is a damaged local copy and
+        // neither schedules a repair. They are answered apart because only one of them is worth asking about again.
+        if (BodyOfUnstoredContent(summary.ContentAvailability) is { } unstoredBody)
         {
-            return EmailContentReadOutcome.Read(ContentWithoutStoredMime(summary, request));
+            return EmailContentReadOutcome.Read(ContentWithoutStoredMime(summary, request, unstoredBody));
         }
 
         var content = await this.contentStore.FindStoredContentAsync(storedEmailId, cancellationToken);
@@ -243,9 +245,23 @@ public sealed class EmailContentReader
     /// content being unread rather than about it carrying no files, which the absent counts beside it state.
     /// </para>
     /// </remarks>
+    /// <summary>Names the body to report for an occurrence whose content was never stored, or nothing when it was.</summary>
+    /// <remarks>
+    /// A row recorded as available and holding no content is a different thing entirely — that is a local copy that has
+    /// gone missing, and the caller below answers it with a repair request rather than with a body state.
+    /// </remarks>
+    private static EmailContentBody? BodyOfUnstoredContent(StoredEmailContentAvailability availability) =>
+        availability switch
+        {
+            StoredEmailContentAvailability.ExceededSizeLimit => EmailContentBody.NotStoredExceededSizeLimit,
+            StoredEmailContentAvailability.AwaitingStorageHeadroom => EmailContentBody.NotStoredAwaitingStorageHeadroom,
+            _ => null,
+        };
+
     private static ReadEmailContent ContentWithoutStoredMime(
         EmailSummary summary,
-        GetEmailContentRequest request)
+        GetEmailContentRequest request,
+        EmailContentBody body)
     {
         return new ReadEmailContent
         {
@@ -254,7 +270,7 @@ public sealed class EmailContentReader
             FolderAlias = summary.FolderAlias,
             SizeOctets = summary.SizeOctets,
             Headers = HeadersFrom(summary),
-            Body = EmailContentBody.NotStoredExceededSizeLimit,
+            Body = body,
             AttachmentSummary = null,
             Attachments = request.IncludeAttachmentDetails ? [] : null,
             RemoteFlags = summary.RemoteFlags,

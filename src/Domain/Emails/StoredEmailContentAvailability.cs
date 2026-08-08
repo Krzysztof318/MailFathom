@@ -17,4 +17,16 @@ public enum StoredEmailContentAvailability
 
     /// <summary>Raw MIME content was deliberately not stored because the email exceeded the configured size limit.</summary>
     ExceededSizeLimit = 1,
+
+    /// <summary>
+    /// Raw MIME content was deliberately not stored because local content storage had reached its configured ceiling,
+    /// and is fetched once that ceiling has headroom again.
+    /// </summary>
+    /// <remarks>
+    /// It stays distinct from <see cref="ExceededSizeLimit" /> because the two have opposite futures. An email above the
+    /// size limit will exceed it on every later run, so nothing is waiting for it; an email recorded here is one whose
+    /// payload the mailbox would have served, and a later run fetches it as soon as the ceiling permits. Collapsing them
+    /// would leave a queue that nothing could tell apart from a permanent gap.
+    /// </remarks>
+    AwaitingStorageHeadroom = 2,
 }

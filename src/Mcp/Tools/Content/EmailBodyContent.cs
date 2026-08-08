@@ -23,7 +23,7 @@ namespace MailFathom.Mcp.Tools.Content;
 internal sealed record EmailBodyContent
 {
     /// <summary>Gets whether the body could be read, or why it could not.</summary>
-    [Description("Whether the body could be read: 'readable' when the text below is the message, 'encryptedNotReadableLocally' when the body arrived inside a cryptographic envelope MailFathom cannot open, or 'notStoredExceededSizeLimit' when the email was deliberately stored without its content. In the two latter states the text is empty because nothing could be read, not because the message displayed nothing.")]
+    [Description("Whether the body could be read: 'readable' when the text below is the message, 'encryptedNotReadableLocally' when the body arrived inside a cryptographic envelope MailFathom cannot open, 'notStoredExceededSizeLimit' when the email was deliberately stored without its content because it is larger than the configured limit, or 'notStoredAwaitingStorageHeadroom' when local storage was full when the email arrived and its content is fetched once there is room. In the three latter states the text is empty because nothing could be read, not because the message displayed nothing; only the last of them is worth asking about again later.")]
     public required EmailBodyAvailabilityState Availability { get; init; }
 
     /// <summary>Gets the plain-text representation, which is empty whenever the body could not be read.</summary>
@@ -61,6 +61,7 @@ internal sealed record EmailBodyContent
             EmailBodyAvailability.Readable => EmailBodyAvailabilityState.Readable,
             EmailBodyAvailability.EncryptedNotReadableLocally => EmailBodyAvailabilityState.EncryptedNotReadableLocally,
             EmailBodyAvailability.NotStoredExceededSizeLimit => EmailBodyAvailabilityState.NotStoredExceededSizeLimit,
+            EmailBodyAvailability.NotStoredAwaitingStorageHeadroom => EmailBodyAvailabilityState.NotStoredAwaitingStorageHeadroom,
             _ => throw new ArgumentOutOfRangeException(
                 nameof(availability),
                 availability,

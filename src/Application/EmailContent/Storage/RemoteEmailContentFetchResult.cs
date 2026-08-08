@@ -15,6 +15,15 @@ public enum RemoteEmailContentFetchOutcome
 
     /// <summary>The payload grew past the configured limit while it was being read, so the fetch was abandoned.</summary>
     ExceededSizeLimit = 1,
+
+    /// <summary>The folder no longer holds the occurrence, so there was no payload to fetch.</summary>
+    /// <remarks>
+    /// A message can leave its folder between the moment a run learned of it and the moment it asks for the body, and a
+    /// run that asks for content it deferred earlier is asking about a message it last saw runs ago. Neither is a
+    /// failure of the mail server or of the session, so the caller steps over the occurrence and lets the backward pass
+    /// settle what became of it, rather than the folder's whole run ending on it.
+    /// </remarks>
+    NoLongerHeld = 2,
 }
 
 /// <summary>Carries the raw MIME a fetch returned, or the reason none was returned.</summary>
@@ -57,4 +66,9 @@ public sealed record RemoteEmailContentFetchResult
     /// <returns>A size-limit result.</returns>
     public static RemoteEmailContentFetchResult ExceededSizeLimit() =>
         new(RemoteEmailContentFetchOutcome.ExceededSizeLimit, content: null);
+
+    /// <summary>Reports an occurrence the folder no longer holds.</summary>
+    /// <returns>A no-longer-held result.</returns>
+    public static RemoteEmailContentFetchResult NoLongerHeld() =>
+        new(RemoteEmailContentFetchOutcome.NoLongerHeld, content: null);
 }
