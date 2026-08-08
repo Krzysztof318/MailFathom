@@ -383,6 +383,7 @@ try
             ?? throw new InvalidOperationException(
                 "The chat endpoint was declared at registration and is absent from the validated configuration."));
         builder.Services.AddChatProviderAdapter();
+        builder.Services.AddMailAnsweringAgent();
         // Readiness alone, and never worse than degraded. Neither provider serves a request path, so a failing one must
         // not take the instance out of traffic and must never reach the liveness probe: restarting the process cannot
         // fix a provider and would turn one outage into an outage plus a restart loop. The registration says all of

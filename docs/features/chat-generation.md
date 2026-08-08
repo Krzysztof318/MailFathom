@@ -17,7 +17,8 @@ reported on independently. That is deliberate, because the states they produce a
 
 - **No embedding provider.** Semantic search is off and lexical search continues. [Embedding
   generation](embedding-generation.md) describes that half.
-- **No chat provider.** Search is unaffected, and only the answering capability stops being offered.
+- **No chat provider.** Search is unaffected, and only the answering capability stops being offered. [Mail
+  answering](mail-answering.md) describes what that capability is composed of.
 
 An instance may reasonably have one and not the other, so a single "AI is configured" flag would be wrong in both
 directions. Writing neither section is a supported deployment: nothing is generated, no provider is called, no

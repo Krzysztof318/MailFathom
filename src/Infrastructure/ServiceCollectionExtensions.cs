@@ -23,6 +23,7 @@ using MailFathom.Application.Mail.Mutations;
 using MailFathom.Application.Mail.Mutations.Convergence;
 using MailFathom.Application.Persistence;
 using MailFathom.Application.Resilience;
+using MailFathom.Application.Retrieval;
 using MailFathom.Application.Synchronization;
 using MailFathom.Application.Synchronization.Checkpoints;
 using MailFathom.Application.Synchronization.Reconciliation;
@@ -268,6 +269,11 @@ public static class ServiceCollectionExtensions
         services.AddScoped<MailboxTimelineReader>();
         services.AddScoped<EmailContentReader>();
         services.AddScoped<MailboxSearchReader>();
+        // Registered for every deployment rather than only where a chat endpoint was declared, because what it is is a
+        // reading of the search above: an instance that answers no questions simply resolves it and never calls it, and
+        // the bounds it hands passages over under are the same wherever the retrieval is reached from.
+        services.AddSingleton(EmailKnowledgeBounds.Default);
+        services.AddScoped<IEmailKnowledgeSearch, MailboxKnowledgeSearch>();
         // The cache outlives every scope because a token is valid for whichever work unit next needs the account,
         // while the source that fills it is scoped to the configuration snapshot it resolves settings from.
         services.AddSingleton<MailAccessTokenCache>();

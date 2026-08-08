@@ -15,9 +15,9 @@ namespace MailFathom.AI.ProviderAdapters;
 /// <summary>Produces answers by calling the declared chat endpoint.</summary>
 /// <remarks>
 /// <para>
-/// The only type in this system that speaks to a chat provider. Everything provider-specific stops here: the client
-/// library, its options, its exceptions, and the two authentication shapes are all confined to this namespace, so a
-/// second provider is a new endpoint declaration rather than a change anywhere above.
+/// The whole of the single-request path to a chat provider. Everything provider-specific stops in this namespace: the
+/// client library, its options, its exceptions, and the two authentication shapes, so a second provider is a new
+/// endpoint declaration rather than a change anywhere above.
 /// </para>
 /// <para>
 /// It composes nothing. The conversation arrives built, the model and its parameters arrive validated in the plan, and

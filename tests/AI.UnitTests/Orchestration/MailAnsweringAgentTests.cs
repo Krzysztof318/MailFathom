@@ -1,0 +1,178 @@
+// Copyright © 2026 Krzysztof Kasprowicz
+// Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
+// Project repository: https://github.com/Krzysztof318/MailFathom
+
+using System.Net;
+using System.Text;
+using MailFathom.AI.Orchestration;
+using MailFathom.AI.ProviderAdapters;
+using MailFathom.AI.Providers;
+using MailFathom.AI.UnitTests.TestDoubles;
+using MailFathom.Application.AiProviders;
+using MailFathom.Application.Chat;
+using MailFathom.Application.Emails.Mailboxes;
+using MailFathom.Application.Resilience;
+using MailFathom.Application.Retrieval;
+using MailFathom.Domain.Accounts;
+using MailFathom.TestSupport;
+using Microsoft.Extensions.Logging.Abstractions;
+using NSubstitute;
+using Xunit;
+
+namespace MailFathom.AI.UnitTests.Orchestration;
+
+/// <summary>Covers what one answering run does around the composed agent: what it bounds, what it opens, and what it publishes.</summary>
+/// <remarks>
+/// The run goes over a real provider client and a scripted transport, so what is exercised is the client construction,
+/// the credential resolution, and the mapping of a provider's answer. What the agent itself is composed of is proved
+/// against a substituted chat client instead, where the tool loop can be driven directly.
+/// </remarks>
+public sealed class MailAnsweringAgentTests
+{
+    private static readonly MailQuestion Question = new(
+        "was the invoice attached",
+        MailboxScope.Create([MailAccountId.Create("primary")], []));
+
+    [Fact]
+    public async Task AnswerAsync_AProviderThatAnswered_ReturnsTheAnswerAndWhatTheRunRetrieved()
+    {
+        // Arrange
+        using var provider = ScriptedTransport.Answering(Completion("The invoice was attached."));
+        var agent = provider.AgentOver(new RecordingEmailKnowledgeSearch());
+
+        // Act
+        var answer = await agent.AnswerAsync(Question, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal("The invoice was attached.", answer.Text);
+        Assert.Empty(answer.Passages);
+        provider.HealthRecorder.Received(1).RecordServed(AiProviderRole.Chat);
+    }
+
+    /// <summary>An empty string reaching a caller reads as a model that had nothing to say rather than as a run that produced nothing.</summary>
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    public async Task AnswerAsync_AProviderThatProducedNoText_IsAnEmptyAnswerFailure(string content)
+    {
+        // Arrange
+        using var provider = ScriptedTransport.Answering(Completion(content));
+        var agent = provider.AgentOver(new RecordingEmailKnowledgeSearch());
+
+        // Act
+        var failure = await Assert.ThrowsAsync<ChatGenerationFailedException>(() =>
+            agent.AnswerAsync(Question, TestContext.Current.CancellationToken));
+
+        // Assert
+        Assert.Equal(ChatGenerationFailure.AnswerEmpty, failure.Failure);
+    }
+
+    /// <summary>The question is one turn, so what bounds a turn bounds the question, and it is refused before anything is sent.</summary>
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    public async Task AnswerAsync_AQuestionWithNoText_IsRefusedWithoutReachingTheProvider(string text)
+    {
+        // Arrange
+        using var provider = ScriptedTransport.Answering(Completion("never reached"));
+        var agent = provider.AgentOver(new RecordingEmailKnowledgeSearch());
+
+        // Act
+        await Assert.ThrowsAsync<ArgumentException>(() =>
+            agent.AnswerAsync(Question with { Text = text }, TestContext.Current.CancellationToken));
+
+        // Assert
+        Assert.Equal(0, provider.RequestCount);
+    }
+
+    [Fact]
+    public async Task AnswerAsync_AQuestionLargerThanOneCallSends_IsRefusedWithoutReachingTheProvider()
+    {
+        // Arrange
+        using var provider = ScriptedTransport.Answering(Completion("never reached"));
+        var agent = provider.AgentOver(new RecordingEmailKnowledgeSearch());
+
+        // Act
+        await Assert.ThrowsAsync<ArgumentException>(() => agent.AnswerAsync(
+            Question with { Text = new string('a', 5000) },
+            TestContext.Current.CancellationToken));
+
+        // Assert
+        Assert.Equal(0, provider.RequestCount);
+    }
+
+    /// <summary>Builds the chat-completion payload a provider answers with.</summary>
+    private static string Completion(string content) =>
+        "{\"id\":\"chatcmpl-1\",\"object\":\"chat.completion\",\"created\":1,\"model\":\"a-chat-model\","
+        + "\"choices\":[{\"index\":0,\"message\":{\"role\":\"assistant\",\"content\":\""
+        + content
+        + "\"},\"finish_reason\":\"stop\"}]}";
+
+    /// <summary>A provider that answers from a script, so the run is exercised over a real client and no network.</summary>
+    private sealed class ScriptedTransport : IDisposable
+    {
+        private readonly FakeHttpMessageHandler handler;
+        private string payload = string.Empty;
+
+        private ScriptedTransport() =>
+            this.handler = new FakeHttpMessageHandler((_, _) =>
+            {
+                this.RequestCount++;
+
+                return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new StringContent(this.payload, Encoding.UTF8, "application/json"),
+                });
+            });
+
+        /// <summary>The health state every call this provider serves reports into, so a test can read what the run established.</summary>
+        public IAiProviderHealthRecorder HealthRecorder { get; } = Substitute.For<IAiProviderHealthRecorder>();
+
+        public int RequestCount { get; private set; }
+
+        public static ScriptedTransport Answering(string payload) => new() { payload = payload };
+
+        public MailAnsweringAgent AgentOver(IEmailKnowledgeSearch knowledgeSearch)
+        {
+            var transportFactory = Substitute.For<IHttpClientFactory>();
+            transportFactory
+                .CreateClient(Arg.Any<string>())
+                .Returns(_ => new HttpClient(this.handler, disposeHandler: false));
+
+            var credentialSource = Substitute.For<IProviderEndpointCredentialSource>();
+            credentialSource
+                .ResolveAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+                .Returns(_ => Task.FromResult(
+                    ProviderEndpointCredential.FromApiKey("a-configured-key", resolvedMaterial: null)));
+
+            var operationRunner = Substitute.For<IOutboundOperationRunner>();
+            operationRunner
+                .RunAsync(
+                    Arg.Any<OutboundDependency>(),
+                    Arg.Any<string>(),
+                    Arg.Any<Func<CancellationToken, Task<Microsoft.Extensions.AI.ChatResponse>>>(),
+                    Arg.Any<CancellationToken>())
+                .Returns(call =>
+                {
+                    // The substitute cannot know the argument is present, and it always is: this configuration matches
+                    // the only overload the decorator calls.
+                    var operation = call.Arg<Func<CancellationToken, Task<Microsoft.Extensions.AI.ChatResponse>>>()!;
+
+                    return operation(call.Arg<CancellationToken>());
+                });
+
+            return new MailAnsweringAgent(
+                ChatDeclarations.Plan(),
+                credentialSource,
+                new OpenAiCompatibleClientFactory(),
+                transportFactory,
+                knowledgeSearch,
+                operationRunner,
+                this.HealthRecorder,
+                NullLoggerFactory.Instance,
+                NullLogger<MailAnsweringAgent>.Instance);
+        }
+
+        public void Dispose() => this.handler.Dispose();
+    }
+}

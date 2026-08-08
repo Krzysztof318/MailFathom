@@ -6,6 +6,7 @@ using MailFathom.Application.Emails.Embeddings.Backfill;
 using MailFathom.Application.Emails.Embeddings.Generation;
 using MailFathom.Application.Emails.Search;
 using MailFathom.Application.Emails.SearchEmails;
+using MailFathom.Application.Retrieval;
 using MailFathom.Infrastructure.Persistence.Connections;
 using MailFathom.Infrastructure.Secrets.Resolution;
 using Microsoft.Extensions.DependencyInjection;
@@ -124,6 +125,33 @@ public sealed class ServiceCollectionExtensionsTests
             services,
             descriptor => descriptor.ServiceType == typeof(MailboxSearchReader)
                 && descriptor.Lifetime == ServiceLifetime.Scoped);
+    }
+
+    /// <summary>
+    /// The retrieval an answering run reaches mail through is a reading of the search above, so it is registered for
+    /// every deployment rather than only where a chat endpoint was declared: an instance that answers no questions
+    /// resolves it and never calls it, while one that does would otherwise fail to compose its agent.
+    /// </summary>
+    [Fact]
+    public void AddInfrastructure_WithoutAChatEndpoint_StillRegistersTheRetrievalAnAnsweringRunUses()
+    {
+        // Arrange
+        var services = new ServiceCollection();
+
+        // Act
+        services.AddInfrastructure(
+            _ => new PostgresConnectionSettings("Host=localhost;Database=mailfathom", null, null),
+            PostgresTextSearchConfiguration.Default);
+
+        // Assert
+        Assert.Contains(
+            services,
+            descriptor => descriptor.ServiceType == typeof(IEmailKnowledgeSearch)
+                && descriptor.Lifetime == ServiceLifetime.Scoped);
+        Assert.Contains(
+            services,
+            descriptor => descriptor.ServiceType == typeof(EmailKnowledgeBounds)
+                && descriptor.Lifetime == ServiceLifetime.Singleton);
     }
 
     /// <summary>

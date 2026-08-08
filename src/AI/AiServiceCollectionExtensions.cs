@@ -5,11 +5,13 @@
 using MailFathom.AI.Chat;
 using MailFathom.AI.Chunking;
 using MailFathom.AI.Embeddings;
+using MailFathom.AI.Orchestration;
 using MailFathom.AI.ProviderAdapters;
 using MailFathom.AI.Providers;
 using MailFathom.Application.Chat;
 using MailFathom.Application.Emails.Chunking;
 using MailFathom.Application.Emails.Embeddings;
+using MailFathom.Application.Retrieval;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 
@@ -135,6 +137,32 @@ public static class AiServiceCollectionExtensions
         services.AddSingleton<IChatModelClient, ProviderChatModelClient>();
 
         AddChatProviderTransport(services);
+
+        return services;
+    }
+
+    /// <summary>Registers the agent that answers a question about the mailbox from what it retrieves while answering.</summary>
+    /// <param name="services">The service collection to add to.</param>
+    /// <returns>The same service collection, so registration reads as one expression.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="services" /> is <see langword="null" />.</exception>
+    /// <remarks>
+    /// <para>
+    /// Called only where a chat endpoint was declared, and beside <see cref="AddChatProviderAdapter" /> rather than inside
+    /// it: they are two capabilities over one endpoint, and an instance that answers questions is not the same decision as
+    /// one that can generate text.
+    /// </para>
+    /// <para>
+    /// Scoped, because a run retrieves through the mailbox search, and that reads through the scoped persistence context.
+    /// It adds no transport of its own — a run's requests go to the same endpoint under the same bounds as any other chat
+    /// request, so it sends over the client that registration named.
+    /// </para>
+    /// </remarks>
+    public static IServiceCollection AddMailAnsweringAgent(this IServiceCollection services)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+
+        services.TryAddSingleton<OpenAiCompatibleClientFactory>();
+        services.AddScoped<IMailQuestionAnswerer, MailAnsweringAgent>();
 
         return services;
     }
