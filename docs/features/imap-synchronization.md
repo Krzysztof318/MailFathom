@@ -239,8 +239,8 @@ configuration to reconsider, and the log says which folders lost push.
 ### The third connection: writing
 
 An account can hold one more connection than the two kinds above, and it is the only one able to change the mailbox.
-MailFathom opens it the first time something asks to relocate, delete, copy, or mark a message read, keeps it for
-`WriteConnectionIdlePeriod` after the last change it carried, and closes it when that elapses. There is **at most one
+MailFathom opens it the first time something asks to relocate, delete, copy, or mark a message read or unread, keeps it
+for `WriteConnectionIdlePeriod` after the last change it carried, and closes it when that elapses. There is **at most one
 per account**, whatever is happening: a second caller waits for the first rather than opening a second connection, so a
 burst of changes never becomes a burst of logins against a server that counts them.
 
@@ -302,6 +302,35 @@ The record holds no mail. A folder path, a UID, a mutation name, a requester ide
 all it carries, and it is removed with the email it describes — including when the change it recorded was that email's
 deletion. [Stored email schema](../architecture/stored-email-schema.md#recorded-mailbox-mutations) states the columns and
 the stages in full.
+
+### Marking mail read is an act, never a side effect of reading
+
+**Reading mail through MailFathom still never marks it read, and that has not been traded away for this.** What changed
+is the shape of the guarantee rather than its strength: it is scoped to reading rather than to the whole process. A
+synchronization pass, a reconciliation pass, a content fetch, and every MCP tool hold a session type that has no
+operation capable of writing a flag, so none of them can mark mail read whatever a later change does inside them.
+Marking a message read or unread is not one of those paths at all: it is a change the mailbox owner authored, carried by
+the write session above, which nothing on the read side can open, borrow, or reach.
+
+Both directions are one mutation and one authored act, because both are the same statement about the same flag. Setting
+it is what stops mail MailFathom has already handled from sitting unread in the client the owner actually opens;
+clearing it is what lets automation put something back in front of them. Neither writes any other flag: `\Flagged`,
+`\Answered`, `\Draft`, and keywords stay unwritten, and permitting one of them is a decision to reopen
+[ADR 0007](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0007-remote-mailbox-mutation-boundary-and-write-session.md)
+rather than a gap to read as permission.
+
+**The stored value stays a mirror.** MailFathom does not write the local flag when it issues the command. The request is
+recorded and sent, and `is_remotely_seen` changes only when the reconciliation pass next reads that folder and finds the
+flag standing somewhere new — the same way it would change had the owner moved it in their own mail client. So a query
+run between the command and that window still reports the last value the server was seen to hold, which is a short lag
+rather than a disagreement: the column has exactly one writer, and there is never a local value to reconcile against a
+command nobody can prove landed. [Stored email schema](../architecture/stored-email-schema.md) states the columns.
+
+A `\Seen` change is also the one mutation that leaves the occurrence exactly where it was, which is what makes the
+suppression below unavoidable rather than tidy — and what makes asking twice mean something specific. The idempotency
+identity is the occurrence, the mutation, and who asked, so the same rule asking again about the same message is
+answered from its own record and issues nothing. That is deliberate: an owner who reverted the change by hand is not
+overruled by the rule that made it. A different rule asking about the same message is a different act and is carried.
 
 ### A change nobody finished finishes by itself
 

@@ -20,10 +20,10 @@ namespace MailFathom.IntegrationTests.Synchronization;
 /// <summary>Proves that a <c>\Seen</c> flag MailFathom set is told from one the mailbox owner set, against a real server and a real database.</summary>
 /// <remarks>
 /// <para>
-/// One test, and it carries both messages, because the whole claim is a comparison: the server reports the identical
-/// moved flag whichever side wrote it, and the only thing separating them is a record MailFathom wrote before the
-/// <c>STORE</c> went out. Two tests would pay twice for one composition and could not observe both halves of the same
-/// run.
+/// One test, and it carries both messages and both directions, because the whole claim is a comparison: the server
+/// reports the identical moved flag whichever side wrote it and whichever way it moved, and the only thing separating
+/// them is a record MailFathom wrote before the <c>STORE</c> went out. Splitting it would pay several times for one
+/// composition and could not observe the halves of the same run against each other.
 /// </para>
 /// <para>
 /// What only real infrastructure establishes here is the query. Whether a change is withheld is decided in the domain
@@ -47,12 +47,22 @@ public sealed class OrchestratedSeenStateProvenanceTests(MailFathomOrchestration
         MailFolderAlias.Create("seen-state-provenance"),
         RemoteFolderPath.Create(FolderName, hierarchyDelimiter: '.'));
 
-    private static readonly MailboxMutationRequester Requester =
+    private static readonly MailboxMutationRequester MarkingRule =
         MailboxMutationRequester.Rule("mark-newsletters-read", 1);
 
-    /// <summary>The flag MailFathom set is withheld from rule evaluation, and the one the owner set beside it is not.</summary>
+    /// <summary>
+    /// A second rule, because the idempotency identity is the occurrence, the mutation, and who asked, and a
+    /// <c>\Seen</c> change is the one mutation that leaves the occurrence where it was. The same rule asking again about
+    /// the same occurrence is therefore answered from its own record and issues nothing, which is what stops a rule
+    /// fighting an owner who reverted its change by hand. Putting the two directions on one requester would test that
+    /// answer rather than the clearing this class is about.
+    /// </summary>
+    private static readonly MailboxMutationRequester SurfacingRule =
+        MailboxMutationRequester.Rule("surface-unpaid-invoices", 1);
+
+    /// <summary>Each flag MailFathom moved is withheld from rule evaluation, the owner's is not, and the stored value follows only an observation.</summary>
     [Fact]
-    public async Task SynchronizeAsync_AfterTwoSeenFlagsOneSideEach_WithholdsOnlyTheOneMailFathomSet()
+    public async Task SynchronizeAsync_AfterSeenFlagsMovedByBothSidesInBothDirections_WithholdsOnlyItsOwnAndMirrorsOnlyWhatItObserved()
     {
         // Arrange
         var cancellationToken = TestContext.Current.CancellationToken;
@@ -75,27 +85,64 @@ public sealed class OrchestratedSeenStateProvenanceTests(MailFathomOrchestration
         var ours = await ReadStoredEmailAsync(services, markedByMailFathom, cancellationToken);
         var theirs = await ReadStoredEmailAsync(services, markedByOwner, cancellationToken);
 
-        var outcome = await MarkSeenAsync(services, ours, cancellationToken);
-        Assert.Equal(MailboxMutationStatus.Performed, outcome.Status);
+        // Act
+        //
+        // Every stored reading is captured where it means something rather than at the end, because the column under
+        // test is the one that changes as the sequence proceeds: read after the run instead of before it, an assertion
+        // that the value lagged the command would be indistinguishable from one that it never followed the server.
+        var setOutcome = await ChangeSeenStateAsync(services, ours, MarkingRule, isSeen: true, cancellationToken);
+        var storedAfterTheSetCommand = await IsRemotelySeenAsync(services, markedByMailFathom, cancellationToken);
 
         await mailbox.MarkSeenAsync(FolderName, theirs.Uid, cancellationToken);
 
-        // Act
-        var result = await SynchronizeAsync(services, cancellationToken);
+        var afterSetting = await SynchronizeAsync(services, cancellationToken);
+        var oursAfterSettingRun = await IsRemotelySeenAsync(services, markedByMailFathom, cancellationToken);
+        var theirsAfterSettingRun = await IsRemotelySeenAsync(services, markedByOwner, cancellationToken);
+
+        var clearOutcome = await ChangeSeenStateAsync(services, ours, SurfacingRule, isSeen: false, cancellationToken);
+        var storedAfterTheClearCommand = await IsRemotelySeenAsync(services, markedByMailFathom, cancellationToken);
+
+        var afterClearing = await SynchronizeAsync(services, cancellationToken);
+        var oursAfterClearingRun = await IsRemotelySeenAsync(services, markedByMailFathom, cancellationToken);
+        var theirsAfterClearingRun = await IsRemotelySeenAsync(services, markedByOwner, cancellationToken);
 
         // Assert
-        Assert.Equal(1, result.Reconciliation.SeenStateChangedEmailCount);
+        Assert.Equal(MailboxMutationStatus.Performed, setOutcome.Status);
+        Assert.Equal(MailboxMutationStatus.Performed, clearOutcome.Status);
 
+        // The server has served each command and no run has read the folder in between, so the stored value must still
+        // be the one the last window saw. This is the whole of what keeps the column a mirror: neither request wrote a
+        // local flag, in either direction.
+        Assert.False(storedAfterTheSetCommand);
+        Assert.True(storedAfterTheClearCommand);
+
+        Assert.Equal(1, afterSetting.Reconciliation.SeenStateChangedEmailCount);
+        AssertWithheld(afterSetting, ours.StoredEmailId, setOutcome.RecordId);
+
+        Assert.Equal(0, afterClearing.Reconciliation.SeenStateChangedEmailCount);
+        AssertWithheld(afterClearing, ours.StoredEmailId, clearOutcome.RecordId);
+
+        // The stored snapshot follows the server for every flag that moved, because what was withheld is the trigger
+        // and never the reading. An assertion that one change was withheld says nothing unless the owner's own change
+        // beside it really did arrive, and unless the withheld one really did reach the column.
+        Assert.True(oursAfterSettingRun);
+        Assert.True(theirsAfterSettingRun);
+        Assert.False(oursAfterClearingRun);
+        Assert.True(theirsAfterClearingRun);
+    }
+
+    /// <summary>Requires a run to have withheld exactly the one flag change the named record accounts for.</summary>
+    private static void AssertWithheld(
+        MailboxSynchronizationResult result,
+        StoredEmailId storedEmailId,
+        MailboxMutationRecordId recordId)
+    {
         var suppressed = Assert.Single(result.SuppressedChanges);
+
         Assert.Equal(MailboxChangeKind.SeenStateChanged, suppressed.Kind);
         Assert.Equal(MailboxMutation.SetSeen, suppressed.Mutation);
-        Assert.Equal(ours.StoredEmailId, suppressed.StoredEmailId);
-        Assert.Equal(outcome.RecordId, suppressed.MutationRecordId);
-
-        // The stored snapshot follows the server for both, because what was withheld is the trigger and never the
-        // reading. An assertion that one flag was withheld says nothing unless the other one really did move.
-        Assert.True(await IsRemotelySeenAsync(services, markedByMailFathom, cancellationToken));
-        Assert.True(await IsRemotelySeenAsync(services, markedByOwner, cancellationToken));
+        Assert.Equal(storedEmailId, suppressed.StoredEmailId);
+        Assert.Equal(recordId, suppressed.MutationRecordId);
     }
 
     private static Task<MailboxSynchronizationResult> SynchronizeAsync(
@@ -107,10 +154,12 @@ public sealed class OrchestratedSeenStateProvenanceTests(MailFathomOrchestration
                 token),
             cancellationToken);
 
-    /// <summary>Marks one stored email read through the production performer, which writes the record the join reads.</summary>
-    private static Task<MailboxMutationOutcome> MarkSeenAsync(
+    /// <summary>Moves one stored email's remote flag through the production performer, which writes the record the join reads.</summary>
+    private static Task<MailboxMutationOutcome> ChangeSeenStateAsync(
         OrchestratedMailFathomServices services,
         StoredEmailRow stored,
+        MailboxMutationRequester requester,
+        bool isSeen,
         CancellationToken cancellationToken)
     {
         var folder = MailFolderResolution.FirstBindingOf(Mapping.Alias, Mapping.RemotePath!.Value);
@@ -119,7 +168,7 @@ public sealed class OrchestratedSeenStateProvenanceTests(MailFathomOrchestration
             folder.Id,
             stored.UidValidity,
             stored.Uid);
-        var request = MailboxMutationRequest.SetSeen(stored.StoredEmailId, occurrence, Requester, isSeen: true);
+        var request = MailboxMutationRequest.SetSeen(stored.StoredEmailId, occurrence, requester, isSeen);
 
         return services.InScopeAsync(
             (scope, token) => scope.GetRequiredService<IMailboxMutationPerformer>().PerformAsync(
