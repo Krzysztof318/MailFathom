@@ -905,7 +905,7 @@ somebody else removed it. Each account chooses, through `RemotelyDeletedEmailDis
 | Value | What happens locally |
 |---|---|
 | `RetainTombstone` (default) | The row stays and records `remote_expunge_observed_at`. Every mailbox query — the timeline, search, and the content read — excludes it from that moment, and so does every later reconciliation window. Its raw MIME and derived text stay in the database. |
-| `EraseLocalCopy` | The row is removed as the disappearance is observed, and PostgreSQL removes the raw MIME, the search document, and any outstanding repair request with it. Nothing of the message survives locally. |
+| `EraseLocalCopy` | The row is removed as the disappearance is observed, and PostgreSQL removes the raw MIME, the search document, the chunks, the vectors, and any outstanding repair request with it. Nothing of the message survives locally. |
 
 The setting is per account because the accounts of one deployment are not interchangeable: a mailbox whose provider is
 the system of record can be followed exactly, while a mailbox MailFathom is the durable copy of must not lose mail because
@@ -927,6 +927,34 @@ conflict safe. A tombstone keeps the timestamp of the run that first observed th
 restamped, and a row already removed is not an error to remove again. An email whose stored observation is **newer** than
 the window being applied is left alone entirely: another writer has since asked the same server, its answer supersedes
 this one, and that includes the case where this window would have deleted the email.
+
+### What becomes of a message MailFathom deleted itself
+
+A deletion the mailbox owner authored is a different act from the one above, and it is answered by a different setting.
+`AuthoredDeleteEmailDisposition` decides it, per account, and **takes precedence over `RemotelyDeletedEmailDisposition`
+for every disappearance a mutation record accounts for** — which is to say the setting above is never consulted for one.
+That separation is the point of having two: without it, an account configured to erase what its server loses would also
+erase what MailFathom was just told to delete, and that is precisely where the owner is likeliest to have meant the
+opposite. Deleting on the server frees quota; the local archive is usually the reason to do it.
+
+| Value | What happens locally |
+|---|---|
+| `RetainLocalCopy` (default) | The row stays readable. It records `remote_expunge_observed_at`, because the server no longer holds the message and the reconciliation queue must stop asking about it, and it also records `is_retained_after_authored_delete`, which keeps it inside the timeline, search, and content read. Freeing space on the server is then not the same instruction as forgetting the mail. |
+| `RetainTombstone` | Exactly the counterpart of the default above: the row stays and every mailbox query excludes it from that moment. The record that the email existed survives, so an authored delete is auditable rather than silent, and the mail itself stops being reachable. |
+| `EraseLocalCopy` | The row is removed as the disappearance is observed, and PostgreSQL removes the raw MIME, the search document, the chunks, the vectors, and any outstanding repair request with it. Nothing of the message survives locally. |
+
+The default is the value that destroys nothing, for the reason the other setting's default is: a disposition nobody has
+thought about must not be why mail stops being readable.
+
+**The value is resolved when the delete is authored, not when it completes.** Those are different runs — the commands go
+out now and the local copy is disposed of by the synchronization run that later sees the message gone — so the answer is
+written onto the mutation record and read back from there. Changing the setting therefore governs the deletes authored
+after the change and leaves one already in flight exactly as it was begun.
+
+A deletion that never reaches the server changes nothing locally either. The disposition is applied where reconciliation
+observes the message gone from its folder, so a delete that was refused, abandoned, or is still in flight has left the
+local copy alone; and because all three values take the row out of the reconciliation queue, the disposition is applied
+once per delete however many windows pass over the folder afterwards.
 
 ### What a run reports
 
@@ -972,6 +1000,7 @@ Synchronization is disabled by default:
         "Mode": "Push",
         "EarliestEmailReceivedDate": "2024-01-01",
         "RemotelyDeletedEmailDisposition": "RetainTombstone",
+        "AuthoredDeleteEmailDisposition": "RetainLocalCopy",
         "Secrets": {
           "Password": {
             "Name": "imap-primary-password",
@@ -1024,6 +1053,8 @@ The extraction backfill has a section of its own rather than a block inside the 
 ```
 
 `MaxReconciledEmailsPerRun` bounds the backward pass the way the batch settings bound the forward one, and `RemotelyDeletedEmailDisposition` is the per-account choice [Reconciling against the server](#reconciling-against-the-server) describes. It binds as one of the two names `RetainTombstone` and `EraseLocalCopy`, and a value that is neither **fails startup** rather than falling back to a default: the setting decides whether stored mail is destroyed, and a typo in it must never be the reason mail survives or does not. That check is explicit rather than left to the binder, because a bare number binds onto an enum whether or not any member carries it — strict binding rejects unknown keys and failed conversions, and this conversion succeeds.
+
+`AuthoredDeleteEmailDisposition` answers the same question for the opposite act — a deletion MailFathom performed on the owner's instruction rather than one it observed — and [takes precedence over the setting above](#what-becomes-of-a-message-mailfathom-deleted-itself) for every such deletion. It binds as `RetainLocalCopy`, `RetainTombstone`, or `EraseLocalCopy`, is validated the same way, fails startup the same way, and defaults to keeping the local copy readable.
 
 When enabled, at least one account with a non-blank `AccountId`, host, and user name must be configured. The account password is not a configuration value at all: `Secrets.Password` carries a reference, and startup fails when it cannot be resolved. Each entry of `Folders` names an alias and exactly one of `RemotePath` and `SpecialUse`; naming both, naming neither, or naming a role that does not exist fails startup with a message identifying the alias. Supported roles are `Inbox`, `Archive`, `Drafts`, `Sent`, `Junk`, `Trash`, `All`, `Flagged`, and `Important`. If an account omits `Folders`, its supervisor applies the post-binding default of one alias `inbox` mapped to the inbox role; explicit folder lists replace that default.
 

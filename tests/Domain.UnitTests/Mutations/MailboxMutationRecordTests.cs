@@ -159,7 +159,11 @@ public sealed class MailboxMutationRecordTests
         // Arrange
         var delete = CompletedRelocation() with
         {
-            Request = MailboxMutationRequest.Delete(LocalEmail, SourceOccurrence(), Requester),
+            Request = MailboxMutationRequest.Delete(
+                LocalEmail,
+                SourceOccurrence(),
+                Requester,
+                AuthoredDeleteEmailDisposition.RetainLocalCopy),
         };
         var setSeen = CompletedRelocation() with
         {
@@ -370,7 +374,11 @@ public sealed class MailboxMutationRecordTests
         // Arrange
         var delete = CompletedRelocation() with
         {
-            Request = MailboxMutationRequest.Delete(LocalEmail, SourceOccurrence(), Requester),
+            Request = MailboxMutationRequest.Delete(
+                LocalEmail,
+                SourceOccurrence(),
+                Requester,
+                AuthoredDeleteEmailDisposition.RetainLocalCopy),
             Placement = RemoteEmailPlacement.NotReported(),
         };
         var setSeen = delete with

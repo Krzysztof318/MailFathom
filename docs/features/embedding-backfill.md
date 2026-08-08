@@ -23,8 +23,9 @@ Two conditions select a message, and they are the two halves of what a pre-exist
   activated, or was turned away by `Embeddings:MaxQueuedEmails`, or was left part-way through by a provider call that
   failed.
 
-A message an expunge has been observed for is in neither group. Vectors nothing may retrieve are a provider bill with
-no reader.
+A message a tombstone hides is in neither group. Vectors nothing may retrieve are a provider bill with no reader. A
+message whose local copy was deliberately kept after MailFathom deleted it on the server is not that: nothing may
+retrieve it from the server any more, and everything may still retrieve it here, so the walk reaches it like any other.
 
 Once a message is selected, what happens to it is exactly what happens to a newly synchronized one — the same unit of
 work, described under [embedding one message](automatic-embedding.md#embedding-one-message). Nothing is remembered

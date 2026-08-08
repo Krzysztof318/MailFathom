@@ -5,6 +5,7 @@
 using System.Diagnostics.CodeAnalysis;
 using MailFathom.AppHost;
 using MailFathom.Application.Mail;
+using MailFathom.Application.Mail.Mutations;
 using MailFathom.Application.Synchronization.Checkpoints;
 using MailFathom.Application.Synchronization.Reconciliation;
 using MailFathom.Domain.Accounts;
@@ -31,11 +32,15 @@ namespace MailFathom.IntegrationTests.Orchestration;
 /// exercise, and it is confined to a container that lives for one run.
 /// </para>
 /// </remarks>
-internal sealed class SyntheticMailAccount(OrchestratedMailServerEndpoints endpoints)
+internal sealed class SyntheticMailAccount(
+    OrchestratedMailServerEndpoints endpoints,
+    RemotelyDeletedEmailDisposition remotelyDeletedEmailDisposition =
+        RemotelyDeletedEmailDisposition.RetainTombstone)
     : IImapAccountSettingsProvider,
     IMailTransportSecurityPolicyReader,
     IMailSynchronizationWindowReader,
-    IRemotelyDeletedEmailDispositionReader
+    IRemotelyDeletedEmailDispositionReader,
+    IAuthoredDeleteEmailDispositionReader
 {
     /// <summary>Gets the account identifier every occurrence this suite stores belongs to.</summary>
     public static MailAccountId AccountId { get; } = MailAccountId.Create("integration");
@@ -53,10 +58,21 @@ internal sealed class SyntheticMailAccount(OrchestratedMailServerEndpoints endpo
     /// The configured default, and the only disposition under which a test can read back what an earlier run stored:
     /// erasing a local copy would let a folder this suite recreates take the mail an ordered test asserts on with it.
     /// What the other disposition does is decided by <c>MailboxReconciler</c> and covered where that decision is, in
-    /// the unit suite.
+    /// the unit suite. It is a constructor parameter for one case only — a test proving that this setting is *not*
+    /// what decides the local outcome of a deletion MailFathom itself performed — and that test owns folders nothing
+    /// else reads.
     /// </remarks>
     public RemotelyDeletedEmailDisposition GetDisposition(MailAccountId accountId) =>
-        RemotelyDeletedEmailDisposition.RetainTombstone;
+        remotelyDeletedEmailDisposition;
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Every delete this suite authors names its own disposition on the request, so nothing resolves one through this
+    /// port. It is implemented because the port is part of the account's contract and a harness that answered none of
+    /// it would let a production path resolve nothing where the host resolves something.
+    /// </remarks>
+    public AuthoredDeleteEmailDisposition GetAuthoredDeleteDisposition(MailAccountId accountId) =>
+        AuthoredDeleteEmailDisposition.RetainLocalCopy;
 
     /// <inheritdoc />
     public MailTransportSecurityPolicy GetPolicy(MailAccountId accountId) => MailTransportSecurityPolicy.Create(

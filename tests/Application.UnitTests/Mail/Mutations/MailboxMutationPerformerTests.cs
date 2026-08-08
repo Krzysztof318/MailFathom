@@ -335,7 +335,11 @@ public sealed class MailboxMutationPerformerTests
 
         // Act
         await context.Performer.PerformAsync(
-            MailboxMutationRequest.Delete(storedEmailId, occurrence, requester),
+            MailboxMutationRequest.Delete(
+                storedEmailId,
+                occurrence,
+                requester,
+                AuthoredDeleteEmailDisposition.RetainLocalCopy),
             InboxFolder,
             TransportPolicy,
             CancellationToken.None);

@@ -14,6 +14,7 @@ using MailFathom.Application.Persistence;
 using MailFathom.Application.Synchronization;
 using MailFathom.Application.Synchronization.Checkpoints;
 using MailFathom.Application.Synchronization.Reconciliation;
+using MailFathom.Domain.Emails;
 using MailFathom.Infrastructure;
 using MailFathom.Infrastructure.DataEncryption;
 using MailFathom.Infrastructure.Mail;
@@ -65,13 +66,20 @@ internal sealed class OrchestratedMailFathomServices : IAsyncDisposable
     /// <summary>Starts the composed services against the orchestrated infrastructure.</summary>
     /// <param name="orchestration">The running orchestration whose database and mail server are used.</param>
     /// <param name="cancellationToken">Cancels the startup.</param>
+    /// <param name="remotelyDeletedEmailDisposition">
+    /// What the account does locally with an email its server no longer holds. It is left at the suite's default
+    /// everywhere but the one class proving that this setting does not decide the outcome of a deletion MailFathom
+    /// itself performed.
+    /// </param>
     /// <returns>The composed services, which the caller owns and must dispose.</returns>
     internal static async Task<OrchestratedMailFathomServices> StartAsync(
         MailFathomOrchestrationFixture orchestration,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        RemotelyDeletedEmailDisposition remotelyDeletedEmailDisposition =
+            RemotelyDeletedEmailDisposition.RetainTombstone)
     {
         var builder = new HostApplicationBuilder();
-        var account = new SyntheticMailAccount(orchestration.MailServer);
+        var account = new SyntheticMailAccount(orchestration.MailServer, remotelyDeletedEmailDisposition);
 
         builder.Services.AddSingleton(TimeProvider.System);
         builder.Services.AddSecretResolution(SecretValueInterpretation.ReferenceOnly);
@@ -81,6 +89,7 @@ internal sealed class OrchestratedMailFathomServices : IAsyncDisposable
         builder.Services.AddSingleton<IMailTransportSecurityPolicyReader>(account);
         builder.Services.AddSingleton<IMailSynchronizationWindowReader>(account);
         builder.Services.AddSingleton<IRemotelyDeletedEmailDispositionReader>(account);
+        builder.Services.AddSingleton<IAuthoredDeleteEmailDispositionReader>(account);
         builder.Services.AddSingleton(new MailboxSynchronizationOptions
         {
             MaxMetadataBatchSize = 50,

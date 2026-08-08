@@ -497,6 +497,98 @@ public sealed class MailSynchronizationOptionsTests
         Assert.Contains("EraseLocalCopy", result.ErrorMessage, StringComparison.Ordinal);
     }
 
+    /// <summary>The two dispositions are independent settings, so one account can follow its server and still keep what it deletes.</summary>
+    /// <remarks>
+    /// This is the confusion the second setting exists to prevent. An account that erases what its server loses would
+    /// otherwise erase what MailFathom itself was told to delete, which is precisely where the owner is most likely to
+    /// have meant the opposite: deleting on the server frees quota, and the local archive is the reason to do it.
+    /// </remarks>
+    [Fact]
+    public void GetDisposition_AccountErasingWhatItsServerLoses_KeepsWhatMailFathomDeletesItself()
+    {
+        // Arrange
+        var account = CreateAccount("primary");
+        account.RemotelyDeletedEmailDisposition = RemotelyDeletedEmailDisposition.EraseLocalCopy;
+        var options = new MailSynchronizationOptions { Accounts = [account] };
+        var accountId = MailAccountId.Create("primary");
+
+        // Act
+        var remoteDisposition = options.GetDisposition(accountId);
+        var authoredDisposition = options.GetAuthoredDeleteDisposition(accountId);
+
+        // Assert
+        Assert.Equal(RemotelyDeletedEmailDisposition.EraseLocalCopy, remoteDisposition);
+        Assert.Equal(AuthoredDeleteEmailDisposition.RetainLocalCopy, authoredDisposition);
+    }
+
+    /// <summary>The two accounts of one deployment answer differently here too, which is why this setting is per account as well.</summary>
+    [Fact]
+    public void GetAuthoredDeleteDisposition_AccountsConfiguringDifferentDispositions_AnswersPerAccount()
+    {
+        // Arrange
+        var forgetful = CreateAccount("forgetful");
+        forgetful.AuthoredDeleteEmailDisposition = AuthoredDeleteEmailDisposition.EraseLocalCopy;
+        var options = new MailSynchronizationOptions { Accounts = [forgetful, CreateAccount("archive")] };
+
+        // Act
+        var dispositions = options.ServedAccountIds
+            .Select(options.GetAuthoredDeleteDisposition)
+            .ToArray();
+
+        // Assert
+        Assert.Equal(
+            [AuthoredDeleteEmailDisposition.RetainLocalCopy, AuthoredDeleteEmailDisposition.EraseLocalCopy],
+            dispositions);
+    }
+
+    [Fact]
+    public void Bind_AuthoredDeleteEmailDisposition_ReadsItByName()
+    {
+        // Arrange
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["MailSynchronization:Accounts:0:AccountId"] = "primary",
+                ["MailSynchronization:Accounts:0:AuthoredDeleteEmailDisposition"] = "RetainTombstone",
+            })
+            .Build();
+
+        // Act
+        var options = configuration.GetSection("MailSynchronization").Get<MailSynchronizationOptions>()!;
+
+        // Assert
+        Assert.Equal(
+            AuthoredDeleteEmailDisposition.RetainTombstone,
+            Assert.Single(options.Accounts).AuthoredDeleteEmailDisposition);
+    }
+
+    /// <summary>
+    /// A bare number binds onto this enum as readily as onto the one above, and the value decides what a delete leaves
+    /// behind. An account whose value names nothing would have every delete it authored refused where the record is
+    /// built, one deletion at a time, rather than at the startup that accepted the typo.
+    /// </summary>
+    [Fact]
+    public void ValidateForSynchronization_AuthoredDeleteDispositionNumberNoMemberCarries_IsRejected()
+    {
+        // Arrange
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["MailSynchronization:Accounts:0:AccountId"] = "primary",
+                ["MailSynchronization:Accounts:0:AuthoredDeleteEmailDisposition"] = "3",
+            })
+            .Build();
+        var options = configuration.GetSection("MailSynchronization").Get<MailSynchronizationOptions>()!;
+
+        // Act
+        var results = options.ValidateForSynchronization().ToArray();
+
+        // Assert
+        var result = Assert.Single(results);
+        Assert.Contains("RetainLocalCopy", result.ErrorMessage, StringComparison.Ordinal);
+        Assert.Contains("EraseLocalCopy", result.ErrorMessage, StringComparison.Ordinal);
+    }
+
     /// <summary>Push holds a connection open per folder, so an account that says nothing keeps the schedule it already had.</summary>
     [Fact]
     public void Mode_AccountConfiguringNone_Polls()

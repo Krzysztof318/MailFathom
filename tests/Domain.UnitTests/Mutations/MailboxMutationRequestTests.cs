@@ -19,8 +19,9 @@ public sealed class MailboxMutationRequestTests
     private static readonly MailboxMutationRequester Requester =
         MailboxMutationRequester.Rule("file-newsletters", 3);
 
-    /// <summary>The two parameter names a wrongly shaped request can be refused against, whichever is checked first.</summary>
-    private static readonly string[] RejectedParameterNames = ["destinationPath", "desiredSeenState"];
+    /// <summary>The parameter names a wrongly shaped request can be refused against, whichever is checked first.</summary>
+    private static readonly string[] RejectedParameterNames =
+        ["destinationPath", "desiredSeenState", "localDisposition"];
 
     /// <summary>Each mutation carries exactly the parameters it takes, which is what the factories exist to guarantee.</summary>
     [Fact]
@@ -28,19 +29,27 @@ public sealed class MailboxMutationRequestTests
     {
         // Act
         var relocate = MailboxMutationRequest.Relocate(LocalEmail, Occurrence(), Requester, Archive);
-        var delete = MailboxMutationRequest.Delete(LocalEmail, Occurrence(), Requester);
+        var delete = MailboxMutationRequest.Delete(
+            LocalEmail,
+            Occurrence(),
+            Requester,
+            AuthoredDeleteEmailDisposition.EraseLocalCopy);
         var setSeen = MailboxMutationRequest.SetSeen(LocalEmail, Occurrence(), Requester, isSeen: true);
         var copy = MailboxMutationRequest.Copy(LocalEmail, Occurrence(), Requester, Archive);
 
         // Assert
         Assert.Equal(Archive, relocate.DestinationPath);
         Assert.Null(relocate.DesiredSeenState);
+        Assert.Null(relocate.LocalDisposition);
         Assert.Null(delete.DestinationPath);
         Assert.Null(delete.DesiredSeenState);
+        Assert.Equal(AuthoredDeleteEmailDisposition.EraseLocalCopy, delete.LocalDisposition);
         Assert.Null(setSeen.DestinationPath);
         Assert.True(setSeen.DesiredSeenState);
+        Assert.Null(setSeen.LocalDisposition);
         Assert.Equal(Archive, copy.DestinationPath);
         Assert.Equal(MailboxMutation.Copy, copy.Mutation);
+        Assert.Null(copy.LocalDisposition);
     }
 
     /// <summary>A stored row hands the parameters back loose, so a combination no mutation has is rejected on the way in.</summary>
@@ -56,13 +65,14 @@ public sealed class MailboxMutationRequestTests
             MailboxMutation.Relocate,
             Requester,
             withDestination ? Archive : null,
-            withSeenState ? true : null));
+            withSeenState ? true : null,
+            localDisposition: null));
 
         // Assert
         Assert.Contains(refusal.ParamName, RejectedParameterNames, StringComparer.Ordinal);
     }
 
-    /// <summary>A delete names nothing, so a destination on one is a request nobody could have meant.</summary>
+    /// <summary>A delete names only a local disposition, so a destination on one is a request nobody could have meant.</summary>
     [Fact]
     public void Create_DeleteNamingADestination_IsRefused()
     {
@@ -73,10 +83,65 @@ public sealed class MailboxMutationRequestTests
             MailboxMutation.Delete,
             Requester,
             Archive,
-            desiredSeenState: null));
+            desiredSeenState: null,
+            AuthoredDeleteEmailDisposition.RetainLocalCopy));
 
         // Assert
         Assert.Equal("destinationPath", refusal.ParamName);
+    }
+
+    /// <summary>A delete decides what becomes of the local copy, so a stored row that decided nothing is not acted on.</summary>
+    [Fact]
+    public void Create_DeleteNamingNoLocalDisposition_IsRefused()
+    {
+        // Act
+        var refusal = Assert.Throws<ArgumentException>(() => MailboxMutationRequest.Create(
+            LocalEmail,
+            Occurrence(),
+            MailboxMutation.Delete,
+            Requester,
+            destinationPath: null,
+            desiredSeenState: null,
+            localDisposition: null));
+
+        // Assert
+        Assert.Equal("localDisposition", refusal.ParamName);
+    }
+
+    /// <summary>Only a delete disposes of a local copy, so a disposition on any other mutation names a decision it never takes.</summary>
+    [Fact]
+    public void Create_RelocationNamingALocalDisposition_IsRefused()
+    {
+        // Act
+        var refusal = Assert.Throws<ArgumentException>(() => MailboxMutationRequest.Create(
+            LocalEmail,
+            Occurrence(),
+            MailboxMutation.Relocate,
+            Requester,
+            Archive,
+            desiredSeenState: null,
+            AuthoredDeleteEmailDisposition.EraseLocalCopy));
+
+        // Assert
+        Assert.Equal("localDisposition", refusal.ParamName);
+    }
+
+    /// <summary>A disposition outside the declared set names no decision, so it never reaches the durable record.</summary>
+    [Fact]
+    public void Create_DeleteNamingAnUndeclaredDisposition_IsRefused()
+    {
+        // Act
+        var refusal = Assert.Throws<ArgumentOutOfRangeException>(() => MailboxMutationRequest.Create(
+            LocalEmail,
+            Occurrence(),
+            MailboxMutation.Delete,
+            Requester,
+            destinationPath: null,
+            desiredSeenState: null,
+            (AuthoredDeleteEmailDisposition)97));
+
+        // Assert
+        Assert.Equal("localDisposition", refusal.ParamName);
     }
 
     /// <summary>The struct default names no mutation, so a row that somehow carried one is not reconstructed.</summary>
@@ -90,7 +155,8 @@ public sealed class MailboxMutationRequestTests
             default,
             Requester,
             destinationPath: null,
-            desiredSeenState: null));
+            desiredSeenState: null,
+            localDisposition: null));
 
         // Assert
         Assert.Equal("mutation", refusal.ParamName);

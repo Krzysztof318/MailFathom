@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.CodeCoverage;
+using MailFathom.Domain.Emails;
 using MailFathom.Domain.Mutations;
 
 namespace MailFathom.Infrastructure.Persistence.Entities;
@@ -60,6 +61,15 @@ internal sealed class MailboxMutationEntity
 
     /// <summary>Gets or sets which way a <c>\Seen</c> change was asked for, and <see langword="null" /> for every other mutation.</summary>
     public bool? DesiredSeenState { get; set; }
+
+    /// <summary>Gets or sets what becomes of the local copy after a delete, and <see langword="null" /> for every other mutation.</summary>
+    /// <remarks>
+    /// It is written once with the row and never rewritten, which is the whole reason it is stored rather than read
+    /// where the delete finishes. A delete completes locally in a later synchronization run, so reading the account's
+    /// configuration there would apply whatever the operator had changed it to in the meantime to a deletion that was
+    /// authored under the previous answer.
+    /// </remarks>
+    public AuthoredDeleteEmailDisposition? LocalDisposition { get; set; }
 
     public MailboxMutationStage Stage { get; set; }
 

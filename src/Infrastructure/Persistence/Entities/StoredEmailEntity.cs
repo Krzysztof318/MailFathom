@@ -127,6 +127,25 @@ internal sealed class StoredEmailEntity
     /// </remarks>
     public DateTimeOffset? RemoteExpungeObservedAt { get; set; }
 
+    /// <summary>
+    /// Gets or sets whether this email is kept readable although its remote occurrence has gone, which only a delete
+    /// MailFathom performed under <see cref="AuthoredDeleteEmailDisposition.RetainLocalCopy" /> sets.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// It is what separates freeing space on the server from forgetting the mail. The row still carries
+    /// <see cref="RemoteExpungeObservedAt" />, because the server genuinely no longer holds the message and the
+    /// reconciliation queue must stop asking about it; this flag is what keeps the same row inside every mailbox query
+    /// the timestamp would otherwise take it out of.
+    /// </para>
+    /// <para>
+    /// Nothing but an authored delete sets it. A disappearance somebody else caused is answered by
+    /// <see cref="RemotelyDeletedEmailDisposition" />, which has no value that keeps the mail readable: MailFathom did
+    /// not cause that removal and cannot say the owner meant to keep a local copy of it.
+    /// </para>
+    /// </remarks>
+    public bool IsRetainedAfterAuthoredDelete { get; set; }
+
     public bool IsRemotelySeen { get; set; }
 
     public bool IsRemotelyAnswered { get; set; }

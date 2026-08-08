@@ -372,6 +372,11 @@ internal sealed class MailFathomDbContext : DbContext
             entity.Property(mutation => mutation.RequesterOrigin).HasConversion<string>().HasMaxLength(64).IsRequired();
             entity.Property(mutation => mutation.Stage).HasConversion<string>().HasMaxLength(64).IsRequired();
 
+            // Stored as text for the same reason, and nullable because only a delete carries one. A row whose text
+            // names no declared disposition fails the read rather than being taken as the destructive value by
+            // elimination, which is what an integer column would have allowed.
+            entity.Property(mutation => mutation.LocalDisposition).HasConversion<string>().HasMaxLength(64);
+
             // See the stored-email mapping: this is the PostgreSQL `xmin` system column, not a user-defined column.
             entity.Property(mutation => mutation.ConcurrencyVersion).IsRowVersion();
 

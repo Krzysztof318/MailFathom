@@ -254,7 +254,8 @@ public sealed class MailboxReconciler
                     .Select(static attribution => new MutationAttributedDisappearance(
                         attribution.StoredEmailId,
                         attribution.Record!.Id,
-                        attribution.Record.Request.Mutation)),
+                        attribution.Record.Request.Mutation,
+                        attribution.Record.Request.LocalDisposition)),
             ],
             disposition,
             observedAt);

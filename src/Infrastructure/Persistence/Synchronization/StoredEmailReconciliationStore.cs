@@ -116,16 +116,47 @@ internal sealed class StoredEmailReconciliationStore(MailFathomDbContext readCon
             }
         }
 
-        // A disappearance MailFathom itself caused moves the queue timestamp and nothing else. The row is on its way
-        // into another folder, or it is the local copy of a message the owner deleted on the server and what becomes of
-        // it is the delete action's own decision; neither is the remote deletion the disposition below answers for.
+        // A disappearance MailFathom itself caused is not the remote deletion the disposition below answers for, so it
+        // never reaches that setting. A relocation moves the queue timestamp and nothing else, because the row is on
+        // its way into another folder; a delete additionally applies the disposition its own record carries, which is
+        // the one the owner authored it under rather than whatever the account is configured with by now.
+        var erasedByAuthoredDelete = new List<StoredEmailEntity>();
+
         foreach (var attributed in outcome.RemovedByOwnMutation)
         {
-            if (rowsById.TryGetValue(attributed.StoredEmailId.Value, out var row)
-                && !HasNewerObservationThan(row, outcome.ObservedAt))
+            if (!rowsById.TryGetValue(attributed.StoredEmailId.Value, out var row)
+                || HasNewerObservationThan(row, outcome.ObservedAt))
             {
-                row.RemoteFlagsObservedAt = outcome.ObservedAt;
+                continue;
             }
+
+            row.RemoteFlagsObservedAt = outcome.ObservedAt;
+
+            // Only a delete names one, which is the request's own invariant. A relocation reaching here has its row
+            // carried into the destination folder by the placement instead.
+            if (attributed.LocalDisposition is not { } authoredDisposition)
+            {
+                continue;
+            }
+
+            if (authoredDisposition is AuthoredDeleteEmailDisposition.EraseLocalCopy)
+            {
+                erasedByAuthoredDelete.Add(row);
+
+                continue;
+            }
+
+            // Both retaining values record the expunge, because the server genuinely no longer holds the message and
+            // the reconciliation queue has to stop selecting a row nothing will ever answer about again. Which of the
+            // two it was decides only whether mailbox queries still admit the row.
+            row.RemoteExpungeObservedAt ??= outcome.ObservedAt;
+            row.IsRetainedAfterAuthoredDelete =
+                authoredDisposition is AuthoredDeleteEmailDisposition.RetainLocalCopy;
+        }
+
+        if (erasedByAuthoredDelete.Count > 0)
+        {
+            sessionContext.StoredEmails.RemoveRange(erasedByAuthoredDelete);
         }
 
         var disappeared = outcome.Disappeared
@@ -136,8 +167,9 @@ internal sealed class StoredEmailReconciliationStore(MailFathomDbContext readCon
 
         if (outcome.Disposition is RemotelyDeletedEmailDisposition.EraseLocalCopy)
         {
-            // One RemoveRange rather than a remove per row: the raw MIME, the search document, and any outstanding
-            // repair request are declared with OnDelete(Cascade) from this row, so PostgreSQL removes them too.
+            // One RemoveRange rather than a remove per row: the raw MIME, the search document, the chunks and their
+            // vectors, and any outstanding repair request are declared with OnDelete(Cascade) from this row, so
+            // PostgreSQL removes them too.
             sessionContext.StoredEmails.RemoveRange(disappeared);
 
             return;

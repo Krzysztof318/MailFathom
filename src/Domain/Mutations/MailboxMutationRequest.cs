@@ -18,8 +18,8 @@ namespace MailFathom.Domain.Mutations;
 /// <para>
 /// The parameters a mutation takes are part of the request rather than a payload beside it, and which ones are present
 /// is an invariant rather than a convention: a relocation and a copy name a destination folder and nothing else, a
-/// delete names nothing, and a <c>\Seen</c> change names a direction. The factories are the only way to build one, so a
-/// request naming a destination for a delete cannot be constructed at all.
+/// delete names what becomes of the local copy, and a <c>\Seen</c> change names a direction. The factories are the only
+/// way to build one, so a request naming a destination for a delete cannot be constructed at all.
 /// </para>
 /// <para>
 /// Nothing here is mail content. A folder path, an account, a folder binding, a UID, and a requester identity are all
@@ -35,7 +35,8 @@ public sealed record MailboxMutationRequest
         MailboxMutation mutation,
         MailboxMutationRequester requester,
         RemoteFolderPath? destinationPath,
-        bool? desiredSeenState)
+        bool? desiredSeenState,
+        AuthoredDeleteEmailDisposition? localDisposition)
     {
         this.StoredEmailId = storedEmailId;
         this.Occurrence = occurrence;
@@ -43,6 +44,7 @@ public sealed record MailboxMutationRequest
         this.Requester = requester;
         this.DestinationPath = destinationPath;
         this.DesiredSeenState = desiredSeenState;
+        this.LocalDisposition = localDisposition;
     }
 
     /// <summary>Gets the local email the change is about.</summary>
@@ -63,6 +65,15 @@ public sealed record MailboxMutationRequest
     /// <summary>Gets which way a <c>\Seen</c> change was asked for, and <see langword="null" /> for every other mutation.</summary>
     public bool? DesiredSeenState { get; }
 
+    /// <summary>Gets what becomes of the local copy once the delete has happened, and <see langword="null" /> for every other mutation.</summary>
+    /// <remarks>
+    /// It is resolved from the account's configuration when the request is built and written down with the record, so a
+    /// setting changed while the delete is in flight cannot decide the outcome of work already begun. Only a delete
+    /// carries one: a relocation keeps the email and a copy adds an occurrence, so neither has a local copy to dispose
+    /// of.
+    /// </remarks>
+    public AuthoredDeleteEmailDisposition? LocalDisposition { get; }
+
     /// <summary>Asks for one email to be moved out of its folder and into another.</summary>
     /// <param name="storedEmailId">The local email being moved.</param>
     /// <param name="occurrence">Where the email is now.</param>
@@ -80,24 +91,34 @@ public sealed record MailboxMutationRequest
             MailboxMutation.Relocate,
             requester,
             destinationPath,
-            desiredSeenState: null);
+            desiredSeenState: null,
+            localDisposition: null);
 
     /// <summary>Asks for one email to be removed from the folder it is in.</summary>
     /// <param name="storedEmailId">The local email being removed.</param>
     /// <param name="occurrence">Where the email is now.</param>
     /// <param name="requester">The authored act asking.</param>
+    /// <param name="localDisposition">What becomes of the local copy once the server no longer holds the message.</param>
     /// <returns>The request to write down.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="occurrence" /> or <paramref name="requester" /> is <see langword="null" />.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="localDisposition" /> names no declared disposition.</exception>
+    /// <remarks>
+    /// The disposition is a parameter rather than something read where the delete completes, because completion happens
+    /// in a later synchronization run that would read whatever the configuration says by then. Taking it here is what
+    /// makes the answer the one that was true when the owner asked.
+    /// </remarks>
     public static MailboxMutationRequest Delete(
         StoredEmailId storedEmailId,
         EmailOccurrenceId occurrence,
-        MailboxMutationRequester requester) => Create(
+        MailboxMutationRequester requester,
+        AuthoredDeleteEmailDisposition localDisposition) => Create(
             storedEmailId,
             occurrence,
             MailboxMutation.Delete,
             requester,
             destinationPath: null,
-            desiredSeenState: null);
+            desiredSeenState: null,
+            localDisposition);
 
     /// <summary>Asks for the remote <c>\Seen</c> flag of one email to be set or cleared.</summary>
     /// <param name="storedEmailId">The local email being flagged.</param>
@@ -116,7 +137,8 @@ public sealed record MailboxMutationRequest
             MailboxMutation.SetSeen,
             requester,
             destinationPath: null,
-            isSeen);
+            isSeen,
+            localDisposition: null);
 
     /// <summary>Asks for a second live occurrence of one email to be put into another folder.</summary>
     /// <param name="storedEmailId">The local email being copied.</param>
@@ -135,7 +157,8 @@ public sealed record MailboxMutationRequest
             MailboxMutation.Copy,
             requester,
             destinationPath,
-            desiredSeenState: null);
+            desiredSeenState: null,
+            localDisposition: null);
 
     /// <summary>Restores the request a durable record was written for.</summary>
     /// <param name="storedEmailId">The local email the change is about.</param>
@@ -144,9 +167,11 @@ public sealed record MailboxMutationRequest
     /// <param name="requester">The authored act that asked.</param>
     /// <param name="destinationPath">The stored destination folder, where the mutation takes one.</param>
     /// <param name="desiredSeenState">The stored flag direction, where the mutation takes one.</param>
+    /// <param name="localDisposition">The stored local disposition, where the mutation takes one.</param>
     /// <returns>The request those values name.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="occurrence" /> or <paramref name="requester" /> is <see langword="null" />.</exception>
     /// <exception cref="ArgumentException">Thrown when <paramref name="mutation" /> is unspecified, or when the parameters present are not the ones it takes.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="localDisposition" /> names no declared disposition.</exception>
     /// <remarks>
     /// This is the one route that accepts the parameters loose, because a stored row hands them back that way. It
     /// validates the shape the factories above guarantee, so a row edited by hand into a combination no mutation has is
@@ -158,7 +183,8 @@ public sealed record MailboxMutationRequest
         MailboxMutation mutation,
         MailboxMutationRequester requester,
         RemoteFolderPath? destinationPath,
-        bool? desiredSeenState)
+        bool? desiredSeenState,
+        AuthoredDeleteEmailDisposition? localDisposition)
     {
         ArgumentNullException.ThrowIfNull(occurrence);
         ArgumentNullException.ThrowIfNull(requester);
@@ -168,7 +194,7 @@ public sealed record MailboxMutationRequest
             throw new ArgumentException("A mutation request must name a permitted mutation.", nameof(mutation));
         }
 
-        RequireParametersOf(mutation, destinationPath, desiredSeenState);
+        RequireParametersOf(mutation, destinationPath, desiredSeenState, localDisposition);
 
         return new MailboxMutationRequest(
             storedEmailId,
@@ -176,17 +202,20 @@ public sealed record MailboxMutationRequest
             mutation,
             requester,
             destinationPath,
-            desiredSeenState);
+            desiredSeenState,
+            localDisposition);
     }
 
     /// <summary>Refuses a parameter set that is not the one the named mutation takes.</summary>
     private static void RequireParametersOf(
         MailboxMutation mutation,
         RemoteFolderPath? destinationPath,
-        bool? desiredSeenState)
+        bool? desiredSeenState,
+        AuthoredDeleteEmailDisposition? localDisposition)
     {
         var takesDestination = mutation == MailboxMutation.Relocate || mutation == MailboxMutation.Copy;
         var takesSeenState = mutation == MailboxMutation.SetSeen;
+        var takesLocalDisposition = mutation == MailboxMutation.Delete;
 
         if (takesDestination != destinationPath.HasValue)
         {
@@ -204,6 +233,26 @@ public sealed record MailboxMutationRequest
                     ? $"The {mutation.Name} mutation names a flag direction and none was supplied."
                     : $"The {mutation.Name} mutation names no flag direction.",
                 nameof(desiredSeenState));
+        }
+
+        if (takesLocalDisposition != localDisposition.HasValue)
+        {
+            throw new ArgumentException(
+                takesLocalDisposition
+                    ? $"The {mutation.Name} mutation names a local disposition and none was supplied."
+                    : $"The {mutation.Name} mutation names no local disposition.",
+                nameof(localDisposition));
+        }
+
+        // A value outside the declared set names no decision about the local copy, and the request is what gets written
+        // down: a record carrying one could not be read back at all, which would strand the delete rather than perform
+        // it under some fallback. It is refused where the request is built, before any of that is durable.
+        if (localDisposition is { } disposition && !Enum.IsDefined(disposition))
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(localDisposition),
+                disposition,
+                "The local disposition of a delete must be one of the declared dispositions.");
         }
     }
 }

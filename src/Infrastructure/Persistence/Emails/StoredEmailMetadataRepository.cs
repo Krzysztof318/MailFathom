@@ -123,10 +123,12 @@ internal sealed class StoredEmailMetadataRepository(TimeProvider timeProvider, E
         entity.Uid = occurrenceId.Uid.Value;
 
         // The stored flags were read in the folder the email has left, and the tombstone, if the source disappearance
-        // was seen first, described an occurrence that no longer exists. Both are cleared so the destination folder's
-        // own window is what says what holds there now.
+        // was seen first, described an occurrence that no longer exists. All three are cleared so the destination
+        // folder's own window is what says what holds there now: the email has a remote occurrence again, so it is no
+        // longer one retained without one either.
         entity.RemoteFlagsObservedAt = null;
         entity.RemoteExpungeObservedAt = null;
+        entity.IsRetainedAfterAuthoredDelete = false;
 
         return true;
     }

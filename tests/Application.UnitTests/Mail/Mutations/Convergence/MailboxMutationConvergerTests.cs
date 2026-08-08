@@ -389,7 +389,8 @@ public sealed class MailboxMutationConvergerTests
     private static MailboxMutationRequest DeleteRequest(uint uid) => MailboxMutationRequest.Delete(
         StoredEmailId.Create(Guid.CreateVersion7()),
         Occurrence(uid),
-        MailboxMutationRequester.Rule("drop-notifications", 5));
+        MailboxMutationRequester.Rule("drop-notifications", 5),
+        AuthoredDeleteEmailDisposition.RetainLocalCopy);
 
     /// <summary>Assembles the converger over the same in-memory record store the performer's own tests use.</summary>
     /// <remarks>

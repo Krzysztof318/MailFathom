@@ -30,7 +30,8 @@ internal sealed class StoredEmailSummaryReader(MailFathomDbContext dbContext) : 
     {
         var row = await dbContext.StoredEmails
             .AsNoTracking()
-            .Where(email => email.Id == storedEmailId.Value && email.RemoteExpungeObservedAt == null)
+            .Where(email => email.Id == storedEmailId.Value)
+            .Where(StoredEmailTombstone.IsNotTombstoned)
             .Select(StoredEmailSummaryRow.Projection)
             .SingleOrDefaultAsync(cancellationToken);
 

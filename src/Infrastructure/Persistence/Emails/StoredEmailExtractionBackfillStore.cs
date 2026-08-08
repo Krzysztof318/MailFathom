@@ -53,9 +53,9 @@ internal sealed class StoredEmailExtractionBackfillStore(
         var resumeAfterId = resumeAfter?.Value;
         var candidates = await dbContext.StoredEmails
             .AsNoTracking()
+            .Where(StoredEmailTombstone.IsNotTombstoned)
             .Where(email => email.ContentAvailability == StoredEmailContentAvailability.Available
                 && email.SearchDocument == null
-                && email.RemoteExpungeObservedAt == null
                 && (resumeAfterId == null || email.Id > resumeAfterId))
             .OrderBy(email => email.Id)
             .Take(batchSize)
