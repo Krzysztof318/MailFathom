@@ -190,8 +190,8 @@ makes those values unopenable, and the failure appears at the next read rather t
 
 ## `MailboxSearch`
 
-The deployment-wide privacy bound on what a search result may quote. [Lexical email
-search](../features/email-search.md) records how snippets are cut.
+The deployment-wide privacy bound on what a search result may quote, whether the result was ranked lexically or
+hybridly. [Email search](../features/email-search.md) records how snippets are cut.
 
 | Key | Type | Default | Constraint | Change |
 | --- | --- | --- | --- | --- |
