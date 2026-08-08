@@ -179,7 +179,7 @@ public sealed class MailboxTimelineReaderTests
     }
 
     /// <summary>
-    /// The acceptance criterion of the specification: a walk with stable filters visits every row exactly once, across
+    /// The acceptance criterion for keyset pagination: a walk with stable filters visits every row exactly once, across
     /// equal received timestamps, across undated mail, and in both directions.
     /// </summary>
     [Theory]

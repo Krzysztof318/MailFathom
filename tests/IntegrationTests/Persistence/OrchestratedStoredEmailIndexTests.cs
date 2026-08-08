@@ -34,8 +34,8 @@ namespace MailFathom.IntegrationTests.Persistence;
 /// declares and what EF Core publishes no way to write, and a parameterized <c>tsquery</c> against the text search
 /// configuration the generated column was built with. The assertions are therefore about the schema, which is what
 /// carries the coverage marker here. How the mailbox listing read model behaves over the same data is
-/// <see cref="OrchestratedStoredEmailTimelineReaderTests" />, and the lexical search read model of specification 15 will
-/// join it rather than this class.
+/// <see cref="OrchestratedStoredEmailTimelineReaderTests" />, and the lexical search read model belongs beside it
+/// rather than in this class.
 /// </para>
 /// </remarks>
 [Collection(OrchestratedInfrastructureCollectionDefinition.Name)]

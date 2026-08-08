@@ -38,7 +38,7 @@ Four kinds of file under `docs/` are deliberately not published:
   documentation of the product.
 - **The `toc.yml` files**, which are the navigation itself.
 
-The specifications under `specs/` are not published either, and are not under `docs/` to begin with: a specification
+The architecture draft under `specs/` is not published either, and is not under `docs/` to begin with: the draft
 states intent, and every page on this site states fact.
 
 ## Which versions are published, and which one opens
@@ -82,7 +82,7 @@ Two forms, and which one to use is decided by whether the target is on the site:
 - **A link to another published page stays relative**, as `../operations/mcp-endpoint.md`. docfx rewrites it to the
   published page, and GitHub resolves it to the file, so one link works in both renderings.
 - **A link to anything the site does not carry is written as an absolute `https://github.com/Krzysztof318/MailFathom`
-  URL** — an ADR, a specification, a deployment asset, a source file. A relative link to one of those resolves on
+  URL** — an ADR, the architecture draft, a deployment asset, a source file. A relative link to one of those resolves on
   GitHub and reaches a 404 on the site.
 - **A link into the API reference is a `xref:`**, naming the type or namespace rather than the generated file, as
   `[Domain](xref:MailFathom.Domain)`. It is the one kind of link a refactor breaks without touching the page, so it

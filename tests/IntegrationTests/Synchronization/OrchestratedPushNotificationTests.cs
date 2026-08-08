@@ -26,8 +26,8 @@ namespace MailFathom.IntegrationTests.Synchronization;
 /// The unit suite drives the whole push state machine — degradation, renewal, recycling, the subscription bounds —
 /// against a substituted <see cref="IMailboxNotificationSessionFactory" />, so what it proves is that the caller reacts
 /// to a change that was reported to it. Whether MailKit is ever told about one is the part that only an IMAP server can
-/// answer, and it is the part specification 21 scoped and then deferred because specification 11 had not been built
-/// yet.
+/// answer, and it is the part the IMAP behavior suite scoped and then deferred until push synchronization existed to
+/// verify.
 /// </para>
 /// <para>
 /// Two tests, because there are two answers a server can give. The first covers the whole life of a session that the
@@ -40,7 +40,8 @@ namespace MailFathom.IntegrationTests.Synchronization;
 /// The order inside the first test is what makes it free of a sleep and free of a race. Opening the session selects the
 /// folder, which snapshots the message count the server will report a change against, so mail delivered afterwards is a
 /// change whether it arrives while the session is idling or between two waits. GreenMail polls rather than pushes its
-/// own notifications, which specification 21 records, so the wait is bounded generously rather than tightly.
+/// own notifications, which is recorded with the rest of that server's behavior, so the wait is bounded generously
+/// rather than tightly.
 /// </para>
 /// </remarks>
 [Collection(OrchestratedInfrastructureCollectionDefinition.Name)]
@@ -108,7 +109,7 @@ public sealed class OrchestratedPushNotificationTests(MailFathomOrchestrationFix
             cancellationToken);
 
         // The push session reports that a folder changed and never what changed, so nothing it did may have set the
-        // flag. This is the invariant specification 11 asks for in the one place a second fetch path could have hidden.
+        // flag. This is the read-only invariant in the one place a second fetch path could have hidden.
         RemoteSeenFlagAssertion.AssertNoneIsSeen(
             await mailbox.ReadAsync(WatchedFolderName, cancellationToken),
             "A push notification session observing a delivery");

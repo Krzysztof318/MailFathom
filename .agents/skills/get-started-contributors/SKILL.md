@@ -61,9 +61,10 @@ offer to go deeper on any one of them instead of expanding all six.
    language a contributor thinks and asks questions in is their own.
 
 3. **Where things live.** `src/` holds the clean-architecture boundaries — `Domain`, `Application`, `Infrastructure`,
-   `AI`, `Mcp`, `Host`, `Cli` — and `tests/` mirrors them. `docs/` states what the code *does* and `specs/` states what a
-   planned change *must* do; `docs/decisions/` holds the ADRs a change is written to be consistent with. `deploy/`,
-   `scripts/`, and `.agents/skills/` are the deployment assets, the gates, and this workflow. Each directory's own
+   `AI`, `Mcp`, `Host`, `Cli` — and `tests/` mirrors them. `docs/` states what the code *does* and `specs/` holds the
+   architecture draft, which states what MailFathom is being built into; `docs/decisions/` holds the ADRs a change is
+   written to be consistent with. `deploy/`, `scripts/`, and `.agents/skills/` are the deployment assets, the gates,
+   and this workflow. Each directory's own
    `AGENTS.md` governs it, and the table in the root one says which to read when.
 
 4. **The licence, and the one mistake that cannot be undone.** MailFathom is Apache-2.0, and section 5 puts a

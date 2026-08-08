@@ -105,7 +105,7 @@ public sealed class OrchestratedStoredEmailTimelineReaderTests(MailFathomOrchest
     /// <summary>Applies every filter the read model publishes, which is what proves each one translates and selects.</summary>
     /// <remarks>
     /// The remote flag filter is asserted as an all-or-nothing partition deliberately. Nothing writes the flag snapshot
-    /// yet — reconciliation is specification 10 — so every seeded row carries the never-observed default, and what this
+    /// yet — remote flag reconciliation is not implemented — so every seeded row carries the never-observed default, and what this
     /// establishes is that the predicate reaches the column and that such a row counts as unseen.
     /// </remarks>
     [Fact]

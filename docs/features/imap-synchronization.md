@@ -888,8 +888,8 @@ enriched nor unreadable.
 
 Logs record counts and the account and folder identity only. Addresses, subjects, file names, and body text are never
 written to a log — a file name is both mail content and attacker-controlled, so logging one would leak and inject at
-once. Extracted participant data is personal data by default, which constrains how specification 07 will persist and
-index it.
+once. Extracted participant data is personal data by default, which constrains how it is persisted and
+indexed.
 
 ## Body text and the lexical index
 
@@ -905,7 +905,7 @@ Within that branch:
 2. Only when the message offered no plain-text alternative is text derived from the HTML body, and the result is **marked lossy** so a later chunking or ranking design can decide how much to trust it instead of re-deriving from the message which path produced the words it is holding.
 3. A message with neither records **no textual body**.
 
-Derivation uses `MimeKit.Text.HtmlTokenizer`, which arrives with MailKit, so this adds no dependency. That matters beyond convenience: specification 14 selects an HTML sanitizer that pins AngleSharp to an exact old version, so keeping this on MimeKit avoids trading one version conflict for another. Nothing in the derivation resolves a URL, loads a style sheet, follows a `src`, or expands an external entity — an HTML body cannot make extraction reach the network or the filesystem however it is written. Script, style, and head content is machinery rather than words and never reaches the index; block elements become line breaks, character references are decoded to what a reader saw, and source indentation collapses.
+Derivation uses `MimeKit.Text.HtmlTokenizer`, which arrives with MailKit, so this adds no dependency. That matters beyond convenience: the content read model uses an HTML sanitizer that pins AngleSharp to an exact old version, so keeping this on MimeKit avoids trading one version conflict for another. Nothing in the derivation resolves a URL, loads a style sheet, follows a `src`, or expands an external entity — an HTML body cannot make extraction reach the network or the filesystem however it is written. Script, style, and head content is machinery rather than words and never reaches the index; block elements become line breaks, character references are decoded to what a reader saw, and source indentation collapses.
 
 ### Encrypted, empty, and unread are different answers
 

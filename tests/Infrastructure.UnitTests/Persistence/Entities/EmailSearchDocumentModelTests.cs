@@ -16,7 +16,7 @@ namespace MailFathom.Infrastructure.UnitTests.Persistence.Entities;
 /// <summary>
 /// Asserts the shape of the lexical index the schema is generated from. The model is built in memory by the real
 /// PostgreSQL provider and no connection is opened, so this states what the column and index are declared to be;
-/// whether PostgreSQL then matches a query against them is an integration question that specification 20 answers.
+/// whether PostgreSQL then matches a query against them is an integration question the integration suite answers.
 /// </summary>
 public sealed class EmailSearchDocumentModelTests
 {

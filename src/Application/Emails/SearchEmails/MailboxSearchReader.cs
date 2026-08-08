@@ -34,7 +34,7 @@ namespace MailFathom.Application.Emails.SearchEmails;
 /// </para>
 /// <para>
 /// Because the index covers body text only, a word that appears solely inside an attachment payload matches nothing
-/// here. That is the deliberate limit the extraction specification records rather than something this use case works
+/// here. That is a deliberate limit of text extraction rather than something this use case works
 /// around, and the feature documentation states it so the behavior is not surprising.
 /// </para>
 /// </remarks>

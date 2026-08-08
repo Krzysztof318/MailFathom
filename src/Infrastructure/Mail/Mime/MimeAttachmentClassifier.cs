@@ -16,7 +16,7 @@ namespace MailFathom.Infrastructure.Mail.Mime;
 /// <remarks>
 /// <para>
 /// The rules run as: the cryptographic envelope, then cryptographic leaf parts, then the body branch, then inline
-/// resources an HTML body embeds, and everything left over is an attachment. The order is the specification rather than
+/// resources an HTML body embeds, and everything left over is an attachment. The order is the rule rather than
 /// an implementation detail, because several ordinary parts satisfy more than one rule at once — an <c>smime.p7s</c>
 /// part arrives with <c>Content-Disposition: attachment</c>, and a <c>text/plain</c> body inside a
 /// <c>multipart/mixed</c> is a part with no disposition at all.

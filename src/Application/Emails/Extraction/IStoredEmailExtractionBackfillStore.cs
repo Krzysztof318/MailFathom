@@ -48,8 +48,8 @@ public interface IStoredEmailExtractionBackfillStore
     /// <param name="cancellationToken">Propagates caller cancellation.</param>
     /// <returns>A task that completes when the write has been staged.</returns>
     /// <remarks>
-    /// This persists the classification markers specification 06 introduced before it persists any text derived from
-    /// them. A row stored before that specification carries no markers at all, so reading one instead of writing it
+    /// This persists the classification markers MIME extraction produces before it persists any text derived from
+    /// them. A row stored before extraction existed carries no markers at all, so reading one instead of writing it
     /// would leave every pre-existing encrypted message indistinguishable from an empty one.
     /// </remarks>
     Task ApplyExtractionAsync(

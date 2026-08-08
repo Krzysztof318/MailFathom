@@ -12,7 +12,7 @@ namespace MailFathom.IntegrationTests.Mailbox;
 /// <remarks>
 /// <para>
 /// Ordering is the exception this suite is allowed and the unit suites are not. A test class here shares one mailbox
-/// and one database with every other test in the assembly, and some of what the specification asks for is a claim about
+/// and one database with every other test in the assembly, and some of what synchronization has to guarantee is a claim about
 /// two runs rather than one: that synchronizing a folder again stores nothing twice. Expressed as a single test, the
 /// second run's assertions would be reported as a failure of the first run's arrangement; expressed as two tests
 /// without an order, whichever ran first would decide what the other saw.

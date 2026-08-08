@@ -18,7 +18,7 @@ Running the gate is mandatory; finding something to change is not. `n/a` and `pa
 Confirm that durable documentation describes implemented behavior:
 
 - update affected commands, examples, configuration, failure modes, security assumptions, and operations;
-- keep future intent in specifications and actual behavior in `docs/`;
+- keep future intent on the issue that owns it and actual behavior in `docs/`;
 - treat stale guidance as a failure;
 - do not create or modify an ADR without explicit owner approval.
 
@@ -67,7 +67,7 @@ When a dependency is pinned in `Directory.Packages.props`, record the exact pack
 
 `THIRD_PARTY_LICENSES.md` records what the repository actually pins, bundles, or calls, and is not the project's own `LICENSE` or a generated notice bundle. Put an entry in the section that matches the component's exposure — redistributed, build-time, test-only, orchestration, continuous integration, developer tooling, externally sourced source, or hosted service — because that is what decides whether a release obligation follows.
 
-Register only what the change actually introduces. A component it mentions, plans, evaluates, or rejects gets no row anywhere in the file, in any wording: a row asserts a completed review of software in use, and a rejected or deferred candidate would have to be reviewed again at adoption. Record that reasoning in the specification, ADR, or issue that owns the future work. Removing a component removes its row in the same change.
+Register only what the change actually introduces. A component it mentions, plans, evaluates, or rejects gets no row anywhere in the file, in any wording: a row asserts a completed review of software in use, and a rejected or deferred candidate would have to be reviewed again at adoption. Record that reasoning in the ADR or issue that owns the future work. Removing a component removes its row in the same change.
 
 ## Verdict
 

@@ -18,7 +18,7 @@ namespace MailFathom.Infrastructure.UnitTests.Persistence.Emails;
 /// the real model and no connection is opened, which is the only place the parameterization claim is checkable without
 /// a database: an in-memory repository generates no SQL, so a test feeding it metacharacters would pass against a
 /// vulnerable adapter and prove nothing. Whether the server then uses the GIN index is a query-plan question
-/// specification 20 answers.
+/// the integration suite answers.
 /// </summary>
 public sealed class StoredEmailSearchIndexReaderCommandTests
 {
