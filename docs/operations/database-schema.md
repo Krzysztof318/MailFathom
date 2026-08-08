@@ -44,8 +44,7 @@ redirection, and no page here has to be rewritten when a release is cut.
 
 ## The role that applies it
 
-**It needs privileges the service's role does not, and it should not be the service's role.** Two facts drive that,
-and both outlive whatever runs the SQL.
+**Two facts decide which role runs the SQL, and both outlive whatever does.**
 
 **The `vector` extension.** The schema installs it, and PostgreSQL does not permit an ordinary role to create an
 extension. Either install it out of band, while a superuser is connected — which is what the Compose deployment's
@@ -53,9 +52,22 @@ initialization script does, so its `CREATE EXTENSION IF NOT EXISTS vector` then 
 schema step as a role that may.
 
 **Ownership follows whoever runs the DDL.** PostgreSQL makes the role that created a table, sequence, or index its
-owner, and ownership grants nothing to anybody else. A schema applied by `mailfathom_migrator` therefore leaves
-MailFathom failing on permission errors against a schema that plainly exists. Grant the service's role the privileges
-it needs, and set default privileges so the next migration's objects are covered too:
+owner, and ownership grants nothing to anybody else. A schema applied by any role but the one MailFathom connects as
+therefore leaves it failing on permission errors against a schema that plainly exists — the superuser included, which
+is the easiest version of this mistake to make.
+
+That leaves two arrangements, and a deployment is one or the other.
+
+**One role applies and serves.** The extension is installed out of band, the serving role owns everything the script
+created, and no grant is needed. This is the Docker Compose deployment:
+`postgres/10-create-mailfathom-database.sh` creates the database owned by `mailfathom` and installs `vector` while a
+superuser is still connected, precisely so that the schema step afterwards is an ordinary role's work. [Applying it
+there](#docker-compose) is the command, and it connects as `mailfathom`.
+
+**A separate migrator applies it.** `mailfathom_migrator` owns what it created and `mailfathom` serves, which is the
+shape to reach for wherever the privilege to alter the schema and the privilege to serve requests are meant to differ.
+It costs the grants below: grant the service's role the privileges it needs, and set default privileges so the next
+migration's objects are covered too.
 
 ```sql
 GRANT USAGE ON SCHEMA public TO mailfathom;
@@ -123,18 +135,23 @@ Do not add `--single-transaction`. The script issues its own transaction stateme
 
 ### Docker Compose
 
-The database publishes no port, and the superuser password is already mounted inside its container, so the shortest
-route is to run psql there and hand it the script on standard input. Nothing puts the credential on a command line
-that another process could read:
+The database publishes no port, and both database credentials are already mounted inside its container, so the
+shortest route is to run psql there and hand it the script on standard input. Nothing puts the credential on a command
+line that another process could read:
 
 ```bash
 cd deploy/compose
 
 docker compose exec --no-TTY postgres sh -c \
-  'PGPASSWORD="$(cat /run/secrets/postgres-superuser-password)" exec psql \
-     --username postgres --dbname "$MAILFATHOM_DATABASE" --set ON_ERROR_STOP=on' \
+  'PGPASSWORD="$(cat /run/secrets/mailfathom-database-password)" exec psql \
+     --username "$MAILFATHOM_DATABASE_ROLE" --dbname "$MAILFATHOM_DATABASE" --set ON_ERROR_STOP=on' \
   < 'mailfathom-schema-<version>.sql'
 ```
+
+**As `mailfathom`, never as `postgres`.** This is the single-role arrangement above, so the role that applies the
+schema is the role that serves requests, and it is the one the objects have to end up owned by. Applying the script as
+the superuser instead leaves MailFathom refusing to start with `42501: permission denied for table
+__EFMigrationsHistory` — the schema is there and unreadable to the only role that needs it.
 
 [Deploying with Docker Compose](deployment-compose.md#starting) is where that step sits in the sequence.
 
