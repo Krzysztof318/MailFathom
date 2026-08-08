@@ -286,6 +286,45 @@ This replaces the orchestration framework's own formatting, which writes each re
 dashed separators and closes with an instruction of its own. Retrieved mail written that way is prose in the same voice
 as an instruction, and a message imitating one of those separators is indistinguishable from it.
 
+### What is actually tried, and what it settles
+
+Everything above is a design until something attacks it, so a maintained set of adversarial messages does. It holds mail
+written to give the model orders, mail written to close the envelope's own elements and open a forged instruction inside
+it, mail written to talk the second pass into scoring it top, mail written to widen the accounts and folders a run may
+read, and mail written to make an answer cite a message nobody retrieved. Each of them is put to the formatter, to a
+whole run, to the relevance filter, and to the `ask_mail` request path. Every one of those runs is conducted against a
+substituted chat model rather than a provider, so the set costs nothing to run and reaches no network — and the
+substitute is scripted as a model that **did** what the message asked, because what is being tested is the system around
+the model rather than the model's judgement.
+
+Four things are settled that way, and they are properties of what a run can do:
+
+- **Scope.** A question, a query the model wrote, and a retrieved message are all incapable of widening the accounts and
+  folders an answer may be drawn from. That is checked in two independent places — where the request resolves the
+  caller's filters, and where the run binds them — because either one alone would be a single point of failure for the
+  only escalation here that reaches somebody else's mail.
+- **Position.** What one request carries is this build's instruction, the question as it was asked, the model's own
+  turns, and the envelope of what was retrieved. There is no fifth thing, so there is no position left for a message to
+  have reached other than the one it is quoted in — which is asserted as an equality against those four rather than as
+  the absence of the message's words, because the envelope escapes what a message wrote and searching for the raw text
+  would report a message that arrived intact as one that never arrived at all.
+- **Ranking.** A passage cannot promote itself. The second pass decides whether a candidate survives and never where it
+  sits, so a message that begs to be scored top still holds the place the fused ranking gave it, and one judged below the
+  threshold is dropped however loudly it objects.
+- **Citations.** The messages a response names are read from what the run retrieved, never from what the model wrote, so
+  an answer that names some other message names it in prose and in no citation.
+
+What none of it settles is worth stating just as plainly: **a model can still be talked into saying something wrong.**
+Nothing here inspects an answer's truth, and a sufficiently well-written message may well persuade a model to repeat its
+claims, adopt its framing, or describe the mailbox inaccurately. The guarantee is about capability rather than about
+eloquence — an answer that has been talked into a falsehood is a falsehood arriving as one message's content, attributed
+to the message that carried it, citing only mail that exists, drawn from no wider a mailbox than the caller allowed. That
+is what makes it checkable, which is the property this system can offer and truthfulness is not.
+
+The set is evidence rather than proof, and it is evidence about the attacks that were understood when it was written. It
+grows when a new one is: adding a message to it puts that message through every property above without a test being
+edited.
+
 ## What an answer carries back
 
 The answer text, and the passages the run retrieved. The passages travel with it because they are what make it
