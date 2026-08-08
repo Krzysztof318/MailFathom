@@ -12,8 +12,8 @@ namespace MailFathom.Cli.Transport;
 /// <param name="Subject">Who the certificate says the deployment is.</param>
 /// <param name="Issuer">Who signed it, which is what says whether an internal authority or nobody vouched for it.</param>
 /// <param name="Fingerprint">The SHA-256 fingerprint, which is what a profile pins and what an operator compares.</param>
-/// <param name="NotBefore">When it starts being valid.</param>
-/// <param name="NotAfter">When it stops being valid.</param>
+/// <param name="NotBefore">When it starts being valid, in UTC.</param>
+/// <param name="NotAfter">When it stops being valid, in UTC.</param>
 /// <param name="ValidationFailure">Why this machine would not accept it on its own.</param>
 /// <remarks>
 /// MailFathom's own value rather than an <see cref="X509Certificate2" />, because the decision this feeds is an
@@ -35,6 +35,12 @@ internal sealed record PresentedCertificate(
     /// <param name="chain">The chain the platform built, or <see langword="null" /> when it built none.</param>
     /// <returns>The description.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="certificate" /> is <see langword="null" />.</exception>
+    /// <remarks>
+    /// The validity window is converted rather than merely carried. <see cref="X509Certificate2" /> surfaces it as a
+    /// local <see cref="DateTime" />, and while the implicit conversion to <see cref="DateTimeOffset" /> keeps the
+    /// instant — which is what the <c>u</c> format an operator reads renders in UTC — a value that is UTC as stored
+    /// cannot be rendered as local wall clock by a later caller that formats it some other way.
+    /// </remarks>
     internal static PresentedCertificate Describe(
         X509Certificate2 certificate,
         SslPolicyErrors errors,
@@ -46,8 +52,8 @@ internal sealed record PresentedCertificate(
             certificate.Subject,
             certificate.Issuer,
             FingerprintOf(certificate),
-            certificate.NotBefore,
-            certificate.NotAfter,
+            certificate.NotBefore.ToUniversalTime(),
+            certificate.NotAfter.ToUniversalTime(),
             DescribeFailure(errors, chain));
     }
 

@@ -391,7 +391,7 @@ to make out of habit:
 ```console
 $ mfctl login --endpoint http://mail.internal.example:8090 --name internal
 
-mail.internal.example:8090 is an HTTP address, so nothing protects this connection.
+http://mail.internal.example:8090 is an HTTP address, so nothing protects this connection.
 The credential you are about to present, and every later request from this profile, cross the network in clear text.
 A redirect the deployment might send to an https:// address would not change that: the credential is already on the wire by then.
 

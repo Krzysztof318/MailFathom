@@ -104,10 +104,13 @@ public sealed class TransportTrustSignInTests : IDisposable
         Assert.Contains(this.deploymentCertificate.Issuer, reported, StringComparison.Ordinal);
         Assert.Contains(PresentedCertificate.FingerprintOf(this.deploymentCertificate), reported, StringComparison.Ordinal);
         Assert.Contains(
-            new DateTimeOffset(this.deploymentCertificate.NotAfter).ToString("u"),
+            this.deploymentCertificate.NotAfter.ToUniversalTime().ToString("u"),
             reported,
             StringComparison.Ordinal);
         Assert.Contains("does not trust the chain", reported, StringComparison.Ordinal);
+        Assert.Contains(
+            this.console.Errors,
+            line => line.StartsWith($"{SecureEndpoint} presented a certificate", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -214,6 +217,11 @@ public sealed class TransportTrustSignInTests : IDisposable
         Assert.Contains(
             this.console.Lines,
             line => line.Contains("clear text", StringComparison.Ordinal));
+
+        // The scheme is part of the line, because that is what an operator compares their terminal against.
+        Assert.Contains(
+            this.console.Errors,
+            line => line.StartsWith($"{ClearTextEndpoint} is an HTTP address", StringComparison.Ordinal));
     }
 
     /// <summary>The question is asked from the address alone, before anything is sent, so a deployment that would have redirected never gets to answer it.</summary>
