@@ -346,21 +346,12 @@ try
     // a resilience circuit is keyed by, and what every log line naming an endpoint carries. Two endpoints answering to
     // one name would share all three, so a chat endpoint reusing an embedding alias is refused here rather than
     // producing an instance whose chat outage opens the circuit its embeddings are served through.
-    if (declaredChat?.IsConfigured is true && declaredEmbeddings is not null)
+    if (ProviderEndpointAliases.FindReusedAlias(declaredEmbeddings, declaredChat) is { } reusedAlias)
     {
-        var reusedAlias = declaredEmbeddings.Endpoints
-            .Select(endpoint => endpoint.Alias.Trim())
-            .FirstOrDefault(alias => string.Equals(alias, declaredChat.Alias.Trim(), StringComparison.OrdinalIgnoreCase));
-
-        if (reusedAlias is not null)
-        {
-            throw new OptionsValidationException(
-                "Chat",
-                typeof(ChatModelOptions),
-                [
-                    $"The chat endpoint and an embedding endpoint both declare the alias '{reusedAlias}'. An alias names one endpoint, because it is what a credential, a resilience circuit, and a log line are keyed by.",
-                ]);
-        }
+        throw new OptionsValidationException(
+            "Chat",
+            typeof(ChatModelOptions),
+            [ProviderEndpointAliases.DescribeReusedAlias(reusedAlias)]);
     }
 
     // Registered once for both declarations, because it resolves by alias and the aliases are unique across them. It is

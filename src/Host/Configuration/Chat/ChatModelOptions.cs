@@ -107,9 +107,15 @@ internal sealed class ChatModelOptions : IValidatableObject
     {
         if (!this.IsConfigured)
         {
-            // A section carrying settings but no alias is the one shape worth naming: an operator who wrote a model and
-            // a key and expects the provider to be in use has to be told that nothing reads any of it.
-            if (this.Model.Trim().Length > 0 || this.ApiKey is not null || this.EntraCredential is not null)
+            // A section carrying settings but no alias is the one shape worth naming: an operator who wrote a model, an
+            // address, or a credential and expects the provider to be in use has to be told that nothing reads any of
+            // it. Every member checked here has no useful default, so writing one is unambiguous intent; the bounds and
+            // the timeout are not, because a deployment that accepted their defaults is indistinguishable from one that
+            // wrote them out.
+            if (this.Model.Trim().Length > 0
+                || this.Address.Trim().Length > 0
+                || this.ApiKey is not null
+                || this.EntraCredential is not null)
             {
                 yield return new ValidationResult(
                     "The Chat section declares settings but no Alias, so no chat provider is configured and nothing in it is read. Give the endpoint an alias, or remove the section.",

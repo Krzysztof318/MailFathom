@@ -33,15 +33,21 @@ public sealed class ChatModelOptionsTests
     /// A section carrying a model and a key but no alias reads to an operator as a configured provider, and nothing
     /// would ever call it. That is the one absent-alias shape worth refusing rather than passing over.
     /// </summary>
-    [Fact]
-    public void Validate_SettingsWithNoAlias_AreRefusedRatherThanIgnored()
+    /// <summary>
+    /// Each of these members has no useful default, so writing one is unambiguous intent that a provider be in use. An
+    /// address in particular is what a private or cloud deployment is reached at, and dropping it silently would leave
+    /// an operator believing their traffic goes somewhere it never does.
+    /// </summary>
+    /// <remarks>The case is named rather than passed, because the bound options type is internal to the host and a public test signature may not carry it.</remarks>
+    [Theory]
+    [InlineData("model")]
+    [InlineData("address")]
+    [InlineData("api-key")]
+    [InlineData("entra-credential")]
+    public void Validate_SettingsWithNoAlias_AreRefusedRatherThanIgnored(string writtenSetting)
     {
         // Arrange
-        var settings = new ChatModelOptions
-        {
-            Model = "a-chat-model",
-            ApiKey = new ConfiguredSecret { SecretReference = "env:CHAT_KEY" },
-        };
+        var settings = WrittenWithoutAnAlias(writtenSetting);
 
         // Act
         var errors = Validate(settings);
@@ -49,6 +55,25 @@ public sealed class ChatModelOptionsTests
         // Assert
         Assert.False(settings.IsConfigured);
         Assert.Contains(errors, error => error.Contains("Alias", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// A section left entirely alone is the ordinary deployment that generates nothing, and the bounds and the timeout
+    /// carry defaults — so a deployment that accepted them is indistinguishable from one that never wrote the section,
+    /// and neither may be refused.
+    /// </summary>
+    [Fact]
+    public void Validate_ASectionCarryingOnlyDefaults_IsAcceptedAsNoProvider()
+    {
+        // Arrange
+        var settings = new ChatModelOptions { MaxOutputTokens = 2048, RequestTimeout = TimeSpan.FromMinutes(3) };
+
+        // Act
+        var errors = Validate(settings);
+
+        // Assert
+        Assert.False(settings.IsConfigured);
+        Assert.Empty(errors);
     }
 
     [Fact]
@@ -240,6 +265,20 @@ public sealed class ChatModelOptionsTests
         // Assert
         Assert.True(accepted);
     }
+
+    private static ChatModelOptions WrittenWithoutAnAlias(string writtenSetting) => writtenSetting switch
+    {
+        "model" => new ChatModelOptions { Model = "a-chat-model" },
+        "address" => new ChatModelOptions { Address = "https://resource.cloud.invalid/openai/v1/" },
+        "api-key" => new ChatModelOptions { ApiKey = new ConfiguredSecret { SecretReference = "env:CHAT_KEY" } },
+        _ => new ChatModelOptions
+        {
+            EntraCredential = new ProviderEntraCredentialOptions
+            {
+                Kind = ProviderEndpointCredentialKind.ManagedIdentity,
+            },
+        },
+    };
 
     private static ChatModelOptions Declared() => new()
     {

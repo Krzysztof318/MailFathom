@@ -159,8 +159,13 @@ decision can never disagree about whether waiting is the answer.
 
 **Nothing probes a provider to find out.** A paid call made to answer a health check would spend an operator's money on
 every scrape, and the answer would be about a request nobody asked for. What is reported is the outcome of the last real
-call, stamped with when it ended — which is what separates a provider failing now from one that failed once during a
-deployment and has not been asked since.
+call.
+
+One consequence is worth knowing before reading a `Degraded` probe: **the state carries no age.** The moment the last
+call ended is recorded, but nothing reads it, so a provider that failed once during a deployment and has not been called
+since reports exactly what one that failed a moment ago reports. On an instance that embeds continuously the state is as
+current as the work; on one whose chat provider nothing calls, a stale failure can sit there indefinitely. Read the log
+records for when it happened.
 
 Two things make the states readable:
 

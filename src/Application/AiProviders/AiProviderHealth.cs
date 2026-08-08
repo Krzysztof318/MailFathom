@@ -9,8 +9,16 @@ namespace MailFathom.Application.AiProviders;
 /// <param name="State">What the last call established about it.</param>
 /// <param name="ObservedAt">When that call ended, or <see langword="null" /> while nothing has been observed.</param>
 /// <remarks>
-/// The timestamp is what separates a provider that is failing now from one that failed once during a deployment and has
-/// not been asked since. Without it a state read hours after the fact reads as current, which is how an operator ends
-/// up chasing an outage that ended before they were paged.
+/// <para>
+/// <paramref name="ObservedAt" /> records when the state was established and nothing reads it to decide anything yet.
+/// The health check reports <paramref name="State" /> alone, so a provider that failed once during a deployment and has
+/// not been called since reports exactly what one that failed a moment ago reports. It is carried because the state is
+/// otherwise undatable — a reader that wants to tell a stale failure from a current one has no way to derive the moment
+/// afterwards — and treating that distinction as already made is the mistake to avoid, not the one to describe.
+/// </para>
+/// <para>
+/// Anything that does come to act on it owes a staleness window, which is a deployment's decision rather than this
+/// type's: how long a provider may go unasked before its last failure stops being news.
+/// </para>
 /// </remarks>
 public sealed record AiProviderHealth(AiProviderRole Role, AiProviderHealthState State, DateTimeOffset? ObservedAt);
