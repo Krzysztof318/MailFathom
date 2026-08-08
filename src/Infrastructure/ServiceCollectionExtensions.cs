@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.Accounts;
+using MailFathom.Application.AiProviders;
 using MailFathom.Application.EmailContent.Rendering;
 using MailFathom.Application.EmailContent.Repair;
 using MailFathom.Application.EmailContent.Storage;
@@ -198,6 +199,13 @@ public static class ServiceCollectionExtensions
         // worker that finds nothing to do.
         services.AddSingleton<IEmailEmbeddingBacklog, BoundedEmailEmbeddingBacklog>();
         services.AddSingleton<EmailEmbeddingTelemetry>();
+        // Registered whichever providers this deployment declared, and as one instance behind both ports: the state is
+        // one fact per provider about the whole process, and a second instance would leave a health check reading what
+        // nothing had written to. An instance that declares no provider simply reports both roles as unobserved, which
+        // is what "nothing has been asked yet" should look like.
+        services.AddSingleton<AiProviderHealthTracker>();
+        services.AddSingleton<IAiProviderHealthRecorder>(provider => provider.GetRequiredService<AiProviderHealthTracker>());
+        services.AddSingleton<IAiProviderHealthReader>(provider => provider.GetRequiredService<AiProviderHealthTracker>());
         // A singleton for the reason the backlog is: the sweep's outstanding count is one figure about the whole
         // instance, and a gauge answering per scope would publish whichever scope observed it last.
         services.AddSingleton<EmailEmbeddingBackfillTelemetry>();

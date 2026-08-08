@@ -3,11 +3,10 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using Azure.Identity;
-using MailFathom.AI.Embeddings;
-using MailFathom.AI.ProviderAdapters;
+using MailFathom.AI.Providers;
 using Xunit;
 
-namespace MailFathom.AI.UnitTests.ProviderAdapters;
+namespace MailFathom.AI.UnitTests.Providers;
 
 /// <summary>Covers the credential chain a background service is allowed to hold, and the shapes it refuses.</summary>
 /// <remarks>
@@ -21,7 +20,7 @@ public sealed class NonInteractiveEntraCredentialsTests
     public void Create_ASystemAssignedManagedIdentity_NeedsNoIdentifier()
     {
         // Act
-        var credential = NonInteractiveEntraCredentials.Create(Declaration(EmbeddingEndpointCredentialKind.ManagedIdentity));
+        var credential = NonInteractiveEntraCredentials.Create(Declaration(ProviderEndpointCredentialKind.ManagedIdentity));
 
         // Assert
         Assert.IsType<ManagedIdentityCredential>(credential);
@@ -33,7 +32,7 @@ public sealed class NonInteractiveEntraCredentialsTests
     {
         // Arrange
         var declaration = Declaration(
-            EmbeddingEndpointCredentialKind.ManagedIdentity,
+            ProviderEndpointCredentialKind.ManagedIdentity,
             clientId: "8e6b3a1c-0000-4a00-9c00-1f2e3d4c5b6a");
 
         // Act
@@ -48,7 +47,7 @@ public sealed class NonInteractiveEntraCredentialsTests
     {
         // Act
         var credential = NonInteractiveEntraCredentials.Create(
-            Declaration(EmbeddingEndpointCredentialKind.WorkloadIdentity, tenantId: "a-directory", clientId: "an-application"));
+            Declaration(ProviderEndpointCredentialKind.WorkloadIdentity, tenantId: "a-directory", clientId: "an-application"));
 
         // Assert
         Assert.IsType<WorkloadIdentityCredential>(credential);
@@ -59,7 +58,7 @@ public sealed class NonInteractiveEntraCredentialsTests
     {
         // Arrange
         var declaration = Declaration(
-            EmbeddingEndpointCredentialKind.ClientSecret,
+            ProviderEndpointCredentialKind.ClientSecret,
             tenantId: "a-directory",
             clientId: "an-application",
             clientSecret: "a-resolved-secret");
@@ -73,12 +72,12 @@ public sealed class NonInteractiveEntraCredentialsTests
 
     /// <summary>A shape missing what it needs fails where the declaration is read, naming the member rather than surfacing later as a refused token.</summary>
     [Theory]
-    [InlineData(EmbeddingEndpointCredentialKind.ClientSecret, "", "an-application", "a-secret", "", nameof(EntraCredentialDeclaration.TenantId))]
-    [InlineData(EmbeddingEndpointCredentialKind.ClientSecret, "a-directory", "", "a-secret", "", nameof(EntraCredentialDeclaration.ClientId))]
-    [InlineData(EmbeddingEndpointCredentialKind.ClientSecret, "a-directory", "an-application", null, "", nameof(EntraCredentialDeclaration.ClientSecret))]
-    [InlineData(EmbeddingEndpointCredentialKind.ClientCertificate, "a-directory", "an-application", null, "", nameof(EntraCredentialDeclaration.CertificatePath))]
+    [InlineData(ProviderEndpointCredentialKind.ClientSecret, "", "an-application", "a-secret", "", nameof(EntraCredentialDeclaration.TenantId))]
+    [InlineData(ProviderEndpointCredentialKind.ClientSecret, "a-directory", "", "a-secret", "", nameof(EntraCredentialDeclaration.ClientId))]
+    [InlineData(ProviderEndpointCredentialKind.ClientSecret, "a-directory", "an-application", null, "", nameof(EntraCredentialDeclaration.ClientSecret))]
+    [InlineData(ProviderEndpointCredentialKind.ClientCertificate, "a-directory", "an-application", null, "", nameof(EntraCredentialDeclaration.CertificatePath))]
     public void Create_AShapeMissingWhatItNeeds_IsRefused(
-        EmbeddingEndpointCredentialKind kind,
+        ProviderEndpointCredentialKind kind,
         string tenantId,
         string clientId,
         string? clientSecret,
@@ -102,11 +101,11 @@ public sealed class NonInteractiveEntraCredentialsTests
     {
         // Act, Assert
         Assert.Throws<ArgumentOutOfRangeException>(
-            () => NonInteractiveEntraCredentials.Create(Declaration(EmbeddingEndpointCredentialKind.ApiKey)));
+            () => NonInteractiveEntraCredentials.Create(Declaration(ProviderEndpointCredentialKind.ApiKey)));
     }
 
     private static EntraCredentialDeclaration Declaration(
-        EmbeddingEndpointCredentialKind kind,
+        ProviderEndpointCredentialKind kind,
         string tenantId = "",
         string clientId = "",
         string? clientSecret = null,

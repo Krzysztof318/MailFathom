@@ -247,6 +247,30 @@ public readonly record struct MailFathomErrorCode
 
     #endregion
 
+    #region Category 7 — Chat providers
+
+    /// <summary>Gets subcategory 1, credentials: a chat provider refused the credential this deployment presented.</summary>
+    /// <remarks>
+    /// Separate from the embedding category rather than shared with it, because the two providers are configured
+    /// independently and fail independently: an instance may hold a working embedding credential and a rejected chat
+    /// one, and a single code would leave an operator rotating the key that was never refused.
+    /// </remarks>
+    public static MailFathomErrorCode ChatProviderCredentialRejected { get; } = new(71001);
+
+    /// <summary>Gets subcategory 2, availability: the declared chat endpoint did not answer within the budget configured for it.</summary>
+    /// <remarks>A rate limit, a timeout, an unreachable endpoint, and a request the provider rejected outright collapse into this one code, because each says the same thing to the work that asked: no answer exists to present.</remarks>
+    public static MailFathomErrorCode ChatProviderUnavailable { get; } = new(72001);
+
+    /// <summary>Gets subcategory 3, answer shape: a chat provider ended the call with no text to present.</summary>
+    /// <remarks>
+    /// Raised at the adapter rather than passed on as an empty answer, because an empty string reaching a caller reads
+    /// as a model that had nothing to say rather than as a call that produced nothing, and the two lead an operator to
+    /// different places.
+    /// </remarks>
+    public static MailFathomErrorCode ChatAnswerEmpty { get; } = new(73001);
+
+    #endregion
+
     /// <summary>Gets every allocated code.</summary>
     /// <remarks>Declared last so the members it lists are already initialized when this initializer runs.</remarks>
     public static IReadOnlyList<MailFathomErrorCode> All { get; } =
@@ -286,6 +310,9 @@ public readonly record struct MailFathomErrorCode
         EmbeddingProviderCredentialRejected,
         EmbeddingProviderUnavailable,
         EmbeddingVectorShapeUnexpected,
+        ChatProviderCredentialRejected,
+        ChatProviderUnavailable,
+        ChatAnswerEmpty,
     ];
 
     /// <summary>Gets the five-digit code.</summary>

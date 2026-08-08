@@ -1,6 +1,6 @@
 # Embedding generation
 
-<!-- describes: src/AI/Embeddings/**, src/AI/ProviderAdapters/**, src/Application/Emails/Embeddings/**, src/Host/Configuration/Embeddings/** -->
+<!-- describes: src/AI/Embeddings/**, src/AI/Providers/**, src/AI/ProviderAdapters/**, src/Application/Emails/Embeddings/**, src/Host/Configuration/Embeddings/**, src/Host/Configuration/Providers/** -->
 
 A chunk is a passage of text. A vector is where that passage lands in a space a model defines, and two vectors of one
 space can be compared, which is what makes semantic search possible at all. This page describes how MailFathom turns
@@ -95,15 +95,18 @@ than an error.
 
 OpenAI and Azure OpenAI are the two this release reaches, and one client construction serves both: an Azure resource's
 v1 data plane is OpenAI-compatible, so a cloud deployment is the same client pointed at the resource's own
-`/openai/v1/` address with the deployment's name as the routed model. The choice is deliberate beyond
-embeddings — the chat model the answering feature will need is served by this same wiring rather than by a second one.
+`/openai/v1/` address with the deployment's name as the routed model. The choice reaches beyond embeddings — a declared
+chat endpoint is served by this same wiring rather than by a second one, as [chat
+generation](chat-generation.md#two-providers-one-client) describes.
 
 Support beyond these two is deliberately out of scope and is tracked separately.
 
 ## Authentication has two shapes
 
 An endpoint carries **either** a provider key **or** a Microsoft Entra credential, never both and never neither, and
-startup refuses any other combination.
+startup refuses any other combination. The rules below govern a declared chat endpoint identically, and one credential
+source resolves both — which is why an alias names one endpoint across the whole deployment rather than within one
+section.
 
 A key is a secret reference like every other credential this deployment holds, resolved per request — so rotating it
 behind an unchanged reference takes effect on the next call, with no cache to invalidate and no restart.

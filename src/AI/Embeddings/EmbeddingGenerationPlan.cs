@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.AI.Providers;
 using MailFathom.Application.Emails.Embeddings;
 
 namespace MailFathom.AI.Embeddings;
@@ -15,7 +16,7 @@ namespace MailFathom.AI.Embeddings;
 /// </para>
 /// <para>
 /// Deliberately holds no credential and no secret reference. What proves the deployment's identity to an endpoint is
-/// resolved per request through <see cref="IEmbeddingCredentialSource" />, so a rotated key needs no restart and this
+/// resolved per request through <see cref="IProviderEndpointCredentialSource" />, so a rotated key needs no restart and this
 /// value is safe to hold for the lifetime of the process.
 /// </para>
 /// </remarks>

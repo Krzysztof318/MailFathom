@@ -2,8 +2,8 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-using MailFathom.AI.Embeddings;
 using MailFathom.AI.ProviderAdapters;
+using MailFathom.AI.Providers;
 using MailFathom.AI.UnitTests.TestDoubles;
 using MailFathom.TestSupport;
 using Xunit;
@@ -16,21 +16,21 @@ namespace MailFathom.AI.UnitTests.ProviderAdapters;
 /// its token at that point rather than at construction. What these tests establish is that one construction covers a
 /// first-party endpoint and a cloud deployment of the same model, whichever of the two credential shapes it holds.
 /// </remarks>
-public sealed class OpenAiCompatibleEmbeddingClientFactoryTests
+public sealed class OpenAiCompatibleClientFactoryTests
 {
-    private readonly OpenAiCompatibleEmbeddingClientFactory factory = new();
+    private readonly OpenAiCompatibleClientFactory factory = new();
 
     [Fact]
-    public void Open_AnEndpointAuthenticatedWithAKey_OpensAGenerator()
+    public void OpenEmbeddingGenerator_AnEndpointAuthenticatedWithAKey_OpensAGenerator()
     {
         // Arrange
         using var handler = new FakeHttpMessageHandler(
             (_, _) => Task.FromResult(new HttpResponseMessage(System.Net.HttpStatusCode.OK)));
         using var transport = new HttpClient(handler, disposeHandler: false);
-        using var credential = EmbeddingEndpointCredential.FromApiKey("a-resolved-key", resolvedMaterial: null);
+        using var credential = ProviderEndpointCredential.FromApiKey("a-resolved-key", resolvedMaterial: null);
 
         // Act
-        using var generator = this.factory.Open(EmbeddingDeclarations.Endpoint(), credential, transport);
+        using var generator = this.factory.OpenEmbeddingGenerator(EmbeddingDeclarations.Endpoint(), credential, transport);
 
         // Assert
         Assert.NotNull(generator);
@@ -38,15 +38,15 @@ public sealed class OpenAiCompatibleEmbeddingClientFactoryTests
 
     /// <summary>The shape a deployment holds where there is no key to provision at all.</summary>
     [Fact]
-    public void Open_AnEndpointAuthenticatedWithAnEntraCredential_OpensAGenerator()
+    public void OpenEmbeddingGenerator_AnEndpointAuthenticatedWithAnEntraCredential_OpensAGenerator()
     {
         // Arrange
         using var handler = new FakeHttpMessageHandler(
             (_, _) => Task.FromResult(new HttpResponseMessage(System.Net.HttpStatusCode.OK)));
         using var transport = new HttpClient(handler, disposeHandler: false);
-        using var credential = EmbeddingEndpointCredential.FromEntra(
+        using var credential = ProviderEndpointCredential.FromEntra(
             new EntraCredentialDeclaration(
-                EmbeddingEndpointCredentialKind.ManagedIdentity,
+                ProviderEndpointCredentialKind.ManagedIdentity,
                 "https://ai.example.invalid/.default",
                 TenantId: null,
                 ClientId: null,
@@ -61,7 +61,7 @@ public sealed class OpenAiCompatibleEmbeddingClientFactoryTests
             routedModelName: "embeddings-small");
 
         // Act
-        using var generator = this.factory.Open(endpoint, credential, transport);
+        using var generator = this.factory.OpenEmbeddingGenerator(endpoint, credential, transport);
 
         // Assert
         Assert.NotNull(generator);
@@ -69,16 +69,16 @@ public sealed class OpenAiCompatibleEmbeddingClientFactoryTests
 
     /// <summary>An endpoint with no address of its own is the provider's first-party API at the library's default.</summary>
     [Fact]
-    public void Open_AnEndpointWithNoAddress_OpensAGeneratorAtTheProviderDefault()
+    public void OpenEmbeddingGenerator_AnEndpointWithNoAddress_OpensAGeneratorAtTheProviderDefault()
     {
         // Arrange
         using var handler = new FakeHttpMessageHandler(
             (_, _) => Task.FromResult(new HttpResponseMessage(System.Net.HttpStatusCode.OK)));
         using var transport = new HttpClient(handler, disposeHandler: false);
-        using var credential = EmbeddingEndpointCredential.FromApiKey("a-resolved-key", resolvedMaterial: null);
+        using var credential = ProviderEndpointCredential.FromApiKey("a-resolved-key", resolvedMaterial: null);
 
         // Act
-        using var generator = this.factory.Open(
+        using var generator = this.factory.OpenEmbeddingGenerator(
             EmbeddingDeclarations.Endpoint(address: null),
             credential,
             transport);

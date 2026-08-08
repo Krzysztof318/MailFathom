@@ -7,51 +7,55 @@ using System.ClientModel.Primitives;
 using System.Net;
 using System.Net.Sockets;
 using MailFathom.AI.ProviderAdapters;
-using MailFathom.Application.Emails.Embeddings;
 using Xunit;
 
 namespace MailFathom.AI.UnitTests.ProviderAdapters;
 
 /// <summary>Covers the classification the retry decision and the operator's next move both rest on.</summary>
-public sealed class EmbeddingProviderFailureClassificationTests
+public sealed class ProviderCallFailureClassificationTests
 {
     /// <summary>
     /// The provider libraries surface a refusal as their own result type carrying the status, so the status is the
     /// whole of the evidence. `403` joins `401` because the operator's move is the same for both and repeating either
     /// buys the same answer.
     /// </summary>
+    /// <remarks>
+    /// The expectation is the classification's name rather than the value, because the classification is internal to
+    /// the AI boundary and a public test signature may not carry it. <c>nameof</c> keeps the reference a compile-time
+    /// one, so a renamed member fails the build here rather than turning into a comparison against a stale string.
+    /// </remarks>
     [Theory]
-    [InlineData(401, EmbeddingGenerationFailure.CredentialRejected)]
-    [InlineData(403, EmbeddingGenerationFailure.CredentialRejected)]
-    [InlineData(429, EmbeddingGenerationFailure.RateLimited)]
-    [InlineData(408, EmbeddingGenerationFailure.RequestTimedOut)]
-    [InlineData(504, EmbeddingGenerationFailure.RequestTimedOut)]
-    [InlineData(500, EmbeddingGenerationFailure.TransportFaulted)]
-    [InlineData(503, EmbeddingGenerationFailure.TransportFaulted)]
-    [InlineData(400, EmbeddingGenerationFailure.RequestRefused)]
-    [InlineData(404, EmbeddingGenerationFailure.RequestRefused)]
-    [InlineData(0, EmbeddingGenerationFailure.TransportFaulted)]
-    public void Classify_AProviderRefusal_ReadsItsStatus(int status, EmbeddingGenerationFailure expected)
+    [InlineData(401, nameof(ProviderCallFailure.CredentialRejected))]
+    [InlineData(403, nameof(ProviderCallFailure.CredentialRejected))]
+    [InlineData(429, nameof(ProviderCallFailure.RateLimited))]
+    [InlineData(408, nameof(ProviderCallFailure.RequestTimedOut))]
+    [InlineData(504, nameof(ProviderCallFailure.RequestTimedOut))]
+    [InlineData(500, nameof(ProviderCallFailure.TransportFaulted))]
+    [InlineData(503, nameof(ProviderCallFailure.TransportFaulted))]
+    [InlineData(400, nameof(ProviderCallFailure.RequestRefused))]
+    [InlineData(404, nameof(ProviderCallFailure.RequestRefused))]
+    [InlineData(0, nameof(ProviderCallFailure.TransportFaulted))]
+    public void Classify_AProviderRefusal_ReadsItsStatus(int status, string expected)
     {
         // Arrange
         using var response = new FakeClientResponse(status);
         var failure = new ClientResultException("refused", response);
 
         // Act
-        var classified = EmbeddingProviderFailureClassification.Classify(failure);
+        var classified = ProviderCallFailureClassification.Classify(failure);
 
         // Assert
-        Assert.Equal(expected, classified);
+        Assert.Equal(expected, classified?.ToString());
     }
 
     [Fact]
     public void Classify_AnHttpFailureWithoutAStatus_IsATransportFault()
     {
         // Act
-        var classified = EmbeddingProviderFailureClassification.Classify(new HttpRequestException("unreachable"));
+        var classified = ProviderCallFailureClassification.Classify(new HttpRequestException("unreachable"));
 
         // Assert
-        Assert.Equal(EmbeddingGenerationFailure.TransportFaulted, classified);
+        Assert.Equal(ProviderCallFailure.TransportFaulted, classified);
     }
 
     [Fact]
@@ -61,10 +65,10 @@ public sealed class EmbeddingProviderFailureClassificationTests
         var failure = new HttpRequestException("throttled", inner: null, HttpStatusCode.TooManyRequests);
 
         // Act
-        var classified = EmbeddingProviderFailureClassification.Classify(failure);
+        var classified = ProviderCallFailureClassification.Classify(failure);
 
         // Assert
-        Assert.Equal(EmbeddingGenerationFailure.RateLimited, classified);
+        Assert.Equal(ProviderCallFailure.RateLimited, classified);
     }
 
     [Theory]
@@ -72,20 +76,20 @@ public sealed class EmbeddingProviderFailureClassificationTests
     public void Classify_ATransportFailure_IsATransportFault(Exception failure)
     {
         // Act
-        var classified = EmbeddingProviderFailureClassification.Classify(failure);
+        var classified = ProviderCallFailureClassification.Classify(failure);
 
         // Assert
-        Assert.Equal(EmbeddingGenerationFailure.TransportFaulted, classified);
+        Assert.Equal(ProviderCallFailure.TransportFaulted, classified);
     }
 
     [Fact]
     public void Classify_ATimeout_IsARequestTimeout()
     {
         // Act
-        var classified = EmbeddingProviderFailureClassification.Classify(new TimeoutException());
+        var classified = ProviderCallFailureClassification.Classify(new TimeoutException());
 
         // Assert
-        Assert.Equal(EmbeddingGenerationFailure.RequestTimedOut, classified);
+        Assert.Equal(ProviderCallFailure.RequestTimedOut, classified);
     }
 
     /// <summary>
@@ -96,7 +100,7 @@ public sealed class EmbeddingProviderFailureClassificationTests
     public void Classify_ACancellation_IsNotAProviderFailure()
     {
         // Act
-        var classified = EmbeddingProviderFailureClassification.Classify(new OperationCanceledException());
+        var classified = ProviderCallFailureClassification.Classify(new OperationCanceledException());
 
         // Assert
         Assert.Null(classified);
@@ -106,7 +110,7 @@ public sealed class EmbeddingProviderFailureClassificationTests
     public void Classify_AFailureNoProviderProduced_IsUnclassified()
     {
         // Act
-        var classified = EmbeddingProviderFailureClassification.Classify(new InvalidOperationException());
+        var classified = ProviderCallFailureClassification.Classify(new InvalidOperationException());
 
         // Assert
         Assert.Null(classified);

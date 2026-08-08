@@ -3,12 +3,12 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.ComponentModel.DataAnnotations;
-using MailFathom.AI.Embeddings;
+using MailFathom.AI.Providers;
 using MailFathom.Infrastructure.Secrets.Discovery;
 
-namespace MailFathom.Host.Configuration.Embeddings;
+namespace MailFathom.Host.Configuration.Providers;
 
-/// <summary>Declares the non-interactive Microsoft Entra credential an endpoint is reached with, where no key exists to provision.</summary>
+/// <summary>Declares the non-interactive Microsoft Entra credential an AI provider endpoint is reached with, where no key exists to provision.</summary>
 /// <remarks>
 /// <para>
 /// Present only for a deployment whose endpoint accepts Microsoft Entra, and absent by default rather than an empty
@@ -22,11 +22,11 @@ namespace MailFathom.Host.Configuration.Embeddings;
 /// from <c>DefaultAzureCredential</c>, whose own chain contains both.
 /// </para>
 /// </remarks>
-internal sealed class EmbeddingEntraCredentialOptions
+internal sealed class ProviderEntraCredentialOptions
 {
     /// <summary>Gets or sets which non-interactive shape the deployment holds.</summary>
-    /// <remarks><see cref="EmbeddingEndpointCredentialKind.ApiKey" /> is rejected here: a key is declared as one, in the endpoint's own key block.</remarks>
-    public EmbeddingEndpointCredentialKind Kind { get; set; } = EmbeddingEndpointCredentialKind.ManagedIdentity;
+    /// <remarks><see cref="ProviderEndpointCredentialKind.ApiKey" /> is rejected here: a key is declared as one, in the endpoint's own key block.</remarks>
+    public ProviderEndpointCredentialKind Kind { get; set; } = ProviderEndpointCredentialKind.ManagedIdentity;
 
     /// <summary>Gets or sets the scope an access token is requested for.</summary>
     /// <remarks>
@@ -59,14 +59,14 @@ internal sealed class EmbeddingEntraCredentialOptions
     /// <returns>One result per rule this declaration breaks.</returns>
     public IEnumerable<ValidationResult> FindConfigurationErrors(string endpointAlias)
     {
-        if (this.Kind is EmbeddingEndpointCredentialKind.ApiKey)
+        if (this.Kind is ProviderEndpointCredentialKind.ApiKey)
         {
             yield return Error(endpointAlias, "declares a Microsoft Entra credential of kind ApiKey. A provider key is declared in the endpoint's ApiKey block instead.");
 
             yield break;
         }
 
-        if (this.Kind is EmbeddingEndpointCredentialKind.ClientSecret or EmbeddingEndpointCredentialKind.ClientCertificate)
+        if (this.Kind is ProviderEndpointCredentialKind.ClientSecret or ProviderEndpointCredentialKind.ClientCertificate)
         {
             if (this.TenantId.Length == 0)
             {
@@ -79,12 +79,12 @@ internal sealed class EmbeddingEntraCredentialOptions
             }
         }
 
-        if (this.Kind is EmbeddingEndpointCredentialKind.ClientSecret && this.ClientSecret is null)
+        if (this.Kind is ProviderEndpointCredentialKind.ClientSecret && this.ClientSecret is null)
         {
             yield return Error(endpointAlias, "declares a ClientSecret credential and references no secret.");
         }
 
-        if (this.Kind is EmbeddingEndpointCredentialKind.ClientCertificate && this.CertificatePath.Length == 0)
+        if (this.Kind is ProviderEndpointCredentialKind.ClientCertificate && this.CertificatePath.Length == 0)
         {
             yield return Error(endpointAlias, "declares a ClientCertificate credential and no CertificatePath.");
         }
@@ -96,5 +96,5 @@ internal sealed class EmbeddingEntraCredentialOptions
     }
 
     private static ValidationResult Error(string endpointAlias, string detail) =>
-        new($"Embedding endpoint '{endpointAlias}' {detail}");
+        new($"AI endpoint '{endpointAlias}' {detail}");
 }

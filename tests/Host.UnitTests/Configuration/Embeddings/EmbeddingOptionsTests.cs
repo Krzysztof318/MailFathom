@@ -4,8 +4,10 @@
 
 using System.ComponentModel.DataAnnotations;
 using MailFathom.AI.Embeddings;
+using MailFathom.AI.Providers;
 using MailFathom.Application.Emails.Embeddings;
 using MailFathom.Host.Configuration.Embeddings;
+using MailFathom.Host.Configuration.Providers;
 using MailFathom.Infrastructure.Secrets.Discovery;
 using Xunit;
 
@@ -145,7 +147,7 @@ public sealed class EmbeddingOptionsTests
         // Arrange
         var settings = new EmbeddingOptions();
         var endpoint = Endpoint("primary");
-        endpoint.EntraCredential = new EmbeddingEntraCredentialOptions();
+        endpoint.EntraCredential = new ProviderEntraCredentialOptions();
         settings.Endpoints.Add(endpoint);
 
         // Act
@@ -255,13 +257,13 @@ public sealed class EmbeddingOptionsTests
     /// the composition root and a theory's parameters are part of a public signature.
     /// </summary>
     [Theory]
-    [InlineData(EmbeddingEndpointCredentialKind.ClientSecret, "", "an-application", false, "", "a-scope", "TenantId")]
-    [InlineData(EmbeddingEndpointCredentialKind.ClientSecret, "a-directory", "", false, "", "a-scope", "ClientId")]
-    [InlineData(EmbeddingEndpointCredentialKind.ClientSecret, "a-directory", "an-application", false, "", "a-scope", "references no secret")]
-    [InlineData(EmbeddingEndpointCredentialKind.ClientCertificate, "a-directory", "an-application", false, "", "a-scope", "CertificatePath")]
-    [InlineData(EmbeddingEndpointCredentialKind.ManagedIdentity, "", "", false, "", "  ", "TokenScope")]
+    [InlineData(ProviderEndpointCredentialKind.ClientSecret, "", "an-application", false, "", "a-scope", "TenantId")]
+    [InlineData(ProviderEndpointCredentialKind.ClientSecret, "a-directory", "", false, "", "a-scope", "ClientId")]
+    [InlineData(ProviderEndpointCredentialKind.ClientSecret, "a-directory", "an-application", false, "", "a-scope", "references no secret")]
+    [InlineData(ProviderEndpointCredentialKind.ClientCertificate, "a-directory", "an-application", false, "", "a-scope", "CertificatePath")]
+    [InlineData(ProviderEndpointCredentialKind.ManagedIdentity, "", "", false, "", "  ", "TokenScope")]
     public void Validate_AnEntraCredentialMissingWhatItsShapeNeeds_IsRefused(
-        EmbeddingEndpointCredentialKind kind,
+        ProviderEndpointCredentialKind kind,
         string tenantId,
         string clientId,
         bool referencesASecret,
@@ -273,7 +275,7 @@ public sealed class EmbeddingOptionsTests
         var settings = new EmbeddingOptions();
         var endpoint = Endpoint("primary");
         endpoint.ApiKey = null;
-        endpoint.EntraCredential = new EmbeddingEntraCredentialOptions
+        endpoint.EntraCredential = new ProviderEntraCredentialOptions
         {
             Kind = kind,
             TenantId = tenantId,
@@ -295,15 +297,15 @@ public sealed class EmbeddingOptionsTests
 
     /// <summary>The two shapes that hold no secret at all are what a deployment on Azure or on Kubernetes should use.</summary>
     [Theory]
-    [InlineData(EmbeddingEndpointCredentialKind.ManagedIdentity)]
-    [InlineData(EmbeddingEndpointCredentialKind.WorkloadIdentity)]
-    public void Validate_ACredentialShapeThatHoldsNoSecret_NeedsNothingElse(EmbeddingEndpointCredentialKind kind)
+    [InlineData(ProviderEndpointCredentialKind.ManagedIdentity)]
+    [InlineData(ProviderEndpointCredentialKind.WorkloadIdentity)]
+    public void Validate_ACredentialShapeThatHoldsNoSecret_NeedsNothingElse(ProviderEndpointCredentialKind kind)
     {
         // Arrange
         var settings = new EmbeddingOptions();
         var endpoint = Endpoint("primary");
         endpoint.ApiKey = null;
-        endpoint.EntraCredential = new EmbeddingEntraCredentialOptions { Kind = kind };
+        endpoint.EntraCredential = new ProviderEntraCredentialOptions { Kind = kind };
         settings.Endpoints.Add(endpoint);
 
         // Act
@@ -321,9 +323,9 @@ public sealed class EmbeddingOptionsTests
         var settings = new EmbeddingOptions();
         var endpoint = Endpoint("primary");
         endpoint.ApiKey = null;
-        endpoint.EntraCredential = new EmbeddingEntraCredentialOptions
+        endpoint.EntraCredential = new ProviderEntraCredentialOptions
         {
-            Kind = EmbeddingEndpointCredentialKind.ApiKey,
+            Kind = ProviderEndpointCredentialKind.ApiKey,
         };
         settings.Endpoints.Add(endpoint);
 

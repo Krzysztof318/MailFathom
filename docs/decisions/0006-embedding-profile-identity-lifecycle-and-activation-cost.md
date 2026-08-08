@@ -9,7 +9,7 @@ informed:
 
 # Identify an embedding profile by the geometry of its vector space, keep that identity immutable, and make activation state what it is about to spend
 
-<!-- describes: src/AI/Chunking/**, src/AI/Embeddings/**, src/AI/ProviderAdapters/** -->
+<!-- describes: src/AI/Chunking/**, src/AI/Embeddings/**, src/AI/ProviderAdapters/**, src/AI/Providers/** -->
 
 ## Context and Problem Statement
 

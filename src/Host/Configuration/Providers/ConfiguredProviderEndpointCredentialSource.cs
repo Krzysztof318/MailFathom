@@ -3,43 +3,73 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.Diagnostics.CodeAnalysis;
-using MailFathom.AI.Embeddings;
+using MailFathom.AI.Providers;
+using MailFathom.Host.Configuration.Chat;
+using MailFathom.Host.Configuration.Embeddings;
 using MailFathom.Infrastructure.Secrets.Discovery;
 using MailFathom.Infrastructure.Secrets.References;
 using MailFathom.Infrastructure.Secrets.Resolution;
 using Microsoft.Extensions.Options;
 
-namespace MailFathom.Host.Configuration.Embeddings;
+namespace MailFathom.Host.Configuration.Providers;
 
-/// <summary>Resolves the credential one embedding request presents, from the references the endpoint declared.</summary>
+/// <summary>Resolves the credential one AI provider request presents, from the references the endpoint declared.</summary>
 /// <remarks>
+/// <para>
 /// The adapter exists so the AI boundary holds no secret provider at all: references, schemes, and the resolution rules
 /// stay in the composition root, and what crosses is material with a defined lifetime. It resolves per request rather
 /// than once, so a key rotated behind an unchanged reference takes effect on the next call with no cache to invalidate.
+/// </para>
+/// <para>
+/// One source for both declared sections, keyed by the alias alone. Startup refuses a chat endpoint whose alias an
+/// embedding endpoint already uses, which is what lets the lookup stay a search over one name rather than a name paired
+/// with the section it came from — and the same rule is what keeps two endpoints from sharing one resilience circuit
+/// and one log identity.
+/// </para>
 /// </remarks>
 [SuppressMessage("Performance", "CA1812:Avoid uninstantiated internal classes", Justification = "The dependency injection container materializes this credential source.")]
-internal sealed class ConfiguredEmbeddingCredentialSource(
+internal sealed class ConfiguredProviderEndpointCredentialSource(
     IOptions<EmbeddingOptions> embeddingSettings,
-    ISecretReferenceResolver secretReferenceResolver) : IEmbeddingCredentialSource
+    IOptions<ChatModelOptions> chatSettings,
+    ISecretReferenceResolver secretReferenceResolver) : IProviderEndpointCredentialSource
 {
     /// <inheritdoc />
-    public async Task<EmbeddingEndpointCredential> ResolveAsync(
-        string endpointAlias,
-        CancellationToken cancellationToken)
+    public Task<ProviderEndpointCredential> ResolveAsync(string endpointAlias, CancellationToken cancellationToken)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(endpointAlias);
 
-        var endpoint = embeddingSettings.Value.Endpoints
-            .FirstOrDefault(candidate => string.Equals(candidate.Alias.Trim(), endpointAlias, StringComparison.OrdinalIgnoreCase))
+        var declaration = this.FindDeclaration(endpointAlias)
             ?? throw new InvalidOperationException(
-                $"Embedding endpoint '{endpointAlias}' is not present in the configuration this deployment started with.");
+                $"AI endpoint '{endpointAlias}' is not present in the configuration this deployment started with.");
 
-        return endpoint.EntraCredential is { } entra
-            ? await this.ResolveEntraCredentialAsync(endpointAlias, entra, cancellationToken)
-            : await this.ResolveApiKeyAsync(endpointAlias, endpoint.ApiKey, cancellationToken);
+        return declaration.Entra is { } entra
+            ? this.ResolveEntraCredentialAsync(endpointAlias, entra, cancellationToken)
+            : this.ResolveApiKeyAsync(endpointAlias, declaration.ApiKey, cancellationToken);
     }
 
-    private async Task<EmbeddingEndpointCredential> ResolveApiKeyAsync(
+    /// <summary>Finds the endpoint an alias names, in whichever section declared it.</summary>
+    /// <remarks>
+    /// The embedding chain is searched before the single chat endpoint only because it is the longer of the two. The
+    /// order decides nothing, since an alias declared in both is refused at startup.
+    /// </remarks>
+    private ProviderCredentialDeclaration? FindDeclaration(string endpointAlias)
+    {
+        var embeddingEndpoint = embeddingSettings.Value.Endpoints.FirstOrDefault(
+            candidate => NamesEndpoint(candidate.Alias, endpointAlias));
+
+        if (embeddingEndpoint is not null)
+        {
+            return new ProviderCredentialDeclaration(embeddingEndpoint.ApiKey, embeddingEndpoint.EntraCredential);
+        }
+
+        var chat = chatSettings.Value;
+
+        return chat.IsConfigured && NamesEndpoint(chat.Alias, endpointAlias)
+            ? new ProviderCredentialDeclaration(chat.ApiKey, chat.EntraCredential)
+            : null;
+    }
+
+    private async Task<ProviderEndpointCredential> ResolveApiKeyAsync(
         string endpointAlias,
         ConfiguredSecret? apiKey,
         CancellationToken cancellationToken)
@@ -50,7 +80,7 @@ internal sealed class ConfiguredEmbeddingCredentialSource(
         {
             // Revealed as late as possible and handed straight to the client the request is sent with, which is the one
             // boundary that takes a string. The buffer it came from is released with the credential.
-            return EmbeddingEndpointCredential.FromApiKey(material!.RevealAsString(), material);
+            return ProviderEndpointCredential.FromApiKey(material!.RevealAsString(), material);
         }
         catch
         {
@@ -60,18 +90,18 @@ internal sealed class ConfiguredEmbeddingCredentialSource(
         }
     }
 
-    private async Task<EmbeddingEndpointCredential> ResolveEntraCredentialAsync(
+    private async Task<ProviderEndpointCredential> ResolveEntraCredentialAsync(
         string endpointAlias,
-        EmbeddingEntraCredentialOptions entra,
+        ProviderEntraCredentialOptions entra,
         CancellationToken cancellationToken)
     {
         // At most one shape carries a secret, so at most one is resolved and there is never a second buffer to release
         // if the first one fails.
-        var clientSecret = entra.Kind is EmbeddingEndpointCredentialKind.ClientSecret
+        var clientSecret = entra.Kind is ProviderEndpointCredentialKind.ClientSecret
             ? await this.ResolveMaterialAsync(endpointAlias, entra.ClientSecret, "application secret", cancellationToken)
             : null;
 
-        var certificatePassword = entra.Kind is EmbeddingEndpointCredentialKind.ClientCertificate && entra.CertificatePassword is not null
+        var certificatePassword = entra.Kind is ProviderEndpointCredentialKind.ClientCertificate && entra.CertificatePassword is not null
             ? await this.ResolveMaterialAsync(endpointAlias, entra.CertificatePassword, "certificate password", cancellationToken)
             : null;
 
@@ -79,7 +109,7 @@ internal sealed class ConfiguredEmbeddingCredentialSource(
 
         try
         {
-            return EmbeddingEndpointCredential.FromEntra(
+            return ProviderEndpointCredential.FromEntra(
                 new EntraCredentialDeclaration(
                     entra.Kind,
                     entra.TokenScope.Trim(),
@@ -109,8 +139,16 @@ internal sealed class ConfiguredEmbeddingCredentialSource(
         // The failure names the kind of secret and the endpoint's alias and nothing else: the target of a reference is
         // a path or a store identifier, which resolution deliberately keeps out of its own result for the same reason.
         return resolution.Secret ?? throw new InvalidOperationException(
-            $"The {secretDescription} of embedding endpoint '{endpointAlias}' could not be resolved [{resolution.Failure}].");
+            $"The {secretDescription} of AI endpoint '{endpointAlias}' could not be resolved [{resolution.Failure}].");
     }
 
+    private static bool NamesEndpoint(string declaredAlias, string endpointAlias) =>
+        string.Equals(declaredAlias.Trim(), endpointAlias, StringComparison.OrdinalIgnoreCase);
+
     private static string? NullWhenEmpty(string value) => value.Trim() is { Length: > 0 } trimmed ? trimmed : null;
+
+    /// <summary>The two credential blocks an endpoint of either section declares, once the section it came from stops mattering.</summary>
+    private sealed record ProviderCredentialDeclaration(
+        ConfiguredSecret? ApiKey,
+        ProviderEntraCredentialOptions? Entra);
 }

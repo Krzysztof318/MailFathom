@@ -8,7 +8,9 @@ using System.Net;
 using System.Text;
 using MailFathom.AI.Embeddings;
 using MailFathom.AI.ProviderAdapters;
+using MailFathom.AI.Providers;
 using MailFathom.AI.UnitTests.TestDoubles;
+using MailFathom.Application.AiProviders;
 using MailFathom.Application.Emails.Embeddings;
 using MailFathom.Application.Resilience;
 using MailFathom.Domain.Failures;
@@ -322,6 +324,9 @@ public sealed class ProviderTextEmbeddingGeneratorTests
 
         public int RequestCount => this.requestBodies.Count;
 
+        /// <summary>The health state every call this provider serves reports into, so a test can read what the run established.</summary>
+        public IAiProviderHealthRecorder HealthRecorder { get; } = Substitute.For<IAiProviderHealthRecorder>();
+
         public static ScriptedProvider Answering(string payload) => new ScriptedProvider().ThenAnswering(payload);
 
         public static ScriptedProvider Refusing(HttpStatusCode status) => new ScriptedProvider().ThenRefusing(status);
@@ -372,11 +377,11 @@ public sealed class ProviderTextEmbeddingGeneratorTests
                 .CreateClient(Arg.Any<string>())
                 .Returns(_ => new HttpClient(this.handler, disposeHandler: false));
 
-            var credentialSource = Substitute.For<IEmbeddingCredentialSource>();
+            var credentialSource = Substitute.For<IProviderEndpointCredentialSource>();
             credentialSource
                 .ResolveAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
                 .Returns(_ => Task.FromResult(
-                    EmbeddingEndpointCredential.FromApiKey("a-configured-key", resolvedMaterial: null)));
+                    ProviderEndpointCredential.FromApiKey("a-configured-key", resolvedMaterial: null)));
 
             var operationRunner = Substitute.For<IOutboundOperationRunner>();
             operationRunner
@@ -405,9 +410,10 @@ public sealed class ProviderTextEmbeddingGeneratorTests
             return new ProviderTextEmbeddingGenerator(
                 plan,
                 credentialSource,
-                new OpenAiCompatibleEmbeddingClientFactory(),
+                new OpenAiCompatibleClientFactory(),
                 transportFactory,
                 operationRunner,
+                this.HealthRecorder,
                 NullLogger<ProviderTextEmbeddingGenerator>.Instance);
         }
 

@@ -1,0 +1,39 @@
+// Copyright © 2026 Krzysztof Kasprowicz
+// Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
+// Project repository: https://github.com/Krzysztof318/MailFathom
+
+using MailFathom.AI.Chat;
+
+namespace MailFathom.AI.UnitTests.TestDoubles;
+
+/// <summary>Builds the endpoints and plans the chat tests declare, so each test states only what it varies.</summary>
+internal static class ChatDeclarations
+{
+    /// <summary>The deadline every plan below applies to one request unless a test says otherwise.</summary>
+    public static readonly TimeSpan RequestTimeout = TimeSpan.FromSeconds(5);
+
+    /// <summary>Builds the declared endpoint.</summary>
+    public static ChatEndpoint Endpoint(
+        string alias = "answering",
+        string? address = "https://provider.invalid/v1/",
+        string routedModelName = "a-chat-model") =>
+        new(alias, address is null ? null : new Uri(address, UriKind.Absolute), routedModelName);
+
+    /// <summary>Builds a plan over the declared endpoint.</summary>
+    public static ChatGenerationPlan Plan(
+        ChatEndpoint? endpoint = null,
+        int maximumOutputTokens = 256,
+        float? temperature = null,
+        float? topP = null,
+        int maximumMessagesPerRequest = 8,
+        int maximumRequestCharacters = 4000,
+        TimeSpan? requestTimeout = null) =>
+        ChatGenerationPlan.Create(
+            endpoint ?? Endpoint(),
+            maximumOutputTokens,
+            temperature,
+            topP,
+            maximumMessagesPerRequest,
+            maximumRequestCharacters,
+            requestTimeout ?? RequestTimeout);
+}

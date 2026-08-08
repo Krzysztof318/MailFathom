@@ -5,11 +5,10 @@
 using System.ClientModel;
 using System.Net;
 using System.Net.Sockets;
-using MailFathom.Application.Emails.Embeddings;
 
 namespace MailFathom.AI.ProviderAdapters;
 
-/// <summary>Turns whatever a provider client threw into one of the classifications the port publishes.</summary>
+/// <summary>Turns whatever a provider client threw into one of the classifications a calling boundary publishes.</summary>
 /// <remarks>
 /// <para>
 /// This is the deliverable rather than a detail of one. Without it every provider failure is "the call failed", and
@@ -18,12 +17,17 @@ namespace MailFathom.AI.ProviderAdapters;
 /// carries the requests.
 /// </para>
 /// <para>
+/// One classifier serves every provider role. What an HTTP status means about the remote party does not depend on what
+/// was asked of it, so an embedding call and a chat call read a <c>429</c> identically and differ only in what they do
+/// next — which is why each maps this vocabulary into a failure enumeration of its own instead of receiving one.
+/// </para>
+/// <para>
 /// The verdict is read from the failure's type and its HTTP status alone. Nothing from a response body, a request
 /// payload, or a credential takes part in it, and nothing from any of them is carried into the failure this produces —
-/// a provider error body quotes the request, and the request is mail text.
+/// a provider error body quotes the request, and a request is mail text or somebody's question.
 /// </para>
 /// </remarks>
-internal static class EmbeddingProviderFailureClassification
+internal static class ProviderCallFailureClassification
 {
     /// <summary>Classifies a failure raised while calling a provider.</summary>
     /// <param name="failure">The failure the call produced.</param>
@@ -34,7 +38,7 @@ internal static class EmbeddingProviderFailureClassification
     /// <see cref="OperationCanceledException" /> and neither says anything about the provider, so reporting one as a
     /// provider failure would let this system's own decision open a circuit against a healthy endpoint.
     /// </remarks>
-    public static EmbeddingGenerationFailure? Classify(Exception failure)
+    public static ProviderCallFailure? Classify(Exception failure)
     {
         ArgumentNullException.ThrowIfNull(failure);
 
@@ -44,9 +48,9 @@ internal static class EmbeddingProviderFailureClassification
             ClientResultException refusal => ClassifyStatus((HttpStatusCode)refusal.Status),
             HttpRequestException transportFailure => transportFailure.StatusCode is { } status
                 ? ClassifyStatus(status)
-                : EmbeddingGenerationFailure.TransportFaulted,
-            TimeoutException => EmbeddingGenerationFailure.RequestTimedOut,
-            SocketException or IOException => EmbeddingGenerationFailure.TransportFaulted,
+                : ProviderCallFailure.TransportFaulted,
+            TimeoutException => ProviderCallFailure.RequestTimedOut,
+            SocketException or IOException => ProviderCallFailure.TransportFaulted,
             _ => null,
         };
     }
@@ -64,14 +68,14 @@ internal static class EmbeddingProviderFailureClassification
     /// and repeating either buys the same answer, so they share a classification.
     /// </para>
     /// </remarks>
-    private static EmbeddingGenerationFailure ClassifyStatus(HttpStatusCode status) => status switch
+    private static ProviderCallFailure ClassifyStatus(HttpStatusCode status) => status switch
     {
-        0 => EmbeddingGenerationFailure.TransportFaulted,
-        HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden => EmbeddingGenerationFailure.CredentialRejected,
-        HttpStatusCode.TooManyRequests => EmbeddingGenerationFailure.RateLimited,
-        HttpStatusCode.RequestTimeout or HttpStatusCode.GatewayTimeout => EmbeddingGenerationFailure.RequestTimedOut,
+        0 => ProviderCallFailure.TransportFaulted,
+        HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden => ProviderCallFailure.CredentialRejected,
+        HttpStatusCode.TooManyRequests => ProviderCallFailure.RateLimited,
+        HttpStatusCode.RequestTimeout or HttpStatusCode.GatewayTimeout => ProviderCallFailure.RequestTimedOut,
         _ => (int)status >= 500
-            ? EmbeddingGenerationFailure.TransportFaulted
-            : EmbeddingGenerationFailure.RequestRefused,
+            ? ProviderCallFailure.TransportFaulted
+            : ProviderCallFailure.RequestRefused,
     };
 }

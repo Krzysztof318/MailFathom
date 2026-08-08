@@ -4,6 +4,8 @@
 
 using MailFathom.AI.Embeddings;
 using MailFathom.AI.ProviderAdapters;
+using MailFathom.AI.Providers;
+using MailFathom.Application.AiProviders;
 using MailFathom.Application.Emails.Embeddings;
 using MailFathom.Application.Resilience;
 using Microsoft.Extensions.DependencyInjection;
@@ -114,7 +116,7 @@ public sealed class EmbeddingProviderContractTests
     {
         var services = new ServiceCollection();
         services.AddHttpClient();
-        services.AddSingleton<IEmbeddingCredentialSource>(new FixedEmbeddingCredentialSource(apiKey));
+        services.AddSingleton<IProviderEndpointCredentialSource>(new FixedEmbeddingCredentialSource(apiKey));
 
         return services.BuildServiceProvider();
     }
@@ -135,18 +137,19 @@ public sealed class EmbeddingProviderContractTests
         IServiceProvider composition) =>
         new(
             plan,
-            composition.GetRequiredService<IEmbeddingCredentialSource>(),
-            new OpenAiCompatibleEmbeddingClientFactory(),
+            composition.GetRequiredService<IProviderEndpointCredentialSource>(),
+            new OpenAiCompatibleClientFactory(),
             composition.GetRequiredService<IHttpClientFactory>(),
             new PassThroughOutboundOperationRunner(),
+            composition.GetRequiredService<IAiProviderHealthRecorder>(),
             NullLogger<ProviderTextEmbeddingGenerator>.Instance);
 
-    private sealed class FixedEmbeddingCredentialSource(string apiKey) : IEmbeddingCredentialSource
+    private sealed class FixedEmbeddingCredentialSource(string apiKey) : IProviderEndpointCredentialSource
     {
-        public Task<EmbeddingEndpointCredential> ResolveAsync(
+        public Task<ProviderEndpointCredential> ResolveAsync(
             string endpointAlias,
             CancellationToken cancellationToken) =>
-            Task.FromResult(EmbeddingEndpointCredential.FromApiKey(apiKey, resolvedMaterial: null));
+            Task.FromResult(ProviderEndpointCredential.FromApiKey(apiKey, resolvedMaterial: null));
     }
 
     private sealed class PassThroughOutboundOperationRunner : IOutboundOperationRunner

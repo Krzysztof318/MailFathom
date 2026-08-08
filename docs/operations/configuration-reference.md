@@ -257,6 +257,38 @@ reaches an interactive browser credential and the developer-tool credentials of 
 | `…:CertificatePath` | string | *(empty)* | required for `ClientCertificate`; a PKCS#12 file the process account can read | restart |
 | `…:CertificatePassword` | secret block | *(absent)* | where the certificate file has one | restart |
 
+## `Chat`
+
+What this deployment generates text with. A root of its own beside `Embeddings` rather than a block inside it, because
+the two are separate choices with separate consequences: without an embedding provider semantic search is off and
+lexical search continues, while without a chat provider search is unaffected and only the answering capability stops
+being offered. Writing nothing is a supported deployment, exactly as writing no `Embeddings` section is. [Chat
+generation](../features/chat-generation.md) records what a declaration means and what one call may spend.
+
+One endpoint rather than an ordered chain. A fallback embedding endpoint is another route to one vector space and
+startup proves it; nothing proves that of two chat models, so falling through would answer a person in a different
+model's voice with nothing above able to tell. An operator who wants failover puts a gateway in front of the declared
+endpoint.
+
+| Key | Type | Default | Constraint | Change |
+| --- | --- | --- | --- | --- |
+| `Chat:Alias` | string | *(empty)* | writing one is what configures a chat provider at all; unique across every AI endpoint the deployment declares, embedding endpoints included. A section carrying other settings without it is refused rather than ignored | restart |
+| `Chat:Model` | string | — | required once an alias is written; what a request is routed to, which for a cloud deployment is the deployment's own name rather than the vendor's model identifier | restart |
+| `Chat:Address` | string | *(empty)* | absolute HTTPS; empty uses the provider library's default. A cloud resource's OpenAI-compatible address ends in `/openai/v1/` | restart |
+| `Chat:MaxOutputTokens` | int | `1024` | 1 – 200000; what one answer may occupy. Reaching it is not a failure — the answer arrives marked as cut short | restart |
+| `Chat:Temperature` | float | *(unset)* | 0 – 2; left unset sends nothing, which is required by the models that reject the parameter outright | restart |
+| `Chat:TopP` | float | *(unset)* | 0 – 1; unset the same way, and for the same reason | restart |
+| `Chat:MaxMessagesPerRequest` | int | `64` | 1 – 512; the turns one request carries, refused rather than truncated | restart |
+| `Chat:MaxRequestCharacters` | int | `120000` | 1 – 4000000; what those turns may add up to. Stated in characters rather than tokens because counting tokens would mean carrying the model's own tokenizer; set it below what the model's context window allows | restart |
+| `Chat:RequestTimeout` | TimeSpan | `00:02:00` | positive; one request. Longer than an embedding request's by default, because generating an answer takes as long as the answer is | restart |
+| `Chat:ApiKey` | secret block | *(absent)* | the provider key. Exactly one of this and `EntraCredential` is declared | restart, value read per request |
+
+### Microsoft Entra credential — `Chat:EntraCredential`
+
+The same block, with the same keys, defaults, and rules as
+[`Embeddings:Endpoints:<n>:EntraCredential`](#microsoft-entra-credential--embeddingsendpointsnentracredential) above.
+One credential source resolves both sections, which is why the alias uniqueness rule spans them.
+
 ## `EmbeddingBackfill`
 
 The sweep that gives mail stored before the active profile its passages and its vectors. A root of its own rather than

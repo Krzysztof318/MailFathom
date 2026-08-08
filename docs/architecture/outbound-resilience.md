@@ -106,8 +106,10 @@ without depending on Polly. `Infrastructure` implements it per protocol family:
   question from a status this side never sees would produce a second opinion for the pipeline to disagree with. The
   adapter's own rule is the same one: `408`, `429`, and the `5xx` class are worth repeating, an absent status means the
   response never arrived, and everything else — a refused credential, a rejected request, an answer of the wrong shape
-  — is terminal. [Embedding generation](../features/embedding-generation.md#what-a-failing-call-is-classified-as)
-  carries the whole table.
+  — is terminal. One classifier reads a status for both provider roles, because what a status says about the remote
+  party does not depend on what was asked of it; each role then publishes a table of its own, in [embedding
+  generation](../features/embedding-generation.md#what-a-failing-call-is-classified-as) and [chat
+  generation](../features/chat-generation.md#what-a-failing-call-is-classified-as).
 
 A caller's own cancellation is never transient, in any family. Anything unrecognized is terminal, because an
 unrecognized rejection repeated against a mail server is exactly what locks a mailbox account.
@@ -132,7 +134,7 @@ is the layer rather than something MailFathom re-implements:
   pipeline. An adapter that wants the pipeline instead removes the handler from its own registration with
   `RemoveAllResilienceHandlers`; it may not have both.
 
-  Two clients do that today. The first is the transport a mailbox token request is sent over.
+  Three clients do that today. The first is the transport a mailbox token request is sent over.
   `MailOAuthAccessTokenSource` already runs the exchange under `MailAuthorizationServerInvocation`, keyed per account,
   so leaving the handler on would put three attempts inside three and send nine token requests to an authorization
   server that is refusing. The removal takes out what was registered before it, so it holds only while the host adds
@@ -144,6 +146,15 @@ is the layer rather than something MailFathom re-implements:
   served through. There is a third layer to switch off here rather than two: the provider client library retries `408`,
   `429`, and the `5xx` class on its own, and its retry policy is therefore set to zero attempts at construction — a
   layer beneath the pipeline would be invisible to the classification that decides what may be repeated at all.
+
+  The third is the transport a chat request is sent over, on the same terms and for the same reasons.
+  `ProviderChatModelClient` runs the call under `AiProviderInvocation` keyed by the chat endpoint's alias, and an alias
+  names one endpoint across the whole deployment — startup refuses a chat endpoint that reuses an embedding one's — so
+  a chat outage opens a circuit of its own rather than the one the embeddings are served through. It is a registration
+  of its own rather than a second consumer of the embedding client's, because the two bound different answers: an
+  answer's size follows the configured output budget while an embedding response's is fixed by the declared geometry,
+  and one client would have to take the larger ceiling and would then bound neither. [Chat
+  generation](../features/chat-generation.md#bounds-every-call-carries) carries the rest of what one call may spend.
 - **EF Core.** `EnableRetryOnFailure` is deliberately not configured. The obstacle is not the unit of work: with a
   retrying execution strategy each query and each `SaveChangesAsync` is already replayed as its own retriable unit. It
   is the *user-initiated* transaction. `PersistenceSessionFactory` opens one with `BeginTransactionAsync` for every
