@@ -5,6 +5,8 @@
 using System.Net;
 using System.Net.Security;
 using System.Security.Cryptography.X509Certificates;
+using System.Web;
+using MailFathom.Cli.Authorization;
 using MailFathom.Cli.Credentials;
 using MailFathom.Cli.Transport;
 using MailFathom.TestSupport;
@@ -49,8 +51,13 @@ public sealed class TransportTrustSignInTests : IDisposable
     /// <summary>What a connection whose handshake was refused answers, which is nothing: the request never reaches the deployment.</summary>
     private readonly FakeHttpMessageHandler refusedHandshake = FakeAdminEndpoint.Unreachable();
 
-    /// <summary>What each host a command reached was trusted with, so a test can assert which trust travelled where.</summary>
-    private readonly Dictionary<string, StoredTransportTrust> trustPerHost = new(StringComparer.Ordinal);
+    /// <summary>Every connection a command opened, in order, so a test can assert which trust travelled to which address.</summary>
+    /// <remarks>
+    /// By address rather than by host, because the authorization server serves both the discovery document and the token
+    /// endpoint: keying on the host would let a correctly opened token-endpoint connection stand in for a discovery
+    /// connection that was never opened, which is exactly the regression these assertions exist to catch.
+    /// </remarks>
+    private readonly List<(Uri Address, StoredTransportTrust Trust)> openedConnections = [];
 
     public TransportTrustSignInTests()
     {
@@ -427,7 +434,7 @@ public sealed class TransportTrustSignInTests : IDisposable
         Assert.Equal("an-access-token", store.Resolve("production").Token);
         Assert.Equal(
             StoredTransportTrust.Protected,
-            this.trustPerHost[new Uri(FakeOAuthDeployment.TokenEndpoint).Host]);
+            this.TrustCarriedTo(new Uri(FakeOAuthDeployment.TokenEndpoint)));
     }
 
     /// <summary>The same isolation for a clear-text profile: an unprotected deployment does not make the renewal unprotected.</summary>
@@ -461,11 +468,73 @@ public sealed class TransportTrustSignInTests : IDisposable
         Assert.Equal("refresh_token", deployment.LastTokenRequest["grant_type"]);
         Assert.Equal(
             StoredTransportTrust.Protected,
-            this.trustPerHost[new Uri(FakeOAuthDeployment.TokenEndpoint).Host]);
+            this.TrustCarriedTo(new Uri(FakeOAuthDeployment.TokenEndpoint)));
     }
+
+    /// <summary>
+    /// The same isolation one step earlier, and on the path where the pin does not exist yet. A sign-in reads the
+    /// deployment's metadata through the connection whose certificate is still in question and the authorization
+    /// server's through one of its own, so threading the deployment's transport into both would refuse every OAuth
+    /// sign-in to a self-signed deployment — at the authorization server, which is the wrong machine to send an
+    /// operator to look at.
+    /// </summary>
+    [Fact]
+    public async Task Login_AnInteractiveSignInToAnUntrustedDeployment_DiscoversTheAuthorizationServerUnpinned()
+    {
+        // Arrange
+        var deployment = FakeOAuthDeployment.Answering();
+        using var handler = deployment.Handler();
+        var store = this.CreateStore();
+        this.console.AnswerToGive = true;
+
+        // Act
+        var exitCode = await RunAsync(
+            this.TwoHostContext(store, handler, FakeMailboxRedirect.ApprovingWhenAsked(
+                "an-authorization-code",
+                this.StateTheCommandGenerated)),
+            "login",
+            "--endpoint",
+            FakeOAuthDeployment.DeploymentAddress,
+            "--mode",
+            "interactive",
+            "--client-id",
+            "mfctl");
+
+        // Assert
+        Assert.Equal(0, exitCode);
+        Assert.Equal("an-access-token", store.Resolve(requestedDeployment: null).Token);
+        Assert.Equal(
+            PresentedCertificate.FingerprintOf(this.deploymentCertificate),
+            store.Resolve(requestedDeployment: null).Trust.PinnedCertificateFingerprint);
+        Assert.Equal(StoredTransportTrust.Protected, this.TrustCarriedToTheDiscoveryDocument());
+    }
+
+    /// <summary>Reports the trust one address was reached under, failing when no connection was opened to it at all.</summary>
+    private StoredTransportTrust TrustCarriedTo(Uri address) =>
+        this.openedConnections.SingleOrDefault(opened => opened.Address == address).Trust
+        ?? throw new InvalidOperationException($"No connection was opened to {address}.");
+
+    /// <summary>Reports the trust the authorization server's discovery document was fetched under.</summary>
+    /// <remarks>Matched on the metadata address rather than on the host, so a token-endpoint connection opened correctly cannot stand in for a discovery connection that was never opened.</remarks>
+    private StoredTransportTrust TrustCarriedToTheDiscoveryDocument() =>
+        this.openedConnections
+            .Where(opened => opened.Address.AbsolutePath.StartsWith("/.well-known/", StringComparison.Ordinal))
+            .Select(opened => opened.Trust)
+            .FirstOrDefault()
+        ?? throw new InvalidOperationException("No connection was opened to fetch a discovery document.");
 
     private static Task<int> RunAsync(CliContext context, params string[] args) =>
         CliRunner.RunAsync(context, args);
+
+    /// <summary>Reads the anti-forgery value out of the address the command printed, the way the person's browser does.</summary>
+    private string StateTheCommandGenerated()
+    {
+        var address = this.console.Errors.LastOrDefault(line => line.Contains("state=", StringComparison.Ordinal))?.Trim()
+            ?? throw new InvalidOperationException("The command printed no authorization address.");
+
+        return HttpUtility.ParseQueryString(new Uri(address).Query)["state"]
+            ?? throw new InvalidOperationException("The printed authorization address carried no state.");
+    }
 
     private CredentialStore CreateStore() => new(
         Path.Combine(this.storeDirectory, "credentials.json"),
@@ -503,18 +572,22 @@ public sealed class TransportTrustSignInTests : IDisposable
         _ => false,
         this.clock);
 
-    /// <summary>Builds a context for the two hosts an OAuth profile reaches: the deployment, and the server that renews its token.</summary>
+    /// <summary>Builds a context for the two hosts an OAuth sign-in reaches: the deployment, and the server that authorizes it.</summary>
     /// <remarks>
     /// The authorization server presents a certificate of its own that this machine trusts, which is the ordinary case
-    /// and the one that fails loudly if a profile's pin ever travelled here: the pin names the deployment's certificate,
-    /// so a pinned connection would refuse this one and the renewal would never be sent.
+    /// and the one that fails loudly if the deployment's trust ever travelled here: it names the deployment's
+    /// certificate, so a pinned connection would refuse this one and the request — a discovery document at sign-in, a
+    /// renewal afterwards — would never be sent.
     /// </remarks>
-    private CliContext TwoHostContext(CredentialStore store, FakeHttpMessageHandler handler) => new(
+    private CliContext TwoHostContext(
+        CredentialStore store,
+        FakeHttpMessageHandler handler,
+        Func<Uri, IMailboxRedirectAwaiter>? awaitRedirect = null) => new(
         this.console,
         store,
         (address, trust) =>
         {
-            this.trustPerHost[address.Host] = trust;
+            this.openedConnections.Add((address, trust));
 
             // An http address completes no handshake, so no certificate is presented over one and the ordinary
             // transport is what a command meets there.
@@ -533,7 +606,9 @@ public sealed class TransportTrustSignInTests : IDisposable
                 handler,
                 this.refusedHandshake);
         },
-        FakeMailboxRedirect.Silent(),
+        awaitRedirect ?? FakeMailboxRedirect.Silent(),
+
+        // Never started in a test: opening a browser is a side effect on the machine running the suite.
         _ => false,
         this.clock);
 
