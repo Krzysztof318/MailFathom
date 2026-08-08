@@ -2180,7 +2180,8 @@ public sealed class MailboxSynchronizerTests
         InMemoryMailboxMutationReconciliationStore? mutationStore = null,
         IEmailEmbeddingBacklog? embeddingBacklog = null,
         IStoredEmailContentInventory? contentInventory = null,
-        RawMimeMemoryBudget? rawMimeMemoryBudget = null)
+        RawMimeMemoryBudget? rawMimeMemoryBudget = null,
+        StoredContentCeiling? storedContentCeiling = null)
     {
         var concurrencyRetryPolicy = new OptimisticConcurrencyRetryPolicy(
             persistenceSessionFactory,
@@ -2198,6 +2199,7 @@ public sealed class MailboxSynchronizerTests
             metadataRepository,
             contentStore,
             contentInventory ?? new InMemoryStoredEmailContentInventory(),
+            storedContentCeiling ?? new StoredContentCeiling(ceilingBytes: null),
             rawMimeMemoryBudget ?? new RawMimeMemoryBudget(long.MaxValue),
             mimeReader ?? CreateMimeReaderThatExtractsEverything(),
             mutations,
@@ -2360,14 +2362,15 @@ public sealed class MailboxSynchronizerTests
         var uidValidity = ImapUidValidity.Create(5);
         var occurrence = EmailOccurrenceId.Create(accountId, InboxFolder.Id, uidValidity, ImapUid.Create(10));
         var metadata = MetadataOf(occurrence, 600);
-        var options = new MailboxSynchronizationOptions
-        {
-            MaxMetadataBatchSize = 25,
-            MaxRawMimeBytes = 1024,
-            MaxStoredContentBytes = 1000,
-        };
+        var options = new MailboxSynchronizationOptions { MaxMetadataBatchSize = 25, MaxRawMimeBytes = 1024 };
         var inventory = new InMemoryStoredEmailContentInventory { StoredContentBytes = 900 };
-        var arrangement = ArrangeContentRun(options, uidValidity, [metadata], occurrence.Uid, inventory: inventory);
+        var arrangement = ArrangeContentRun(
+            options,
+            uidValidity,
+            [metadata],
+            occurrence.Uid,
+            inventory: inventory,
+            storedContentCeiling: new StoredContentCeiling(1000));
 
         // Act
         var result = await arrangement.Synchronizer.SynchronizeAsync(accountId, InboxMapping, CancellationToken.None);
@@ -2410,15 +2413,16 @@ public sealed class MailboxSynchronizerTests
         var uidValidity = ImapUidValidity.Create(5);
         var deferred = EmailOccurrenceId.Create(accountId, InboxFolder.Id, uidValidity, ImapUid.Create(7));
         var deferredMetadata = MetadataOf(deferred, 600);
-        var options = new MailboxSynchronizationOptions
-        {
-            MaxMetadataBatchSize = 25,
-            MaxRawMimeBytes = 1024,
-            MaxStoredContentBytes = 100_000,
-        };
+        var options = new MailboxSynchronizationOptions { MaxMetadataBatchSize = 25, MaxRawMimeBytes = 1024 };
         var inventory = new InMemoryStoredEmailContentInventory { StoredContentBytes = 900 };
         inventory.AddAwaitingContent(deferredMetadata);
-        var arrangement = ArrangeContentRun(options, uidValidity, [], inspectedThroughUid: null, inventory: inventory);
+        var arrangement = ArrangeContentRun(
+            options,
+            uidValidity,
+            [],
+            inspectedThroughUid: null,
+            inventory: inventory,
+            storedContentCeiling: new StoredContentCeiling(100_000));
         StubRetrievedContent(arrangement.Session, options, deferred, 600);
 
         // Act
@@ -2457,15 +2461,16 @@ public sealed class MailboxSynchronizerTests
         var accountId = MailAccountId.Create("primary");
         var uidValidity = ImapUidValidity.Create(5);
         var deferred = EmailOccurrenceId.Create(accountId, InboxFolder.Id, uidValidity, ImapUid.Create(7));
-        var options = new MailboxSynchronizationOptions
-        {
-            MaxMetadataBatchSize = 25,
-            MaxRawMimeBytes = 1024,
-            MaxStoredContentBytes = 1000,
-        };
+        var options = new MailboxSynchronizationOptions { MaxMetadataBatchSize = 25, MaxRawMimeBytes = 1024 };
         var inventory = new InMemoryStoredEmailContentInventory { StoredContentBytes = 900 };
         inventory.AddAwaitingContent(MetadataOf(deferred, 600));
-        var arrangement = ArrangeContentRun(options, uidValidity, [], inspectedThroughUid: null, inventory: inventory);
+        var arrangement = ArrangeContentRun(
+            options,
+            uidValidity,
+            [],
+            inspectedThroughUid: null,
+            inventory: inventory,
+            storedContentCeiling: new StoredContentCeiling(1000));
 
         // Act
         var result = await arrangement.Synchronizer.SynchronizeAsync(accountId, InboxMapping, CancellationToken.None);
@@ -2575,7 +2580,8 @@ public sealed class MailboxSynchronizerTests
         ImapUid? inspectedThroughUid,
         SynchronizationCheckpoint? storedCheckpoint = null,
         InMemoryStoredEmailContentInventory? inventory = null,
-        RawMimeMemoryBudget? rawMimeMemoryBudget = null)
+        RawMimeMemoryBudget? rawMimeMemoryBudget = null,
+        StoredContentCeiling? storedContentCeiling = null)
     {
         var checkpointStore = Substitute.For<ISynchronizationCheckpointStore>();
         var metadataRepository = Substitute.For<IEmailMetadataRepository>();
@@ -2614,7 +2620,8 @@ public sealed class MailboxSynchronizerTests
             clock,
             options,
             contentInventory: contentInventory,
-            rawMimeMemoryBudget: rawMimeMemoryBudget);
+            rawMimeMemoryBudget: rawMimeMemoryBudget,
+            storedContentCeiling: storedContentCeiling);
 
         return new ContentRunArrangement(
             synchronizer,

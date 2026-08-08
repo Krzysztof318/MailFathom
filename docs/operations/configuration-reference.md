@@ -88,7 +88,7 @@ shape the coordinator loop itself, which are read once at start and marked *rest
 | `MailSynchronization:MaxRawMimeBytes` | long | `26214400` (25 MiB) | 1024 – 104857600; larger messages are stored without content | reload |
 | `MailSynchronization:MaxMetadataBatchesPerRun` | int | `10` | 1 – 1000 | reload |
 | `MailSynchronization:MaxContentBytesPerRun` | long | `1073741824` (1 GiB) | 1024 – 1099511627776; how much raw MIME one folder run may fetch before it ends at its checkpoint. Must be at least `MaxRawMimeBytes` | reload |
-| `MailSynchronization:MaxStoredContentBytes` | long | *(none)* | 1024 – `9223372036854775807`; how much storage stored content may occupy before ingestion degrades to metadata only. Unset means no ceiling. Must be at least `MaxRawMimeBytes` | reload |
+| `MailSynchronization:MaxStoredContentBytes` | long | *(none)* | 1024 – `9223372036854775807`; how much storage stored content may occupy before ingestion degrades to metadata only. Unset means no ceiling. Must be at least `MaxRawMimeBytes` | restart |
 | `MailSynchronization:MaxInFlightRawMimeBytes` | long | `134217728` (128 MiB) | 1024 – 4294967296; how much raw MIME every folder work unit together may hold in memory. Must be at least `MaxRawMimeBytes` | restart |
 | `MailSynchronization:MaxReconciledEmailsPerRun` | int | `500` | 1 – 10000 | reload |
 | `MailSynchronization:MaxMimePartCount` | int | `1000` | 1 – 100000 | reload |

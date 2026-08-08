@@ -33,6 +33,7 @@ public sealed class MailboxSynchronizer
     private readonly IEmailMetadataRepository metadataRepository;
     private readonly IEmailContentStore contentStore;
     private readonly IStoredEmailContentInventory contentInventory;
+    private readonly StoredContentCeiling storedContentCeiling;
     private readonly RawMimeMemoryBudget rawMimeMemoryBudget;
     private readonly IEmailMimeReader mimeReader;
     private readonly IMailboxMutationReconciliationStore mutationStore;
@@ -53,6 +54,7 @@ public sealed class MailboxSynchronizer
         IEmailMetadataRepository metadataRepository,
         IEmailContentStore contentStore,
         IStoredEmailContentInventory contentInventory,
+        StoredContentCeiling storedContentCeiling,
         RawMimeMemoryBudget rawMimeMemoryBudget,
         IEmailMimeReader mimeReader,
         IMailboxMutationReconciliationStore mutationStore,
@@ -71,6 +73,7 @@ public sealed class MailboxSynchronizer
         this.metadataRepository = metadataRepository;
         this.contentStore = contentStore;
         this.contentInventory = contentInventory;
+        this.storedContentCeiling = storedContentCeiling;
         this.rawMimeMemoryBudget = rawMimeMemoryBudget;
         this.mimeReader = mimeReader;
         this.mutationStore = mutationStore;
@@ -164,10 +167,14 @@ public sealed class MailboxSynchronizer
             ? persistedCheckpoint
             : SynchronizationCheckpoint.None(uidValidity);
 
-        var budget = new SynchronizationContentBudget(
-            this.options.MaxContentBytesPerRun,
+        // The mark is captured before the measurement, so bytes another run claims while this query is in flight are
+        // carried onto the reading rather than being overwritten by it.
+        var claimMark = this.storedContentCeiling.ClaimMark;
+        this.storedContentCeiling.Observe(
             await this.contentInventory.GetStoredContentBytesAsync(cancellationToken),
-            this.options.MaxStoredContentBytes);
+            claimMark);
+
+        var budget = new SynchronizationContentBudget(this.options.MaxContentBytesPerRun);
 
         var storedCount = 0;
         var skippedOversizedCount = 0;
@@ -340,7 +347,7 @@ public sealed class MailboxSynchronizer
             new MailboxContentVolume(
                 budget.FetchedBytes,
                 budget.StoredBytes,
-                budget.StoredContentBytesAtRunStart + budget.StoredBytes,
+                this.storedContentCeiling.OccupiedBytes,
                 deferredForStorageCount,
                 refill.RefilledEmailCount,
                 stoppedForContentBudget || refill.StoppedForContentBudget));
@@ -399,11 +406,6 @@ public sealed class MailboxSynchronizer
 
         foreach (var metadata in awaiting)
         {
-            if (!budget.HasStorageHeadroomFor(this.AssumedContentCostOf(metadata)))
-            {
-                break;
-            }
-
             if (!budget.HasRunBudgetFor(this.AssumedContentCostOf(metadata)))
             {
                 stoppedForContentBudget = true;
@@ -418,9 +420,11 @@ public sealed class MailboxSynchronizer
                 budget,
                 cancellationToken);
 
+            // The ceiling filled up again while this pass ran, or the occurrence has left the folder. Either way the
+            // rest of the queue is in the same position, so the pass ends rather than asking about each of them.
             if (occurrence.Availability != StoredEmailContentAvailability.Available)
             {
-                continue;
+                break;
             }
 
             refilledCount++;
@@ -574,10 +578,14 @@ public sealed class MailboxSynchronizer
                 cancellationToken);
         }
 
-        // Storage is checked before the fetch rather than before the write, because a payload retrieved into a full
-        // store would have cost the network read and the buffer for nothing. The occurrence is still recorded, so the
-        // gap is queryable and a later run with room fetches exactly what this one left.
-        if (!budget.HasStorageHeadroomFor(this.AssumedContentCostOf(metadata)))
+        // Room is claimed before the fetch rather than checked before the write, because a payload retrieved into a
+        // full store would have cost the network read and the buffer for nothing, and because a check that every
+        // concurrent run made against the same reading would let each of them believe it had the room the others were
+        // taking. The occurrence is still recorded, so the gap is queryable and a later run with room fetches exactly
+        // what this one left.
+        using var storageClaim = this.storedContentCeiling.TryClaim(this.AssumedContentCostOf(metadata));
+
+        if (storageClaim is null)
         {
             return await this.RecordOccurrenceWithoutContentAsync(
                 metadata,
@@ -644,6 +652,7 @@ public sealed class MailboxSynchronizer
             cancellationToken);
 
         budget.RecordStored(content.RawMime.Length);
+        storageClaim.Settle(content.RawMime.Length);
 
         // Offered after the commit and never inside it, which is what keeps a provider outage out of this run: the
         // message and the passages the chunk writer derived beside it are durable by now, so the worker consumes

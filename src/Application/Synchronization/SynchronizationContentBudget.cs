@@ -4,37 +4,19 @@
 
 namespace MailFathom.Application.Synchronization;
 
-/// <summary>Tracks how much raw MIME one folder run may still fetch and how much room local storage still has.</summary>
+/// <summary>Tracks how much raw MIME one folder run may still fetch, and how much it has moved.</summary>
 /// <remarks>
-/// <para>
-/// The two bounds answer different questions and are therefore counted apart. The run budget bounds the rate at which
-/// a mailbox is ingested, so an initial backfill fills storage over many runs instead of in one; the storage headroom
-/// bounds the total, so a deployment stops writing payloads before it fills its disk. Exhausting them has different
-/// consequences too, which is why nothing here decides what to do about either.
-/// </para>
-/// <para>
-/// The headroom is read once at the start of a run and then spent by arithmetic, because reading it per occurrence
-/// would cost a query per email to sharpen a bound whose whole purpose is to be approached rarely. What a run may
-/// therefore overshoot by is one run's own ingestion, which the run budget already bounds.
-/// </para>
+/// This is the bound that belongs to a run: it paces how fast a mailbox is ingested, so an initial backfill fills
+/// storage over many runs instead of in one. How much may be kept in total is a different question with a different
+/// owner — <see cref="EmailContent.Storage.StoredContentCeiling" /> answers it for the whole process, because several
+/// folder runs write into one content store at the same moment and a per-run view of the total would let each of them
+/// believe it had the room the others were already taking.
 /// </remarks>
 internal sealed class SynchronizationContentBudget
 {
-    private readonly long storageCeilingBytes;
-
     /// <summary>Opens a budget for one folder run.</summary>
     /// <param name="runByteBudget">How many raw MIME bytes this run may fetch.</param>
-    /// <param name="storedContentBytes">How much local storage the stored content occupied when the run began.</param>
-    /// <param name="storageCeilingBytes">The configured ceiling, or <see langword="null" /> when none is configured.</param>
-    public SynchronizationContentBudget(long runByteBudget, long storedContentBytes, long? storageCeilingBytes)
-    {
-        this.RemainingRunBytes = runByteBudget;
-        this.StoredContentBytesAtRunStart = storedContentBytes;
-        this.storageCeilingBytes = storageCeilingBytes ?? long.MaxValue;
-    }
-
-    /// <summary>Gets how much local storage the stored content occupied when the run began.</summary>
-    public long StoredContentBytesAtRunStart { get; }
+    public SynchronizationContentBudget(long runByteBudget) => this.RemainingRunBytes = runByteBudget;
 
     /// <summary>Gets how many raw MIME bytes this run may still fetch.</summary>
     public long RemainingRunBytes { get; private set; }
@@ -49,16 +31,6 @@ internal sealed class SynchronizationContentBudget
     /// <param name="sizeOctets">The size the server advertised for the occurrence.</param>
     /// <returns><see langword="true" /> when the run budget covers it; otherwise, <see langword="false" />.</returns>
     public bool HasRunBudgetFor(long sizeOctets) => sizeOctets <= this.RemainingRunBytes;
-
-    /// <summary>Determines whether local storage has room for one occurrence's advertised size.</summary>
-    /// <param name="sizeOctets">The size the server advertised for the occurrence.</param>
-    /// <returns><see langword="true" /> when the ceiling covers it; otherwise, <see langword="false" />.</returns>
-    /// <remarks>
-    /// The comparison is against what the run has already stored as well as against what storage held when it started,
-    /// so a single run cannot walk past the ceiling one message at a time.
-    /// </remarks>
-    public bool HasStorageHeadroomFor(long sizeOctets) =>
-        this.StoredContentBytesAtRunStart + this.StoredBytes + sizeOctets <= this.storageCeilingBytes;
 
     /// <summary>Records that a payload was fetched and buffered.</summary>
     /// <param name="bytes">How many bytes the mail server actually served.</param>

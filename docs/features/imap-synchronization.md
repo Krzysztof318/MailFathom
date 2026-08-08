@@ -141,11 +141,14 @@ because one message is anywhere between a kilobyte and the size limit.
 
 Three settings bound the volume instead, and each answers a different question:
 
-| Bound | Setting | Default | The question it answers |
-| --- | --- | --- | --- |
-| Per run | `MaxContentBytesPerRun` | 1 GiB | How fast may storage fill? |
-| In total | `MaxStoredContentBytes` | *(none)* | How full may it get? |
-| At one moment | `MaxInFlightRawMimeBytes` | 128 MiB | How much may be in memory while it does? |
+| Bound | Setting | Default | The question it answers | Scope |
+| --- | --- | --- | --- | --- |
+| Per run | `MaxContentBytesPerRun` | 1 GiB | How fast may storage fill? | One folder run |
+| In total | `MaxStoredContentBytes` | *(none)* | How full may it get? | The whole process |
+| At one moment | `MaxInFlightRawMimeBytes` | 128 MiB | How much may be in memory while it does? | The whole process |
+
+Two of the three are process-wide, and that is the point of them rather than an implementation detail: both bound a
+resource every concurrent folder run draws on at once, so a per-run version of either would be no bound at all.
 
 All three are validated at startup against `MaxRawMimeBytes`, and none may be below it. That is one rule stated three
 times rather than three rules: a bound smaller than a single message would not make that message rare, it would make it
@@ -198,11 +201,24 @@ There is deliberately **no default ceiling**. No number MailFathom could pick wo
 guessed too low would stop a healthy deployment from storing mail. Unset means content storage is bounded by the disk,
 which is what a deployment gets until it says otherwise.
 
-What the ceiling is compared against is PostgreSQL's own accounting of what the content table occupies — its heap, its
-indexes, and the out-of-line storage the payloads live in — read from the catalog in constant time rather than summed
-over the rows. That is the quantity a disk fills with, and it is cheap enough to read once per folder run. Two
-consequences follow from it and are intended: the number is somewhat above the sum of the message sizes, because storage
-overhead is part of what fills a disk; and space a deletion freed counts as occupied until the database reclaims it.
+**The ceiling is one budget for the process, not one per run.** Several folder work units write into the same content
+store at the same moment, so a ceiling each of them evaluated against its own measurement would let every one of them
+find the same room and take it — and the deployment would pass the configured limit by as much as those runs were
+allowed to fetch between them. Room is therefore *claimed* from a single process-wide ceiling before a payload is
+fetched, and kept only for what was actually stored: an abandoned fetch, a message that had left the folder, and a
+rolled-back commit each give their claim back, so the level tracks what storage holds rather than what runs intended to
+put there.
+
+Each run still measures the store when it begins, and that measurement replaces the level rather than accumulating on
+top of it, so space a vacuum reclaimed is noticed. Bytes claimed while the measurement was in flight are carried onto
+the new reading instead of being overwritten by it, and a measurement older than one already adopted is discarded — two
+runs measuring at once cannot make the newer reading lose to the slower query.
+
+What the level is measured as is PostgreSQL's own accounting of what the content table occupies — its heap, its indexes,
+and the out-of-line storage the payloads live in — read from the catalog in constant time rather than summed over the
+rows. That is the quantity a disk fills with, and it is cheap enough to read once per folder run. Two consequences
+follow from it and are intended: the number is somewhat above the sum of the message sizes, because storage overhead is
+part of what fills a disk; and space a deletion freed counts as occupied until the database reclaims it.
 
 ### The in-flight budget is the one bound that spans work units
 

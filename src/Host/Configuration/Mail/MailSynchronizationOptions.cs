@@ -264,6 +264,11 @@ internal sealed class MailSynchronizationOptions
     /// bounded only by the disk, which is what every deployment does until it says otherwise. It may not be lower than
     /// <see cref="MaxRawMimeBytes" />, which would leave no message storable at all.
     /// </para>
+    /// <para>
+    /// It bounds the whole process rather than one run, because every concurrent folder run writes into one content
+    /// store and a per-run ceiling would let each of them claim the room the others were taking. It is therefore read
+    /// once at startup, which is why the configuration reference marks it as needing a restart.
+    /// </para>
     /// </remarks>
     [Range(1024, long.MaxValue)]
     public long? MaxStoredContentBytes { get; set; }

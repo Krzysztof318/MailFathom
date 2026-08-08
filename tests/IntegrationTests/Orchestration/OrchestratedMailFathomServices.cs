@@ -130,6 +130,7 @@ internal sealed class OrchestratedMailFathomServices : IAsyncDisposable
         // The process-wide buffer bound, registered by the composition root for the same reason. It is generous here
         // because the suite runs one work unit at a time and nothing it asserts is about waiting for the budget.
         builder.Services.AddSingleton(new RawMimeMemoryBudget(64L * 1024L * 1024L));
+        builder.Services.AddSingleton(new StoredContentCeiling(ceilingBytes: null));
         builder.Services.AddSingleton(new MailboxMutationOptions());
         builder.Services.AddSingleton(new MailboxConvergenceOptions());
         builder.Services.AddSingleton(new PersistenceConcurrencyOptions { MaximumCommitAttempts = 3 });
