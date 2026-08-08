@@ -57,6 +57,12 @@ message that said water damage. Which one you get depends on whether the server 
 reachable, and it can differ between two calls, which is why the field is on every response rather than something to
 look up once.
 
+**`semanticSearch` beside it says why a `lexical` answer was lexical.** `inactive` means the server does not embed mail
+at all, so lexical is what it is meant to do and nothing is wrong. `available` means it does and its provider is
+answering. `degraded` means it does but currently cannot reach the provider or its configuration is wrong, so these
+results are narrower than the server intends — retrying will not help, and it is the server's operator who has a
+credential or a declaration to fix. Recovery is automatic once they do.
+
 There is deliberately no search cursor. Relevance order moves as mail keeps arriving and indexing catches up, so a
 second page could silently skip or repeat matches; ask a narrower question instead of a longer window.
 

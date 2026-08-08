@@ -1429,5 +1429,8 @@ does not distinguish that case: it is computed from synchronization checkpoints 
 `synchronizedAt` and `wasSynchronized` true exactly as a fully indexed one does. An empty window from a freshly
 synchronized folder is therefore worth checking against extraction progress in the server log before it is read as a
 statement about the mailbox. Its `retrievalMode` reports `hybrid` on an instance with a healthy embedding profile and
-`lexical` otherwise — including for the length of a provider outage on an instance that is otherwise hybrid — and a
-request that asks for more than 50 ranked results is refused with `51003` rather than served a smaller window.
+`lexical` otherwise — including for the length of a provider outage on an instance that is otherwise hybrid — while
+`semanticSearch` beside it says which of the two a `lexical` answer was: `inactive` on an instance that has activated no
+profile, `degraded` on one whose provider or model declaration currently needs an operator, and `available` on one that
+is ranking both ways. A request that asks for more than 50 ranked results is refused with `51003` rather than served a
+smaller window.

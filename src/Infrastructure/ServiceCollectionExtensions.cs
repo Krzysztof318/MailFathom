@@ -238,6 +238,8 @@ public static class ServiceCollectionExtensions
         services.AddScoped(provider => new SemanticEmailSearch(
             provider.GetRequiredService<IActiveEmbeddingProfileReader>(),
             provider.GetRequiredService<IEmailVectorSearchIndexReader>(),
+            provider.GetRequiredService<IAiProviderHealthReader>(),
+            provider.GetRequiredService<TimeProvider>(),
             provider.GetService<ITextEmbeddingGenerator>()));
         services.AddScoped<ISynchronizationFreshnessReader, SynchronizationFreshnessReader>();
         // The one write a read path performs. It joins no session for the reason its port states, so it is registered

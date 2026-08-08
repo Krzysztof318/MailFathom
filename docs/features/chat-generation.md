@@ -174,7 +174,7 @@ since reports exactly what one that failed a moment ago reports. On an instance 
 current as the work; on one whose chat provider nothing calls, a stale failure can sit there indefinitely. Read the log
 records for when it happened.
 
-Two things make the states readable:
+Three things make the states readable:
 
 - **A health check per declared provider**, named `ai-chat-provider` and `ai-embedding-provider`. Both reach the
   readiness probe alone and **neither ever reports worse than degraded**. Neither provider serves a request path — an
@@ -186,6 +186,12 @@ Two things make the states readable:
   `mailfathom.ai.provider.role`. It publishes the state's own value rather than its name, because an instrument's value
   has to be a number; the values are allocated once and never reordered. A role nothing has called publishes no
   measurement, so a flat line always means a provider that is being watched.
+- **A log record for each transition**, and for nothing else. Losing a capability is written at `Warning` naming the
+  role, the state it left, and the state it reached; regaining one is written at `Information`. Only a change is
+  recorded, because every provider call records a state and a line per call would put the log's volume on the size of
+  the mailbox rather than on anything an operator would act on — and a first call that succeeded is not one of those
+  changes, because it restored nothing. A first call that *failed* is. This is what answers *when* a state changed,
+  which the state itself deliberately does not carry.
 
 ## What never reaches a log
 

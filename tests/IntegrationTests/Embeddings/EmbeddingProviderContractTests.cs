@@ -10,6 +10,7 @@ using MailFathom.Application.Emails.Embeddings;
 using MailFathom.Application.Resilience;
 using MailFathom.Infrastructure.Observability;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using xRetry.v3;
 using Xunit;
@@ -122,7 +123,10 @@ public sealed class EmbeddingProviderContractTests
         // The real tracker rather than a double, because it is what the host registers and it reaches nothing: the
         // adapter's only use of it is to record an outcome, so a run against the real provider exercises the same
         // recording path a deployment does at no additional cost.
-        services.AddSingleton<IAiProviderHealthRecorder>(new AiProviderHealthTracker(TimeProvider.System));
+        services.AddLogging();
+        services.AddSingleton<IAiProviderHealthRecorder>(provider => new AiProviderHealthTracker(
+            TimeProvider.System,
+            provider.GetRequiredService<ILogger<AiProviderHealthTracker>>()));
 
         return services.BuildServiceProvider();
     }
