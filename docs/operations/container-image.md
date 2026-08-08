@@ -63,6 +63,14 @@ until you name that proxy in `ReverseProxy:TrustedProxies`, which is what stops 
 network from setting them — see
 [behind a TLS-terminating reverse proxy](mcp-endpoint.md#behind-a-tls-terminating-reverse-proxy).
 
+**The image carries no listener-shaped variable of its own.** Where a surface is served is its own section's question,
+so the host refuses `ASPNETCORE_URLS`, `ASPNETCORE_HTTP_PORTS`, and `ASPNETCORE_HTTPS_PORTS` rather than ignoring them —
+and the aspnet base image sets `ASPNETCORE_HTTP_PORTS=8080` in its own config. The runtime stage clears that variable to
+an empty value, which is what the refusal treats as absent, so a container serves what `McpEndpoint:Port` and
+`HealthEndpoints:Port` say and no deployment has to unset anything. The other two are absent. [Where each surface is
+served](configuration-reference.md#where-each-surface-is-served) is the contract, and [Verification](#verification) is
+the gate that reads all three back off the built image so a base-image bump cannot reintroduce one unnoticed.
+
 `DOTNET_EnableDiagnostics=0` is set, so no diagnostic IPC socket is created. That socket can request a process dump,
 and a dump is a way to read secret material out of managed memory — the residual exposure
 [secret provisioning](secret-provisioning.md#secret-material-in-process-memory) documents and asks deployments to
@@ -276,9 +284,16 @@ Publication runs the gates instead, in an order that spends the cheap ones first
    baseline migration, and asserts against the result, which is minutes of container time no commit a unit test would
    have rejected is worth. A nightly does not run it.
 3. **The image gates.** The image is built for one architecture, started, and required to report the version and
-   revision its labels claim, to run as the unprivileged `1654` account, and to expose both listeners; then Trivy scans
-   it, which refuses to publish a release carrying a fixable `HIGH` or `CRITICAL` finding and only reports one on a
-   nightly.
+   revision its labels claim, to run as the unprivileged `1654` account, to expose both listeners, and to carry none of
+   the three listener-shaped variables the host refuses; then Trivy scans it, which refuses to publish a release
+   carrying a fixable `HIGH` or `CRITICAL` finding and only reports one on a nightly.
+
+   The listener check reads `ASPNETCORE_URLS`, `ASPNETCORE_HTTP_PORTS`, and `ASPNETCORE_HTTPS_PORTS` back off the built
+   image's config rather than reading the Dockerfile, because a value under any of them can arrive from the base image
+   as well as from a line somebody wrote — the base image sets one today, and a bump can introduce another. The startup
+   line the same step waits for is no evidence here: it is logged before configuration is validated, so a container that
+   reports it can still fail on the next line. What this does not cover is a pull request: the gate runs where the image
+   is built, so a change that put a variable back is caught by the next nightly rather than by the branch that made it.
 
 **Nothing is built from the commit until the first two have passed** — not the image, not the schema script, and not
 the command binaries. They are jobs in `Release` and `Nightly` themselves rather than steps inside the workflow that

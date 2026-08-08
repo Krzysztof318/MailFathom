@@ -330,6 +330,21 @@ jobs:
           [[ "$image_ports" == *'8080/tcp'* && "$image_ports" == *'8081/tcp'* ]] || { echo "::error::The image exposes '${image_ports}' rather than 8080 and 8081."; exit 1; }
           [[ "$image_channel" == "$EXPECTED_CHANNEL" ]] || { echo "::error::The image is labelled channel '${image_channel}' rather than '${EXPECTED_CHANNEL}'."; exit 1; }
 
+          # Where a surface is served is its own section's question, so MailFathom refuses the host's URL-shaped
+          # addresses rather than ignoring them — and the aspnet base image ships one of them, ASPNETCORE_HTTP_PORTS, in
+          # its own config. An image that carries a value under any of the three therefore fails every container it
+          # produces, before it serves anything, against a variable no operator wrote. The runtime stage clears the one
+          # the base image sets; this reads the built image back instead of reading that file, which is what also sees a
+          # variable arriving from a base-image bump rather than from a line somebody could be asked about in review.
+          # The startup line asserted above is logged before configuration is validated, so it is no evidence of this.
+          image_listener_variables="$(docker image inspect mailfathom:gate --format '{{ json .Config.Env }}' |
+            jq -r '(. // [])[] | select(test("^ASPNETCORE_(URLS|HTTP_PORTS|HTTPS_PORTS)=."))')"
+
+          if [[ -n "$image_listener_variables" ]]; then
+            echo "::error::The image carries a listener-shaped variable MailFathom refuses at startup: $(printf '%s' "$image_listener_variables" | paste -sd ' ' -). Every container started from it would fail before serving anything. Clear it in the runtime stage of deploy/docker/Dockerfile, where ASPNETCORE_HTTP_PORTS already is."
+            exit 1
+          fi
+
           echo "The image starts, reports ${EXPECTED_VERSION} from ${EXPECTED_REVISION}, and publishes the documented runtime contract."
 
       # A release publishes nothing when this finds something fixable; a nightly reports and publishes anyway, because a
