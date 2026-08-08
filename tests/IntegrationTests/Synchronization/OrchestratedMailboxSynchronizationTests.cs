@@ -107,7 +107,7 @@ public sealed class OrchestratedMailboxSynchronizationTests(MailFathomOrchestrat
     /// <remarks>
     /// The UIDs the previous incarnation handed out now name different mail, so the run must start the folder over
     /// rather than resume from a checkpoint that describes messages nobody can address any more. What it must not do is
-    /// delete what it stored: those occurrences are a record of mail that existed, and the specification is explicit
+    /// delete what it stored: those occurrences are a record of mail that existed, and the synchronization contract is explicit
     /// that a UIDVALIDITY change triggers controlled reconciliation rather than mass local deletion.
     /// </remarks>
     [Fact]

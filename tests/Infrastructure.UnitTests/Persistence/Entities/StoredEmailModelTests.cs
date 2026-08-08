@@ -15,7 +15,7 @@ namespace MailFathom.Infrastructure.UnitTests.Persistence.Entities;
 /// <summary>
 /// Asserts the shape of the model the schema is generated from. The model is built in memory by the real PostgreSQL
 /// provider and no connection is opened, so this states what the indexes are declared to be; whether PostgreSQL then
-/// plans a query against them is an integration question that specification 20 answers.
+/// plans a query against them is an integration question the integration suite answers.
 /// </summary>
 public sealed class StoredEmailModelTests
 {

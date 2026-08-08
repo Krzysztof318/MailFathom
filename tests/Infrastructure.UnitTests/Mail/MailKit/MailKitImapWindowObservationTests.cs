@@ -83,7 +83,7 @@ public sealed class MailKitImapWindowObservationTests
     }
 
     /// <summary>
-    /// The optimization the specification asks for: the server describes only what changed and names what vanished, and
+    /// The optimization QRESYNC exists for: the server describes only what changed and names what vanished, and
     /// everything else in the window is a message it has just confirmed unchanged.
     /// </summary>
     [Fact]
@@ -144,7 +144,7 @@ public sealed class MailKitImapWindowObservationTests
     }
 
     /// <summary>
-    /// The claim the specification makes about the optimization: whichever path a server's capabilities select, the
+    /// The claim this adapter makes about the optimization: whichever path a server's capabilities select, the
     /// caller learns the same thing about which occurrences survived and which are gone.
     /// </summary>
     [Fact]

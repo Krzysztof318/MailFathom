@@ -11,7 +11,7 @@ namespace MailFathom.Application.Emails.Search;
 /// <para>
 /// A search returns a window rather than a page, and this bound is what closes it. Relevance order is not stable the
 /// way a timeline order is — indexing one new message can move every rank — so a cursor into a ranked result set would
-/// name a boundary that no longer means what it meant when it was issued. The specification states the bound instead of
+/// name a boundary that no longer means what it meant when it was issued. This type states the bound instead of
 /// implying a cursor that would not be sound, and a caller who needs more than a window narrows the structured filters.
 /// </para>
 /// <para>

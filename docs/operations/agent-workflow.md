@@ -324,7 +324,7 @@ The canonical skills are:
 - `start-task` requires a clean workspace or an explicitly approved inventory
   and preservation plan, identifies or creates the GitHub issue that governs the
   task, places it on the board and claims it with `agent:claimed`, then loads the
-  applicable specification, documentation, and ADR context before edits;
+  applicable documentation and ADR context before edits;
 - `review-change` performs a findings-first diff review and records verification
   status and residual risks, and reruns the fast loop only when something has
   invalidated its last green run;
@@ -510,7 +510,7 @@ The branch under review is never checked out and nothing from it is executed.
 The workspace holds the base commit, which is code that already merged, and it
 is there so the reviewer can read the repository's own contract: root
 `AGENTS.md`, the recurring findings in the `review-change` skill, the
-specifications, and the ADRs, as `main` states them rather than as the branch
+architecture draft, and the ADRs, as `main` states them rather than as the branch
 would rewrite them.
 
 The change arrives as data. A collection step reads the pull request, its
@@ -740,7 +740,7 @@ buys no protection against that.
 The prompt points the reviewer at this repository's own rules rather than at
 general review practice: root `AGENTS.md`, the nested `AGENTS.md` files under
 `src/`, `tests/`, and `docs/`, the recurring findings in the `review-change`
-skill, and the specifications and ADRs that govern the area the change touches. A
+skill, and the ADRs and architecture draft that govern the area the change touches. A
 finding names the rule it rests on in a field of its own, and one that applies
 generic advice where this repository has stated a different rule is itself wrong.
 
@@ -1235,11 +1235,10 @@ Each nested `CLAUDE.md` imports its sibling `AGENTS.md`.
 The repository is public, so everything below is read by people who did not write
 it. Each was classified deliberately rather than left in place by default:
 
-- **`specs/` — kept in place.** The architecture draft is named as required
-  context and the numbered specifications are what an issue links to instead of
-  restating. Roughly half describe work that has shipped, and that is what a
-  specification becomes rather than a defect in it: `specs/README.md` states which,
-  and a page under `docs/` is the statement of fact beside it.
+- **`specs/` — kept in place.** It holds the architecture draft, which root
+  `AGENTS.md` names as required context and which states what MailFathom is being
+  built into. A page under `docs/` is the statement of fact beside it, and the
+  roadmap board decomposes the gap between the two into issues.
 - **The five `AGENTS.md` files and their `CLAUDE.md` imports — kept in place.**
   They are the contract the agents execute, they are what makes a contribution
   produced by an agent satisfy the same rules, and `AGENTS.md` is a convention

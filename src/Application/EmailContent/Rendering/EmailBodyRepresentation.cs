@@ -14,7 +14,7 @@ namespace MailFathom.Application.EmailContent.Rendering;
 /// <para>
 /// Truncation is part of the value rather than a flag beside it, because a body and the fact that it is incomplete are
 /// never useful apart: a caller handed only the text would have to guess whether it read a whole message, which is
-/// exactly what the specification forbids. Both representations a reader can receive — the plain text and the sanitized
+/// exactly what this contract forbids. Both representations a reader can receive — the plain text and the sanitized
 /// HTML — carry their own copy, since a message can exceed the bound in one and not in the other.
 /// </para>
 /// <para>

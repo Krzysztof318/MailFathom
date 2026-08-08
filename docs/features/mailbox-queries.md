@@ -168,7 +168,7 @@ The timeline indexes on `stored_emails` reproduce that order column for column, 
 would otherwise invert; [Stored email schema](../architecture/stored-email-schema.md) records the index definitions. EF
 Core publishes no way to state a null sort order in a query, so the read model expresses the same placement as a leading
 ordering key. Whether PostgreSQL can then serve that expression from the timeline indexes without a sort step is a
-query-plan question specification 20 answers, and the answer there is a matching expression index rather than a different
+query-plan question the integration suite answers, and the answer there is a matching expression index rather than a different
 order here.
 
 ### The cursor
