@@ -33,27 +33,37 @@ internal static class FakeDeploymentTransport
             new HttpClient(handler, disposeHandler: false) { BaseAddress = address },
             new ServerCertificatePolicy(trust.PinnedCertificateFingerprint));
 
-    /// <summary>Builds a transport that has already met the certificate a deployment presents.</summary>
-    /// <param name="handler">The handler every request goes through, which is one that fails when the certificate was refused.</param>
+    /// <summary>Builds a transport that has already met the certificate a host presents.</summary>
     /// <param name="address">The address the transport is aimed at.</param>
     /// <param name="trust">What the profile accepted about this deployment's transport.</param>
-    /// <param name="presented">The certificate the deployment presents.</param>
+    /// <param name="presented">The certificate the host presents.</param>
     /// <param name="errors">What this machine found wrong with it, which is none for a certificate refused only by a pin.</param>
-    /// <returns>The transport, refusing or not exactly as the real policy decided.</returns>
+    /// <param name="answering">The handler a connection the policy accepted sends through.</param>
+    /// <param name="refusingHandshake">The handler a connection the policy refused sends through, which answers nothing.</param>
+    /// <returns>The transport, sending through whichever of the two the real policy's decision selects.</returns>
+    /// <remarks>
+    /// Which handler answers is decided by the policy rather than by the caller, because that is the part a real
+    /// connection couples: a refused handshake means the request never reaches the host. A double that let a refused
+    /// connection answer anyway would report every pin as working, which is the opposite of what these tests assert.
+    /// </remarks>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "The client is handed to the DeploymentTransport the command disposes, which disposes it; disposing it here would return a transport with nothing to send through.")]
     internal static DeploymentTransport Presenting(
-        HttpMessageHandler handler,
         Uri address,
         StoredTransportTrust trust,
         X509Certificate2 presented,
-        SslPolicyErrors errors = SslPolicyErrors.RemoteCertificateChainErrors)
+        SslPolicyErrors errors,
+        HttpMessageHandler answering,
+        HttpMessageHandler refusingHandshake)
     {
         ServerCertificatePolicy policy = new(trust.PinnedCertificateFingerprint);
 
         policy.Accepts(presented, chain: null, errors);
 
         return new DeploymentTransport(
-            new HttpClient(handler, disposeHandler: false) { BaseAddress = address },
+            new HttpClient(policy.Refused is null ? answering : refusingHandshake, disposeHandler: false)
+            {
+                BaseAddress = address,
+            },
             policy);
     }
 }

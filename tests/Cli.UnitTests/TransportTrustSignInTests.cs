@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.Net;
+using System.Net.Security;
 using System.Security.Cryptography.X509Certificates;
 using MailFathom.Cli.Credentials;
 using MailFathom.Cli.Transport;
@@ -48,6 +49,9 @@ public sealed class TransportTrustSignInTests : IDisposable
     /// <summary>What a connection whose handshake was refused answers, which is nothing: the request never reaches the deployment.</summary>
     private readonly FakeHttpMessageHandler refusedHandshake = FakeAdminEndpoint.Unreachable();
 
+    /// <summary>What each host a command reached was trusted with, so a test can assert which trust travelled where.</summary>
+    private readonly Dictionary<string, StoredTransportTrust> trustPerHost = new(StringComparer.Ordinal);
+
     public TransportTrustSignInTests()
     {
         this.deploymentCertificate = TestCertificates.IssueServerCertificate(this.authority, "mail.example.test");
@@ -65,7 +69,7 @@ public sealed class TransportTrustSignInTests : IDisposable
 
         // Act
         var exitCode = await RunAsync(
-            this.CertificateContext(store, handler), "login", "--endpoint", SecureEndpoint);
+            this.PresentingContext(store, handler), "login", "--endpoint", SecureEndpoint);
 
         // Assert
         Assert.Equal(0, exitCode);
@@ -85,7 +89,7 @@ public sealed class TransportTrustSignInTests : IDisposable
         this.console.AnswerToGive = true;
 
         // Act
-        await RunAsync(this.CertificateContext(this.CreateStore(), handler), "login", "--endpoint", SecureEndpoint);
+        await RunAsync(this.PresentingContext(this.CreateStore(), handler), "login", "--endpoint", SecureEndpoint);
 
         // Assert
         var reported = string.Join('\n', this.console.Errors);
@@ -109,7 +113,7 @@ public sealed class TransportTrustSignInTests : IDisposable
         this.console.AnswerToGive = false;
 
         // Act
-        var exitCode = await RunAsync(this.CertificateContext(store, handler), "login", "--endpoint", SecureEndpoint);
+        var exitCode = await RunAsync(this.PresentingContext(store, handler), "login", "--endpoint", SecureEndpoint);
 
         // Assert
         Assert.Equal(1, exitCode);
@@ -130,7 +134,7 @@ public sealed class TransportTrustSignInTests : IDisposable
         this.console.AnswersQuestions = false;
 
         // Act
-        var exitCode = await RunAsync(this.CertificateContext(store, handler), "login", "--endpoint", SecureEndpoint);
+        var exitCode = await RunAsync(this.PresentingContext(store, handler), "login", "--endpoint", SecureEndpoint);
 
         // Assert
         Assert.Equal(1, exitCode);
@@ -153,7 +157,7 @@ public sealed class TransportTrustSignInTests : IDisposable
 
         // Act
         var exitCode = await RunAsync(
-            this.CertificateContext(store, handler),
+            this.PresentingContext(store, handler),
             "login",
             "--endpoint",
             SecureEndpoint,
@@ -317,14 +321,15 @@ public sealed class TransportTrustSignInTests : IDisposable
             "not-a-real-key",
             "workstation",
             trust: new StoredTransportTrust(pinned));
-        using var handler = FakeAdminEndpoint.Unreachable();
+        using var handler = FakeAdminEndpoint.Accepting("workstation", "0.5.0");
 
         // Act
         var exitCode = await RunAsync(
             this.PresentingContext(store, handler, this.replacementCertificate), "status");
 
-        // Assert
+        // Assert: the deployment would have answered, so the refusal is the pin's and nothing was sent.
         Assert.Equal(1, exitCode);
+        Assert.Empty(handler.RecordedRequests);
         Assert.Contains(this.console.Errors, line => line.Contains(pinned, StringComparison.Ordinal));
         Assert.Contains(
             this.console.Errors,
@@ -373,7 +378,7 @@ public sealed class TransportTrustSignInTests : IDisposable
 
         // Act
         var exitCode = await RunAsync(
-            this.CertificateContext(store, handler, this.replacementCertificate),
+            this.PresentingContext(store, handler, this.replacementCertificate),
             "login",
             "--endpoint",
             "production");
@@ -383,6 +388,80 @@ public sealed class TransportTrustSignInTests : IDisposable
         Assert.Equal(
             PresentedCertificate.FingerprintOf(this.replacementCertificate),
             store.Resolve("production").Trust.PinnedCertificateFingerprint);
+    }
+
+    /// <summary>
+    /// A profile's pin names the deployment's certificate and says nothing about the authorization server's, so a
+    /// silent renewal must reach that server under ordinary chain validation. Applying the pin there instead would
+    /// refuse every renewal for exactly the operators this feature exists for, and it would do it on an ordinary
+    /// command rather than at sign-in, where nothing would say which certificate was the problem.
+    /// </summary>
+    [Fact]
+    public async Task Status_APinnedProfileWhoseAccessTokenExpired_RenewsAgainstTheAuthorizationServersOwnCertificate()
+    {
+        // Arrange
+        var deployment = FakeOAuthDeployment.Answering();
+        using var handler = deployment.Handler();
+        var store = this.CreateStore();
+        store.Save(
+            "production",
+            new Uri(SecureEndpoint),
+            "a-spent-access-token",
+            "workstation",
+            new OAuthSession(
+                "a-refresh-token",
+                this.clock.GetUtcNow().AddMinutes(-1),
+                new Uri(FakeOAuthDeployment.TokenEndpoint),
+                FakeOAuthDeployment.Issuer,
+                "mfctl",
+                FakeOAuthDeployment.Resource,
+                "mailfathom.admin"),
+            trust: new StoredTransportTrust(PresentedCertificate.FingerprintOf(this.deploymentCertificate)));
+
+        // Act: the deployment presents the pinned certificate, the authorization server its own trusted one.
+        var exitCode = await RunAsync(this.TwoHostContext(store, handler), "status");
+
+        // Assert
+        Assert.Equal(0, exitCode);
+        Assert.Equal("refresh_token", deployment.LastTokenRequest["grant_type"]);
+        Assert.Equal("an-access-token", store.Resolve("production").Token);
+        Assert.Equal(
+            StoredTransportTrust.Protected,
+            this.trustPerHost[new Uri(FakeOAuthDeployment.TokenEndpoint).Host]);
+    }
+
+    /// <summary>The same isolation for a clear-text profile: an unprotected deployment does not make the renewal unprotected.</summary>
+    [Fact]
+    public async Task Status_AClearTextProfileWhoseAccessTokenExpired_RenewsWithoutCarryingTheClearTextDecision()
+    {
+        // Arrange
+        var deployment = FakeOAuthDeployment.Answering();
+        using var handler = deployment.Handler();
+        var store = this.CreateStore();
+        store.Save(
+            "production",
+            new Uri(ClearTextEndpoint),
+            "a-spent-access-token",
+            "workstation",
+            new OAuthSession(
+                "a-refresh-token",
+                this.clock.GetUtcNow().AddMinutes(-1),
+                new Uri(FakeOAuthDeployment.TokenEndpoint),
+                FakeOAuthDeployment.Issuer,
+                "mfctl",
+                FakeOAuthDeployment.Resource,
+                "mailfathom.admin"),
+            trust: new StoredTransportTrust(PinnedCertificateFingerprint: null, AcceptsClearText: true));
+
+        // Act
+        var exitCode = await RunAsync(this.TwoHostContext(store, handler), "status");
+
+        // Assert
+        Assert.Equal(0, exitCode);
+        Assert.Equal("refresh_token", deployment.LastTokenRequest["grant_type"]);
+        Assert.Equal(
+            StoredTransportTrust.Protected,
+            this.trustPerHost[new Uri(FakeOAuthDeployment.TokenEndpoint).Host]);
     }
 
     private static Task<int> RunAsync(CliContext context, params string[] args) =>
@@ -402,42 +481,61 @@ public sealed class TransportTrustSignInTests : IDisposable
         this.clock);
 
     /// <summary>Builds a context for a deployment presenting one certificate to every connection a command opens.</summary>
+    /// <remarks>
+    /// A connection the policy refuses answers nothing, which is what a failed handshake looks like from above: the
+    /// request never reaches the deployment. So a test asserting that a command completed is asserting that the profile's
+    /// own trust is what carried it, and one asserting a failure is asserting that nothing was sent.
+    /// </remarks>
     private CliContext PresentingContext(
         CredentialStore store,
         FakeHttpMessageHandler handler,
-        X509Certificate2 presented) => new(
+        X509Certificate2? presented = null) => new(
         this.console,
         store,
-        (address, trust) => FakeDeploymentTransport.Presenting(handler, address, trust, presented),
+        (address, trust) => FakeDeploymentTransport.Presenting(
+            address,
+            trust,
+            presented ?? this.deploymentCertificate,
+            SslPolicyErrors.RemoteCertificateChainErrors,
+            handler,
+            this.refusedHandshake),
         FakeMailboxRedirect.Silent(),
         _ => false,
         this.clock);
 
-    /// <summary>Builds a context for a deployment whose certificate this machine refuses until the profile pins it.</summary>
+    /// <summary>Builds a context for the two hosts an OAuth profile reaches: the deployment, and the server that renews its token.</summary>
     /// <remarks>
-    /// The refusing connection answers nothing, which is what a failed handshake looks like from above: the request never
-    /// reaches the deployment. Only the connection opened after the pin was taken can carry one, so a test asserting that
-    /// the sign-in completed is asserting that the pin is what carried it.
+    /// The authorization server presents a certificate of its own that this machine trusts, which is the ordinary case
+    /// and the one that fails loudly if a profile's pin ever travelled here: the pin names the deployment's certificate,
+    /// so a pinned connection would refuse this one and the renewal would never be sent.
     /// </remarks>
-    private CliContext CertificateContext(
-        CredentialStore store,
-        FakeHttpMessageHandler handler,
-        X509Certificate2? presented = null)
-    {
-        var certificate = presented ?? this.deploymentCertificate;
+    private CliContext TwoHostContext(CredentialStore store, FakeHttpMessageHandler handler) => new(
+        this.console,
+        store,
+        (address, trust) =>
+        {
+            this.trustPerHost[address.Host] = trust;
 
-        return new CliContext(
-            this.console,
-            store,
-            (address, trust) => FakeDeploymentTransport.Presenting(
-                trust.PinnedCertificateFingerprint is null ? this.refusedHandshake : handler,
+            // An http address completes no handshake, so no certificate is presented over one and the ordinary
+            // transport is what a command meets there.
+            if (address.Scheme == Uri.UriSchemeHttp)
+            {
+                return FakeDeploymentTransport.Over(handler, address, trust);
+            }
+
+            var reachesTheDeployment = address.Host == new Uri(SecureEndpoint).Host;
+
+            return FakeDeploymentTransport.Presenting(
                 address,
                 trust,
-                certificate),
-            FakeMailboxRedirect.Silent(),
-            _ => false,
-            this.clock);
-    }
+                reachesTheDeployment ? this.deploymentCertificate : this.replacementCertificate,
+                reachesTheDeployment ? SslPolicyErrors.RemoteCertificateChainErrors : SslPolicyErrors.None,
+                handler,
+                this.refusedHandshake);
+        },
+        FakeMailboxRedirect.Silent(),
+        _ => false,
+        this.clock);
 
     public void Dispose()
     {
