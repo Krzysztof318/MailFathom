@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.AI;
+using MailFathom.Application.Accounts;
 using MailFathom.Application.EmailContent;
 using MailFathom.Application.EmailContent.Storage;
 using MailFathom.Application.Emails.Embeddings.Backfill;
@@ -114,6 +115,10 @@ internal sealed class OrchestratedMailFathomServices : IAsyncDisposable
         builder.Services.AddSecretResolution(SecretValueInterpretation.ReferenceOnly);
         builder.Services.AddOutboundResiliencePipelines(builder.Configuration.GetSection("Resilience"));
         builder.Services.AddSingleton<IImapAccountSettingsProvider>(account);
+        // The port every mailbox read resolves its scope through, registered by the composition root from the same
+        // options section the account above comes from. Without it a search or a listing resolves nothing rather than
+        // narrowing to this account, so it belongs here with the other host-bound ports.
+        builder.Services.AddSingleton<IMailAccountCatalog>(account);
         builder.Services.AddSingleton<IMailOAuthSettingsProvider>(new UnconfiguredMailOAuthSettingsProvider());
         builder.Services.AddSingleton<IMailTransportSecurityPolicyReader>(account);
         builder.Services.AddSingleton<IMailSynchronizationWindowReader>(account);
