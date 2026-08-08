@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using System.Collections.Concurrent;
 using System.Diagnostics.Metrics;
 using MailFathom.Common.Observability;
 
@@ -24,7 +25,16 @@ namespace MailFathom.Infrastructure.UnitTests.TestDoubles;
 internal sealed class RecordedMailFathomMeasurements : IDisposable
 {
     private readonly MeterListener listener;
-    private readonly List<RecordedMeasurement> recorded = [];
+
+    /// <summary>What the watched instruments measured, held concurrently because the writer is not the reader.</summary>
+    /// <remarks>
+    /// A measurement is recorded on whatever thread published it, and xUnit runs test classes in parallel, so two
+    /// classes watching one instrument name have this callback running while the other reads. A plain
+    /// <see cref="List{T}" /> throws <c>Collection was modified</c> out of the reading query when that happens, and it
+    /// reports itself against whichever test was reading rather than against the one that wrote.
+    /// </remarks>
+    private readonly ConcurrentQueue<RecordedMeasurement> recorded = new();
+
     private readonly HashSet<string> instrumentNames;
 
     /// <summary>Subscribes to the named instruments and records every measurement they take from now on.</summary>
@@ -51,7 +61,8 @@ internal sealed class RecordedMailFathomMeasurements : IDisposable
     }
 
     /// <summary>Gets every measurement recorded so far, in the order the instruments took them.</summary>
-    internal IReadOnlyList<RecordedMeasurement> Recorded => this.recorded;
+    /// <remarks>A snapshot, so a caller may enumerate it while the instruments it watches keep measuring.</remarks>
+    internal IReadOnlyList<RecordedMeasurement> Recorded => [.. this.recorded];
 
     /// <summary>Asks every observable instrument being watched for its current value.</summary>
     /// <remarks>A gauge is only measured when something asks, so a test that never asks records nothing from one.</remarks>
@@ -76,7 +87,7 @@ internal sealed class RecordedMailFathomMeasurements : IDisposable
 
     private void Record<T>(Instrument instrument, T measurement, ReadOnlySpan<KeyValuePair<string, object?>> tags, object? state)
         where T : struct =>
-        this.recorded.Add(new RecordedMeasurement(
+        this.recorded.Enqueue(new RecordedMeasurement(
             instrument.Name,
             Convert.ToDouble(measurement, System.Globalization.CultureInfo.InvariantCulture),
             DescribeTags(tags)));
