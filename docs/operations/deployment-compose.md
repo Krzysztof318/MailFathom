@@ -7,6 +7,19 @@ runs when an operator asks for it. It is the shape to use for self-hosting on on
 
 Everything below assumes `deploy/compose/` as the working directory.
 
+**Every command here is `docker compose`, and Docker is what this deployment is verified on.** Nothing in
+`compose.yaml` is Docker-specific and the same file runs under `podman compose`, with two rootless-Podman facts worth
+knowing before you start, because neither announces itself:
+
+- The account inside the container maps to a subordinate uid rather than to yours, so the file modes below are what
+  makes the deployment start rather than a hardening preference. They are the modes Docker needs as well and for the
+  same reason — the account is nobody's host user in either runtime — and getting them right is also what keeps a
+  `--userns` mapping out of it, which matters because `podman-compose` puts a project's services in one pod and
+  `--userns` cannot be combined with a pod.
+- Rootless Podman publishes no port below 1024 until `net.ipv4.ip_unprivileged_port_start` allows it. This deployment
+  publishes 8080 and 8081, so what meets that limit is a reverse proxy terminating TLS on 443 in front of MailFathom
+  rather than MailFathom itself.
+
 ## Before the first start
 
 Three files have to exist. Two are database credentials the Compose file mounts as secrets; the third is the
@@ -18,7 +31,9 @@ cd deploy/compose
 cp .env.example .env
 
 mkdir -p secrets/mailfathom
-chmod 700 secrets secrets/mailfathom
+chmod 700 secrets
+chmod 711 secrets/mailfathom
+chmod 755 config
 
 openssl rand -base64 33 | tr -d '\n' > secrets/postgres-superuser-password
 openssl rand -base64 33 | tr -d '\n' > secrets/mailfathom-database-password
@@ -26,14 +41,34 @@ chmod 444 secrets/postgres-superuser-password secrets/mailfathom-database-passwo
 
 cp config/10-mailfathom.json.example config/10-mailfathom.json
 $EDITOR config/10-mailfathom.json
+chmod 644 config/10-mailfathom.json          # after the editor, which may have rewritten the file under your umask
 ```
 
-**The directory restricts access and the files are readable — not the other way round.** MailFathom runs as an
-unprivileged account inside the container that corresponds to no user on the host, and Compose bind-mounts a secret
-with the host's own permissions: outside Swarm it ignores `mode`, `uid`, and `gid`. A `0600` file therefore presents
-to MailFathom as a secret reference that cannot be resolved, and startup fails naming the setting. The `0700` directory
-is what keeps other users on the host out; only root and you can reach through it at all. Every file you add under
-`secrets/mailfathom/` needs the same treatment.
+**What is mounted has to be reachable by the container's own account; what is not mounted is what restricts access.**
+MailFathom runs as an unprivileged account inside the container that corresponds to no user on the host — uid 1654,
+with every capability dropped, so it holds no `DAC_OVERRIDE` to override a mode with. Compose bind-mounts with the
+host's own permissions: outside Swarm it ignores `mode`, `uid`, and `gid`. Three consequences follow, and each is a
+startup failure when it is missed:
+
+- **`secrets/mailfathom` and `config` are the bind mounts, so that account needs the execute bit on both.** At `0700`
+  it has none, and a directory is checked before the files inside it are, so every secret reference under it fails to
+  resolve however those files are permissioned. What startup reports is material that could not be found rather than a
+  permission error, because MailFathom collapses every file-system failure into one result so that no diagnostic
+  quotes the path it was handed — which makes a mode the least visible way to break this deployment. `0711` is what
+  the secrets directory takes: traversable by that account, and still not listable by anything but you. The
+  configuration directory is *listed* rather than opened by name, because MailFathom layers in every `*.json` it finds
+  there, so that one needs read as well, which is the `0755` above. It is set rather than assumed because Git records
+  no directory mode: `config/` arrives with whatever `umask` the clone ran under, and a strict one leaves a directory
+  the container cannot list.
+- **The files inside both are read, so they have to be readable.** `0444` for a secret and `0644` for a configuration
+  file. A `0600` or `0400` file presents to MailFathom as a secret reference that cannot be resolved, or crashes
+  startup naming the configuration file it could not open, so a `umask` of `077` produces a deployment that will not
+  start.
+- **`secrets/` itself is mounted nowhere**, so its `0700` is the whole of the access control: only root and you reach
+  through it at all, and that holds for `secrets/mailfathom/` underneath it whatever the mount needs. Loosening the
+  mounted directory by one bit therefore costs nothing on the host.
+
+Every file you add under `secrets/mailfathom/` needs the same `0444`.
 
 `.env`, `secrets/`, and `config/*.json` are all ignored by Git. The two `.example` files are tracked and contain
 placeholders only.
@@ -104,15 +139,24 @@ build defines: 20260731132336_Initial.
 ```
 
 The step is `mailfathom-schema-<version>.sql`, attached to the release you are installing. The database publishes no
-port, and the superuser password is already mounted inside its container, so the shortest route is to run psql there
-and hand it the script on standard input — which also keeps the credential off a command line:
+port, and both database credentials are already mounted inside its container, so the shortest route is to run psql
+there and hand it the script on standard input — which also keeps the credential off a command line:
 
 ```bash
 docker compose exec --no-TTY postgres sh -c \
-  'PGPASSWORD="$(cat /run/secrets/postgres-superuser-password)" exec psql \
-     --username postgres --dbname "$MAILFATHOM_DATABASE" --set ON_ERROR_STOP=on' \
+  'PGPASSWORD="$(cat /run/secrets/mailfathom-database-password)" exec psql \
+     --username "$MAILFATHOM_DATABASE_ROLE" --dbname "$MAILFATHOM_DATABASE" --set ON_ERROR_STOP=on' \
   < 'mailfathom-schema-<version>.sql'
 ```
+
+**As `mailfathom`, never as `postgres`.** PostgreSQL makes the role that ran the DDL the owner of everything it
+created, and ownership grants nothing to anybody else, so a schema applied by the superuser leaves MailFathom refusing
+to start against a schema that plainly exists — `42501: permission denied for table __EFMigrationsHistory`, reported
+as a schema of unknown shape. This deployment has one role that both applies the schema and serves requests, which is
+exactly what the initialization script's out-of-band `CREATE EXTENSION` buys: the schema artifact's own
+`CREATE EXTENSION IF NOT EXISTS vector` then finds the extension already present rather than needing a privilege
+`mailfathom` does not have. [The role that applies it](database-schema.md#the-role-that-applies-it) states the other
+arrangement and what it costs.
 
 Read the SQL before applying it, and take a backup first. The script is idempotent, so running it against a database
 that already carries some of its migrations applies only what is missing. [Applying the database
@@ -179,8 +223,8 @@ running one keeps serving against a schema that is ahead.
 
 ```bash
 docker compose exec --no-TTY postgres sh -c \
-  'PGPASSWORD="$(cat /run/secrets/postgres-superuser-password)" exec psql \
-     --username postgres --dbname "$MAILFATHOM_DATABASE" --set ON_ERROR_STOP=on' \
+  'PGPASSWORD="$(cat /run/secrets/mailfathom-database-password)" exec psql \
+     --username "$MAILFATHOM_DATABASE_ROLE" --dbname "$MAILFATHOM_DATABASE" --set ON_ERROR_STOP=on' \
   < 'mailfathom-schema-<version>.sql'                            # the version being upgraded to
 
 docker compose pull                                        # or: docker compose build

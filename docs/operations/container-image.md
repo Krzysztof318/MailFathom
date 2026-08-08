@@ -163,12 +163,13 @@ database with DDL. What a released installation applies is a file beside the ima
 `mailfathom-schema-<version>.sql`, attached to the release — and running it is an explicit operator action each
 deployment page describes.
 
-The role that applies it needs more privilege than the service's: the schema installs the `vector` extension, which
-PostgreSQL does not permit an ordinary role to create. That asymmetry is why the step is separate, and why a command
-inside this image would be the wrong shape for it whatever else it cost — the credentials this process runs with are
-not the ones that may run DDL. Grant the service a role that can read and write rows and nothing more, and give the
-schema step a role that can do the rest. The Compose deployment installs the extension during initialization, while a
-superuser is still connected, so neither of its roles has to be one.
+Applying it can need more privilege than serving does: the schema installs the `vector` extension, which PostgreSQL
+does not permit an ordinary role to create. That asymmetry is why the step is separate, and why a command inside this
+image would be the wrong shape for it whatever else it cost — the credentials this process runs with are not the ones
+that decide what may run DDL. Where the extension is installed out of band the asymmetry disappears and one role can
+both apply the schema and serve, which is what the Compose deployment does during initialization while a superuser is
+still connected; where it is not, give the schema step a role that may create an extension and grant the service one
+that can read and write rows and nothing more.
 
 [Applying the database schema](database-schema.md) is the whole path, including the ownership grants a separate role
 leaves behind and the three startup failures a schema problem reports.
