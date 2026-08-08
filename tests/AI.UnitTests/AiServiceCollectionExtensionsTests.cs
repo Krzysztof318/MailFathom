@@ -11,6 +11,7 @@ using MailFathom.Application.Chat;
 using MailFathom.Application.Emails.Chunking;
 using MailFathom.Application.Emails.Embeddings;
 using MailFathom.Application.Resilience;
+using MailFathom.Application.Retrieval;
 using Microsoft.Extensions.DependencyInjection;
 using NSubstitute;
 using Xunit;
@@ -193,6 +194,46 @@ public sealed class AiServiceCollectionExtensionsTests
     {
         // Act, Assert
         Assert.Throws<ArgumentNullException>(() => AiServiceCollectionExtensions.AddChatProviderAdapter(null!));
+    }
+
+    /// <summary>
+    /// A run retrieves through the mailbox search, which reads through the scoped persistence context, so the agent is
+    /// scoped too: a singleton would capture one scope's reader and answer every later question through it.
+    /// </summary>
+    [Fact]
+    public void AddMailAnsweringAgent_ResolvesTheAnsweringPortOncePerScope()
+    {
+        // Arrange
+        var services = new ServiceCollection();
+        services.AddHttpClient();
+        services.AddLogging();
+        services.AddSingleton(ChatDeclarations.Plan());
+        services.AddSingleton(Substitute.For<IProviderEndpointCredentialSource>());
+        services.AddSingleton(Substitute.For<IOutboundOperationRunner>());
+        services.AddSingleton(Substitute.For<IAiProviderHealthRecorder>());
+        services.AddScoped<IEmailKnowledgeSearch, RecordingEmailKnowledgeSearch>();
+
+        // Beside the adapter, as the composition root registers them: a run sends over the transport that call names.
+        services.AddChatProviderAdapter();
+
+        // Act
+        services.AddMailAnsweringAgent();
+
+        // Assert
+        using var provider = services.BuildServiceProvider();
+        using var scope = provider.CreateScope();
+        using var otherScope = provider.CreateScope();
+
+        Assert.NotSame(
+            scope.ServiceProvider.GetRequiredService<IMailQuestionAnswerer>(),
+            otherScope.ServiceProvider.GetRequiredService<IMailQuestionAnswerer>());
+    }
+
+    [Fact]
+    public void AddMailAnsweringAgent_WithoutAServiceCollection_IsRefused()
+    {
+        // Act, Assert
+        Assert.Throws<ArgumentNullException>(() => AiServiceCollectionExtensions.AddMailAnsweringAgent(null!));
     }
 
     [Fact]

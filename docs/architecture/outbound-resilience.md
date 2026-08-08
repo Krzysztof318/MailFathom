@@ -155,6 +155,12 @@ is the layer rather than something MailFathom re-implements:
   answer's size follows the configured output budget while an embedding response's is fixed by the declared geometry,
   and one client would have to take the larger ceiling and would then bound neither. [Chat
   generation](../features/chat-generation.md#bounds-every-call-carries) carries the rest of what one call may spend.
+
+  An answering run sends over that same registration, under the same pipeline and the same alias, but reaches it
+  differently: a run is several calls made by an orchestration framework holding one client, so the deadline and the
+  pipeline sit *inside* the client rather than around a single request. [Mail
+  answering](../features/mail-answering.md#a-run-is-several-calls-and-each-carries-the-bounds-of-one) states what that
+  costs and what it does not change.
 - **EF Core.** `EnableRetryOnFailure` is deliberately not configured. The obstacle is not the unit of work: with a
   retrying execution strategy each query and each `SaveChangesAsync` is already replayed as its own retriable unit. It
   is the *user-initiated* transaction. `PersistenceSessionFactory` opens one with `BeginTransactionAsync` for every

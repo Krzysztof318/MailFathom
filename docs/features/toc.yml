@@ -23,5 +23,7 @@
   href: embedding-backfill.md
 - name: Chat generation
   href: chat-generation.md
+- name: Mail answering
+  href: mail-answering.md
 - name: MCP tools
   href: mcp-tools.md
