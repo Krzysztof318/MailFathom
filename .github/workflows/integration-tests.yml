@@ -21,12 +21,14 @@ on:
         description: 'Branch, tag, or SHA to run the suite against'
         required: false
         type: string
-      # Off by default, because embedding is the first thing MailFathom does that costs money per
-      # unit of mail and a paid call is never the default. Turning it on without the repository
-      # secrets below configured fails the run rather than skipping the tests: a run somebody asked
-      # for and which then quietly proved nothing is worse than one that never started.
-      run_provider_contract_tests:
-        description: 'Call the real embedding provider. Spends provider credit; needs the EMBEDDING_PROVIDER_* secrets'
+      # Off by default, because calling an AI provider is what costs money per unit of mail here and
+      # a paid call is never the default. One input for both providers, because which half of the AI
+      # boundary a test spends against is not a distinction the operator turning them on makes.
+      # Turning it on without the repository secrets and variables below configured fails the run
+      # rather than skipping the tests: a run somebody asked for and which then quietly proved
+      # nothing is worse than one that never started.
+      run_ai_provider_contract_tests:
+        description: 'Call the real AI providers. Spends provider credit; needs the EMBEDDING_PROVIDER_* and CHAT_PROVIDER_* secrets and variables'
         required: false
         default: false
         type: boolean
@@ -87,12 +89,15 @@ jobs:
           # Absent on every run that did not ask, which is what makes the provider-contract tests
           # skip and cost nothing. The `Release` workflow calls this one without the input, so a
           # release never spends provider credit either.
-          MAILFATHOM_EMBEDDING_CONTRACT_TESTS: ${{ inputs.run_provider_contract_tests || 'false' }}
+          MAILFATHOM_AI_CONTRACT_TESTS: ${{ inputs.run_ai_provider_contract_tests || 'false' }}
           MAILFATHOM_EMBEDDING_API_KEY: ${{ secrets.EMBEDDING_PROVIDER_API_KEY }}
           MAILFATHOM_EMBEDDING_ADDRESS: ${{ vars.EMBEDDING_PROVIDER_ADDRESS }}
           MAILFATHOM_EMBEDDING_MODEL: ${{ vars.EMBEDDING_PROVIDER_MODEL }}
           MAILFATHOM_EMBEDDING_ROUTED_MODEL: ${{ vars.EMBEDDING_PROVIDER_ROUTED_MODEL }}
           MAILFATHOM_EMBEDDING_DIMENSION: ${{ vars.EMBEDDING_PROVIDER_DIMENSION }}
+          MAILFATHOM_CHAT_API_KEY: ${{ secrets.CHAT_PROVIDER_API_KEY }}
+          MAILFATHOM_CHAT_ADDRESS: ${{ vars.CHAT_PROVIDER_ADDRESS }}
+          MAILFATHOM_CHAT_MODEL: ${{ vars.CHAT_PROVIDER_MODEL }}
 
       - name: Upload test results
         if: always()

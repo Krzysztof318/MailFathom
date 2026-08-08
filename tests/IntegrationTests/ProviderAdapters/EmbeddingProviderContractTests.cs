@@ -15,7 +15,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using xRetry.v3;
 using Xunit;
 
-namespace MailFathom.IntegrationTests.Embeddings;
+namespace MailFathom.IntegrationTests.ProviderAdapters;
 
 /// <summary>
 /// Proves the provider adapter against a real provider: that it speaks the protocol, authenticates, classifies a real
@@ -65,12 +65,12 @@ public sealed class EmbeddingProviderContractTests
     /// <summary>Gets whether a provider-contract run was explicitly asked for.</summary>
     /// <remarks>Public and static because that is the shape xUnit reads a skip condition from.</remarks>
     public static bool ProviderContractTestsRequested =>
-        EmbeddingProviderContractSettings.ProviderContractTestsRequested;
+        AiProviderContractRun.Requested;
 
     [RetryFact(
         MaxAttempts,
         DelayBetweenAttemptsMs,
-        Skip = EmbeddingProviderContractSettings.SkipReason,
+        Skip = AiProviderContractRun.SkipReason,
         SkipUnless = nameof(ProviderContractTestsRequested))]
     public async Task GenerateAsync_AgainstTheRealProvider_AnswersInTheDeclaredSpace()
     {
@@ -96,7 +96,7 @@ public sealed class EmbeddingProviderContractTests
     [RetryFact(
         MaxAttempts,
         DelayBetweenAttemptsMs,
-        Skip = EmbeddingProviderContractSettings.SkipReason,
+        Skip = AiProviderContractRun.SkipReason,
         SkipUnless = nameof(ProviderContractTestsRequested))]
     public async Task GenerateAsync_WithACredentialTheProviderRefuses_IsClassifiedAsSuch()
     {
