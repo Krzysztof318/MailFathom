@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.Reflection;
+using MailFathom.Application.Mail.Mutations;
 using Xunit;
 
 namespace MailFathom.Mcp.UnitTests;
@@ -39,4 +40,55 @@ public sealed class McpDependencyBoundaryTests
         // Assert
         Assert.Equal(["MailFathom.Application", "MailFathom.Domain"], referencedMailFathomAssemblies);
     }
+
+    /// <summary>No tool can obtain the one session able to change a mailbox, so no MCP request can mark mail read.</summary>
+    /// <remarks>
+    /// The reference list above cannot answer this one, because the write session is published by
+    /// <c>MailFathom.Application</c> alongside everything the tools legitimately read. What separates them is the type a
+    /// tool holds, and a tool that held the factory could set the remote <c>\Seen</c> flag while serving what a caller
+    /// asked to be a read. The scan reaches method bodies as well as signatures: a local kept across an <c>await</c>
+    /// and a captured variable both become fields of a compiler-generated type nested in the one that declared them.
+    /// </remarks>
+    [Fact]
+    public void McpAssembly_HoldsNoTypeAbleToObtainAWriteSession()
+    {
+        // Arrange
+        var mcpAssembly = Assembly.Load("MailFathom.Mcp");
+        Type[] writeCapabilities = [typeof(IMailboxWriteSession), typeof(IMailboxWriteSessionFactory)];
+
+        // Act
+        var holders = mcpAssembly
+            .GetTypes()
+            .Where(type => MentionedTypes(type).Intersect(writeCapabilities).Any())
+            .Select(type => type.FullName)
+            .ToArray();
+
+        // Assert
+        Assert.Empty(holders);
+    }
+
+    /// <summary>Every type a member of <paramref name="type" /> names, with generic arguments unwrapped.</summary>
+    private static IEnumerable<Type> MentionedTypes(Type type)
+    {
+        const BindingFlags Members = BindingFlags.Public
+            | BindingFlags.NonPublic
+            | BindingFlags.Instance
+            | BindingFlags.Static
+            | BindingFlags.DeclaredOnly;
+
+        var methods = type.GetMethods(Members);
+        var parameters = methods.SelectMany(method => method.GetParameters())
+            .Concat(type.GetConstructors(Members).SelectMany(constructor => constructor.GetParameters()));
+
+        return type.GetFields(Members).Select(field => field.FieldType)
+            .Concat(type.GetProperties(Members).Select(property => property.PropertyType))
+            .Concat(methods.Select(method => method.ReturnType))
+            .Concat(parameters.Select(parameter => parameter.ParameterType))
+            .SelectMany(Unwrap);
+    }
+
+    /// <summary>A type together with the types its generic arguments name, so a wrapped capability is not missed.</summary>
+    private static IEnumerable<Type> Unwrap(Type type) => type.IsGenericType
+        ? [type, .. type.GetGenericArguments().SelectMany(Unwrap)]
+        : [type];
 }

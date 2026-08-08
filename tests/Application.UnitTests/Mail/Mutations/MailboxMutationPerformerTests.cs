@@ -376,6 +376,42 @@ public sealed class MailboxMutationPerformerTests
             Arg.Any<CancellationToken>());
     }
 
+    /// <summary>Clearing the flag is the same mutation as setting it, and the direction reaches the session as asked.</summary>
+    /// <remarks>
+    /// Both directions are one authored act about one flag, so a request that asks for mail to be marked unread must not
+    /// arrive at the server as a request to mark it read. The performer carries the direction off the record rather than
+    /// deciding it, which is what makes a resumed attempt ask for what was originally asked for.
+    /// </remarks>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task PerformAsync_ForASeenStateChange_CarriesTheAuthoredDirectionIntoTheSession(bool isSeen)
+    {
+        // Arrange
+        var context = new PerformerContext();
+        var occurrence = Occurrence(42U);
+        var request = MailboxMutationRequest.SetSeen(
+            StoredEmailId.Create(Guid.CreateVersion7()),
+            occurrence,
+            MailboxMutationRequester.Rule("surface-invoices", 2),
+            isSeen);
+
+        // Act
+        var outcome = await context.Performer.PerformAsync(
+            request,
+            InboxFolder,
+            TransportPolicy,
+            CancellationToken.None);
+
+        // Assert
+        Assert.Equal(MailboxMutationStatus.Performed, outcome.Status);
+        await context.WriteSession.Received(1).SetSeenAsync(
+            occurrence,
+            isSeen,
+            Arg.Any<IMailboxMutationJournal>(),
+            Arg.Any<CancellationToken>());
+    }
+
     /// <summary>A caller's mistake about which binding the occurrence belongs to costs no login and reaches no mailbox.</summary>
     [Fact]
     public async Task PerformAsync_FolderBindingThatDoesNotCarryTheOccurrence_IsRefusedBeforeAnythingIsWrittenDown()
