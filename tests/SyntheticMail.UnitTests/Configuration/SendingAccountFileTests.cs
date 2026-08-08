@@ -237,6 +237,25 @@ public sealed class SendingAccountFileTests
         Assert.Contains("0 to 65535", failure.Message, StringComparison.Ordinal);
     }
 
+    [Theory]
+    [InlineData("security", "2")]
+    [InlineData("security", "-1")]
+    [InlineData("author", "7")]
+    [InlineData("author", "0x1")]
+    public void ReadFrom_AFileNamingAnEnumerationValueAsANumber_IsRefusedNamingTheOptions(string key, string written)
+    {
+        // Arrange, Act
+        var failure = Assert.Throws<SyntheticMailFailure>(
+            () => Read($$"""{ "host": "h", "address": "a@example.test", "password": "p", "{{key}}": "{{written}}" }"""));
+
+        // Assert
+        // `Enum.TryParse` accepts a string of digits and answers with whatever number it holds, so without a
+        // definedness check a value this enumeration never declared would arrive as one — and every reader
+        // downstream treats an unrecognized security as the upgrading option rather than as a refusal.
+        Assert.Contains($"'{key}' in '{Origin}' is '{written}'", failure.Message, StringComparison.Ordinal);
+        Assert.Contains("which is not one of", failure.Message, StringComparison.Ordinal);
+    }
+
     [Fact]
     public void ToString_ADocument_HidesThePasswordBeforeAnythingIsValidated()
     {

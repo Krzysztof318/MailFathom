@@ -120,6 +120,13 @@ internal static class SendingAccountFile
             ? parsed
             : throw new SyntheticMailFailure($"'address' in '{path}' is not a mail address.");
 
+    /// <summary>Resolves how the connection carrying the credential is secured.</summary>
+    /// <remarks>
+    /// The definedness check sits beside the parse rather than after it, because <c>Enum.TryParse</c> also accepts a
+    /// string of digits and answers with whatever number it holds — so <c>"security": "2"</c> would arrive as a value
+    /// this enumeration never declared, and everything downstream treats anything that is not <c>ImplicitTls</c> as
+    /// the upgrading option. A file naming something meaningless is refused however it spells it.
+    /// </remarks>
     private static SmtpTransportSecurity ParseSecurity(string? security, string path)
     {
         if (string.IsNullOrWhiteSpace(security))
@@ -127,7 +134,7 @@ internal static class SendingAccountFile
             return SmtpTransportSecurity.StartTls;
         }
 
-        return Enum.TryParse<SmtpTransportSecurity>(security, ignoreCase: true, out var parsed)
+        return Enum.TryParse<SmtpTransportSecurity>(security, ignoreCase: true, out var parsed) && Enum.IsDefined(parsed)
             ? parsed
             : throw new SyntheticMailFailure(
                 $"'security' in '{path}' is '{security}', which is not one of {string.Join(" or ", Enum.GetNames<SmtpTransportSecurity>())}. There is no unsecured option: the run authenticates with a password.");
@@ -140,7 +147,7 @@ internal static class SendingAccountFile
             return SyntheticAuthorIdentity.Fabricated;
         }
 
-        return Enum.TryParse<SyntheticAuthorIdentity>(author, ignoreCase: true, out var parsed)
+        return Enum.TryParse<SyntheticAuthorIdentity>(author, ignoreCase: true, out var parsed) && Enum.IsDefined(parsed)
             ? parsed
             : throw new SyntheticMailFailure(
                 $"'author' in '{path}' is '{author}', which is not one of {string.Join(" or ", Enum.GetNames<SyntheticAuthorIdentity>())}.");

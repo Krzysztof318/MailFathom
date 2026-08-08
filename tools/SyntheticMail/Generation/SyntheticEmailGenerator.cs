@@ -4,7 +4,8 @@
 
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
-using System.Net;
+using System.Text.Encodings.Web;
+using System.Text.Unicode;
 
 namespace MailFathom.SyntheticMail.Generation;
 
@@ -43,6 +44,9 @@ internal sealed class SyntheticEmailGenerator
 
     /// <summary>How often a message carries an attachment, in messages per hundred.</summary>
     private const int AttachmentPercentage = 35;
+
+    /// <summary>The encoder an HTML body is written through, which escapes markup and passes every character.</summary>
+    private static readonly HtmlEncoder BodyEncoder = HtmlEncoder.Create(new TextEncoderSettings(UnicodeRanges.All));
 
     private readonly SyntheticCorpusPlan plan;
     private readonly Random source;
@@ -237,8 +241,16 @@ internal sealed class SyntheticEmailGenerator
             characterSet);
     }
 
+    /// <summary>Wraps the paragraphs in the smallest HTML document that is still one.</summary>
+    /// <remarks>
+    /// Encoded through <see cref="BodyEncoder" /> rather than <c>WebUtility.HtmlEncode</c>, whose output is ASCII by
+    /// construction: it rewrites every code point outside Basic Latin as a numeric character reference. That would
+    /// make the <c>text/html</c> part's bytes pure ASCII while the part still declared <c>iso-8859-1</c> or
+    /// <c>utf-8</c>, so the charset axis this generator exists to vary would be varied in the header alone and
+    /// nothing reading the corpus would ever decode a non-ASCII byte out of an HTML body.
+    /// </remarks>
     private static string BuildHtml(IReadOnlyList<string> blocks) =>
-        $"<html><body>{string.Concat(blocks.Select(block => $"<p>{WebUtility.HtmlEncode(block)}</p>"))}</body></html>";
+        $"<html><body>{string.Concat(blocks.Select(block => $"<p>{BodyEncoder.Encode(block)}</p>"))}</body></html>";
 
     private string BuildParagraph() => string.Join(
         ' ',

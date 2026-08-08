@@ -187,6 +187,52 @@ public sealed class SyntheticEmailGeneratorTests
     }
 
     [Fact]
+    public void Generate_ANonAsciiBody_CarriesItsCharactersIntoTheHtmlAlternativeRatherThanEntities()
+    {
+        // Arrange
+        var plan = Plan(seed: 31, count: 200);
+
+        // Act
+        var corpus = SyntheticEmailGenerator.Generate(plan);
+
+        // Assert
+        // An ASCII-only encoder would rewrite every one of these as a numeric character reference, leaving the
+        // `text/html` part's bytes pure ASCII while it still declared iso-8859-1 or utf-8 — the charset axis varied
+        // in the header and nowhere else, which is the one place a reader of this corpus would never look.
+        var nonAsciiBodies = corpus
+            .Where(email => email.Body.CharacterSet != SyntheticCharacterSet.Ascii)
+            .Select(email => email.Body)
+            .Where(body => !body.PlainText.All(char.IsAscii))
+            .ToArray();
+
+        Assert.NotEmpty(nonAsciiBodies);
+        Assert.All(
+            nonAsciiBodies,
+            body => Assert.Equal(
+                body.PlainText.Where(character => !char.IsAscii(character)).Distinct().Order(),
+                body.Html.Where(character => !char.IsAscii(character)).Distinct().Order()));
+    }
+
+    [Fact]
+    public void Generate_AnyBody_StillEscapesTheMarkupCharactersThatWouldBreakTheDocument()
+    {
+        // Arrange
+        var plan = Plan(seed: 12, count: 60);
+
+        // Act
+        var corpus = SyntheticEmailGenerator.Generate(plan);
+
+        // Assert
+        // Passing every character through is about the charset, not about admitting raw markup: the paragraphs the
+        // generator writes are the only content, and each stays inside the one element that holds it.
+        Assert.All(
+            corpus.Select(email => email.Body.Html),
+            html => Assert.Equal(
+                html.Split("<p>").Length,
+                html.Split("</p>").Length));
+    }
+
+    [Fact]
     public void Generate_ALargeEnoughCorpus_VariesTheSubjectAndBodyLength()
     {
         // Arrange

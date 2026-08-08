@@ -240,6 +240,30 @@ public sealed class SmtpSyntheticMailTransportTests
     }
 
     [Fact]
+    public async Task OpenAsync_AMechanismThatCannotNegotiate_IsReportedThroughTheAuthenticationBranch()
+    {
+        // Arrange
+        var client = Substitute.For<ISmtpClient>();
+
+        client
+            .AuthenticateAsync("throwaway@example.test", "not-a-real-password", Arg.Any<CancellationToken>())
+            .Returns(Task.FromException(new SaslException("PLAIN", SaslErrorCode.InvalidChallenge, "malformed challenge")));
+
+        await using var transport = new SmtpSyntheticMailTransport(Account(), client);
+
+        // Act
+        var failure = await Assert.ThrowsAsync<SyntheticMailFailure>(
+            () => transport.OpenAsync(TestContext.Current.CancellationToken));
+
+        // Assert
+        // `SaslException` derives from MailKit's own `AuthenticationException`, so the type pattern in
+        // `IsTransportFailure` already covers it — asserted here rather than reasoned about, because that is a fact
+        // about a library this code does not own and a future MailKit could move it.
+        Assert.IsAssignableFrom<AuthenticationException>(failure.InnerException);
+        Assert.Contains("refused the configured credential", failure.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task DisposeAsync_AConnectedSession_QuitsBeforeDisposingTheClient()
     {
         // Arrange
