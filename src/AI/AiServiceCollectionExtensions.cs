@@ -2,12 +2,16 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.AI.Chat;
 using MailFathom.AI.Chunking;
 using MailFathom.AI.Embeddings;
 using MailFathom.AI.ProviderAdapters;
+using MailFathom.AI.Providers;
+using MailFathom.Application.Chat;
 using MailFathom.Application.Emails.Chunking;
 using MailFathom.Application.Emails.Embeddings;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 
 namespace MailFathom.AI;
 
@@ -23,6 +27,14 @@ public static class AiServiceCollectionExtensions
     private const int ResponseBytesPerComponent = 16;
 
     private const int ResponseEnvelopeBytes = 8 * 1024;
+
+    /// <summary>Bounds a chat response by what the configured output budget could possibly fill, plus room for its envelope.</summary>
+    /// <remarks>
+    /// Thirty-two bytes per output token is generous for text of any script and deliberately so, for the reason the
+    /// per-component figure above is: the number is a ceiling on a misbehaving endpoint rather than an estimate of a
+    /// well-behaved one, and a provider that has been replaced must not be able to answer with an unbounded body.
+    /// </remarks>
+    private const int ResponseBytesPerOutputToken = 32;
 
     /// <summary>Registers the derivations retrieval is built on that reach no provider and no network.</summary>
     /// <param name="services">The service collection to add to.</param>
@@ -75,7 +87,7 @@ public static class AiServiceCollectionExtensions
     /// <remarks>
     /// <para>
     /// The caller registers the <see cref="EmbeddingGenerationPlan" /> and the
-    /// <see cref="IEmbeddingCredentialSource" /> itself, because binding configuration and resolving a secret
+    /// <see cref="IProviderEndpointCredentialSource" /> itself, because binding configuration and resolving a secret
     /// reference both belong to the composition root. Nothing here reads configuration or knows what a secret
     /// reference is.
     /// </para>
@@ -89,10 +101,40 @@ public static class AiServiceCollectionExtensions
     {
         ArgumentNullException.ThrowIfNull(services);
 
-        services.AddSingleton<OpenAiCompatibleEmbeddingClientFactory>();
+        services.TryAddSingleton<OpenAiCompatibleClientFactory>();
         services.AddSingleton<ITextEmbeddingGenerator, ProviderTextEmbeddingGenerator>();
 
         AddEmbeddingProviderTransport(services);
+
+        return services;
+    }
+
+    /// <summary>Registers the adapter that produces answers by calling a chat provider, and the transport it sends over.</summary>
+    /// <param name="services">The service collection to add to.</param>
+    /// <returns>The same service collection, so registration reads as one expression.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="services" /> is <see langword="null" />.</exception>
+    /// <remarks>
+    /// <para>
+    /// The caller registers the <see cref="ChatGenerationPlan" /> and the
+    /// <see cref="IProviderEndpointCredentialSource" /> itself, because binding configuration and resolving a secret
+    /// reference both belong to the composition root. Nothing here reads configuration or knows what a secret reference
+    /// is.
+    /// </para>
+    /// <para>
+    /// Independent of <see cref="AddEmbeddingProviderAdapter" /> in both directions, and that is the point rather than
+    /// an accident of ordering. An instance may declare a chat provider and no embedding provider, or the reverse, and
+    /// each of those is a working deployment with a different set of capabilities — so neither method assumes the other
+    /// ran, and the client factory they share is registered by whichever one runs first.
+    /// </para>
+    /// </remarks>
+    public static IServiceCollection AddChatProviderAdapter(this IServiceCollection services)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+
+        services.TryAddSingleton<OpenAiCompatibleClientFactory>();
+        services.AddSingleton<IChatModelClient, ProviderChatModelClient>();
+
+        AddChatProviderTransport(services);
 
         return services;
     }
@@ -130,6 +172,45 @@ public static class AiServiceCollectionExtensions
         // to every client the factory builds, so keeping both would multiply the two attempt counts against a provider
         // that is already refusing. It removes what is registered before it, so it depends on AddServiceDefaults having
         // run first; the host's composition root does.
+#pragma warning disable EXTEXP0001 // RemoveAllResilienceHandlers is experimental, and is how the standard handler is opted out of.
+        client.RemoveAllResilienceHandlers();
+#pragma warning restore EXTEXP0001
+    }
+
+    /// <summary>Registers the transport a chat request is sent over.</summary>
+    /// <remarks>
+    /// <para>
+    /// A registration of its own rather than a second consumer of the embedding one, because the two carry different
+    /// bounds against different endpoints: an answer is a stream of prose whose size follows the configured output
+    /// budget, while an embedding response is a block of numbers whose size the declared geometry fixes exactly. One
+    /// client would have to take the larger of the two ceilings and would then bound neither.
+    /// </para>
+    /// <para>
+    /// No base address is set, because which endpoint a request goes to is a per-endpoint setting the adapter applies
+    /// per call rather than something one registration could know. Redirects are refused for the reason every
+    /// credential-bearing client refuses them: a moved endpoint that answered with a redirect would carry the key or
+    /// the bearer token to whatever host it named.
+    /// </para>
+    /// <para>
+    /// The client timeout is deliberately looser than the per-request deadline the adapter applies, so a slow endpoint
+    /// surfaces as this deployment's own timeout — which is classified, logged, and retried under a budget — rather
+    /// than as a transport exception from underneath it.
+    /// </para>
+    /// </remarks>
+    private static void AddChatProviderTransport(IServiceCollection services)
+    {
+        var client = services.AddHttpClient(ProviderChatModelClient.TransportName)
+            .ConfigurePrimaryHttpMessageHandler(static () => new SocketsHttpHandler { AllowAutoRedirect = false })
+            .ConfigureHttpClient(static (provider, client) =>
+            {
+                var plan = provider.GetRequiredService<ChatGenerationPlan>();
+
+                client.Timeout = plan.RequestTimeout + TimeSpan.FromSeconds(30);
+                client.MaxResponseContentBufferSize =
+                    ((long)plan.MaximumOutputTokens * ResponseBytesPerOutputToken) + ResponseEnvelopeBytes;
+            });
+
+        // The third client in this process to opt out, for the reason the embedding one does.
 #pragma warning disable EXTEXP0001 // RemoveAllResilienceHandlers is experimental, and is how the standard handler is opted out of.
         client.RemoveAllResilienceHandlers();
 #pragma warning restore EXTEXP0001

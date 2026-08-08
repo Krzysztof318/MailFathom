@@ -3,6 +3,8 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.AI.Embeddings;
+using MailFathom.AI.Providers;
+using MailFathom.Application.AiProviders;
 using MailFathom.Application.Emails.Embeddings;
 using MailFathom.Application.Resilience;
 using MailFathom.Domain.Failures;
@@ -37,10 +39,11 @@ internal sealed class ProviderTextEmbeddingGenerator : ITextEmbeddingGenerator
     internal const string TransportName = "mailfathom.embedding-provider";
 
     private readonly EmbeddingGenerationPlan plan;
-    private readonly IEmbeddingCredentialSource credentialSource;
-    private readonly OpenAiCompatibleEmbeddingClientFactory clientFactory;
+    private readonly IProviderEndpointCredentialSource credentialSource;
+    private readonly OpenAiCompatibleClientFactory clientFactory;
     private readonly IHttpClientFactory transportFactory;
     private readonly IOutboundOperationRunner operationRunner;
+    private readonly IAiProviderHealthRecorder healthRecorder;
     private readonly ILogger<ProviderTextEmbeddingGenerator> logger;
 
     /// <summary>Initializes a generator over the declared chain, its credentials, its transport, and its resilience budget.</summary>
@@ -49,14 +52,16 @@ internal sealed class ProviderTextEmbeddingGenerator : ITextEmbeddingGenerator
     /// <param name="clientFactory">Opens a provider client over one endpoint.</param>
     /// <param name="transportFactory">Opens the transport a request is sent over, one per attempt.</param>
     /// <param name="operationRunner">Applies the provider resilience budget.</param>
+    /// <param name="healthRecorder">Records what each call established about the embedding provider.</param>
     /// <param name="logger">Records the outcome without recording any passage, vector, or credential.</param>
     /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
     public ProviderTextEmbeddingGenerator(
         EmbeddingGenerationPlan plan,
-        IEmbeddingCredentialSource credentialSource,
-        OpenAiCompatibleEmbeddingClientFactory clientFactory,
+        IProviderEndpointCredentialSource credentialSource,
+        OpenAiCompatibleClientFactory clientFactory,
         IHttpClientFactory transportFactory,
         IOutboundOperationRunner operationRunner,
+        IAiProviderHealthRecorder healthRecorder,
         ILogger<ProviderTextEmbeddingGenerator> logger)
     {
         ArgumentNullException.ThrowIfNull(plan);
@@ -64,6 +69,7 @@ internal sealed class ProviderTextEmbeddingGenerator : ITextEmbeddingGenerator
         ArgumentNullException.ThrowIfNull(clientFactory);
         ArgumentNullException.ThrowIfNull(transportFactory);
         ArgumentNullException.ThrowIfNull(operationRunner);
+        ArgumentNullException.ThrowIfNull(healthRecorder);
         ArgumentNullException.ThrowIfNull(logger);
 
         this.plan = plan;
@@ -71,6 +77,7 @@ internal sealed class ProviderTextEmbeddingGenerator : ITextEmbeddingGenerator
         this.clientFactory = clientFactory;
         this.transportFactory = transportFactory;
         this.operationRunner = operationRunner;
+        this.healthRecorder = healthRecorder;
         this.logger = logger;
     }
 
@@ -87,6 +94,29 @@ internal sealed class ProviderTextEmbeddingGenerator : ITextEmbeddingGenerator
     {
         EmbeddingRequestBounds.Require(passages, this.plan.MaximumPassagesPerCall);
 
+        try
+        {
+            var vectors = await this.GenerateAcrossChainAsync(passages, cancellationToken);
+
+            // Recorded once the chain has produced vectors, not once an endpoint has: an endpoint that fell through to
+            // a working fallback is a chain that served, and reporting the fall-through as ill health would describe
+            // the declaration's own resilience as a fault.
+            this.healthRecorder.RecordServed(AiProviderRole.Embedding);
+
+            return vectors;
+        }
+        catch (EmbeddingGenerationFailedException failure)
+        {
+            this.RecordFailure(failure);
+
+            throw;
+        }
+    }
+
+    private async Task<IReadOnlyList<EmbeddingVector>> GenerateAcrossChainAsync(
+        IReadOnlyList<string> passages,
+        CancellationToken cancellationToken)
+    {
         var prepared = passages
             .Select(passage => EmbeddingPassagePreparation.Prepare(passage, this.plan.Identity.InputPreparation))
             .ToArray();
@@ -113,6 +143,23 @@ internal sealed class ProviderTextEmbeddingGenerator : ITextEmbeddingGenerator
         throw lastFailure;
     }
 
+    /// <summary>Records what the failure established about the provider, at the granularity an operator acts on.</summary>
+    /// <remarks>
+    /// The split is the exception's own <see cref="EmbeddingGenerationFailedException.IsWorthRepeating" />, so the
+    /// health state and the resilience pipeline can never disagree about whether waiting is the answer.
+    /// </remarks>
+    private void RecordFailure(EmbeddingGenerationFailedException failure)
+    {
+        if (failure.IsWorthRepeating)
+        {
+            this.healthRecorder.RecordUnavailable(AiProviderRole.Embedding);
+
+            return;
+        }
+
+        this.healthRecorder.RecordMisconfigured(AiProviderRole.Embedding);
+    }
+
     /// <summary>Reports whether the next endpoint of the chain could answer where this one did not.</summary>
     /// <remarks>
     /// An unreachable endpoint, a throttled one, a slow one, and one that refused the credential are all statements
@@ -123,6 +170,21 @@ internal sealed class ProviderTextEmbeddingGenerator : ITextEmbeddingGenerator
     /// </remarks>
     private static bool IsWorthAnotherEndpoint(EmbeddingGenerationFailedException failure) =>
         failure.Failure is not EmbeddingGenerationFailure.VectorShapeUnexpected;
+
+    /// <summary>Reads a transport-level classification into the one this port publishes.</summary>
+    /// <remarks>
+    /// Five of the six members map straight across, because the shared classifier already names what the remote party
+    /// did. The sixth — an answer of the wrong shape — has no transport-level counterpart at all: it is decided from
+    /// what came back rather than from how, so it is raised where the vectors are read instead.
+    /// </remarks>
+    private static EmbeddingGenerationFailure ToEmbeddingFailure(ProviderCallFailure failure) => failure switch
+    {
+        ProviderCallFailure.CredentialRejected => EmbeddingGenerationFailure.CredentialRejected,
+        ProviderCallFailure.RateLimited => EmbeddingGenerationFailure.RateLimited,
+        ProviderCallFailure.RequestTimedOut => EmbeddingGenerationFailure.RequestTimedOut,
+        ProviderCallFailure.RequestRefused => EmbeddingGenerationFailure.RequestRefused,
+        _ => EmbeddingGenerationFailure.TransportFaulted,
+    };
 
     private async Task<IReadOnlyList<EmbeddingVector>> GenerateAtAsync(
         EmbeddingEndpoint endpoint,
@@ -173,7 +235,7 @@ internal sealed class ProviderTextEmbeddingGenerator : ITextEmbeddingGenerator
     /// </remarks>
     private async Task<IReadOnlyList<Embedding<float>>> RequestVectorsAsync(
         EmbeddingEndpoint endpoint,
-        EmbeddingEndpointCredential credential,
+        ProviderEndpointCredential credential,
         string[] prepared,
         CancellationToken cancellationToken)
     {
@@ -183,7 +245,7 @@ internal sealed class ProviderTextEmbeddingGenerator : ITextEmbeddingGenerator
         attemptDeadline.CancelAfter(this.plan.RequestTimeout);
 
         using var transport = this.transportFactory.CreateClient(TransportName);
-        using var generator = this.clientFactory.Open(endpoint, credential, transport);
+        using var generator = this.clientFactory.OpenEmbeddingGenerator(endpoint, credential, transport);
 
         var options = new EmbeddingGenerationOptions
         {
@@ -204,9 +266,9 @@ internal sealed class ProviderTextEmbeddingGenerator : ITextEmbeddingGenerator
                 endpoint.Alias,
                 EmbeddingGenerationFailure.RequestTimedOut);
         }
-        catch (Exception failure) when (EmbeddingProviderFailureClassification.Classify(failure) is { } classified)
+        catch (Exception failure) when (ProviderCallFailureClassification.Classify(failure) is { } classified)
         {
-            throw new EmbeddingGenerationFailedException(endpoint.Alias, classified, failure);
+            throw new EmbeddingGenerationFailedException(endpoint.Alias, ToEmbeddingFailure(classified), failure);
         }
     }
 

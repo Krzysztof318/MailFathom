@@ -4,7 +4,10 @@
 
 using MailFathom.AI.Embeddings;
 using MailFathom.AI.ProviderAdapters;
+using MailFathom.AI.Providers;
 using MailFathom.AI.UnitTests.TestDoubles;
+using MailFathom.Application.AiProviders;
+using MailFathom.Application.Chat;
 using MailFathom.Application.Emails.Chunking;
 using MailFathom.Application.Emails.Embeddings;
 using MailFathom.Application.Resilience;
@@ -97,8 +100,9 @@ public sealed class AiServiceCollectionExtensionsTests
         services.AddHttpClient();
         services.AddLogging();
         services.AddSingleton(EmbeddingDeclarations.Plan());
-        services.AddSingleton(Substitute.For<IEmbeddingCredentialSource>());
+        services.AddSingleton(Substitute.For<IProviderEndpointCredentialSource>());
         services.AddSingleton(Substitute.For<IOutboundOperationRunner>());
+        services.AddSingleton(Substitute.For<IAiProviderHealthRecorder>());
 
         // Act
         services.AddEmbeddingProviderAdapter();
@@ -121,6 +125,74 @@ public sealed class AiServiceCollectionExtensionsTests
     {
         // Act, Assert
         Assert.Throws<ArgumentNullException>(() => AiServiceCollectionExtensions.AddEmbeddingProviderAdapter(null!));
+    }
+
+    /// <summary>
+    /// The chat adapter, its client construction, and the transport it sends over are wired in one place, and its
+    /// transport carries bounds of its own rather than the embedding client's.
+    /// </summary>
+    [Fact]
+    public void AddChatProviderAdapter_ResolvesTheAdapterOverItsOwnTransport()
+    {
+        // Arrange
+        var services = new ServiceCollection();
+        services.AddHttpClient();
+        services.AddLogging();
+        services.AddSingleton(ChatDeclarations.Plan());
+        services.AddSingleton(Substitute.For<IProviderEndpointCredentialSource>());
+        services.AddSingleton(Substitute.For<IOutboundOperationRunner>());
+        services.AddSingleton(Substitute.For<IAiProviderHealthRecorder>());
+
+        // Act
+        services.AddChatProviderAdapter();
+
+        // Assert
+        using var provider = services.BuildServiceProvider();
+        var client = provider.GetRequiredService<IChatModelClient>();
+        using var transport = provider
+            .GetRequiredService<IHttpClientFactory>()
+            .CreateClient(ProviderChatModelClient.TransportName);
+
+        Assert.NotNull(client);
+
+        // The bounds live in the registration rather than at a call site, so a client asked for by name carries them.
+        Assert.Equal(ChatDeclarations.RequestTimeout + TimeSpan.FromSeconds(30), transport.Timeout);
+    }
+
+    /// <summary>
+    /// Either adapter may be the only one a deployment registers, so neither may assume the other ran — including for
+    /// the client construction the two share.
+    /// </summary>
+    [Fact]
+    public void AddChatProviderAdapter_BesideTheEmbeddingAdapter_SharesOneClientFactory()
+    {
+        // Arrange
+        var services = new ServiceCollection();
+        services.AddHttpClient();
+        services.AddLogging();
+        services.AddSingleton(EmbeddingDeclarations.Plan());
+        services.AddSingleton(ChatDeclarations.Plan());
+        services.AddSingleton(Substitute.For<IProviderEndpointCredentialSource>());
+        services.AddSingleton(Substitute.For<IOutboundOperationRunner>());
+        services.AddSingleton(Substitute.For<IAiProviderHealthRecorder>());
+
+        // Act
+        services.AddEmbeddingProviderAdapter();
+        services.AddChatProviderAdapter();
+
+        // Assert
+        using var provider = services.BuildServiceProvider();
+
+        Assert.NotNull(provider.GetRequiredService<ITextEmbeddingGenerator>());
+        Assert.NotNull(provider.GetRequiredService<IChatModelClient>());
+        Assert.Single(services, service => service.ServiceType == typeof(OpenAiCompatibleClientFactory));
+    }
+
+    [Fact]
+    public void AddChatProviderAdapter_WithoutAServiceCollection_IsRefused()
+    {
+        // Act, Assert
+        Assert.Throws<ArgumentNullException>(() => AiServiceCollectionExtensions.AddChatProviderAdapter(null!));
     }
 
     [Fact]

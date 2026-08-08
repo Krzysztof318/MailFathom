@@ -99,6 +99,16 @@ started are different questions about one provider bill.
 [Embedding backfill](../features/embedding-backfill.md#what-an-operator-can-see) names each of them, and says why the
 outstanding figure is a sweep old rather than live.
 
+Each outbound AI provider publishes what its last call established about it, as `mailfathom.ai.provider.health` tagged
+with `mailfathom.ai.provider.role` — `embedding` or `chat`. The two roles carry one measurement each rather than one
+combined figure, because an instance may hold a working embedding provider and a failing chat one and the two ask
+different things of an operator. The value is the state's own number rather than its name, since an instrument's value
+has to be one: `0` nothing called yet, `1` serving, `2` unavailable and worth waiting out, `3` failing for a reason a
+credential or a declaration has to change. A role nothing has called publishes no measurement at all, so a flat line
+always means a provider that is being watched rather than one nobody configured. [Chat
+generation](../features/chat-generation.md#provider-health-is-tracked-per-provider) records what each state means and
+why nothing probes a provider to produce one.
+
 What such a signal may carry is bounded by the same rule that governs the log lines, and it is a cardinality rule as
 much as a privacy one. Counts, sizes, durations, outcomes, error codes, and MailFathom's own configured account and
 folder aliases are permitted. Mail content, an address, a subject, a remote folder path, a message identifier, a UID, a

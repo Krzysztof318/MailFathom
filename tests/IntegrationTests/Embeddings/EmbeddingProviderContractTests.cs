@@ -4,8 +4,11 @@
 
 using MailFathom.AI.Embeddings;
 using MailFathom.AI.ProviderAdapters;
+using MailFathom.AI.Providers;
+using MailFathom.Application.AiProviders;
 using MailFathom.Application.Emails.Embeddings;
 using MailFathom.Application.Resilience;
+using MailFathom.Infrastructure.Observability;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using xRetry.v3;
@@ -114,7 +117,12 @@ public sealed class EmbeddingProviderContractTests
     {
         var services = new ServiceCollection();
         services.AddHttpClient();
-        services.AddSingleton<IEmbeddingCredentialSource>(new FixedEmbeddingCredentialSource(apiKey));
+        services.AddSingleton<IProviderEndpointCredentialSource>(new FixedEmbeddingCredentialSource(apiKey));
+
+        // The real tracker rather than a double, because it is what the host registers and it reaches nothing: the
+        // adapter's only use of it is to record an outcome, so a run against the real provider exercises the same
+        // recording path a deployment does at no additional cost.
+        services.AddSingleton<IAiProviderHealthRecorder>(new AiProviderHealthTracker(TimeProvider.System));
 
         return services.BuildServiceProvider();
     }
@@ -135,18 +143,19 @@ public sealed class EmbeddingProviderContractTests
         IServiceProvider composition) =>
         new(
             plan,
-            composition.GetRequiredService<IEmbeddingCredentialSource>(),
-            new OpenAiCompatibleEmbeddingClientFactory(),
+            composition.GetRequiredService<IProviderEndpointCredentialSource>(),
+            new OpenAiCompatibleClientFactory(),
             composition.GetRequiredService<IHttpClientFactory>(),
             new PassThroughOutboundOperationRunner(),
+            composition.GetRequiredService<IAiProviderHealthRecorder>(),
             NullLogger<ProviderTextEmbeddingGenerator>.Instance);
 
-    private sealed class FixedEmbeddingCredentialSource(string apiKey) : IEmbeddingCredentialSource
+    private sealed class FixedEmbeddingCredentialSource(string apiKey) : IProviderEndpointCredentialSource
     {
-        public Task<EmbeddingEndpointCredential> ResolveAsync(
+        public Task<ProviderEndpointCredential> ResolveAsync(
             string endpointAlias,
             CancellationToken cancellationToken) =>
-            Task.FromResult(EmbeddingEndpointCredential.FromApiKey(apiKey, resolvedMaterial: null));
+            Task.FromResult(ProviderEndpointCredential.FromApiKey(apiKey, resolvedMaterial: null));
     }
 
     private sealed class PassThroughOutboundOperationRunner : IOutboundOperationRunner

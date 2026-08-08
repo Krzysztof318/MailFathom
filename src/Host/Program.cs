@@ -3,8 +3,9 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.AI;
-using MailFathom.AI.Embeddings;
+using MailFathom.AI.Providers;
 using MailFathom.Application.Accounts;
+using MailFathom.Application.AiProviders;
 using MailFathom.Application.EmailContent;
 using MailFathom.Application.Emails.Embeddings.Backfill;
 using MailFathom.Application.Emails.Embeddings.Generation;
@@ -20,11 +21,13 @@ using MailFathom.Application.Synchronization.Reconciliation;
 using MailFathom.Host;
 using MailFathom.Host.Api;
 using MailFathom.Host.Configuration;
+using MailFathom.Host.Configuration.Chat;
 using MailFathom.Host.Configuration.DataEncryption;
 using MailFathom.Host.Configuration.Embeddings;
 using MailFathom.Host.Configuration.Endpoints;
 using MailFathom.Host.Configuration.Mail;
 using MailFathom.Host.Configuration.Persistence;
+using MailFathom.Host.Configuration.Providers;
 using MailFathom.Host.Configuration.Provisioning;
 using MailFathom.Host.Hosting;
 using MailFathom.Host.Hosting.Startup;
@@ -135,6 +138,16 @@ try
     builder.Services.AddOptions<EmbeddingOptions>()
         .Bind(
             builder.Configuration.GetSection("Embeddings"),
+            binderOptions => binderOptions.ErrorOnUnknownConfiguration = true)
+        .ValidateDataAnnotations()
+        .ValidateOnStart();
+    // A configuration root of its own beside Embeddings rather than a section inside it, because the two are separate
+    // choices with separate consequences: an instance may generate and not embed, or embed and not generate, and each
+    // is a working deployment with a different set of capabilities. An absent section is one of those states rather
+    // than a startup failure.
+    builder.Services.AddOptions<ChatModelOptions>()
+        .Bind(
+            builder.Configuration.GetSection("Chat"),
             binderOptions => binderOptions.ErrorOnUnknownConfiguration = true)
         .ValidateDataAnnotations()
         .ValidateOnStart();
@@ -323,9 +336,33 @@ try
         Capacity = provider.GetRequiredService<IOptions<EmbeddingOptions>>().Value.MaxQueuedEmails,
     });
 
+    // Read the same way and for the same reason as the embedding declaration: whether this deployment generates text
+    // decides which services exist, and that decision is taken before the container that would resolve an options
+    // snapshot. Only the presence of a declaration is read this way — every rule about what it says is validated on
+    // start, where a failure reports every problem at once instead of the first one to be built.
+    var declaredChat = builder.Configuration.GetSection("Chat").Get<ChatModelOptions>();
+
+    // An alias names one AI endpoint across the whole deployment, because it is what a credential is resolved by, what
+    // a resilience circuit is keyed by, and what every log line naming an endpoint carries. Two endpoints answering to
+    // one name would share all three, so a chat endpoint reusing an embedding alias is refused here rather than
+    // producing an instance whose chat outage opens the circuit its embeddings are served through.
+    if (ProviderEndpointAliases.FindReusedAlias(declaredEmbeddings, declaredChat) is { } reusedAlias)
+    {
+        throw new OptionsValidationException(
+            "Chat",
+            typeof(ChatModelOptions),
+            [ProviderEndpointAliases.DescribeReusedAlias(reusedAlias)]);
+    }
+
+    // Registered once for both declarations, because it resolves by alias and the aliases are unique across them. It is
+    // needed by whichever adapter exists, so it is registered when either does rather than by each of them.
+    if (declaredEmbeddings?.IsConfigured is true || declaredChat?.IsConfigured is true)
+    {
+        builder.Services.AddSingleton<IProviderEndpointCredentialSource, ConfiguredProviderEndpointCredentialSource>();
+    }
+
     if (declaredEmbeddings?.IsConfigured is true)
     {
-        builder.Services.AddSingleton<IEmbeddingCredentialSource, ConfiguredEmbeddingCredentialSource>();
         builder.Services.AddSingleton(provider => EmbeddingGenerationPlanMapper.Map(
             provider.GetRequiredService<IOptions<EmbeddingOptions>>().Value)
             ?? throw new InvalidOperationException(
@@ -335,6 +372,23 @@ try
         // registers. An instance that declared no chain registers neither and starts; one that declared one registers
         // both and the workers below have something to resolve.
         builder.Services.AddEmailEmbeddingGeneration();
+        builder.Services.AddHealthChecks()
+            .Add(AiProviderHealthCheck.RegistrationFor(AiProviderRole.Embedding));
+    }
+
+    if (declaredChat?.IsConfigured is true)
+    {
+        builder.Services.AddSingleton(provider => ChatGenerationPlanMapper.Map(
+            provider.GetRequiredService<IOptions<ChatModelOptions>>().Value)
+            ?? throw new InvalidOperationException(
+                "The chat endpoint was declared at registration and is absent from the validated configuration."));
+        builder.Services.AddChatProviderAdapter();
+        // Readiness alone, and never worse than degraded. Neither provider serves a request path, so a failing one must
+        // not take the instance out of traffic and must never reach the liveness probe: restarting the process cannot
+        // fix a provider and would turn one outage into an outage plus a restart loop. The registration says all of
+        // that once, for both roles.
+        builder.Services.AddHealthChecks()
+            .Add(AiProviderHealthCheck.RegistrationFor(AiProviderRole.Chat));
     }
     builder.Services.AddInfrastructure(
         provider => provider.GetRequiredService<DatabaseConnectionSettingsMapper>()

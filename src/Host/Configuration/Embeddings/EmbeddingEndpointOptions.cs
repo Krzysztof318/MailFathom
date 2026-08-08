@@ -5,6 +5,7 @@
 using System.ComponentModel.DataAnnotations;
 using MailFathom.AI.Embeddings;
 using MailFathom.Application.Emails.Embeddings;
+using MailFathom.Host.Configuration.Providers;
 using MailFathom.Infrastructure.Secrets.Discovery;
 
 namespace MailFathom.Host.Configuration.Embeddings;
@@ -100,7 +101,7 @@ internal sealed class EmbeddingEndpointOptions
 
     /// <summary>Gets or sets the non-interactive Microsoft Entra credential this endpoint is authenticated with.</summary>
     /// <remarks>Absent for an endpoint authenticated with a key. Exactly one of the two is declared, and startup refuses both or neither.</remarks>
-    public EmbeddingEntraCredentialOptions? EntraCredential { get; set; }
+    public ProviderEntraCredentialOptions? EntraCredential { get; set; }
 
     /// <summary>Reports every reason this endpoint could not be used, by reading the declaration alone.</summary>
     /// <returns>One result per rule this declaration breaks.</returns>

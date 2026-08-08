@@ -5,9 +5,8 @@
 using System.Security.Cryptography.X509Certificates;
 using Azure.Core;
 using Azure.Identity;
-using MailFathom.AI.Embeddings;
 
-namespace MailFathom.AI.ProviderAdapters;
+namespace MailFathom.AI.Providers;
 
 /// <summary>Builds the Microsoft Entra credential a background service is allowed to hold.</summary>
 /// <remarks>
@@ -37,18 +36,18 @@ internal static class NonInteractiveEntraCredentials
 
         return declaration.Kind switch
         {
-            EmbeddingEndpointCredentialKind.ManagedIdentity => CreateManagedIdentityCredential(declaration),
-            EmbeddingEndpointCredentialKind.WorkloadIdentity => new WorkloadIdentityCredential(
+            ProviderEndpointCredentialKind.ManagedIdentity => CreateManagedIdentityCredential(declaration),
+            ProviderEndpointCredentialKind.WorkloadIdentity => new WorkloadIdentityCredential(
                 new WorkloadIdentityCredentialOptions
                 {
                     TenantId = declaration.TenantId,
                     ClientId = declaration.ClientId,
                 }),
-            EmbeddingEndpointCredentialKind.ClientSecret => new ClientSecretCredential(
+            ProviderEndpointCredentialKind.ClientSecret => new ClientSecretCredential(
                 Require(declaration.TenantId, nameof(EntraCredentialDeclaration.TenantId)),
                 Require(declaration.ClientId, nameof(EntraCredentialDeclaration.ClientId)),
                 Require(declaration.ClientSecret, nameof(EntraCredentialDeclaration.ClientSecret))),
-            EmbeddingEndpointCredentialKind.ClientCertificate => CreateCertificateCredential(declaration),
+            ProviderEndpointCredentialKind.ClientCertificate => CreateCertificateCredential(declaration),
             _ => throw new ArgumentOutOfRangeException(
                 nameof(declaration),
                 declaration.Kind,

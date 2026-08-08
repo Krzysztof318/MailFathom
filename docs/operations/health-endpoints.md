@@ -78,7 +78,7 @@ Kestrel's own default address.
 | Probe | Path | Consults | A failure means |
 |---|---|---|---|
 | Startup | `/started` | The host's own startup gates: every secret reference resolved, the database schema verified | The process has not finished coming up; the grace period continues |
-| Readiness | `/health` | The dependencies a request needs, the database included | The instance stops receiving traffic; it is not restarted |
+| Readiness | `/health` | The dependencies a request needs, the database included, and each declared AI provider | The instance stops receiving traffic; it is not restarted |
 | Liveness | `/alive` | Process-local state only | The container is restarted |
 
 One endpoint cannot answer all three, because the three have different consequences. Wiring liveness to the readiness
@@ -90,6 +90,16 @@ registered — `live`, `ready`, `startup` — and a check that states none reach
 framework's default is to include every registered check in every endpoint, which is how a dependency check ends up
 able to restart the process. Because a probe over no checks reports healthy, composition refuses to start when any of
 the three would answer without consulting anything.
+
+**A declared AI provider degrades the readiness probe rather than failing it.** An embedding provider and a chat
+provider each register a check of their own — `ai-embedding-provider` and `ai-chat-provider` — when the deployment
+declared one, and neither ever reports worse than degraded. Neither serves a request path: an instance whose embedding
+provider is failing still answers every search lexically, and one whose chat provider is failing still answers every
+search at all. So `/health` reads `Degraded` while a provider is unreachable, the instance keeps its traffic, and the
+liveness probe is untouched — restarting the process could not fix a provider and would turn one outage into two.
+Neither check calls a provider to find out; each reports the outcome of the last real call, which is what keeps a
+health scrape from spending an operator's money. [Chat generation](../features/chat-generation.md#provider-health-is-tracked-per-provider)
+records the states and what each asks of an operator.
 
 The startup gates are reported rather than re-run. The probe reads a flag the gates set as they complete, so polling it
 opens no connection and costs nothing, and once it turns healthy it stays healthy. Under the host builder MailFathom

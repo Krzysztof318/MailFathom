@@ -2,15 +2,15 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-namespace MailFathom.AI.Embeddings;
+namespace MailFathom.AI.Providers;
 
 /// <summary>Everything one non-interactive Microsoft Entra credential is built from.</summary>
 /// <param name="Kind">Which of the four non-interactive shapes the deployment holds.</param>
 /// <param name="TokenScope">The scope an access token is requested for.</param>
 /// <param name="TenantId">The directory the application is registered in, or <see langword="null" /> where the shape reads it from the platform.</param>
 /// <param name="ClientId">The application or user-assigned identity being authenticated, or <see langword="null" /> for a system-assigned managed identity.</param>
-/// <param name="ClientSecret">The resolved application secret, for <see cref="EmbeddingEndpointCredentialKind.ClientSecret" /> alone.</param>
-/// <param name="CertificatePath">The path of the application certificate, for <see cref="EmbeddingEndpointCredentialKind.ClientCertificate" /> alone.</param>
+/// <param name="ClientSecret">The resolved application secret, for <see cref="ProviderEndpointCredentialKind.ClientSecret" /> alone.</param>
+/// <param name="CertificatePath">The path of the application certificate, for <see cref="ProviderEndpointCredentialKind.ClientCertificate" /> alone.</param>
 /// <param name="CertificatePassword">The resolved password protecting that certificate, or <see langword="null" /> where it needs none.</param>
 /// <remarks>
 /// <para>
@@ -25,7 +25,7 @@ namespace MailFathom.AI.Embeddings;
 /// </para>
 /// </remarks>
 public sealed record EntraCredentialDeclaration(
-    EmbeddingEndpointCredentialKind Kind,
+    ProviderEndpointCredentialKind Kind,
     string TokenScope,
     string? TenantId,
     string? ClientId,

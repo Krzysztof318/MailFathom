@@ -2,9 +2,9 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-namespace MailFathom.AI.Embeddings;
+namespace MailFathom.AI.Providers;
 
-/// <summary>What one embedding request presents to one endpoint, already resolved from whatever reference declared it.</summary>
+/// <summary>What one request presents to one AI provider endpoint, already resolved from whatever reference declared it.</summary>
 /// <remarks>
 /// <para>
 /// The instance is owned by the request that resolved it and released when that request ends, which bounds the window
@@ -17,12 +17,12 @@ namespace MailFathom.AI.Embeddings;
 /// credential fetches and caches for itself.
 /// </para>
 /// </remarks>
-public sealed class EmbeddingEndpointCredential : IDisposable
+public sealed class ProviderEndpointCredential : IDisposable
 {
     private readonly IDisposable? resolvedMaterial;
 
-    private EmbeddingEndpointCredential(
-        EmbeddingEndpointCredentialKind kind,
+    private ProviderEndpointCredential(
+        ProviderEndpointCredentialKind kind,
         string? apiKey,
         EntraCredentialDeclaration? entra,
         IDisposable? resolvedMaterial)
@@ -34,7 +34,7 @@ public sealed class EmbeddingEndpointCredential : IDisposable
     }
 
     /// <summary>Gets how the deployment proves its identity to the endpoint.</summary>
-    public EmbeddingEndpointCredentialKind Kind { get; }
+    public ProviderEndpointCredentialKind Kind { get; }
 
     /// <summary>Gets the resolved provider key, or <see langword="null" /> when the credential is a Microsoft Entra one.</summary>
     public string? ApiKey { get; }
@@ -47,12 +47,12 @@ public sealed class EmbeddingEndpointCredential : IDisposable
     /// <param name="resolvedMaterial">The secret material the key was read from, released when this credential is, or <see langword="null" /> when the caller holds none.</param>
     /// <returns>The credential.</returns>
     /// <exception cref="ArgumentException">Thrown when the key is blank.</exception>
-    public static EmbeddingEndpointCredential FromApiKey(string apiKey, IDisposable? resolvedMaterial)
+    public static ProviderEndpointCredential FromApiKey(string apiKey, IDisposable? resolvedMaterial)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(apiKey);
 
-        return new EmbeddingEndpointCredential(
-            EmbeddingEndpointCredentialKind.ApiKey,
+        return new ProviderEndpointCredential(
+            ProviderEndpointCredentialKind.ApiKey,
             apiKey,
             entra: null,
             resolvedMaterial);
@@ -63,13 +63,13 @@ public sealed class EmbeddingEndpointCredential : IDisposable
     /// <param name="resolvedMaterial">The secret material the declaration's own secret was read from, released when this credential is, or <see langword="null" /> when the shape holds none.</param>
     /// <returns>The credential.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="declaration" /> is <see langword="null" />.</exception>
-    public static EmbeddingEndpointCredential FromEntra(
+    public static ProviderEndpointCredential FromEntra(
         EntraCredentialDeclaration declaration,
         IDisposable? resolvedMaterial)
     {
         ArgumentNullException.ThrowIfNull(declaration);
 
-        return new EmbeddingEndpointCredential(declaration.Kind, apiKey: null, declaration, resolvedMaterial);
+        return new ProviderEndpointCredential(declaration.Kind, apiKey: null, declaration, resolvedMaterial);
     }
 
     /// <inheritdoc />
