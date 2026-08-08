@@ -150,6 +150,15 @@ LABEL org.opencontainers.image.licenses="Apache-2.0" \
 # terminates at the ingress or the reverse proxy in front of it, which is also the only place a certificate needs to
 # exist.
 ENV McpEndpoint__Port=8080 \
+    # Cleared rather than omitted, and this line is load-bearing. The aspnet base image sets ASPNETCORE_HTTP_PORTS=8080
+    # in its own config, and the refusal above is a refusal rather than an "ignore" — so an image that inherits the
+    # value fails every container it produces, against a variable no operator wrote and no deployment asset sets. A
+    # Dockerfile cannot unset an inherited variable, and an empty value is what the guard treats as absent, so this is
+    # the whole of the fix. Do not delete it as redundant with the refusal: the refusal is what it exists to keep from
+    # firing. `ASPNETCORE_URLS` and `ASPNETCORE_HTTPS_PORTS` are absent from the base image and are deliberately not
+    # cleared here — the smoke test in .github/workflows/publish-container-image.yml reads all three back off the built
+    # image, so a base-image bump that introduces one fails the publication instead of being neutralized unnoticed.
+    ASPNETCORE_HTTP_PORTS= \
     # No diagnostic IPC socket. It would be the one thing this process writes outside /tmp's tmpfs, and a socket that
     # can request a process dump is a way to read secret material out of managed memory — the exposure
     # docs/operations/secret-provisioning.md documents and asks deployments to close. Set it back to 1 deliberately,
