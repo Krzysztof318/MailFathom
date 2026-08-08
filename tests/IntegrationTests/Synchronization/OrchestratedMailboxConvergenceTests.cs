@@ -5,6 +5,7 @@
 using MailFathom.Application.Folders;
 using MailFathom.Application.Mail;
 using MailFathom.Application.Mail.Mutations;
+using MailFathom.Application.Mail.Mutations.Audit;
 using MailFathom.Application.Mail.Mutations.Convergence;
 using MailFathom.Application.Persistence;
 using MailFathom.Application.Resilience;
@@ -239,9 +240,11 @@ public sealed class OrchestratedMailboxConvergenceTests(MailFathomOrchestrationF
                 store,
                 scope.GetRequiredService<IMailboxWriteSessionFactory>(),
                 commitPolicy,
+                scope.GetRequiredService<IMailboxMutationAuditTrail>(),
                 new MailboxMutationOptions()),
             scope.GetRequiredService<IMailTransportSecurityPolicyReader>(),
             commitPolicy,
+            scope.GetRequiredService<IMailboxMutationAuditTrail>(),
             new MailboxConvergenceOptions { UnknownOutcomeGrace = TimeSpan.Zero },
             TimeProvider.System);
 
@@ -312,9 +315,11 @@ public sealed class OrchestratedMailboxConvergenceTests(MailFathomOrchestrationF
                 store,
                 new MailKitImapWriteSessionFactory(pool, CreateTelemetry()),
                 commitPolicy,
+                scope.GetRequiredService<IMailboxMutationAuditTrail>(),
                 new MailboxMutationOptions()),
             scope.GetRequiredService<IMailTransportSecurityPolicyReader>(),
             commitPolicy,
+            scope.GetRequiredService<IMailboxMutationAuditTrail>(),
             new MailboxConvergenceOptions(),
             TimeProvider.System);
 

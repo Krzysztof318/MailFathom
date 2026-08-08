@@ -8,6 +8,7 @@ using System.Security.Cryptography.X509Certificates;
 using MailFathom.Application.Accounts;
 using MailFathom.Application.Mail;
 using MailFathom.Application.Mail.Mutations;
+using MailFathom.Application.Mail.Mutations.Audit;
 using MailFathom.Application.Synchronization;
 using MailFathom.Application.Synchronization.Checkpoints;
 using MailFathom.Application.Synchronization.Reconciliation;
@@ -31,6 +32,7 @@ internal sealed class MailSynchronizationOptions
         IMailSynchronizationWindowReader,
         IRemotelyDeletedEmailDispositionReader,
         IAuthoredDeleteEmailDispositionReader,
+        IMailboxMutationAuditSettingsReader,
         IMailAccountCatalog
 {
     /// <summary>The shutdown budget the .NET Generic Host applies when nothing configures one.</summary>
@@ -347,6 +349,16 @@ internal sealed class MailSynchronizationOptions
 
     /// <inheritdoc />
     /// <remarks>
+    /// An account this snapshot no longer names reports <see cref="MailboxMutationAuditSettings.Disabled" /> rather
+    /// than failing, unlike every other per-account reader here. The two callers are why: a mutation is only recorded
+    /// for a configured account, and the retention pass runs over accounts a reload may have removed between one run and
+    /// the next — where the honest answer is that no operator decision applies, not that the deployment is broken.
+    /// </remarks>
+    public MailboxMutationAuditSettings GetAuditSettings(MailAccountId accountId) =>
+        this.FindConfiguredAccount(accountId)?.CreateAuditSettings() ?? MailboxMutationAuditSettings.Disabled;
+
+    /// <inheritdoc />
+    /// <remarks>
     /// Configuration is what defines the set of accounts, so this answers from the same bound options every other
     /// per-account reader does. It deliberately ignores <see cref="Enabled" />: that switch stops runs from fetching
     /// mail, and an operator who turned it off has not asked for the copy already stored to become unreadable. An
@@ -504,6 +516,14 @@ internal sealed class MailSynchronizationAccountOptions : IValidatableObject
     public AuthoredDeleteEmailDisposition AuthoredDeleteEmailDisposition { get; set; } =
         AuthoredDeleteEmailDisposition.RetainLocalCopy;
 
+    /// <summary>Gets or sets whether and for how long this account keeps a record of the changes MailFathom made to it.</summary>
+    /// <remarks>
+    /// Omitting the block leaves the trail off, which is the default for the reason the privacy rules require: the trail
+    /// is derived personal data — it says where a person's mail has been, when, and at whose instruction — so a
+    /// deployment that never asked for it never accumulates it.
+    /// </remarks>
+    public MailboxMutationAuditTrailOptions AuditTrail { get; set; } = new();
+
     /// <summary>Gets or sets what starts this account's next synchronization pass.</summary>
     /// <remarks>
     /// <para>
@@ -568,6 +588,23 @@ internal sealed class MailSynchronizationAccountOptions : IValidatableObject
             yield return new ValidationResult(
                 $"Account '{this.AccountId}': the synchronization mode must be one of {string.Join(", ", Enum.GetNames<MailSynchronizationMode>())}.",
                 [nameof(this.Mode)]);
+        }
+
+        // Checked here rather than through a data annotation because nothing binds the block as an options graph of its
+        // own, so an annotation on it would be read by nothing. The window decides when personal data is destroyed, so
+        // a typo in it fails startup instead of quietly selecting a period nobody wrote.
+        if (this.AuditTrail is null)
+        {
+            yield return new ValidationResult(
+                $"Account '{this.AccountId}': the audit trail configuration must be a block.",
+                [nameof(this.AuditTrail)]);
+        }
+        else if (this.AuditTrail.Retention < MailboxMutationAuditTrailOptions.MinimumRetention
+            || this.AuditTrail.Retention > MailboxMutationAuditTrailOptions.MaximumRetention)
+        {
+            yield return new ValidationResult(
+                $"Account '{this.AccountId}': the audit trail retention must be between {MailboxMutationAuditTrailOptions.MinimumRetention} and {MailboxMutationAuditTrailOptions.MaximumRetention}.",
+                [nameof(this.AuditTrail)]);
         }
 
         if (this.Folders is null)
@@ -742,6 +779,11 @@ internal sealed class MailSynchronizationAccountOptions : IValidatableObject
                 [nameof(this.EarliestEmailReceivedDate)]);
         }
     }
+
+    /// <summary>Builds the account's configured audit trail settings.</summary>
+    /// <returns>The settings the account's block names.</returns>
+    internal MailboxMutationAuditSettings CreateAuditSettings() =>
+        new(this.AuditTrail.Enabled, this.AuditTrail.Retention);
 
     /// <summary>Builds the account's configured synchronization window.</summary>
     /// <returns>The window the account's bound names, or an unbounded one when it configured none.</returns>

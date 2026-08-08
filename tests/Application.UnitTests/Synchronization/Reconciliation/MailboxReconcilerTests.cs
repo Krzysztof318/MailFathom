@@ -1121,6 +1121,7 @@ public sealed class MailboxReconcilerTests
                     requester,
                     localDisposition),
             Stage = MailboxMutationStage.Completed,
+            IsAudited = false,
             RequiresSourceRemoval = isRelocation,
             Placement = isRelocation
                 ? RemoteEmailPlacement.Reported(ImapUidValidity.Create(99), ImapUid.Create(4))
@@ -1152,6 +1153,7 @@ public sealed class MailboxReconcilerTests
                 MailboxMutationRequester.Rule("mark-newsletters-read", 1),
                 isSeen),
             Stage = stage,
+            IsAudited = false,
             RequiresSourceRemoval = false,
             Placement = RemoteEmailPlacement.NotReported(),
             AttemptCount = 1,

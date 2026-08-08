@@ -2,8 +2,10 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Application.Mail.Mutations.Audit;
 using MailFathom.Application.Persistence;
 using MailFathom.Domain.Failures;
+using MailFathom.Domain.Folders;
 using MailFathom.Domain.Mutations;
 
 namespace MailFathom.Application.Mail.Mutations;
@@ -21,44 +23,52 @@ namespace MailFathom.Application.Mail.Mutations;
 /// attempted once. A concurrent reader of the same account's mutations is ordinary, and losing a race is not a reason to
 /// leave a stage unwritten.
 /// </para>
+/// <para>
+/// Being that single writer is also why the audit trail is appended from here rather than from the callers. The two
+/// terminal stages are reached from four places between the performer and convergence, and an entry owed by one of them
+/// and not written by another would be a history whose gaps mean nothing. The append happens after the terminal stage is
+/// durable and cannot fail the mutation, which <see cref="IMailboxMutationAuditTrail" /> states in full.
+/// </para>
 /// </remarks>
 internal sealed class MailboxMutationJournal : IMailboxMutationJournal
 {
     private readonly IMailboxMutationRecordStore store;
     private readonly OptimisticConcurrencyRetryPolicy commitPolicy;
+    private readonly IMailboxMutationAuditTrail auditTrail;
+    private readonly MailFolderResolution sourceFolder;
+    private MailboxMutationRecord record;
 
     internal MailboxMutationJournal(
         IMailboxMutationRecordStore store,
         OptimisticConcurrencyRetryPolicy commitPolicy,
-        MailboxMutationRecord record)
+        IMailboxMutationAuditTrail auditTrail,
+        MailboxMutationRecord record,
+        MailFolderResolution sourceFolder)
     {
         this.store = store;
         this.commitPolicy = commitPolicy;
-        this.RecordId = record.Id;
-        this.Stage = record.Stage;
-        this.Placement = record.Placement;
-        this.RequiresSourceRemoval = record.RequiresSourceRemoval;
-        this.AttemptCount = record.AttemptCount;
-        this.LastFailure = record.LastFailure;
+        this.auditTrail = auditTrail;
+        this.record = record;
+        this.sourceFolder = sourceFolder;
     }
 
     /// <summary>Gets the record every write here names.</summary>
-    internal MailboxMutationRecordId RecordId { get; }
+    internal MailboxMutationRecordId RecordId => this.record.Id;
 
     /// <inheritdoc />
-    public MailboxMutationStage Stage { get; private set; }
+    public MailboxMutationStage Stage => this.record.Stage;
 
     /// <inheritdoc />
-    public RemoteEmailPlacement Placement { get; private set; }
+    public RemoteEmailPlacement Placement => this.record.Placement;
 
     /// <inheritdoc />
-    public bool RequiresSourceRemoval { get; private set; }
+    public bool RequiresSourceRemoval => this.record.RequiresSourceRemoval;
 
     /// <summary>Gets how many attempts the record has counted, including one this journal has just counted.</summary>
-    internal int AttemptCount { get; private set; }
+    internal int AttemptCount => this.record.AttemptCount;
 
     /// <summary>Gets the failure the last attempt ended in, or <see langword="null" /> while none has.</summary>
-    internal MailFathomErrorCode? LastFailure { get; private set; }
+    internal MailFathomErrorCode? LastFailure => this.record.LastFailure;
 
     /// <inheritdoc />
     public async Task PlacementIssuedAsync(bool requiresSourceRemoval, CancellationToken cancellationToken)
@@ -71,8 +81,11 @@ internal sealed class MailboxMutationJournal : IMailboxMutationJournal
                 token),
             cancellationToken);
 
-        this.Stage = MailboxMutationStage.PlacementIssued;
-        this.RequiresSourceRemoval = requiresSourceRemoval;
+        this.record = this.record with
+        {
+            Stage = MailboxMutationStage.PlacementIssued,
+            RequiresSourceRemoval = requiresSourceRemoval,
+        };
     }
 
     /// <inheritdoc />
@@ -90,12 +103,16 @@ internal sealed class MailboxMutationJournal : IMailboxMutationJournal
     /// <summary>Counts one attempt before it is made, so an attempt that never returns still counted.</summary>
     internal async Task CountAttemptAsync(CancellationToken cancellationToken)
     {
+        var countedAttempts = 0;
+
         await this.commitPolicy.CommitAsync(
             async (session, token) =>
             {
-                this.AttemptCount = await this.store.CountAttemptAsync(session, this.RecordId, token);
+                countedAttempts = await this.store.CountAttemptAsync(session, this.RecordId, token);
             },
             cancellationToken);
+
+        this.record = this.record with { AttemptCount = countedAttempts };
     }
 
     /// <summary>Ends the record in the stage that says the change was made.</summary>
@@ -116,7 +133,7 @@ internal sealed class MailboxMutationJournal : IMailboxMutationJournal
             (session, token) => this.store.RecordFailureAsync(session, this.RecordId, failure, token),
             cancellationToken);
 
-        this.LastFailure = failure;
+        this.record = this.record with { LastFailure = failure };
     }
 
     private async Task AdvanceAsync(
@@ -128,11 +145,15 @@ internal sealed class MailboxMutationJournal : IMailboxMutationJournal
             (session, token) => this.store.AdvanceAsync(session, this.RecordId, stage, placement, token),
             cancellationToken);
 
-        this.Stage = stage;
-
-        if (placement is not null)
+        this.record = this.record with
         {
-            this.Placement = placement;
+            Stage = stage,
+            Placement = placement ?? this.record.Placement,
+        };
+
+        if (this.record.IsTerminal)
+        {
+            await this.auditTrail.RecordAsync(this.record, this.sourceFolder, cancellationToken);
         }
     }
 }

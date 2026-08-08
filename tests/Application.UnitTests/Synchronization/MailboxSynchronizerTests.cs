@@ -2026,6 +2026,7 @@ public sealed class MailboxSynchronizerTests
                 MailboxMutationRequester.Rule("file-newsletters", 1),
                 InboxFolder.RemotePath),
             Stage = MailboxMutationStage.Completed,
+            IsAudited = false,
             RequiresSourceRemoval = true,
             Placement = RemoteEmailPlacement.Reported(placedUidValidity, placedUid),
             AttemptCount = 1,

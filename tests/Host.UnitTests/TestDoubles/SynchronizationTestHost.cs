@@ -9,6 +9,7 @@ using MailFathom.Application.Emails.Summaries;
 using MailFathom.Application.Folders;
 using MailFathom.Application.Mail;
 using MailFathom.Application.Mail.Mutations;
+using MailFathom.Application.Mail.Mutations.Audit;
 using MailFathom.Application.Mail.Mutations.Convergence;
 using MailFathom.Application.Persistence;
 using MailFathom.Application.Synchronization;
@@ -123,6 +124,14 @@ internal static class SynchronizationTestHost
         services.AddSingleton<MailboxConvergenceTelemetry>();
         services.AddScoped<IMailboxMutationPerformer, MailboxMutationPerformer>();
         services.AddScoped<MailboxMutationConverger>();
+
+        // The trail and its retention pass are composed here for the same reason convergence is: a supervisor resolves
+        // both from its scope. Neither is what these tests are about — the trail is off for every account they
+        // configure, so both answer that there is nothing to keep and nothing to erase.
+        services.AddSingleton(CreateTrailThatKeepsNothing());
+        services.AddSingleton(CreateAuditStoreWithNothingToErase());
+        services.AddScoped<IMailboxMutationAuditSettingsReader>(provider => provider.GetRequiredService<MailSynchronizationOptions>());
+        services.AddScoped<MailboxMutationAuditTrailRetention>();
         services.AddLogging();
 
         // Each run hands its own snapshot to the scopes it opens, and every per-account reader answers from that
@@ -259,6 +268,35 @@ internal static class SynchronizationTestHost
             .Returns(Task.FromResult<IReadOnlyList<MailboxMutationLifecycleCount>>([]));
 
         return recordStore;
+    }
+
+    /// <summary>Answers every append, because the accounts these tests configure keep no trail and owe none.</summary>
+    private static IMailboxMutationAuditTrail CreateTrailThatKeepsNothing()
+    {
+        var auditTrail = Substitute.For<IMailboxMutationAuditTrail>();
+        auditTrail
+            .RecordAsync(
+                Arg.Any<MailboxMutationRecord>(),
+                Arg.Any<MailFolderResolution>(),
+                Arg.Any<CancellationToken>())
+            .Returns(Task.CompletedTask);
+
+        return auditTrail;
+    }
+
+    /// <summary>Answers a retention pass that the account's trail holds nothing that has outlived its window.</summary>
+    private static IMailboxMutationAuditEntryStore CreateAuditStoreWithNothingToErase()
+    {
+        var auditStore = Substitute.For<IMailboxMutationAuditEntryStore>();
+        auditStore
+            .EraseCompletedBeforeAsync(
+                Arg.Any<MailAccountId>(),
+                Arg.Any<DateTimeOffset>(),
+                Arg.Any<int>(),
+                Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(0));
+
+        return auditStore;
     }
 
     private static IMailboxMutationReconciliationStore CreateMutationStoreWithNothingRecorded()

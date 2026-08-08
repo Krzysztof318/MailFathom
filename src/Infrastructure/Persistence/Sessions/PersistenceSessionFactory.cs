@@ -46,7 +46,7 @@ internal sealed class PersistenceSessionFactory(MailFathomDbContext dbContext) :
         public Task RollbackTransactionAsync(CancellationToken cancellationToken) =>
             transaction.RollbackAsync(cancellationToken);
 
-        /// <summary>Recognizes the four inserts a competing writer can win, and nothing else.</summary>
+        /// <summary>Recognizes the five inserts a competing writer can win, and nothing else.</summary>
         /// <remarks>
         /// <para>
         /// Each names a constraint whose violation means "another run got here first" rather than "this data is
@@ -63,6 +63,13 @@ internal sealed class PersistenceSessionFactory(MailFathomDbContext dbContext) :
         /// and the retry reads back the record the winner wrote — which is exactly how the same request twice performs
         /// one mutation.
         /// </para>
+        /// <para>
+        /// The fifth is one audit entry per mutation ending, and it is listed for a reason the others do not have: what
+        /// reads the answer is a trail that swallows a failed append and counts it. An append repeated after a commit
+        /// whose answer was lost is the benign case that constraint exists for, and leaving it unrecognized would report
+        /// it as an entry the trail could not keep — on the very counter that makes swallowing defensible — while the
+        /// trail in fact holds exactly the one entry it should.
+        /// </para>
         /// </remarks>
         public bool IsConcurrencyConflict(DbUpdateException exception) =>
             exception.InnerException is PostgresException
@@ -71,7 +78,8 @@ internal sealed class PersistenceSessionFactory(MailFathomDbContext dbContext) :
                 ConstraintName: MailFathomDbContext.SynchronizationCheckpointPrimaryKeyConstraintName
                     or MailFathomDbContext.MailFolderBindingUniqueIndexName
                     or MailFathomDbContext.MailboxAccountPrimaryKeyConstraintName
-                    or MailFathomDbContext.MailboxMutationIdentityUniqueIndexName,
+                    or MailFathomDbContext.MailboxMutationIdentityUniqueIndexName
+                    or MailFathomDbContext.MailboxMutationAuditEntryMutationUniqueIndexName,
             };
 
         public void ClearTrackedState() => dbContext.ChangeTracker.Clear();

@@ -325,6 +325,95 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                     b.ToTable("mailbox_accounts", (string)null);
                 });
 
+            modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.MailboxMutationAuditEntryEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CompletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool?>("DesiredSeenState")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("DestinationFolderPath")
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)");
+
+                    b.Property<string>("DestinationHierarchyDelimiter")
+                        .HasMaxLength(1)
+                        .HasColumnType("character varying(1)");
+
+                    b.Property<int?>("FailureCode")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("MailboxAccountId")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<string>("Mutation")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<Guid>("MutationRecordId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Outcome")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<long?>("PlacementUid")
+                        .HasColumnType("bigint");
+
+                    b.Property<long?>("PlacementUidValidity")
+                        .HasColumnType("bigint");
+
+                    b.Property<DateTimeOffset>("RequestedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("RequesterIdentity")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<string>("RequesterOrigin")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("SourceFolderPath")
+                        .IsRequired()
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)");
+
+                    b.Property<string>("SourceHierarchyDelimiter")
+                        .HasMaxLength(1)
+                        .HasColumnType("character varying(1)");
+
+                    b.Property<long>("SourceUid")
+                        .HasColumnType("bigint");
+
+                    b.Property<long>("SourceUidValidity")
+                        .HasColumnType("bigint");
+
+                    b.Property<Guid>("StoredEmailId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("MutationRecordId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_mailbox_mutation_audit_entries_mutation");
+
+                    b.HasIndex("MailboxAccountId", "CompletedAt", "Id")
+                        .HasDatabaseName("ix_mailbox_mutation_audit_entries_account_completed");
+
+                    b.ToTable("mailbox_mutation_audit_entries", (string)null);
+                });
+
             modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.MailboxMutationEntity", b =>
                 {
                     b.Property<Guid>("Id")
@@ -332,6 +421,9 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
 
                     b.Property<int>("AttemptCount")
                         .HasColumnType("integer");
+
+                    b.Property<bool>("AuditTrailEnabled")
+                        .HasColumnType("boolean");
 
                     b.Property<uint>("ConcurrencyVersion")
                         .IsConcurrencyToken()

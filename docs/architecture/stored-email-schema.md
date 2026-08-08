@@ -225,6 +225,50 @@ No mail content is here. A folder path, a UID, a mutation name, and a requester 
 MailFathom's own names for things, and a failure is kept as its five-digit code rather than as the message text
 assembled at the failure site.
 
+`AuditTrailEnabled` is the one column on this row that is about something other than performing the change: it is the
+account's audit-trail setting as it stood when the intent was written down, and it decides whether the ending of this
+mutation is kept in the table below. It is stored for the reason `LocalDisposition` is — a mutation ends in a later run,
+and reading the setting there would apply whatever an operator had changed it to in the meantime, producing a history
+whose gaps look like changes nobody made.
+
+## The audit trail of finished mutations
+
+`mailbox_mutation_audit_entries` holds one row per change MailFathom **finished** making to a remote mailbox, written
+once when the mutation reaches `Completed` or `Abandoned`. It is a separate table from `mailbox_mutations` because the
+two answer different questions with different lifetimes: that one is operational state a retry reads, and its useful
+life ends when the change does; this one is written once, read by nothing the mechanism depends on, and its whole value
+is that it is still there months later when somebody asks what happened to a message. One table for both would decide
+two retention policies with one answer — operational state that is never pruned grows without bound, and history pruned
+on completion answers nothing.
+
+**Every identity on the row is a value rather than an association, and no foreign key leaves it.** That is the design
+rather than an omission. If the trail inherited the deletion path of the email it describes, then erasing that message
+would erase the record that MailFathom deleted it — which removes exactly the entry an audit of deletions exists to
+hold. So `StoredEmailId`, `MailboxAccountId`, and both folder paths are stored as values, and the entry outlives every
+one of them.
+
+| Column | What it records |
+|---|---|
+| `MutationRecordId`, unique | Which mutation this was, while that record still exists; the uniqueness is what makes a repeated append leave one entry |
+| `MailboxAccountId`, `StoredEmailId` | Whose mailbox and which local email, as values that survive both being removed |
+| `Mutation` | The change, by the name a log line and a metric already use |
+| `SourceFolderPath`, `SourceHierarchyDelimiter`, `SourceUidValidity`, `SourceUid` | The occurrence the IMAP command was aimed at, with the folder written as its remote path rather than as a key into a binding a later rebinding replaces |
+| `DestinationFolderPath`, `DestinationHierarchyDelimiter` | Where a relocation or a copy was aimed, and null for every other mutation |
+| `PlacementUidValidity`, `PlacementUid` | Where the server said it put the message, where it supplied `COPYUID` |
+| `DesiredSeenState` | Which way a `\Seen` change was asked for, and null for every other mutation |
+| `RequesterOrigin`, `RequesterIdentity` | Who asked — a rule together with the revision that matched, or one invocation |
+| `RequestedAt`, `CompletedAt` | When it was asked for and when it ended |
+| `Outcome`, `FailureCode` | `Performed`, or `Abandoned` with the five-digit code it was given up on for |
+
+Nothing amends a row. An entry states an ending that has already happened, so the table only ever grows and shrinks and
+carries no concurrency token; the two writes it takes are the append and the erasure that retention or a data-subject
+request calls for.
+
+No mail content is here either, and the omission is the same one the mutation record makes for the same reason: no
+subject, no address, no body fragment, no filename. What makes this table's version of that promise worth stating
+separately is that this one outlives the mail, so an entry that carried content would be content kept past the erasure
+of the message it came from.
+
 ## Indexes
 
 | Index | Columns | Purpose |
@@ -243,6 +287,8 @@ assembled at the failure site.
 | `ix_mailbox_mutations_identity` | `(MailFolderId, UidValidity, Uid, RequesterOrigin, RequesterIdentity, Mutation)`, unique | A mutation's idempotency identity, which is what makes the same request twice perform one change |
 | `ix_mailbox_mutations_outstanding` | `(MailboxAccountId, RecordedAt)` where the stage is not `Completed` | The changes an operator asks about: those in flight and those given up on |
 | `ix_mailbox_mutations_placement` | `(MailboxAccountId, DestinationFolderPath, PlacementUidValidity, PlacementUid)` where `PlacementObservedAt` is null | The question the forward pass asks of every batch it discovers: is one of these UIDs where a relocation or a copy put an email |
+| `ix_mailbox_mutation_audit_entries_mutation` | `(MutationRecordId)`, unique | One audit entry per mutation ending, whatever a repeated append attempts |
+| `ix_mailbox_mutation_audit_entries_account_completed` | `(MailboxAccountId, CompletedAt, Id)` | The two ways the trail is worked: a keyset-paginated page of an account's history, and the retention pass that erases what ended before a cutoff |
 
 The recipient and search-vector indexes are GIN rather than B-tree because both serve containment tests. A B-tree over an array column serves only equality against a whole array, and over a `tsvector` it serves nothing search asks for; a GIN index is what turns either into an index scan.
 
@@ -287,6 +333,8 @@ Participants, subject, and thread identifiers are personal data. They are stored
 The derived search document is not a lesser classification of the same data. Body text, the copied subject and addresses, and the search vector built from them are mail content, and none of them is anonymous merely because it was derived; they inherit the retention, access, export, and erasure obligations of the message they came from. The cascade from `stored_emails` is what makes that structural rather than a rule somebody has to remember.
 
 `mailbox_mutations` is derived personal data too, and for a reason worth stating plainly: a mutation history says where a person's mail has been and what was done to it. It therefore inherits the retention and deletion obligations of the email it describes rather than outliving it, and the cascade from `stored_emails` is what makes that structural — including where the recorded mutation was the deletion itself.
+
+`mailbox_mutation_audit_entries` is the one table on this page that deliberately does **not** inherit those obligations, and it is the only one that needs an operator's decision before it holds anything at all. It is derived personal data by the same reading — where a person's mail has been, when, and at whose instruction — and the reason it outlives the mail is that an audit of deletions whose entries are erased by the deletions they record holds nothing. What replaces the cascade is a bound of its own: the trail is off unless an account turns it on, each account states how long its entries are kept, and every account run erases what has outlived that window. A data-subject erasure reaches it separately for the same reason, and [Administrative endpoint](../operations/admin-endpoint.md#reading-what-mailfathom-changed) states that path.
 
 The same holds for `email_chunks`, and one thing about it is deliberate: a chunk records the message it came from and the span inside it, and nothing else. The account, folder, sender, recipients, date, and subject a retrieval will want to cite are reached through that message rather than copied onto the passage, so cutting mail into chunks widens no access, export, or erasure surface — it only adds rows the same cascade erases.
 

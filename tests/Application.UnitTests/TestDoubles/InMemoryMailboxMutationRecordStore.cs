@@ -28,6 +28,13 @@ internal sealed class InMemoryMailboxMutationRecordStore : IMailboxMutationRecor
     /// <summary>Gets how many requests were written down, which is one per idempotency identity however often it was asked.</summary>
     internal int OpenedRecordCount => this.recordsById.Count;
 
+    /// <summary>Gets or sets what the account's audit trail setting resolves to when a record is opened.</summary>
+    /// <remarks>
+    /// It is a property of the store because that is where the real one resolves it: the answer is written onto the row
+    /// once and never re-read, so a test arranges it here rather than by changing a setting mid-run.
+    /// </remarks>
+    internal bool AuditsMutations { get; set; }
+
     /// <inheritdoc />
     public Task<MailboxMutationRecord> OpenAsync(
         IPersistenceSession session,
@@ -46,6 +53,7 @@ internal sealed class InMemoryMailboxMutationRecordStore : IMailboxMutationRecor
             Id = MailboxMutationRecordId.Create(Guid.CreateVersion7(this.Advance())),
             Request = request,
             Stage = MailboxMutationStage.Recorded,
+            IsAudited = this.AuditsMutations,
             RequiresSourceRemoval = false,
             Placement = RemoteEmailPlacement.NotReported(),
             AttemptCount = 0,

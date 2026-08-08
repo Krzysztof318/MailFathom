@@ -70,6 +70,7 @@ reverse proxy, write the public URL and keep the path: `https://mail.example.tes
 | --- | --- |
 | `GET /api/admin/session` | Reports the credential that authenticated and the running version. This is what `login` and `status` ask. |
 | `POST /api/admin/mailbox/refresh-token` | Stores a mailbox refresh token for one configured account, sealed under the deployment's data-encryption key. This is what [`mfctl mailbox authorize --account`](mailbox-oauth.md#sending-the-token-to-the-deployment) sends. |
+| `GET /api/admin/mailbox/mutations/audit` | Reads one account's record of the changes MailFathom made to its mailbox, where that account [keeps one](../features/imap-synchronization.md#an-account-can-keep-a-record-of-what-was-done-to-it-and-none-does-by-default). |
 
 The write route's body carries a long-lived credential for a named mailbox owner, which is what makes the clear-text
 warning below matter more here than it does for a session probe. It refuses, with `400` and a sentence naming what was
@@ -81,6 +82,56 @@ can be read back out through it.
 Storing seals the token under the deployment's [data-encryption key](secret-provisioning.md). A deployment that
 configures no key ring cannot store one, and the route answers `500` rather than a refusal it can explain, because
 nothing about the request was wrong.
+
+### Reading what MailFathom changed
+
+The audit route serves one bounded, keyset-paginated page of one account's finished changes, newest first. The account
+is required rather than optional, and that is deliberate: the answer says where a person's mail has been and at whose
+instruction, so a caller names whose history they are reading rather than asking for a deployment-wide list.
+
+| Query parameter | What it does |
+| --- | --- |
+| `account` | Required. The configured identifier of the account whose trail is read. |
+| `mutation` | Narrows to one change: `relocate`, `delete`, `set-seen`, or `copy`. |
+| `from`, `before` | Narrows to entries that ended within a range; `from` is inclusive and `before` is exclusive. |
+| `pageSize` | Between 1 and 200; 50 when omitted. |
+| `cursor` | The `nextCursor` the previous page returned. |
+
+```console
+$ curl -sS -H "X-API-Key: $MAILFATHOM_ADMIN_KEY" \
+    "http://127.0.0.1:8090/api/admin/mailbox/mutations/audit?account=work&mutation=delete&pageSize=2"
+```
+
+The response carries the entries and, while more remain, the cursor the next page is asked with. **A walk ends when no
+cursor comes back**, never by comparing a short page against the size you asked for. A cursor names a boundary within
+the filters it was issued for, so presenting one alongside different filters is refused with `400`; changing only the
+page size is not, because pacing is not a filter. Every other refusal is `400` too, with a sentence naming what to
+change: an account this deployment does not configure, a mutation name that is not one of the four, a page size outside
+the range, a range that ends where it begins, and a cursor this deployment did not issue.
+
+Nothing in the answer is mail. Folder paths, UIDs, the local email identifier, the requester, the two timestamps, and
+the outcome are what an entry holds, which is what makes the route readable without exposing the message it is about.
+
+An entry a later build wrote and this one cannot interpret — one naming a change this version does not permit — is left
+out of the page rather than failing it, and a warning names the account and how many were left out. The rows stay in the
+trail and a build that permits the change reads them; what the warning exists for is that a page quietly short of
+entries would be worse than one that says so, on a surface whose whole value is being complete.
+
+**Erasing entries for a data-subject request.** Retention erases what has outlived each account's configured window, and
+that is the ordinary path. A request that reaches further — erase everything held about one person's mail now — is
+answered against the table directly, because the trail deliberately survives the deletion of the mail it describes and
+therefore has no cascade to ride:
+
+```sql
+DELETE FROM mailbox_mutation_audit_entries
+WHERE "MailboxAccountId" = 'work'
+  AND "StoredEmailId" = ANY($1);
+```
+
+The identifiers are the local email identifiers the entries name, which the same account's mailbox queries return for
+the messages in scope; erasing the whole of one account's trail is the same statement without the second predicate.
+Take it as a deliberate administrative act on a database you have a backup of: nothing here replays an erasure, and the
+entries it removes are the accountability evidence for the changes they recorded.
 
 ## Rate limiting
 

@@ -20,6 +20,7 @@ using MailFathom.Application.Emails.SearchEmails;
 using MailFathom.Application.Emails.Summaries;
 using MailFathom.Application.Folders;
 using MailFathom.Application.Mail.Mutations;
+using MailFathom.Application.Mail.Mutations.Audit;
 using MailFathom.Application.Mail.Mutations.Convergence;
 using MailFathom.Application.Persistence;
 using MailFathom.Application.Resilience;
@@ -328,6 +329,13 @@ public static class ServiceCollectionExtensions
         // Read by synchronization rather than by the performer, so that a relocation coming back through an ordinary
         // run is recognized as MailFathom's own instead of being stored as a second email.
         services.AddScoped<IMailboxMutationReconciliationStore, MailboxMutationReconciliationStore>();
+        // The history a finished change leaves behind, which is a second table with a lifetime of its own rather than
+        // the operational record above: that one ends with the mutation, and this one is kept for as long as the
+        // account's retention says and is erased by the pass beside it.
+        services.AddScoped<IMailboxMutationAuditEntryStore, MailboxMutationAuditEntryStore>();
+        services.AddSingleton<MailboxMutationAuditTelemetry>();
+        services.AddScoped<IMailboxMutationAuditTrail, MailboxMutationAuditTrail>();
+        services.AddScoped<MailboxMutationAuditTrailRetention>();
         services.AddScoped<IMailboxMutationPerformer, MailboxMutationPerformer>();
         // A singleton, because the gauges it publishes are the process's and the account snapshots behind them outlive
         // any one run; the pass that fills them is scoped like everything else that reaches a mail server.

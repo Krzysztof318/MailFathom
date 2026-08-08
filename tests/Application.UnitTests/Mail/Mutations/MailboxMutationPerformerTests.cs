@@ -11,6 +11,7 @@ using MailFathom.Domain.Emails;
 using MailFathom.Domain.Failures;
 using MailFathom.Domain.Folders;
 using MailFathom.Domain.Mutations;
+using MailFathom.Domain.Mutations.Audit;
 using MailFathom.Domain.Transport;
 using NSubstitute;
 using NSubstitute.ExceptionExtensions;
@@ -434,6 +435,139 @@ public sealed class MailboxMutationPerformerTests
         Assert.Equal(0, context.Store.OpenedRecordCount);
     }
 
+    /// <summary>Every change MailFathom is permitted to make leaves one entry behind on an account that asked for a trail.</summary>
+    [Theory]
+    [InlineData("relocate")]
+    [InlineData("delete")]
+    [InlineData("set-seen")]
+    [InlineData("copy")]
+    public async Task PerformAsync_OnAnAuditedAccount_LeavesOneEntryPerFinishedMutation(string mutationName)
+    {
+        // Arrange
+        var context = new PerformerContext();
+        context.Store.AuditsMutations = true;
+        var request = RequestFor(mutationName);
+
+        // Act
+        await context.Performer.PerformAsync(request, InboxFolder, TransportPolicy, CancellationToken.None);
+
+        // Assert
+        var entry = Assert.Single(context.AuditTrail.Entries);
+        Assert.Equal(
+            (request.Mutation, request.StoredEmailId, InboxFolder.RemotePath, MailboxMutationAuditOutcome.Performed),
+            (entry.Mutation, entry.StoredEmailId, entry.SourceFolderPath, entry.Outcome));
+    }
+
+    /// <summary>An account that never asked for a history accumulates none, which is what off by default has to mean.</summary>
+    [Fact]
+    public async Task PerformAsync_OnAnAccountWithoutTheTrail_LeavesNothingBehind()
+    {
+        // Arrange
+        var context = new PerformerContext();
+
+        // Act
+        await context.Performer.PerformAsync(
+            RelocationRequest(),
+            InboxFolder,
+            TransportPolicy,
+            CancellationToken.None);
+
+        // Assert
+        Assert.Empty(context.AuditTrail.Entries);
+    }
+
+    /// <summary>A change nothing will attempt again is recorded as given up on, with the code it was given up on for.</summary>
+    [Fact]
+    public async Task PerformAsync_MutationTheServerRefuses_RecordsTheEndingItWasGivenUpOnFor()
+    {
+        // Arrange
+        var context = new PerformerContext();
+        context.Store.AuditsMutations = true;
+        context.FailRelocationWith(new MailboxDestinationFolderMissingException(
+            Account,
+            InboxFolder.Alias,
+            MailboxMutation.Relocate,
+            new InvalidOperationException("The folder could not be found.")));
+
+        // Act
+        await Assert.ThrowsAsync<MailboxDestinationFolderMissingException>(
+            () => context.Performer.PerformAsync(
+                RelocationRequest(),
+                InboxFolder,
+                TransportPolicy,
+                CancellationToken.None));
+
+        // Assert
+        var entry = Assert.Single(context.AuditTrail.Entries);
+        Assert.Equal(
+            (MailboxMutationAuditOutcome.Abandoned,
+                (MailFathomErrorCode?)MailFathomErrorCode.MailboxMutationDestinationMissing),
+            (entry.Outcome, entry.Failure));
+    }
+
+    /// <summary>A trail that cannot be written costs the history and never the change that had already been made.</summary>
+    [Fact]
+    public async Task PerformAsync_TrailThatRefusesEveryAppend_StillPerformsTheMutation()
+    {
+        // Arrange
+        var context = new PerformerContext();
+        context.Store.AuditsMutations = true;
+        context.AuditTrail.FailsEveryAppend = true;
+        var request = RelocationRequest();
+
+        // Act
+        var outcome = await context.Performer.PerformAsync(
+            request,
+            InboxFolder,
+            TransportPolicy,
+            CancellationToken.None);
+
+        // Assert
+        Assert.Equal(MailboxMutationStatus.Performed, outcome.Status);
+        Assert.Equal(MailboxMutationStage.Completed, context.Store.RecordOf(request).Stage);
+    }
+
+    /// <summary>The answer is resolved when the change is written down, so switching the trail on later leaves it out.</summary>
+    [Fact]
+    public async Task PerformAsync_TrailSwitchedOnAfterTheRecordWasOpened_LeavesThatMutationOut()
+    {
+        // Arrange
+        var context = new PerformerContext(maximumAttempts: 3);
+        var request = RelocationRequest();
+        context.FailRelocationWith(
+            new MailboxUnavailableException(Account, InboxFolder.Alias, new TimeoutException()));
+
+        await Assert.ThrowsAsync<MailboxUnavailableException>(
+            () => context.Performer.PerformAsync(request, InboxFolder, TransportPolicy, CancellationToken.None));
+
+        // Act
+        context.Store.AuditsMutations = true;
+        context.AnswerRelocationWith(ArchivedAt);
+        await context.Performer.PerformAsync(request, InboxFolder, TransportPolicy, CancellationToken.None);
+
+        // Assert
+        Assert.Empty(context.AuditTrail.Entries);
+    }
+
+    private static MailboxMutationRequest RequestFor(string mutationName)
+    {
+        var storedEmailId = StoredEmailId.Create(Guid.CreateVersion7());
+        var occurrence = Occurrence(42U);
+        var requester = MailboxMutationRequester.Rule("file-newsletters", 3);
+
+        return mutationName switch
+        {
+            "relocate" => MailboxMutationRequest.Relocate(storedEmailId, occurrence, requester, ArchivePath),
+            "copy" => MailboxMutationRequest.Copy(storedEmailId, occurrence, requester, ArchivePath),
+            "set-seen" => MailboxMutationRequest.SetSeen(storedEmailId, occurrence, requester, isSeen: true),
+            _ => MailboxMutationRequest.Delete(
+                storedEmailId,
+                occurrence,
+                requester,
+                AuthoredDeleteEmailDisposition.RetainLocalCopy),
+        };
+    }
+
     private static EmailOccurrenceId Occurrence(uint uid) => EmailOccurrenceId.Create(
         Account,
         InboxFolder.Id,
@@ -485,10 +619,13 @@ public sealed class MailboxMutationPerformerTests
                     sessionFactory,
                     new PersistenceConcurrencyOptions { MaximumCommitAttempts = 1 },
                     TimeProvider.System),
+                this.AuditTrail,
                 new MailboxMutationOptions { MaximumAttempts = maximumAttempts });
         }
 
         internal InMemoryMailboxMutationRecordStore Store { get; } = new();
+
+        internal RecordingMailboxMutationAuditTrail AuditTrail { get; } = new();
 
         internal IMailboxWriteSession WriteSession { get; }
 

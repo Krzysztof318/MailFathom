@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Application.Mail.Mutations.Audit;
 using MailFathom.Application.Persistence;
 using MailFathom.Domain.Failures;
 using MailFathom.Domain.Folders;
@@ -29,12 +30,14 @@ public sealed class MailboxMutationPerformer : IMailboxMutationPerformer
     private readonly IMailboxMutationRecordStore store;
     private readonly IMailboxWriteSessionFactory writeSessionFactory;
     private readonly OptimisticConcurrencyRetryPolicy commitPolicy;
+    private readonly IMailboxMutationAuditTrail auditTrail;
     private readonly int maximumAttempts;
 
     /// <summary>Initializes the performer from the record store, the write session it acts through, and its attempt bound.</summary>
     /// <param name="store">Keeps the durable record every mutation is written to.</param>
     /// <param name="writeSessionFactory">Opens the one session able to change a mailbox.</param>
     /// <param name="commitPolicy">Commits the record's first write, retrying an optimistic conflict.</param>
+    /// <param name="auditTrail">Keeps the history a finished mutation leaves behind, where the account asked for one.</param>
     /// <param name="options">Supplies how many attempts one mutation may spend.</param>
     /// <exception cref="ArgumentNullException">Thrown when a required collaborator is <see langword="null" />.</exception>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when the configured attempt bound is below one.</exception>
@@ -42,17 +45,20 @@ public sealed class MailboxMutationPerformer : IMailboxMutationPerformer
         IMailboxMutationRecordStore store,
         IMailboxWriteSessionFactory writeSessionFactory,
         OptimisticConcurrencyRetryPolicy commitPolicy,
+        IMailboxMutationAuditTrail auditTrail,
         MailboxMutationOptions options)
     {
         ArgumentNullException.ThrowIfNull(store);
         ArgumentNullException.ThrowIfNull(writeSessionFactory);
         ArgumentNullException.ThrowIfNull(commitPolicy);
+        ArgumentNullException.ThrowIfNull(auditTrail);
         ArgumentNullException.ThrowIfNull(options);
         ArgumentOutOfRangeException.ThrowIfLessThan(options.MaximumAttempts, 1, nameof(options));
 
         this.store = store;
         this.writeSessionFactory = writeSessionFactory;
         this.commitPolicy = commitPolicy;
+        this.auditTrail = auditTrail;
         this.maximumAttempts = options.MaximumAttempts;
     }
 
@@ -74,13 +80,13 @@ public sealed class MailboxMutationPerformer : IMailboxMutationPerformer
         {
             if (settledOutcome.Status == MailboxMutationStatus.OutcomeUnknown)
             {
-                await this.RecordUnknownOutcomeAsync(record, cancellationToken);
+                await this.RecordUnknownOutcomeAsync(record, folder, cancellationToken);
             }
 
             return settledOutcome;
         }
 
-        var journal = new MailboxMutationJournal(this.store, this.commitPolicy, record);
+        var journal = this.OpenJournal(record, folder);
 
         // The bound is checked before the attempt is counted, so a mutation whose every attempt crashed the process
         // reaches its terminal stage on the next run rather than counting a further attempt it will not survive either.
@@ -144,16 +150,23 @@ public sealed class MailboxMutationPerformer : IMailboxMutationPerformer
     /// so an operator reading the outstanding mutations would see it as merely old. It is written once: a record that
     /// already names this failure is left alone, so asking repeatedly costs no write.
     /// </remarks>
-    private async Task RecordUnknownOutcomeAsync(MailboxMutationRecord record, CancellationToken cancellationToken)
+    private async Task RecordUnknownOutcomeAsync(
+        MailboxMutationRecord record,
+        MailFolderResolution folder,
+        CancellationToken cancellationToken)
     {
         if (record.LastFailure == MailFathomErrorCode.MailboxMutationOutcomeUnknown)
         {
             return;
         }
 
-        await new MailboxMutationJournal(this.store, this.commitPolicy, record)
+        await this.OpenJournal(record, folder)
             .RecordFailureAsync(MailFathomErrorCode.MailboxMutationOutcomeUnknown, cancellationToken);
     }
+
+    /// <summary>Opens the single writer of one record, which is also what appends its audit entry when it ends.</summary>
+    private MailboxMutationJournal OpenJournal(MailboxMutationRecord record, MailFolderResolution folder) =>
+        new(this.store, this.commitPolicy, this.auditTrail, record, folder);
 
     private async Task<MailboxMutationOutcome> AttemptAsync(
         MailboxMutationRequest request,

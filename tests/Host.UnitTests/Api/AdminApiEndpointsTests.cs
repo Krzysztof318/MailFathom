@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.Accounts;
+using MailFathom.Application.Mail.Mutations.Audit;
 using MailFathom.Host.Api;
 using MailFathom.Host.Configuration.Endpoints;
 using MailFathom.Host.Security.Transport;
@@ -77,9 +78,9 @@ public sealed class AdminApiEndpointsTests
         Assert.All(mapped, endpoint => Assert.Empty(endpoint.Metadata.GetOrderedMetadata<IAuthorizeData>()));
     }
 
-    /// <summary>Both routes are the group's, and the write route is the one whose absence from it would matter most.</summary>
+    /// <summary>Every route is the group's, and the write route is the one whose absence from it would matter most.</summary>
     [Fact]
-    public void MapAdminApi_Always_ServesBothRoutesBeneathTheAdministrativePrefix()
+    public void MapAdminApi_Always_ServesEveryRouteBeneathTheAdministrativePrefix()
     {
         // Arrange
         var endpoints = BuildRouteBuilder();
@@ -95,6 +96,7 @@ public sealed class AdminApiEndpointsTests
 
         Assert.Equal(
             [
+                $"{AdminEndpointOptions.RoutePrefix}{MailboxMutationAuditEndpoint.Route}",
                 $"{AdminEndpointOptions.RoutePrefix}{MailboxRefreshTokenEndpoint.Route}",
                 $"{AdminEndpointOptions.RoutePrefix}/session",
             ],
@@ -155,6 +157,8 @@ public sealed class AdminApiEndpointsTests
         services.AddScoped(_ => new MailboxRefreshTokenRecorder(
             Substitute.For<IMailAccountCatalog>(),
             Substitute.For<IMailboxRefreshTokenStore>()));
+        services.AddScoped(_ => Substitute.For<IMailAccountCatalog>());
+        services.AddScoped(_ => Substitute.For<IMailboxMutationAuditEntryStore>());
 
         return new TestEndpointRouteBuilder(services.BuildServiceProvider());
     }

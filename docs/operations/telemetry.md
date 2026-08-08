@@ -86,6 +86,14 @@ replaced whole, so a lifecycle that empties stops being reported instead of repo
 A `dead-lettered` count that stops falling is the reading worth alerting on: those are changes nothing will attempt
 again, waiting for somebody to look.
 
+One counter beside them answers a question about the record rather than about the change.
+`mailfathom.mailbox.mutation.audit.refused_appends` counts the audit entries a finished mutation owed and the trail
+could not be given, by mutation and account, alongside a warning naming the record. It is zero on a deployment that
+keeps no trail, because nothing is owed there. On one that keeps a trail it is the reading worth alerting on outright:
+the change was made and the history of it is missing, which is exactly the gap an audit cannot recover afterwards. It
+exists because writing an entry may never fail the mutation that produced it — a trail that could roll back somebody's
+mailbox would be worse than a reported hole — so swallowing the failure is only defensible while it is counted.
+
 Embedding publishes the depth of its backlog, how many messages the bound turned away, and how many messages and
 passages it embedded and how long that took, broken down by outcome and by the classification of a provider failure.
 [Automatic embedding](../features/automatic-embedding.md#what-an-operator-can-see) names each instrument and what it
