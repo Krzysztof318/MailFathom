@@ -131,7 +131,15 @@ public static class ServiceCollectionExtensions
     /// <para>
     /// The embedding stores registered here are the tables; the units of work that write vectors into them are not,
     /// and belong to <see cref="AddEmailEmbeddingGeneration" /> for the reason that method states. A registration
-    /// added here that resolves an <see cref="ITextEmbeddingGenerator" /> belongs there instead.
+    /// added here that <em>constructor-injects</em> an <see cref="ITextEmbeddingGenerator" /> belongs there instead,
+    /// because that is the descriptor a container cannot build where no chain was declared.
+    /// </para>
+    /// <para>
+    /// A factory that asks for one optionally is the other case and stays here. Nothing validates a factory's body, so
+    /// such a descriptor builds in every container and answers <see langword="null" /> where there is no generator —
+    /// which is what the read path needs, because search is served by every deployment and a registration made only
+    /// where a chain was declared would leave a lexical-only instance unable to resolve a search at all.
+    /// <see cref="SemanticEmailSearch" /> is the one such registration.
     /// </para>
     /// </remarks>
     public static IServiceCollection AddInfrastructure(
@@ -215,6 +223,10 @@ public static class ServiceCollectionExtensions
         // deployment may not have: an instance that declared no endpoint chain registers no `ITextEmbeddingGenerator`,
         // and a constructor injection of one would make lexical-only search fail to resolve rather than run. Asking the
         // provider keeps that decision where the composition root made it and out of the use case.
+        //
+        // It stays here rather than joining AddEmailEmbeddingGeneration, which is called only where a chain was
+        // declared: search is served by every deployment, so a registration made there would leave a lexical-only
+        // instance unable to resolve MailboxSearchReader at all.
         services.AddScoped(provider => new SemanticEmailSearch(
             provider.GetRequiredService<IActiveEmbeddingProfileReader>(),
             provider.GetRequiredService<IEmailVectorSearchIndexReader>(),
@@ -328,6 +340,12 @@ public static class ServiceCollectionExtensions
     /// <para>
     /// The two are one call because they are one decision: the backfill's unit of work is one message brought up to
     /// date by that same generator, so a deployment that resolves neither is the only other shape.
+    /// </para>
+    /// <para>
+    /// Semantic retrieval reads the same generator and is deliberately <em>not</em> here. It is asked for through a
+    /// factory rather than injected, so its descriptor builds without one, and it has to: a search is served by every
+    /// deployment, so registering it only where a chain was declared would make a lexical-only instance fail to
+    /// resolve the search use case instead of serving it lexically.
     /// </para>
     /// </remarks>
     public static IServiceCollection AddEmailEmbeddingGeneration(this IServiceCollection services)
