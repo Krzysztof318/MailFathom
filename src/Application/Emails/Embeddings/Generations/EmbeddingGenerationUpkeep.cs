@@ -76,15 +76,14 @@ public sealed class EmbeddingGenerationUpkeep
     public async Task<EmbeddingGenerationUpkeepResult> RunAsync(CancellationToken cancellationToken)
     {
         var generations = await this.generationStore.ReadGenerationsAsync(cancellationToken);
-        if (generations.Target is not { } target)
-        {
-            return new EmbeddingGenerationUpkeepResult(
-                StoredEmailEmbeddingBackfillResult.NoActiveProfile,
-                EmbeddingGenerationTransition.None,
-                RemovedSupersededVectorCount: 0);
-        }
 
-        var sweep = await this.backfill.RunAsync(target, cancellationToken);
+        // The walk is what an instance with no generation has nothing to do; the removal is not. A reindex cancelled
+        // on an instance that had never served one leaves a superseded generation and no sibling, and its partial
+        // vectors are personal data that has to go whether or not anything is being embedded now.
+        var sweep = generations.Target is { } target
+            ? await this.backfill.RunAsync(target, cancellationToken)
+            : StoredEmailEmbeddingBackfillResult.NoActiveProfile;
+
         var transition = await this.CompleteBuiltGenerationAsync(generations, sweep, cancellationToken);
         var removedVectorCount = await this.RemoveSupersededVectorsAsync(cancellationToken);
 

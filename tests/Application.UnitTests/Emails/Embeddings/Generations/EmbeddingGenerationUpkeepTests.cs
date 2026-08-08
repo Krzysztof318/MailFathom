@@ -173,6 +173,57 @@ public sealed class EmbeddingGenerationUpkeepTests
         await world.VectorIndex.Received().RemoveAsync(superseded.Id, Arg.Any<CancellationToken>());
     }
 
+    /// <summary>
+    /// A reindex cancelled on an instance that had never served a generation leaves one superseded row and no sibling,
+    /// so there is nothing to sweep towards and still something to clear out. The vectors it accumulated are personal
+    /// data derived from mail, and a pass that walked away from them because it had no target would keep them forever.
+    /// </summary>
+    [Fact]
+    public async Task RunAsync_ASupersededGenerationAndNothingElse_StillRemovesItsVectors()
+    {
+        // Arrange
+        var world = CreateWorld();
+        var abandoned = await world.ServeAGenerationWithVectorsAsync(messageCount: 2);
+        world.GenerationStore.Supersede(abandoned.Id);
+
+        // Act
+        var result = await world.Upkeep.RunAsync(TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(StoredEmailEmbeddingBackfillOutcome.NoActiveProfile, result.Sweep.Outcome);
+        Assert.Equal(2, result.RemovedSupersededVectorCount);
+        Assert.Equal(0, world.EmbeddingStore.CountVectors(abandoned.Id));
+    }
+
+    /// <summary>
+    /// Rolling back catches its own removal part-way through: a generation activated again stops being superseded, and
+    /// the vectors it still holds are what makes that rollback cheaper than a full re-embed. A delete decided before
+    /// the reactivation must not go through on the strength of that earlier decision.
+    /// </summary>
+    [Fact]
+    public async Task RunAsync_AGenerationActivatedAgainWhileItsRemovalWasPending_KeepsTheVectorsItStillHolds()
+    {
+        // Arrange
+        var world = CreateWorld();
+        var reactivated = await world.ServeAGenerationWithVectorsAsync(messageCount: 2);
+        world.GenerationStore.Supersede(reactivated.Id);
+        await world.GenerationStore.RegisterBuildingAsync(
+            Substitute.For<IPersistenceSession>(),
+            CreateIdentity("a-model"),
+            TestContext.Current.CancellationToken);
+
+        // Act
+        var result = await world.Upkeep.RunAsync(TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(0, result.RemovedSupersededVectorCount);
+        Assert.Equal(2, world.EmbeddingStore.CountVectors(reactivated.Id));
+
+        // The vectors that survived are what makes this rollback cheap: nothing was outstanding, so the generation was
+        // complete the moment it was registered again and the pass switched straight back to it.
+        Assert.Equal(EmbeddingProfileLifecycleState.Active, world.GenerationStore.StateOf(reactivated.Id));
+    }
+
     /// <summary>An instance that has registered no generation has nothing to work towards, so nothing is spent.</summary>
     [Fact]
     public async Task RunAsync_NoGenerationRegistered_ReadsNoMailAndReachesNoProvider()

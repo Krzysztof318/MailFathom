@@ -219,11 +219,20 @@ internal sealed class EmbeddingGenerationStore(MailFathomDbContext dbContext, Ti
 
     /// <inheritdoc />
     /// <remarks>
+    /// <para>
     /// The one statement here that is written rather than composed, and the reason is the shape of a bounded delete
     /// over a whole generation. A limit needs rows chosen, and choosing them by any column would sort every vector the
     /// generation still holds on every batch — quadratic over the run that empties a mailbox's worth of them. Selecting
     /// by <c>ctid</c> lets PostgreSQL stop at the limit while reading the profile's own index, so a batch costs what a
-    /// batch is. Both values are parameters rather than text, so nothing a caller supplies reaches the statement.
+    /// batch is. Every value is a parameter rather than text, so nothing a caller supplies reaches the statement.
+    /// </para>
+    /// <para>
+    /// The lifecycle is re-checked here rather than trusted from the read that chose this generation, because the two
+    /// are separate transactions and an activation of the same model in between is exactly the case the rollback
+    /// promise covers: a generation that stops being superseded keeps whatever vectors it still holds, and a delete
+    /// that had already been decided would charge the operator for re-embedding them. The subquery is uncorrelated, so
+    /// PostgreSQL evaluates it once for the statement rather than per row.
+    /// </para>
     /// </remarks>
     public Task<int> RemoveVectorsAsync(
         IPersistenceSession session,
@@ -235,13 +244,18 @@ internal sealed class EmbeddingGenerationStore(MailFathomDbContext dbContext, Ti
 
         var sessionContext = EfCorePersistenceSessionAccessor.DbContextOf(session);
         var supersededProfileId = profileId.Value;
+        var supersededState = nameof(EmbeddingProfileLifecycleState.Superseded);
 
         return sessionContext.Database.ExecuteSqlAsync(
             $"""
              DELETE FROM email_embeddings
              WHERE ctid IN (
-                 SELECT ctid FROM email_embeddings
-                 WHERE "EmbeddingProfileId" = {supersededProfileId}
+                 SELECT vector.ctid FROM email_embeddings AS vector
+                 WHERE vector."EmbeddingProfileId" = {supersededProfileId}
+                   AND EXISTS (
+                       SELECT 1 FROM embedding_profiles AS generation
+                       WHERE generation."Id" = {supersededProfileId}
+                         AND generation."LifecycleState" = {supersededState})
                  LIMIT {batchSize})
              """,
             cancellationToken);

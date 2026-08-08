@@ -54,6 +54,10 @@ internal sealed class InMemoryEmbeddingGenerationStore : IEmbeddingGenerationSto
     public EmbeddingProfileLifecycleState StateOf(EmbeddingProfileId profileId) =>
         this.rows[profileId].LifecycleState;
 
+    /// <summary>Leaves one row where a cancelled reindex leaves it, so a later pass finds what it would find.</summary>
+    public void Supersede(EmbeddingProfileId profileId) =>
+        this.rows[profileId].LifecycleState = EmbeddingProfileLifecycleState.Superseded;
+
     /// <inheritdoc />
     public Task<EmbeddingGenerations> ReadGenerationsAsync(CancellationToken cancellationToken)
     {
@@ -162,6 +166,13 @@ internal sealed class InMemoryEmbeddingGenerationStore : IEmbeddingGenerationSto
         cancellationToken.ThrowIfCancellationRequested();
 
         this.RequestedRemovalBatchSizes.Add(batchSize);
+
+        // The state is re-checked at the delete for the reason the real store re-checks it: a generation activated
+        // again between the read that chose it and this write keeps whatever vectors it still holds.
+        if (this.rows[profileId].LifecycleState != EmbeddingProfileLifecycleState.Superseded)
+        {
+            return Task.FromResult(0);
+        }
 
         return Task.FromResult(this.embeddingStore.RemoveVectors(profileId, batchSize));
     }

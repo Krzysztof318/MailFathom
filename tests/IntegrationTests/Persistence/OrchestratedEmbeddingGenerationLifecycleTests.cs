@@ -72,6 +72,15 @@ public sealed class OrchestratedEmbeddingGenerationLifecycleTests(MailFathomOrch
         Assert.Equal(chunkIds.Count, await CountVectorsAsync(services, previous.Id, cancellationToken));
         Assert.Equal(previous.Id, await FindSupersededHoldingVectorsAsync(services, cancellationToken));
 
+        // A rollback that catches its own removal part-way through keeps what the generation still holds, and the
+        // delete is what has to know that: the read that chose this generation happened in an earlier transaction, so
+        // the statement re-checks the state rather than trusting the decision it was given.
+        await RegisterAsync(services, "generation-previous", cancellationToken);
+        Assert.Equal(0, await RemoveVectorsAsync(services, previous.Id, batchSize: 100, cancellationToken));
+        Assert.Equal(chunkIds.Count, await CountVectorsAsync(services, previous.Id, cancellationToken));
+
+        await AbandonAsync(services, previous.Id, cancellationToken);
+
         var firstBatch = await RemoveVectorsAsync(services, previous.Id, batchSize: 1, cancellationToken);
         var remainingBatch = await RemoveVectorsAsync(services, previous.Id, batchSize: 100, cancellationToken);
 
@@ -151,6 +160,22 @@ public sealed class OrchestratedEmbeddingGenerationLifecycleTests(MailFathomOrch
         // The store refuses to switch to a generation that is no longer being built, so a false here would mean the
         // arrangement never registered one rather than that the switch merely did nothing.
         Assert.True(switched);
+    }
+
+    private static async Task AbandonAsync(
+        OrchestratedMailFathomServices services,
+        EmbeddingProfileId building,
+        CancellationToken cancellationToken)
+    {
+        var abandoned = false;
+
+        var commitResult = await services.CommitAsync(
+            async (scope, session, token) => abandoned = await scope.GetRequiredService<IEmbeddingGenerationStore>()
+                .AbandonAsync(session, building, token),
+            cancellationToken);
+
+        Assert.Equal(PersistenceCommitResult.Committed, commitResult);
+        Assert.True(abandoned);
     }
 
     private static Task<EmbeddingGenerations> ReadGenerationsAsync(
