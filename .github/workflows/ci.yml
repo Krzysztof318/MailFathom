@@ -109,6 +109,10 @@ jobs:
             build:
               - 'src/**'
               - 'tests/**'
+              # The development tooling under `tools/` ships nowhere, but it is in `MailFathom.slnx` and is therefore
+              # built, analyzed, and unit-tested by exactly the same gates as everything else. Without this line a
+              # change there would compile nowhere before it merged.
+              - 'tools/**'
               - '.config/**'
               - '.editorconfig'
               - '.github/workflows/build-test-format-and-migrations.yml'
@@ -130,6 +134,7 @@ jobs:
             format:
               - 'src/**'
               - 'tests/**'
+              - 'tools/**'
               - '.editorconfig'
               - '.github/workflows/build-test-format-and-migrations.yml'
               - '.github/workflows/ci.yml'

@@ -1,0 +1,36 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>MailFathom.SyntheticMail</RootNamespace>
+
+    <!-- A run must produce the same corpus on every machine, and a machine's locale is the one input nothing here
+         passes explicitly: the dates the command parses and the ones it prints would otherwise follow whatever culture
+         the shell was started under. Turning globalization off pins both to the invariant culture, which is what the
+         seed already promises about everything else. -->
+    <InvariantGlobalization>true</InvariantGlobalization>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="MailKit" />
+    <PackageReference Include="MimeKit" />
+    <PackageReference Include="System.CommandLine" />
+  </ItemGroup>
+
+  <!-- The generator is the one implementation of "build a synthetic message" in the repository, so the integration
+       suite composes its seeded mail through this project rather than keeping a second copy that would drift from it.
+       Nothing under src/ references this project, and nothing may: the guard that says so is
+       `the_development_tooling_never_reaches_a_published_artifact` in scripts/test-agent-workflow.sh. -->
+  <ItemGroup>
+    <InternalsVisibleTo Include="MailFathom.SyntheticMail.UnitTests" />
+    <InternalsVisibleTo Include="MailFathom.IntegrationTests" />
+  </ItemGroup>
+
+  <!-- The developer's own credential file, which `.gitignore` covers as `*.local.json`. It is copied beside the
+       executable so the command finds it whichever directory it was started from; the `config` option is what points
+       at one kept somewhere else. The condition lets the project build in a checkout that has never configured one. -->
+  <ItemGroup>
+    <None Include="synthetic-mail.local.json"
+          CopyToOutputDirectory="PreserveNewest"
+          Condition="Exists('$(MSBuildProjectDirectory)/synthetic-mail.local.json')" />
+  </ItemGroup>
+</Project>

@@ -6,6 +6,7 @@ using System.Diagnostics.CodeAnalysis;
 using MailFathom.AppHost;
 using MailFathom.Domain.Emails;
 using MailFathom.IntegrationTests.Orchestration;
+using MailFathom.SyntheticMail.Generation;
 using MailKit;
 using MailKit.Net.Imap;
 using MailKit.Net.Smtp;
@@ -32,16 +33,32 @@ internal sealed class OrchestratedMailbox(OrchestratedMailServerEndpoints endpoi
     /// <summary>The path of the folder mail delivered over SMTP arrives in.</summary>
     internal const string InboxPath = "INBOX";
 
+    /// <summary>What every message this suite composes is generated from, so two runs seed the mailbox identically.</summary>
+    private const int SyntheticSeed = 602;
+
+    private static readonly MailboxAddress MailboxRecipient = new(
+        "MailFathom integration mailbox",
+        OrchestrationContract.MailServerAccountEmailAddress);
+
+    private static readonly MailboxAddress SyntheticSender = new(
+        "MailFathom integration sender",
+        "sender@mailfathom.test");
+
     /// <summary>Delivers one synthetic message, which the server files unread.</summary>
     /// <param name="subject">The subject, which is how a test recognizes its own message among the mailbox's.</param>
     /// <param name="cancellationToken">Cancels the delivery.</param>
+    /// <remarks>
+    /// The envelope is stated rather than read out of the headers. A generated message names invented participants
+    /// under a reserved domain, and letting MailKit derive the envelope from those would ask the server to deliver to
+    /// each of them — which is neither what this suite is arranging nor something the container should be asked to do.
+    /// </remarks>
     internal async Task DeliverAsync(string subject, CancellationToken cancellationToken)
     {
         using var message = CreateSyntheticMessage(subject);
         using var client = new SmtpClient();
 
         await client.ConnectAsync(endpoints.SmtpHost, endpoints.SmtpPort, SecureSocketOptions.None, cancellationToken);
-        await client.SendAsync(message, cancellationToken);
+        await client.SendAsync(message, SyntheticSender, [MailboxRecipient], cancellationToken);
         await client.DisconnectAsync(quit: true, cancellationToken);
     }
 
@@ -312,20 +329,36 @@ internal sealed class OrchestratedMailbox(OrchestratedMailServerEndpoints endpoi
             cancellationToken);
     }
 
+    /// <summary>Builds one message through the repository's own synthetic-mail generator.</summary>
+    /// <remarks>
+    /// <para>
+    /// The generator lives in <c>tools/SyntheticMail</c> and is what a developer fills a development mailbox with, so
+    /// this suite composes through it rather than keeping a second builder of its own: two implementations of "build a
+    /// synthetic message" would drift, and the drift would be between the mail this suite proves things about and the
+    /// mail anybody actually works against.
+    /// </para>
+    /// <para>
+    /// One fixed seed and a count of one, so the message is the same on every run; only the subject is replaced,
+    /// because the subject is how a test recognizes its own message among the mailbox's. Attachments are switched off
+    /// because nothing here asserts about one and every byte of one would cross the container boundary per delivery.
+    /// </para>
+    /// </remarks>
     private static MimeMessage CreateSyntheticMessage(string subject)
     {
-        var message = new MimeMessage
-        {
-            Subject = subject,
-            Body = new TextPart("plain") { Text = $"Synthetic body of {subject}." },
-        };
+        var plan = new SyntheticCorpusPlan(
+            SyntheticSeed,
+            Count: 1,
+            LatestSentAt: new DateTimeOffset(2026, 1, 1, 12, 0, 0, TimeSpan.Zero),
+            SpanDays: 1,
+            MaximumAttachmentBytes: 0);
 
-        message.From.Add(new MailboxAddress("MailFathom integration sender", "sender@mailfathom.test"));
-        message.To.Add(new MailboxAddress(
-            "MailFathom integration mailbox",
-            OrchestrationContract.MailServerAccountEmailAddress));
+        var generated = SyntheticEmailGenerator.Generate(plan)[0] with { Subject = subject };
 
-        return message;
+        return SyntheticMimeComposer.Compose(
+            generated,
+            MailboxRecipient,
+            SyntheticSender,
+            SyntheticAuthorIdentity.Fabricated);
     }
 
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "Ownership of the connected client passes to the caller, which disposes it when its observation ends.")]
