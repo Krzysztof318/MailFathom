@@ -77,7 +77,7 @@ internal static class SendingAccountFile
 
         return new SendingAccount(
             host,
-            ParsePort(document.Port, security),
+            ParsePort(document.Port, security, origin),
             security,
             address,
             string.IsNullOrWhiteSpace(document.UserName) ? address.Address : document.UserName,
@@ -147,7 +147,24 @@ internal static class SendingAccountFile
     }
 
     /// <summary>Resolves the port, defaulting to the conventional one for the chosen security.</summary>
-    /// <remarks>Defaulted rather than required, because the two conventions are fixed and a developer naming the wrong one for their own server gets a connection failure that says so.</remarks>
-    private static int ParsePort(int? port, SmtpTransportSecurity security) =>
-        port ?? (security == SmtpTransportSecurity.ImplicitTls ? 465 : 587);
+    /// <remarks>
+    /// Defaulted rather than required, because the two conventions are fixed and a developer naming the wrong one for
+    /// their own server gets a connection failure that says so. A written value is checked against the range MailKit
+    /// documents for <c>ConnectAsync</c> before MailKit sees it: outside it the library throws
+    /// <see cref="ArgumentOutOfRangeException" />, which is neither a transport failure the delivery layer translates
+    /// nor a <see cref="SyntheticMailFailure" /> the runner reports, so a mistyped digit would surface as a stack trace
+    /// where every other malformed value in this file produces one line naming the key.
+    /// </remarks>
+    private static int ParsePort(int? port, SmtpTransportSecurity security, string path)
+    {
+        if (port is not { } configured)
+        {
+            return security == SmtpTransportSecurity.ImplicitTls ? 465 : 587;
+        }
+
+        return configured is >= 0 and <= 65535
+            ? configured
+            : throw new SyntheticMailFailure(
+                $"'port' in '{path}' is {configured}, which is outside 0 to 65535.");
+    }
 }

@@ -329,7 +329,8 @@ under it; nothing about that belongs to an account that reaches anything else. S
 file with a message naming the key to set.
 
 `security` is `StartTls` or `ImplicitTls`, and there is no third value: the run authenticates with a password, so an
-endpoint that cannot secure the connection is refused rather than downgraded to. `port` defaults to 587 or 465 to match.
+endpoint that cannot secure the connection is refused rather than downgraded to. `port` defaults to 587 or 465 to match,
+and a written one is refused outside 0 to 65535 rather than carried as far as the connection.
 
 A development mail server whose TLS parameters the platform refuses stops this command exactly as it stops the host,
 and for the same reason: the handshake goes through the system OpenSSL rather than through .NET, so the policy on the

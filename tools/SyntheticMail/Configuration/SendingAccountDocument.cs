@@ -32,4 +32,14 @@ internal sealed record SendingAccountDocument
 
     /// <summary>Whose address generated mail is from, named after a <see cref="Generation.SyntheticAuthorIdentity" /> value.</summary>
     public string? Author { get; init; }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Redacted for the reason <see cref="SendingAccount.ToString" /> is, one step earlier in the same pipeline: this
+    /// is what holds the credential between parsing and validation, so it is what a message about a file that failed
+    /// validation would be written from. The synthesized printer prints every member, which would put a real password
+    /// into the one kind of output this type exists to produce.
+    /// </remarks>
+    public override string ToString() =>
+        $"{nameof(SendingAccountDocument)} {{ {nameof(this.Host)} = {this.Host}, {nameof(this.Port)} = {this.Port}, {nameof(this.Security)} = {this.Security}, {nameof(this.Address)} = {this.Address}, {nameof(this.Password)} = ***, {nameof(this.UserName)} = {this.UserName}, {nameof(this.Author)} = {this.Author} }}";
 }

@@ -206,6 +206,60 @@ public sealed class SendingAccountFileTests
         Assert.DoesNotContain("not-a-real-password", interpolated, StringComparison.Ordinal);
     }
 
+    [Theory]
+    [InlineData(0)]
+    [InlineData(25)]
+    [InlineData(65535)]
+    public void ReadFrom_AFileNamingAPortInRange_KeepsIt(int port)
+    {
+        // Arrange, Act
+        var account = Read($$"""{ "host": "h", "address": "a@example.test", "password": "p", "port": {{port}} }""");
+
+        // Assert
+        Assert.Equal(port, account.Port);
+    }
+
+    [Theory]
+    [InlineData(-1)]
+    [InlineData(65536)]
+    [InlineData(70000)]
+    public void ReadFrom_AFileNamingAPortOutsideTheRange_IsRefusedNamingTheKey(int port)
+    {
+        // Arrange, Act
+        var failure = Assert.Throws<SyntheticMailFailure>(
+            () => Read($$"""{ "host": "h", "address": "a@example.test", "password": "p", "port": {{port}} }"""));
+
+        // Assert
+        // MailKit throws ArgumentOutOfRangeException for a port outside this range, and that is neither a transport
+        // failure the delivery layer translates nor one the runner reports — so without this check a mistyped digit
+        // reaches the terminal as a stack trace rather than as the one line every other malformed value produces.
+        Assert.Contains($"'port' in '{Origin}' is {port}", failure.Message, StringComparison.Ordinal);
+        Assert.Contains("0 to 65535", failure.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ToString_ADocument_HidesThePasswordBeforeAnythingIsValidated()
+    {
+        // Arrange
+        var document = new SendingAccountDocument
+        {
+            Host = "smtp.example.test",
+            Port = 2525,
+            Address = "throwaway@example.test",
+            Password = "not-a-real-password",
+        };
+
+        // Act
+        var printed = $"{document}";
+
+        // Assert
+        // This type holds the credential between parsing and validation, which is exactly the window a message about
+        // a file that failed validation would be written in.
+        Assert.DoesNotContain("not-a-real-password", printed, StringComparison.Ordinal);
+        Assert.Contains("Password = ***", printed, StringComparison.Ordinal);
+        Assert.Contains("smtp.example.test", printed, StringComparison.Ordinal);
+    }
+
     [Fact]
     public void ReadFrom_ANullArgument_IsRefused()
     {

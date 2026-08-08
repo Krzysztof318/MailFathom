@@ -139,8 +139,13 @@ internal sealed class SmtpSyntheticMailTransport : ISyntheticMailTransport
             // A session being torn down has nothing left to report. Letting this out of an `await using` would replace
             // whatever actually went wrong with the noise of the connection noticing afterwards.
         }
-
-        this.client.Dispose();
+        finally
+        {
+            // In a `finally` rather than after the catch, because the filter above deliberately admits only failures
+            // the network produced: anything else — a racing cancellation, a MailKit exception this list does not name
+            // — leaves through `DisposeAsync`, and the socket underneath would go with it undisposed.
+            this.client.Dispose();
+        }
     }
 
     /// <summary>Reports whether a failure is one the server or the network produced rather than a defect here.</summary>

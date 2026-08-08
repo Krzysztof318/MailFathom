@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using System.Diagnostics.CodeAnalysis;
 using MailFathom.SyntheticMail.Configuration;
 using MailFathom.SyntheticMail.Delivery;
 using MailFathom.SyntheticMail.Generation;
@@ -290,6 +291,41 @@ public sealed class SmtpSyntheticMailTransportTests
         // Assert
         // A session being torn down has nothing left to report, and letting this out of an `await using` would replace
         // whatever actually went wrong with the noise of the connection noticing afterwards.
+        client.Received(1).Dispose();
+    }
+
+    [Fact]
+    [SuppressMessage(
+        "Reliability",
+        "CA2000:Dispose objects before losing scope",
+        Justification = "The subject of this test is a DisposeAsync that throws, so no path can dispose the transport in the way this rule looks for. The client underneath is what must survive that, and the assertion below is what says it did.")]
+    public async Task DisposeAsync_ATeardownFailureOutsideTheTransportSet_StillDisposesTheClient()
+    {
+        // Arrange
+        var client = Substitute.For<ISmtpClient>();
+        client.IsConnected.Returns(true);
+        client
+            .DisconnectAsync(quit: true, Arg.Any<CancellationToken>())
+            .Returns(Task.FromException(new ObjectDisposedException(nameof(ISmtpClient))));
+
+        var transport = new SmtpSyntheticMailTransport(Account(), client);
+        ObjectDisposedException? thrown = null;
+
+        // Act
+        try
+        {
+            await transport.DisposeAsync();
+        }
+        catch (ObjectDisposedException failure)
+        {
+            thrown = failure;
+        }
+
+        // Assert
+        Assert.NotNull(thrown);
+        // The catch filter deliberately admits only what the network produced, so anything else leaves through
+        // `DisposeAsync` — and the socket underneath would leave with it undisposed were the disposal not in a
+        // `finally`. The failure still propagates: it is a defect here rather than a connection noticing a reset.
         client.Received(1).Dispose();
     }
 
