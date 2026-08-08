@@ -3,12 +3,14 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.AI;
+using MailFathom.Application.Accounts;
 using MailFathom.Application.EmailContent;
 using MailFathom.Application.EmailContent.Storage;
 using MailFathom.Application.Emails.Embeddings.Backfill;
 using MailFathom.Application.Emails.Embeddings.Generation;
 using MailFathom.Application.Emails.Embeddings.Limits;
 using MailFathom.Application.Emails.Extraction;
+using MailFathom.Application.Emails.Search;
 using MailFathom.Application.Mail;
 using MailFathom.Application.Mail.Mutations;
 using MailFathom.Application.Mail.Mutations.Audit;
@@ -114,6 +116,14 @@ internal sealed class OrchestratedMailFathomServices : IAsyncDisposable
         builder.Services.AddSecretResolution(SecretValueInterpretation.ReferenceOnly);
         builder.Services.AddOutboundResiliencePipelines(builder.Configuration.GetSection("Resilience"));
         builder.Services.AddSingleton<IImapAccountSettingsProvider>(account);
+        // The port every mailbox read resolves its scope through, registered by the composition root from the same
+        // options section the account above comes from. Without it a search or a listing resolves nothing rather than
+        // narrowing to this account, so it belongs here with the other host-bound ports.
+        builder.Services.AddSingleton<IMailAccountCatalog>(account);
+        // How much of a message's body one search result may show, which a composition root composes from the
+        // MailboxSearch section. It is the deployment's control on what a query draws out of a mailbox rather than a
+        // request's, so the shipped default is what this suite searches under.
+        builder.Services.AddSingleton(EmailSearchSnippetBounds.Default);
         builder.Services.AddSingleton<IMailOAuthSettingsProvider>(new UnconfiguredMailOAuthSettingsProvider());
         builder.Services.AddSingleton<IMailTransportSecurityPolicyReader>(account);
         builder.Services.AddSingleton<IMailSynchronizationWindowReader>(account);

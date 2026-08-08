@@ -4,6 +4,7 @@
 
 using System.Diagnostics.CodeAnalysis;
 using MailFathom.AppHost;
+using MailFathom.Application.Accounts;
 using MailFathom.Application.Mail;
 using MailFathom.Application.Mail.Mutations;
 using MailFathom.Application.Mail.Mutations.Audit;
@@ -46,13 +47,23 @@ internal sealed class SyntheticMailAccount(
     IRemotelyDeletedEmailDispositionReader,
     IAuthoredDeleteEmailDispositionReader,
     IMailboxMutationAuditSettingsReader,
-    IMailAnsweringAuditSettingsReader
+    IMailAnsweringAuditSettingsReader,
+    IMailAccountCatalog
 {
     /// <summary>The window this account keeps an answering entry for, which a retention test writes an older entry than.</summary>
     internal static readonly TimeSpan AnsweringAuditRetention = TimeSpan.FromDays(30);
 
     /// <summary>Gets the account identifier every occurrence this suite stores belongs to.</summary>
-    public static MailAccountId AccountId { get; } = MailAccountId.Create("integration");
+    public static MailAccountId AccountId { get; } =
+        MailAccountId.Create(OrchestrationContract.ServedMailAccountId);
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// The one account this suite stores anything under. Every read model resolves its scope through this port before it
+    /// reads a row, so a harness that answered nothing here would make a mailbox query return an empty window over mail
+    /// the same run had just written — an arrangement failure that reads exactly like the query being wrong.
+    /// </remarks>
+    public IReadOnlyList<MailAccountId> ServedAccountIds => [AccountId];
 
     /// <inheritdoc />
     /// <remarks>
