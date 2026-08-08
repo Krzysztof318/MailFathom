@@ -770,8 +770,8 @@
         "type": "Project",
         "dependencies": {
           "Azure.Identity": "[1.21.0, )",
-          "MailFathom.Application": "[0.4.0, )",
-          "MailFathom.Domain": "[0.4.0, )",
+          "MailFathom.Application": "[0.5.0, )",
+          "MailFathom.Domain": "[0.5.0, )",
           "Microsoft.Agents.AI": "[1.15.0, )",
           "Microsoft.Extensions.AI": "[10.8.1, )",
           "Microsoft.Extensions.AI.Abstractions": "[10.8.1, )",
@@ -784,13 +784,13 @@
       "MailFathom.Application": {
         "type": "Project",
         "dependencies": {
-          "MailFathom.Domain": "[0.4.0, )"
+          "MailFathom.Domain": "[0.5.0, )"
         }
       },
       "MailFathom.Common": {
         "type": "Project",
         "dependencies": {
-          "MailFathom.Domain": "[0.4.0, )"
+          "MailFathom.Domain": "[0.5.0, )"
         }
       },
       "MailFathom.Domain": {
@@ -799,12 +799,12 @@
       "MailFathom.Host": {
         "type": "Project",
         "dependencies": {
-          "MailFathom.AI": "[0.4.0, )",
-          "MailFathom.Application": "[0.4.0, )",
-          "MailFathom.Common": "[0.4.0, )",
-          "MailFathom.Domain": "[0.4.0, )",
-          "MailFathom.Infrastructure": "[0.4.0, )",
-          "MailFathom.Mcp": "[0.4.0, )",
+          "MailFathom.AI": "[0.5.0, )",
+          "MailFathom.Application": "[0.5.0, )",
+          "MailFathom.Common": "[0.5.0, )",
+          "MailFathom.Domain": "[0.5.0, )",
+          "MailFathom.Infrastructure": "[0.5.0, )",
+          "MailFathom.Mcp": "[0.5.0, )",
           "Microsoft.AspNetCore.Authentication.JwtBearer": "[10.0.10, )",
           "Microsoft.Extensions.Http.Resilience": "[10.6.0, )",
           "Microsoft.Extensions.ServiceDiscovery": "[10.6.0, )",
@@ -820,9 +820,9 @@
         "dependencies": {
           "Aspire.Npgsql.EntityFrameworkCore.PostgreSQL": "[13.4.6, )",
           "HtmlSanitizer": "[9.1.974, )",
-          "MailFathom.Application": "[0.4.0, )",
-          "MailFathom.Common": "[0.4.0, )",
-          "MailFathom.Domain": "[0.4.0, )",
+          "MailFathom.Application": "[0.5.0, )",
+          "MailFathom.Common": "[0.5.0, )",
+          "MailFathom.Domain": "[0.5.0, )",
           "MailKit": "[4.17.0, )",
           "Microsoft.EntityFrameworkCore": "[10.0.10, )",
           "Microsoft.EntityFrameworkCore.Relational": "[10.0.10, )",
@@ -841,8 +841,8 @@
       "MailFathom.Mcp": {
         "type": "Project",
         "dependencies": {
-          "MailFathom.Application": "[0.4.0, )",
-          "MailFathom.Domain": "[0.4.0, )",
+          "MailFathom.Application": "[0.5.0, )",
+          "MailFathom.Domain": "[0.5.0, )",
           "Microsoft.Extensions.Logging.Abstractions": "[10.0.10, )",
           "ModelContextProtocol.AspNetCore": "[2.0.0, )"
         }
