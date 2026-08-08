@@ -3,8 +3,15 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.Accounts;
+using MailFathom.Application.AiProviders;
+using MailFathom.Application.Emails.Embeddings.Administration;
+using MailFathom.Application.Emails.Embeddings.Generations;
+using MailFathom.Application.Emails.Embeddings.Indexing;
+using MailFathom.Application.Emails.Embeddings.Limits;
 using MailFathom.Application.Mail.Mutations.Audit;
+using MailFathom.Application.Persistence;
 using MailFathom.Host.Api;
+using MailFathom.Host.Configuration.Embeddings;
 using MailFathom.Host.Configuration.Endpoints;
 using MailFathom.Host.Security.Transport;
 using Microsoft.AspNetCore.Authorization;
@@ -12,6 +19,7 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Time.Testing;
 using NSubstitute;
 using Xunit;
 
@@ -94,8 +102,14 @@ public sealed class AdminApiEndpointsTests
             .Select(endpoint => $"/{endpoint.RoutePattern.RawText?.TrimStart('/')}")
             .Order(StringComparer.Ordinal);
 
+        // The activation path appears twice because it is one resource read with a get and performed with a post, and
+        // both verbs are mapped separately.
         Assert.Equal(
             [
+                $"{AdminEndpointOptions.RoutePrefix}{EmbeddingProfileEndpoints.StatusRoute}",
+                $"{AdminEndpointOptions.RoutePrefix}{EmbeddingProfileEndpoints.ActivationRoute}",
+                $"{AdminEndpointOptions.RoutePrefix}{EmbeddingProfileEndpoints.ActivationRoute}",
+                $"{AdminEndpointOptions.RoutePrefix}{EmbeddingProfileEndpoints.ReindexCancellationRoute}",
                 $"{AdminEndpointOptions.RoutePrefix}{MailboxMutationAuditEndpoint.Route}",
                 $"{AdminEndpointOptions.RoutePrefix}{MailboxRefreshTokenEndpoint.Route}",
                 $"{AdminEndpointOptions.RoutePrefix}/session",
@@ -159,8 +173,44 @@ public sealed class AdminApiEndpointsTests
             Substitute.For<IMailboxRefreshTokenStore>()));
         services.AddScoped(_ => Substitute.For<IMailAccountCatalog>());
         services.AddScoped(_ => Substitute.For<IMailboxMutationAuditEntryStore>());
+        RegisterEmbeddingAdministration(services);
 
         return new TestEndpointRouteBuilder(services.BuildServiceProvider());
+    }
+
+    /// <summary>Places what the embedding routes resolve, so their endpoints can be built without a container of the real thing.</summary>
+    /// <remarks>
+    /// The three services are sealed classes over application ports, so they are constructed here rather than
+    /// substituted. None of them is invoked — no request is made — and what this arrangement exists for is that a route
+    /// whose parameters cannot be placed is refused at build time and would disappear from the assertions above.
+    /// </remarks>
+    private static void RegisterEmbeddingAdministration(IServiceCollection services)
+    {
+        var generationStore = Substitute.For<IEmbeddingGenerationStore>();
+        var workloadReader = Substitute.For<IEmbeddingWorkloadReader>();
+        var vectorIndex = Substitute.For<IEmbeddingProfileVectorIndex>();
+        var timeProvider = new FakeTimeProvider();
+        var spendGate = new EmbeddingSpendGate(
+            Substitute.For<IEmbeddingSpendLedger>(),
+            EmbeddingSpendBudget.Unbounded,
+            timeProvider);
+        var retryPolicy = new OptimisticConcurrencyRetryPolicy(
+            Substitute.For<IPersistenceSessionFactory>(),
+            new PersistenceConcurrencyOptions(),
+            timeProvider);
+
+        services.AddSingleton(new DeclaredEmbeddingGeometry(Identity: null));
+        services.AddScoped(_ => new EmbeddingStatusReader(
+            generationStore,
+            workloadReader,
+            spendGate,
+            Substitute.For<IAiProviderHealthReader>()));
+        services.AddScoped(_ => new CountedEmbeddingActivation(
+            generationStore,
+            workloadReader,
+            spendGate,
+            new EmbeddingProfileActivation(generationStore, vectorIndex, retryPolicy)));
+        services.AddScoped(_ => new EmbeddingReindexCancellation(generationStore, vectorIndex, retryPolicy));
     }
 
     private static IReadOnlyList<Endpoint> MaterializeEndpoints(IEndpointRouteBuilder endpoints) =>

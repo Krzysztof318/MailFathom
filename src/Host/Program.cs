@@ -362,6 +362,12 @@ try
         Capacity = provider.GetRequiredService<IOptions<EmbeddingOptions>>().Value.MaxQueuedEmails,
     });
 
+    // What this deployment declares it embeds with, registered whichever way the reading above went. The administrative
+    // surface needs the answer on an instance that declared nothing at all — that is the instance whose operator is
+    // asking why semantic search is not working — so the absence is a value here rather than a missing registration.
+    builder.Services.AddSingleton(provider => new DeclaredEmbeddingGeometry(
+        EmbeddingGenerationPlanMapper.Map(provider.GetRequiredService<IOptions<EmbeddingOptions>>().Value)?.Identity));
+
     // The three ceilings, registered the same way and for the same reason the backlog bound is: each of them applies to
     // an instance rather than to an activation. Passages are cut for every synchronized message whether or not a
     // provider was ever declared, and what a period has spent is a figure an operator reads before deciding to declare

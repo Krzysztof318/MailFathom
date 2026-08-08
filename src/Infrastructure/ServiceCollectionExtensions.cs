@@ -8,6 +8,7 @@ using MailFathom.Application.EmailContent.Rendering;
 using MailFathom.Application.EmailContent.Repair;
 using MailFathom.Application.EmailContent.Storage;
 using MailFathom.Application.Emails.Embeddings;
+using MailFathom.Application.Emails.Embeddings.Administration;
 using MailFathom.Application.Emails.Embeddings.Backfill;
 using MailFathom.Application.Emails.Embeddings.Generation;
 using MailFathom.Application.Emails.Embeddings.Generations;
@@ -223,6 +224,10 @@ public static class ServiceCollectionExtensions
         // fact about the instance rather than about an activation, and an operator deciding whether to declare a
         // ceiling reads it before there is anything to bound.
         services.AddScoped<IEmbeddingSpendLedger, EmbeddingSpendLedger>();
+        // The gate over that ledger is registered here rather than beside the generation work for the same reason.
+        // Where a period stands is what an activation weighs its estimate against and what a status command reports,
+        // and both are asked of an instance that has declared nothing at all.
+        services.AddScoped<EmbeddingSpendGate>();
         // The only registration here that changes the schema. It is scoped like every other store so that a caller
         // which has opened a persistence session gets its statement inside that session's transaction rather than
         // beside it.
@@ -234,6 +239,12 @@ public static class ServiceCollectionExtensions
         // container. What decides that there is anything to activate is the declaration the caller reads, not this.
         services.AddScoped<EmbeddingProfileActivation>();
         services.AddScoped<EmbeddingReindexCancellation>();
+        // What the administrative surface asks of those two: the counting in front of an activation, and the one read
+        // that says whether semantic search is working. Registered unconditionally like the acts they wrap, because an
+        // instance that declared no provider is exactly the one whose operator most needs to be told so.
+        services.AddScoped<IEmbeddingWorkloadReader, EmbeddingWorkloadReader>();
+        services.AddScoped<CountedEmbeddingActivation>();
+        services.AddScoped<EmbeddingStatusReader>();
         services.AddScoped<IEmailMetadataRepository, StoredEmailMetadataRepository>();
         services.AddScoped<IDatabaseSchemaInspector, EfCoreDatabaseSchemaInspector>();
         services.AddScoped<IEmailContentStore, EmailContentStore>();
@@ -422,10 +433,6 @@ public static class ServiceCollectionExtensions
     {
         ArgumentNullException.ThrowIfNull(services);
 
-        // Scoped like the generator that asks it, because the ledger it reads through is the scoped persistence
-        // context. The budget and the pacer behind it are singletons: one is a configured value and the other holds the
-        // reservation every caller of this process takes its slot from.
-        services.AddScoped<EmbeddingSpendGate>();
         services.AddScoped<StoredEmailEmbeddingGenerator>();
         services.AddScoped<StoredEmailEmbeddingBackfill>();
         services.AddScoped<EmbeddingGenerationUpkeep>();

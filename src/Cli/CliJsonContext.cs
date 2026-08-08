@@ -4,6 +4,7 @@
 
 using System.Text.Json.Serialization;
 using MailFathom.Cli.Administration;
+using MailFathom.Cli.Administration.Embeddings;
 using MailFathom.Cli.Authorization;
 using MailFathom.Cli.Credentials;
 using MailFathom.Common.OAuth;
@@ -31,6 +32,10 @@ namespace MailFathom.Cli;
 [JsonSerializable(typeof(AdminSession))]
 [JsonSerializable(typeof(MailboxRefreshTokenRequest))]
 [JsonSerializable(typeof(AdminProblem))]
+[JsonSerializable(typeof(EmbeddingStatus))]
+[JsonSerializable(typeof(EmbeddingActivationAssessment))]
+[JsonSerializable(typeof(EmbeddingActivation))]
+[JsonSerializable(typeof(EmbeddingReindexCancellation))]
 [JsonSerializable(typeof(StoredCredentials))]
 [JsonSerializable(typeof(ProtectedResourceMetadata))]
 [JsonSerializable(typeof(AuthorizationServerMetadata))]

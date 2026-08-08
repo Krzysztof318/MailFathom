@@ -37,6 +37,16 @@ internal static class CliRootCommand
             AuthorizeMailboxCommand.Create(context),
         };
 
+        // A group of its own rather than three commands at the root, because "status" already means something here:
+        // the root one asks whether the stored credential still works, and this one asks whether semantic search does.
+        // Both are worth having and neither should have to be renamed for the other.
+        Command embeddingCommand = new("embedding", "Administer the deployment's embedding profile.")
+        {
+            EmbeddingStatusCommand.Create(context),
+            ActivateEmbeddingCommand.Create(context),
+            CancelEmbeddingReindexCommand.Create(context),
+        };
+
         return new RootCommand($"MailFathom administration tool ({version.Version}).")
         {
             LoginCommand.Create(context),
@@ -45,6 +55,7 @@ internal static class CliRootCommand
             ProfilesCommand.Create(context),
             StatusCommand.Create(context),
             mailboxCommand,
+            embeddingCommand,
         };
     }
 }

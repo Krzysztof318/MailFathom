@@ -189,10 +189,38 @@ choice if you would rather place credentials yourself.
 [Mailbox OAuth](../operations/mailbox-oauth.md) is the whole procedure, including what each provider requires of the
 application you register and how a stored token relates to the reference in your configuration.
 
+## Turning semantic search on
+
+Which model your deployment embeds with is a configuration value, and editing it starts nothing. Turning semantic
+search on is a separate, deliberate act, because it is the first thing MailFathom does that costs money per unit of
+mail — a full mailbox goes to your provider, and you should see the size of that before agreeing to it:
+
+```console
+$ mfctl embedding activate
+```
+
+The command reads what the deployment would spend, prints it as passages, characters, and approximate tokens, and asks
+before it starts. `--yes` agrees up front, for a scripted run.
+
+| What you want | Command |
+| --- | --- |
+| Find out why semantic search is quiet | `mfctl embedding status` |
+| Take up the model your configuration declares | `mfctl embedding activate` |
+| Stop a re-embed you have changed your mind about | `mfctl embedding cancel-reindex` |
+
+`mfctl embedding status` is the one to reach for first. It answers, in one output, whether a model is active, whether
+that model is still the one your configuration declares, whether your provider is answering, how much of the mailbox
+is embedded, and what the current budget period has spent.
+
+[Administering the embedding profile](../operations/admin-endpoint.md#administering-the-embedding-profile) is the
+operator's reference for all three, and [changing the embedding model](../operations/embedding-profiles.md) is what a
+switch and a rollback cost.
+
 ## Where to go next
 
 - [Administering a deployment](../operations/admin-endpoint.md) — the operator's reference for everything above
 - [Mailbox OAuth](../operations/mailbox-oauth.md) — registering the application, and every mode of the sign-in above
+- [Changing the embedding model](../operations/embedding-profiles.md) — what activating, switching, and rolling back cost
 - [Configuration reference](../operations/configuration-reference.md#adminendpoint) — every `AdminEndpoint` key
 - [Secret provisioning](../operations/secret-provisioning.md) and [rotation](../operations/secret-rotation.md) — how
   the key on the server is supplied and replaced
