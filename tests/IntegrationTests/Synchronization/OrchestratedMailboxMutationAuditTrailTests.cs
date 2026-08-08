@@ -98,10 +98,11 @@ public sealed class OrchestratedMailboxMutationAuditTrailTests(MailFathomOrchest
             performedEntries.Where(entry => entry.Requester == Requester),
             entry => Assert.Equal(MailboxMutationAuditOutcome.Performed, entry.Outcome));
 
-        // The trail hangs on nothing the erasure reached, so the same entries are still readable afterwards.
+        // The trail hangs on nothing the erasure reached, so the same entries are still readable afterwards. Ordered by
+        // the identifier's own value rather than by the identity, which is a record struct and carries no comparison.
         Assert.Equal(
-            performedEntries.Select(entry => entry.Id).Order(),
-            survivingEntries.Select(entry => entry.Id).Order());
+            performedEntries.Select(entry => entry.Id.Value).Order(),
+            survivingEntries.Select(entry => entry.Id.Value).Order());
 
         // The source folder is the remote path rather than a key into a binding, which is what makes the entry
         // readable once the mail it describes is gone.

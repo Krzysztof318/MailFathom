@@ -263,6 +263,60 @@ public sealed class MailSynchronizationOptionsTests
         Assert.Contains(messages, message => message!.Contains("no password secret reference", StringComparison.Ordinal));
     }
 
+    /// <summary>The block decides when personal data is destroyed, so a typo in it fails startup rather than binding away.</summary>
+    [Fact]
+    public void ValidateForSynchronization_AccountWhoseAuditTrailBlockIsNotABlock_ReportsIt()
+    {
+        // Arrange
+        var account = CreateAccount("primary");
+        account.AuditTrail = null!;
+        var options = new MailSynchronizationOptions { Enabled = true, Accounts = [account] };
+
+        // Act
+        var messages = options.ValidateForSynchronization().Select(result => result.ErrorMessage).ToArray();
+
+        // Assert
+        Assert.Contains(messages, message => message!.Contains("Account 'primary'", StringComparison.Ordinal)
+            && message.Contains("audit trail configuration must be a block", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// A window shorter than a run would erase entries before the run that would have shown them, and one beyond the
+    /// ceiling stops being a retention anybody could justify. Both fail startup rather than being clamped.
+    /// </summary>
+    [Theory]
+    [InlineData(0)]
+    [InlineData(23)]
+    [InlineData(3650 * 24 + 1)]
+    public void ValidateForSynchronization_AuditTrailRetentionOutsideTheAcceptedRange_ReportsIt(int retentionHours)
+    {
+        // Arrange
+        var account = CreateAccount("primary");
+        account.AuditTrail.Retention = TimeSpan.FromHours(retentionHours);
+        var options = new MailSynchronizationOptions { Enabled = true, Accounts = [account] };
+
+        // Act
+        var messages = options.ValidateForSynchronization().Select(result => result.ErrorMessage).ToArray();
+
+        // Assert
+        Assert.Contains(messages, message => message!.Contains("Account 'primary'", StringComparison.Ordinal)
+            && message.Contains("audit trail retention must be between", StringComparison.Ordinal));
+    }
+
+    /// <summary>The control for the two above: the default block an account that configures nothing gets is accepted.</summary>
+    [Fact]
+    public void ValidateForSynchronization_AccountThatConfiguresNoAuditTrail_ReportsNoAuditTrailError()
+    {
+        // Arrange
+        var options = new MailSynchronizationOptions { Enabled = true, Accounts = [CreateAccount("primary")] };
+
+        // Act
+        var messages = options.ValidateForSynchronization().Select(result => result.ErrorMessage).ToArray();
+
+        // Assert
+        Assert.DoesNotContain(messages, message => message!.Contains("audit trail", StringComparison.Ordinal));
+    }
+
     [Fact]
     public void ValidateForSynchronization_UnsafeTransportSecurity_NamesTheAccountAndTheViolationIdentity()
     {
