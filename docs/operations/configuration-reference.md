@@ -312,7 +312,7 @@ describes what it drops, what it keeps, and what it does when the provider canno
 | Key | Type | Default | Constraint | Change |
 | --- | --- | --- | --- | --- |
 | `Chat:RelevanceFilter:Enabled` | bool | `false` | turning it on requires a declared `Chat:Alias`, and a `Chat:MaxMessagesPerRequest` of at least 2, because a judgement is an instruction and a candidate | restart |
-| `Chat:RelevanceFilter:MaxCandidates` | int | `8` | 1 – 50, which is what one search can rank; the ceiling on what one lookup spends. Set below what retrieval returns it buys a weaker filter rather than a shorter result — a passage nobody judged keeps its place | restart |
+| `Chat:RelevanceFilter:MaxCandidates` | int | `8` | 1 – 8, which is everything one retrieval hands over — a higher value would name candidates that never exist and is refused rather than accepted and never met. The ceiling on what one lookup spends and how long it takes. Set below the default it buys a weaker filter rather than a shorter result: a passage nobody judged keeps its place | restart |
 | `Chat:RelevanceFilter:MinimumRelevance` | int | `50` | 1 – 100, on the scale the model answers a judgement on. A threshold of 0 is refused: it would pay for a judgement that can drop nothing | restart |
 
 ## `EmbeddingBackfill`

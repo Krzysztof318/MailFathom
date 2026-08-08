@@ -3,7 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.AI.Retrieval;
-using MailFathom.Application.Emails.Search;
+using MailFathom.Application.Retrieval;
 using Xunit;
 
 namespace MailFathom.AI.UnitTests.Retrieval;
@@ -26,12 +26,31 @@ public sealed class PassageRelevanceFilterPlanTests
         Assert.Equal(65, plan.MinimumRelevance);
     }
 
-    /// <summary>A retrieval is answered from a search window, so a candidate count beyond it would state a ceiling no question could reach.</summary>
+    /// <summary>
+    /// A candidate count beyond what one retrieval hands over states a ceiling no question could reach, so a deployment
+    /// writing one would be told it had widened a filter that had not moved.
+    /// </summary>
+    [Fact]
+    public void Create_ACandidateBoundBeyondWhatOneRetrievalHandsOver_IsRefused()
+    {
+        // Act, Assert
+        Assert.Throws<ArgumentOutOfRangeException>(() => PassageRelevanceFilterPlan.Create(
+            PassageRelevanceFilterPlan.GreatestCandidates + 1,
+            minimumRelevance: 50));
+    }
+
+    /// <summary>The ceiling is the retrieval bound itself rather than a number that merely matched it once.</summary>
+    [Fact]
+    public void GreatestCandidates_TheDeclaredCeiling_IsWhatOneRetrievalHandsOver()
+    {
+        // Assert
+        Assert.Equal(EmailKnowledgeBounds.Default.MaximumPassages, PassageRelevanceFilterPlan.GreatestCandidates);
+    }
+
     [Theory]
     [InlineData(0)]
     [InlineData(-1)]
-    [InlineData(EmailSearchResultLimit.MaximumValue + 1)]
-    public void Create_ACandidateBoundOutsideWhatOneSearchRanks_IsRefused(int maximumCandidates)
+    public void Create_ACandidateBoundBelowOne_IsRefused(int maximumCandidates)
     {
         // Act, Assert
         Assert.Throws<ArgumentOutOfRangeException>(

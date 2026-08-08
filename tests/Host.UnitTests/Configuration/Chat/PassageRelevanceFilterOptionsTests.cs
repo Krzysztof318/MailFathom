@@ -4,7 +4,6 @@
 
 using System.ComponentModel.DataAnnotations;
 using MailFathom.AI.Retrieval;
-using MailFathom.Application.Emails.Search;
 using MailFathom.Host.Configuration.Chat;
 using MailFathom.Infrastructure.Secrets.Discovery;
 using Xunit;
@@ -62,11 +61,12 @@ public sealed class PassageRelevanceFilterOptionsTests
         Assert.Contains(errors, error => error.Contains("no Alias", StringComparison.Ordinal));
     }
 
+    /// <summary>A count beyond what one retrieval hands over names candidates that never exist, so it is refused rather than accepted and never met.</summary>
     [Theory]
     [InlineData(0)]
     [InlineData(-1)]
-    [InlineData(EmailSearchResultLimit.MaximumValue + 1)]
-    public void Validate_ACandidateBoundOutsideWhatOneSearchRanks_IsRefused(int maxCandidates)
+    [InlineData(int.MaxValue)]
+    public void Validate_ACandidateBoundOutsideWhatOneRetrievalHandsOver_IsRefused(int maxCandidates)
     {
         // Arrange
         var settings = Declared();
@@ -78,6 +78,37 @@ public sealed class PassageRelevanceFilterOptionsTests
 
         // Assert
         Assert.Contains(errors, error => error.Contains("MaxCandidates", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Validate_ACandidateBoundOnePastTheRetrievalCeiling_IsRefused()
+    {
+        // Arrange
+        var settings = Declared();
+        settings.RelevanceFilter.Enabled = true;
+        settings.RelevanceFilter.MaxCandidates = PassageRelevanceFilterPlan.GreatestCandidates + 1;
+
+        // Act
+        var errors = Validate(settings);
+
+        // Assert
+        Assert.Contains(errors, error => error.Contains("MaxCandidates", StringComparison.Ordinal));
+    }
+
+    /// <summary>The default judges everything a retrieval hands over, which is also the greatest value that means anything.</summary>
+    [Fact]
+    public void Validate_TheDefaultCandidateBound_IsTheRetrievalCeiling()
+    {
+        // Arrange
+        var settings = Declared();
+        settings.RelevanceFilter.Enabled = true;
+
+        // Act
+        var errors = Validate(settings);
+
+        // Assert
+        Assert.Equal(PassageRelevanceFilterPlan.GreatestCandidates, settings.RelevanceFilter.MaxCandidates);
+        Assert.Empty(errors);
     }
 
     [Theory]

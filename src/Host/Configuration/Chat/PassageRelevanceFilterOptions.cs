@@ -4,7 +4,6 @@
 
 using System.ComponentModel.DataAnnotations;
 using MailFathom.AI.Retrieval;
-using MailFathom.Application.Emails.Search;
 
 namespace MailFathom.Host.Configuration.Chat;
 
@@ -36,10 +35,11 @@ internal sealed class PassageRelevanceFilterOptions
 
     /// <summary>Gets or sets the greatest number of passages one retrieval puts to the model.</summary>
     /// <remarks>
-    /// The ceiling on what one lookup costs. Set below what retrieval returns it buys a weaker filter rather than a
-    /// shorter result: a passage nobody judged keeps the place the fused ranking gave it.
+    /// The ceiling on what one lookup costs, in latency as much as in spend. Set below what retrieval returns it buys a
+    /// weaker filter rather than a shorter result: a passage nobody judged keeps the place the fused ranking gave it.
+    /// The default judges everything a retrieval hands over, which is also the greatest value that means anything.
     /// </remarks>
-    public int MaxCandidates { get; set; } = 8;
+    public int MaxCandidates { get; set; } = PassageRelevanceFilterPlan.GreatestCandidates;
 
     /// <summary>Gets or sets the least relevance a judged passage may carry and still be handed over.</summary>
     /// <remarks>Stated on the scale the model answers on. Half of it is a starting point rather than a recommendation: how much of an answer an extract has to hold depends on the mail an instance actually carries.</remarks>
@@ -61,10 +61,10 @@ internal sealed class PassageRelevanceFilterOptions
             yield break;
         }
 
-        if (this.MaxCandidates is < 1 or > EmailSearchResultLimit.MaximumValue)
+        if (this.MaxCandidates < 1 || this.MaxCandidates > PassageRelevanceFilterPlan.GreatestCandidates)
         {
             yield return new ValidationResult(
-                $"Chat endpoint '{endpointAlias}' enables the relevance filter with MaxCandidates outside 1 to {EmailSearchResultLimit.MaximumValue}, which is what one search can rank.",
+                $"Chat endpoint '{endpointAlias}' enables the relevance filter with MaxCandidates outside 1 to {PassageRelevanceFilterPlan.GreatestCandidates}, which is everything one retrieval hands over. A higher count would name candidates that never exist.",
                 [nameof(this.MaxCandidates)]);
         }
 

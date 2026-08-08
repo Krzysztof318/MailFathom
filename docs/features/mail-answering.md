@@ -86,6 +86,10 @@ against a provider that is working perfectly well.
 Setting the candidate count below what retrieval returns buys a weaker filter rather than a shorter result. A passage
 nobody judged was never found irrelevant, so it keeps the place the fused ranking gave it.
 
+Above that number there is nothing to buy. The count is capped at the passages-per-retrieval bound in the table above,
+because a ninth candidate never exists to be judged, and a value beyond it is refused at startup rather than accepted as
+a widening that could not happen. The default is that same number: judge everything the lookup handed over.
+
 ### It filters; it does not reorder
 
 What survives is a subsequence of the fused ordering. The fusion is computed across every candidate at once, while a

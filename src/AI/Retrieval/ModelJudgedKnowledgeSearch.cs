@@ -109,18 +109,19 @@ internal sealed class ModelJudgedKnowledgeSearch : IEmailKnowledgeSearch
             ? ranked
             : [.. ranked.Take(this.plan.MaximumCandidates)];
 
+        var judged = await this.JudgeInTurnAsync(queryText, candidates, cancellationToken);
+
         // The unjudged remainder keeps the position the fused ranking gave it. A candidate count below what the search
         // returned bounds what a question spends, and spending less must not silently drop mail nobody looked at.
-        IReadOnlyList<EmailKnowledgePassage> kept =
-        [
-            .. await this.JudgeInTurnAsync(queryText, candidates, cancellationToken),
-            .. ranked.Skip(candidates.Count),
-        ];
+        IReadOnlyList<EmailKnowledgePassage> kept = [.. judged.Kept, .. ranked.Skip(candidates.Count)];
 
+        // The count the pass reached rather than the pool it was given, which differ whenever a provider failure ended
+        // it early: a record saying it judged the whole pool in the same breath as one saying it stopped part way
+        // through would leave neither believable.
         PassageRelevanceEvents.LogJudged(
             this.logger,
             ranked.Count,
-            candidates.Count,
+            judged.JudgedCount,
             ranked.Count - kept.Count);
 
         return kept;
@@ -130,9 +131,10 @@ internal sealed class ModelJudgedKnowledgeSearch : IEmailKnowledgeSearch
     /// <remarks>
     /// A candidate reached after the provider failed is kept rather than skipped over, so ending the pass early narrows
     /// what was filtered and never what is handed over. That is the same rule the per-candidate one follows: nothing the
-    /// model did not judge is dropped.
+    /// model did not judge is dropped. It reports how far it got beside what it kept, because the two stop agreeing the
+    /// moment a failure ends the pass and only the caller records either.
     /// </remarks>
-    private async Task<IReadOnlyList<EmailKnowledgePassage>> JudgeInTurnAsync(
+    private async Task<JudgedCandidates> JudgeInTurnAsync(
         string queryText,
         IReadOnlyList<EmailKnowledgePassage> candidates,
         CancellationToken cancellationToken)
@@ -145,12 +147,12 @@ internal sealed class ModelJudgedKnowledgeSearch : IEmailKnowledgeSearch
 
             if (judgement.ProviderFailure is { } failure)
             {
-                var unjudged = candidates.Count - position;
-
-                PassageRelevanceEvents.LogJudgingStopped(this.logger, failure, unjudged);
+                // The candidate this call was about received no determination either, so it is the first of the
+                // unjudged rather than the last of the judged.
+                PassageRelevanceEvents.LogJudgingStopped(this.logger, failure, candidates.Count - position);
                 kept.AddRange(candidates.Skip(position));
 
-                break;
+                return new JudgedCandidates(kept, position);
             }
 
             if (judgement.Score is not { } score || score >= this.plan.MinimumRelevance)
@@ -159,7 +161,7 @@ internal sealed class ModelJudgedKnowledgeSearch : IEmailKnowledgeSearch
             }
         }
 
-        return kept;
+        return new JudgedCandidates(kept, candidates.Count);
     }
 
     /// <summary>Asks the model what one candidate is worth against the query, or reports why it did not say.</summary>
@@ -209,4 +211,9 @@ internal sealed class ModelJudgedKnowledgeSearch : IEmailKnowledgeSearch
     /// stop asking.
     /// </remarks>
     private readonly record struct PassageJudgement(int? Score, ChatGenerationFailure? ProviderFailure);
+
+    /// <summary>What the pass handed back: the passages it kept, and how many candidates it reached before it ended.</summary>
+    /// <param name="Kept">The candidates that survived, in the order retrieval ranked them.</param>
+    /// <param name="JudgedCount">How many candidates received a determination, which is fewer than the pool wherever a provider failure ended the pass.</param>
+    private readonly record struct JudgedCandidates(IReadOnlyList<EmailKnowledgePassage> Kept, int JudgedCount);
 }
