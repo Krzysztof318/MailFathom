@@ -370,7 +370,11 @@ internal sealed partial class AccountSynchronizationSupervisor
             var synchronizer = scope.ServiceProvider.GetRequiredService<MailboxSynchronizer>();
             var result = await synchronizer.SynchronizeAsync(this.accountId, folderMapping, cancellationToken);
 
-            this.ReportFolderOutcome(folderAlias, remotelyDeletedEmailDisposition, result);
+            this.ReportFolderOutcome(
+                folderAlias,
+                remotelyDeletedEmailDisposition,
+                result,
+                scope.ServiceProvider.GetRequiredService<MailboxContentVolumeTelemetry>());
 
             return new FolderRunOutcome(Succeeded: true, result.Folder);
         }
@@ -402,7 +406,8 @@ internal sealed partial class AccountSynchronizationSupervisor
     private void ReportFolderOutcome(
         string folderAlias,
         RemotelyDeletedEmailDisposition remotelyDeletedEmailDisposition,
-        MailboxSynchronizationResult result)
+        MailboxSynchronizationResult result,
+        MailboxContentVolumeTelemetry contentVolumeTelemetry)
     {
         if (result.Outcome == MailboxSynchronizationOutcome.FolderAliasUnresolved)
         {
@@ -434,6 +439,11 @@ internal sealed partial class AccountSynchronizationSupervisor
                 result.RelocatedEmailCount,
                 result.Reconciliation.OwnMutationCompletedEmailCount);
         }
+
+        // Published only for a folder the run actually reached, because the level it carries is a measurement rather
+        // than a count: an alias that resolved to nothing measured nothing, and publishing its empty volume would move
+        // the deployment's stored-content gauge to zero.
+        contentVolumeTelemetry.Report(this.accountId, folderAlias, result.ContentVolume);
 
         this.ReportSuppressedChanges(folderAlias, result.SuppressedChanges);
         this.ReportReconciliation(folderAlias, remotelyDeletedEmailDisposition, result.Reconciliation);

@@ -133,9 +133,11 @@ public sealed class EmailContentReader
             return EmailContentReadOutcome.NotFound(storedEmailId);
         }
 
-        if (summary.ContentAvailability is StoredEmailContentAvailability.ExceededSizeLimit)
+        // Both states are content synchronization deliberately did not store, so neither is a damaged local copy and
+        // neither schedules a repair. They are answered apart because only one of them is worth asking about again.
+        if (BodyOfUnstoredContent(summary.ContentAvailability) is { } unstoredBody)
         {
-            return EmailContentReadOutcome.Read(ContentWithoutStoredMime(summary, request));
+            return EmailContentReadOutcome.Read(ContentWithoutStoredMime(summary, request, unstoredBody));
         }
 
         var content = await this.contentStore.FindStoredContentAsync(storedEmailId, cancellationToken);
@@ -231,13 +233,27 @@ public sealed class EmailContentReader
         attachments.CarriesUnverifiedSignature,
         attachments.ContainsUnexpandedTnefPart);
 
-    /// <summary>Builds the content of an email whose raw MIME the size limit kept out of local storage.</summary>
+    /// <summary>Names the body to report for an occurrence whose content was never stored, or nothing when it was.</summary>
+    /// <remarks>
+    /// A row recorded as available and holding no content is a different thing entirely — that is a local copy that has
+    /// gone missing, and the caller answers it with a repair request rather than with a body state.
+    /// </remarks>
+    private static EmailContentBody? BodyOfUnstoredContent(StoredEmailContentAvailability availability) =>
+        availability switch
+        {
+            StoredEmailContentAvailability.ExceededSizeLimit => EmailContentBody.NotStoredExceededSizeLimit,
+            StoredEmailContentAvailability.AwaitingStorageHeadroom => EmailContentBody.NotStoredAwaitingStorageHeadroom,
+            _ => null,
+        };
+
+    /// <summary>Builds the content of an email whose raw MIME synchronization deliberately kept out of local storage.</summary>
     /// <remarks>
     /// Everything answerable is still answered, and nothing else is. The headers come from the columns the listing is
     /// served out of, which are narrower than a parse would produce but are what exists. Both the per-attachment list
     /// and the attachment counts are absent, because nobody has ever read this message's parts: the row carries what
     /// the server's envelope reported, and an envelope says nothing about attachments, so its zero counts are unset
-    /// defaults rather than a finding. The body state says why all of it is missing.
+    /// defaults rather than a finding. The body state says why all of it is missing, and which of the two reasons it
+    /// was.
     /// <para>
     /// The empty list a caller that asked for attachment descriptions receives is therefore about this message's
     /// content being unread rather than about it carrying no files, which the absent counts beside it state.
@@ -245,7 +261,8 @@ public sealed class EmailContentReader
     /// </remarks>
     private static ReadEmailContent ContentWithoutStoredMime(
         EmailSummary summary,
-        GetEmailContentRequest request)
+        GetEmailContentRequest request,
+        EmailContentBody body)
     {
         return new ReadEmailContent
         {
@@ -254,7 +271,7 @@ public sealed class EmailContentReader
             FolderAlias = summary.FolderAlias,
             SizeOctets = summary.SizeOctets,
             Headers = HeadersFrom(summary),
-            Body = EmailContentBody.NotStoredExceededSizeLimit,
+            Body = body,
             AttachmentSummary = null,
             Attachments = request.IncludeAttachmentDetails ? [] : null,
             RemoteFlags = summary.RemoteFlags,

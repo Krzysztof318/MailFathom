@@ -424,15 +424,31 @@ internal sealed class MailKitImapMailboxSession(
         // the selection mode nor the fetch item is capable of setting the remote \Seen flag. Changing this call to any
         // non-PEEK retrieval or to a StoreAsync-based flag update would break the read-only synchronization invariant,
         // including on the attempt that follows a recovered connection.
-        await using var stream = await openFolder.GetStreamAsync(new UniqueId(occurrenceId.Uid.Value), cancellationToken);
-        using var memory = new MemoryStream();
+        Stream stream;
 
-        if (!await TryCopyWithinLimitAsync(stream, memory, maxRawMimeBytes, cancellationToken))
+        try
         {
-            return RemoteEmailContentFetchResult.ExceededSizeLimit();
+            stream = await openFolder.GetStreamAsync(new UniqueId(occurrenceId.Uid.Value), cancellationToken);
+        }
+        catch (MessageNotFoundException)
+        {
+            // The folder answered that it holds no such UID, which is an answer rather than a failure: the message left
+            // between the moment this run learned of it and the moment its body was asked for. Repeating the fetch would
+            // receive the same answer, and failing the folder's run for it would stop every message behind it.
+            return RemoteEmailContentFetchResult.NoLongerHeld();
         }
 
-        return RemoteEmailContentFetchResult.Retrieved(new RemoteEmailContent(occurrenceId, memory.ToArray()));
+        await using (stream)
+        {
+            using var memory = new MemoryStream();
+
+            if (!await TryCopyWithinLimitAsync(stream, memory, maxRawMimeBytes, cancellationToken))
+            {
+                return RemoteEmailContentFetchResult.ExceededSizeLimit();
+            }
+
+            return RemoteEmailContentFetchResult.Retrieved(new RemoteEmailContent(occurrenceId, memory.ToArray()));
+        }
     }
 
     /// <summary>Builds the one UID SEARCH that carries both the remaining UID range and the account's earliest-arrival bound.</summary>

@@ -76,7 +76,7 @@ internal sealed record ListedEmailSummary
     public required ObservedRemoteFlags RemoteFlags { get; init; }
 
     /// <summary>Gets whether raw content is available locally, and the reason when it is not.</summary>
-    [Description("Whether the raw email content is stored locally: 'available' when a content read will succeed, or 'exceededSizeLimit' when the email was deliberately stored without its content because it was larger than the configured limit. Read this before asking for content.")]
+    [Description("Whether the raw email content is stored locally: 'available' when a content read will succeed, 'exceededSizeLimit' when the email was deliberately stored without its content because it was larger than the configured limit, or 'awaitingStorageHeadroom' when local storage was full when it arrived and its content is fetched once there is room. Read this before asking for content; only the last state is worth asking about again later.")]
     public required ListedEmailContentAvailability ContentAvailability { get; init; }
 
     /// <summary>Publishes one summary a read returned.</summary>
@@ -116,6 +116,7 @@ internal sealed record ListedEmailSummary
         {
             StoredEmailContentAvailability.Available => ListedEmailContentAvailability.Available,
             StoredEmailContentAvailability.ExceededSizeLimit => ListedEmailContentAvailability.ExceededSizeLimit,
+            StoredEmailContentAvailability.AwaitingStorageHeadroom => ListedEmailContentAvailability.AwaitingStorageHeadroom,
             _ => throw new ArgumentOutOfRangeException(
                 nameof(availability),
                 availability,

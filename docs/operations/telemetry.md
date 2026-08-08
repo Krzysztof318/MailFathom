@@ -94,6 +94,23 @@ the change was made and the history of it is missing, which is exactly the gap a
 exists because writing an entry may never fail the mutation that produced it — a trail that could roll back somebody's
 mailbox would be worse than a reported hole — so swallowing the failure is only defensible while it is counted.
 
+Synchronization publishes the byte volume it moves, which is what storage is sized from — counting messages says
+nothing about it, since one message is anywhere between a kilobyte and the configured size limit.
+`mailfathom.mail.content.fetched` and `mailfathom.mail.content.stored` count the raw MIME bytes each folder run read
+from its mail server and wrote to local storage, by account and folder alias, and are read as a rate: how much a mailbox
+costs per interval. `mailfathom.mail.content.stored_total` is the level that rate is filling — how much storage the
+stored content occupies, as the most recent run measured it. It carries no account or folder dimension on purpose,
+because content storage is one store every account writes into and a per-account copy of the same number would invite a
+dashboard to sum it.
+
+`mailfathom.mail.content.limits_reached` counts the folder runs that ended against one of the two byte limits, tagged
+with which: `run_budget` for a run that spent what it may fetch, and `storage_ceiling` for one that had to record
+messages without their content. Both are counted rather than only logged because both are conditions that persist — a
+run that stopped for its budget will stop again next interval, and a deployment at its ceiling stays there until
+somebody acts — so a rising count says it has been running that way rather than that it did once.
+[Bounding how much mail a run brings in](../features/imap-synchronization.md#bounding-how-much-mail-a-run-brings-in)
+states what each limit does when it is reached and how the gap a ceiling leaves is closed.
+
 Embedding publishes the depth of its backlog, how many messages the bound turned away, and how many messages and
 passages it embedded and how long that took, broken down by outcome and by the classification of a provider failure.
 [Automatic embedding](../features/automatic-embedding.md#what-an-operator-can-see) names each instrument and what it

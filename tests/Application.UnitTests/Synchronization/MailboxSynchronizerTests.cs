@@ -2178,7 +2178,10 @@ public sealed class MailboxSynchronizerTests
         MailSynchronizationWindow synchronizationWindow = default,
         IStoredEmailReconciliationStore? reconciliationStore = null,
         InMemoryMailboxMutationReconciliationStore? mutationStore = null,
-        IEmailEmbeddingBacklog? embeddingBacklog = null)
+        IEmailEmbeddingBacklog? embeddingBacklog = null,
+        IStoredEmailContentInventory? contentInventory = null,
+        RawMimeMemoryBudget? rawMimeMemoryBudget = null,
+        StoredContentCeiling? storedContentCeiling = null)
     {
         var concurrencyRetryPolicy = new OptimisticConcurrencyRetryPolicy(
             persistenceSessionFactory,
@@ -2195,6 +2198,9 @@ public sealed class MailboxSynchronizerTests
             persistenceSessionFactory,
             metadataRepository,
             contentStore,
+            contentInventory ?? new InMemoryStoredEmailContentInventory(),
+            storedContentCeiling ?? new StoredContentCeiling(ceilingBytes: null),
+            rawMimeMemoryBudget ?? new RawMimeMemoryBudget(long.MaxValue),
             mimeReader ?? CreateMimeReaderThatExtractsEverything(),
             mutations,
             new MailboxReconciler(
@@ -2256,6 +2262,422 @@ public sealed class MailboxSynchronizerTests
         EmailThreadReferences.None,
         EmailAttachmentSummary.None,
         ExtractedEmailText.NoTextualBody);
+
+    /// <summary>A run that runs out of bytes ends between two messages, at a checkpoint that covers only what it stored.</summary>
+    /// <remarks>
+    /// The checkpoint is the whole point: the batch reported a cursor covering both messages, and committing that one
+    /// would step the folder past a message this run never fetched. Reporting why it stopped is what separates a budget
+    /// an operator may want to raise from a mailbox that simply holds more mail.
+    /// </remarks>
+    [Fact]
+    public async Task SynchronizeAsync_ContentBudgetSpentMidBatch_CheckpointsAtTheLastStoredMessageAndReportsWhyItStopped()
+    {
+        // Arrange
+        var accountId = MailAccountId.Create("primary");
+        var uidValidity = ImapUidValidity.Create(5);
+        var first = EmailOccurrenceId.Create(accountId, InboxFolder.Id, uidValidity, ImapUid.Create(10));
+        var second = EmailOccurrenceId.Create(accountId, InboxFolder.Id, uidValidity, ImapUid.Create(11));
+        var options = new MailboxSynchronizationOptions
+        {
+            MaxMetadataBatchSize = 25,
+            MaxRawMimeBytes = 1024,
+            MaxContentBytesPerRun = 1024,
+        };
+        var arrangement = ArrangeContentRun(
+            options,
+            uidValidity,
+            [MetadataOf(first, 600), MetadataOf(second, 600)],
+            inspectedThroughUid: second.Uid);
+        StubRetrievedContent(arrangement.Session, options, first, 600);
+        StubRetrievedContent(arrangement.Session, options, second, 600);
+
+        // Act
+        var result = await arrangement.Synchronizer.SynchronizeAsync(accountId, InboxMapping, CancellationToken.None);
+
+        // Assert
+        Assert.Equal(1, result.StoredEmailCount);
+        Assert.True(result.HasMoreEmails);
+        Assert.True(result.ContentVolume.StoppedForContentBudget);
+        Assert.Equal(600, result.ContentVolume.FetchedBytes);
+        Assert.Equal(600, result.ContentVolume.StoredBytes);
+        await arrangement.Session.DidNotReceive().FetchEmailContentWithoutSettingSeenAsync(second, options.MaxRawMimeBytes, CancellationToken.None);
+        await arrangement.CheckpointStore.Received(1).SaveCheckpointAsync(
+            Arg.Any<IPersistenceSession>(),
+            accountId,
+            InboxFolder.Id,
+            Arg.Any<SynchronizationCheckpoint?>(),
+            Arg.Is<SynchronizationCheckpoint>(checkpoint => checkpoint!.LastSeenUid == first.Uid),
+            CancellationToken.None);
+    }
+
+    /// <summary>The run after a budget stop picks the folder up where the previous one committed.</summary>
+    [Fact]
+    public async Task SynchronizeAsync_CheckpointCommittedByABudgetStop_ResumesAtTheMessageTheBudgetStoppedBefore()
+    {
+        // Arrange
+        var accountId = MailAccountId.Create("primary");
+        var uidValidity = ImapUidValidity.Create(5);
+        var stoppedBefore = EmailOccurrenceId.Create(accountId, InboxFolder.Id, uidValidity, ImapUid.Create(11));
+        var options = new MailboxSynchronizationOptions
+        {
+            MaxMetadataBatchSize = 25,
+            MaxRawMimeBytes = 1024,
+            MaxContentBytesPerRun = 1024,
+        };
+        var arrangement = ArrangeContentRun(
+            options,
+            uidValidity,
+            [MetadataOf(stoppedBefore, 600)],
+            inspectedThroughUid: stoppedBefore.Uid,
+            storedCheckpoint: SynchronizationCheckpoint.None(uidValidity).AdvanceTo(
+                ImapUid.Create(10),
+                new DateTimeOffset(2026, 7, 24, 12, 0, 0, TimeSpan.Zero)));
+        StubRetrievedContent(arrangement.Session, options, stoppedBefore, 600);
+
+        // Act
+        var result = await arrangement.Synchronizer.SynchronizeAsync(accountId, InboxMapping, CancellationToken.None);
+
+        // Assert
+        Assert.Equal(1, result.StoredEmailCount);
+        Assert.False(result.ContentVolume.StoppedForContentBudget);
+        await arrangement.Session.Received(1).GetEmailBatchAfterAsync(
+            ImapUid.Create(10),
+            options.MaxMetadataBatchSize,
+            MailSynchronizationWindow.Unbounded,
+            CancellationToken.None);
+        await arrangement.Session.Received(1).FetchEmailContentWithoutSettingSeenAsync(stoppedBefore, options.MaxRawMimeBytes, CancellationToken.None);
+    }
+
+    /// <summary>At the storage ceiling the occurrence is still recorded, and its payload is neither fetched nor stored.</summary>
+    /// <remarks>
+    /// The distinct availability is what makes the gap recoverable: an oversized message will exceed its limit forever,
+    /// and this one is waiting for room. The checkpoint still advances, which is what keeps the mailbox's timeline
+    /// current while its content cannot be kept.
+    /// </remarks>
+    [Fact]
+    public async Task SynchronizeAsync_StorageCeilingReached_RecordsTheOccurrenceWithoutFetchingItsContent()
+    {
+        // Arrange
+        var accountId = MailAccountId.Create("primary");
+        var uidValidity = ImapUidValidity.Create(5);
+        var occurrence = EmailOccurrenceId.Create(accountId, InboxFolder.Id, uidValidity, ImapUid.Create(10));
+        var metadata = MetadataOf(occurrence, 600);
+        var options = new MailboxSynchronizationOptions { MaxMetadataBatchSize = 25, MaxRawMimeBytes = 1024 };
+        var inventory = new InMemoryStoredEmailContentInventory { StoredContentBytes = 900 };
+        var arrangement = ArrangeContentRun(
+            options,
+            uidValidity,
+            [metadata],
+            occurrence.Uid,
+            inventory: inventory,
+            storedContentCeiling: new StoredContentCeiling(1000));
+
+        // Act
+        var result = await arrangement.Synchronizer.SynchronizeAsync(accountId, InboxMapping, CancellationToken.None);
+
+        // Assert
+        Assert.Equal(0, result.StoredEmailCount);
+        Assert.Equal(0, result.SkippedOversizedEmailCount);
+        Assert.Equal(1, result.ContentVolume.DeferredForStorageEmailCount);
+        Assert.Equal(0, result.ContentVolume.FetchedBytes);
+        await arrangement.Session.DidNotReceive().FetchEmailContentWithoutSettingSeenAsync(
+            Arg.Any<EmailOccurrenceId>(),
+            Arg.Any<long>(),
+            Arg.Any<CancellationToken>());
+        await arrangement.MetadataRepository.Received(1).UpsertMetadataAsync(
+            Arg.Any<IPersistenceSession>(),
+            metadata,
+            null,
+            StoredEmailContentAvailability.AwaitingStorageHeadroom,
+            CancellationToken.None);
+        await arrangement.CheckpointStore.Received(1).SaveCheckpointAsync(
+            Arg.Any<IPersistenceSession>(),
+            accountId,
+            InboxFolder.Id,
+            Arg.Any<SynchronizationCheckpoint?>(),
+            Arg.Is<SynchronizationCheckpoint>(checkpoint => checkpoint!.LastSeenUid == occurrence.Uid),
+            CancellationToken.None);
+    }
+
+    /// <summary>Once storage has room again, a run fetches the content earlier runs left unstored.</summary>
+    /// <remarks>
+    /// It is the same store a first discovery makes, onto the row that already names the occurrence, so nothing is
+    /// duplicated and no UIDVALIDITY has to be reset for the gap to close. The checkpoint is left alone, because the
+    /// forward pass moved past these occurrences long ago.
+    /// </remarks>
+    [Fact]
+    public async Task SynchronizeAsync_StorageHasRoomAgain_FetchesTheContentAnEarlierRunDeferred()
+    {
+        // Arrange
+        var accountId = MailAccountId.Create("primary");
+        var uidValidity = ImapUidValidity.Create(5);
+        var deferred = EmailOccurrenceId.Create(accountId, InboxFolder.Id, uidValidity, ImapUid.Create(7));
+        var deferredMetadata = MetadataOf(deferred, 600);
+        var options = new MailboxSynchronizationOptions { MaxMetadataBatchSize = 25, MaxRawMimeBytes = 1024 };
+        var inventory = new InMemoryStoredEmailContentInventory { StoredContentBytes = 900 };
+        inventory.AddAwaitingContent(deferredMetadata);
+        var arrangement = ArrangeContentRun(
+            options,
+            uidValidity,
+            [],
+            inspectedThroughUid: null,
+            inventory: inventory,
+            storedContentCeiling: new StoredContentCeiling(100_000));
+        StubRetrievedContent(arrangement.Session, options, deferred, 600);
+
+        // Act
+        var result = await arrangement.Synchronizer.SynchronizeAsync(accountId, InboxMapping, CancellationToken.None);
+
+        // Assert
+        Assert.Equal(1, result.ContentVolume.RefilledEmailCount);
+        Assert.Equal(600, result.ContentVolume.StoredBytes);
+        Assert.Equal(1500, result.ContentVolume.StoredContentBytes);
+        await arrangement.Session.Received(1).FetchEmailContentWithoutSettingSeenAsync(deferred, options.MaxRawMimeBytes, CancellationToken.None);
+        await arrangement.MetadataRepository.Received(1).UpsertMetadataAsync(
+            Arg.Any<IPersistenceSession>(),
+            deferredMetadata,
+            Arg.Any<ExtractedEmailMetadata?>(),
+            StoredEmailContentAvailability.Available,
+            CancellationToken.None);
+        await arrangement.ContentStore.Received(1).SaveContentAsync(
+            Arg.Any<IPersistenceSession>(),
+            Arg.Any<StoredEmailId>(),
+            Arg.Is<RemoteEmailContent>(content => content!.OccurrenceId == deferred),
+            CancellationToken.None);
+        await arrangement.CheckpointStore.DidNotReceive().SaveCheckpointAsync(
+            Arg.Any<IPersistenceSession>(),
+            Arg.Any<MailAccountId>(),
+            Arg.Any<MailFolderResolutionId>(),
+            Arg.Any<SynchronizationCheckpoint?>(),
+            Arg.Any<SynchronizationCheckpoint>(),
+            Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>One departed message ends that message and not the rest of the queue waiting behind it.</summary>
+    /// <remarks>
+    /// A message leaving its folder is a fact about that message. The occurrences behind it in the queue may still be
+    /// on the server with room to store them, so treating one departure as evidence about the batch would make them
+    /// wait a whole run for nothing — and would do it again on the next run, since the departed one is still first.
+    /// </remarks>
+    [Fact]
+    public async Task SynchronizeAsync_DeferredMessageHasLeftTheFolder_StillRefillsTheOnesBehindIt()
+    {
+        // Arrange
+        var accountId = MailAccountId.Create("primary");
+        var uidValidity = ImapUidValidity.Create(5);
+        var departed = EmailOccurrenceId.Create(accountId, InboxFolder.Id, uidValidity, ImapUid.Create(7));
+        var behindIt = EmailOccurrenceId.Create(accountId, InboxFolder.Id, uidValidity, ImapUid.Create(8));
+        var options = new MailboxSynchronizationOptions { MaxMetadataBatchSize = 25, MaxRawMimeBytes = 1024 };
+        var inventory = new InMemoryStoredEmailContentInventory { StoredContentBytes = 100 };
+        inventory.AddAwaitingContent(MetadataOf(departed, 600));
+        inventory.AddAwaitingContent(MetadataOf(behindIt, 600));
+        var arrangement = ArrangeContentRun(
+            options,
+            uidValidity,
+            [],
+            inspectedThroughUid: null,
+            inventory: inventory,
+            storedContentCeiling: new StoredContentCeiling(100_000));
+        arrangement.Session
+            .FetchEmailContentWithoutSettingSeenAsync(departed, options.MaxRawMimeBytes, CancellationToken.None)
+            .Returns(RemoteEmailContentFetchResult.NoLongerHeld());
+        StubRetrievedContent(arrangement.Session, options, behindIt, 600);
+
+        // Act
+        var result = await arrangement.Synchronizer.SynchronizeAsync(accountId, InboxMapping, CancellationToken.None);
+
+        // Assert
+        Assert.Equal(1, result.ContentVolume.RefilledEmailCount);
+        await arrangement.Session.Received(1).FetchEmailContentWithoutSettingSeenAsync(behindIt, options.MaxRawMimeBytes, CancellationToken.None);
+    }
+
+    /// <summary>A deployment still at its ceiling leaves the deferred content exactly where it is.</summary>
+    [Fact]
+    public async Task SynchronizeAsync_StorageStillAtItsCeiling_LeavesTheDeferredContentUnfetched()
+    {
+        // Arrange
+        var accountId = MailAccountId.Create("primary");
+        var uidValidity = ImapUidValidity.Create(5);
+        var deferred = EmailOccurrenceId.Create(accountId, InboxFolder.Id, uidValidity, ImapUid.Create(7));
+        var options = new MailboxSynchronizationOptions { MaxMetadataBatchSize = 25, MaxRawMimeBytes = 1024 };
+        var inventory = new InMemoryStoredEmailContentInventory { StoredContentBytes = 900 };
+        inventory.AddAwaitingContent(MetadataOf(deferred, 600));
+        var arrangement = ArrangeContentRun(
+            options,
+            uidValidity,
+            [],
+            inspectedThroughUid: null,
+            inventory: inventory,
+            storedContentCeiling: new StoredContentCeiling(1000));
+
+        // Act
+        var result = await arrangement.Synchronizer.SynchronizeAsync(accountId, InboxMapping, CancellationToken.None);
+
+        // Assert
+        Assert.Equal(0, result.ContentVolume.RefilledEmailCount);
+        await arrangement.Session.DidNotReceive().FetchEmailContentWithoutSettingSeenAsync(
+            Arg.Any<EmailOccurrenceId>(),
+            Arg.Any<long>(),
+            Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>A message that left its folder before its body was asked for ends that message and not the run.</summary>
+    [Fact]
+    public async Task SynchronizeAsync_MessageLeftTheFolderBeforeItsContentWasFetched_StepsOverItAndAdvancesTheCheckpoint()
+    {
+        // Arrange
+        var accountId = MailAccountId.Create("primary");
+        var uidValidity = ImapUidValidity.Create(5);
+        var occurrence = EmailOccurrenceId.Create(accountId, InboxFolder.Id, uidValidity, ImapUid.Create(10));
+        var options = new MailboxSynchronizationOptions { MaxMetadataBatchSize = 25, MaxRawMimeBytes = 1024 };
+        var arrangement = ArrangeContentRun(options, uidValidity, [MetadataOf(occurrence, 600)], occurrence.Uid);
+        arrangement.Session
+            .FetchEmailContentWithoutSettingSeenAsync(occurrence, options.MaxRawMimeBytes, CancellationToken.None)
+            .Returns(RemoteEmailContentFetchResult.NoLongerHeld());
+
+        // Act
+        var result = await arrangement.Synchronizer.SynchronizeAsync(accountId, InboxMapping, CancellationToken.None);
+
+        // Assert
+        Assert.Equal(0, result.StoredEmailCount);
+        Assert.Equal(0, result.SkippedOversizedEmailCount);
+        Assert.Equal(0, result.ContentVolume.DeferredForStorageEmailCount);
+        await arrangement.MetadataRepository.DidNotReceive().UpsertMetadataAsync(
+            Arg.Any<IPersistenceSession>(),
+            Arg.Any<RemoteEmailMetadata>(),
+            Arg.Any<ExtractedEmailMetadata?>(),
+            Arg.Any<StoredEmailContentAvailability>(),
+            Arg.Any<CancellationToken>());
+        await arrangement.CheckpointStore.Received(1).SaveCheckpointAsync(
+            Arg.Any<IPersistenceSession>(),
+            accountId,
+            InboxFolder.Id,
+            Arg.Any<SynchronizationCheckpoint?>(),
+            Arg.Is<SynchronizationCheckpoint>(checkpoint => checkpoint!.LastSeenUid == occurrence.Uid),
+            CancellationToken.None);
+    }
+
+    /// <summary>A run waits for its share of the process-wide buffer before it fetches, so peak memory stays bounded.</summary>
+    /// <remarks>
+    /// The budget spans work units, which is what keeps the peak from being the product of the account and folder
+    /// concurrency bounds. Holding all of it and watching the run stall in front of the fetch is the only way to observe
+    /// that from one work unit.
+    /// </remarks>
+    [Fact]
+    public async Task SynchronizeAsync_InFlightBudgetIsFullyHeld_WaitsForItBeforeFetchingContent()
+    {
+        // Arrange
+        var accountId = MailAccountId.Create("primary");
+        var uidValidity = ImapUidValidity.Create(5);
+        var occurrence = EmailOccurrenceId.Create(accountId, InboxFolder.Id, uidValidity, ImapUid.Create(10));
+        var options = new MailboxSynchronizationOptions { MaxMetadataBatchSize = 25, MaxRawMimeBytes = 1024 };
+        var memoryBudget = new RawMimeMemoryBudget(1024);
+        var arrangement = ArrangeContentRun(
+            options,
+            uidValidity,
+            [MetadataOf(occurrence, 600)],
+            occurrence.Uid,
+            rawMimeMemoryBudget: memoryBudget);
+        StubRetrievedContent(arrangement.Session, options, occurrence, 600);
+        var held = await memoryBudget.ReserveAsync(1024, CancellationToken.None);
+
+        // Act
+        var run = arrangement.Synchronizer.SynchronizeAsync(accountId, InboxMapping, CancellationToken.None);
+        await arrangement.Session.DidNotReceive().FetchEmailContentWithoutSettingSeenAsync(occurrence, options.MaxRawMimeBytes, CancellationToken.None);
+        held.Dispose();
+        var result = await run;
+
+        // Assert
+        Assert.Equal(1, result.StoredEmailCount);
+        Assert.Equal(1024, memoryBudget.AvailableBytes);
+        await arrangement.Session.Received(1).FetchEmailContentWithoutSettingSeenAsync(occurrence, options.MaxRawMimeBytes, CancellationToken.None);
+    }
+
+    private static RemoteEmailMetadata MetadataOf(EmailOccurrenceId occurrenceId, long sizeOctets) => new(
+        occurrenceId,
+        $"message-{occurrenceId.Uid.Value}@example.test",
+        "Subject",
+        new DateTimeOffset(2026, 7, 24, 8, 0, 0, TimeSpan.Zero),
+        sizeOctets);
+
+    private static void StubRetrievedContent(
+        IMailboxSession session,
+        MailboxSynchronizationOptions options,
+        EmailOccurrenceId occurrenceId,
+        int payloadLength) =>
+        session
+            .FetchEmailContentWithoutSettingSeenAsync(occurrenceId, options.MaxRawMimeBytes, CancellationToken.None)
+            .Returns(RemoteEmailContentFetchResult.Retrieved(
+                new RemoteEmailContent(occurrenceId, new ReadOnlyMemory<byte>(new byte[payloadLength]))));
+
+    /// <summary>Composes a run over one batch, which is the shape every byte-budget assertion is about.</summary>
+    private static ContentRunArrangement ArrangeContentRun(
+        MailboxSynchronizationOptions options,
+        ImapUidValidity uidValidity,
+        IReadOnlyList<RemoteEmailMetadata> batch,
+        ImapUid? inspectedThroughUid,
+        SynchronizationCheckpoint? storedCheckpoint = null,
+        InMemoryStoredEmailContentInventory? inventory = null,
+        RawMimeMemoryBudget? rawMimeMemoryBudget = null,
+        StoredContentCeiling? storedContentCeiling = null)
+    {
+        var checkpointStore = Substitute.For<ISynchronizationCheckpointStore>();
+        var metadataRepository = Substitute.For<IEmailMetadataRepository>();
+        var persistenceSessionFactory = Substitute.For<IPersistenceSessionFactory>();
+        var persistenceSession = Substitute.For<IPersistenceSession>();
+        var contentStore = Substitute.For<IEmailContentStore>();
+        var sessionFactory = Substitute.For<IMailboxSessionFactory>();
+        var session = Substitute.For<IMailboxSession>();
+        var clock = new FakeTimeProvider(new DateTimeOffset(2026, 7, 24, 12, 0, 0, TimeSpan.Zero));
+
+        persistenceSessionFactory.BeginSessionAsync(Arg.Any<CancellationToken>()).Returns(persistenceSession);
+        checkpointStore
+            .GetCheckpointAsync(Arg.Any<MailAccountId>(), InboxFolder.Id, Arg.Any<CancellationToken>())
+            .Returns(storedCheckpoint ?? SynchronizationCheckpoint.None(uidValidity));
+        sessionFactory
+            .OpenReadOnlyAsync(Arg.Any<MailAccountId>(), InboxFolder, Arg.Any<MailTransportSecurityPolicy>(), Arg.Any<CancellationToken>())
+            .Returns(session);
+        session.GetUidValidityAsync(Arg.Any<CancellationToken>()).Returns(uidValidity);
+        session
+            .GetEmailBatchAfterAsync(
+                Arg.Any<ImapUid?>(),
+                Arg.Any<int>(),
+                Arg.Any<MailSynchronizationWindow>(),
+                Arg.Any<CancellationToken>())
+            .Returns(
+                _ => new RemoteEmailMetadataBatch(batch, inspectedThroughUid, HasMore: false),
+                _ => new RemoteEmailMetadataBatch([], InspectedThroughUid: null, HasMore: false));
+
+        var contentInventory = inventory ?? new InMemoryStoredEmailContentInventory();
+        var synchronizer = CreateSynchronizer(
+            sessionFactory,
+            checkpointStore,
+            persistenceSessionFactory,
+            metadataRepository,
+            contentStore,
+            clock,
+            options,
+            contentInventory: contentInventory,
+            rawMimeMemoryBudget: rawMimeMemoryBudget,
+            storedContentCeiling: storedContentCeiling);
+
+        return new ContentRunArrangement(
+            synchronizer,
+            session,
+            checkpointStore,
+            metadataRepository,
+            contentStore,
+            contentInventory);
+    }
+
+    /// <summary>The parts of a byte-budget run its assertions read back.</summary>
+    private sealed record ContentRunArrangement(
+        MailboxSynchronizer Synchronizer,
+        IMailboxSession Session,
+        ISynchronizationCheckpointStore CheckpointStore,
+        IEmailMetadataRepository MetadataRepository,
+        IEmailContentStore ContentStore,
+        InMemoryStoredEmailContentInventory ContentInventory);
 
     private sealed class TrackingSession : IPersistenceSession
     {

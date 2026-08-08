@@ -12,6 +12,7 @@ MailFathom synchronizes mailboxes read-only, on a bounded schedule, and — for 
 - How far back a run reaches is bounded per account by an optional earliest date, which travels into the IMAP search itself rather than filtering what came back. An account that names one pays no `FETCH`, no MIME read, no `bytea` write, and no search-vector computation for the mail it excludes, and the folder checkpoint still advances across the excluded range so a run ends instead of rescanning it every interval. [Bounding how far back a run reaches](#bounding-how-far-back-a-run-reaches) states which date the bound compares against and what widening one later does not do.
 - Batches are bounded by email count, not by UID-space width. The adapter searches the whole remaining assigned UID range — a UID SEARCH returns identifiers only — and then fetches envelopes for at most `MaxMetadataBatchSize` emails. A folder whose UIDs are sparse after deletions therefore still advances a full batch per iteration instead of crawling the UID space, which keeps an initial backfill practical.
 - An email that exceeds `MaxRawMimeBytes` is never silently dropped. Its occurrence metadata is committed with `ContentAvailability = ExceededSizeLimit` before the checkpoint moves past it, so the gap stays queryable and auditable instead of existing only as a counter in a log line. The same applies when the advertised size understated the payload and the bounded stream read abandons it mid-fetch: the session reports that as a `RemoteEmailContentFetchResult` outcome rather than as a failure, because the caller records the occurrence and continues, exactly as it does for MIME the reader cannot parse.
+- How much mail a run brings in is bounded in bytes as well as in messages, and how much of it may be kept is bounded too. A folder run fetches at most `MaxContentBytesPerRun` of raw MIME and then ends at a committed checkpoint; local content storage stops accepting payloads at `MaxStoredContentBytes` and keeps recording occurrences without them, which a later run with room fills in; and every folder work unit of the process shares `MaxInFlightRawMimeBytes` of buffer, so peak memory does not grow with the concurrency bounds. [Bounding how much mail a run brings in](#bounding-how-much-mail-a-run-brings-in) describes all three, what each one does when it is reached, and what an operator sees.
 - Committing occurrences before the window checkpoint means a process failure may cause a later run to fetch an already stored occurrence again. Content and metadata writes use the stable remote occurrence identity and are idempotent, so this retry does not create duplicate stored emails.
 - `Infrastructure` maps the pre-migration PostgreSQL model to `mailbox_accounts`, `mail_folders`, `stored_emails`, `email_message_contents`, and separate `synchronization_checkpoints`. A `mail_folders` row is one alias binding: it carries the alias, its resolution generation, the remote path, and the hierarchy delimiter the server advertised, and is unique on `(account, alias, generation)` rather than on `(account, alias)`. Each stored email has a local UUIDv7; its raw MIME row uses the same UUID as both primary key and foreign key and records byte length, SHA-256, and storage time. Each stored email also records a `ContentAvailability` value as text so a metadata-only occurrence is distinguishable from one whose raw MIME is present, alongside the normalized participants, thread identifiers, attachment summary, and remote flag snapshot that [Stored email schema](../architecture/stored-email-schema.md) describes in full. Persistence sessions clear tracked state after cleanup so one scoped context does not retain MIME arrays between per-email transactions, and re-synchronizing an occurrence that is already stored overwrites its payload with a set-based update rather than reading the existing `bytea` back into the change tracker.
 - A write repository takes its EF Core context from the `IPersistenceSession` it is handed, and injects none of its own. The write is therefore always issued on that session's own context, whichever scope the session came from, so "this write joined the caller's transaction" is structurally true instead of being an effect of both objects happening to resolve from the same DI scope. A session backed by a different persistence provider cannot supply a context at all and is rejected outright. Read methods take no session and use the scoped context, because a read joins no transaction.
@@ -130,6 +131,142 @@ readable; removing the account does both.
 Supervisor logs and run records carry the account identifier, the folder alias, counts, the run duration, the
 consecutive failure count, and the current backoff, and never message-level data. They are structured log records;
 first-party metering instruments for the same values are still [pending](#pending-work).
+
+## Bounding how much mail a run brings in
+
+Every other bound on synchronization counts **messages**. `MaxMetadataBatchSize` and `MaxMetadataBatchesPerRun` cap a
+folder run at a thousand occurrences by default, and `MaxRawMimeBytes` caps each of those at 25 MiB — which is a legal
+run of some 25 GB, every message of it inside every configured limit. Counting messages says nothing about volume,
+because one message is anywhere between a kilobyte and the size limit.
+
+Three settings bound the volume instead, and each answers a different question:
+
+| Bound | Setting | Default | The question it answers | Scope |
+| --- | --- | --- | --- | --- |
+| Per run | `MaxContentBytesPerRun` | 1 GiB | How fast may storage fill? | One folder run |
+| In total | `MaxStoredContentBytes` | *(none)* | How full may it get? | The whole process |
+| At one moment | `MaxInFlightRawMimeBytes` | 128 MiB | How much may be in memory while it does? | The whole process |
+
+Two of the three are process-wide, and that is the point of them rather than an implementation detail: both bound a
+resource every concurrent folder run draws on at once, so a per-run version of either would be no bound at all.
+
+All three are validated at startup against `MaxRawMimeBytes`, and none may be below it. That is one rule stated three
+times rather than three rules: a bound smaller than a single message would not make that message rare, it would make it
+unfetchable — and the folder holding it would stop in front of it on every run, forever.
+
+### The per-run budget ends a run; it never drops a message
+
+A run stops fetching once it has read `MaxContentBytesPerRun` of raw MIME. What it does then is the part worth being
+precise about, because the obvious alternatives are both wrong:
+
+- It stops **between two messages**, never part-way through one. The budget is tested before an occurrence is touched,
+  so nothing is half-stored and nothing already committed is discarded.
+- It commits the checkpoint **through the message it actually stored**, not through the cursor the batch reported. The
+  batch's cursor covers occurrences the run never reached, and committing it would step the folder past mail nothing
+  fetched — silently, and with no later pass that would come back for it.
+- It reports **why** it stopped, separately from reporting that more mail remains. Those ask the operator for different
+  things: more mail to discover is ordinary, and a folder that keeps ending on its budget is a budget to raise.
+
+A message above `MaxRawMimeBytes` is exempt from the budget, because it costs no fetch at all: it is recorded from its
+envelope as it always was, and the run continues. So is a message the folder has stopped holding, which is [its own
+case](#a-message-that-leaves-between-being-listed-and-being-fetched).
+
+The next run resumes from the committed checkpoint and spends a fresh budget. An initial backfill of a large mailbox
+therefore arrives over many runs at a rate the operator chose, instead of in one run whose size nobody predicted.
+
+### The storage ceiling degrades ingestion rather than failing it
+
+`MaxStoredContentBytes` is the point at which MailFathom stops writing payloads. Reaching it does **not** stop
+synchronization: occurrences keep being discovered, their metadata keeps being committed, the envelope-only search
+document is still written, and the checkpoint keeps advancing. What stops is the content, and the row says so —
+`ContentAvailability = AwaitingStorageHeadroom`.
+
+That value is deliberately distinct from `ExceededSizeLimit`, because the two have opposite futures. A message above the
+size limit will exceed it on every later run and nothing is waiting for it. A message recorded here is one the mailbox
+would have served, and it is fetched as soon as there is room.
+
+**Closing the gap is a pass of its own, at the end of every run.** After the forward pass and after the backward pass, a
+run asks which occurrences of the folder it just worked are recorded without their content, and fetches as many as its
+remaining run budget and the ceiling allow — over the session it already has open, in UID order. The order is
+deliberate: new mail comes first because discovering it is what keeps the timeline current, and the backward pass comes
+before this one so a message that has left the folder is settled before anything asks the server for its body.
+
+Each refill is the ordinary store of a discovery, onto the row that already names the occurrence, so the content write is
+the same idempotent one and nothing is duplicated. Raising the ceiling, or freeing space, is all it takes; no
+UIDVALIDITY has to be reset and no folder is re-walked. A deployment whose forward pass keeps spending the whole run
+budget fills these in once discovery has caught up, which is the right order — a mailbox with unread mail arriving is
+better served by finding it than by backfilling bodies.
+
+There is deliberately **no default ceiling**. No number MailFathom could pick would describe an operator's disk, and one
+guessed too low would stop a healthy deployment from storing mail. Unset means content storage is bounded by the disk,
+which is what a deployment gets until it says otherwise.
+
+**The ceiling is one budget for the process, not one per run.** Several folder work units write into the same content
+store at the same moment, so a ceiling each of them evaluated against its own measurement would let every one of them
+find the same room and take it — and the deployment would pass the configured limit by as much as those runs were
+allowed to fetch between them. Room is therefore *claimed* from a single process-wide ceiling before a payload is
+fetched, and kept only for what was actually stored: an abandoned fetch, a message that had left the folder, and a
+rolled-back commit each give their claim back, so the level tracks what storage holds rather than what runs intended to
+put there.
+
+Each run still measures the store when it begins, and that measurement replaces the level rather than accumulating on
+top of it, so space a vacuum reclaimed is noticed. Bytes claimed while the measurement was in flight are carried onto
+the new reading instead of being overwritten by it, and a measurement older than one already adopted is discarded — two
+runs measuring at once cannot make the newer reading lose to the slower query.
+
+What the level is measured as is PostgreSQL's own accounting of what the content table occupies — its heap, its indexes,
+and the out-of-line storage the payloads live in — read from the catalog in constant time rather than summed over the
+rows. That is the quantity a disk fills with, and it is cheap enough to read once per folder run. Two consequences
+follow from it and are intended: the number is somewhat above the sum of the message sizes, because storage overhead is
+part of what fills a disk; and space a deletion freed counts as occupied until the database reclaims it.
+
+### The in-flight budget is the one bound that spans work units
+
+A payload is buffered whole between the fetch that reads it and the commit that stores it. Peak memory is therefore one
+payload per folder work unit in flight — and `MaxConcurrentAccounts × MaxConcurrentFoldersPerAccount` is how many of
+those there are. Without a shared bound, raising either concurrency setting would raise the memory ceiling with it,
+silently.
+
+`MaxInFlightRawMimeBytes` is that shared bound, and it is a single process-wide budget rather than a per-run value. A
+work unit reserves the size the server advertised before it fetches and releases it once the transaction that stored the
+payload has ended; one that cannot reserve its share waits for one that finishes, so the effect is slower ingestion
+rather than a refused message. Reservations are granted in request order, which is what keeps a large message from being
+starved by a stream of small ones.
+
+Two approximations are worth stating. A server that understated a message's size can exceed its reservation, by at most
+`MaxRawMimeBytes` for that work unit; and a server that advertised no size at all is charged that limit outright, since
+nothing short of the fetch says what the message costs. The budget bounds what MailFathom deliberately holds, not what
+the runtime has allocated.
+
+### A message that leaves between being listed and being fetched
+
+A folder can stop holding a message between the moment a run learned of it and the moment the body is asked for — and a
+run refilling deferred content is asking about a message it last saw runs ago. The session reports that as an outcome
+rather than raising a failure: nothing is recorded, the checkpoint moves past the occurrence, and the run continues. The
+alternative would fail the whole folder's run on a message that no longer exists, and fail it again on every later run
+until the backward pass happened to reach it.
+
+### What an operator can see
+
+| Signal | Kind | When |
+| --- | --- | --- |
+| `mailfathom.mail.content.fetched` | Counter, bytes | Every run, by account and folder |
+| `mailfathom.mail.content.stored` | Counter, bytes | Every run, by account and folder |
+| `mailfathom.mail.content.stored_total` | Gauge, bytes | The level the most recent run measured, for the deployment |
+| `mailfathom.mail.content.limits_reached` | Counter, runs | A run that ended on its budget or met the ceiling, tagged with which |
+| `Folder …/… ended its run after fetching N bytes…` | Information | The run budget was spent |
+| `Local content storage holds N bytes and has reached its configured ceiling…` | Warning | Messages were recorded without their content |
+| `Fetched the content of N messages … that an earlier run had left without it` | Information | The refill pass closed gaps |
+
+The counters are what a **rate** is read from — how much a mailbox costs per interval, which is what storage is sized
+from — and the gauge is the level that rate is filling. Reaching a limit is counted as well as logged, because both are
+conditions that persist: a run that stopped for its budget will stop again next interval, and a deployment at its
+ceiling stays there until somebody acts, so a rising count says it has been running that way rather than that it did
+once. The gauge carries no account or folder dimension, because content storage is one store every account writes into
+and publishing it per account would invite a dashboard to sum it.
+
+Everything here carries the account identifier, the folder alias, byte counts, and the name of the limit — MailFathom's
+own configured words. No subject, address, remote folder path, or UID appears in any of it.
 
 ## Push synchronization
 
@@ -1385,10 +1522,10 @@ A rejected reload is logged with the configuration path and the failure identity
 - Per-account discovery. Every folder currently resolves on its own short-lived connection, so a run costs one extra
   IMAP login per configured folder on top of its synchronization session. The listing is the same for every folder of
   an account, and the per-account supervisor a run now belongs to is where one listing can serve them all.
-- Metering instruments for a supervised run. Run duration, stored and skipped counts, the consecutive failure count,
-  and the current backoff are recorded as structured log properties today. Publishing them through a first-party
-  `Meter` is a separate change, because MailFathom declares no meter of its own yet and the one the service defaults
-  export is Polly's.
+- Metering instruments for the rest of a supervised run. The byte volume a run moves is published through MailFathom's
+  own meter, as [Bounding how much mail a run brings in](#bounding-how-much-mail-a-run-brings-in) lists; run duration,
+  the stored and skipped counts, the consecutive failure count, and the current backoff are still structured log
+  properties alone.
 - Watching a folder the account does not synchronize. A subscription names the folders a run resolved, so a change in a
   folder nothing is configured for is not reported and would not start a pass if it were.
 - A durable audit store for mapping changes. The log-backed sink cannot join the transaction that commits a binding,

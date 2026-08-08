@@ -32,6 +32,9 @@ public sealed class MailboxSynchronizer
     private readonly IPersistenceSessionFactory persistenceSessionFactory;
     private readonly IEmailMetadataRepository metadataRepository;
     private readonly IEmailContentStore contentStore;
+    private readonly IStoredEmailContentInventory contentInventory;
+    private readonly StoredContentCeiling storedContentCeiling;
+    private readonly RawMimeMemoryBudget rawMimeMemoryBudget;
     private readonly IEmailMimeReader mimeReader;
     private readonly IMailboxMutationReconciliationStore mutationStore;
     private readonly MailboxReconciler reconciler;
@@ -50,6 +53,9 @@ public sealed class MailboxSynchronizer
         IPersistenceSessionFactory persistenceSessionFactory,
         IEmailMetadataRepository metadataRepository,
         IEmailContentStore contentStore,
+        IStoredEmailContentInventory contentInventory,
+        StoredContentCeiling storedContentCeiling,
+        RawMimeMemoryBudget rawMimeMemoryBudget,
         IEmailMimeReader mimeReader,
         IMailboxMutationReconciliationStore mutationStore,
         MailboxReconciler reconciler,
@@ -66,6 +72,9 @@ public sealed class MailboxSynchronizer
         this.persistenceSessionFactory = persistenceSessionFactory;
         this.metadataRepository = metadataRepository;
         this.contentStore = contentStore;
+        this.contentInventory = contentInventory;
+        this.storedContentCeiling = storedContentCeiling;
+        this.rawMimeMemoryBudget = rawMimeMemoryBudget;
         this.mimeReader = mimeReader;
         this.mutationStore = mutationStore;
         this.reconciler = reconciler;
@@ -158,15 +167,26 @@ public sealed class MailboxSynchronizer
             ? persistedCheckpoint
             : SynchronizationCheckpoint.None(uidValidity);
 
+        // The mark is captured before the measurement, so bytes another run claims while this query is in flight are
+        // carried onto the reading rather than being overwritten by it.
+        var claimMark = this.storedContentCeiling.ClaimMark;
+        this.storedContentCeiling.Observe(
+            await this.contentInventory.GetStoredContentBytesAsync(cancellationToken),
+            claimMark);
+
+        var budget = new SynchronizationContentBudget(this.options.MaxContentBytesPerRun);
+
         var storedCount = 0;
         var skippedOversizedCount = 0;
+        var deferredForStorageCount = 0;
         var unreadableMimeCount = 0;
         var relocatedCount = 0;
         var hasMore = true;
+        var stoppedForContentBudget = false;
         var inspectedBatchCount = 0;
         var suppressedChanges = new List<SuppressedMailboxChange>();
 
-        while (hasMore && inspectedBatchCount < this.options.MaxMetadataBatchesPerRun)
+        while (hasMore && !stoppedForContentBudget && inspectedBatchCount < this.options.MaxMetadataBatchesPerRun)
         {
             inspectedBatchCount++;
 
@@ -182,6 +202,8 @@ public sealed class MailboxSynchronizer
                 batch,
                 cancellationToken);
 
+            var processedThroughUid = default(ImapUid?);
+
             foreach (var metadata in batch.Emails.OrderBy(email => email.OccurrenceId.Uid.Value))
             {
                 var placement = FindPlacementOf(placements, folder, metadata.OccurrenceId);
@@ -196,8 +218,20 @@ public sealed class MailboxSynchronizer
                         relocation.Request.Mutation,
                         relocation.Request.StoredEmailId,
                         relocation.Id));
+                    processedThroughUid = metadata.OccurrenceId.Uid;
 
                     continue;
+                }
+
+                // The budget is tested before the occurrence is touched rather than while it is being stored, so a run
+                // that runs out of bytes ends between two emails and never halfway through one. An email above the size
+                // limit is exempt because it costs no fetch at all, and stopping the run for one would leave a
+                // checkpoint stuck in front of a message no budget will ever cover.
+                if (this.WouldFetchContentOf(metadata) && !budget.HasRunBudgetFor(this.AssumedContentCostOf(metadata)))
+                {
+                    stoppedForContentBudget = true;
+
+                    break;
                 }
 
                 // A copy is stored like any other discovery, because the email it duplicates stays where it was and a
@@ -207,14 +241,32 @@ public sealed class MailboxSynchronizer
                     ? candidate
                     : null;
 
-                var occurrence = await this.StoreOccurrenceAsync(mailboxSession, metadata, copy, cancellationToken);
-                if (occurrence.Availability == StoredEmailContentAvailability.Available)
+                var occurrence = await this.StoreOccurrenceAsync(mailboxSession, metadata, copy, budget, cancellationToken);
+                processedThroughUid = metadata.OccurrenceId.Uid;
+
+                if (occurrence.Availability is null)
                 {
-                    storedCount++;
+                    // The folder stopped holding the occurrence between the batch that described it and the fetch. There
+                    // is no message to record and nothing local to correct, so the checkpoint simply moves past it.
+                    continue;
                 }
-                else
+
+                switch (occurrence.Availability)
                 {
-                    skippedOversizedCount++;
+                    case StoredEmailContentAvailability.Available:
+                        storedCount++;
+
+                        break;
+
+                    case StoredEmailContentAvailability.AwaitingStorageHeadroom:
+                        deferredForStorageCount++;
+
+                        break;
+
+                    default:
+                        skippedOversizedCount++;
+
+                        break;
                 }
 
                 if (occurrence.MimeCouldNotBeRead)
@@ -222,17 +274,22 @@ public sealed class MailboxSynchronizer
                     unreadableMimeCount++;
                 }
 
-                if (copy is not null)
+                if (copy is not null && occurrence.StoredEmailId is { } storedEmailId)
                 {
                     suppressedChanges.Add(new SuppressedMailboxChange(
                         MailboxChangeKind.EmailAppearedInFolder,
                         copy.Request.Mutation,
-                        occurrence.StoredEmailId,
+                        storedEmailId,
                         copy.Id));
                 }
             }
 
-            if (batch.InspectedThroughUid is { } inspectedThroughUid)
+            // A run stopped by its byte budget checkpoints through the last occurrence it actually handled rather than
+            // through the cursor the batch reported, which covers emails this run never reached. The two are the same
+            // whenever the batch was worked through, and only a truncated batch tells them apart.
+            var advanceThroughUid = stoppedForContentBudget ? processedThroughUid : batch.InspectedThroughUid;
+
+            if (advanceThroughUid is { } inspectedThroughUid)
             {
                 var advancedCheckpoint = checkpoint.AdvanceTo(inspectedThroughUid, this.timeProvider.GetUtcNow());
                 await this.CommitCheckpointAsync(
@@ -246,13 +303,13 @@ public sealed class MailboxSynchronizer
                 persistedCheckpoint = advancedCheckpoint;
             }
 
-            hasMore = batch.HasMore;
+            hasMore = stoppedForContentBudget || batch.HasMore;
         }
 
-        // The backward pass runs last and over the same open session, so it costs no second connection and inspects
-        // only what the forward pass has already committed. It is deliberately not gated on the forward pass having
-        // finished its folder: a mailbox whose backfill spans many runs must still notice a deletion in the part of it
-        // that is already stored.
+        // The backward pass runs over the same open session, so it costs no second connection and inspects only what the
+        // forward pass has already committed. It is deliberately not gated on the forward pass having finished its
+        // folder: a mailbox whose backfill spans many runs must still notice a deletion in the part of it that is
+        // already stored.
         var reconciliation = await this.reconciler.ReconcileAsync(
             mailboxSession,
             accountId,
@@ -269,16 +326,123 @@ public sealed class MailboxSynchronizer
             reconciliation.ReconciledThroughModSeq,
             cancellationToken);
 
+        var refill = await this.RefillDeferredContentAsync(
+            mailboxSession,
+            accountId,
+            folder,
+            uidValidity,
+            budget,
+            cancellationToken);
+
         return MailboxSynchronizationResult.Synchronized(
             folder,
             storedCount,
             skippedOversizedCount,
-            unreadableMimeCount,
+            unreadableMimeCount + refill.UnreadableMimeEmailCount,
             relocatedCount,
             hasMore,
             checkpoint,
             reconciliation,
-            [.. suppressedChanges, .. reconciliation.SuppressedChanges]);
+            [.. suppressedChanges, .. reconciliation.SuppressedChanges],
+            new MailboxContentVolume(
+                budget.FetchedBytes,
+                budget.StoredBytes,
+                this.storedContentCeiling.OccupiedBytes,
+                deferredForStorageCount,
+                refill.RefilledEmailCount,
+                stoppedForContentBudget || refill.StoppedForContentBudget));
+    }
+
+    /// <summary>Determines whether an occurrence would cost this run a payload retrieval at all.</summary>
+    /// <remarks>
+    /// An email above the size limit is recorded from its envelope alone, so neither byte budget applies to it. Where
+    /// the server advertised no size the answer is yes, because the only way to find out what it costs is to fetch it.
+    /// </remarks>
+    private bool WouldFetchContentOf(RemoteEmailMetadata metadata) =>
+        metadata.SizeOctets <= this.options.MaxRawMimeBytes;
+
+    /// <summary>States what one occurrence is assumed to cost before anything has read its payload.</summary>
+    /// <remarks>
+    /// A server is not obliged to report a size, and IMAP's own answer for one that does not is silence rather than a
+    /// number. Treating that as nothing would exempt the message from both byte bounds — a server reporting no size for
+    /// any message would let one run fetch a mailbox without limit and walk past the storage ceiling one message at a
+    /// time — so an unreported size is charged the most a fetch of it could cost instead.
+    /// </remarks>
+    private long AssumedContentCostOf(RemoteEmailMetadata metadata) =>
+        metadata.SizeOctets > 0 ? metadata.SizeOctets : this.options.MaxRawMimeBytes;
+
+    /// <summary>Fetches the content of occurrences an earlier run recorded without theirs, as far as this run's limits allow.</summary>
+    /// <remarks>
+    /// <para>
+    /// It runs after the forward and backward passes and never before them. New mail comes first because discovering it
+    /// is what keeps the mailbox's timeline current, and the backward pass comes before this one because an occurrence
+    /// the folder has stopped holding must be settled before anything asks the server for its body.
+    /// </para>
+    /// <para>
+    /// Each refill is an ordinary store of the occurrence the row already names, so the content write is the same
+    /// idempotent one a first discovery makes and the row is not duplicated. Nothing here touches the checkpoint: the
+    /// forward pass already moved past these occurrences, and this pass closes the gap it left behind rather than
+    /// walking the folder again.
+    /// </para>
+    /// </remarks>
+    private async Task<DeferredContentRefill> RefillDeferredContentAsync(
+        IMailboxSession mailboxSession,
+        MailAccountId accountId,
+        MailFolderResolution folder,
+        ImapUidValidity uidValidity,
+        SynchronizationContentBudget budget,
+        CancellationToken cancellationToken)
+    {
+        var awaiting = await this.contentInventory.GetEmailsAwaitingContentAsync(
+            accountId,
+            folder.Id,
+            uidValidity,
+            this.options.MaxMetadataBatchSize,
+            cancellationToken);
+
+        var refilledCount = 0;
+        var unreadableMimeCount = 0;
+        var stoppedForContentBudget = false;
+
+        foreach (var metadata in awaiting)
+        {
+            if (!budget.HasRunBudgetFor(this.AssumedContentCostOf(metadata)))
+            {
+                stoppedForContentBudget = true;
+
+                break;
+            }
+
+            var occurrence = await this.StoreOccurrenceAsync(
+                mailboxSession,
+                metadata,
+                placement: null,
+                budget,
+                cancellationToken);
+
+            // The ceiling filled up again while this pass ran, which is true of the whole queue rather than of this
+            // occurrence, so the pass ends instead of asking about each of the rest in turn.
+            if (occurrence.Availability == StoredEmailContentAvailability.AwaitingStorageHeadroom)
+            {
+                break;
+            }
+
+            // Anything else is about this occurrence alone — it has left the folder, or its payload turned out to be
+            // above the size limit — and says nothing about the ones behind it, which may still be fetchable now.
+            if (occurrence.Availability != StoredEmailContentAvailability.Available)
+            {
+                continue;
+            }
+
+            refilledCount++;
+
+            if (occurrence.MimeCouldNotBeRead)
+            {
+                unreadableMimeCount++;
+            }
+        }
+
+        return new DeferredContentRefill(refilledCount, unreadableMimeCount, stoppedForContentBudget);
     }
 
     /// <summary>Reads the mutations whose destination is this folder and whose placement is one of the UIDs this batch discovered.</summary>
@@ -409,20 +573,64 @@ public sealed class MailboxSynchronizer
         IMailboxSession mailboxSession,
         RemoteEmailMetadata metadata,
         MailboxMutationRecord? placement,
+        SynchronizationContentBudget budget,
         CancellationToken cancellationToken)
     {
-        if (metadata.SizeOctets > this.options.MaxRawMimeBytes)
+        if (!this.WouldFetchContentOf(metadata))
         {
-            return await this.RecordOversizedOccurrenceAsync(metadata, placement, cancellationToken);
+            return await this.RecordOccurrenceWithoutContentAsync(
+                metadata,
+                placement,
+                StoredEmailContentAvailability.ExceededSizeLimit,
+                cancellationToken);
         }
 
+        // Room is claimed before the fetch rather than checked before the write, because a payload retrieved into a
+        // full store would have cost the network read and the buffer for nothing, and because a check that every
+        // concurrent run made against the same reading would let each of them believe it had the room the others were
+        // taking. The occurrence is still recorded, so the gap is queryable and a later run with room fetches exactly
+        // what this one left.
+        using var storageClaim = this.storedContentCeiling.TryClaim(this.AssumedContentCostOf(metadata));
+
+        if (storageClaim is null)
+        {
+            return await this.RecordOccurrenceWithoutContentAsync(
+                metadata,
+                placement,
+                StoredEmailContentAvailability.AwaitingStorageHeadroom,
+                cancellationToken);
+        }
+
+        // The reservation spans the fetch, the MIME read, and the commit, because the payload is referenced throughout
+        // and released only once the transaction that stored it has ended. What is reserved is the advertised size,
+        // which a server that understated it can exceed by up to the size limit; a server that advertised no size at
+        // all is charged that limit outright, since nothing short of the fetch says what it costs.
+        using var reservation = await this.rawMimeMemoryBudget.ReserveAsync(
+            this.AssumedContentCostOf(metadata),
+            cancellationToken);
+
         var fetch = await mailboxSession.FetchEmailContentWithoutSettingSeenAsync(metadata.OccurrenceId, this.options.MaxRawMimeBytes, cancellationToken);
+
+        if (fetch.Outcome == RemoteEmailContentFetchOutcome.NoLongerHeld)
+        {
+            return OccurrenceSynchronizationOutcome.NoLongerHeld;
+        }
+
         if (fetch is not { Outcome: RemoteEmailContentFetchOutcome.Retrieved, Content: { } content })
         {
             // The advertised size understated the payload, so the occurrence is recorded without content instead of
-            // being silently skipped past by the checkpoint.
-            return await this.RecordOversizedOccurrenceAsync(metadata, placement, cancellationToken);
+            // being silently skipped past by the checkpoint. The run is charged the size limit, because that is where
+            // the stream was abandoned and therefore what it read off the wire.
+            budget.RecordFetched(this.options.MaxRawMimeBytes);
+
+            return await this.RecordOccurrenceWithoutContentAsync(
+                metadata,
+                placement,
+                StoredEmailContentAvailability.ExceededSizeLimit,
+                cancellationToken);
         }
+
+        budget.RecordFetched(content.RawMime.Length);
 
         // Enrichment reads the payload this run already fetched, so it costs no second IMAP round trip and cannot reach
         // the remote \Seen flag. A message nobody can parse is counted and stepped over: the occurrence is stored with
@@ -450,6 +658,9 @@ public sealed class MailboxSynchronizer
             },
             cancellationToken);
 
+        budget.RecordStored(content.RawMime.Length);
+        storageClaim.Settle(content.RawMime.Length);
+
         // Offered after the commit and never inside it, which is what keeps a provider outage out of this run: the
         // message and the passages the chunk writer derived beside it are durable by now, so the worker consumes
         // committed state and nothing it does can extend or fail the transaction that produced it. A refusal by a full
@@ -463,9 +674,11 @@ public sealed class MailboxSynchronizer
             extraction.Outcome != EmailMimeExtractionOutcome.Extracted);
     }
 
-    private async Task<OccurrenceSynchronizationOutcome> RecordOversizedOccurrenceAsync(
+    /// <summary>Records one occurrence from its envelope alone, with the reason its payload is not stored beside it.</summary>
+    private async Task<OccurrenceSynchronizationOutcome> RecordOccurrenceWithoutContentAsync(
         RemoteEmailMetadata metadata,
         MailboxMutationRecord? placement,
+        StoredEmailContentAvailability availability,
         CancellationToken cancellationToken)
     {
         var storedEmailId = default(StoredEmailId);
@@ -477,7 +690,7 @@ public sealed class MailboxSynchronizer
                     persistenceSession,
                     metadata,
                     extractedMetadata: null,
-                    StoredEmailContentAvailability.ExceededSizeLimit,
+                    availability,
                     attemptCancellationToken);
 
                 await this.ObservePlacementAsync(persistenceSession, placement, attemptCancellationToken);
@@ -486,10 +699,7 @@ public sealed class MailboxSynchronizer
 
         // An occurrence whose content was never retrieved has no MIME to read, so it is neither enriched nor counted as
         // unreadable.
-        return new OccurrenceSynchronizationOutcome(
-            storedEmailId,
-            StoredEmailContentAvailability.ExceededSizeLimit,
-            MimeCouldNotBeRead: false);
+        return new OccurrenceSynchronizationOutcome(storedEmailId, availability, MimeCouldNotBeRead: false);
     }
 
     /// <summary>Writes down that the occurrence a copy created has been met, where this discovery was one.</summary>
@@ -539,12 +749,29 @@ public sealed class MailboxSynchronizer
 
     /// <summary>States what one occurrence's turn through the run produced.</summary>
     /// <param name="StoredEmailId">The local email the occurrence was stored as, which a suppressed arrival is named by.</param>
-    /// <param name="Availability">Whether the occurrence was stored with its content or as metadata only.</param>
+    /// <param name="Availability">
+    /// Whether the occurrence was stored with its content or as metadata only, and why. It is absent exactly when the
+    /// folder had stopped holding the occurrence, which is the one case where nothing was written at all.
+    /// </param>
     /// <param name="MimeCouldNotBeRead">Whether enrichment refused the payload that was stored.</param>
     private readonly record struct OccurrenceSynchronizationOutcome(
-        StoredEmailId StoredEmailId,
-        StoredEmailContentAvailability Availability,
-        bool MimeCouldNotBeRead);
+        StoredEmailId? StoredEmailId,
+        StoredEmailContentAvailability? Availability,
+        bool MimeCouldNotBeRead)
+    {
+        /// <summary>Reports an occurrence the folder no longer held when its payload was asked for.</summary>
+        public static OccurrenceSynchronizationOutcome NoLongerHeld { get; } =
+            new(StoredEmailId: null, Availability: null, MimeCouldNotBeRead: false);
+    }
+
+    /// <summary>States what the pass that closes earlier storage gaps did.</summary>
+    /// <param name="RefilledEmailCount">How many occurrences had their content fetched and stored by this pass.</param>
+    /// <param name="UnreadableMimeEmailCount">How many of those carried MIME that enrichment could not read.</param>
+    /// <param name="StoppedForContentBudget">Whether the pass ended because the run had spent the bytes it may fetch.</param>
+    private readonly record struct DeferredContentRefill(
+        int RefilledEmailCount,
+        int UnreadableMimeEmailCount,
+        bool StoppedForContentBudget);
 }
 
 /// <summary>States whether a synchronization run reached its folder at all.</summary>
@@ -579,6 +806,7 @@ public enum MailboxSynchronizationOutcome
 /// both passes together, since one relocation arrives as an appearance in the forward pass and a disappearance in the
 /// backward one. Without it a rule that files mail would match the mail it had just filed, indefinitely.
 /// </param>
+/// <param name="ContentVolume">How many bytes of mail content the run moved, and which of its byte limits it reached.</param>
 /// <remarks>
 /// The binding is reported because resolution happens inside the run and a caller that wants to keep watching the
 /// folder afterwards must watch the remote folder the alias actually resolved to. Re-resolving it outside the run would
@@ -595,7 +823,8 @@ public sealed record MailboxSynchronizationResult(
     bool HasMoreEmails,
     SynchronizationCheckpoint? Checkpoint,
     MailboxReconciliationResult Reconciliation,
-    IReadOnlyList<SuppressedMailboxChange> SuppressedChanges)
+    IReadOnlyList<SuppressedMailboxChange> SuppressedChanges,
+    MailboxContentVolume ContentVolume)
 {
     /// <summary>Reports a run that reached its folder.</summary>
     /// <param name="folder">The binding the run worked under.</param>
@@ -607,8 +836,9 @@ public sealed record MailboxSynchronizationResult(
     /// <param name="checkpoint">The progress the run ended on.</param>
     /// <param name="reconciliation">What the run's backward pass found.</param>
     /// <param name="suppressedChanges">The changes the run recognized as MailFathom's own and did not raise.</param>
+    /// <param name="contentVolume">How many bytes the run moved and which of its byte limits it reached.</param>
     /// <returns>A synchronized result.</returns>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="folder" /> or <paramref name="suppressedChanges" /> is <see langword="null" />.</exception>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="folder" />, <paramref name="suppressedChanges" />, or <paramref name="contentVolume" /> is <see langword="null" />.</exception>
     public static MailboxSynchronizationResult Synchronized(
         MailFolderResolution folder,
         int storedEmailCount,
@@ -618,10 +848,12 @@ public sealed record MailboxSynchronizationResult(
         bool hasMoreEmails,
         SynchronizationCheckpoint checkpoint,
         MailboxReconciliationResult reconciliation,
-        IReadOnlyList<SuppressedMailboxChange> suppressedChanges)
+        IReadOnlyList<SuppressedMailboxChange> suppressedChanges,
+        MailboxContentVolume contentVolume)
     {
         ArgumentNullException.ThrowIfNull(folder);
         ArgumentNullException.ThrowIfNull(suppressedChanges);
+        ArgumentNullException.ThrowIfNull(contentVolume);
 
         return new MailboxSynchronizationResult(
             MailboxSynchronizationOutcome.Synchronized,
@@ -633,7 +865,8 @@ public sealed record MailboxSynchronizationResult(
             hasMoreEmails,
             checkpoint,
             reconciliation,
-            suppressedChanges);
+            suppressedChanges,
+            contentVolume);
     }
 
     /// <summary>Reports a configured alias that named no single advertised folder.</summary>
@@ -666,6 +899,7 @@ public sealed record MailboxSynchronizationResult(
             HasMoreEmails: false,
             Checkpoint: null,
             MailboxReconciliationResult.NothingToReconcile,
-            SuppressedChanges: []);
+            SuppressedChanges: [],
+            MailboxContentVolume.None);
     }
 }

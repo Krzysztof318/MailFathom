@@ -234,6 +234,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IEmailMetadataRepository, StoredEmailMetadataRepository>();
         services.AddScoped<IDatabaseSchemaInspector, EfCoreDatabaseSchemaInspector>();
         services.AddScoped<IEmailContentStore, EmailContentStore>();
+        services.AddScoped<IStoredEmailContentInventory, StoredEmailContentInventory>();
         services.AddScoped<IStoredEmailExtractionBackfillStore, StoredEmailExtractionBackfillStore>();
         services.AddScoped<IStoredEmailReconciliationStore, StoredEmailReconciliationStore>();
         // The read side takes no persistence session and joins no transaction, so its ports are registered beside the
@@ -367,6 +368,9 @@ public static class ServiceCollectionExtensions
         // A singleton, because the gauges it publishes are the process's and the account snapshots behind them outlive
         // any one run; the pass that fills them is scoped like everything else that reaches a mail server.
         services.AddSingleton<MailboxConvergenceTelemetry>();
+        // A singleton for the same reason: the level it publishes belongs to the deployment's one content store rather
+        // than to any run, and the counters beside it accumulate across every account.
+        services.AddSingleton<MailboxContentVolumeTelemetry>();
         services.AddScoped<MailboxMutationConverger>();
         services.AddScoped<IRemoteFolderCatalog>(provider => new MailKitRemoteFolderCatalog(
             static () => new ImapClient(),

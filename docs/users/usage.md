@@ -36,8 +36,10 @@ flags — and carries `storedEmailId`, the identifier a content read uses. Two f
 
 - `attachments` counts real attachments separately from inline images, so a message whose only payload is a logo in
   its signature does not read as one carrying a document.
-- `contentAvailability` says whether the raw content is stored locally, and why not when it is not — a message that
-  exceeded the configured size limit reports so here, instead of failing a later read unexplained.
+- `contentAvailability` says whether the raw content is stored locally, and why not when it is not, instead of failing a
+  later read unexplained. A message larger than the configured size limit reports so here and will report the same on
+  every later read; one that arrived while local storage stood at its ceiling reports that it is waiting for room, and a
+  later synchronization run fetches it.
 
 Paging is a cursor: pass `nextCursor` back unchanged, with the same filters and direction. A cursor is bound to the
 filters that issued it, so changing a filter mid-walk is refused (`52002`) rather than answered with a page from a
@@ -88,7 +90,8 @@ Five parts of the result exist so that an agent does not misreport a message:
   than any single call returns; `readCharacterBudget` means the messages named before it used up the call's shared
   budget, and naming fewer at once returns more of this one.
 - **An absent body has a reason.** `availability` distinguishes a message that displayed nothing from one MailFathom
-  cannot decrypt and from one whose content the size limit deliberately kept out of storage.
+  cannot decrypt, from one whose content the size limit deliberately kept out of storage, and from one that is simply
+  waiting for storage room — which is the one case where asking again later returns the body.
 - **Attachments are counted always, named on request.** `attachmentCounts` says how many there are whatever you asked
   for; `attachments` is `null` when you did not ask and `[]` when the message carries none. A file name is text the
   sender chose, so an ordinary read of a body does not publish it.
