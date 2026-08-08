@@ -162,7 +162,7 @@ try
     // writing nothing takes the conservative defaults rather than none.
     builder.Services.AddOptions<MailAnsweringOptions>()
         .Bind(
-            builder.Configuration.GetSection("MailAnswering"),
+            builder.Configuration.GetSection(MailAnsweringOptions.SectionName),
             binderOptions => binderOptions.ErrorOnUnknownConfiguration = true)
         .ValidateDataAnnotations()
         .ValidateOnStart();
@@ -391,8 +391,24 @@ try
     // caps the relevance filter's candidate count and what supplies that count's default, and both are decided while
     // the services are being registered. An absent section binds to the defaults rather than to nothing, so this never
     // has to be treated as optional the way a provider declaration is.
-    var declaredAnswering = builder.Configuration.GetSection("MailAnswering").Get<MailAnsweringOptions>()
+    var declaredAnswering = builder.Configuration.GetSection(MailAnsweringOptions.SectionName).Get<MailAnsweringOptions>()
         ?? new MailAnsweringOptions();
+
+    // Validated here rather than through ValidateOnStart, for the reason the endpoint sections below are: the mapping
+    // on the next line happens while the builder is being composed, so the container that would have run the pipeline
+    // does not exist yet. Without this a typo would first be noticed by an ArgumentOutOfRangeException out of a Create
+    // method and reach an operator as a framework stack trace instead of the aggregated report every other section
+    // produces.
+    var answeringConfigurationErrors = declaredAnswering.FindConfigurationErrors();
+
+    if (answeringConfigurationErrors.Count > 0)
+    {
+        throw new OptionsValidationException(
+            MailAnsweringOptions.SectionName,
+            typeof(MailAnsweringOptions),
+            answeringConfigurationErrors);
+    }
+
     var answeringBudget = MailAnsweringBudgetMapper.Map(declaredAnswering);
 
     // The one rule spanning two sections. A filter declared to judge more candidates than a lookup hands over states a

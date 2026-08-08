@@ -28,6 +28,9 @@ namespace MailFathom.Host.Configuration.Answering;
 [SuppressMessage("Performance", "CA1812:Avoid uninstantiated internal classes", Justification = "The options framework materializes this type during configuration binding.")]
 internal sealed class MailAnsweringOptions : IValidatableObject
 {
+    /// <summary>The configuration section this declaration is bound from.</summary>
+    public const string SectionName = "MailAnswering";
+
     /// <summary>Gets or sets the greatest number of passages one lookup may hand over.</summary>
     /// <remarks>
     /// How many messages a single lookup can draw on. Capped by what one search can rank, because a retrieval is
@@ -88,6 +91,24 @@ internal sealed class MailAnsweringOptions : IValidatableObject
     /// <summary>Gets or sets the greatest number of tokens the runs of one period may consume between them.</summary>
     [Range(1, 10_000_000_000)]
     public long MaxTokensPerPeriod { get; set; } = 300_000;
+
+    /// <summary>Reports every reason this declaration could not be mapped, by reading the declaration alone.</summary>
+    /// <returns>One message per rule this declaration breaks, which is empty for a usable one.</returns>
+    /// <remarks>
+    /// The composition root maps this section into value objects while the builder is being composed, which is before
+    /// the container exists and therefore before <c>ValidateOnStart</c> could have run. Without this the first thing to
+    /// notice a typo would be a <see cref="ArgumentOutOfRangeException" /> out of a <c>Create</c> method, which reaches
+    /// an operator as a framework stack trace rather than as the aggregated report every other section produces. It
+    /// runs the attributes and <see cref="Validate" /> together, so the same rules answer whichever path reaches them.
+    /// </remarks>
+    public IReadOnlyList<string> FindConfigurationErrors()
+    {
+        List<ValidationResult> results = [];
+
+        Validator.TryValidateObject(this, new ValidationContext(this), results, validateAllProperties: true);
+
+        return [.. results.Select(result => result.ErrorMessage ?? string.Empty)];
+    }
 
     /// <inheritdoc />
     public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
