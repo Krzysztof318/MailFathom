@@ -54,7 +54,7 @@
           },
           "rule": {
             "type": "string",
-            "description": "The file and its section, or the specification or ADR, that the finding rests on."
+            "description": "The file and its section, or the ADR, that the finding rests on."
           }
         }
       }

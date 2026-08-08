@@ -57,7 +57,7 @@ internal sealed class StoredEmailTimelineReader(MailFathomDbContext dbContext) :
     /// written as an ordering key because PostgreSQL's default under <c>DESC</c> is <c>NULLS FIRST</c> — the opposite of
     /// the contract — and EF Core publishes no way to state a null sort order in a query. The timeline indexes spell out
     /// <c>NULLS LAST</c>, so the two agree on the order; whether PostgreSQL can serve this expression from those indexes
-    /// without a sort step is a query-plan question specification 20 answers, and the answer there is a matching
+    /// without a sort step is a query-plan question the integration suite answers, and the answer there is a matching
     /// expression index rather than a different order here.
     /// </para>
     /// <para>

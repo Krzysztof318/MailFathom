@@ -30,9 +30,9 @@ body:
       label: Context
       description: >-
         What is true today, and why that is a problem or an opportunity. Name whatever governs this —
-        the specification under `specs/`, the ADR under `docs/decisions/`, or the issue it follows
-        from — and where nothing does, what you write here is it. Link a specification rather than
-        copying its text — a copy goes stale in silence.
+        the ADR under `docs/decisions/`, the architecture draft under `specs/`, or the issue it
+        follows from — and where nothing does, what you write here is it. Link that text rather than
+        copying it — a copy goes stale in silence.
     validations:
       required: true
 

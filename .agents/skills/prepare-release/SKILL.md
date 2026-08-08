@@ -217,7 +217,7 @@ every release — the ordering, what gets published, and what follows the tag �
 ```markdown
 ## Context
 
-**No numbered specification backs this issue.** It is the release itself: cutting, tagging, and publishing `x.y.z`
+**Nothing outside this issue governs it.** It is the release itself: cutting, tagging, and publishing `x.y.z`
 from the work placed in the `x.y.z` milestone. #<the previous release's issue> was the same issue for the release
 before it.
 
@@ -343,7 +343,7 @@ alternative is for.
 
 One shape is deliberately left to the table above rather than added here: prose naming a version as the threshold a
 capability arrives at — "from `0.2.0` each release attaches". Catching it needs a pattern anchored on a version number,
-and every such pattern also matches the package versions filling `THIRD_PARTY_LICENSES.md` and the specifications,
+and every such pattern also matches the package versions filling `THIRD_PARTY_LICENSES.md`,
 which is a page of noise to catch a sentence the table can simply name. A version threshold is a file to list, not a
 phrase to search for.
 
@@ -353,8 +353,8 @@ Read every hit against the tree being tagged and settle it one of three ways:
 - **Still true, and about a *later* release.** A page saying a capability arrives with the next version is accurate and
   stays. Confirm the version it names is still the right one — a feature deferred out of this release has to name where
   it went.
-- **Not about the release at all.** The pattern is deliberately wide, so it matches specification prose, an ADR's
-  reasoning, and an example. Leave it.
+- **Not about the release at all.** The pattern is deliberately wide, so it matches the architecture draft's prose, an
+  ADR's reasoning, and an example. Leave it.
 
 The exclusions are deliberate. `CHANGELOG.md` is the one file whose historical entries *should* read as claims about
 past releases, and rewriting one would be falsifying a record. `docs/decisions/` is excluded because an accepted ADR is

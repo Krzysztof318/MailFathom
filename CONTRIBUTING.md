@@ -8,7 +8,7 @@ By participating you agree to the [Code of Conduct](CODE_OF_CONDUCT.md).
 
 ## How this project is built
 
-**MailFathom is developed AI-first, and close to zero-touch.** Nearly every line here was written by an autonomous coding agent working from an issue, a specification, and the rules in [`AGENTS.md`](AGENTS.md); the maintainer sets direction, reviews, and decides, but rarely edits code by hand. That is the normal path rather than an experiment, and it is why the instruction files read as a prescriptive contract instead of as advice: they are what the agents execute.
+**MailFathom is developed AI-first, and close to zero-touch.** Nearly every line here was written by an autonomous coding agent working from an issue and the rules in [`AGENTS.md`](AGENTS.md); the maintainer sets direction, reviews, and decides, but rarely edits code by hand. That is the normal path rather than an experiment, and it is why the instruction files read as a prescriptive contract instead of as advice: they are what the agents execute.
 
 **You are encouraged to work the same way.** Point an agent at your checkout — Claude Code, Codex, and anything else that reads `AGENTS.md` pick the rules up on their own — give it the issue, and let it produce the change, the tests, and the documentation in one pass. A hand-written patch is equally welcome and is judged identically; the point is that the conventions here are dense enough that an agent which has actually read them will satisfy them faster than a person skimming them.
 
@@ -229,7 +229,7 @@ The files that carry the licensing decision itself are not merely off limits by 
 | [`docs/operations/issue-tracking.md`](docs/operations/issue-tracking.md) | Which work needs an issue, what its body carries, and how a maintainer triages one that arrives from outside the project |
 | [`docs/operations/agent-workflow.md`](docs/operations/agent-workflow.md) | The verification scripts and the skills at length, and how the automated review behaves |
 | [`docs/decisions/`](docs/decisions/) | Architectural decision records — required context before an architectural change |
-| [`specs/`](specs/) | What a planned change must do. A specification is intent; a page under `docs/` is fact |
+| [`specs/`](specs/) | The architecture draft: what MailFathom is being built into. The draft is intent; a page under `docs/` is fact |
 
 Those files are written for the autonomous agents that do most of the work here, so they are longer and more prescriptive than a contribution guide needs to be. They remain authoritative: where this guide and one of them disagree, they win, and please report the discrepancy.
 

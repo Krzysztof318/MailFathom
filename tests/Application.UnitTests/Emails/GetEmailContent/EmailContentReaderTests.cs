@@ -84,7 +84,7 @@ public sealed class EmailContentReaderTests
         Assert.Equal(attachmentSummary.TotalSizeOctets, content.Attachments.Sum(attachment => attachment.DecodedSizeOctets));
 
         // The row counted the same message, so the derived answer and the persisted one agree here — which is the
-        // consistency the specification asks for. Where they could disagree, the derived one is what is published.
+        // consistency the content contract asks for. Where they could disagree, the derived one is what is published.
         Assert.Equal(summary.Attachments.AttachmentCount, attachmentSummary.AttachmentCount);
         Assert.Equal(summary.Attachments.InlineResourceCount, attachmentSummary.InlineResourceCount);
     }

@@ -44,7 +44,8 @@ in that same selector, and a page outside the current release says so in a banne
 The [repository](https://github.com/Krzysztof318/MailFathom) holds what is deliberately not published here: the
 architectural decision records under
 [`docs/decisions/`](https://github.com/Krzysztof318/MailFathom/tree/main/docs/decisions), which are a closed record of
-why a decision was taken rather than documentation of how MailFathom behaves; the specifications under
-[`specs/`](https://github.com/Krzysztof318/MailFathom/tree/main/specs), which state intent rather than fact; and the
+why a decision was taken rather than documentation of how MailFathom behaves; the
+[architecture draft](https://github.com/Krzysztof318/MailFathom/blob/main/specs/2026-07-22-mail-fathom-architecture-draft.md),
+which states intent rather than fact; and the
 instructions that govern the agents and contributors working on it. MailFathom is published under the
 [Apache License 2.0](https://github.com/Krzysztof318/MailFathom/blob/main/LICENSE).

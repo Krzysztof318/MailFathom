@@ -81,10 +81,10 @@ them if that access were ever removed.
    - Return `blocked` until every path is inventoried and the user explicitly approves its
      preservation plan, or the changes are moved to a separate worktree. Never assume existing
      changes are unrelated.
-5. Classify the task by what governs it: a numbered roadmap specification, an ADR or an existing
-   issue where no specification does, or documentation-only work. Work no specification backs is an
-   ordinary case and a feature can be one, so never write a specification to supply the
-   classification — say that nothing governs it and let the issue body carry the scope instead.
+5. Classify the task by what governs it: an ADR, the architecture draft, an existing issue, or
+   documentation-only work. Work nothing backs is an ordinary case and a feature can be one, so never
+   invent a governing document to supply the classification — say that nothing governs it and let the
+   issue body carry the scope instead.
 6. Read whatever step 5 named, plus affected implemented-behavior documentation and relevant ADRs.
 7. Check the task against the protected paths before planning the work, not after the check refuses
    it. `.github/`, `.config/`, `.agents/`, `.claude/`, and `docs/decisions/`, an `.editorconfig`,
@@ -95,8 +95,7 @@ them if that access were ever removed.
    session spent on a diff that cannot merge.
 8. Identify the GitHub issue that governs the task, reading
    `docs/operations/issue-tracking.md` first. Create it when none exists; its body draws on what
-   step 6 read. A change set that adds a numbered specification also creates that specification's
-   issue.
+   step 6 read.
 9. Place the issue. The label and the milestone need write access to the repository, so they belong
    to the owner's checkout; the board fields need write access to the board, which step 2
    established. It carries exactly one `type:*` label, an `Area` and a `Queue` value on the board, a

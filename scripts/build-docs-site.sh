@@ -89,7 +89,7 @@ if unresolved_links="$(
   printf '\nThe build resolved no target for these links, so publishing it would put a 404 behind each one:\n\n' >&2
   printf '%s\n' "$unresolved_links" >&2
   printf '\nA link between two published pages stays relative; a link to anything the site does not carry — an\n' >&2
-  printf 'architectural decision record, a specification, a deployment asset, a source file — is written as an\n' >&2
+  printf 'architectural decision record, the architecture draft, a deployment asset, a source file — is written as an\n' >&2
   printf 'absolute https://github.com/Krzysztof318/MailFathom URL so that it works in both renderings.\n' >&2
   exit 1
 fi

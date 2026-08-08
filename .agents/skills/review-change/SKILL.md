@@ -12,7 +12,7 @@ metadata:
 ## Workflow
 
 1. Resolve the repository root, comparison base, staged diff, and unstaged diff.
-2. Read the applicable `AGENTS.md`, selected specification, implemented-behavior documentation, and relevant ADRs.
+2. Read the applicable `AGENTS.md`, the issue that governs the change, implemented-behavior documentation, and relevant ADRs.
 3. Review only changed behavior and its direct consequences. Check:
    - correctness, failure handling, cancellation, and security;
    - architecture boundaries and domain-correct naming;

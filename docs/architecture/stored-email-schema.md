@@ -4,7 +4,7 @@
 
 `stored_emails` holds the normalized metadata a mailbox timeline is read from. Its raw MIME lives in a separate one-to-one table, `email_message_contents`, and the text derived from that MIME lives in a third, `email_search_documents`, so nothing that lists or filters mail ever loads a `bytea` value, a body's worth of text, or a search vector — let alone tracks one in the change tracker.
 
-This page describes the table as the EF Core model declares it and as the reviewed baseline migration creates it. [Specification 19](https://github.com/Krzysztof318/MailFathom/blob/main/specs/19-ef-core-migration-baseline-and-apply-policy.md) generated that migration, so PostgreSQL has now had its say: the types, constraints, and indexes below are the ones a schema dump reports rather than the ones a model was hoped to produce. How the schema reaches a database is at the end of this page.
+This page describes the table as the EF Core model declares it and as the reviewed baseline migration creates it. PostgreSQL has had its say about that migration, so the types, constraints, and indexes below are the ones a schema dump reports rather than the ones a model was hoped to produce. How the schema reaches a database is at the end of this page.
 
 ## What a row records
 
@@ -32,7 +32,7 @@ The five columns are an observation and never an instruction. Reading mail canno
 
 The sender is stored as three columns: the display name and address as the message wrote them, and the upper-cased comparison form that every filter and index matches on. The `From` header supplies it. `Sender` is the fallback and only stands in for a message that named no author at all, because it names whoever submitted a message written on someone else's behalf and therefore answers a different question.
 
-Recipients are PostgreSQL `text[]` columns — `to_addresses`, `cc_addresses`, `reply_to_addresses` — rather than a join table, because every planned query tests containment rather than joining to recipient rows. They hold the comparison form only. A recipient's display name is mail content that no planned query filters or sorts on, and a second copy of it would widen the access, export, and erasure surface for nothing; a reader that needs the names re-derives them from the stored raw MIME, which [specification 14](https://github.com/Krzysztof318/MailFathom/blob/main/specs/14-email-content-read-model.md) parses anyway.
+Recipients are PostgreSQL `text[]` columns — `to_addresses`, `cc_addresses`, `reply_to_addresses` — rather than a join table, because every planned query tests containment rather than joining to recipient rows. They hold the comparison form only. A recipient's display name is mail content that no planned query filters or sorts on, and a second copy of it would widen the access, export, and erasure surface for nothing; a reader that needs the names re-derives them from the stored raw MIME, which the [email content](../features/email-content.md) read model parses anyway.
 
 ### Bounds on what a header may contribute
 
@@ -42,7 +42,7 @@ A value over a ceiling is **dropped, not truncated**, and the row keeps the rest
 
 Letting the value through would be worse than losing it. The column would reject the write, the retry budget would run out, the folder checkpoint would never advance past the message, and every later run would stop on the same one — one malformed header would halt synchronization of the folder behind it.
 
-Truncating would be worse still. A prefix of a message identifier is an identifier another message may legitimately carry, so a truncated one would assemble a thread out of unrelated conversations, and a truncated address would name a mailbox nobody wrote. The columns are a filter index over what a message said, not a second copy of it; the complete headers stay in the raw MIME that specification 14 reads.
+Truncating would be worse still. A prefix of a message identifier is an identifier another message may legitimately carry, so a truncated one would assemble a thread out of unrelated conversations, and a truncated address would name a mailbox nobody wrote. The columns are a filter index over what a message said, not a second copy of it; the complete headers stay in the raw MIME the content read model parses.
 
 Where a bound cuts a sequence, it keeps the end that answers the question. Recipients keep header order from the first, because that is the order a reader sees them in. Thread references keep the ancestors nearest to this message, because that is the end of the path a thread view walks first.
 
@@ -343,7 +343,7 @@ that the message can be fetched and read whole through the reads that already se
 
 The recipient and search-vector indexes are GIN rather than B-tree because both serve containment tests. A B-tree over an array column serves only equality against a whole array, and over a `tsvector` it serves nothing search asks for; a GIN index is what turns either into an index scan.
 
-The partial indexes over remotely deleted messages that the architecture draft lists are still deliberately absent; they wait for specification 10, which introduces the state they would filter on. The per-profile HNSW index is absent from the migrations for a different reason, and permanently.
+The partial indexes over remotely deleted messages that the architecture draft lists are still deliberately absent; they wait for the remote-expunge reconciliation that introduces the state they would filter on. The per-profile HNSW index is absent from the migrations for a different reason, and permanently.
 
 ### The index no migration creates
 
