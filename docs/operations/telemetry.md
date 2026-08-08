@@ -67,7 +67,7 @@ impossible rather than merely discouraged: there is no second source to give a d
 because disposing a shared source would silence every other publisher, so a type that reports through them implements
 no disposal on their account.
 
-What publishes to that name is documented with the subsystem that does it, and today two subsystems do.
+What publishes to that name is documented with the subsystem that does it.
 
 Every change MailFathom makes to a remote mailbox opens a span named after the mutation, and is counted along with how
 long it took, broken down by the mutation, the account, the folder alias, and whether it succeeded. It is deliberately
@@ -174,6 +174,50 @@ An endpoint that reports no usage advances neither token figure, which is why th
 call-count form as well. [Mail answering § What one question may
 spend](../features/mail-answering.md#what-one-question-may-spend) holds the ceilings these are read against, and
 [`MailAnswering`](configuration-reference.md#mailanswering) the keys.
+
+### What a run records
+
+Those instruments describe what answering costs across a deployment. One span describes a single run, and it is the only
+place a slow or degraded question is attributable to itself. Every run opens `answer_mail_question` on the `MailFathom`
+activity source, inside the MCP tool call it happened in — so the SDK's own span for the call is its parent, the
+provider calls the run makes are its children, and its duration is the run's own.
+
+| Tag | What it carries |
+| --- | --- |
+| `mailfathom.answering.endpoint` | The alias of the chat endpoint the run was conducted through |
+| `mailfathom.answering.instructions_version` | The version of the instruction the run was conducted under |
+| `mailfathom.answering.candidates` | How many candidates the run's lookups ranked, before any relevance filtering |
+| `mailfathom.answering.candidates.relevant` | How many of those survived being judged, which equals the figure above where nothing judged them |
+| `mailfathom.answering.passages` | How many passages reached the model |
+| `mailfathom.answering.outcome` | How the run ended: `Answered`, `AnswerEmpty`, `ProviderFailed`, `RunBudgetExhausted`, `Cancelled`, or `Failed` |
+| `mailfathom.answering.degradation` | `None`, `RetrievalCeilingReached`, `RelevanceFilterFellBack`, or both |
+
+Three counts rather than one, because they narrow for three different reasons and only the gaps between them say
+anything: what the queries resembled, what the second pass decided actually answered, and what the run's own ceiling on
+retrieved mail then allowed to leave the process. A dashboard showing only the last cannot tell a question that found
+little from one that was stopped from sending much.
+
+The degradation is one bounded tag rather than a log line, which is what lets a degraded run be counted and alerted on
+rather than read about. It is a set because the two genuinely compose, and it is separate from the outcome because
+failing is an ending while degrading is what a run that reached an ending did on the way.
+
+A run that failed publishes exactly as one that answered. That is deliberate: the run that ended badly is the one an
+operator most needs attributed, and a report built only from a successful answer would be silent about it.
+
+Nothing here republishes consumed budget; the instruments above own that, and a second one for it would be duplication.
+Nothing here carries a question, an answer, a query the model wrote, a retrieved passage, or a message identifier
+either — which is a cardinality rule as much as a privacy one, and is why *which* messages a run read is kept in a
+durable record instead. [Mail answering § An account can keep a record of what a question
+read](../features/mail-answering.md#an-account-can-keep-a-record-of-what-a-question-read-and-none-does-by-default)
+describes that record and why the split falls where it does.
+
+One counter beside the span answers a question about the record rather than about the run.
+`mailfathom.answering.audit.refused_appends` counts the entries a finished run owed and the record could not be given,
+by endpoint alias, alongside a warning naming the run. It is zero on a deployment where no account keeps a record,
+because nothing is owed there. On one that does it is the reading worth alerting on outright: the question was answered
+and the history of what it read is missing, which is exactly the gap an audit cannot recover afterwards. It exists
+because writing an entry may never fail the answer it describes, so swallowing the failure is only defensible while it
+is counted.
 
 What such a signal may carry is bounded by the same rule that governs the log lines, and it is a cardinality rule as
 much as a privacy one. Counts, sizes, durations, outcomes, error codes, and MailFathom's own configured account and

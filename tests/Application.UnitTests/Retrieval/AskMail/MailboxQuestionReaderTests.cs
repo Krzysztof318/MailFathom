@@ -4,13 +4,16 @@
 
 using MailFathom.Application.Accounts;
 using MailFathom.Application.AiProviders;
+using MailFathom.Application.Chat;
 using MailFathom.Application.Emails.Embeddings;
 using MailFathom.Application.Emails.Mailboxes;
 using MailFathom.Application.Emails.Search;
 using MailFathom.Application.Retrieval;
 using MailFathom.Application.Retrieval.AskMail;
+using MailFathom.Application.Retrieval.AskMail.Audit;
 using MailFathom.Application.UnitTests.TestDoubles;
 using MailFathom.Domain.Accounts;
+using MailFathom.Domain.Answering.Audit;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Folders;
 using Microsoft.Extensions.Time.Testing;
@@ -344,6 +347,178 @@ public sealed class MailboxQuestionReaderTests
         Assert.False(result.AnswerWasTruncated);
     }
 
+    /// <summary>The record of a clean run: what it read, which of that the answer named, and what produced it.</summary>
+    [Fact]
+    public async Task AnswerQuestionAsync_AnAnsweredQuestion_ReportsAndRecordsWhatTheRunRead()
+    {
+        // Arrange
+        var read = PassageOf(1, "we will pay 4200");
+        var answerer = new RecordingMailQuestionAnswerer().Answering("They agreed to pay 4200.", read);
+        var runTelemetry = new RecordingMailAnsweringRunTelemetry();
+        var auditTrail = new RecordingMailAnsweringAuditTrail();
+        var reader = ReaderOver(answerer, runTelemetry: runTelemetry, auditTrail: auditTrail);
+
+        // Act
+        await AnswerAsync(reader, new AskMailRequest { QuestionText = "what was agreed" });
+
+        // Assert
+        var recorded = Assert.Single(auditTrail.Runs);
+
+        Assert.Equal(MailAnsweringRunOutcome.Answered, recorded.Outcome);
+        Assert.Equal([read.StoredEmailId], recorded.RetrievedEmailIds);
+        Assert.Equal([read.StoredEmailId], recorded.CitedEmailIds);
+        Assert.Equal(
+            (RecordingMailQuestionAnswerer.EndpointAlias, RecordingMailQuestionAnswerer.InstructionsVersion),
+            (recorded.ChatEndpointAlias, recorded.InstructionsVersion));
+        Assert.Equal(
+            (1, 1, 1, MailAnsweringRunOutcome.Answered),
+            (runTelemetry.Published?.CandidateCount,
+                runTelemetry.Published?.RelevantCandidateCount,
+                runTelemetry.Published?.PassageCount,
+                runTelemetry.Published?.Outcome));
+    }
+
+    /// <summary>A message the run read and the response could not name is exactly what the difference is for.</summary>
+    [Fact]
+    public async Task AnswerQuestionAsync_MoreEmailsReadThanTheResponseNames_RecordsTheCitedOnesAsASubset()
+    {
+        // Arrange
+        var answerer = new RecordingMailQuestionAnswerer().Answering(
+            "An answer.",
+            [.. Enumerable.Range(1, 3).Select(position => PassageOf(position, "an extract"))]);
+        var auditTrail = new RecordingMailAnsweringAuditTrail();
+        var reader = ReaderOver(answerer, bounds: MailAnswerBounds.Create(20_000, 2), auditTrail: auditTrail);
+
+        // Act
+        await AnswerAsync(reader, new AskMailRequest { QuestionText = "what was agreed" });
+
+        // Assert
+        var recorded = Assert.Single(auditTrail.Runs);
+
+        Assert.Equal(3, recorded.RetrievedEmailIds.Count);
+        Assert.Equal(
+            [StoredEmailId.Create(EmailIdentityAt(1)), StoredEmailId.Create(EmailIdentityAt(2))],
+            recorded.CitedEmailIds);
+    }
+
+    /// <summary>Each way a run reads less of a mailbox reaches the report and the record as itself.</summary>
+    [Theory]
+    [InlineData(false, false, MailAnsweringRunDegradation.None)]
+    [InlineData(true, false, MailAnsweringRunDegradation.RetrievalCeilingReached)]
+    [InlineData(false, true, MailAnsweringRunDegradation.RelevanceFilterFellBack)]
+    [InlineData(
+        true,
+        true,
+        MailAnsweringRunDegradation.RetrievalCeilingReached | MailAnsweringRunDegradation.RelevanceFilterFellBack)]
+    public async Task AnswerQuestionAsync_ADegradedRun_ReportsAndRecordsHowItDegraded(
+        bool reachedTheCeiling,
+        bool filterFellBack,
+        MailAnsweringRunDegradation expected)
+    {
+        // Arrange
+        var answerer = new RecordingMailQuestionAnswerer().Answering("An answer.", PassageOf(1, "an extract"));
+
+        if (reachedTheCeiling)
+        {
+            answerer.HavingReachedTheRetrievalCeiling();
+        }
+
+        if (filterFellBack)
+        {
+            answerer.HavingFallenBackToTheUnjudgedRanking();
+        }
+
+        var runTelemetry = new RecordingMailAnsweringRunTelemetry();
+        var auditTrail = new RecordingMailAnsweringAuditTrail();
+        var reader = ReaderOver(answerer, runTelemetry: runTelemetry, auditTrail: auditTrail);
+
+        // Act
+        var result = await AnswerAsync(reader, new AskMailRequest { QuestionText = "what was agreed" });
+
+        // Assert
+        Assert.Equal(expected, Assert.Single(auditTrail.Runs).Degradation);
+        Assert.Equal(expected, runTelemetry.Published?.Degradation);
+        Assert.Equal(reachedTheCeiling, result.RetrievalWasTruncated);
+    }
+
+    /// <summary>
+    /// The record of a run that failed is the one most worth having: it read somebody's mail before it failed, and the
+    /// ending is what an operator diagnoses from.
+    /// </summary>
+    [Theory]
+    [InlineData(nameof(ChatGenerationFailure.AnswerEmpty), MailAnsweringRunOutcome.AnswerEmpty)]
+    [InlineData(nameof(ChatGenerationFailure.RateLimited), MailAnsweringRunOutcome.ProviderFailed)]
+    public async Task AnswerQuestionAsync_ARunTheProviderEnded_ReportsAndRecordsTheEndingAndWhatItHadRead(
+        string failure,
+        MailAnsweringRunOutcome expected)
+    {
+        // Arrange
+        var read = PassageOf(1, "we will pay 4200");
+        var answerer = new RecordingMailQuestionAnswerer()
+            .Answering("never published", read)
+            .Failing(new ChatGenerationFailedException(
+                "answering",
+                Enum.Parse<ChatGenerationFailure>(failure)));
+        var runTelemetry = new RecordingMailAnsweringRunTelemetry();
+        var auditTrail = new RecordingMailAnsweringAuditTrail();
+        var reader = ReaderOver(answerer, runTelemetry: runTelemetry, auditTrail: auditTrail);
+
+        // Act
+        await Assert.ThrowsAsync<ChatGenerationFailedException>(() =>
+            AnswerAsync(reader, new AskMailRequest { QuestionText = "what was agreed" }));
+
+        // Assert
+        var recorded = Assert.Single(auditTrail.Runs);
+
+        Assert.Equal(expected, recorded.Outcome);
+        Assert.Equal([read.StoredEmailId], recorded.RetrievedEmailIds);
+        Assert.Empty(recorded.CitedEmailIds);
+        Assert.Equal(expected, runTelemetry.Published?.Outcome);
+    }
+
+    /// <summary>A run stopped by what one question may spend is a ceiling being met rather than an unnamed failure.</summary>
+    [Fact]
+    public async Task AnswerQuestionAsync_ARunThatReachedWhatOneQuestionMaySpend_RecordsThatEnding()
+    {
+        // Arrange
+        var answerer = new RecordingMailQuestionAnswerer()
+            .Answering("never published")
+            .Failing(MailAnsweringBudgetExhaustedException.RunSpent());
+        var auditTrail = new RecordingMailAnsweringAuditTrail();
+        var reader = ReaderOver(answerer, auditTrail: auditTrail);
+
+        // Act
+        await Assert.ThrowsAsync<MailAnsweringBudgetExhaustedException>(() =>
+            AnswerAsync(reader, new AskMailRequest { QuestionText = "what was agreed" }));
+
+        // Assert
+        Assert.Equal(MailAnsweringRunOutcome.RunBudgetExhausted, Assert.Single(auditTrail.Runs).Outcome);
+    }
+
+    /// <summary>A question refused before a run began is not a run, so nothing is reported and nothing is recorded.</summary>
+    [Fact]
+    public async Task AnswerQuestionAsync_AQuestionThePeriodHasNoAllowanceFor_ReportsAndRecordsNoRun()
+    {
+        // Arrange
+        var spendLedger = Substitute.For<IMailAnsweringSpendLedger>();
+        spendLedger.TryAdmitRun().Returns(false);
+        var runTelemetry = new RecordingMailAnsweringRunTelemetry();
+        var auditTrail = new RecordingMailAnsweringAuditTrail();
+        var reader = ReaderOver(
+            new RecordingMailQuestionAnswerer(),
+            spendLedger: spendLedger,
+            runTelemetry: runTelemetry,
+            auditTrail: auditTrail);
+
+        // Act
+        await Assert.ThrowsAsync<MailAnsweringBudgetExhaustedException>(() =>
+            AnswerAsync(reader, new AskMailRequest { QuestionText = "what was agreed" }));
+
+        // Assert
+        Assert.Equal(0, runTelemetry.OpenedCount);
+        Assert.Empty(auditTrail.Runs);
+    }
+
     private static Task<AskMailResult> AnswerAsync(MailboxQuestionReader reader, AskMailRequest request) =>
         reader.AnswerQuestionAsync(request, TestContext.Current.CancellationToken);
 
@@ -364,7 +539,9 @@ public sealed class MailboxQuestionReaderTests
         IMailQuestionAnswerer? answerer,
         AiProviderHealthState chatState = AiProviderHealthState.Serving,
         MailAnswerBounds? bounds = null,
-        IMailAnsweringSpendLedger? spendLedger = null)
+        IMailAnsweringSpendLedger? spendLedger = null,
+        IMailAnsweringRunTelemetry? runTelemetry = null,
+        IMailAnsweringAuditTrail? auditTrail = null)
     {
         var healthReader = Substitute.For<IAiProviderHealthReader>();
         healthReader.Read(AiProviderRole.Embedding)
@@ -399,7 +576,10 @@ public sealed class MailboxQuestionReaderTests
                 answerer),
             new MailboxScopeResolver(CatalogServing(MailAccountId.Create(ServedAccountId))),
             spendLedger ?? LedgerAdmitting(),
-            bounds ?? MailAnswerBounds.Default);
+            bounds ?? MailAnswerBounds.Default,
+            runTelemetry ?? new RecordingMailAnsweringRunTelemetry(),
+            auditTrail ?? new RecordingMailAnsweringAuditTrail(),
+            timeProvider);
     }
 
     /// <summary>A ledger with an allowance for whatever a test asks it.</summary>

@@ -4,6 +4,7 @@
 
 using System.ComponentModel.DataAnnotations;
 using System.Globalization;
+using MailFathom.Application.Retrieval.AskMail.Audit;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Folders;
@@ -390,6 +391,74 @@ public sealed class MailSynchronizationOptionsTests
 
         // Assert
         Assert.DoesNotContain(messages, message => message!.Contains("audit trail", StringComparison.Ordinal));
+    }
+
+    /// <summary>The record of what a question read is a second operator decision, so its window is checked as its own.</summary>
+    [Theory]
+    [InlineData(0)]
+    [InlineData(23)]
+    [InlineData(3650 * 24 + 1)]
+    public void ValidateForSynchronization_AnsweringAuditTrailRetentionOutsideTheAcceptedRange_ReportsIt(
+        int retentionHours)
+    {
+        // Arrange
+        var account = CreateAccount("primary");
+        account.AnsweringAuditTrail.Retention = TimeSpan.FromHours(retentionHours);
+        var options = new MailSynchronizationOptions { Enabled = true, Accounts = [account] };
+
+        // Act
+        var messages = options.ValidateForSynchronization().Select(result => result.ErrorMessage).ToArray();
+
+        // Assert
+        Assert.Contains(messages, message => message!.Contains("Account 'primary'", StringComparison.Ordinal)
+            && message.Contains("answering audit trail retention must be between", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void ValidateForSynchronization_AccountWithNoAnsweringAuditTrailBlock_ReportsIt()
+    {
+        // Arrange
+        var account = CreateAccount("primary");
+        account.AnsweringAuditTrail = null!;
+        var options = new MailSynchronizationOptions { Enabled = true, Accounts = [account] };
+
+        // Act
+        var messages = options.ValidateForSynchronization().Select(result => result.ErrorMessage).ToArray();
+
+        // Assert
+        Assert.Contains(messages, message => message!.Contains("Account 'primary'", StringComparison.Ordinal)
+            && message.Contains("answering audit trail configuration must be a block", StringComparison.Ordinal));
+    }
+
+    /// <summary>Off by default and separate from the mutation trail, which is what the two blocks together have to mean.</summary>
+    [Fact]
+    public void GetAnsweringAuditSettings_AnAccountThatTurnedOnlyTheMutationTrailOn_KeepsTheAnsweringRecordOff()
+    {
+        // Arrange
+        var account = CreateAccount("primary");
+        account.AuditTrail.Enabled = true;
+        var options = new MailSynchronizationOptions { Enabled = true, Accounts = [account] };
+
+        // Act
+        var settings = options.GetAnsweringAuditSettings(MailAccountId.Create("primary"));
+
+        // Assert
+        Assert.False(settings.IsEnabled);
+        Assert.Equal(TimeSpan.FromDays(30), settings.Retention);
+    }
+
+    /// <summary>An account this deployment does not configure names no window, and a missing window destroys nothing.</summary>
+    [Fact]
+    public void GetAnsweringAuditSettings_AnAccountThisDeploymentDoesNotConfigure_IsDisabled()
+    {
+        // Arrange
+        var options = new MailSynchronizationOptions { Enabled = true, Accounts = [CreateAccount("primary")] };
+
+        // Act
+        var settings = options.GetAnsweringAuditSettings(MailAccountId.Create("somebody-elses"));
+
+        // Assert
+        Assert.Equal(MailAnsweringAuditSettings.Disabled, settings);
     }
 
     [Fact]

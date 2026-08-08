@@ -46,7 +46,7 @@ public sealed class MailAnsweringAgentCompositionTests
         // Assert
         Assert.Equal("I can answer questions about your mail.", response.Text);
         Assert.Empty(knowledgeSearch.Calls);
-        Assert.Empty(retrieval.Retrieved);
+        Assert.Empty(retrieval.Report.Passages);
     }
 
     [Fact]
@@ -71,7 +71,7 @@ public sealed class MailAnsweringAgentCompositionTests
         // Assert
         Assert.Equal("The invoice was attached.", response.Text);
         Assert.Equal("invoice", Assert.Single(knowledgeSearch.Calls).QueryText);
-        Assert.Equal("the invoice is attached", Assert.Single(retrieval.Retrieved).Text);
+        Assert.Equal("the invoice is attached", Assert.Single(retrieval.Report.Passages).Text);
     }
 
     /// <summary>
@@ -264,7 +264,7 @@ public sealed class MailAnsweringAgentCompositionTests
 
         // Assert
         var expectedEnvelope = RetrievedMailContextFormatter.Format(
-            [.. retrieval.Retrieved],
+            [.. retrieval.Report.Passages],
             retrievalLimitReached: false);
         var sent = chatClient.Calls[^1].Messages;
 
@@ -306,7 +306,7 @@ public sealed class MailAnsweringAgentCompositionTests
         await agent.RunAsync("was it attached", session: null, options: null, TestContext.Current.CancellationToken);
 
         // Assert
-        Assert.Empty(retrieval.Retrieved);
+        Assert.Empty(retrieval.Report.Passages);
         Assert.True(retrieval.WasTruncated);
 
         var toolResult = chatClient.Calls[^1].Messages.Single(message => message.Role == ChatRole.Tool);

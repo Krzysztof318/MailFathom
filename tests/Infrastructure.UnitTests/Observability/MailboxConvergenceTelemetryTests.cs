@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using System.Collections.Concurrent;
 using System.Diagnostics.Metrics;
 using System.Globalization;
 using MailFathom.Application.Mail.Mutations.Convergence;
@@ -168,7 +169,10 @@ public sealed class MailboxConvergenceTelemetryTests : IDisposable
     private sealed class GaugeCollector : IDisposable
     {
         private readonly MeterListener listener = new();
-        private readonly List<PublishedMeasurement> measurements = [];
+
+        // Concurrent because the listener is enabled for every instrument on MailFathom's one meter, so any other test
+        // class publishing to it writes here while this one reads — which a plain list reports as a modified collection.
+        private readonly ConcurrentQueue<PublishedMeasurement> measurements = [];
 
         internal GaugeCollector()
         {
@@ -194,7 +198,7 @@ public sealed class MailboxConvergenceTelemetryTests : IDisposable
 
             return
             [
-                .. this.measurements.Where(measurement =>
+                .. this.measurements.ToArray().Where(measurement =>
                     StringComparer.Ordinal.Equals(measurement.InstrumentName, instrumentName)
                     && measurement.Tags.TryGetValue(AccountTagName, out var account)
                     && Equals(account, accountId.Value)),
@@ -207,7 +211,7 @@ public sealed class MailboxConvergenceTelemetryTests : IDisposable
             ReadOnlySpan<KeyValuePair<string, object?>> tags,
             object? state)
             where TMeasurement : struct =>
-            this.measurements.Add(new PublishedMeasurement(
+            this.measurements.Enqueue(new PublishedMeasurement(
                 instrument.Name,
                 Convert.ToDouble(measurement, CultureInfo.InvariantCulture),
                 tags.ToArray().ToDictionary(tag => tag.Key, tag => tag.Value, StringComparer.Ordinal)));

@@ -38,7 +38,7 @@ public sealed class ModelJudgedKnowledgeSearchTests
         var search = SearchOver(Retrieving(settled, discussed), judge, minimumRelevance: 50);
 
         // Act
-        var passages = await search.FindPassagesAsync(Scope, Query, TestContext.Current.CancellationToken);
+        var passages = (await search.FindPassagesAsync(Scope, Query, TestContext.Current.CancellationToken)).Passages;
 
         // Assert
         Assert.Equal([settled, discussed], passages);
@@ -57,7 +57,7 @@ public sealed class ModelJudgedKnowledgeSearchTests
         var search = SearchOver(Retrieving(settled, mentioned), judge, minimumRelevance: 50);
 
         // Act
-        var passages = await search.FindPassagesAsync(Scope, Query, TestContext.Current.CancellationToken);
+        var passages = (await search.FindPassagesAsync(Scope, Query, TestContext.Current.CancellationToken)).Passages;
 
         // Assert
         Assert.Equal([settled], passages);
@@ -73,7 +73,7 @@ public sealed class ModelJudgedKnowledgeSearchTests
         var search = SearchOver(Retrieving(passage), judge, minimumRelevance: 50);
 
         // Act
-        var passages = await search.FindPassagesAsync(Scope, Query, TestContext.Current.CancellationToken);
+        var passages = (await search.FindPassagesAsync(Scope, Query, TestContext.Current.CancellationToken)).Passages;
 
         // Assert
         Assert.Equal([passage], passages);
@@ -91,7 +91,7 @@ public sealed class ModelJudgedKnowledgeSearchTests
             minimumRelevance: 50);
 
         // Act
-        var passages = await search.FindPassagesAsync(Scope, Query, TestContext.Current.CancellationToken);
+        var passages = (await search.FindPassagesAsync(Scope, Query, TestContext.Current.CancellationToken)).Passages;
 
         // Assert
         Assert.Empty(passages);
@@ -121,7 +121,7 @@ public sealed class ModelJudgedKnowledgeSearchTests
         var search = SearchOver(Retrieving(refused, mentioned), judge, minimumRelevance: 50);
 
         // Act
-        var passages = await search.FindPassagesAsync(Scope, Query, TestContext.Current.CancellationToken);
+        var passages = (await search.FindPassagesAsync(Scope, Query, TestContext.Current.CancellationToken)).Passages;
 
         // Assert
         Assert.Equal([refused, mentioned], passages);
@@ -144,7 +144,7 @@ public sealed class ModelJudgedKnowledgeSearchTests
         var search = SearchOver(Retrieving(unreadable, mentioned), judge, minimumRelevance: 50);
 
         // Act
-        var passages = await search.FindPassagesAsync(Scope, Query, TestContext.Current.CancellationToken);
+        var passages = (await search.FindPassagesAsync(Scope, Query, TestContext.Current.CancellationToken)).Passages;
 
         // Assert
         Assert.Equal([unreadable], passages);
@@ -192,7 +192,7 @@ public sealed class ModelJudgedKnowledgeSearchTests
         var search = SearchOver(Retrieving(passage), judge, minimumRelevance: 50);
 
         // Act
-        var passages = await search.FindPassagesAsync(Scope, Query, TestContext.Current.CancellationToken);
+        var passages = (await search.FindPassagesAsync(Scope, Query, TestContext.Current.CancellationToken)).Passages;
 
         // Assert
         Assert.Equal([passage], passages);
@@ -212,7 +212,7 @@ public sealed class ModelJudgedKnowledgeSearchTests
         var search = SearchOver(Retrieving(first, second), judge, minimumRelevance: 50, providerState: state);
 
         // Act
-        var passages = await search.FindPassagesAsync(Scope, Query, TestContext.Current.CancellationToken);
+        var passages = (await search.FindPassagesAsync(Scope, Query, TestContext.Current.CancellationToken)).Passages;
 
         // Assert
         Assert.Equal([first, second], passages);
@@ -232,7 +232,7 @@ public sealed class ModelJudgedKnowledgeSearchTests
         var search = SearchOver(Retrieving(judged, beyond), judge, minimumRelevance: 50, maximumCandidates: 1);
 
         // Act
-        var passages = await search.FindPassagesAsync(Scope, Query, TestContext.Current.CancellationToken);
+        var passages = (await search.FindPassagesAsync(Scope, Query, TestContext.Current.CancellationToken)).Passages;
 
         // Assert
         Assert.Equal([beyond], passages);
@@ -248,7 +248,7 @@ public sealed class ModelJudgedKnowledgeSearchTests
         var search = SearchOver(new RecordingEmailKnowledgeSearch(), judge, minimumRelevance: 50);
 
         // Act
-        var passages = await search.FindPassagesAsync(Scope, Query, TestContext.Current.CancellationToken);
+        var passages = (await search.FindPassagesAsync(Scope, Query, TestContext.Current.CancellationToken)).Passages;
 
         // Assert
         Assert.Empty(passages);

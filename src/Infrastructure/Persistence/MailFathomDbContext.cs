@@ -111,6 +111,13 @@ internal sealed class MailFathomDbContext : DbContext
     internal const string MailboxMutationAuditEntryTimelineIndexName =
         "ix_mailbox_mutation_audit_entries_account_completed";
 
+    /// <summary>The constraint that keeps one answering entry per run per account, whatever a repeated append attempts.</summary>
+    internal const string MailAnsweringAuditEntryRunUniqueIndexName = "ix_mail_answering_audit_entries_run_account";
+
+    /// <summary>The index the answering record is both read and aged through.</summary>
+    internal const string MailAnsweringAuditEntryTimelineIndexName =
+        "ix_mail_answering_audit_entries_account_completed";
+
     private readonly PostgresTextSearchConfiguration textSearchConfiguration;
 
     /// <summary>Initializes a new MailFathom EF Core context.</summary>
@@ -163,6 +170,9 @@ internal sealed class MailFathomDbContext : DbContext
 
     internal DbSet<MailboxMutationAuditEntryEntity> MailboxMutationAuditEntries =>
         this.Set<MailboxMutationAuditEntryEntity>();
+
+    internal DbSet<MailAnsweringAuditEntryEntity> MailAnsweringAuditEntries =>
+        this.Set<MailAnsweringAuditEntryEntity>();
 
     /// <inheritdoc />
     /// <remarks>
@@ -372,6 +382,84 @@ internal sealed class MailFathomDbContext : DbContext
 
         ConfigureMailboxMutation(modelBuilder);
         ConfigureMailboxMutationAuditEntry(modelBuilder);
+        ConfigureMailAnsweringAuditEntry(modelBuilder);
+    }
+
+    /// <summary>Declares the record one answered question leaves behind, and the emails it names.</summary>
+    /// <remarks>
+    /// <para>
+    /// Two tables rather than one, and the split is the deletion obligation rather than normalization for its own sake.
+    /// The entry states that a question was answered from an account's mailbox, which stays true after the account is
+    /// removed from configuration; the rows beside it name individual messages, and a message erased anywhere in this
+    /// system has to stop being named here. A column holding an array of identifiers would satisfy the first and quietly
+    /// defeat the second.
+    /// </para>
+    /// <para>
+    /// Nothing here is mail content. An identifier, an endpoint alias, an instruction version, two instants, and two
+    /// bounded outcomes are MailFathom's own names for things — which is what lets the run be explained without the mail
+    /// being copied.
+    /// </para>
+    /// <para>
+    /// It is append-only. Nothing amends an entry, so the row carries no concurrency token: there is no second writer
+    /// for one to protect against, and the uniqueness below is what makes a repeated append leave the record as it was.
+    /// </para>
+    /// </remarks>
+    private static void ConfigureMailAnsweringAuditEntry(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<MailAnsweringAuditEntryEntity>(entity =>
+        {
+            entity.ToTable("mail_answering_audit_entries");
+            entity.HasKey(record => record.Id);
+            entity.Property(record => record.Id).ValueGeneratedNever();
+            entity.Property(record => record.MailboxAccountId).HasMaxLength(128).IsRequired();
+            entity.Property(record => record.ChatEndpointAlias)
+                .HasMaxLength(MailAnsweringAuditEntryEntity.MaximumAliasLength)
+                .IsRequired();
+            entity.Property(record => record.InstructionsVersion)
+                .HasMaxLength(MailAnsweringAuditEntryEntity.MaximumInstructionsVersionLength)
+                .IsRequired();
+
+            // The two bounded outcomes are held as their own names rather than as converted enums, which is the one
+            // place this model departs from the pattern beside it. A converted enum fails materialization on a name it
+            // declares no member for, and this record is read a page at a time: a value a later build wrote would fail
+            // the page holding it and every page after it, on exactly the artifact an audit cannot afford that on.
+            entity.Property(record => record.Outcome).HasMaxLength(64).IsRequired();
+            entity.Property(record => record.Degradation).HasMaxLength(128).IsRequired();
+
+            // One entry per run per account, enforced by the database rather than checked before the insert: an append
+            // repeated after a commit whose answer was lost passes any application check and only the constraint closes
+            // that window.
+            entity.HasIndex(record => new { record.RunId, record.MailboxAccountId })
+                .IsUnique()
+                .HasDatabaseName(MailAnsweringAuditEntryRunUniqueIndexName);
+
+            // The one index the record is worked through, and it serves both readers: a page is the account's entries
+            // ordered by when they ended, and retention erases the same account's entries that ended before a cutoff.
+            entity.HasIndex(record => new { record.MailboxAccountId, record.CompletedAt, record.Id })
+                .HasDatabaseName(MailAnsweringAuditEntryTimelineIndexName);
+        });
+
+        modelBuilder.Entity<MailAnsweringAuditedEmailEntity>(entity =>
+        {
+            entity.ToTable("mail_answering_audited_emails");
+
+            // The pair is the key rather than a surrogate, because one run names one message once however many of its
+            // lookups found it. That makes the uniqueness the identity instead of a constraint beside one.
+            entity.HasKey(read => new { read.MailAnsweringAuditEntryId, read.StoredEmailId });
+
+            entity.HasOne<MailAnsweringAuditEntryEntity>()
+                .WithMany(record => record.Emails)
+                .HasForeignKey(read => read.MailAnsweringAuditEntryId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            // No navigation to the stored email, so appending a row reads nothing: what is recorded is that a run
+            // retrieved this identifier. The cascade is the point of the association — an erased message reaches every
+            // run that read it, through the email's own deletion path rather than through a rule somebody remembers.
+            entity.HasOne<StoredEmailEntity>()
+                .WithMany()
+                .HasForeignKey(read => read.StoredEmailId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
     }
 
     /// <summary>Declares the history a finished change to a remote mailbox leaves behind.</summary>

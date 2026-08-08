@@ -1,6 +1,6 @@
 # Mail answering
 
-<!-- describes: src/AI/Orchestration/**, src/AI/Retrieval/**, src/AI/ProviderAdapters/ResilientChatClient.cs, src/Application/Retrieval/** -->
+<!-- describes: src/AI/Orchestration/**, src/AI/Retrieval/**, src/AI/ProviderAdapters/ResilientChatClient.cs, src/Application/Retrieval/**, src/Domain/Answering/**, src/Infrastructure/Persistence/Answering/**, src/Host/Configuration/Mail/MailAnsweringAuditTrailOptions.cs -->
 
 A question about the mailbox, answered from the mail the model looks up while answering. This page describes the
 composition that does it: what the model may reach, when it reaches it, how much of it leaves the process, and what an
@@ -149,7 +149,9 @@ run. A restart therefore begins the current window with nothing spent.
 ### What it is observable as
 
 Consumed budget is published as counts and nothing else, so an operator watches spend without any of the content it was
-spent on. [Telemetry § Answering spend](../operations/telemetry.md#answering-spend) lists the instruments.
+spent on. [Telemetry § Answering spend](../operations/telemetry.md#answering-spend) lists the instruments. What one
+*run* did is a separate signal beside them, described in [§ What a run publishes as
+telemetry](#what-a-run-publishes-as-telemetry) below; nothing there republishes consumed budget.
 
 ## An optional second pass: the model decides what answers
 
@@ -413,6 +415,84 @@ larger than one call may send is refused rather than truncated.
 The agent is composed with one tool and that tool searches. There is nothing that sends, deletes, moves, or marks mail
 as read, so a question is never a mutating act — a property of what the agent is made of rather than a rule written
 beside it. Retrieval reaches no mail server either: it answers from what synchronization has already stored.
+
+## An account can keep a record of what a question read, and none does by default
+
+An answer produced by a model is not reproducible. Asked twice, the same question over the same mailbox can produce two
+different answers, so the only way to explain one afterwards is to have recorded what produced it. An account can
+therefore keep a durable record of the runs answered from its mailbox, and it is **off by default**:
+
+| Key | Type | Default | What it does |
+| --- | --- | --- | --- |
+| `MailSynchronization:Accounts:<n>:AnsweringAuditTrail:Enabled` | bool | `false` | Whether a finished run leaves an entry for this account |
+| `MailSynchronization:Accounts:<n>:AnsweringAuditTrail:Retention` | TimeSpan | `30.00:00:00` | 1 day – 3650 days; how long an entry is kept |
+
+It is a separate decision from the [mutation trail](imap-synchronization.md#an-account-can-keep-a-record-of-what-was-done-to-it-and-none-does-by-default)
+beside it and deliberately not the same switch. One record says where a person's mail has been; this says what it was
+read for, and an operator may want either without the other. Both are off by default for the same reason: each is
+derived personal data an operator undertakes to hold, describe, and erase rather than something MailFathom accumulates
+for everyone.
+
+### What an entry holds, and what it deliberately does not
+
+One entry per account in the run's scope, so a question asked across two mailboxes leaves one entry each, sharing a run
+identifier and naming only its own account's mail. An entry carries:
+
+- the emails of that account the run retrieved, in the order it first reached each, and which of them the answer cited;
+- the chat endpoint alias the run was conducted through, and the version of the instruction it was conducted under;
+- when the run began and when it ended;
+- how it ended, and how it degraded.
+
+**No retrieved passage, prompt, completion, or fragment of mail content is stored.** Identifiers, MailFathom's own
+configured names, and bounded outcomes are the whole of it. A record that stored the retrieved passages would create a
+second copy of the mailbox with its own retention, access, export, and erasure obligations — for the sake of a debugging
+convenience. What the identifier buys instead is that the message can be fetched and read whole, by somebody entitled to
+it, through the reads that already serve it.
+
+An account in scope that a run drew nothing from still gets an entry naming no mail. That is a recorded fact rather than
+a missing one: the question was asked of that mailbox and took nothing out of it, and a record that appeared only when
+mail was found could not answer whether a mailbox had been queried at all.
+
+A run that ended without an answer is recorded too, with what it had already read. A run that failed on its third
+provider call has read somebody's mail, and a record built from the answer alone would say it read nothing.
+
+### It is written after the answer, and never at the answer's expense
+
+The entry is appended once the run has ended and the answer has already been produced, so there is nothing left for it
+to roll back and nothing it may fail. An append that does not happen is warned about naming the run and counted, which
+is the only thing that makes swallowing the failure defensible — [Telemetry](../operations/telemetry.md#what-a-run-records)
+names the counter.
+
+A question refused before a run began — this deployment answers none, or the period has spent its allowance — is not a
+run and leaves no entry. Recording a refusal as a run that read no mail would put it among the answers.
+
+### It is erased twice over
+
+Retention erases whole entries past each account's configured window, in bounded batches, on the same pass the account's
+own synchronization run already makes for the mutation trail. A failure there never fails the run and never puts the
+account into backoff; the next run erases what this one did not.
+
+Beside that, **an entry follows the mail it names**: erasing a message erases it from the runs that read it, through the
+same cascade every other derived row rides. That is the difference from the mutation trail, which deliberately survives
+the mail it describes because the act it records may have *been* the deletion. Nothing of the sort applies to reading a
+message, so a message nobody may hold any more is not one this record goes on naming.
+
+It is read through the administrative endpoint, beside the mutation trail and under the same credential.
+[The administrative endpoint § Reading what a question read](../operations/admin-endpoint.md#reading-what-a-question-read)
+holds the route, its filters, and the erasure statement a data-subject request is answered with.
+
+## What a run publishes as telemetry
+
+Every run opens a span on the `MailFathom` activity source, named `answer_mail_question`, inside the MCP tool call it
+happened in — so the provider calls the run made sit beneath it and a slow or degraded run is attributable without
+opening a database. [Telemetry § What a run records](../operations/telemetry.md#what-a-run-records) lists its tags.
+
+The split between the two records is the point rather than an accident. Which messages a run read cannot go on a span:
+a tag per message opens a time series per person, a span store is not MailFathom's to carry an obligation in, exports
+are off by default, spans are sampled, and an erasure request cannot reach somebody else's trace backend. How long a run
+took and how much it considered cannot usefully go in a table either, because that is what a dashboard already answers.
+Between them the three questions an operator actually has are answered, each in one place: why did it answer *that* —
+the record; why is it slow — the span; why did it degrade — the span.
 
 ## What never reaches a log
 

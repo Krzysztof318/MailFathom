@@ -60,9 +60,11 @@ reverse proxy, write the public URL and keep the path: `https://mail.example.tes
 > **Every authenticated caller may perform every administrative operation.** There is no permission model. The
 > credential is what bounds access, so provision one per client and rotate it like any other secret.
 >
-> Weigh that against what the operations are. The endpoint serves one read — who a credential makes the caller — and
-> one write, which stores a mailbox refresh token. Any credential that can do the first can therefore do the second, so
-> an administrative key is as sensitive as the mailbox credentials it can place.
+> Weigh that against what the operations are. The endpoint serves reads — who a credential makes the caller, two
+> records of what a mailbox has had done to it and what has been read from it, and where semantic search stands — and
+> writes that store a mailbox refresh token and start a provider bill. Any credential that can do the first can
+> therefore do all of them, so an administrative key is as sensitive as the mailbox credentials it can place, the
+> histories it can read, and the spend it can begin.
 
 ## What the endpoint serves
 
@@ -71,6 +73,7 @@ reverse proxy, write the public URL and keep the path: `https://mail.example.tes
 | `GET /api/admin/session` | Reports the credential that authenticated and the running version. This is what `login` and `status` ask. |
 | `POST /api/admin/mailbox/refresh-token` | Stores a mailbox refresh token for one configured account, sealed under the deployment's data-encryption key. This is what [`mfctl mailbox authorize --account`](mailbox-oauth.md#sending-the-token-to-the-deployment) sends. |
 | `GET /api/admin/mailbox/mutations/audit` | Reads one account's record of the changes MailFathom made to its mailbox, where that account [keeps one](../features/imap-synchronization.md#an-account-can-keep-a-record-of-what-was-done-to-it-and-none-does-by-default). |
+| `GET /api/admin/answering/audit` | Reads one account's record of the questions answered from its mailbox, where that account [keeps one](../features/mail-answering.md#an-account-can-keep-a-record-of-what-a-question-read-and-none-does-by-default). |
 | `GET /api/admin/embeddings` | Reports whether semantic search is working and how far behind it is. This is what [`mfctl embedding status`](#administering-the-embedding-profile) asks. |
 | `GET /api/admin/embeddings/activation` | Reports what activating the declared model would do and what it would cost, writing nothing. |
 | `POST /api/admin/embeddings/activation` | Takes up the declared model and begins embedding under it. **This is the one route that starts a provider bill.** |
@@ -136,6 +139,56 @@ The identifiers are the local email identifiers the entries name, which the same
 the messages in scope; erasing the whole of one account's trail is the same statement without the second predicate.
 Take it as a deliberate administrative act on a database you have a backup of: nothing here replays an erasure, and the
 entries it removes are the accountability evidence for the changes they recorded.
+
+### Reading what a question read
+
+The answering route is the same shape for the other half of the question an operator has. The mutation trail answers
+"why is this message in this folder"; this answers "why did it answer that" — which messages one `ask_mail` run
+retrieved from an account, and which of them the response went on to cite.
+
+| Query parameter | What it does |
+| --- | --- |
+| `account` | Required. The configured identifier of the account whose record is read. |
+| `from`, `before` | Narrows to runs that ended within a range; `from` is inclusive and `before` is exclusive. |
+| `pageSize` | Between 1 and 100; 50 when omitted. |
+| `cursor` | The `nextCursor` the previous page returned. |
+
+```console
+$ curl -sS -H "X-API-Key: $MAILFATHOM_ADMIN_KEY" \
+    "http://127.0.0.1:8090/api/admin/answering/audit?account=work&pageSize=2"
+```
+
+The page is smaller than the mutation trail's because an entry here carries a list rather than a fixed set of columns:
+one row per message the run read, each with the position it was reached at and whether the answer cited it. There is no
+narrowing filter beside the account and the range, because the questions worth asking of this record are about a
+mailbox and a period rather than about a kind of run.
+
+An entry names the run it belongs to, the chat endpoint alias the run was conducted through, the version of the
+instruction it was conducted under, when it began and ended, how it ended, and how it degraded. A question asked across
+two accounts leaves one entry per account, sharing a `runId` and each naming only its own account's mail.
+
+Nothing in the answer is mail. There is no question, no answer, no retrieved extract, and no subject — the identifiers
+are what a reader fetches the messages themselves with, through the reads that already serve them, and storing anything
+more would make this record a second copy of the mailbox with its own retention.
+
+The same refusals apply, for the same reasons: an account this deployment does not configure, a page size outside the
+range, a range that ends where it begins, and a cursor this deployment did not issue are each `400` with a sentence
+naming what to change. An entry a later build wrote and this one cannot interpret — one naming an ending or a
+degradation this version does not declare — is left out of the page rather than failing it, and a warning names the
+account and how many were left out.
+
+**Erasing entries for a data-subject request.** Unlike the mutation trail, this record follows the mail it names:
+erasing a message erases it from the runs that read it, through the same cascade every other derived row rides. That is
+the difference between recording an act performed on mail and recording that mail was read. Retention erases whole
+entries at each account's configured window, and a request that reaches further is the same statement the mutation
+trail takes:
+
+```sql
+DELETE FROM mail_answering_audit_entries
+WHERE "MailboxAccountId" = 'work';
+```
+
+Take it as a deliberate administrative act on a database you have a backup of.
 
 ### Administering the embedding profile
 

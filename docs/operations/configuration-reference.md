@@ -114,6 +114,8 @@ shape the coordinator loop itself, which are read once at start and marked *rest
 | `…:AuthoredDeleteEmailDisposition` | enum | `RetainLocalCopy` | `RetainLocalCopy`, `RetainTombstone`, `EraseLocalCopy`; what becomes of the local copy of mail MailFathom itself deleted, and it takes precedence over the key above for those | reload; governs deletes authored from then on |
 | `…:AuditTrail:Enabled` | bool | `false` | Whether a finished change to this account's mailbox leaves a durable audit entry | reload; governs changes authored from then on |
 | `…:AuditTrail:Retention` | TimeSpan | `90.00:00:00` | 1 day – 3650 days; how long this account's audit entries are kept | reload; the next account run erases against the new window |
+| `…:AnsweringAuditTrail:Enabled` | bool | `false` | Whether a finished `ask_mail` run leaves a durable entry naming the mail it read from this account | reload; governs runs from then on |
+| `…:AnsweringAuditTrail:Retention` | TimeSpan | `30.00:00:00` | 1 day – 3650 days; how long this account's answering entries are kept | reload; the next account run erases against the new window |
 | `…:Folders` | list | inbox by role | Aliases unique; each entry below | reload |
 
 `AuditTrail` is off by default because the record it keeps is derived personal data: it says where a person's mail has
@@ -122,6 +124,14 @@ erasing it — which is why the retention is configured beside the switch rather
 switch back off stops new entries while leaving the existing ones to age out under the window they were written under.
 [An account can keep a record of what was done to it](../features/imap-synchronization.md#an-account-can-keep-a-record-of-what-was-done-to-it-and-none-does-by-default)
 states what an entry holds and what it deliberately does not.
+
+`AnsweringAuditTrail` is the same shape for the other record and the same default, and it is a **separate decision**
+rather than the same switch: one says where a person's mail has been, the other says what it was read for, and an
+operator may want either without the other. Its default window is shorter because an entry names every message one
+question reached, so the record grows with how much an instance is asked rather than with how much it is told to change.
+[An account can keep a record of what a question read](../features/mail-answering.md#an-account-can-keep-a-record-of-what-a-question-read-and-none-does-by-default)
+states what an entry holds, what it deliberately does not, and the one way it differs from the trail above — an erased
+message is erased from the runs that read it.
 
 A folder entry names `Alias` (required — your stable name for the folder) and **exactly one** of `RemotePath` (the
 server's own path) or `SpecialUse` (a role discovery resolves: `Inbox`, `Archive`, `Drafts`, `Sent`, `Junk`, `Trash`,

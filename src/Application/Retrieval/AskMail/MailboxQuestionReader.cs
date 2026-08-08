@@ -2,19 +2,22 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using System.Diagnostics.CodeAnalysis;
 using MailFathom.Application.Accounts;
 using MailFathom.Application.Chat;
 using MailFathom.Application.Emails.Mailboxes;
+using MailFathom.Application.Retrieval.AskMail.Audit;
+using MailFathom.Domain.Answering.Audit;
 
 namespace MailFathom.Application.Retrieval.AskMail;
 
-/// <summary>Answers one question about the local mailbox copy and names the emails the answer was drawn from.</summary>
+/// <summary>Answers one question about the local mailbox copy, names the emails the answer was drawn from, and records the run.</summary>
 /// <remarks>
 /// <para>
 /// The use case owns everything between an unvalidated request and a published answer: it bounds the question, refuses
 /// an account this deployment does not serve, decides whether this deployment can answer at all, admits the question
-/// against what this period may still spend, and cuts what one response may carry. The agent behind the answering port
-/// does none of that, and no protocol adapter repeats it.
+/// against what this period may still spend, cuts what one response may carry, and reports what the run did. The agent
+/// behind the answering port does none of that, and no protocol adapter repeats it.
 /// </para>
 /// <para>
 /// The scope is resolved here and again underneath. This resolution is the access decision — an account nobody
@@ -28,8 +31,15 @@ namespace MailFathom.Application.Retrieval.AskMail;
 /// mail as read — a property of what the agent is composed of rather than a rule observed here.
 /// </para>
 /// <para>
-/// Neither the question nor the answer nor a citation's subject is written to a log by anything on this path. A question
-/// is personal data of a particularly revealing kind, and an answer is mail content restated.
+/// Reporting the run is two things, and they are separate because they answer different questions and outlive the
+/// request by different amounts. The span says how long the run took, how much it considered, and how it ended, beside
+/// the tool call it happened inside; the record says which messages it read, durably, on a deployment exporting nothing.
+/// Both are published however the run ended — a run that failed on its third provider call has already read somebody's
+/// mail, and a report built from the answer alone would say it read nothing.
+/// </para>
+/// <para>
+/// Neither the question nor the answer nor a citation's subject is written to a log, a span, or the record by anything on
+/// this path. A question is personal data of a particularly revealing kind, and an answer is mail content restated.
 /// </para>
 /// </remarks>
 public sealed class MailboxQuestionReader
@@ -38,28 +48,43 @@ public sealed class MailboxQuestionReader
     private readonly MailboxScopeResolver scopeResolver;
     private readonly IMailAnsweringSpendLedger spendLedger;
     private readonly MailAnswerBounds answerBounds;
+    private readonly IMailAnsweringRunTelemetry runTelemetry;
+    private readonly IMailAnsweringAuditTrail auditTrail;
+    private readonly TimeProvider timeProvider;
 
     /// <summary>Initializes the use case.</summary>
     /// <param name="capability">Decides whether a question may run, and hands over what runs it.</param>
     /// <param name="scopeResolver">Decides which accounts and folders the answer may be drawn from.</param>
     /// <param name="spendLedger">Decides whether the current period still has an allowance for a question.</param>
     /// <param name="answerBounds">How much of one run's outcome a single answer publishes.</param>
+    /// <param name="runTelemetry">Publishes the run beside the request it happened inside.</param>
+    /// <param name="auditTrail">Keeps the durable record of what the run read, for the accounts that asked for one.</param>
+    /// <param name="timeProvider">Stamps when the run began and when it ended.</param>
     /// <exception cref="ArgumentNullException">Thrown when any argument is <see langword="null" />.</exception>
     public MailboxQuestionReader(
         MailAnsweringCapability capability,
         MailboxScopeResolver scopeResolver,
         IMailAnsweringSpendLedger spendLedger,
-        MailAnswerBounds answerBounds)
+        MailAnswerBounds answerBounds,
+        IMailAnsweringRunTelemetry runTelemetry,
+        IMailAnsweringAuditTrail auditTrail,
+        TimeProvider timeProvider)
     {
         ArgumentNullException.ThrowIfNull(capability);
         ArgumentNullException.ThrowIfNull(scopeResolver);
         ArgumentNullException.ThrowIfNull(spendLedger);
         ArgumentNullException.ThrowIfNull(answerBounds);
+        ArgumentNullException.ThrowIfNull(runTelemetry);
+        ArgumentNullException.ThrowIfNull(auditTrail);
+        ArgumentNullException.ThrowIfNull(timeProvider);
 
         this.capability = capability;
         this.scopeResolver = scopeResolver;
         this.spendLedger = spendLedger;
         this.answerBounds = answerBounds;
+        this.runTelemetry = runTelemetry;
+        this.auditTrail = auditTrail;
+        this.timeProvider = timeProvider;
     }
 
     /// <summary>Answers one question from the mail within its scope.</summary>
@@ -82,6 +107,11 @@ public sealed class MailboxQuestionReader
     /// The period allowance is taken after the capability is read and before the run begins, which is the last point at
     /// which nothing has been spent. Taking it earlier would count a question a deployment was never going to answer
     /// against a ceiling on what it spends.
+    /// </para>
+    /// <para>
+    /// Nothing above that point is a run, which is why nothing above it is reported as one. A question this deployment
+    /// does not serve and one the period has no allowance for both end before a model is reached, and recording either as
+    /// a run that read no mail would put a refusal among the answers.
     /// </para>
     /// </remarks>
     public async Task<AskMailResult> AnswerQuestionAsync(
@@ -106,15 +136,94 @@ public sealed class MailboxQuestionReader
             throw MailAnsweringBudgetExhaustedException.PeriodSpent();
         }
 
-        var answer = await answerer.AnswerAsync(new MailQuestion(questionText, scope), cancellationToken);
+        var startedAt = this.timeProvider.GetUtcNow();
+        var observation = new MailAnsweringRunObservation(
+            MailAnsweringRunId.Create(Guid.CreateVersion7(startedAt)),
+            scope,
+            startedAt);
 
-        return this.Published(answer);
+        try
+        {
+            return await this.ConductAsync(
+                answerer,
+                new MailQuestion(questionText, scope),
+                observation,
+                cancellationToken);
+        }
+        finally
+        {
+            // Outside the span rather than inside it, so the duration reported is the run's own and not the run plus a
+            // database write. The record is owed whatever the run did, which is why it is a finally and not a
+            // continuation of the successful path.
+            await this.auditTrail.RecordAsync(observation, cancellationToken);
+        }
     }
 
-    /// <summary>Cuts one run's outcome down to what a single answer publishes, and says what it cut.</summary>
-    private AskMailResult Published(MailAnswer answer)
+    /// <summary>Conducts one run inside its span, and stamps how it ended before the span is published.</summary>
+    /// <remarks>
+    /// Every ending is stamped by a handler that re-raises what it caught, so the failure reaches the caller unchanged
+    /// and the report reaches an operator complete. The alternative — stamping after the exception has escaped — would
+    /// close the span before anything knew how the run ended.
+    /// </remarks>
+    [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "The exception is re-raised unchanged; the handler exists only to stamp how the run ended before its span is published.")]
+    private async Task<AskMailResult> ConductAsync(
+        IMailQuestionAnswerer answerer,
+        MailQuestion question,
+        MailAnsweringRunObservation observation,
+        CancellationToken cancellationToken)
     {
-        var citations = Cited(answer.Passages);
+        using var runReport = this.runTelemetry.BeginRun(observation);
+
+        try
+        {
+            var answer = await answerer.AnswerAsync(question, observation, cancellationToken);
+            var published = this.Published(answer, observation.Retrieval);
+
+            observation.RecordOutcome(
+                MailAnsweringRunOutcome.Answered,
+                [.. published.Citations.Select(static citation => citation.StoredEmailId)],
+                this.timeProvider.GetUtcNow());
+
+            return published;
+        }
+        catch (OperationCanceledException)
+        {
+            this.RecordEnding(observation, MailAnsweringRunOutcome.Cancelled);
+
+            throw;
+        }
+        catch (MailAnsweringBudgetExhaustedException)
+        {
+            this.RecordEnding(observation, MailAnsweringRunOutcome.RunBudgetExhausted);
+
+            throw;
+        }
+        catch (ChatGenerationFailedException generation)
+        {
+            this.RecordEnding(
+                observation,
+                generation.Failure is ChatGenerationFailure.AnswerEmpty
+                    ? MailAnsweringRunOutcome.AnswerEmpty
+                    : MailAnsweringRunOutcome.ProviderFailed);
+
+            throw;
+        }
+        catch (Exception)
+        {
+            this.RecordEnding(observation, MailAnsweringRunOutcome.Failed);
+
+            throw;
+        }
+    }
+
+    /// <summary>Stamps an ending that published no answer, and therefore cited nothing.</summary>
+    private void RecordEnding(MailAnsweringRunObservation observation, MailAnsweringRunOutcome outcome) =>
+        observation.RecordOutcome(outcome, [], this.timeProvider.GetUtcNow());
+
+    /// <summary>Cuts one run's outcome down to what a single answer publishes, and says what it cut.</summary>
+    private AskMailResult Published(MailAnswer answer, MailAnsweringRetrievalReport retrieval)
+    {
+        var citations = Cited(retrieval.Passages);
         var maximumCitations = this.answerBounds.MaximumCitations;
         var maximumAnswerCharacters = this.answerBounds.MaximumAnswerCharacters;
 
@@ -123,7 +232,7 @@ public sealed class MailboxQuestionReader
             [.. citations.Take(maximumCitations)],
             answer.Text.Length > maximumAnswerCharacters,
             citations.Count > maximumCitations,
-            answer.RetrievalWasTruncated);
+            retrieval.Degradation.HasFlag(MailAnsweringRunDegradation.RetrievalCeilingReached));
     }
 
     /// <summary>Reads the passages a run retrieved into one citation per email.</summary>

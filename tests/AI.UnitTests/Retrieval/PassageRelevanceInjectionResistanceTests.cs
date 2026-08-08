@@ -57,10 +57,10 @@ public sealed class PassageRelevanceInjectionResistanceTests
         var search = SearchOver(Retrieving(settled, promoter), judge);
 
         // Act
-        var passages = await search.FindPassagesAsync(
+        var passages = (await search.FindPassagesAsync(
             OnePrimaryAccount,
             Query,
-            TestContext.Current.CancellationToken);
+            TestContext.Current.CancellationToken)).Passages;
 
         // Assert
         Assert.Equal([settled, promoter], passages);
@@ -79,10 +79,10 @@ public sealed class PassageRelevanceInjectionResistanceTests
         var search = SearchOver(Retrieving(settled, promoter), judge);
 
         // Act
-        var passages = await search.FindPassagesAsync(
+        var passages = (await search.FindPassagesAsync(
             OnePrimaryAccount,
             Query,
-            TestContext.Current.CancellationToken);
+            TestContext.Current.CancellationToken)).Passages;
 
         // Assert
         Assert.Equal([settled], passages);

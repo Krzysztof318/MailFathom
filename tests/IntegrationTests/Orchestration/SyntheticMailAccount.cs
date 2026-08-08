@@ -7,6 +7,7 @@ using MailFathom.AppHost;
 using MailFathom.Application.Mail;
 using MailFathom.Application.Mail.Mutations;
 using MailFathom.Application.Mail.Mutations.Audit;
+using MailFathom.Application.Retrieval.AskMail.Audit;
 using MailFathom.Application.Synchronization.Checkpoints;
 using MailFathom.Application.Synchronization.Reconciliation;
 using MailFathom.Domain.Accounts;
@@ -37,14 +38,19 @@ internal sealed class SyntheticMailAccount(
     OrchestratedMailServerEndpoints endpoints,
     RemotelyDeletedEmailDisposition remotelyDeletedEmailDisposition =
         RemotelyDeletedEmailDisposition.RetainTombstone,
-    bool auditTrailEnabled = false)
+    bool auditTrailEnabled = false,
+    bool answeringAuditTrailEnabled = false)
     : IImapAccountSettingsProvider,
     IMailTransportSecurityPolicyReader,
     IMailSynchronizationWindowReader,
     IRemotelyDeletedEmailDispositionReader,
     IAuthoredDeleteEmailDispositionReader,
-    IMailboxMutationAuditSettingsReader
+    IMailboxMutationAuditSettingsReader,
+    IMailAnsweringAuditSettingsReader
 {
+    /// <summary>The window this account keeps an answering entry for, which a retention test writes an older entry than.</summary>
+    internal static readonly TimeSpan AnsweringAuditRetention = TimeSpan.FromDays(30);
+
     /// <summary>Gets the account identifier every occurrence this suite stores belongs to.</summary>
     public static MailAccountId AccountId { get; } = MailAccountId.Create("integration");
 
@@ -56,6 +62,15 @@ internal sealed class SyntheticMailAccount(
     /// </remarks>
     public MailboxMutationAuditSettings GetAuditSettings(MailAccountId accountId) =>
         new(auditTrailEnabled, TimeSpan.FromDays(90));
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Off unless a test asks for it, for the reason the trail above is: it is the deployed default, and an entry per
+    /// answered question would otherwise accumulate across a suite that asks many of them. The window is a constant so
+    /// a retention test can write an entry older than it rather than reconfigure the account.
+    /// </remarks>
+    public MailAnsweringAuditSettings GetAnsweringAuditSettings(MailAccountId accountId) =>
+        new(answeringAuditTrailEnabled, AnsweringAuditRetention);
 
     /// <inheritdoc />
     /// <remarks>

@@ -49,7 +49,7 @@ public sealed class MailboxKnowledgeSearch : IEmailKnowledgeSearch
     }
 
     /// <inheritdoc />
-    public async Task<IReadOnlyList<EmailKnowledgePassage>> FindPassagesAsync(
+    public async Task<EmailKnowledgeLookup> FindPassagesAsync(
         MailboxScope scope,
         string queryText,
         CancellationToken cancellationToken)
@@ -58,7 +58,7 @@ public sealed class MailboxKnowledgeSearch : IEmailKnowledgeSearch
 
         if (UsableQueryText(queryText) is not { } validatedQueryText)
         {
-            return [];
+            return EmailKnowledgeLookup.Unfiltered([]);
         }
 
         var request = new SearchEmailsRequest
@@ -71,12 +71,12 @@ public sealed class MailboxKnowledgeSearch : IEmailKnowledgeSearch
 
         var result = await this.searchReader.SearchEmailsAsync(request, cancellationToken);
 
-        return
+        return EmailKnowledgeLookup.Unfiltered(
         [
             .. result.Matches
                 .Select(this.ToPassage)
                 .Where(static passage => passage.Text.Length is not 0),
-        ];
+        ]);
     }
 
     /// <summary>Validates the one part of a retrieval a model wrote, treating text no query accepts as no result.</summary>
