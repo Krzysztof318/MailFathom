@@ -60,6 +60,7 @@ cp .env.example .env
 mkdir -p secrets/mailfathom
 chmod 700 secrets                # not mounted anywhere; this is what keeps other host users out
 chmod 711 secrets/mailfathom     # bind-mounted, so uid 1654 needs to traverse it
+chmod 755 config                 # bind-mounted and listed, so it needs read too — a clone's umask decides this
 openssl rand -base64 33 | tr -d '\n' > secrets/postgres-superuser-password
 openssl rand -base64 33 | tr -d '\n' > secrets/mailfathom-database-password
 chmod 444 secrets/postgres-superuser-password secrets/mailfathom-database-password

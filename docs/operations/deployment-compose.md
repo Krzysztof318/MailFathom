@@ -33,6 +33,7 @@ cp .env.example .env
 mkdir -p secrets/mailfathom
 chmod 700 secrets
 chmod 711 secrets/mailfathom
+chmod 755 config
 
 openssl rand -base64 33 | tr -d '\n' > secrets/postgres-superuser-password
 openssl rand -base64 33 | tr -d '\n' > secrets/mailfathom-database-password
@@ -56,7 +57,9 @@ startup failure when it is missed:
   quotes the path it was handed — which makes a mode the least visible way to break this deployment. `0711` is what
   the secrets directory takes: traversable by that account, and still not listable by anything but you. The
   configuration directory is *listed* rather than opened by name, because MailFathom layers in every `*.json` it finds
-  there, so that one needs read as well — `0755`, which is what the checkout already carries.
+  there, so that one needs read as well, which is the `0755` above. It is set rather than assumed because Git records
+  no directory mode: `config/` arrives with whatever `umask` the clone ran under, and a strict one leaves a directory
+  the container cannot list.
 - **The files inside both are read, so they have to be readable.** `0444` for a secret and `0644` for a configuration
   file. A `0600` or `0400` file presents to MailFathom as a secret reference that cannot be resolved, or crashes
   startup naming the configuration file it could not open, so a `umask` of `077` produces a deployment that will not
