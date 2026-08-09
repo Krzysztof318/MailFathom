@@ -1,0 +1,9 @@
+{
+  "host": "smtp.example.test",
+  "port": 587,
+  "security": "StartTls",
+  "address": "throwaway@example.test",
+  "userName": "throwaway@example.test",
+  "password": "the throwaway account's password",
+  "author": "Fabricated"
+}

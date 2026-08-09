@@ -1,6 +1,6 @@
 # Local development
 
-<!-- describes: scripts/**, global.json, .config/dotnet-tools.json, .config/typos.toml, .config/CodeCoverage.proj, .config/testconfig.json, src/AppHost/**, src/Infrastructure/Persistence/MailFathomDbContextDesignTimeFactory.cs, .github/workflows/**, tests/IntegrationTests/ProviderAdapters/** -->
+<!-- describes: scripts/**, global.json, .config/dotnet-tools.json, .config/typos.toml, .config/CodeCoverage.proj, .config/testconfig.json, src/AppHost/**, src/Infrastructure/Persistence/MailFathomDbContextDesignTimeFactory.cs, .github/workflows/**, tests/IntegrationTests/ProviderAdapters/**, tools/** -->
 
 Use the .NET SDK pinned in `global.json`. Test execution is configured for Microsoft Testing Platform through the repository-level `global.json` test runner setting.
 
@@ -292,6 +292,107 @@ The block shape is identical to production, so moving a working development conf
 Neither file nor user secrets is a production secret store. User secrets are stored unencrypted in the developer's profile directory and exist only to keep credentials out of the repository; `appsettings.Development.json` is committed and must never hold a real credential. [Secret provisioning](secret-provisioning.md) describes the deployment paths.
 
 **The data-encryption key is the one secret you do not provision locally.** The app model hands the host a fixed development key — `OrchestrationContract.DataEncryptionKeyMaterial`, as a `plaintext:` reference under the key identifier `development` — so a local run seals and opens stored values without anybody generating one first. It is stated rather than generated for the reason the PostgreSQL password is, and with more at stake: a key that diverged from the data volume it protects would leave every locally sealed row unopenable rather than merely reporting an authentication failure. Resetting the local database is what re-seals under a changed key. A deployment provisions its own, which [ADR 0005](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0005-data-encryption-key-ring-and-provisioning.md) records and this app model builds no part of.
+
+## Filling a development mailbox
+
+Working on synchronization, search, embeddings, or answering means having mail to work on. `tools/SyntheticMail` is
+where that mail comes from: it invents messages and delivers them over SMTP to a mailbox you name, so the mailbox
+MailFathom then synchronizes fills the way a real one does — by mail arriving — rather than by anything reaching inside
+it. It exists so that nobody has to point a local run at their own correspondence, which this repository classifies as
+sensitive by default.
+
+It is a development tool and is not part of the product. It ships in no artifact, is a command of `mfctl` in no sense,
+and no project under `src/` references it; `the_development_tooling_never_reaches_a_published_artifact` in
+`scripts/test-agent-workflow.sh` is what holds all three rather than a convention. Build it from source and run it:
+
+```bash
+dotnet run --project tools/SyntheticMail -- <recipient> --count 200
+```
+
+**Configure the sending account first.** The address and its password are read from
+`tools/SyntheticMail/synthetic-mail.local.json`, never from an argument — a password on a command line lands in the
+shell history and in the process list of a shared machine. `.gitignore` covers the file as `*.local.json`, and
+`synthetic-mail.example.json` beside it shows the shape:
+
+```json
+{
+  "host": "smtp.example.test",
+  "port": 587,
+  "security": "StartTls",
+  "address": "throwaway@example.test",
+  "password": "the throwaway account's password"
+}
+```
+
+**Use a throwaway account.** The command authenticates as whatever this file names and submits a few hundred messages
+under it; nothing about that belongs to an account that reaches anything else. Startup refuses a missing or incomplete
+file with a message naming the key to set.
+
+`security` is `StartTls` or `ImplicitTls`, and there is no third value: the run authenticates with a password, so an
+endpoint that cannot secure the connection is refused rather than downgraded to. `port` defaults to 587 or 465 to match,
+and a written one is refused outside 0 to 65535 rather than carried as far as the connection.
+
+A development mail server whose TLS parameters the platform refuses stops this command exactly as it stops the host,
+and for the same reason: the handshake goes through the system OpenSSL rather than through .NET, so the policy on the
+machine decides which servers are reachable at all. The symptom sends most people the wrong way — the handshake fails
+and reads as a refused credential. [The platform TLS policy](platform-tls-policy.md) covers the file, what relaxing it
+costs, and [how to confirm the handshake is what failed](platform-tls-policy.md#confirming-it-is-the-handshake); this
+command inherits the environment it is started in, so pointing it at a relaxed policy is a prefix like anywhere else:
+
+```bash
+OPENSSL_CONF=/etc/mailfathom/openssl-legacy.cnf dotnet run --project tools/SyntheticMail -- <recipient>
+```
+
+The relaxation is process-wide rather than per connection, which here reaches only this command's own submission
+session and nothing else, because the process opens no other TLS connection.
+`userName` is the address unless the server wants something else. `author` decides whose address generated mail is
+`From`: `Fabricated`, the default, invents one and names the account in `Sender`; `SendingAccount` puts the account
+there and moves the invented participant to `Reply-To`, which is what a hosted provider that refuses to submit mail
+authored by anyone but the authenticated user needs.
+
+**Generation is deterministic and local.** No model is called and no network is reached: word lists, name lists, and
+templates carried in the repository, combined by a seeded generator, produce every subject, participant, body, thread,
+date, and attachment. A seed is what makes a page boundary, a ranking, or a retrieval result something to assert
+against rather than something to look at, so a run that names none chooses one and reports it, together with the exact
+invocation that repeats the batch:
+
+```text
+Seed 481923: 200 messages dated 2026-05-10..2026-08-08, attachments up to 65536 bytes.
+Repeat this batch with: developer@example.com --seed 481923 --count 200 --days 90 --until 2026-08-08 --attachment-bytes 65536
+```
+
+What the corpus varies is what the product actually reads: subject and body length, how many participants a message
+names, threading through `In-Reply-To` and `References`, dates spread over the requested range, plain text against HTML
+against `multipart/alternative`, `us-ascii` against `iso-8859-1` against `utf-8`, and messages with and without an
+attachment. Every invented participant is under a domain in the reserved `.test` top-level domain, which RFC 6761
+guarantees resolves to nothing, so a generated address cannot reach a person even if it is echoed into a reply. The
+recipient you name is the only real address a run touches, and it is the only one the envelope ever carries.
+
+| Option | What it decides |
+| --- | --- |
+| `--count`, `-n` | How many messages, 1..2000. Defaults to 50. |
+| `--seed` | What the corpus is derived from. Chosen and reported when absent. |
+| `--days` | How far back from `--until` the dates reach, 1..3650. Defaults to 90. |
+| `--until` | The newest day a message is dated, as `yyyy-MM-dd`. Defaults to today and is reported either way. |
+| `--attachment-bytes` | The ceiling on one attachment, 0..10485760. Zero generates a corpus carrying none. Defaults to 65536. |
+| `--interval` | Milliseconds between two submissions, 0..60000, so a real server is not hit with a burst. Defaults to 250. |
+| `--config` | The credential file to read, when it is not the one beside the built command. |
+| `--dry-run` | Generate and list the corpus on standard output without connecting to anything. |
+
+The corpus listing goes to standard output and everything the run says about itself to standard error, so two dry runs
+of one seed are compared with an ordinary `diff`:
+
+```bash
+diff <(dotnet run --project tools/SyntheticMail -- a@example.test --dry-run --seed 42 2>/dev/null) \
+     <(dotnet run --project tools/SyntheticMail -- a@example.test --dry-run --seed 42 2>/dev/null)
+```
+
+A batch reports how many were delivered and names each message the server refused rather than stopping at the first
+one, and it exits non-zero when any failed — a mailbox holding an unknown prefix of a corpus is worse than one that
+finished and said which messages are missing from it.
+
+The integration suite composes its own mail through the same generator, in `OrchestratedMailbox`, so there is one
+implementation of *build a synthetic message* rather than two that would drift.
 
 ## Command-line tooling
 
