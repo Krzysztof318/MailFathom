@@ -60,6 +60,7 @@ using MailFathom.Infrastructure.Secrets.Sources;
 using MailFathom.Infrastructure.Security.OAuth;
 using MailKit.Net.Imap;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Npgsql;
@@ -195,8 +196,16 @@ public static class ServiceCollectionExtensions
         // every write at session start rather than merely leave it un-retried. Adopting it instead means handing each
         // unit of work to Database.CreateExecutionStrategy().ExecuteAsync so the strategy can replay it whole, and
         // dropping OutboundDependency.DatabaseCommandExecution from those paths so the two never stack.
-        services.AddDbContext<MailFathomDbContext>((provider, options) =>
-            options.UseNpgsql(provider.GetRequiredService<NpgsqlDataSource>(), npgsql => npgsql.UseVector()));
+        // EF Core reports every executed command at Information, which is one record per round trip and therefore most
+        // of what a deployment writes: a synchronization run, a backfill sweep, and every MCP read reach the database
+        // repeatedly, so the records an operator is reading for are buried among the SQL that served them. Lowering the
+        // event to Debug is not the same as filtering the category out, which would remove the records at every level:
+        // they stay reachable through Logging:LogLevel:Microsoft.EntityFrameworkCore.Database.Command, which is what a
+        // slow or unexpected query is diagnosed with. Only this event moves, so a failed command still surfaces at its
+        // own level.
+        services.AddDbContext<MailFathomDbContext>((provider, options) => options
+            .UseNpgsql(provider.GetRequiredService<NpgsqlDataSource>(), npgsql => npgsql.UseVector())
+            .ConfigureWarnings(warnings => warnings.Log((RelationalEventId.CommandExecuted, LogLevel.Debug))));
         services.AddScoped<IPersistenceSessionFactory, PersistenceSessionFactory>();
         services.AddScoped<ISynchronizationCheckpointStore, SynchronizationCheckpointStore>();
         // Registered here rather than beside the chunker it calls, because what it is is a table: it decides which
