@@ -146,7 +146,7 @@ public sealed class EmailContentReader
         // neither schedules a repair. They are answered apart because only one of them is worth asking about again.
         if (BodyOfUnstoredContent(summary.ContentAvailability) is { } unstoredBody)
         {
-            return EmailContentReadOutcome.Read(ContentWithoutStoredMime(summary, request, unstoredBody));
+            return EmailContentReadOutcome.Read(ContentWithoutStoredMime(summary, unstoredBody));
         }
 
         var content = await this.contentStore.FindStoredContentAsync(storedEmailId, cancellationToken);
@@ -170,7 +170,7 @@ public sealed class EmailContentReader
             cancellationToken);
 
         return rendering.Rendering is { } rendered
-            ? EmailContentReadOutcome.Read(ContentFrom(summary, rendered, request))
+            ? EmailContentReadOutcome.Read(ContentFrom(summary, rendered))
             : await this.RequestRepairAsync(summary, EmailContentDefect.Unreadable, cancellationToken);
     }
 
@@ -187,14 +187,14 @@ public sealed class EmailContentReader
 
     /// <summary>States how much attachment content this email may return, or that it may return none.</summary>
     /// <remarks>
-    /// The bounds are absent when the request did not ask to describe the attachments, which is what keeps a read of
-    /// bodies from decoding files nobody asked about. The same argument asks for both the descriptions and the octets,
-    /// because a caller that wants a file has to be told what the file is to make anything of it.
+    /// The bounds are absent when the request did not ask for content, which is what keeps a read of bodies from
+    /// decoding files nobody asked for. The descriptions are produced either way and cost nothing extra: the same walk
+    /// measures every part whether or not it keeps one.
     /// </remarks>
     private EmailAttachmentContentBounds? AttachmentContentBoundsFor(
         GetEmailContentRequest request,
         int remainingAttachmentOctets) =>
-        request.IncludeAttachmentDetails
+        request.IncludeAttachmentContent
             ? new EmailAttachmentContentBounds(this.readOptions.MaxAttachmentBytes, remainingAttachmentOctets)
             : null;
 
@@ -204,8 +204,8 @@ public sealed class EmailContentReader
     /// charging the budget for it would withhold the next attachment on the strength of one that was never sent.
     /// </remarks>
     private static int AttachmentOctetsReturnedBy(EmailContentReadOutcome outcome) =>
-        outcome.Content?.Attachments is { } attachments
-            ? attachments.Sum(attachment => attachment.Content.Octets.Length)
+        outcome.Content is { } content
+            ? content.Attachments.Sum(attachment => attachment.Content.Octets.Length)
             : 0;
 
     /// <summary>Records the defect durably and produces the outcome to report for it.</summary>
@@ -232,17 +232,12 @@ public sealed class EmailContentReader
     /// while the message it describes has them, and reporting the row's answer beside a list of two files would be
     /// wrong in the one direction a caller cannot check.
     /// <para>
-    /// The counts are published whether or not the caller asked to describe the attachments, because how many a message
-    /// carries is what tells a caller that asking again would describe something. The names, media types, sizes, and
-    /// content are what the request decides, and the request is read again here rather than inferred from what the
-    /// rendering returned: withholding them is this use case's guarantee, and one an adapter cannot be trusted to keep
-    /// on its behalf.
+    /// The counts and the descriptions are published whatever the caller asked for, because both are what a caller
+    /// decides against: how many files there are, and whether any of them is worth the octets. Only the octets are the
+    /// request's to ask for, and the rendering already carries them exactly where it did.
     /// </para>
     /// </remarks>
-    private static ReadEmailContent ContentFrom(
-        EmailSummary summary,
-        EmailContentRendering rendering,
-        GetEmailContentRequest request)
+    private static ReadEmailContent ContentFrom(EmailSummary summary, EmailContentRendering rendering)
     {
         return new ReadEmailContent
         {
@@ -255,7 +250,7 @@ public sealed class EmailContentReader
                 ? EmailContentBody.EncryptedNotReadableLocally
                 : EmailContentBody.Readable(rendering.PlainTextBody, rendering.SanitizedHtmlBody),
             AttachmentSummary = SummaryOf(rendering.AttachmentSummary),
-            Attachments = request.IncludeAttachmentDetails ? rendering.Attachments : null,
+            Attachments = rendering.Attachments,
             RemoteFlags = summary.RemoteFlags,
         };
     }
@@ -290,14 +285,11 @@ public sealed class EmailContentReader
     /// defaults rather than a finding. The body state says why all of it is missing, and which of the two reasons it
     /// was.
     /// <para>
-    /// The empty list a caller that asked for attachment descriptions receives is therefore about this message's
-    /// content being unread rather than about it carrying no files, which the absent counts beside it state.
+    /// The empty attachment list is therefore about this message's parts never having been read rather than about it
+    /// carrying no files, which the absent counts beside it state.
     /// </para>
     /// </remarks>
-    private static ReadEmailContent ContentWithoutStoredMime(
-        EmailSummary summary,
-        GetEmailContentRequest request,
-        EmailContentBody body)
+    private static ReadEmailContent ContentWithoutStoredMime(EmailSummary summary, EmailContentBody body)
     {
         return new ReadEmailContent
         {
@@ -308,7 +300,7 @@ public sealed class EmailContentReader
             Headers = HeadersFrom(summary),
             Body = body,
             AttachmentSummary = null,
-            Attachments = request.IncludeAttachmentDetails ? [] : null,
+            Attachments = [],
             RemoteFlags = summary.RemoteFlags,
         };
     }

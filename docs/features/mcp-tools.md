@@ -261,10 +261,10 @@ configuration leaves its stored rows in place.
 ## `get_email_content`
 
 Returns up to ten emails from the local mailbox copy in one call: for each one its normalized headers, the plain-text
-body, optionally a sanitized HTML body, how many attachments it carries, and optionally one entry per attachment with
-the file itself. [Email content](email-content.md) documents the use case behind it — the representations, the
-sanitization policy, the four bounds, the attachment default, and the consistency behavior — where they are enforced.
-This section describes the surface.
+body, optionally a sanitized HTML body, every attachment it carries described, and — on request — those attachments'
+content. [Email content](email-content.md) documents the use case behind it — the representations, the sanitization
+policy, the four bounds, the attachment default, and the consistency behavior — where they are enforced. This section
+describes the surface.
 
 ### Arguments
 
@@ -272,7 +272,7 @@ This section describes the surface.
 |---|---|---|
 | `storedEmailIds` | `string[]` | **Required.** The `storedEmailId` values a listing or a search returned, 1 to 10 of them, each named at most once. Each is a UUID; anything else is refused with `51004` |
 | `includeSanitizedHtml` | `boolean` | Whether to also return the sanitized HTML body of each email. Omitted returns plain text alone |
-| `includeAttachmentDetails` | `boolean` | Whether to return each attachment — its file name, media type, size, and content — rather than only count them. Omitted returns the counts alone |
+| `includeAttachmentContent` | `boolean` | Whether to return the content of each attachment as base64, rather than only describing it. Omitted still returns every attachment's file name, media type, and size |
 
 Naming several emails is what the tool exists for: a call that has just listed or searched routinely wants the top few
 results, and one round trip per email spends the protocol overhead, the rate-limit budget, and a turn of the model's own
@@ -339,12 +339,14 @@ Five parts of it are worth reading before a caller writes against them:
   later synchronization run fetches once there is room. The last three return an empty text because nothing could be
   read, and a caller that ignored the distinction would report an empty message — or would give up on the one state
   where asking again later actually returns the body.
-- **`attachments` is `null` unless it was asked for, which is not an empty list.** A file name is text the sender chose
-  and is often the most identifying string an email carries, and the file itself is the most sensitive thing an email
-  holds, so an ordinary read of a body publishes neither. `null` means the call did not ask; `[]` means the email
-  carries none. `attachmentCounts` answers how many either way, so a caller can tell that asking again would return
-  something.
-- **`contentBase64` is the whole file or nothing, and `contentState` says which.** An attachment above
+- **`attachments` is always present, and `[]` means the email carries none.** Every read describes what a message
+  carries, because deciding whether a file is worth asking for *is* reading its name, its type, and its size — a result
+  answering with a count alone would force a second call to learn what the first was about. `attachmentCounts` answers
+  how many either way. `list_emails` still counts and never names, deliberately: a listing is a browse over mail the
+  caller has not opened, while a content read has already returned the body in full.
+- **`contentBase64` is the whole file or nothing, and `contentState` says which.** It is absent unless the call set
+  `includeAttachmentContent`, which `contentState: notRequested` states rather than leaving a reader to infer. An
+  attachment above
   `EmailContent:MaxAttachmentBytes`, or reached after `EmailContent:MaxAttachmentBytesPerRead` is spent, is described
   with `contentBase64` absent and `contentState` naming the bound: `exceededAttachmentByteLimit` is the same answer in
   every call, while `readByteBudgetExhausted` may come back in a narrower one. *May*, because the budget falls to the

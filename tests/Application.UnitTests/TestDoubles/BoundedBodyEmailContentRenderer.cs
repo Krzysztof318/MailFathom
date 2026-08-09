@@ -59,6 +59,7 @@ internal sealed class BoundedBodyEmailContentRenderer(
 
         var attachments = RenderAttachments(bounds.AttachmentContent, attachmentOctetCounts ?? []);
 
+
         return Task.FromResult(EmailContentRenderingResult.Rendered(
             new EmailContentRendering(
                 new EmailContentHeaders("Subject", SentAt: null, ReceivedAt: null, [], EmailThreadReferences.None),
@@ -66,7 +67,7 @@ internal sealed class BoundedBodyEmailContentRenderer(
                 sanitizedHtml,
                 BodyIsEncrypted: false,
                 EmailAttachmentSummary.Create(
-                    attachments?.Select(attachment => attachment.Description) ?? [],
+                    attachments.Select(attachment => attachment.Description),
                     inlineResourceCount: 0,
                     isEncrypted: false,
                     carriesUnverifiedSignature: false,
@@ -74,28 +75,21 @@ internal sealed class BoundedBodyEmailContentRenderer(
                 attachments)));
     }
 
-    /// <summary>Produces one attachment per configured size, keeping the content the allowance permits.</summary>
-    private static List<RenderedEmailAttachment>? RenderAttachments(
+    /// <summary>Describes one attachment per configured size, keeping the content the allowance permits.</summary>
+    /// <remarks>
+    /// Every attachment is described whether or not content was asked for, the way the real adapter describes what one
+    /// walk of the message found; only the octets depend on the bounds.
+    /// </remarks>
+    private static List<RenderedEmailAttachment> RenderAttachments(
         EmailAttachmentContentBounds? attachmentContent,
         IReadOnlyList<int> octetCounts)
     {
-        if (attachmentContent is null)
-        {
-            return null;
-        }
-
         var rendered = new List<RenderedEmailAttachment>(octetCounts.Count);
-        var remainingOctets = attachmentContent.RemainingOctetsForRead;
+        var remainingOctets = attachmentContent?.RemainingOctetsForRead ?? 0;
 
         foreach (var octetCount in octetCounts)
         {
-            var allowance = EmailAttachmentContentAllowance.Of(
-                attachmentContent.MaxOctetsPerAttachment,
-                remainingOctets);
-
-            var attachmentContentOfPart = octetCount > allowance.MaxOctets
-                ? EmailAttachmentContent.Withheld(allowance.AvailabilityWhenExceeded)
-                : EmailAttachmentContent.Returned(new byte[octetCount]);
+            var attachmentContentOfPart = ContentOf(attachmentContent, octetCount, remainingOctets);
 
             remainingOctets -= attachmentContentOfPart.Octets.Length;
             rendered.Add(new RenderedEmailAttachment(
@@ -104,5 +98,25 @@ internal sealed class BoundedBodyEmailContentRenderer(
         }
 
         return rendered;
+    }
+
+    /// <summary>Decides what one attachment of the given size returns under the bounds the read carried.</summary>
+    private static EmailAttachmentContent ContentOf(
+        EmailAttachmentContentBounds? attachmentContent,
+        int octetCount,
+        int remainingOctets)
+    {
+        if (attachmentContent is null)
+        {
+            return EmailAttachmentContent.NotRequested;
+        }
+
+        var allowance = EmailAttachmentContentAllowance.Of(
+            attachmentContent.MaxOctetsPerAttachment,
+            remainingOctets);
+
+        return octetCount > allowance.MaxOctets
+            ? EmailAttachmentContent.Withheld(allowance.AvailabilityWhenExceeded)
+            : EmailAttachmentContent.Returned(new byte[octetCount]);
     }
 }

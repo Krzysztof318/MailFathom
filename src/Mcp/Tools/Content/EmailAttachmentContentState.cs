@@ -20,4 +20,7 @@ internal enum EmailAttachmentContentState
 
     /// <summary>The call's attachment budget was spent by the attachments returned before this one.</summary>
     ReadByteBudgetExhausted = 2,
+
+    /// <summary>The call did not ask for attachment content, so the file was described and never decoded.</summary>
+    NotRequested = 3,
 }

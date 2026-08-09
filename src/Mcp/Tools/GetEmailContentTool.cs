@@ -34,8 +34,8 @@ namespace MailFathom.Mcp.Tools;
 /// </para>
 /// <para>
 /// This is the most sensitive tool MailFathom publishes, since its result is message content in full — including, for a
-/// call that asked to describe the attachments, the files themselves. Nothing here writes any part of a result to a
-/// log, and the failures it raises name neither the content nor the text the caller supplied.
+/// call that asked for it, the attached files themselves. Nothing here writes any part of a result to a log, and the
+/// failures it raises name neither the content nor the text the caller supplied.
 /// </para>
 /// </remarks>
 [McpServerToolType]
@@ -57,7 +57,7 @@ internal sealed class GetEmailContentTool(EmailContentReader emailContentReader)
     /// <summary>Reads the content of the named emails from the local mailbox copy.</summary>
     /// <param name="storedEmailIds">The stable local identifiers a listing or a search returned for the emails.</param>
     /// <param name="includeSanitizedHtml">Whether to also return the sanitized HTML representation of each body.</param>
-    /// <param name="includeAttachmentDetails">Whether to return each attachment with its content rather than only count them.</param>
+    /// <param name="includeAttachmentContent">Whether to return the octets of each attachment rather than only describe it.</param>
     /// <param name="cancellationToken">Cancels the read when the caller disconnects or the host shuts down.</param>
     /// <returns>One entry per named email, each carrying its content or the reason there is none.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="storedEmailIds" /> is <see langword="null" />, which the advertised schema already refuses.</exception>
@@ -79,29 +79,28 @@ internal sealed class GetEmailContentTool(EmailContentReader emailContentReader)
         UseStructuredContent = true)]
     [Description(
         "Reads up to 10 emails already synchronized into MailFathom's local mailbox copy, in one call: for each one its "
-        + "normalized headers, the plain-text body, optionally a sanitized HTML body, and how many attachments it "
-        + "carries. Reads the local copy only: it never contacts a mail server, never downloads mail, and never marks "
-        + "mail as read. Each email is answered for separately, so one this deployment cannot serve does not discard "
-        + "the others. Bodies are bounded per email and by a budget shared across the whole call, and each says which "
-        + "of the two cut it; naming fewer emails at once returns more of each. By default attachments are counted and "
-        + "not described — set includeAttachmentDetails to receive their file names, media types, sizes, and their "
-        + "content as base64 in contentBase64. Attachment content is bounded per attachment and by a byte budget "
-        + "shared across the call: a file above either bound is described with no content and says which bound "
-        + "withheld it, and a file is never returned in part. Name each email by the storedEmailId a listing or a "
-        + "search returned.")]
+        + "normalized headers, the plain-text body, optionally a sanitized HTML body, and every attachment it carries "
+        + "described by file name, media type, and size. Reads the local copy only: it never contacts a mail server, "
+        + "never downloads mail, and never marks mail as read. Each email is answered for separately, so one this "
+        + "deployment cannot serve does not discard the others. Bodies are bounded per email and by a budget shared "
+        + "across the whole call, and each says which of the two cut it; naming fewer emails at once returns more of "
+        + "each. Attachment content is not returned by default — set includeAttachmentContent to receive each file as "
+        + "base64 in contentBase64, which is bounded per attachment and by a byte budget shared across the call: a "
+        + "file above either bound is described with no content and says which bound withheld it, and a file is never "
+        + "returned in part. Name each email by the storedEmailId a listing or a search returned.")]
     public async Task<GetEmailContentToolResult> GetEmailContentAsync(
         [Description("The storedEmailIds a listing or a search returned, at most 10, each named at most once. Each is a UUID and does not change when the mail server renumbers or moves the message. Results come back in the order given, and the call is refused rather than truncated when it names more than 10.")]
         IReadOnlyList<string> storedEmailIds,
         [Description("Whether to also return the sanitized HTML body of each email. Omit it unless the markup itself matters: the plain text is the representation to read from, HTML costs a sanitization pass, and it draws on the same character budget as the plain text. An email carrying no HTML part returns none either way.")]
         bool includeSanitizedHtml = false,
-        [Description("Whether to return each attachment — its file name, media type, decoded size, and its content as base64 — rather than only count them. Omitted returns the counts alone, which is what an ordinary read of a body needs: a file name is text the sender chose and is often the most identifying string an email carries, and the content is the file itself. Set it when the files are what you are after, and expect a much larger response for an email that carries any.")]
-        bool includeAttachmentDetails = false,
+        [Description("Whether to return the content of each attachment as base64, rather than only describing it. Omitted still returns every attachment's file name, media type, and size, which is what an ordinary read needs to decide whether a file is worth asking for; the content is the file itself. Set it when the files are what you are after, and expect a much larger response for an email that carries any: base64 makes a file about a third larger again.")]
+        bool includeAttachmentContent = false,
         CancellationToken cancellationToken = default)
     {
         var request = GetEmailContentRequest.Create(
             NamedEmails(storedEmailIds),
             includeSanitizedHtml,
-            includeAttachmentDetails);
+            includeAttachmentContent);
 
         var result = await emailContentReader.ReadContentAsync(request, cancellationToken);
 

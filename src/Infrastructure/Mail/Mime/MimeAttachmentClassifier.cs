@@ -65,7 +65,7 @@ internal sealed partial class MimeAttachmentClassifier
 
         return new MimeContentClassification(
             classifier.Summarize(attachments),
-            attachmentContent is null ? null : attachments,
+            attachments,
             [.. classifier.bodyBranchLeaves.OfType<TextPart>()],
             classifier.bodyBranchIsEncrypted);
     }

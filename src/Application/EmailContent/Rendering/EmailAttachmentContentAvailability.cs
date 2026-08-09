@@ -33,8 +33,9 @@ public enum EmailAttachmentContentAvailability
 
     /// <summary>Nothing asked for this attachment's content, so nothing decoded it.</summary>
     /// <remarks>
-    /// It never reaches a reader: a rendering given no attachment bounds publishes no attachment list at all, and this
-    /// is what the parse that fills the lexical index leaves behind on the descriptions it produces along the way.
+    /// This is the ordinary answer for a read that wanted the message rather than its files, and it is what the parse
+    /// that fills the lexical index leaves behind on every description it produces along the way. It is distinct from
+    /// the two bounds because it says nothing about the file: asking for content is what returns it.
     /// </remarks>
     NotRequested = 3,
 }

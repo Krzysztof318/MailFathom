@@ -4,8 +4,8 @@
 
 MailFathom serves the content of the emails one call names, from its local copy. `EmailContentReader` is the second read
 use case: it takes the stable local identifiers a listing returned and answers for each of them with normalized headers,
-the body as plain text, optionally a sanitized HTML representation, attachment counts, optionally each attachment with
-its content, the source account and folder alias, and the remote flag snapshot.
+the body as plain text, optionally a sanitized HTML representation, attachment counts, every attachment described and
+optionally carrying its content, the source account and folder alias, and the remote flag snapshot.
 
 It reaches no mail server. That is structural rather than a rule someone keeps: the use case is constructed from a
 summary reader, a content store, a renderer, a repair-request store, and the account catalog, and none of them can open
@@ -23,19 +23,16 @@ tool that maps onto it is documented in [MCP tools](mcp-tools.md#get_email_conte
 |---|---|---|
 | `StoredEmailIds` | The emails to read, named by the identities a listing returned, in the order to read them | — |
 | `IncludeSanitizedHtml` | Whether to also produce the sanitized HTML representation of each body | plain text only |
-| `IncludeAttachmentDetails` | Whether to return each attachment, with its content, rather than only count them | counts only |
+| `IncludeAttachmentContent` | Whether to return the octets of each attachment, rather than only describe it | descriptions only |
 
-Both flags govern the whole call rather than one email each. A caller asking for markup or for the attachments wants them
-for what it is about to read, and a flag per identifier would make the argument list grow with the batch while answering
-a question no caller asks per email.
+Both flags govern the whole call rather than one email each. A caller asking for markup or for the attached files wants
+them for what it is about to read, and a flag per identifier would make the argument list grow with the batch while
+answering a question no caller asks per email.
 
 The HTML representation is opt-in because it costs a sanitization pass over untrusted markup and because plain text is
 what most callers want: a model reading mail is better served by the words than by the layout around them. The
-attachments are opt-in for a different reason, recorded under
-[Attachments](#attachments-are-counted-always-and-returned-on-request).
-
-One flag covers the descriptions and the content rather than two, because a caller that wants a file has to be told what
-the file is to make anything of it, and a caller that wants only how many there are already has the counts.
+attachment octets are opt-in for a different reason, recorded under
+[Attachments](#attachments-are-described-always-and-returned-on-request).
 
 ### Reading several emails, and what bounds it
 
@@ -99,7 +96,7 @@ fact whether it named one email or ten.
 | `Headers` | Subject, sent and received timestamps, every participant under its header role, and the thread identifiers |
 | `Body` | The representations, or the reason there are none |
 | `AttachmentSummary` | The counts for what the message carries besides its body, absent when nobody has counted them |
-| `Attachments` | One entry per attachment when the request asked for them, re-derived from the stored raw MIME, each with its octets or the bound that withheld them |
+| `Attachments` | One entry per attachment, re-derived from the stored raw MIME, each carrying its octets or the reason it carries none |
 | `RemoteFlags` | The flags a server last showed, and when they were read |
 
 ### Headers come from the message, not from the row
@@ -118,21 +115,25 @@ prefix of a message identifier is an identifier another message may legitimately
 same values more narrowly, deliberately — one bound is about what a parse publishes to a reader and the other about
 what a column stores.
 
-### Attachments are counted always, and returned on request
+### Attachments are described always, and returned on request
 
-How many attachments an email carries is answered by every read. What each one is *called*, and what is in it, are
-answered only when `IncludeAttachmentDetails` asks: a file name is text the sender chose, it is frequently the most
-identifying string a message carries, the file itself is the message's most sensitive part, and a read that only wanted
-the body never asked for either. `list_emails` already publishes counts and never names, so withholding the names here
-makes the two read models agree about the same data rather than disagree for no reason a caller stated.
+Every read answers what a message carries: how many attachments, what each is called, what it declares itself to be, and
+how large it is. Only the octets wait for `IncludeAttachmentContent`, because they are the message's most sensitive part
+and by far its largest — base64 makes an ordinary attachment several times the size of the body beside it.
 
-The default is never silently lossy. `AttachmentSummary` states how many attachments exist, their total decoded size,
-the inline-resource count, and the encryption, signature, and TNEF flags whichever way the flag is set, so a caller can
-tell that asking again would return something rather than concluding the message carries nothing. `Attachments` is
-absent rather than empty in that case, which keeps "you did not ask" and "there are none" apart.
+The line falls there rather than around the descriptions because of what a caller does with them. Deciding whether a
+file is worth asking for *is* reading its name, its type, and its size; a read that answered with a count alone would
+leave a caller nothing to decide on and force a second call to learn what the first was about. The octets are the part
+that costs something, so they are the part that is asked for.
 
-A read that asks for nothing decodes nothing. The bounds travel to the renderer only where the flag is set, so an
-ordinary read of a body measures each attachment — which is what produces its size — and retains not one octet of it.
+`list_emails` still counts and never names, and that disagreement between the two read models is deliberate rather than
+an oversight. A listing is a browse over a mailbox, where a file name would be sender-chosen identifying text about mail
+the caller has not opened; a content read has already returned the body in full, so a file name adds nothing about that
+message a caller does not already hold.
+
+A read that asks for no content decodes none. The bounds travel to the renderer only where the flag is set, so an
+ordinary read measures each attachment — which is what produces its size — and retains not one octet of it. The entry
+says so: `NotRequested` is what separates a file nobody asked for from one a bound withheld.
 
 ### Attachment content is returned whole, or not at all
 
@@ -155,6 +156,7 @@ on a body cuts the text and reports the cut.
 
 | `Availability` | Meaning | What a caller does about it |
 |---|---|---|
+| `NotRequested` | The call asked for no content, so the file was described and never decoded | Ask again with `IncludeAttachmentContent` |
 | `Returned` | The content is present and is the whole file | Nothing |
 | `ExceededAttachmentByteLimit` | The file is larger than one attachment may return | Nothing; this deployment does not serve a file this size |
 | `ReadByteBudgetExhausted` | The attachments returned before it spent the call's budget | Name fewer emails at once — which helps only when it was another email that spent it |
@@ -173,7 +175,8 @@ who wants every attachment of every message served raises `MaxAttachmentBytesPer
 thing by asking for less.
 
 Inline resources and cryptographic parts carry no content here for the same reason they carry no description — they
-never enter the list at all.
+never enter the list at all. `NotRequested` sits beside the two bounds rather than among them because it says nothing
+about the file: asking for content is what returns it.
 
 The octets are message content in full and inherit every classification, retention, access, and erasure constraint of
 the mail they were read from. They are never logged, never persisted anywhere new, and exist only for as long as the
@@ -241,9 +244,11 @@ never be read locally when naming it alone returns the readable alternative in f
 
 Neither of the two unstored states is a defect and neither schedules a repair: synchronization recorded the occurrence
 and deliberately stored no content for it, so asking for repair would ask a later run to store what it already decided
-not to. Everything answerable is still answered — the headers from the stored row, the attachment counts from the
-summary written when the occurrence was recorded — and only the per-attachment list is absent, because nothing local can
-derive it.
+not to. Everything answerable is still answered — the headers from the stored row — and everything about the message's
+parts is absent, because nothing local can derive it: the attachment list is empty and the counts beside it are `null`
+rather than zero, for the reason [Attachments](#attachments-are-described-always-and-returned-on-request) gives. The
+empty list is about the parts never having been read rather than about the message carrying no files, and the absent
+counts are what say which of the two it is.
 
 What separates them is whether asking again is worth anything. `NotStoredExceededSizeLimit` is permanent: the same limit
 refuses the same message on every run. `NotStoredAwaitingStorageHeadroom` is a queue — the message was discovered while

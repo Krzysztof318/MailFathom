@@ -13,8 +13,8 @@ namespace MailFathom.Application.EmailContent.Rendering;
 /// <param name="BodyIsEncrypted">Whether the message's own body arrived inside a cryptographic envelope and could not be read here.</param>
 /// <param name="AttachmentSummary">What the message carries besides its body, counted whether or not anything asked to describe it.</param>
 /// <param name="Attachments">
-/// One entry per attachment, each pairing the description with the octets the bounds allowed, or <see langword="null" />
-/// when the bounds asked for no attachment content.
+/// One entry per attachment, each pairing the description the parse produced with the octets the bounds allowed, which
+/// are absent when the bounds asked for no attachment content.
 /// </param>
 /// <remarks>
 /// <para>
@@ -39,4 +39,4 @@ public sealed record EmailContentRendering(
     EmailBodyRepresentation? SanitizedHtmlBody,
     bool BodyIsEncrypted,
     EmailAttachmentSummary AttachmentSummary,
-    IReadOnlyList<RenderedEmailAttachment>? Attachments);
+    IReadOnlyList<RenderedEmailAttachment> Attachments);

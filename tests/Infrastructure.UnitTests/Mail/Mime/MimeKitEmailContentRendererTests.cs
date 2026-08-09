@@ -416,22 +416,28 @@ public sealed class MimeKitEmailContentRendererTests
             attachmentContent: new EmailAttachmentContentBounds(MaxOctetsPerAttachment: 1024, RemainingOctetsForRead: 1024));
 
         // Assert
-        var attachment = Assert.Single(rendering.Attachments ?? []);
+        var attachment = Assert.Single(rendering.Attachments);
         Assert.Equal(EmailAttachmentContentAvailability.Returned, attachment.Content.Availability);
         Assert.Equal("pdf-bytes"u8.ToArray(), attachment.Content.Octets.ToArray());
         Assert.Equal("pdf-bytes".Length, attachment.Description.DecodedSizeOctets);
     }
 
-    /// <summary>A read that asked for no attachment content publishes no attachment list, so nothing can hold octets.</summary>
+    /// <summary>
+    /// A read that asked for no attachment content still describes every attachment — the same walk measures each part
+    /// either way — and retains not one octet of any of them.
+    /// </summary>
     [Fact]
-    public async Task RenderAsync_AttachmentContentNotAskedFor_MeasuresTheAttachmentAndPublishesNoList()
+    public async Task RenderAsync_AttachmentContentNotAskedFor_DescribesTheAttachmentAndRetainsNoOctets()
     {
         // Act
         var rendering = await RenderAsync(MessageAttaching("pdf-bytes"));
 
         // Assert
-        Assert.Null(rendering.Attachments);
-        Assert.Equal("pdf-bytes".Length, Assert.Single(rendering.AttachmentSummary.Attachments).DecodedSizeOctets);
+        var attachment = Assert.Single(rendering.Attachments);
+        Assert.Equal("report.pdf", attachment.Description.FileName?.Value);
+        Assert.Equal("pdf-bytes".Length, attachment.Description.DecodedSizeOctets);
+        Assert.Equal(EmailAttachmentContentAvailability.NotRequested, attachment.Content.Availability);
+        Assert.True(attachment.Content.Octets.IsEmpty);
     }
 
     /// <summary>
@@ -452,7 +458,7 @@ public sealed class MimeKitEmailContentRendererTests
             attachmentContent: new EmailAttachmentContentBounds(maxOctetsPerAttachment, remainingOctetsForRead));
 
         // Assert
-        var attachment = Assert.Single(rendering.Attachments ?? []);
+        var attachment = Assert.Single(rendering.Attachments);
         Assert.Equal(expectedAvailability, attachment.Content.Availability.ToString());
         Assert.True(attachment.Content.Octets.IsEmpty);
         Assert.Equal("pdf-bytes".Length, attachment.Description.DecodedSizeOctets);
@@ -494,7 +500,7 @@ public sealed class MimeKitEmailContentRendererTests
                 RemainingOctetsForRead: "first".Length));
 
         // Assert
-        var attachments = rendering.Attachments ?? [];
+        var attachments = rendering.Attachments;
         Assert.Equal(2, attachments.Count);
         Assert.Equal(EmailAttachmentContentAvailability.Returned, attachments[0].Content.Availability);
         Assert.Equal("first"u8.ToArray(), attachments[0].Content.Octets.ToArray());
@@ -529,7 +535,7 @@ public sealed class MimeKitEmailContentRendererTests
             attachmentContent: new EmailAttachmentContentBounds(MaxOctetsPerAttachment: 1024, RemainingOctetsForRead: 1024));
 
         // Assert
-        Assert.Empty(rendering.Attachments ?? []);
+        Assert.Empty(rendering.Attachments);
         Assert.Equal(1, rendering.AttachmentSummary.InlineResourceCount);
     }
 

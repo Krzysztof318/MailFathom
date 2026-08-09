@@ -86,14 +86,19 @@ public sealed class GetEmailContentToolMetadataTests
         // Assert
         Assert.NotNull(description);
         Assert.Contains("up to 10 emails", description, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("includeAttachmentDetails", description, StringComparison.Ordinal);
+        Assert.Contains("includeAttachmentContent", description, StringComparison.Ordinal);
+
+        // The default is that attachments are described and not decoded, which is what stops a model from asking for
+        // content merely to learn what a file is called.
+        Assert.Contains("described by file name, media type, and size", description, StringComparison.Ordinal);
+        Assert.Contains("not returned by default", description, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
     public void AddMailFathomServer_AdvertisesTheEmailIdentifiersAndTheTwoFlagsAsInputSchemaProperties()
     {
         // Arrange
-        string[] expectedProperties = ["storedEmailIds", "includeSanitizedHtml", "includeAttachmentDetails"];
+        string[] expectedProperties = ["storedEmailIds", "includeSanitizedHtml", "includeAttachmentContent"];
 
         // Act
         var advertisedProperties = AdvertisedGetEmailContentTool()
@@ -216,6 +221,7 @@ public sealed class GetEmailContentToolMetadataTests
         Assert.NotNull(outputSchema);
         var advertisedSchema = SchemaText(outputSchema.Value);
         Assert.Contains("contentBase64", advertisedSchema, StringComparison.Ordinal);
+        Assert.Contains("\"notRequested\"", advertisedSchema, StringComparison.Ordinal);
         Assert.Contains("\"returned\"", advertisedSchema, StringComparison.Ordinal);
         Assert.Contains("\"exceededAttachmentByteLimit\"", advertisedSchema, StringComparison.Ordinal);
         Assert.Contains("\"readByteBudgetExhausted\"", advertisedSchema, StringComparison.Ordinal);

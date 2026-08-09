@@ -10,9 +10,9 @@ namespace MailFathom.Mcp.Tools.Content;
 /// <summary>Publishes one attachment of an email, with its content when the read was allowed to return it.</summary>
 /// <remarks>
 /// <para>
-/// This is the one place in the published contract where a file's own octets travel, and only a call that asked to
-/// describe the attachments reaches it. Everything else MailFathom publishes — the listing, the search, the answering
-/// tool — carries counts and descriptions and nothing that could hold content.
+/// Every read of an email describes what it carries; this is the one place in the published contract where a file's own
+/// octets travel, and only a call that asked for them reaches that half. Everything else MailFathom publishes — the
+/// listing, the search, the answering tool — carries counts and nothing that could hold content.
 /// </para>
 /// <para>
 /// Base64 is the wire form because the protocol is JSON, and it costs a third again as much as the file itself. What
@@ -47,7 +47,7 @@ internal sealed record RetrievedEmailAttachment
     public required long SizeBytes { get; init; }
 
     /// <summary>Gets whether the content came back, and which bound stopped it when it did not.</summary>
-    [Description("Whether the attachment's content is present: 'returned' when contentBase64 holds the whole file, 'exceededAttachmentByteLimit' when the file is larger than this deployment returns in one attachment, or 'readByteBudgetExhausted' when the attachments returned before it spent the call's budget. The last one is worth retrying by naming this email alone, though it will not help when it was this same email's earlier attachments that spent the budget; the first is never worth retrying, because the limit applies to every call.")]
+    [Description("Whether the attachment's content is present: 'notRequested' when the call did not set includeAttachmentContent, so the file was described and never decoded; 'returned' when contentBase64 holds the whole file; 'exceededAttachmentByteLimit' when the file is larger than this deployment returns in one attachment; or 'readByteBudgetExhausted' when the attachments returned before it spent the call's budget. Ask again with includeAttachmentContent for the first. The last is worth retrying in a call naming fewer emails, though it will not help when this same email's earlier attachments spent the budget; the size limit is never worth retrying, because it applies to every call.")]
     public required EmailAttachmentContentState ContentState { get; init; }
 
     /// <summary>Gets the attachment's decoded octets as base64, or <see langword="null" /> when a bound withheld them.</summary>
@@ -83,8 +83,7 @@ internal sealed record RetrievedEmailAttachment
     /// <returns>The published state.</returns>
     /// <exception cref="ArgumentOutOfRangeException">
     /// Thrown when an application state has no published value, which means one was added without deciding what a
-    /// client should be told about it. <see cref="EmailAttachmentContentAvailability.NotRequested" /> is that case by
-    /// construction: a read that asked for no content publishes no attachment list to put it in.
+    /// client should be told about it.
     /// </exception>
     private static EmailAttachmentContentState PublishedState(EmailAttachmentContentAvailability availability) =>
         availability switch
@@ -94,6 +93,7 @@ internal sealed record RetrievedEmailAttachment
                 EmailAttachmentContentState.ExceededAttachmentByteLimit,
             EmailAttachmentContentAvailability.ReadByteBudgetExhausted =>
                 EmailAttachmentContentState.ReadByteBudgetExhausted,
+            EmailAttachmentContentAvailability.NotRequested => EmailAttachmentContentState.NotRequested,
             _ => throw new ArgumentOutOfRangeException(
                 nameof(availability),
                 availability,
