@@ -28,7 +28,8 @@ public sealed class ServiceDefaultsExtensionsTests
     {
         // Arrange
         var builder = new HostApplicationBuilder(new HostApplicationBuilderSettings { DisableDefaults = true });
-        var stampedVersion = ServiceVersionResourceExtensions.StampedServiceVersion;
+        var stampedVersion = StampedBuildResourceExtensions.StampedServiceVersion;
+        var stampedRevision = StampedBuildResourceExtensions.StampedSourceRevision;
 
         // Act
         builder.ConfigureOpenTelemetry();
@@ -39,13 +40,22 @@ public sealed class ServiceDefaultsExtensionsTests
         Assert.Equal(stampedVersion, ReadServiceVersion(host.Services.GetRequiredService<LoggerProvider>()));
         Assert.Equal(stampedVersion, ReadServiceVersion(host.Services.GetRequiredService<MeterProvider>()));
         Assert.Equal(stampedVersion, ReadServiceVersion(host.Services.GetRequiredService<TracerProvider>()));
+        Assert.Equal(stampedRevision, ReadSourceRevision(host.Services.GetRequiredService<LoggerProvider>()));
+        Assert.Equal(stampedRevision, ReadSourceRevision(host.Services.GetRequiredService<MeterProvider>()));
+        Assert.Equal(stampedRevision, ReadSourceRevision(host.Services.GetRequiredService<TracerProvider>()));
     }
 
-    private static string ReadServiceVersion(BaseProvider provider)
+    private static string ReadServiceVersion(BaseProvider provider) =>
+        ReadAttribute(provider, StampedBuildResourceExtensions.ServiceVersionAttributeName);
+
+    private static string ReadSourceRevision(BaseProvider provider) =>
+        ReadAttribute(provider, StampedBuildResourceExtensions.SourceRevisionAttributeName);
+
+    private static string ReadAttribute(BaseProvider provider, string attributeName)
     {
         var attribute = Assert.Single(
             provider.GetResource().Attributes,
-            candidate => candidate.Key == ServiceVersionResourceExtensions.ServiceVersionAttributeName);
+            candidate => candidate.Key == attributeName);
 
         return Assert.IsType<string>(attribute.Value);
     }

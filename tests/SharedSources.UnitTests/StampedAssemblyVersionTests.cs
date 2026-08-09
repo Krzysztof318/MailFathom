@@ -27,16 +27,16 @@ public sealed class StampedAssemblyVersionTests
 
     /// <summary>
     /// A prerelease identifier is part of the version rather than provenance, so it must stay on the left of the split.
-    /// This is the shape every nightly build carries, per ADR 0004.
+    /// This is the shape every nightly build carries, per ADR 0004, and the identifier its image tag carries with it.
     /// </summary>
     [Fact]
     public void Parse_PrereleaseVersionCarryingASourceRevision_KeepsThePrereleaseIdentifierWithTheVersion()
     {
         // Act
-        var stamped = StampedAssemblyVersion.Parse("0.2.0-nightly.41+3f1c9ab");
+        var stamped = StampedAssemblyVersion.Parse("0.2.0-nightly.41-3f1c9ab+3f1c9ab");
 
         // Assert
-        Assert.Equal("0.2.0-nightly.41", stamped.Version);
+        Assert.Equal("0.2.0-nightly.41-3f1c9ab", stamped.Version);
         Assert.Equal("3f1c9ab", stamped.Revision);
     }
 
@@ -67,6 +67,40 @@ public sealed class StampedAssemblyVersionTests
         // Assert
         Assert.Equal(StampedAssemblyVersion.Unknown, stamped.Version);
         Assert.Equal(StampedAssemblyVersion.Unknown, stamped.Revision);
+    }
+
+    /// <summary>
+    /// The build stamps the whole object name, and every reader of it — a startup record, an exported resource — wants
+    /// the abbreviation a nightly identifier and a Git log already use. The full name stays on the image label.
+    /// </summary>
+    [Fact]
+    public void Parse_VersionCarryingAWholeObjectName_ReportsTheRevisionAbbreviated()
+    {
+        // Act
+        var stamped = StampedAssemblyVersion.Parse("0.2.0+43092220f05a16d7ff5457af82b3b4573a2665bd");
+
+        // Assert
+        Assert.Equal("0.2.0", stamped.Version);
+        Assert.Equal("4309222", stamped.Revision);
+    }
+
+    /// <summary>
+    /// Truncating a value that is not an object name would produce something nothing can be looked up by, so the
+    /// abbreviation applies to hexadecimal alone and <c>unknown</c> survives it whole.
+    /// </summary>
+    [Theory]
+    [InlineData("0.2.0+unknown", StampedAssemblyVersion.Unknown)]
+    [InlineData("0.2.0+locally-built", "locally-built")]
+    [InlineData("0.2.0+3f1c9a", "3f1c9a")]
+    public void Parse_VersionCarryingSomethingOtherThanAnObjectName_ReportsItWhole(
+        string informationalVersion,
+        string expectedRevision)
+    {
+        // Act
+        var stamped = StampedAssemblyVersion.Parse(informationalVersion);
+
+        // Assert
+        Assert.Equal(expectedRevision, stamped.Revision);
     }
 
     [Theory]

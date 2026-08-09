@@ -49,7 +49,7 @@ because an OCI tag would reject it later and further from the cause.
 | Where | What it says | Read without running the artifact |
 | --- | --- | --- |
 | Host startup record | `ServiceVersion` and `ServiceRevision` | no |
-| Exported telemetry | `service.version` on the resource of every log record, metric point, and span | no |
+| Exported telemetry | `service.version` and `vcs.ref.head.revision` on the resource of every log record, metric point, and span | no |
 | MCP `initialize` | the server's implementation version | no |
 | `org.opencontainers.image.version` and `.revision` | the image's version and commit | yes |
 | The image's tags, including `latest` | which release this is | yes |

@@ -8,13 +8,14 @@ namespace MailFathom.Versioning;
 
 /// <summary>The version an assembly was stamped with at build time, split into the parts a reader asks for separately.</summary>
 /// <param name="Version">The semantic version, carrying a prerelease identifier when the build had one and no build metadata.</param>
-/// <param name="Revision">The source revision the assembly was built from, or <c>unknown</c> when the build supplied none.</param>
+/// <param name="Revision">The short source revision the assembly was built from, or <c>unknown</c> when the build supplied none.</param>
 /// <remarks>
 /// <para>
 /// The single string the build stamps answers two different questions, and reporting it whole answers neither well.
 /// <see cref="Version" /> is the compatibility statement, which is what an operator groups deployments by and what an
 /// MCP client compares against a tool contract it knows; <see cref="Revision" /> is build provenance, which is what
-/// turns a bug report from a deployment the reader did not build into something reproducible. See
+/// turns a bug report from a deployment the reader did not build into something reproducible, and which is reported in
+/// the abbreviated form a nightly identifier and a Git log already use rather than as the whole object name. See
 /// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0004-versioning-and-release-policy.md">ADR 0004</see> for where the number comes
 /// from.
 /// </para>
@@ -34,6 +35,15 @@ internal sealed record StampedAssemblyVersion(string Version, string Revision)
 {
     /// <summary>What either part reads as when the build stamped nothing a reader can use.</summary>
     public const string Unknown = "unknown";
+
+    /// <summary>How many characters of an object name the revision is reported as.</summary>
+    /// <remarks>
+    /// Seven, because that is what the nightly identifier abbreviates to and what a reader pasting the value into
+    /// <c>git show</c> already expects. The whole object name stays on the image's
+    /// <c>org.opencontainers.image.revision</c> label and in the assembly's own informational version, so nothing that
+    /// needs it has lost it.
+    /// </remarks>
+    private const int ShortRevisionLength = 7;
 
     /// <summary>Reads the version an assembly was stamped with.</summary>
     /// <param name="assembly">The assembly whose build-time metadata is read.</param>
@@ -70,9 +80,20 @@ internal sealed record StampedAssemblyVersion(string Version, string Revision)
 
         return new StampedAssemblyVersion(
             NonBlankOrUnknown(informationalVersion.AsSpan(0, buildMetadataStart)),
-            NonBlankOrUnknown(informationalVersion.AsSpan(buildMetadataStart + 1)));
+            Abbreviate(NonBlankOrUnknown(informationalVersion.AsSpan(buildMetadataStart + 1))));
     }
 
     private static string NonBlankOrUnknown(ReadOnlySpan<char> candidate) =>
         candidate.IsWhiteSpace() ? Unknown : candidate.Trim().ToString();
+
+    /// <summary>Shortens an object name to the length a reader expects, leaving anything that is not one alone.</summary>
+    /// <remarks>
+    /// The test is hexadecimal rather than a length, so a Git object name is abbreviated whichever hash function
+    /// produced it while <see cref="Unknown" />, and any other value a build supplied, is reported whole. Truncating
+    /// something that is not an object name would produce a value nothing can be looked up by.
+    /// </remarks>
+    private static string Abbreviate(string revision) =>
+        revision.Length > ShortRevisionLength && revision.All(char.IsAsciiHexDigit)
+            ? revision[..ShortRevisionLength]
+            : revision;
 }
