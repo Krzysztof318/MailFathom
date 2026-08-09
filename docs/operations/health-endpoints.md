@@ -252,7 +252,9 @@ probes:
 `probes.port` sets the container port the kubelet dials and the `HealthEndpoints__Port` the host binds, so the two
 cannot drift. The kubelet reaches a container port on the pod's own address without the Service publishing it, which is
 what keeps the probe listener off the network the MCP endpoint is served on. Setting it to `8080` is refused by the
-values schema, and the host would refuse the same collision at startup.
+values schema, and that refusal is the chart's alone — the host would share the socket, as [the probe listener is one of
+three, and only one](#the-probe-listener-is-one-of-three-and-only-one) describes, which is exactly what publishing the
+probes on the port the Service carries would then mean.
 
 The rendered probes are the ones the schema pins: `/started` for startup, `/health` for readiness, `/alive` for
 liveness. Each path is a `const` in the schema, so a probe pointed at the wrong endpoint is refused at install time

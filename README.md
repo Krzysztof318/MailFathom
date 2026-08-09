@@ -48,7 +48,7 @@ What an agent gets is four tools, and they are the whole surface:
 | Tool | What it answers |
 | --- | --- |
 | `list_emails` | A page of the timeline, newest first, filtered by account, folder, sender, recipient, subject, date range, seen state, or attachment presence |
-| `search_emails` | Ranked matches for a text query across subjects, participants, and body text, each with short extracts around what matched |
+| `search_emails` | Ranked matches for a text query across subjects, participants, and body text, each with short extracts around what matched — ranked lexically, and by embedding similarity beside it once an embedding model is configured |
 | `get_email_content` | Up to ten messages in full: normalized headers, plain-text body, optionally sanitized HTML, and attachment names, types, and sizes — never attachment bytes |
 | `ask_mail` | A question answered from the mail a chat model looks up while answering, citing the identifiers of every message it drew on so each claim can be read for yourself |
 
@@ -176,7 +176,7 @@ A mailbox is the largest archive most people own and the least usable one. Contr
 
 MailFathom is being built to change what mail *is* to software. It keeps the local copy current, indexes it so the whole of it is reachable rather than only its most recent slice, and serves it to agents as tools. The destination is a mail brain: something an agent can put a question to and get an answer from, working across years of mail, on infrastructure that belongs to you.
 
-MCP is how agents reach MailFathom; it is not what MailFathom is. The protocol surface is deliberately thin, and the project is building what sits behind it — continuous synchronization, extracted and indexed content, lexical search today, semantic retrieval and question answering next, and eventually the ability to act on your mail rather than only read it.
+MCP is how agents reach MailFathom; it is not what MailFathom is. The protocol surface is deliberately thin, and the project is building what sits behind it — continuous synchronization, extracted and indexed content, lexical and semantic retrieval, question answering over both, and eventually the ability to act on your mail rather than only read it.
 
 None of it depends on somebody else's service. The copy is yours, the database is yours, the deployment is yours, and the AI capabilities on the roadmap arrive as providers you choose and point at rather than as ones compiled into the product.
 

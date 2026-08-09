@@ -312,16 +312,17 @@ Secret was created outside it and stays.
 
 ### Chart version and application version
 
-`Chart.version` moves whenever anything under the chart directory changes; `Chart.appVersion` is the application
-version the chart is written against. They are separate, and a values default corrected without touching the image is a
-chart release on its own.
-
-`Chart.yaml` carries no `appVersion`, deliberately: the release run supplies it when it packages the chart, from the
-`VersionPrefix` in `Directory.Build.props` that is the only file in the repository carrying an application version.
+**They are one number.** `Chart.yaml` carries `version: 0.0.0` as a placeholder and no `appVersion` at all, and the
+release run supplies both from the `VersionPrefix` in `Directory.Build.props` that is the only file in the repository
+carrying an application version:
 
 ```bash
-helm package deploy/helm/mailfathom --app-version "$(bash scripts/read-declared-version.sh)"
+version="$(bash scripts/read-declared-version.sh)"
+helm package deploy/helm/mailfathom --version "$version" --app-version "$version"
 ```
+
+Omitting `--version` packages the placeholder. [Where the version is
+observable](release-procedure.md#where-the-version-is-observable) is where that rule and its reasoning live.
 
 A **packaged** chart therefore always states the application version it deploys, and refuses an install whose
 `image.tag` disagrees with it unless `image.allowVersionMismatch` says the combination is deliberate. Two cases carry

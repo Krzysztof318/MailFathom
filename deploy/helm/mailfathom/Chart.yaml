@@ -48,17 +48,21 @@ icon: https://raw.githubusercontent.com/Krzysztof318/MailFathom/main/assets/icon
 
 # What a chart search matches on. These are the repository's own topics, narrowed twice. The implementation topics are
 # left out — `csharp`, `dotnet`, `aspnet-core`, `dotnet-aspire`, `clean-architecture` describe the source, and nobody
-# searching a chart registry for something to install searches for the language it was written in. So are the topics
-# naming capabilities this release does not implement: `rag`, `semantic-search`, and `smtp` are the roadmap, and a
-# keyword is a claim about the artifact it is attached to.
+# searching a chart registry for something to install searches for the language it was written in. So is the one topic
+# naming a capability this release does not implement: `smtp` is the roadmap, and a keyword is a claim about the
+# artifact it is attached to. `rag` and `semantic-search` are here because they are now claims this artifact can carry —
+# a configured embedding model gives a search ranked by embedding similarity beside the lexical one, and `ask_mail`
+# answers from the mail it retrieves while citing it.
 keywords:
   - mcp
   - mcp-server
   - model-context-protocol
   - ai
   - ai-agents
+  - rag
   - email
   - email-search
+  - semantic-search
   - imap
   - postgresql
   - self-hosted

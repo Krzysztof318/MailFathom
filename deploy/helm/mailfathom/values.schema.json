@@ -453,7 +453,7 @@
           "not": {
             "const": 8080
           },
-          "description": "The port the probes are served on, reaching both the container port and HealthEndpoints:Port. 8080 is refused: it is the application listener's, the probes would either fail to bind or answer to whoever can reach the MCP endpoint, and the host refuses that collision at startup anyway."
+          "description": "The port the probes are served on, reaching both the container port and HealthEndpoints:Port. 8080 is refused, and the refusal is this chart's own rather than the host's: the host permits a probe port another surface already binds and then binds that socket once so it serves both. What sharing costs is exposure. The probes answer without a credential, 8080 is the port the Service publishes, and the two together would put dependency state in front of whoever can reach the MCP endpoint — so the chart keeps the probes on a port of their own rather than leaving that somewhere a deployment arrives at."
         },
         "readiness": {
           "$ref": "#/definitions/readinessProbe"
