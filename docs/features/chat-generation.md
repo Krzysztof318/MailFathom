@@ -127,7 +127,7 @@ this version can be declared without one.
   This is the same choice `Model` makes and for the same reason. What startup checks is therefore the *shape* — one
   word, no spaces, not absurdly long — and never the vocabulary, because a list held here could only be the list that
   was true when it was written. A level the model does not know is a *request refused*, learned on the first question
-  rather than pre-empted.
+  rather than ruled out in advance.
 
 **What a model must support for `ask_mail` to work at all.** The answering run offers the model function tools and
 requires it to call them, so a model that cannot be given tools cannot answer a question here whatever else is declared.

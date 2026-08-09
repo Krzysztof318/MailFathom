@@ -84,7 +84,7 @@ public sealed partial class ChatGenerationPlan
     /// efforts exist is a property of the model: <c>xhigh</c> arrived after the levels beneath it and a model released
     /// after this version may add another, so a closed set would make a rebuild the price of using one — which is the
     /// same reason the routed model name is a string. What this side owns is the shape of the value, not its meaning,
-    /// and a value the model does not know is a request the provider refuses rather than a value this can pre-empt.
+    /// and a value the model does not know is a request the provider refuses rather than one this can rule out first.
     /// </para>
     /// </remarks>
     public string? ReasoningEffort { get; }
