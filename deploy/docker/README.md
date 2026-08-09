@@ -24,7 +24,7 @@ An agent gets five tools, and they are the whole surface:
 | `list_accounts` | Which mailboxes this deployment serves, each with the readable name you gave it and how current its local copy is — the tool an agent calls first, so it knows what to narrow the others to |
 | `list_emails` | A page of the timeline, newest first, filtered by account, folder, sender, recipient, subject, date range, seen state, or attachment presence |
 | `search_emails` | Ranked matches for a text query across subjects, participants, and body text, each with short extracts around what matched — ranked lexically, and by embedding similarity beside it once an embedding model is configured |
-| `get_email_content` | Up to ten messages in full: normalized headers, plain-text body, optionally sanitized HTML, and attachment names, types, and sizes — never attachment bytes |
+| `get_email_content` | Up to ten messages in full: normalized headers, plain-text body, optionally sanitized HTML, and every attachment by name, type, and size — plus the files themselves as base64 when a call asks for them, which is off by default and bounded per attachment and per call |
 | `ask_mail` | A question answered from the mail a chat model looks up while answering, citing the identifiers of every message it drew on |
 
 The first four are always there. `ask_mail` needs a chat model and an embedding model you configure and point at, so a deployment with neither does not advertise it at all.
