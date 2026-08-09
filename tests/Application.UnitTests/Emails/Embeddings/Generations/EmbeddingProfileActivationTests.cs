@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.Emails.Embeddings;
+using MailFathom.Application.Emails.Embeddings.Backfill;
 using MailFathom.Application.Emails.Embeddings.Generations;
 using MailFathom.Application.Emails.Embeddings.Indexing;
 using MailFathom.Application.Persistence;
@@ -15,6 +16,8 @@ namespace MailFathom.Application.UnitTests.Emails.Embeddings.Generations;
 
 public sealed class EmbeddingProfileActivationTests
 {
+    private static readonly DateTimeOffset Now = new(2026, 8, 9, 12, 0, 0, TimeSpan.Zero);
+
     /// <summary>
     /// The whole guarantee in one assertion: the new geometry becomes a generation that is built rather than one that
     /// is read, and the generation answering searches is left exactly where it was.
@@ -128,6 +131,60 @@ public sealed class EmbeddingProfileActivationTests
     }
 
     /// <summary>
+    /// The row this registers is the whole signal the backfill worker has, and it is asleep on a pause chosen by a pass
+    /// that found nothing to embed. Without the request, the first passages of the reindex go out whenever that
+    /// unrelated interval happens to expire rather than because an operator asked for them.
+    /// </summary>
+    [Fact]
+    public async Task ActivateAsync_ANewGeometry_AsksForTheNextBackfillPassNow()
+    {
+        // Arrange
+        var world = CreateWorld();
+
+        // Act
+        await world.Activation.ActivateAsync(CreateIdentity("a-model"), TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(Now, world.BackfillSchedule.NextPassDueAt);
+    }
+
+    /// <summary>
+    /// Repeating the command against a reindex already running is the repair path for a failed index build, and it is
+    /// also what an operator reaches for when a sweep that completed left messages a refused call had stepped past. The
+    /// pass that reaches them is the one the long interval has just put a quarter of an hour away.
+    /// </summary>
+    [Fact]
+    public async Task ActivateAsync_TheGeometryAlreadyBeingBuilt_AsksForTheNextBackfillPassNow()
+    {
+        // Arrange
+        var world = CreateWorld();
+        var identity = CreateIdentity("a-model");
+        world.GenerationStore.Add(identity, EmbeddingProfileLifecycleState.Building);
+
+        // Act
+        await world.Activation.ActivateAsync(identity, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(Now, world.BackfillSchedule.NextPassDueAt);
+    }
+
+    /// <summary>An activation that changed no row created no work, so it does not spend a pass asking about none.</summary>
+    [Fact]
+    public async Task ActivateAsync_TheGeometryAlreadyServing_LeavesTheBackfillPaceAlone()
+    {
+        // Arrange
+        var world = CreateWorld();
+        var identity = CreateIdentity("a-model");
+        world.GenerationStore.Add(identity, EmbeddingProfileLifecycleState.Active);
+
+        // Act
+        await world.Activation.ActivateAsync(identity, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Null(world.BackfillSchedule.NextPassDueAt);
+    }
+
+    /// <summary>
     /// Two generations being built at once would leave one walk between two partial generations and neither ever
     /// reaching the count that completes it, so the second activation is refused rather than started beside the first.
     /// </summary>
@@ -149,6 +206,7 @@ public sealed class EmbeddingProfileActivationTests
         Assert.Equal(EmbeddingProfileActivationOutcome.DifferentReindexRunning, result.Outcome);
         Assert.Equal(building.Id, result.ProfileId);
         await world.VectorIndex.DidNotReceiveWithAnyArgs().EnsureBuiltAsync(null!, TestContext.Current.CancellationToken);
+        Assert.Null(world.BackfillSchedule.NextPassDueAt);
 
         var generations = await world.GenerationStore.ReadGenerationsAsync(TestContext.Current.CancellationToken);
         Assert.Equal(building.Id, generations.Building?.Id);
@@ -190,7 +248,8 @@ public sealed class EmbeddingProfileActivationTests
             CreateIdentity("the-model-that-won"));
         var activation = CreateActivation(
             RacedRegistrationStore(buildingAfterTheRace: winner),
-            Substitute.For<IEmbeddingProfileVectorIndex>());
+            Substitute.For<IEmbeddingProfileVectorIndex>(),
+            new EmbeddingBackfillSchedule(new FakeTimeProvider(Now)));
 
         // Act
         var result = await activation.ActivateAsync(
@@ -212,7 +271,8 @@ public sealed class EmbeddingProfileActivationTests
         // Arrange
         var activation = CreateActivation(
             RacedRegistrationStore(buildingAfterTheRace: null),
-            Substitute.For<IEmbeddingProfileVectorIndex>());
+            Substitute.For<IEmbeddingProfileVectorIndex>(),
+            new EmbeddingBackfillSchedule(new FakeTimeProvider(Now)));
 
         // Act
         var conflict = await Assert.ThrowsAsync<PersistenceConcurrencyConflictException>(
@@ -256,16 +316,19 @@ public sealed class EmbeddingProfileActivationTests
     {
         var generationStore = new InMemoryEmbeddingGenerationStore(new InMemoryEmailEmbeddingStore());
         var vectorIndex = Substitute.For<IEmbeddingProfileVectorIndex>();
+        var backfillSchedule = new EmbeddingBackfillSchedule(new FakeTimeProvider(Now));
 
         return new ActivationWorld(
             generationStore,
             vectorIndex,
-            CreateActivation(generationStore, vectorIndex));
+            backfillSchedule,
+            CreateActivation(generationStore, vectorIndex, backfillSchedule));
     }
 
     private static EmbeddingProfileActivation CreateActivation(
         IEmbeddingGenerationStore generationStore,
-        IEmbeddingProfileVectorIndex vectorIndex)
+        IEmbeddingProfileVectorIndex vectorIndex,
+        EmbeddingBackfillSchedule backfillSchedule)
     {
         var sessionFactory = Substitute.For<IPersistenceSessionFactory>();
         sessionFactory.BeginSessionAsync(Arg.Any<CancellationToken>())
@@ -277,12 +340,14 @@ public sealed class EmbeddingProfileActivationTests
             new OptimisticConcurrencyRetryPolicy(
                 sessionFactory,
                 new PersistenceConcurrencyOptions(),
-                new FakeTimeProvider()));
+                new FakeTimeProvider()),
+            backfillSchedule);
     }
 
     /// <summary>The generations and the collaborators one activation works against.</summary>
     private sealed record ActivationWorld(
         InMemoryEmbeddingGenerationStore GenerationStore,
         IEmbeddingProfileVectorIndex VectorIndex,
+        EmbeddingBackfillSchedule BackfillSchedule,
         EmbeddingProfileActivation Activation);
 }

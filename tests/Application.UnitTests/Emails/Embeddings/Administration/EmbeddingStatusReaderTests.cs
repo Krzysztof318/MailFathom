@@ -5,6 +5,7 @@
 using MailFathom.Application.AiProviders;
 using MailFathom.Application.Emails.Embeddings;
 using MailFathom.Application.Emails.Embeddings.Administration;
+using MailFathom.Application.Emails.Embeddings.Backfill;
 using MailFathom.Application.Emails.Embeddings.Limits;
 using MailFathom.Application.UnitTests.TestDoubles;
 using Microsoft.Extensions.Time.Testing;
@@ -117,6 +118,39 @@ public sealed class EmbeddingStatusReaderTests
         Assert.Equal(60_000, status.Period.RemainingInputCharacterCount);
     }
 
+    /// <summary>
+    /// The reading that tells a deployment which is waiting apart from one which is failing. Everything else in this
+    /// answer reads the same during a pause between passes as it does on a broken instance: nothing serving, no vector
+    /// written, and a provider nothing has been asked of.
+    /// </summary>
+    [Fact]
+    public async Task ReadAsync_ABackfillPassScheduled_ReportsWhenItIsDue()
+    {
+        // Arrange
+        var world = CreateWorld();
+        world.BackfillSchedule.BringForward();
+
+        // Act
+        var status = await world.Reader.ReadAsync(CreateIdentity("a-model"), TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(Now, status.NextBackfillPassDueAt);
+    }
+
+    /// <summary>An instance whose backfill worker has scheduled nothing says so, which is what a disabled walk looks like.</summary>
+    [Fact]
+    public async Task ReadAsync_NoBackfillPassScheduled_ReportsNone()
+    {
+        // Arrange
+        var world = CreateWorld();
+
+        // Act
+        var status = await world.Reader.ReadAsync(CreateIdentity("a-model"), TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Null(status.NextBackfillPassDueAt);
+    }
+
     private static EmbeddingProfileIdentity CreateIdentity(string modelIdentifier) =>
         EmbeddingProfileIdentity.Create(
             "a-provider",
@@ -135,6 +169,7 @@ public sealed class EmbeddingStatusReaderTests
         providerHealth.Read(Arg.Any<AiProviderRole>()).Returns(callInfo =>
             new AiProviderHealth(callInfo.Arg<AiProviderRole>(), AiProviderHealthState.Unobserved, ObservedAt: null));
 
+        var backfillSchedule = new EmbeddingBackfillSchedule(new FakeTimeProvider(Now));
         var reader = new EmbeddingStatusReader(
             generationStore,
             workloadReader,
@@ -142,9 +177,10 @@ public sealed class EmbeddingStatusReaderTests
                 ledger,
                 EmbeddingSpendBudget.Create(maxInputCharactersPerPeriod, TimeSpan.FromDays(1)),
                 new FakeTimeProvider(Now)),
-            providerHealth);
+            providerHealth,
+            backfillSchedule);
 
-        return new StatusWorld(generationStore, workloadReader, ledger, providerHealth, reader);
+        return new StatusWorld(generationStore, workloadReader, ledger, providerHealth, backfillSchedule, reader);
     }
 
     /// <summary>The state and the collaborators one status answer is composed from.</summary>
@@ -153,5 +189,6 @@ public sealed class EmbeddingStatusReaderTests
         InMemoryEmbeddingWorkloadReader WorkloadReader,
         InMemoryEmbeddingSpendLedger Ledger,
         IAiProviderHealthReader ProviderHealth,
+        EmbeddingBackfillSchedule BackfillSchedule,
         EmbeddingStatusReader Reader);
 }

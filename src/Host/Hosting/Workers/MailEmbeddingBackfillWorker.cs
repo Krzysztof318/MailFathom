@@ -31,12 +31,19 @@ namespace MailFathom.Host.Hosting.Workers;
 /// in front of it is followed by the short interval, and one that reached the end of the stored mail — or that an
 /// operator has to settle before anything can be embedded at all — by the long one.
 /// </para>
+/// <para>
+/// The pause is chosen by the pass that just ended, so a wait can be sitting out an interval an operator's act has made
+/// stale — most visibly the first activation on an instance, where every pass before it found nothing to do and took
+/// the long one. <see cref="EmbeddingBackfillSchedule" /> is where the wait is taken for that reason: the act that
+/// creates the work releases it, and the instant it would otherwise end at is readable while it lasts.
+/// </para>
 /// </remarks>
 [SuppressMessage("Performance", "CA1812:Avoid uninstantiated internal classes", Justification = "The dependency injection container materializes this hosted service.")]
 internal sealed partial class MailEmbeddingBackfillWorker : BackgroundService
 {
     private readonly IServiceScopeFactory scopeFactory;
     private readonly EmailEmbeddingBackfillTelemetry telemetry;
+    private readonly EmbeddingBackfillSchedule schedule;
     private readonly EmbeddingBackfillOptions settings;
     private readonly ILogger<MailEmbeddingBackfillWorker> logger;
     private readonly TimeProvider timeProvider;
@@ -45,6 +52,7 @@ internal sealed partial class MailEmbeddingBackfillWorker : BackgroundService
     public MailEmbeddingBackfillWorker(
         IServiceScopeFactory scopeFactory,
         EmailEmbeddingBackfillTelemetry telemetry,
+        EmbeddingBackfillSchedule schedule,
         IOptions<EmbeddingBackfillOptions> settings,
         ILogger<MailEmbeddingBackfillWorker> logger,
         TimeProvider timeProvider)
@@ -53,6 +61,7 @@ internal sealed partial class MailEmbeddingBackfillWorker : BackgroundService
 
         this.scopeFactory = scopeFactory;
         this.telemetry = telemetry;
+        this.schedule = schedule;
         this.settings = settings.Value;
         this.logger = logger;
         this.timeProvider = timeProvider;
@@ -63,6 +72,10 @@ internal sealed partial class MailEmbeddingBackfillWorker : BackgroundService
     {
         if (!this.settings.Enabled)
         {
+            // Said before returning, because this is the one loop that would ever take a pass: without it an
+            // activation would record a due instant nothing is going to reach, and the status surface would report an
+            // overdue pass for the life of the process.
+            this.schedule.NoPassWillRun();
             this.LogBackfillDisabled();
 
             return;
@@ -72,9 +85,14 @@ internal sealed partial class MailEmbeddingBackfillWorker : BackgroundService
 
         while (!stoppingToken.IsCancellationRequested)
         {
-            var delay = await this.RunOnceAsync(stoppingToken);
+            var pause = await this.RunOnceAsync(stoppingToken);
 
-            await Task.Delay(delay, this.timeProvider, stoppingToken);
+            this.LogNextPassScheduled(pause);
+
+            if (await this.schedule.WaitForNextPassAsync(pause, stoppingToken))
+            {
+                this.LogNextPassBroughtForward();
+            }
         }
     }
 
@@ -238,6 +256,25 @@ internal sealed partial class MailEmbeddingBackfillWorker : BackgroundService
         Level = LogLevel.Information,
         Message = "An embedding backfill sweep began with {OutstandingEmailCount} messages awaiting embedding.")]
     private partial void LogSweepStarted(int outstandingEmailCount);
+
+    /// <summary>Says how long the pause the last pass chose lasts, which is the one thing a quiet deployment never stated.</summary>
+    /// <remarks>
+    /// At <see cref="LogLevel.Debug" /> because it is written after every pass, including the thirty-second ones a busy
+    /// instance takes. What an operator reads instead is <c>mfctl embedding status</c>, which reports the instant this
+    /// pause ends at from <see cref="EmbeddingBackfillSchedule" /> without a level being turned up first. A line
+    /// following it saying the pass was brought forward is not a contradiction: this one names the pause that act cut
+    /// short.
+    /// </remarks>
+    [LoggerMessage(
+        Level = LogLevel.Debug,
+        Message = "The next embedding backfill pass is due in {Pause}.")]
+    private partial void LogNextPassScheduled(TimeSpan pause);
+
+    /// <summary>Says that an operator's act cut the pause short, which happens only when one has been performed.</summary>
+    [LoggerMessage(
+        Level = LogLevel.Information,
+        Message = "Activating or cancelling a generation brought the next embedding backfill pass forward, so it starts now rather than when the pause the last pass chose would have ended.")]
+    private partial void LogNextPassBroughtForward();
 
     /// <summary>Reports one run in counts only; no subject, address, passage, or vector may reach a log.</summary>
     [LoggerMessage(

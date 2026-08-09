@@ -5,6 +5,7 @@
 using MailFathom.Application.Accounts;
 using MailFathom.Application.AiProviders;
 using MailFathom.Application.Emails.Embeddings.Administration;
+using MailFathom.Application.Emails.Embeddings.Backfill;
 using MailFathom.Application.Emails.Embeddings.Generations;
 using MailFathom.Application.Emails.Embeddings.Indexing;
 using MailFathom.Application.Emails.Embeddings.Limits;
@@ -200,18 +201,25 @@ public sealed class AdminApiEndpointsTests
             new PersistenceConcurrencyOptions(),
             timeProvider);
 
+        var backfillSchedule = new EmbeddingBackfillSchedule(timeProvider);
+
         services.AddSingleton(new DeclaredEmbeddingGeometry(Identity: null));
         services.AddScoped(_ => new EmbeddingStatusReader(
             generationStore,
             workloadReader,
             spendGate,
-            Substitute.For<IAiProviderHealthReader>()));
+            Substitute.For<IAiProviderHealthReader>(),
+            backfillSchedule));
         services.AddScoped(_ => new CountedEmbeddingActivation(
             generationStore,
             workloadReader,
             spendGate,
-            new EmbeddingProfileActivation(generationStore, vectorIndex, retryPolicy)));
-        services.AddScoped(_ => new EmbeddingReindexCancellation(generationStore, vectorIndex, retryPolicy));
+            new EmbeddingProfileActivation(generationStore, vectorIndex, retryPolicy, backfillSchedule)));
+        services.AddScoped(_ => new EmbeddingReindexCancellation(
+            generationStore,
+            vectorIndex,
+            retryPolicy,
+            backfillSchedule));
     }
 
     private static IReadOnlyList<Endpoint> MaterializeEndpoints(IEndpointRouteBuilder endpoints) =>

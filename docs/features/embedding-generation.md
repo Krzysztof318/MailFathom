@@ -38,7 +38,10 @@ status` is where they find out — it says outright that a declaration is waitin
 both are documented, with the estimate the second one states before it spends.
 
 What an activation then does — build a new generation beside the one still answering searches, switch to it once, and
-remove what it replaced — is [changing the embedding model](../operations/embedding-profiles.md).
+remove what it replaced — is [changing the embedding model](../operations/embedding-profiles.md). It also starts:
+the walk over the mail an instance already had takes its next pass as soon as the activation commits rather than
+whenever an interval chosen while there was nothing to embed happens to expire, which
+[embedding backfill](embedding-backfill.md#an-operators-act-does-not-wait-for-the-pause-to-expire) records.
 
 ## What a declaration says
 

@@ -119,6 +119,73 @@ public sealed class EmbeddingCommandTests : IDisposable
         Assert.Contains(this.console.Lines, line => line.Contains("answered lexically", StringComparison.Ordinal));
     }
 
+    /// <summary>
+    /// The line an operator reads when a freshly activated deployment looks broken. Nothing serving, nothing embedded,
+    /// and a provider nothing has been asked of are the same three readings a failing instance gives, and the scheduled
+    /// pass is what separates them.
+    /// </summary>
+    [Fact]
+    public async Task Status_ADeploymentWaitingForItsNextBackfillPass_ReportsWhenThatPassIsDue()
+    {
+        // Arrange
+        using var deployment = FakeEmbeddingDeployment.Answering(status: """
+            {
+              "declared": {"fingerprint":"a1b2c3","provider":"a-provider","model":"a-model","modelVersion":null,"dimension":1536,"distanceMetric":"Cosine"},
+              "activationOutstanding": false,
+              "serving": null,
+              "building": {
+                "profileId": "0199c3d0-0000-7000-8000-000000000002",
+                "geometry": {"fingerprint":"a1b2c3","provider":"a-provider","model":"a-model","modelVersion":null,"dimension":1536,"distanceMetric":"Cosine"},
+                "progress": {"searchableEmailCount":12,"embeddedEmailCount":0,"outstandingEmailCount":12,"outstandingPassageCount":40,"outstandingCharacterCount":8000,"approximateTokenCount":2000}
+              },
+              "provider": {"state":"Unobserved","observedAt":null},
+              "spend": {"periodStartsAt":"2026-08-08T00:00:00+00:00","periodEndsAt":"2026-08-09T00:00:00+00:00","consumedInputCharacterCount":0,"ceilingInputCharacterCount":null,"remainingInputCharacterCount":null},
+              "nextBackfillPassDueAt": "2026-08-08T12:00:30+00:00"
+            }
+            """);
+
+        // Act
+        var exitCode = await this.RunAsync(deployment, "embedding", "status", "--endpoint", Endpoint);
+
+        // Assert
+        Assert.Equal(CliExitCode.Success, exitCode);
+        Assert.Contains(
+            this.console.Lines,
+            line => line.Contains("Next pass: due at 2026-08-08 12:00:30Z", StringComparison.Ordinal));
+    }
+
+    /// <summary>A deployment whose walk is turned off schedules nothing, and the line says which setting does that.</summary>
+    [Fact]
+    public async Task Status_ADeploymentSchedulingNoBackfillPass_NamesBothCausesWithoutAssertingEither()
+    {
+        // Arrange
+        using var deployment = FakeEmbeddingDeployment.Answering(status: """
+            {
+              "declared": {"fingerprint":"a1b2c3","provider":"a-provider","model":"a-model","modelVersion":null,"dimension":1536,"distanceMetric":"Cosine"},
+              "activationOutstanding": false,
+              "serving": null,
+              "building": null,
+              "provider": {"state":"Unobserved","observedAt":null},
+              "spend": {"periodStartsAt":"2026-08-08T00:00:00+00:00","periodEndsAt":"2026-08-09T00:00:00+00:00","consumedInputCharacterCount":0,"ceilingInputCharacterCount":null,"remainingInputCharacterCount":null},
+              "nextBackfillPassDueAt": null
+            }
+            """);
+
+        // Act
+        var exitCode = await this.RunAsync(deployment, "embedding", "status", "--endpoint", Endpoint);
+
+        // Assert
+        Assert.Equal(CliExitCode.Success, exitCode);
+        var nextPass = Assert.Single(
+            this.console.Lines,
+            line => line.StartsWith("Next pass:", StringComparison.Ordinal));
+        Assert.Contains("EmbeddingBackfill:Enabled", nextPass, StringComparison.Ordinal);
+
+        // Both causes, because a deployment that has only just started reports the absence as truthfully as one whose
+        // walk is turned off, and naming only the setting sends an operator to a value that is already what they want.
+        Assert.Contains("only just started", nextPass, StringComparison.Ordinal);
+    }
+
     /// <summary>The estimate is written before the question is asked, so what is agreed to is a number rather than a word.</summary>
     [Fact]
     public async Task Activate_ATerminalThatAgrees_ReportsTheEstimateFirstAndThenStartsTheReindex()

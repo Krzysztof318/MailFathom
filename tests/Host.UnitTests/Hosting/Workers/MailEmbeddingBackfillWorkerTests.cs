@@ -45,6 +45,26 @@ public sealed class MailEmbeddingBackfillWorkerTests
     }
 
     /// <summary>
+    /// This loop is the only thing that ever takes a pass, so a worker that never runs one has to say so: otherwise an
+    /// activation records a due instant nothing will reach, and every later status read reports a pass overdue by
+    /// however long the process has been up.
+    /// </summary>
+    [Fact]
+    public async Task ExecuteAsync_BackfillDisabled_LeavesAnActivationUnableToScheduleAPassNothingWouldTake()
+    {
+        // Arrange
+        using var world = CreateWorld(new EmbeddingBackfillOptions { Enabled = false });
+
+        // Act
+        await world.Worker.StartAsync(CancellationToken.None);
+        await world.Worker.ExecuteTask!;
+        world.Schedule.BringForward();
+
+        // Assert
+        Assert.Null(world.Schedule.NextPassDueAt);
+    }
+
+    /// <summary>
     /// The walk is a repeating sweep rather than one that finishes, so reaching the end starts another pass instead of
     /// ending the worker — which is what makes the promise that a refused call and a full live queue are reached later
     /// something this keeps.
@@ -65,6 +85,38 @@ public sealed class MailEmbeddingBackfillWorkerTests
 
         // Assert
         Assert.False(world.Worker.ExecuteTask!.IsCompleted);
+        await world.Worker.StopAsync(CancellationToken.None);
+    }
+
+    /// <summary>
+    /// The wait this worker used to make an operator sit through. Every pass before an activation ends with no
+    /// generation to walk towards and takes the long interval, so the row an activation commits is one the sleeping
+    /// worker cannot observe — and the clock is deliberately never advanced here, because what is being proved is that
+    /// the pass no longer waits for it.
+    /// </summary>
+    [Fact]
+    public async Task ExecuteAsync_APassBroughtForwardWhileIdle_TakesItWithoutWaitingOutTheIdleInterval()
+    {
+        // Arrange
+        using var world = CreateWorld(new EmbeddingBackfillOptions(), activeProfile: null);
+        await world.Worker.StartAsync(CancellationToken.None);
+        await world.Logger.WaitForOccurrences(
+            "No embedding profile is active",
+            occurrences: 1,
+            TestContext.Current.CancellationToken);
+
+        // Act
+        world.Schedule.BringForward();
+        await world.Logger.WaitForOccurrences(
+            "brought the next embedding backfill pass forward",
+            occurrences: 1,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        await world.Logger.WaitForOccurrences(
+            "No embedding profile is active",
+            occurrences: 2,
+            TestContext.Current.CancellationToken);
         await world.Worker.StopAsync(CancellationToken.None);
     }
 
@@ -330,6 +382,7 @@ public sealed class MailEmbeddingBackfillWorkerTests
             new MailEmbeddingBackfillWorker(
                 serviceProvider.GetRequiredService<IServiceScopeFactory>(),
                 new EmailEmbeddingBackfillTelemetry(),
+                world.Schedule,
                 Options.Create(settings),
                 world.Logger,
                 world.TimeProvider));
@@ -343,9 +396,13 @@ public sealed class MailEmbeddingBackfillWorkerTests
         private ServiceProvider? serviceProvider;
         private MailEmbeddingBackfillWorker? worker;
 
+        public WorkerWorld() => this.Schedule = new EmbeddingBackfillSchedule(this.TimeProvider);
+
         public AwaitingLogger<MailEmbeddingBackfillWorker> Logger { get; } = new();
 
         public FakeTimeProvider TimeProvider { get; } = new();
+
+        public EmbeddingBackfillSchedule Schedule { get; }
 
         public IStoredEmailEmbeddingBackfillStore BackfillStore { get; } =
             Substitute.For<IStoredEmailEmbeddingBackfillStore>();

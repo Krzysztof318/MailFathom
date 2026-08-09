@@ -44,11 +44,14 @@ rest on its own.
    refused rather than started beside it, because one walk between two partial generations would finish neither.
    [Administering the embedding profile](admin-endpoint.md#administering-the-embedding-profile) holds the command, its
    flag, and each refusal.
-2. **The reindex fills it.** The same bounded, resumable sweep that backfills mail now walks towards the new
-   generation, at the pace `EmbeddingBackfill:*` sets. [Embedding backfill](../features/embedding-backfill.md) describes
-   the walk, what one pass costs, and how to slow it down. Searches are answered from the old generation throughout,
-   and mail arriving meanwhile is embedded into that old generation by the live path, so nothing becomes unsearchable
-   while the run is on.
+2. **The reindex fills it, starting at once.** The same bounded, resumable sweep that backfills mail now walks towards
+   the new generation, at the pace `EmbeddingBackfill:*` sets. The activation asks for a pass immediately rather than
+   letting the run begin whenever the pause the previous pass chose happens to expire — which on a first activation is
+   the whole of `EmbeddingBackfill:IdleSweepInterval`, chosen while there was nothing to embed;
+   [an operator's act does not wait for the pause to
+   expire](../features/embedding-backfill.md#an-operators-act-does-not-wait-for-the-pause-to-expire) is why. Searches
+   are answered from the old generation throughout, and mail arriving meanwhile is embedded into that old generation by
+   the live path, so nothing becomes unsearchable while the run is on.
 3. **The switch happens once, when nothing is outstanding.** A completed sweep is not enough on its own — a message a
    provider refused stays outstanding behind the walk's position — so the deployment counts what remains and switches
    only at zero. Promoting the new generation and superseding the old one is one transaction, reported as
@@ -62,7 +65,8 @@ While the reindex is running, `mailfathom.embedding.backfill.outstanding` is how
 generation is still missing, and the counters beside it are what move in between.
 [What an operator can see](../features/embedding-backfill.md#what-an-operator-can-see) lists all of them.
 `mfctl embedding status` is the same picture without a metrics backend: it names both generations, how much of the
-mailbox each covers, what the provider last did, and what the budget period has spent.
+mailbox each covers, what the provider last did, what the budget period has spent, and when the next pass is due —
+which is the line to read in the seconds after an activation, while the first pass has yet to write anything.
 
 ## What it costs
 
@@ -78,8 +82,9 @@ a profile's identity — so a model change pays for provider calls and local wri
 
 **Cancelling a reindex** — `mfctl embedding cancel-reindex` — abandons the generation being built and leaves the one
 serving exactly where it is. The abandoned row becomes superseded, its index is dropped, and whatever partial vectors it
-accumulated are removed in the same bounded batches. What was spent on those vectors is spent; nothing about the search
-results changes, because that generation was never read.
+accumulated are removed in the same bounded batches, beginning with a pass the cancellation asks for rather than one an
+earlier pause happened to schedule. What was spent on those vectors is spent; nothing about the search results changes,
+because that generation was never read.
 
 A cancellation that arrives after the reindex has already completed reports that nothing was being built, and changes
 nothing: the generation it names is the one searches are now answered from, and this command never takes that out of
