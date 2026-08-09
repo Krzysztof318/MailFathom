@@ -39,4 +39,13 @@ internal static class ChatDeclarations
             maximumMessagesPerRequest,
             maximumRequestCharacters,
             requestTimeout ?? RequestTimeout);
+
+    /// <summary>Publishes one fixed plan, standing in for the composition root's reading of the declaration in force.</summary>
+    public static IChatGenerationPlanSource PlanSource(ChatGenerationPlan? plan = null) =>
+        new FixedPlanSource(plan ?? Plan());
+
+    private sealed class FixedPlanSource(ChatGenerationPlan plan) : IChatGenerationPlanSource
+    {
+        public ChatGenerationPlan Current => plan;
+    }
 }

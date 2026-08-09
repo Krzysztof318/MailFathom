@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.AI;
+using MailFathom.AI.Chat;
 using MailFathom.AI.Providers;
 using MailFathom.Application.Accounts;
 using MailFathom.Application.AiProviders;
@@ -150,12 +151,16 @@ try
     // choices with separate consequences: an instance may generate and not embed, or embed and not generate, and each
     // is a working deployment with a different set of capabilities. An absent section is one of those states rather
     // than a startup failure.
+    // Bound without ValidateDataAnnotations, unlike every section around it, because this one reloads and the framework
+    // validator is the wrong place for a reloadable group's rules: it runs while the options monitor materializes a
+    // reloaded value, on the thread the configuration provider reported the change from, where a failure has nowhere to
+    // be reported and the candidate is dropped in silence. ChatDeclarationRules runs the same validator from the two
+    // places that can report it — composition below, which fails startup with every problem at once, and the reload
+    // validator, which logs the refusal and leaves the previous declaration serving.
     builder.Services.AddOptions<ChatModelOptions>()
         .Bind(
-            builder.Configuration.GetSection("Chat"),
-            binderOptions => binderOptions.ErrorOnUnknownConfiguration = true)
-        .ValidateDataAnnotations()
-        .ValidateOnStart();
+            builder.Configuration.GetSection(ChatModelOptions.SectionName),
+            binderOptions => binderOptions.ErrorOnUnknownConfiguration = true);
     // A configuration root of its own beside Chat rather than a block inside it, because the two answer different
     // questions: Chat says which endpoint generates text and what one call to it may carry, while this says what
     // answering a question is allowed to cost and how much of a mailbox may leave the process to do it. Unlike the
@@ -391,9 +396,10 @@ try
 
     // Read the same way and for the same reason as the embedding declaration: whether this deployment generates text
     // decides which services exist, and that decision is taken before the container that would resolve an options
-    // snapshot. Only the presence of a declaration is read this way — every rule about what it says is validated on
-    // start, where a failure reports every problem at once instead of the first one to be built.
-    var declaredChat = builder.Configuration.GetSection("Chat").Get<ChatModelOptions>();
+    // snapshot. Unlike the embedding chain, everything else this says is reloadable, so what is frozen here is the
+    // presence of the declaration and nothing more — the model, the address, the parameters, and the bounds are read
+    // again from the published snapshot on every question.
+    var declaredChat = builder.Configuration.GetSection(ChatModelOptions.SectionName).Get<ChatModelOptions>();
 
     // Read the same way, and needed before the container for the same reason: the retrieval ceiling it carries is what
     // caps the relevance filter's candidate count and what supplies that count's default, and both are decided while
@@ -419,32 +425,40 @@ try
 
     var answeringBudget = MailAnsweringBudgetMapper.Map(declaredAnswering);
 
-    // The one rule spanning two sections. A filter declared to judge more candidates than a lookup hands over states a
-    // ceiling no question could reach, and neither options type can see both numbers, so it is refused here rather than
-    // producing an instance whose filter silently judges fewer passages than its operator wrote down.
-    if (PassageRelevanceCandidateAgreement.FindUnreachableCandidateCount(declaredChat, declaredAnswering) is { } unreachableCandidateCount)
+    // Every rule the chat declaration answers to, in one reading: the section's own bounds, the alias that names one AI
+    // endpoint across the whole deployment because a credential, a resilience circuit, and a log line are all keyed by
+    // it, and the filter's candidate count against what a lookup actually hands over. Judged here rather than through
+    // ValidateOnStart so the same rules judge a reloaded candidate, and reported together so an operator who wrote two
+    // mistakes reads both.
+    var chatConfigurationErrors = ChatDeclarationRules.FindDeclarationErrors(
+        declaredChat,
+        declaredEmbeddings,
+        declaredAnswering);
+
+    if (chatConfigurationErrors.Count > 0)
     {
         throw new OptionsValidationException(
-            "Chat",
+            ChatModelOptions.SectionName,
             typeof(ChatModelOptions),
-            [
-                PassageRelevanceCandidateAgreement.DescribeUnreachableCandidateCount(
-                    unreachableCandidateCount,
-                    declaredAnswering.MaxPassagesPerRetrieval),
-            ]);
+            chatConfigurationErrors);
     }
 
-    // An alias names one AI endpoint across the whole deployment, because it is what a credential is resolved by, what
-    // a resilience circuit is keyed by, and what every log line naming an endpoint carries. Two endpoints answering to
-    // one name would share all three, so a chat endpoint reusing an embedding alias is refused here rather than
-    // producing an instance whose chat outage opens the circuit its embeddings are served through.
-    if (ProviderEndpointAliases.FindReusedAlias(declaredEmbeddings, declaredChat) is { } reusedAlias)
-    {
-        throw new OptionsValidationException(
-            "Chat",
-            typeof(ChatModelOptions),
-            [ProviderEndpointAliases.DescribeReusedAlias(reusedAlias)]);
-    }
+    // Registered whether or not a chat endpoint was declared, because the credential source below reads it on behalf of
+    // an embedding-only deployment too, and because an instance that declared nothing is the one whose operator has to
+    // be told that adding the section takes a restart rather than being ignored.
+    builder.Services.AddSingleton(provider => new ChatSettingsReloadValidator(
+        provider.GetRequiredService<SecretConfigurationValidator>(),
+        declaredChat ?? new ChatModelOptions(),
+        declaredEmbeddings,
+        declaredAnswering));
+    builder.Services.AddSingleton(provider => new ValidatedSettingsSnapshot<ChatModelOptions>(
+        provider.GetRequiredService<IOptionsMonitor<ChatModelOptions>>(),
+        (candidate, cancellationToken) => provider.GetRequiredService<ChatSettingsReloadValidator>()
+            .FindConfigurationErrorsAsync(candidate, cancellationToken),
+        ChatModelOptions.SectionName,
+        provider.GetRequiredService<ILogger<ValidatedSettingsSnapshot<ChatModelOptions>>>()));
+    builder.Services.AddSingleton<ISettingsSnapshot<ChatModelOptions>>(provider => provider.GetRequiredService<ValidatedSettingsSnapshot<ChatModelOptions>>());
+    builder.Services.AddHostedService(provider => provider.GetRequiredService<ValidatedSettingsSnapshot<ChatModelOptions>>());
 
     // Registered once for both declarations, because it resolves by alias and the aliases are unique across them. It is
     // needed by whichever adapter exists, so it is registered when either does rather than by each of them.
@@ -470,22 +484,25 @@ try
 
     if (declaredChat?.IsConfigured is true)
     {
-        builder.Services.AddSingleton(provider => ChatGenerationPlanMapper.Map(
-            provider.GetRequiredService<IOptions<ChatModelOptions>>().Value)
-            ?? throw new InvalidOperationException(
-                "The chat endpoint was declared at registration and is absent from the validated configuration."));
+        // The source is a singleton because one published declaration maps to one plan; the plan itself is scoped
+        // because one scope is one question, and reading it once per question is what keeps a run that has begun on the
+        // plan it began with while the next one picks up an edited model.
+        builder.Services.AddSingleton<IChatGenerationPlanSource, ChatGenerationPlanSource>();
+        builder.Services.AddScoped(provider => provider.GetRequiredService<IChatGenerationPlanSource>().Current);
         builder.Services.AddChatProviderAdapter();
         builder.Services.AddMailAnsweringAgent();
 
         // The plan is registered here beside the endpoint it judges with; the filter itself is registered after
-        // AddInfrastructure below, because it decorates the retrieval that call registers.
+        // AddInfrastructure below, because it decorates the retrieval that call registers. Scoped for the reason the
+        // generation plan is: the two numbers it carries are a lookup's, and whether the pass runs at all is the part
+        // that was decided here and cannot follow a reload.
         if (declaredChat.RelevanceFilter.Enabled)
         {
-            builder.Services.AddSingleton(provider => PassageRelevanceFilterPlanMapper.Map(
-                provider.GetRequiredService<IOptions<ChatModelOptions>>().Value,
+            builder.Services.AddScoped(provider => PassageRelevanceFilterPlanMapper.Map(
+                provider.GetRequiredService<ISettingsSnapshot<ChatModelOptions>>().Current,
                 answeringBudget.Retrieval)
                 ?? throw new InvalidOperationException(
-                    "The relevance filter was enabled at registration and is absent from the validated configuration."));
+                    "The relevance filter was enabled at registration and is absent from the configuration in force."));
         }
 
         // Readiness alone, and never worse than degraded. Neither provider serves a request path, so a failing one must

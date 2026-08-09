@@ -120,10 +120,15 @@ public static class AiServiceCollectionExtensions
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="services" /> is <see langword="null" />.</exception>
     /// <remarks>
     /// <para>
-    /// The caller registers the <see cref="ChatGenerationPlan" /> and the
-    /// <see cref="IProviderEndpointCredentialSource" /> itself, because binding configuration and resolving a secret
-    /// reference both belong to the composition root. Nothing here reads configuration or knows what a secret reference
-    /// is.
+    /// The caller registers the <see cref="IChatGenerationPlanSource" />, the scoped <see cref="ChatGenerationPlan" />
+    /// it publishes, and the <see cref="IProviderEndpointCredentialSource" /> itself, because binding configuration and
+    /// resolving a secret reference both belong to the composition root. Nothing here reads configuration or knows what
+    /// a secret reference is.
+    /// </para>
+    /// <para>
+    /// The client is scoped rather than a singleton because the plan it runs against is: the declaration behind it
+    /// reloads, and a client built once would go on calling the model the process started with. One scope is one
+    /// operation, so the plan a call uses is the one its operation began with.
     /// </para>
     /// <para>
     /// Independent of <see cref="AddEmbeddingProviderAdapter" /> in both directions, and that is the point rather than
@@ -137,7 +142,7 @@ public static class AiServiceCollectionExtensions
         ArgumentNullException.ThrowIfNull(services);
 
         services.TryAddSingleton<OpenAiCompatibleClientFactory>();
-        services.AddSingleton<IChatModelClient, ProviderChatModelClient>();
+        services.AddScoped<IChatModelClient, ProviderChatModelClient>();
 
         AddChatProviderTransport(services);
 
@@ -258,6 +263,12 @@ public static class AiServiceCollectionExtensions
     /// surfaces as this deployment's own timeout — which is classified, logged, and retried under a budget — rather
     /// than as a transport exception from underneath it.
     /// </para>
+    /// <para>
+    /// The bounds are read from the plan source rather than from a resolved plan, because this runs on the root
+    /// provider whenever the factory builds a client and the plan itself is scoped to an operation. A client opened
+    /// after a reload therefore carries the reloaded ceilings, which is the same answer the operation holding the plan
+    /// gets.
+    /// </para>
     /// </remarks>
     private static void AddChatProviderTransport(IServiceCollection services)
     {
@@ -265,7 +276,7 @@ public static class AiServiceCollectionExtensions
             .ConfigurePrimaryHttpMessageHandler(static () => new SocketsHttpHandler { AllowAutoRedirect = false })
             .ConfigureHttpClient(static (provider, client) =>
             {
-                var plan = provider.GetRequiredService<ChatGenerationPlan>();
+                var plan = provider.GetRequiredService<IChatGenerationPlanSource>().Current;
 
                 client.Timeout = plan.RequestTimeout + TimeSpan.FromSeconds(30);
                 client.MaxResponseContentBufferSize =

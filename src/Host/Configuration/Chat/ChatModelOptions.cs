@@ -29,10 +29,20 @@ namespace MailFathom.Host.Configuration.Chat;
 /// parameters are all read from configuration, so changing model is an edit rather than a rebuild, and so a model
 /// released after this version can be declared without one.
 /// </para>
+/// <para>
+/// The declaration is read again after an edit rather than once at startup, so correcting a model the provider refused
+/// costs an edit rather than a restart of a process that is mid-synchronization. Two things it says are read while the
+/// host composes itself and cannot follow a reload: whether the section declares an endpoint at all, and whether the
+/// relevance filter runs, because each decides which services exist.
+/// <see cref="ChatDeclarationRules.FindChangesNeedingRestart" /> refuses a candidate that moves either.
+/// </para>
 /// </remarks>
 [SuppressMessage("Performance", "CA1812:Avoid uninstantiated internal classes", Justification = "The options framework materializes this type during configuration binding.")]
 internal sealed class ChatModelOptions : IValidatableObject
 {
+    /// <summary>The configuration section this declaration is bound from.</summary>
+    public const string SectionName = "Chat";
+
     /// <summary>Gets or sets the deployment's own name for the chat endpoint.</summary>
     /// <remarks>
     /// Everything else here is an address or a credential and neither may be written down, so this is the name a log

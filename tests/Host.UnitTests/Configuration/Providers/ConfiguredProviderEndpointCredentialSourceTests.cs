@@ -6,6 +6,7 @@ using MailFathom.AI.Providers;
 using MailFathom.Host.Configuration.Chat;
 using MailFathom.Host.Configuration.Embeddings;
 using MailFathom.Host.Configuration.Providers;
+using MailFathom.Host.UnitTests.TestDoubles;
 using MailFathom.Infrastructure.Secrets.Discovery;
 using MailFathom.Infrastructure.Secrets.References;
 using MailFathom.Infrastructure.Secrets.Resolution;
@@ -153,7 +154,7 @@ public sealed class ConfiguredProviderEndpointCredentialSourceTests
 
         return new ConfiguredProviderEndpointCredentialSource(
             Options.Create(embeddings),
-            Options.Create(chat),
+            new StubSettingsSnapshot<ChatModelOptions>(chat),
             resolver);
     }
 
