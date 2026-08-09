@@ -34,6 +34,7 @@ protected_paths_bin_directory="$test_directory/protected-paths-bin"
 typo_check_bin_directory="$test_directory/typo-check-bin"
 fathom_review_bin_directory="$test_directory/fathom-review-bin"
 settle_bin_directory="$test_directory/fathom-review-settle-bin"
+collect_bin_directory="$test_directory/fathom-review-collect-bin"
 submit_bin_directory="$test_directory/fathom-review-submit-bin"
 board_bin_directory="$test_directory/fathom-review-board-bin"
 invocation_log="$test_directory/dotnet-invocations.log"
@@ -1314,9 +1315,10 @@ typo_check_falls_back_to_the_whole_checkout_for_a_pull_request_beyond_the_report
 # the branch out. Extracting one verbatim is again what makes these contracts run the runner's own
 # code. A block is the `run: |` under the step's `id:`, indented ten spaces, and it ends at the
 # first line that leaves that indentation, so a step added after it changes nothing here.
-extract_fathom_review_step() {
-  local step_id="$1"
-  local step_script="$2"
+extract_workflow_step() {
+  local workflow_file="$1"
+  local step_id="$2"
+  local step_script="$3"
 
   awk -v step_declaration="        id: $step_id" '
     $0 == step_declaration { found = 1; next }
@@ -1326,10 +1328,14 @@ extract_fathom_review_step() {
       sub(/^          /, "")
       print
     }
-  ' "$source_repository_root/.github/workflows/fathom-review.yml" > "$step_script"
+  ' "$workflow_file" > "$step_script"
 
   [[ -s "$step_script" ]]
   bash -n "$step_script"
+}
+
+extract_fathom_review_step() {
+  extract_workflow_step "$source_repository_root/.github/workflows/fathom-review.yml" "$1" "$2"
 }
 
 # The decision is read from `GITHUB_OUTPUT`, which is where the reviewing job reads it, rather than
@@ -1523,6 +1529,474 @@ fathom_review_reads_the_newest_comment_whatever_the_order() {
 
   assert_contains 'still moving' "$output_file"
   assert_seconds_elapsed_at_least 4 "$started_at"
+}
+
+# The collection step decides what the reviewer is able to see, and one field it collects decides
+# how the review is conducted rather than what it concludes: `security` on an issue the change closes
+# is this project's statement that the change needs a security review before it merges, and the
+# prompt turns it into a pass over every file. The prompt cannot read a label the collection drops,
+# and dropping one would leave the review looking exactly as it does now — so the projection is
+# pinned here.
+#
+# The fake `gh` answers each endpoint the step calls with a canned record and then applies the step's
+# own `--jq` filter to it with the real `jq`, which is what the client it stands in for does. That is
+# what makes these contracts assert the filter the workflow declares rather than a copy of it.
+mkdir -p "$collect_bin_directory"
+cat > "$collect_bin_directory/gh" <<'FAKE_GH'
+#!/usr/bin/env bash
+set -euo pipefail
+
+# The endpoint is the first bare argument: `graphql`, or the path. Everything else is a flag, its
+# value, or the `--jq` filter, and only the filter is read back out.
+endpoint=''
+filter=''
+reading_filter='false'
+
+for argument in "$@"; do
+  if [[ "$reading_filter" == 'true' ]]; then
+    filter="$argument"
+    reading_filter='false'
+    continue
+  fi
+
+  case "$argument" in
+    --jq) reading_filter='true' ;;
+    api | -*) ;;
+    *) [[ -n "$endpoint" ]] || endpoint="$argument" ;;
+  esac
+done
+
+case "$endpoint" in
+  graphql)
+    response='{"data":{"repository":{"pullRequest":{"reviewThreads":{"nodes":[]}}}}}'
+    ;;
+  */issues/*/labels)
+    # The one write these steps make, recorded rather than sent so a contract can read what would
+    # have been posted, and refused on demand so the branch that carries on without the label runs
+    # too — which on a fork is the ordinary path rather than a failure.
+    if [[ -n "${FAKE_LABEL_REQUEST:-}" ]]; then
+      printf '%s\n' "$*" > "$FAKE_LABEL_REQUEST"
+    fi
+
+    if [[ "${FAKE_LABEL_FAILS:-false}" == 'true' ]]; then
+      printf 'gh: Forbidden (HTTP 403)\n' >&2
+      exit 1
+    fi
+
+    exit 0
+    ;;
+  */actions/workflows/*/runs*)
+    # The labelling runs for this head. A countdown file rather than a constant, so a contract can
+    # hold one open for a fixed number of polls and then let it go — which is the only way to assert
+    # that the reviewer waited rather than that it happened to read late.
+    #
+    # The run it holds open is `queued` rather than `in_progress`, deliberately: that is a status of
+    # its own rather than a phase of running, and a step asking `status=in_progress` sees none of
+    # them. A contract that answered `in_progress` would pass against the query that misses the very
+    # case the wait exists for.
+    pending='0'
+
+    if [[ -n "${FAKE_LABELLING_COUNTDOWN:-}" ]]; then
+      remaining="$(cat "$FAKE_LABELLING_COUNTDOWN" 2>/dev/null || printf '0')"
+
+      if ((remaining > 0)); then
+        pending='1'
+        printf '%s' "$((remaining - 1))" > "$FAKE_LABELLING_COUNTDOWN"
+      fi
+    fi
+
+    if [[ "$pending" == '0' ]]; then
+      runs='[{"status":"completed","conclusion":"success"}]'
+    else
+      runs='[{"status":"queued","conclusion":null}]'
+    fi
+
+    # A `status=` in the query is honoured the way the API honours it: an exact match on the value,
+    # never a family of them. That is the whole of what makes the contract above discriminate — a
+    # fake that ignored the parameter would answer the same runs to a step asking for the wrong
+    # status, and would pass against the query that cannot see a queued run.
+    case "$endpoint" in
+      *status=*)
+        wanted="${endpoint##*status=}"
+        wanted="${wanted%%&*}"
+        runs="$(printf '%s' "$runs" | jq -c --arg wanted "$wanted" '[.[] | select(.status == $wanted)]')"
+        ;;
+    esac
+
+    response="$(printf '%s' "$runs" | jq -c '{total_count: length, workflow_runs: .}')"
+    ;;
+  */contents/*)
+    printf 'unchanged\nadded\nunchanged\n'
+    exit 0
+    ;;
+  */pulls/*/files*)
+    response='[{"filename":"src/Sample.cs","previous_filename":null,"status":"modified","additions":1,"deletions":0,"patch":"@@ -1,2 +1,3 @@\n unchanged\n+added\n unchanged"}]'
+    ;;
+  */pulls/*/reviews*)
+    response='[]'
+    ;;
+  */issues/*/comments*)
+    response='[]'
+    ;;
+  */pulls/*)
+    pull_request_labels="${FAKE_PULL_REQUEST_LABELS:-}"
+
+    if [[ -z "$pull_request_labels" ]]; then
+      pull_request_labels='["security"]'
+    fi
+
+    response="$(
+      jq -nc --argjson labels "$pull_request_labels" \
+        '{number: 1,
+          title: "Refuse an unauthenticated tool call",
+          body: "Closes #11\nCloses #12\nPart of #13",
+          draft: false,
+          user: {login: "Krzysztof318"},
+          labels: ($labels | map({name: .})),
+          head: {sha: "0123456789abcdef0123456789abcdef01234567"},
+          base: {sha: "89abcdef0123456789abcdef0123456789abcdef", ref: "main"},
+          changed_files: 1,
+          additions: 1,
+          deletions: 0}'
+    )"
+    ;;
+  */issues/*)
+    # The issues the run cannot reach — deleted, or in a repository this token does not see, named
+    # as a comma-separated list. The client fails rather than answering, which is the branch both
+    # the collection's fallback record and the model step's default exist for.
+    case ",${FAKE_UNFETCHABLE_ISSUES:-}," in
+      *",${endpoint##*/},"*)
+        printf 'gh: Not Found (HTTP 404)\n' >&2
+        exit 1
+        ;;
+    esac
+
+    labels="${FAKE_ISSUE_LABELS:-}"
+
+    if [[ -z "$labels" ]]; then
+      labels='["type:defect","security"]'
+    fi
+
+    # A comma-separated list of the issues that carry `security`, for a contract about *which* issue
+    # earned a label rather than about whether one did. Everything outside it answers as ordinary
+    # work, which is what lets one run distinguish a closing issue from a merely related one.
+    if [[ -n "${FAKE_SECURITY_ISSUES:-}" ]]; then
+      case ",${FAKE_SECURITY_ISSUES}," in
+        *",${endpoint##*/},"*) labels='["type:defect","security"]' ;;
+        *) labels='["type:feature"]' ;;
+      esac
+    fi
+
+    response="$(
+      jq -nc --argjson labels "$labels" \
+        '{number: 11,
+          title: "Refuse an unauthenticated tool call",
+          body: "The endpoint accepts a call carrying no token.",
+          labels: ($labels | map({name: .}))}'
+    )"
+    ;;
+  *)
+    printf 'The fake gh was asked for an endpoint it does not answer: %s\n' "$endpoint" >&2
+    exit 1
+    ;;
+esac
+
+if [[ -n "$filter" ]]; then
+  printf '%s' "$response" | jq -rc "$filter"
+else
+  printf '%s' "$response"
+fi
+FAKE_GH
+chmod +x "$collect_bin_directory/gh"
+
+run_fathom_review_collect() {
+  local output_file="$1"
+  local step_script="$test_directory/fathom-review-collect.sh"
+  local step_output_file="$test_directory/fathom-review-collect-step-output"
+
+  collect_review_directory="$test_directory/fathom-review-collect-review"
+
+  extract_fathom_review_step 'collect' "$step_script"
+  rm -rf "$collect_review_directory"
+  mkdir -p "$collect_review_directory"
+  : > "$step_output_file"
+
+  (
+    export PATH="$collect_bin_directory:$PATH"
+    export GH_TOKEN='fake-token'
+    export REPOSITORY='Krzysztof318/MailFathom'
+    export PULL_REQUEST_NUMBER='1'
+    export REVIEW_DIRECTORY="$collect_review_directory"
+    # The step runs the real `collect-closing-references.sh` out of the workspace, which on the
+    # runner holds the base commit and here holds the checkout the suite is testing.
+    export GITHUB_WORKSPACE="$source_repository_root"
+    export GITHUB_OUTPUT="$step_output_file"
+    export FAKE_UNFETCHABLE_ISSUES='12'
+    bash "$step_script"
+  ) > "$output_file" 2>&1
+}
+
+# The contract the security pass rests on. Without the labels beside the body, the one thing that
+# says this change is to be read as a security review is invisible to the reviewer, and the review
+# it produces is indistinguishable from an ordinary one.
+fathom_review_collects_the_labels_of_an_issue_the_change_closes() {
+  local output_file="$test_directory/fathom-review-collect-labels-output"
+
+  run_fathom_review_collect "$output_file"
+
+  assert_json '[11,12]' '[.[].number]' "$collect_review_directory/issues.json"
+  assert_json '["type:defect","security"]' '.[0].labels' "$collect_review_directory/issues.json"
+  # The label the prompt actually keys off. It is on the pull request because `Apply pull request
+  # labels` put it there, and the reviewer reads it from one place rather than deriving it again.
+  assert_json '["security"]' '.labels' "$collect_review_directory/pull-request.json"
+}
+
+# An issue the run could not fetch reports unknown rather than none, exactly as its title and body
+# already do. An empty array would state that the issue carries no `security` label, which is the one
+# thing a failed fetch cannot say — and the reviewer would read the change as ordinary on the
+# strength of it.
+fathom_review_reports_unknown_labels_for_an_issue_it_could_not_fetch() {
+  local output_file="$test_directory/fathom-review-collect-unfetchable-output"
+
+  run_fathom_review_collect "$output_file"
+
+  assert_json '12' '.[1].number' "$collect_review_directory/issues.json"
+  assert_json 'null' '.[1].title' "$collect_review_directory/issues.json"
+  assert_json 'null' '.[1].labels' "$collect_review_directory/issues.json"
+}
+
+# Which model performs the review is the other half of what the `security` label decides, and the
+# reviewer reads that label off the pull request rather than deriving it: `Apply pull request labels`
+# owns which conditions earn which label, and a second implementation of that question could
+# disagree with the label a reader sees. What these contracts pin is the reading — that the label
+# reaches the costlier model, that its absence changes nothing, and that the read waits for the
+# labelling run rather than racing the workflow it depends on.
+run_fathom_review_model() {
+  local pull_request_labels="$1"
+  local pending_polls="$2"
+  local limit_seconds="$3"
+  local output_file="$4"
+  local step_output_file="$5"
+  local step_script="$test_directory/fathom-review-model.sh"
+  local countdown_file="$test_directory/fathom-review-model-countdown"
+
+  extract_fathom_review_step 'security' "$step_script"
+  : > "$step_output_file"
+  printf '%s' "$pending_polls" > "$countdown_file"
+
+  (
+    export PATH="$collect_bin_directory:$PATH"
+    export GH_TOKEN='fake-token'
+    export REPOSITORY='Krzysztof318/MailFathom'
+    export PULL_REQUEST_NUMBER='1'
+    export MODEL='claude-sonnet-5'
+    export SECURITY_MODEL='claude-opus-5'
+    export SECURITY_LABEL='security'
+    export LABELLING_WORKFLOW='apply-pull-request-labels.yml'
+    # Seconds rather than minutes, for the reason the settle contracts run on short windows: what is
+    # asserted is the decision the loop takes, never the values the workflow declares.
+    export LABELLING_LIMIT_SECONDS="$limit_seconds"
+    export LABELLING_POLL_SECONDS='1'
+    export FAKE_PULL_REQUEST_LABELS="$pull_request_labels"
+    export FAKE_LABELLING_COUNTDOWN="$countdown_file"
+    export GITHUB_OUTPUT="$step_output_file"
+    bash "$step_script"
+  ) > "$output_file" 2>&1
+}
+
+# The change whose defect would be a security defect is the one a costlier opinion repays, and the
+# label is where the project already says which change that is.
+fathom_review_reads_a_security_labelled_change_with_the_costlier_model() {
+  local output_file="$test_directory/fathom-review-model-security-output"
+  local step_output_file="$test_directory/fathom-review-model-security-step-output"
+
+  run_fathom_review_model '["type:defect","security"]' '0' '10' "$output_file" "$step_output_file"
+
+  assert_contains 'security_review=true' "$step_output_file"
+  assert_contains 'model=claude-opus-5' "$step_output_file"
+  assert_contains 'carries the security label' "$output_file"
+}
+
+# The other direction, and the one that keeps the escalation from becoming the default: an ordinary
+# change is reviewed by the model the gate chose, at the cost the gate accounted for.
+fathom_review_keeps_the_default_model_for_an_ordinary_change() {
+  local output_file="$test_directory/fathom-review-model-ordinary-output"
+  local step_output_file="$test_directory/fathom-review-model-ordinary-step-output"
+
+  run_fathom_review_model '["type:feature"]' '0' '10' "$output_file" "$step_output_file"
+
+  assert_contains 'security_review=false' "$step_output_file"
+  assert_contains 'model=claude-sonnet-5' "$step_output_file"
+  assert_contains 'carries no security label' "$output_file"
+}
+
+# The dependency itself. Both workflows start from the same event, so on a freshly opened pull
+# request the label is being decided while this runs; a read that did not wait would review a
+# security change with the default model and no pass, and would do it on exactly the changes where
+# that costs most.
+#
+# The run this waits through is `queued`, which is the state the fake answers with and the one the
+# first version of this step could not see: it asked the API for `status=in_progress`, and `queued`
+# is a value of that parameter rather than a phase of it, so a labelling run that had been created
+# and not yet started read as nothing to wait for.
+fathom_review_waits_for_the_labelling_run_before_reading_the_labels() {
+  local output_file="$test_directory/fathom-review-model-waited-output"
+  local step_output_file="$test_directory/fathom-review-model-waited-step-output"
+  local started_at
+  started_at="$(date -u +%s)"
+
+  run_fathom_review_model '["security"]' '2' '10' "$output_file" "$step_output_file"
+
+  assert_contains 'model=claude-opus-5' "$step_output_file"
+  assert_seconds_elapsed_at_least 2 "$started_at"
+}
+
+# The other end of the dependency: a labelling run that never finishes must not hold a review open or
+# fail one, because this decides which model reviews rather than whether a review happens.
+fathom_review_reads_the_labels_as_they_stand_at_the_ceiling() {
+  local output_file="$test_directory/fathom-review-model-ceiling-output"
+  local step_output_file="$test_directory/fathom-review-model-ceiling-step-output"
+
+  run_fathom_review_model '["type:feature"]' '99' '2' "$output_file" "$step_output_file"
+
+  assert_contains 'still running' "$output_file"
+  assert_contains 'model=claude-sonnet-5' "$step_output_file"
+}
+
+# `Apply pull request labels` is where every condition for a label lives, so that adding one is an
+# edit to a single script rather than a rule spread across whichever workflows happen to care. These
+# contracts run that script, and then the step that posts what it printed.
+run_select_labels() {
+  local issue_labels="$1"
+  local unfetchable_issues="$2"
+  local output_file="$3"
+  local security_issues="${4:-}"
+
+  set +e
+  (
+    export PATH="$collect_bin_directory:$PATH"
+    export GH_TOKEN='fake-token'
+    export FAKE_ISSUE_LABELS="$issue_labels"
+    export FAKE_UNFETCHABLE_ISSUES="$unfetchable_issues"
+    export FAKE_SECURITY_ISSUES="$security_issues"
+    bash "$source_repository_root/.github/pull-request-labels/select-labels.sh" \
+      'Krzysztof318/MailFathom' '1' \
+      "$source_repository_root/.github/pull-request-labels/collect-referenced-issues.sh" '10'
+    # Standard output is the label list and standard error is what the client and the ceiling had to
+    # say, so the two are kept apart here exactly as the caller keeps them apart. Folding them
+    # together would make an issue the run could not fetch look like a label it earned.
+  ) > "$output_file" 2> "$output_file.stderr"
+  select_labels_status=$?
+  set -e
+}
+
+select_labels_earns_the_security_label_from_an_issue_the_change_closes() {
+  local output_file="$test_directory/select-labels-security-output"
+
+  run_select_labels '["type:defect","security"]' '' "$output_file" '11'
+
+  ((select_labels_status == 0))
+  assert_file_content 'security' "$output_file"
+}
+
+# The reason this reads references rather than closing references. `#13` is named as *part of* rather
+# than closed, so the reviewer's own collection never sees it — and a change touching the work a
+# security issue describes is one somebody wants read that way whether or not it finishes the issue.
+select_labels_earns_the_security_label_from_an_issue_the_change_is_merely_related_to() {
+  local output_file="$test_directory/select-labels-related-output"
+
+  run_select_labels '["type:defect","security"]' '' "$output_file" '13'
+
+  ((select_labels_status == 0))
+  assert_file_content 'security' "$output_file"
+}
+
+# The condition is a label on an issue and nothing else, which is what keeps the label meaning what
+# it says rather than accumulating on everything.
+select_labels_earns_nothing_from_an_ordinary_change() {
+  local output_file="$test_directory/select-labels-ordinary-output"
+
+  run_select_labels '["type:feature"]' '' "$output_file"
+
+  ((select_labels_status == 0))
+  assert_file_content '' "$output_file"
+}
+
+# A label nobody could read is not a label that says `security`. The walk carries on past the issue
+# it could not fetch and earns nothing from it, rather than failing the run or guessing at it.
+select_labels_earns_nothing_from_an_issue_it_could_not_read() {
+  local output_file="$test_directory/select-labels-unreadable-output"
+
+  run_select_labels '["type:defect","security"]' '11,12,13' "$output_file"
+
+  ((select_labels_status == 0))
+  assert_file_content '' "$output_file"
+}
+
+run_apply_pull_request_labels() {
+  local issue_labels="$1"
+  local label_fails="$2"
+  local output_file="$3"
+  local request_file="$4"
+  local step_script="$test_directory/apply-pull-request-labels.sh"
+
+  extract_workflow_step \
+    "$source_repository_root/.github/workflows/apply-pull-request-labels.yml" \
+    'label' "$step_script"
+  rm -f "$request_file"
+
+  set +e
+  (
+    export PATH="$collect_bin_directory:$PATH"
+    export GH_TOKEN='fake-token'
+    export REPOSITORY='Krzysztof318/MailFathom'
+    export PULL_REQUEST_NUMBER='1'
+    export SELECT_LABELS_SCRIPT="$source_repository_root/.github/pull-request-labels/select-labels.sh"
+    export REFERENCED_ISSUES_SCRIPT="$source_repository_root/.github/pull-request-labels/collect-referenced-issues.sh"
+    export REFERENCE_LIMIT='10'
+    export FAKE_ISSUE_LABELS="$issue_labels"
+    export FAKE_LABEL_REQUEST="$request_file"
+    export FAKE_LABEL_FAILS="$label_fails"
+    bash "$step_script"
+  ) > "$output_file" 2>&1
+  apply_labels_status=$?
+  set -e
+}
+
+apply_pull_request_labels_posts_the_labels_the_change_earns() {
+  local output_file="$test_directory/apply-labels-security-output"
+  local request_file="$test_directory/apply-labels-security-request"
+
+  run_apply_pull_request_labels '["type:defect","security"]' 'false' "$output_file" "$request_file"
+
+  ((apply_labels_status == 0))
+  assert_contains 'labels[]=security' "$request_file"
+  assert_contains '--method POST' "$request_file"
+}
+
+# Nothing earned is nothing posted. A request carrying an empty list would be a call made to say that
+# no call was needed.
+apply_pull_request_labels_posts_nothing_for_an_ordinary_change() {
+  local output_file="$test_directory/apply-labels-ordinary-output"
+  local request_file="$test_directory/apply-labels-ordinary-request"
+
+  run_apply_pull_request_labels '["type:feature"]' 'false' "$output_file" "$request_file"
+
+  ((apply_labels_status == 0))
+  assert_contains 'earns no label' "$output_file"
+  [[ ! -e "$request_file" ]]
+}
+
+# A pull request from a fork runs this with a read-only token whatever the workflow declares, which
+# is the trigger behaving as documented rather than the pipeline breaking. It says so and ends green.
+apply_pull_request_labels_reports_a_write_it_was_refused() {
+  local output_file="$test_directory/apply-labels-refused-output"
+  local request_file="$test_directory/apply-labels-refused-request"
+
+  run_apply_pull_request_labels '["type:defect","security"]' 'true' "$output_file" "$request_file"
+
+  ((apply_labels_status == 0))
+  assert_contains '::notice::' "$output_file"
 }
 
 # The submission step is where the reviewer's answer becomes a review, and it is the one step whose
@@ -2415,6 +2889,79 @@ run_closing_references() {
     "$test_directory/closing-body.md" 'Krzysztof318/MailFathom' > "$output_file" 2>&1
 }
 
+# The superset the labelling pipeline reads, and the reason the two scripts stand side by side: a
+# label answers what the change is *about*, so a mention counts, while a closing reference answers
+# what merging completes and a mention does not. A change that says "part of #123" against a
+# security issue is one somebody wants read that way whether or not it finishes the issue.
+run_referenced_issues() {
+  local body="$1" output_file="$2" limit="${3:-0}"
+
+  printf '%s\n' "$body" > "$test_directory/referenced-body.md"
+
+  bash "$source_repository_root/.github/pull-request-labels/collect-referenced-issues.sh" \
+    "$test_directory/referenced-body.md" 'Krzysztof318/MailFathom' "$limit" > "$output_file" 2>&1
+}
+
+referenced_issues_collect_a_mention_as_well_as_a_closing_reference() {
+  local output_file="$test_directory/referenced-issues-all"
+
+  run_referenced_issues \
+    $'Closes #265\n\nPart of #266, and the ceiling #270 asked for.' \
+    "$output_file"
+
+  assert_file_content $'265\n266\n270' "$output_file"
+}
+
+referenced_issues_collect_a_link_to_an_issue_in_this_repository() {
+  local output_file="$test_directory/referenced-issues-url"
+
+  run_referenced_issues \
+    'Related to https://github.com/Krzysztof318/MailFathom/issues/271.' \
+    "$output_file"
+
+  assert_file_content '271' "$output_file"
+}
+
+# The number in `owner/repo#123` belongs to another project's namespace, so reading the `#123` out of
+# it would earn a label from whichever local issue happens to hold that number — an issue nobody
+# named. The same holds for a link into another repository.
+referenced_issues_ignore_another_repository() {
+  local output_file="$test_directory/referenced-issues-foreign"
+
+  run_referenced_issues \
+    $'Mirrors Krzysztof318/Other#98.\nSee https://github.com/Krzysztof318/Other/issues/99 too.' \
+    "$output_file"
+
+  assert_file_content '' "$output_file"
+}
+
+referenced_issues_report_each_issue_once() {
+  local output_file="$test_directory/referenced-issues-repeated"
+
+  run_referenced_issues $'Closes #265\n\nAnd #265 again, see also #265.' "$output_file"
+
+  assert_file_content '265' "$output_file"
+}
+
+# One issue is fetched per line printed, and a body is untrusted text. What the ceiling cut is said
+# rather than dropped, because a label the change did not earn only because a reference fell off the
+# end is a decision somebody has to be able to see.
+referenced_issues_report_what_the_ceiling_cut() {
+  local output_file="$test_directory/referenced-issues-ceiling"
+  local note_file="$test_directory/referenced-issues-ceiling-note"
+
+  printf '%s\n' 'Closes #1, part of #2, and see #3' > "$test_directory/referenced-body.md"
+
+  # The two streams are kept apart here for the reason the caller keeps them apart: the list is what
+  # decides the labels, and the note is what a reader is told about the part that did not fit.
+  bash "$source_repository_root/.github/pull-request-labels/collect-referenced-issues.sh" \
+    "$test_directory/referenced-body.md" 'Krzysztof318/MailFathom' 2 \
+    > "$output_file" 2> "$note_file"
+
+  assert_file_content $'1\n2' "$output_file"
+  assert_contains 'refers to 3 issues and this covers the first 2' "$note_file"
+}
+
 closing_references_collect_every_issue_the_body_closes() {
   local output_file="$test_directory/closing-references-all"
 
@@ -3138,6 +3685,7 @@ every_write_scope_is_one_the_policy_records() {
 
   recorded_scopes="$(
     printf '%s\n' \
+      'apply-pull-request-labels.yml pull-requests: write' \
       'codeql.yml security-events: write' \
       'nightly.yml attestations: write' \
       'nightly.yml id-token: write' \
@@ -3514,6 +4062,8 @@ workflow_scripts_use_flat_manual_layout() {
   [[ -x "$source_repository_root/.github/fathom-review/index-obligations.sh" ]]
   [[ -x "$source_repository_root/.github/fathom-review/collect-closing-references.sh" ]]
   [[ -x "$source_repository_root/.github/fathom-review/write-board-status.sh" ]]
+  [[ -x "$source_repository_root/.github/pull-request-labels/select-labels.sh" ]]
+  [[ -x "$source_repository_root/.github/pull-request-labels/collect-referenced-issues.sh" ]]
 }
 
 # The per-file licensing mark, everywhere the analyzer that applies it cannot reach. IDE0073 reads
@@ -3703,6 +4253,19 @@ run_test fathom_review_collects_at_once_when_nobody_has_commented
 run_test fathom_review_waits_before_freezing_a_quiet_conversation
 run_test fathom_review_stops_waiting_at_the_ceiling
 run_test fathom_review_reads_the_newest_comment_whatever_the_order
+run_test fathom_review_collects_the_labels_of_an_issue_the_change_closes
+run_test fathom_review_reports_unknown_labels_for_an_issue_it_could_not_fetch
+run_test fathom_review_reads_a_security_labelled_change_with_the_costlier_model
+run_test fathom_review_keeps_the_default_model_for_an_ordinary_change
+run_test fathom_review_waits_for_the_labelling_run_before_reading_the_labels
+run_test fathom_review_reads_the_labels_as_they_stand_at_the_ceiling
+run_test select_labels_earns_the_security_label_from_an_issue_the_change_closes
+run_test select_labels_earns_the_security_label_from_an_issue_the_change_is_merely_related_to
+run_test select_labels_earns_nothing_from_an_ordinary_change
+run_test select_labels_earns_nothing_from_an_issue_it_could_not_read
+run_test apply_pull_request_labels_posts_the_labels_the_change_earns
+run_test apply_pull_request_labels_posts_nothing_for_an_ordinary_change
+run_test apply_pull_request_labels_reports_a_write_it_was_refused
 run_test fathom_review_anchors_a_finding_to_its_line
 run_test fathom_review_moves_a_finding_with_no_line_into_the_body
 run_test fathom_review_approves_when_it_finds_nothing
@@ -3725,6 +4288,11 @@ run_test every_table_of_contents_entry_names_a_page_that_exists
 run_test every_readme_site_link_names_a_page_that_exists
 run_test no_readme_link_reaches_a_published_page_through_the_repository
 run_test the_docker_hub_overview_fits_what_docker_hub_accepts
+run_test referenced_issues_collect_a_mention_as_well_as_a_closing_reference
+run_test referenced_issues_collect_a_link_to_an_issue_in_this_repository
+run_test referenced_issues_ignore_another_repository
+run_test referenced_issues_report_each_issue_once
+run_test referenced_issues_report_what_the_ceiling_cut
 run_test closing_references_collect_every_issue_the_body_closes
 run_test closing_references_match_every_keyword_github_acts_on
 run_test closing_references_ignore_a_keyword_inside_another_word
