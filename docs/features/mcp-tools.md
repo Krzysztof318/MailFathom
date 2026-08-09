@@ -319,7 +319,7 @@ in it.
 | `sizeBytes` | The size of the whole email as the mail server reported it |
 | `headers` | Subject, sent and received timestamps, every participant with its header role, and the three threading identifiers |
 | `body` | The representations, or the reason there are none |
-| `attachments` | One entry per attachment when the call asked for them: normalized file name, media type, decoded size, and the content as base64 within the deployment's byte bounds |
+| `attachments` | One entry per attachment, always: normalized file name, media type, and decoded size, plus the content as base64 within the deployment's byte bounds when the call asked for it |
 | `attachmentCounts` | What the email carries besides its body, returned either way, or `null` when nothing has ever read its parts |
 | `remoteFlags` | The flags a server last showed, and when they were read |
 
