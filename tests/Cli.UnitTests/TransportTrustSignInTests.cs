@@ -70,7 +70,7 @@ public sealed class TransportTrustSignInTests : IDisposable
     {
         // Arrange
         var store = this.CreateStore();
-        using var handler = FakeAdminEndpoint.Accepting("workstation", "0.5.0");
+        using var handler = FakeAdminEndpoint.Accepting("workstation");
         this.console.SecretToSupply = "not-a-real-key";
         this.console.AnswerToGive = true;
 
@@ -91,7 +91,7 @@ public sealed class TransportTrustSignInTests : IDisposable
     public async Task Login_AnUntrustedCertificate_ShowsItsSubjectIssuerFingerprintValidityAndWhyItFailed()
     {
         // Arrange
-        using var handler = FakeAdminEndpoint.Accepting("workstation", "0.5.0");
+        using var handler = FakeAdminEndpoint.Accepting("workstation");
         this.console.SecretToSupply = "not-a-real-key";
         this.console.AnswerToGive = true;
 
@@ -118,7 +118,7 @@ public sealed class TransportTrustSignInTests : IDisposable
     {
         // Arrange
         var store = this.CreateStore();
-        using var handler = FakeAdminEndpoint.Accepting("workstation", "0.5.0");
+        using var handler = FakeAdminEndpoint.Accepting("workstation");
         this.console.SecretToSupply = "not-a-real-key";
         this.console.AnswerToGive = false;
 
@@ -139,7 +139,7 @@ public sealed class TransportTrustSignInTests : IDisposable
     {
         // Arrange
         var store = this.CreateStore();
-        using var handler = FakeAdminEndpoint.Accepting("workstation", "0.5.0");
+        using var handler = FakeAdminEndpoint.Accepting("workstation");
         this.console.SecretToSupply = "not-a-real-key";
         this.console.AnswersQuestions = false;
 
@@ -161,7 +161,7 @@ public sealed class TransportTrustSignInTests : IDisposable
     {
         // Arrange
         var store = this.CreateStore();
-        using var handler = FakeAdminEndpoint.Accepting("workstation", "0.5.0");
+        using var handler = FakeAdminEndpoint.Accepting("workstation");
         this.console.SecretToSupply = "not-a-real-key";
         this.console.AnswersQuestions = false;
 
@@ -187,7 +187,7 @@ public sealed class TransportTrustSignInTests : IDisposable
     {
         // Arrange
         var store = this.CreateStore();
-        using var handler = FakeAdminEndpoint.Accepting("workstation", "0.5.0");
+        using var handler = FakeAdminEndpoint.Accepting("workstation");
         this.console.SecretToSupply = "not-a-real-key";
 
         // Act
@@ -204,7 +204,7 @@ public sealed class TransportTrustSignInTests : IDisposable
     {
         // Arrange
         var store = this.CreateStore();
-        using var handler = FakeAdminEndpoint.Accepting("workstation", "0.5.0");
+        using var handler = FakeAdminEndpoint.Accepting("workstation");
         this.console.SecretToSupply = "not-a-real-key";
         this.console.AnswerToGive = true;
 
@@ -248,7 +248,7 @@ public sealed class TransportTrustSignInTests : IDisposable
     {
         // Arrange
         var store = this.CreateStore();
-        using var handler = FakeAdminEndpoint.Accepting("workstation", "0.5.0");
+        using var handler = FakeAdminEndpoint.Accepting("workstation");
         this.console.SecretToSupply = "not-a-real-key";
         this.console.AnswerToGive = false;
 
@@ -268,7 +268,7 @@ public sealed class TransportTrustSignInTests : IDisposable
     {
         // Arrange
         var store = this.CreateStore();
-        using var handler = FakeAdminEndpoint.Accepting("workstation", "0.5.0");
+        using var handler = FakeAdminEndpoint.Accepting("workstation");
         this.console.SecretToSupply = "not-a-real-key";
         this.console.AnswersQuestions = false;
 
@@ -287,7 +287,7 @@ public sealed class TransportTrustSignInTests : IDisposable
     {
         // Arrange
         var store = this.CreateStore();
-        using var handler = FakeAdminEndpoint.Accepting("workstation", "0.5.0");
+        using var handler = FakeAdminEndpoint.Accepting("workstation");
         this.console.SecretToSupply = "not-a-real-key";
         this.console.AnswersQuestions = false;
 
@@ -313,7 +313,7 @@ public sealed class TransportTrustSignInTests : IDisposable
             "not-a-real-key",
             "workstation",
             trust: new StoredTransportTrust(PinnedCertificateFingerprint: null, AcceptsClearText: true));
-        using var handler = FakeAdminEndpoint.Accepting("workstation", "0.5.0");
+        using var handler = FakeAdminEndpoint.Accepting("workstation");
 
         // Act
         var exitCode = await RunAsync(this.Context(store, handler), "status");
@@ -336,7 +336,7 @@ public sealed class TransportTrustSignInTests : IDisposable
             "not-a-real-key",
             "workstation",
             trust: new StoredTransportTrust(pinned));
-        using var handler = FakeAdminEndpoint.Accepting("workstation", "0.5.0");
+        using var handler = FakeAdminEndpoint.Accepting("workstation");
 
         // Act
         var exitCode = await RunAsync(
@@ -364,7 +364,7 @@ public sealed class TransportTrustSignInTests : IDisposable
             "not-a-real-key",
             "workstation",
             trust: new StoredTransportTrust(PresentedCertificate.FingerprintOf(this.deploymentCertificate)));
-        using var handler = FakeAdminEndpoint.Accepting("workstation", "0.5.0");
+        using var handler = FakeAdminEndpoint.Accepting("workstation");
 
         // Act
         var exitCode = await RunAsync(
@@ -387,7 +387,7 @@ public sealed class TransportTrustSignInTests : IDisposable
             "the-old-key",
             "workstation",
             trust: new StoredTransportTrust(PresentedCertificate.FingerprintOf(this.deploymentCertificate)));
-        using var handler = FakeAdminEndpoint.Accepting("workstation", "0.5.0");
+        using var handler = FakeAdminEndpoint.Accepting("workstation");
         this.console.SecretToSupply = "the-new-key";
         this.console.AnswerToGive = true;
 

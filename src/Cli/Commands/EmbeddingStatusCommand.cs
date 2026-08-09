@@ -48,7 +48,7 @@ internal static class EmbeddingStatusCommand
         var profile = await context.Deployment().ReachAsync(requestedDeployment, cancellationToken);
 
         using var transport = context.OpenTransport(profile.Endpoint, profile.Trust);
-        var status = await new AdminApiClient(transport).ReadEmbeddingStatusAsync(profile.Token, cancellationToken);
+        var status = await new AdminApiClient(transport, context.Console).ReadEmbeddingStatusAsync(profile.Token, cancellationToken);
 
         context.Console.WriteLine($"{profile.Name} ({profile.Endpoint.GetLeftPart(UriPartial.Authority)})");
         context.Console.WriteLine($"Declared:  {DescribeDeclaration(status)}");

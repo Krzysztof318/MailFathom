@@ -431,22 +431,37 @@ public sealed class AuthorizeMailboxCommandTests : IDisposable
     private static FakeHttpMessageHandler ProviderIssuingAGrantAndDeploymentAnswering(HttpStatusCode deploymentStatus) =>
         ProviderIssuingAGrantAndDeploymentRefusing(deploymentStatus, string.Empty);
 
+    /// <summary>The provider, and a deployment that answers its session route before whatever it does with the grant.</summary>
+    /// <remarks>
+    /// The session is answered separately from the rest of the administrative prefix because the command reads it
+    /// before storing anything: that is where the two versions are settled, and letting the status under test answer it
+    /// as well would test the version check rather than what the deployment did with the grant.
+    /// </remarks>
     private static FakeHttpMessageHandler ProviderIssuingAGrantAndDeploymentRefusing(
         HttpStatusCode deploymentStatus,
         string deploymentBody) =>
-        new((request, _) => Task.FromResult(
-            request.RequestUri?.AbsolutePath.StartsWith(AdminEndpointRoutes.Prefix, StringComparison.Ordinal) == true
-                ? new HttpResponseMessage(deploymentStatus)
+        new((request, _) => Task.FromResult(request.RequestUri?.AbsolutePath switch
+        {
+            AdminEndpointRoutes.SessionPath => new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(
+                    FakeAdminEndpoint.SessionBody("workstation", FakeAdminEndpoint.CommandVersion),
+                    Encoding.UTF8,
+                    "application/json"),
+            },
+            { } path when path.StartsWith(AdminEndpointRoutes.Prefix, StringComparison.Ordinal) =>
+                new HttpResponseMessage(deploymentStatus)
                 {
                     Content = new StringContent(deploymentBody, Encoding.UTF8, "application/problem+json"),
-                }
-                : new HttpResponseMessage(HttpStatusCode.OK)
-                {
-                    Content = new StringContent(
-                        """{"access_token":"an-access-token","refresh_token":"a-refresh-token","expires_in":3600}""",
-                        Encoding.UTF8,
-                        "application/json"),
-                }));
+                },
+            _ => new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(
+                    """{"access_token":"an-access-token","refresh_token":"a-refresh-token","expires_in":3600}""",
+                    Encoding.UTF8,
+                    "application/json"),
+            },
+        }));
 
     /// <summary>A token endpoint that refuses everything, so a test reaching it fails loudly rather than passing quietly.</summary>
     private static FakeHttpMessageHandler TokenEndpointRefusing() =>

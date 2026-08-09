@@ -22,13 +22,21 @@ internal static class FakeEmbeddingDeployment
     /// <param name="assessment">The body the activation route answers a read with.</param>
     /// <param name="activation">The body the activation route answers a write with, or a refusal.</param>
     /// <param name="cancellation">The body the reindex cancellation route answers with.</param>
+    /// <param name="version">The version it reports, which defaults to the one the command was built as.</param>
     /// <returns>The deployment.</returns>
+    /// <remarks>
+    /// The session route is answered whatever the test asked for, because every command reads it before its own
+    /// operation: that is where the two versions are settled, and a double that served the embedding routes alone
+    /// would report a deployment nothing can be administered on.
+    /// </remarks>
     internal static FakeHttpMessageHandler Answering(
         string? status = null,
         string? assessment = null,
         (HttpStatusCode Status, string Body)? activation = null,
-        string? cancellation = null) =>
-        new((request, _) => Task.FromResult(Answer(request, status, assessment, activation, cancellation)));
+        string? cancellation = null,
+        string? version = null) =>
+        new((request, _) => Task.FromResult(
+            Answer(request, status, assessment, activation, cancellation, version ?? FakeAdminEndpoint.CommandVersion)));
 
     /// <summary>Reports whether the command asked the deployment to activate anything.</summary>
     /// <param name="deployment">The deployment the command was pointed at.</param>
@@ -48,9 +56,15 @@ internal static class FakeEmbeddingDeployment
         string? status,
         string? assessment,
         (HttpStatusCode Status, string Body)? activation,
-        string? cancellation)
+        string? cancellation,
+        string version)
     {
         var path = request.RequestUri?.AbsolutePath;
+
+        if (path == AdminEndpointRoutes.SessionPath)
+        {
+            return Json(HttpStatusCode.OK, FakeAdminEndpoint.SessionBody("workstation", version));
+        }
 
         if (path == AdminEndpointRoutes.EmbeddingStatusPath && status is { } statusBody)
         {

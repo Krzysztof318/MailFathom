@@ -54,7 +54,7 @@ internal static class CancelEmbeddingReindexCommand
         var profile = await context.Deployment().ReachAsync(requestedDeployment, cancellationToken);
 
         using var transport = context.OpenTransport(profile.Endpoint, profile.Trust);
-        var cancellation = await new AdminApiClient(transport)
+        var cancellation = await new AdminApiClient(transport, context.Console)
             .CancelEmbeddingReindexAsync(profile.Token, cancellationToken);
 
         context.Console.WriteLine(cancellation.Describe());

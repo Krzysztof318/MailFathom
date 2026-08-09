@@ -33,7 +33,7 @@ public sealed class LoginCommandTests : IDisposable
     {
         // Arrange
         var store = this.CreateStore();
-        using var handler = FakeAdminEndpoint.Accepting("workstation", "0.2.0");
+        using var handler = FakeAdminEndpoint.Accepting("workstation");
         this.console.SecretToSupply = "not-a-real-key";
 
         // Act
@@ -49,7 +49,7 @@ public sealed class LoginCommandTests : IDisposable
     public async Task Login_ThePresentedCredential_IsSentAsABearerCredential()
     {
         // Arrange
-        using var handler = FakeAdminEndpoint.Accepting("workstation", "0.2.0");
+        using var handler = FakeAdminEndpoint.Accepting("workstation");
         this.console.SecretToSupply = "not-a-real-key";
 
         // Act
@@ -178,7 +178,7 @@ public sealed class LoginCommandTests : IDisposable
     public async Task Login_NoCredentialSupplied_FailsWithoutReachingTheDeployment()
     {
         // Arrange
-        using var handler = FakeAdminEndpoint.Accepting("workstation", "0.2.0");
+        using var handler = FakeAdminEndpoint.Accepting("workstation");
         this.console.SecretToSupply = string.Empty;
 
         // Act
@@ -195,7 +195,7 @@ public sealed class LoginCommandTests : IDisposable
     {
         // Arrange
         var store = this.CreateStore();
-        using var handler = FakeAdminEndpoint.Accepting("workstation", "0.2.0");
+        using var handler = FakeAdminEndpoint.Accepting("workstation");
         this.console.SecretToSupply = "not-a-real-key";
 
         // Act
@@ -210,7 +210,7 @@ public sealed class LoginCommandTests : IDisposable
     {
         // Arrange
         var store = this.CreateStore();
-        using var handler = FakeAdminEndpoint.Accepting("workstation", "0.2.0");
+        using var handler = FakeAdminEndpoint.Accepting("workstation");
         this.console.SecretToSupply = "not-a-real-key";
 
         // Act
@@ -229,7 +229,7 @@ public sealed class LoginCommandTests : IDisposable
         // Arrange
         var store = this.CreateStore();
         store.Save("production", EndpointAddress, "the-old-key", "workstation");
-        using var handler = FakeAdminEndpoint.Accepting("workstation", "0.2.0");
+        using var handler = FakeAdminEndpoint.Accepting("workstation");
         this.console.SecretToSupply = "the-new-key";
 
         // Act
@@ -246,7 +246,7 @@ public sealed class LoginCommandTests : IDisposable
     public async Task Login_AnUnknownNameThatIsNotAnAddress_SaysToPassAnAddressInstead()
     {
         // Arrange
-        using var handler = FakeAdminEndpoint.Accepting("workstation", "0.2.0");
+        using var handler = FakeAdminEndpoint.Accepting("workstation");
         this.console.SecretToSupply = "not-a-real-key";
 
         // Act
@@ -265,7 +265,7 @@ public sealed class LoginCommandTests : IDisposable
     public async Task Login_ANameThatIsAnAddress_IsRefused()
     {
         // Arrange
-        using var handler = FakeAdminEndpoint.Accepting("workstation", "0.2.0");
+        using var handler = FakeAdminEndpoint.Accepting("workstation");
         this.console.SecretToSupply = "not-a-real-key";
 
         // Act
@@ -285,7 +285,7 @@ public sealed class LoginCommandTests : IDisposable
         store.Save("production", EndpointAddress, "not-a-real-key", "workstation");
 
         // Act
-        using var handler = FakeAdminEndpoint.Accepting("workstation", "0.2.0");
+        using var handler = FakeAdminEndpoint.Accepting("workstation");
 
         var exitCode = await RunAsync(this.Context(store, handler), "logout", "--endpoint", Endpoint);
 
@@ -304,7 +304,7 @@ public sealed class LoginCommandTests : IDisposable
     public async Task ACommandNeedingACredential_WhenNotSignedIn_SaysHowToSignIn(string commandName)
     {
         // Arrange
-        using var handler = FakeAdminEndpoint.Accepting("workstation", "0.2.0");
+        using var handler = FakeAdminEndpoint.Accepting("workstation");
 
         // Act
         var exitCode = await RunAsync(this.Context(this.CreateStore(), handler), commandName);
@@ -324,7 +324,7 @@ public sealed class LoginCommandTests : IDisposable
         // Arrange
         var store = this.CreateStore();
         store.Save("production", EndpointAddress, "not-a-real-key", "workstation");
-        using var handler = FakeAdminEndpoint.Accepting("workstation", "0.2.0");
+        using var handler = FakeAdminEndpoint.Accepting("workstation");
 
         // Act
         var exitCode = await RunAsync(this.Context(store, handler), "status");
@@ -343,7 +343,7 @@ public sealed class LoginCommandTests : IDisposable
         var store = this.CreateStore();
         store.Save("staging", new Uri("https://staging.example.test:8443"), "staging-key", "workstation");
         store.Save("production", EndpointAddress, "production-key", "workstation");
-        using var handler = FakeAdminEndpoint.Accepting("workstation", "0.2.0");
+        using var handler = FakeAdminEndpoint.Accepting("workstation");
 
         // Act
         var exitCode = await RunAsync(this.Context(store, handler), "status", "--endpoint", "staging");
@@ -361,7 +361,7 @@ public sealed class LoginCommandTests : IDisposable
         var store = this.CreateStore();
         store.Save("staging", new Uri("https://staging.example.test:8443"), "staging-key", "workstation");
         store.Save("production", EndpointAddress, "production-key", "workstation");
-        using var handler = FakeAdminEndpoint.Accepting("workstation", "0.2.0");
+        using var handler = FakeAdminEndpoint.Accepting("workstation");
 
         // Act
         var exitCode = await RunAsync(this.Context(store, handler), "switch", "staging");
@@ -378,7 +378,7 @@ public sealed class LoginCommandTests : IDisposable
         // Arrange
         var store = this.CreateStore();
         store.Save("production", EndpointAddress, "production-key", "workstation");
-        using var handler = FakeAdminEndpoint.Accepting("workstation", "0.2.0");
+        using var handler = FakeAdminEndpoint.Accepting("workstation");
 
         // Act
         var exitCode = await RunAsync(this.Context(store, handler), "switch", "qa");
@@ -395,7 +395,7 @@ public sealed class LoginCommandTests : IDisposable
         var store = this.CreateStore();
         store.Save("production", EndpointAddress, "production-key", "workstation");
         store.Save("staging", new Uri("https://staging.example.test:8443"), "staging-key", "workstation");
-        using var handler = FakeAdminEndpoint.Accepting("workstation", "0.2.0");
+        using var handler = FakeAdminEndpoint.Accepting("workstation");
 
         // Act
         var exitCode = await RunAsync(this.Context(store, handler), "profiles");
@@ -411,7 +411,7 @@ public sealed class LoginCommandTests : IDisposable
     public async Task Profiles_NoneStored_SaysSoRatherThanFailing()
     {
         // Arrange
-        using var handler = FakeAdminEndpoint.Accepting("workstation", "0.2.0");
+        using var handler = FakeAdminEndpoint.Accepting("workstation");
 
         // Act
         var exitCode = await RunAsync(this.Context(this.CreateStore(), handler), "profiles");
