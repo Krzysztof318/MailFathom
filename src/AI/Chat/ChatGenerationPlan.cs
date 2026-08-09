@@ -31,6 +31,7 @@ public sealed class ChatGenerationPlan
         int maximumOutputTokens,
         float? temperature,
         float? topP,
+        ChatReasoningEffort? reasoningEffort,
         int maximumMessagesPerRequest,
         int maximumRequestCharacters,
         TimeSpan requestTimeout)
@@ -39,6 +40,7 @@ public sealed class ChatGenerationPlan
         this.MaximumOutputTokens = maximumOutputTokens;
         this.Temperature = temperature;
         this.TopP = topP;
+        this.ReasoningEffort = reasoningEffort;
         this.MaximumMessagesPerRequest = maximumMessagesPerRequest;
         this.MaximumRequestCharacters = maximumRequestCharacters;
         this.RequestTimeout = requestTimeout;
@@ -63,6 +65,16 @@ public sealed class ChatGenerationPlan
     /// <remarks>Nullable for the reason <see cref="Temperature" /> is, and declared beside it rather than instead of it because a provider that accepts both documents setting only one.</remarks>
     public float? TopP { get; }
 
+    /// <summary>Gets the reasoning effort every call states, or <see langword="null" /> to send no reasoning parameter at all.</summary>
+    /// <remarks>
+    /// Nullable for the reason the two sampling parameters are, and with one more consequence of its own: a model that
+    /// does not reason refuses the parameter outright, so a literal default here would turn every call such a deployment
+    /// makes into a rejected request. <see cref="ChatReasoningEffort.None" /> is therefore not the same as writing
+    /// nothing — it states an effort of none and sends it, which is what a provider refusing an unstated effort beside
+    /// function tools asks for.
+    /// </remarks>
+    public ChatReasoningEffort? ReasoningEffort { get; }
+
     /// <summary>Gets the greatest number of turns one request carries.</summary>
     public int MaximumMessagesPerRequest { get; }
 
@@ -83,18 +95,20 @@ public sealed class ChatGenerationPlan
     /// <param name="maximumOutputTokens">The greatest number of tokens one answer may occupy.</param>
     /// <param name="temperature">The sampling temperature, or <see langword="null" /> for the model's own default.</param>
     /// <param name="topP">The nucleus-sampling threshold, or <see langword="null" /> for the model's own default.</param>
+    /// <param name="reasoningEffort">The reasoning effort every call states, or <see langword="null" /> to send none.</param>
     /// <param name="maximumMessagesPerRequest">The greatest number of turns one request carries.</param>
     /// <param name="maximumRequestCharacters">The greatest number of characters those turns may add up to.</param>
     /// <param name="requestTimeout">The time one request may take.</param>
     /// <returns>The plan.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="endpoint" /> is <see langword="null" />.</exception>
     /// <exception cref="ArgumentException">Thrown when the endpoint declares a blank alias or a blank routed model name.</exception>
-    /// <exception cref="ArgumentOutOfRangeException">Thrown when a bound is not positive, or a sampling parameter is outside the range every provider accepts.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when a bound is not positive, a sampling parameter is outside the range every provider accepts, or the endpoint's API or the reasoning effort names no declared value.</exception>
     public static ChatGenerationPlan Create(
         ChatEndpoint endpoint,
         int maximumOutputTokens,
         float? temperature,
         float? topP,
+        ChatReasoningEffort? reasoningEffort,
         int maximumMessagesPerRequest,
         int maximumRequestCharacters,
         TimeSpan requestTimeout)
@@ -109,12 +123,19 @@ public sealed class ChatGenerationPlan
 
         RequireSamplingParameterInRange(temperature, nameof(temperature), greatest: 2f);
         RequireSamplingParameterInRange(topP, nameof(topP), greatest: 1f);
+        RequireDeclaredValue(endpoint.Api, nameof(endpoint));
+
+        if (reasoningEffort is { } effort)
+        {
+            RequireDeclaredValue(effort, nameof(reasoningEffort));
+        }
 
         return new ChatGenerationPlan(
             endpoint,
             maximumOutputTokens,
             temperature,
             topP,
+            reasoningEffort,
             maximumMessagesPerRequest,
             maximumRequestCharacters,
             requestTimeout);
@@ -134,5 +155,20 @@ public sealed class ChatGenerationPlan
 
         ArgumentOutOfRangeException.ThrowIfNegative(declared, parameterName);
         ArgumentOutOfRangeException.ThrowIfGreaterThan(declared, greatest, parameterName);
+    }
+
+    /// <summary>Refuses a value no member of its enumeration declares.</summary>
+    /// <remarks>
+    /// A number outside the declared set arrives from a configuration binder, which accepts any integer for an enum, and
+    /// it would then read as a choice while naming nothing. Refused here rather than at the adapter, so the plan stays
+    /// the value the adapter is allowed to assume.
+    /// </remarks>
+    private static void RequireDeclaredValue<TValue>(TValue value, string parameterName)
+        where TValue : struct, Enum
+    {
+        if (!Enum.IsDefined(value))
+        {
+            throw new ArgumentOutOfRangeException(parameterName, value, $"'{value}' names no declared {typeof(TValue).Name}.");
+        }
     }
 }

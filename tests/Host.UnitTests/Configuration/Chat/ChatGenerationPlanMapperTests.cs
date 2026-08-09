@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.AI.Chat;
 using MailFathom.Host.Configuration.Chat;
 using MailFathom.Infrastructure.Secrets.Discovery;
 using Xunit;
@@ -20,9 +21,11 @@ public sealed class ChatGenerationPlanMapperTests
             Alias = "answering",
             Model = "a-chat-model",
             Address = "https://provider.invalid/v1/",
+            Api = ChatProviderApi.Responses,
             MaxOutputTokens = 512,
             Temperature = 0.3f,
             TopP = 0.8f,
+            ReasoningEffort = ChatReasoningEffort.High,
             MaxMessagesPerRequest = 12,
             MaxRequestCharacters = 60_000,
             RequestTimeout = TimeSpan.FromSeconds(90),
@@ -36,9 +39,11 @@ public sealed class ChatGenerationPlanMapperTests
         Assert.NotNull(plan);
         Assert.Equal("answering", plan.Endpoint.Alias);
         Assert.Equal("a-chat-model", plan.Endpoint.RoutedModelName);
+        Assert.Equal(ChatProviderApi.Responses, plan.Endpoint.Api);
         Assert.Equal(512, plan.MaximumOutputTokens);
         Assert.Equal(0.3f, plan.Temperature);
         Assert.Equal(0.8f, plan.TopP);
+        Assert.Equal(ChatReasoningEffort.High, plan.ReasoningEffort);
         Assert.Equal(12, plan.MaximumMessagesPerRequest);
         Assert.Equal(60_000, plan.MaximumRequestCharacters);
         Assert.Equal(TimeSpan.FromSeconds(90), plan.RequestTimeout);
@@ -55,7 +60,30 @@ public sealed class ChatGenerationPlanMapperTests
         Assert.Null(plan);
     }
 
-    /// <summary>An unset sampling parameter has to survive the mapping, because several current models reject one that is sent.</summary>
+    /// <summary>Chat completions is what a section stating no API runs on, because every OpenAI-compatible server offers it.</summary>
+    [Fact]
+    public void Map_ASectionStatingNoApi_ReachesTheProviderThroughChatCompletions()
+    {
+        // Arrange
+        var settings = new ChatModelOptions
+        {
+            Alias = "answering",
+            Model = "a-chat-model",
+            ApiKey = new ConfiguredSecret { SecretReference = "env:CHAT_KEY" },
+        };
+
+        // Act
+        var plan = ChatGenerationPlanMapper.Map(settings);
+
+        // Assert
+        Assert.NotNull(plan);
+        Assert.Equal(ChatProviderApi.ChatCompletions, plan.Endpoint.Api);
+    }
+
+    /// <summary>
+    /// An unset sampling parameter and an unset reasoning effort both have to survive the mapping, because a model that
+    /// rejects one of them rejects every call a deployment that sent it would make.
+    /// </summary>
     [Fact]
     public void Map_WithoutSamplingParameters_LeavesThemUnset()
     {
@@ -74,6 +102,7 @@ public sealed class ChatGenerationPlanMapperTests
         Assert.NotNull(plan);
         Assert.Null(plan.Temperature);
         Assert.Null(plan.TopP);
+        Assert.Null(plan.ReasoningEffort);
     }
 
     [Fact]

@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.AI.Chat;
 using MailFathom.AI.Orchestration;
 using MailFathom.AI.Retrieval;
 using MailFathom.AI.UnitTests.TestDoubles;
@@ -147,7 +148,11 @@ public sealed class MailAnsweringAgentCompositionTests
             ScopedMailKnowledgeRetrieval.SearchToolName,
             "invoice",
             "The invoice was attached.");
-        var plan = ChatDeclarations.Plan(maximumOutputTokens: 321, temperature: 0.25f, topP: 0.75f);
+        var plan = ChatDeclarations.Plan(
+            maximumOutputTokens: 321,
+            temperature: 0.25f,
+            topP: 0.75f,
+            reasoningEffort: ChatReasoningEffort.Low);
         var retrieval = new ScopedMailKnowledgeRetrieval(
             knowledgeSearch,
             OnePrimaryAccount,
@@ -168,7 +173,31 @@ public sealed class MailAnsweringAgentCompositionTests
             Assert.Equal(321, call.Options?.MaxOutputTokens);
             Assert.Equal(0.25f, call.Options?.Temperature);
             Assert.Equal(0.75f, call.Options?.TopP);
+            Assert.Equal(ReasoningEffort.Low, call.Options?.Reasoning?.Effort);
         });
+    }
+
+    /// <summary>
+    /// A run is a tool loop, so the effort has to ride every turn rather than only the first: the turn that writes the
+    /// answer is the one after a retrieval, and a provider refusing tools beside an unstated effort would refuse it.
+    /// </summary>
+    [Fact]
+    public async Task Compose_ADeploymentThatStatedNoReasoningEffort_SendsNoneOnAnyTurn()
+    {
+        // Arrange
+        var knowledgeSearch = new RecordingEmailKnowledgeSearch();
+        using var chatClient = ScriptedChatClient.CallingTool(
+            ScopedMailKnowledgeRetrieval.SearchToolName,
+            "invoice",
+            "The invoice was attached.");
+        var agent = AgentOver(chatClient, knowledgeSearch, OnePrimaryAccount, out _);
+
+        // Act
+        await agent.RunAsync("was it attached", session: null, options: null, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(2, chatClient.Calls.Count);
+        Assert.All(chatClient.Calls, call => Assert.Null(call.Options?.Reasoning));
     }
 
     /// <summary>

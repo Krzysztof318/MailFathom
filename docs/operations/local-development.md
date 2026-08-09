@@ -619,9 +619,11 @@ A run that was asked for and finds a variable missing fails rather than skipping
 | Adapter | Variables |
 |---|---|
 | Embedding | `MAILFATHOM_EMBEDDING_API_KEY`, `MAILFATHOM_EMBEDDING_MODEL`, `MAILFATHOM_EMBEDDING_DIMENSION`, and optionally `MAILFATHOM_EMBEDDING_ADDRESS` and `MAILFATHOM_EMBEDDING_ROUTED_MODEL` |
-| Chat | `MAILFATHOM_CHAT_API_KEY`, `MAILFATHOM_CHAT_MODEL`, and optionally `MAILFATHOM_CHAT_ADDRESS` |
+| Chat | `MAILFATHOM_CHAT_API_KEY`, `MAILFATHOM_CHAT_MODEL`, and optionally `MAILFATHOM_CHAT_ADDRESS`, `MAILFATHOM_CHAT_API`, and `MAILFATHOM_CHAT_REASONING_EFFORT` |
 
 An absent address means the provider library's own default, which is what a first-party OpenAI endpoint needs; a cloud deployment sets the resource's OpenAI-compatible address. Turning the switch on with only one adapter's variables configured therefore fails the other adapter's tests, which is the same asymmetry rather than a separate rule.
+
+The chat adapter's two optional choices are what point a run at a reasoning model: `MAILFATHOM_CHAT_API` names `ChatCompletions` or `Responses`, and `MAILFATHOM_CHAT_REASONING_EFFORT` names one of the efforts [`Chat:ReasoningEffort`](configuration-reference.md#chat) accepts. Both are unset by default, which sends what the tests always sent. A value that names nothing fails the run rather than falling back, for the reason a missing credential does: a run pointed at a reasoning model through a misspelt effort would call the provider with no effort at all and pass, which proves less than not running.
 
 [ADR 0006](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0006-embedding-profile-identity-lifecycle-and-activation-cost.md) holds the reasoning, and `tests/AGENTS.md` states how such a test is written.
 

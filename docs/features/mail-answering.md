@@ -20,6 +20,12 @@ costs one provider call and reads no mailbox at all.
 The alternative would be to search before every call and inject the results. That answers a greeting by dragging a
 mailbox through a provider, and it makes every question cost the same as the most expensive one.
 
+**This is what the declared model has to be able to do.** A model that cannot be given function tools cannot answer a
+question here, whatever else is configured, and a reasoning model that refuses tools beside a stated reasoning effort
+has to be reached through the other of the provider's two APIs. Both are settings on the endpoint: [Chat generation §
+Two APIs, and the deployment says which](chat-generation.md#two-apis-and-the-deployment-says-which) holds the choice and
+what a wrong one is reported as.
+
 ## The scope is bound before the model sees anything
 
 A question carries the accounts and folders it may be answered from. That scope is bound into the run when it is

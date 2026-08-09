@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.ComponentModel.DataAnnotations;
+using MailFathom.AI.Chat;
 using MailFathom.AI.Providers;
 using MailFathom.Host.Configuration.Chat;
 using MailFathom.Host.Configuration.Providers;
@@ -44,6 +45,7 @@ public sealed class ChatModelOptionsTests
     [InlineData("address")]
     [InlineData("api-key")]
     [InlineData("entra-credential")]
+    [InlineData("reasoning-effort")]
     public void Validate_SettingsWithNoAlias_AreRefusedRatherThanIgnored(string writtenSetting)
     {
         // Arrange
@@ -271,6 +273,7 @@ public sealed class ChatModelOptionsTests
         "model" => new ChatModelOptions { Model = "a-chat-model" },
         "address" => new ChatModelOptions { Address = "https://resource.cloud.invalid/openai/v1/" },
         "api-key" => new ChatModelOptions { ApiKey = new ConfiguredSecret { SecretReference = "env:CHAT_KEY" } },
+        "reasoning-effort" => new ChatModelOptions { ReasoningEffort = ChatReasoningEffort.Low },
         _ => new ChatModelOptions
         {
             EntraCredential = new ProviderEntraCredentialOptions
@@ -279,6 +282,49 @@ public sealed class ChatModelOptionsTests
             },
         },
     };
+
+    /// <summary>
+    /// The binder accepts any number for an enum, so a value no member declares reads as a choice while naming nothing.
+    /// For the API that is a request sent to a path this deployment cannot reach; for the effort it is a parameter the
+    /// provider refuses. Both are learned at startup rather than from the first question a client is waiting on.
+    /// </summary>
+    [Fact]
+    public void Validate_AnApiOrAReasoningEffortNamingNoValue_IsRefused()
+    {
+        // Arrange
+        var withAnUndeclaredApi = Declared();
+        withAnUndeclaredApi.Api = (ChatProviderApi)7;
+
+        var withAnUndeclaredEffort = Declared();
+        withAnUndeclaredEffort.ReasoningEffort = (ChatReasoningEffort)9;
+
+        // Act
+        var apiErrors = Validate(withAnUndeclaredApi);
+        var effortErrors = Validate(withAnUndeclaredEffort);
+
+        // Assert
+        Assert.Contains(apiErrors, error => error.Contains("Api", StringComparison.Ordinal));
+        Assert.Contains(effortErrors, error => error.Contains("ReasoningEffort", StringComparison.Ordinal));
+    }
+
+    /// <summary>Both APIs and every declared effort are accepted, so nothing an operator may legitimately write is refused.</summary>
+    [Theory]
+    [InlineData(ChatProviderApi.ChatCompletions, null)]
+    [InlineData(ChatProviderApi.Responses, ChatReasoningEffort.None)]
+    [InlineData(ChatProviderApi.Responses, ChatReasoningEffort.ExtraHigh)]
+    public void Validate_ADeclaredApiAndEffort_AreAccepted(ChatProviderApi api, ChatReasoningEffort? effort)
+    {
+        // Arrange
+        var settings = Declared();
+        settings.Api = api;
+        settings.ReasoningEffort = effort;
+
+        // Act
+        var errors = Validate(settings);
+
+        // Assert
+        Assert.Empty(errors);
+    }
 
     private static ChatModelOptions Declared() => new()
     {

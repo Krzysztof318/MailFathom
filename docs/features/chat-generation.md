@@ -66,6 +66,33 @@ There is no vendor and no model identity in the declaration beside the routed na
 embedding endpoint rather than an omission. A vector is stored and later compared against other vectors, so which model
 produced it has to be recorded and proved; an answer is produced, presented, and gone.
 
+## Two APIs, and the deployment says which
+
+`Api` names which of the provider's two request APIs a call is conducted through: `ChatCompletions`, which is what a
+deployment stating nothing runs on, or `Responses`. Both are reached over one endpoint with one credential on one
+transport under one resilience budget, so what differs is the path a request goes to — `/chat/completions` or
+`/responses` under the declared address — and what the provider will accept there.
+
+**It is declared rather than derived, and that is the decision rather than a shortcut.** Deriving it would mean reading
+the routed model name, and that name is not a model identity: for a cloud deployment it is whatever the operator called
+the deployment, so a derivation would be guessing from a string the operator invented, and a wrong guess is one nothing
+in the deployment could correct. Declaring it costs an operator one line about their own provider, which is a thing they
+already know; deriving it would cost every operator whose provider does not match the guess a capability they cannot
+turn back on. Azure's OpenAI-compatible surface and any self-hosted OpenAI-compatible server are exactly why: neither
+necessarily offers both paths, and nothing about a model name says which.
+
+**When it has to be `Responses`.** A current reasoning model refuses function tools beside a stated reasoning effort on
+the chat completions API, and names the responses API as the way to have both. The answering run behind `ask_mail` is a
+tool loop by construction — the model asks for mail, retrieval answers, the model writes — so removing the tools would
+remove the capability rather than work around the refusal. A deployment that wants such a model states `Responses` here.
+Choosing it against a server that does not serve that path is a *request refused*: the endpoint rejected the request
+itself, so it is not repeated and the provider is reported misconfigured until the declaration is corrected.
+
+**One consequence is worth knowing.** The responses API reports an outcome rather than a finish reason, so an answer
+that simply finished names nothing and arrives as `Unreported` in the table below rather than as `Completed`. A
+truncation and a content filter still arrive named, which is what keeps either from being repeated as though it were a
+transport fault. Nothing else about the two paths is visible above this boundary.
+
 ## Authentication has two shapes
 
 The same two, under the same rules, as an embedding endpoint's: **either** a provider key **or** one of four
@@ -87,6 +114,17 @@ this version can be declared without one.
 - `Temperature` and `TopP` are left unset unless written. Several current models reject the parameters outright, so
   sending a value one of them refuses would turn every call the deployment makes into a rejected request — which is why
   writing nothing has to mean sending nothing.
+- `ReasoningEffort` states how much reasoning a model is asked to spend before it answers, and follows the same rule for
+  the same reason: a model that does not reason rejects the parameter, so a section that writes none sends none and the
+  request is exactly what it was. `None`, `Low`, `Medium`, `High`, and `ExtraHigh` are what may be written, and
+  `ExtraHigh` reaches the provider as its `xhigh`. **`None` is not the same as writing nothing** — it states an effort of
+  none and sends it, which is precisely what a provider refusing function tools beside an *unstated* effort asks for.
+  Not every reasoning model accepts every level, and one that does not refuses the request rather than falling back.
+
+**What a model must support for `ask_mail` to work at all.** The answering run offers the model function tools and
+requires it to call them, so a model that cannot be given tools cannot answer a question here whatever else is declared.
+Where a reasoning model refuses tools beside a stated effort, `Api` is the setting that resolves it, and the two are
+therefore chosen together rather than independently.
 
 ## Bounds every call carries
 

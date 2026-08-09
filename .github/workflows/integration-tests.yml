@@ -98,6 +98,11 @@ jobs:
           MAILFATHOM_CHAT_API_KEY: ${{ secrets.CHAT_PROVIDER_API_KEY }}
           MAILFATHOM_CHAT_ADDRESS: ${{ vars.CHAT_PROVIDER_ADDRESS }}
           MAILFATHOM_CHAT_MODEL: ${{ vars.CHAT_PROVIDER_MODEL }}
+          # Both optional and both unset by default, which sends exactly what the contract run always
+          # sent. They exist so a run can be pointed at a reasoning model, which needs the responses
+          # API and a stated effort before it will accept the function tools the answering run offers.
+          MAILFATHOM_CHAT_API: ${{ vars.CHAT_PROVIDER_API }}
+          MAILFATHOM_CHAT_REASONING_EFFORT: ${{ vars.CHAT_PROVIDER_REASONING_EFFORT }}
 
       - name: Upload test results
         if: always()

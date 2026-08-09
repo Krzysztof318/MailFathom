@@ -16,8 +16,9 @@ internal static class ChatDeclarations
     public static ChatEndpoint Endpoint(
         string alias = "answering",
         string? address = "https://provider.invalid/v1/",
-        string routedModelName = "a-chat-model") =>
-        new(alias, address is null ? null : new Uri(address, UriKind.Absolute), routedModelName);
+        string routedModelName = "a-chat-model",
+        ChatProviderApi api = ChatProviderApi.ChatCompletions) =>
+        new(alias, address is null ? null : new Uri(address, UriKind.Absolute), routedModelName, api);
 
     /// <summary>Builds a plan over the declared endpoint.</summary>
     public static ChatGenerationPlan Plan(
@@ -25,6 +26,7 @@ internal static class ChatDeclarations
         int maximumOutputTokens = 256,
         float? temperature = null,
         float? topP = null,
+        ChatReasoningEffort? reasoningEffort = null,
         int maximumMessagesPerRequest = 8,
         int maximumRequestCharacters = 4000,
         TimeSpan? requestTimeout = null) =>
@@ -33,6 +35,7 @@ internal static class ChatDeclarations
             maximumOutputTokens,
             temperature,
             topP,
+            reasoningEffort,
             maximumMessagesPerRequest,
             maximumRequestCharacters,
             requestTimeout ?? RequestTimeout);

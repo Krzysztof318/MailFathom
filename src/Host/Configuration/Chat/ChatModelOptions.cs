@@ -33,6 +33,10 @@ namespace MailFathom.Host.Configuration.Chat;
 [SuppressMessage("Performance", "CA1812:Avoid uninstantiated internal classes", Justification = "The options framework materializes this type during configuration binding.")]
 internal sealed class ChatModelOptions : IValidatableObject
 {
+    /// <summary>Names every reasoning effort a declaration may state, for the message that reports one it may not.</summary>
+    /// <remarks>Read from the enumeration rather than written out, so a member added later reaches the message without a second edit.</remarks>
+    private static readonly string DeclaredReasoningEfforts = string.Join(", ", Enum.GetNames<ChatReasoningEffort>());
+
     /// <summary>Gets or sets the deployment's own name for the chat endpoint.</summary>
     /// <remarks>
     /// Everything else here is an address or a credential and neither may be written down, so this is the name a log
@@ -44,6 +48,16 @@ internal sealed class ChatModelOptions : IValidatableObject
     /// <summary>Gets or sets the model identifier requests are routed to.</summary>
     /// <remarks>For a cloud deployment this is the name the operator gave the deployment rather than the vendor's model identifier, because that is the string the endpoint recognizes.</remarks>
     public string Model { get; set; } = string.Empty;
+
+    /// <summary>Gets or sets which of the provider's two request APIs a call is conducted through.</summary>
+    /// <remarks>
+    /// Declared rather than derived from the model, because the routed model name is not a model identity: for a cloud
+    /// deployment it is whatever the operator called the deployment, so deriving would mean guessing from a string they
+    /// invented and a wrong guess is one nothing here could correct. Chat completions is the default because every
+    /// OpenAI-compatible server offers it; the responses API is what a current reasoning model requires before it will
+    /// take function tools beside a stated reasoning effort.
+    /// </remarks>
+    public ChatProviderApi Api { get; set; } = ChatProviderApi.ChatCompletions;
 
     /// <summary>Gets or sets the base address requests are sent to.</summary>
     /// <remarks>
@@ -72,6 +86,14 @@ internal sealed class ChatModelOptions : IValidatableObject
     /// <remarks>Nullable for the reason <see cref="Temperature" /> is, and declared beside it rather than instead of it because a provider that accepts both documents setting only one.</remarks>
     [Range(0d, 1d)]
     public float? TopP { get; set; }
+
+    /// <summary>Gets or sets the reasoning effort every call states, left unset to send no reasoning parameter at all.</summary>
+    /// <remarks>
+    /// Nullable for the reason <see cref="Temperature" /> is: a model that does not reason rejects the parameter
+    /// outright. <c>None</c> is not the same as leaving it out — it states an effort of none and sends it, which is what
+    /// a provider refusing function tools beside an unstated effort asks for.
+    /// </remarks>
+    public ChatReasoningEffort? ReasoningEffort { get; set; }
 
     /// <summary>Gets or sets the greatest number of turns one request carries.</summary>
     [Range(1, 512)]
@@ -118,6 +140,7 @@ internal sealed class ChatModelOptions : IValidatableObject
             // wrote them out.
             if (this.Model.Trim().Length > 0
                 || this.Address.Trim().Length > 0
+                || this.ReasoningEffort is not null
                 || this.ApiKey is not null
                 || this.EntraCredential is not null
                 || this.RelevanceFilter.Enabled)
@@ -144,6 +167,22 @@ internal sealed class ChatModelOptions : IValidatableObject
             yield return new ValidationResult(
                 $"Chat endpoint '{alias}' declares a RequestTimeout that is not positive, because an unbounded request would hold the work behind it open for as long as the endpoint stays silent.",
                 [nameof(this.RequestTimeout)]);
+        }
+
+        // The binder accepts any number for an enum, and a value no member declares would read as a choice while naming
+        // nothing — for the API, a request sent to a path this cannot reach at all.
+        if (!Enum.IsDefined(this.Api))
+        {
+            yield return new ValidationResult(
+                $"Chat endpoint '{alias}' declares an Api of '{(int)this.Api}', which names no API. State '{nameof(ChatProviderApi.ChatCompletions)}' or '{nameof(ChatProviderApi.Responses)}'.",
+                [nameof(this.Api)]);
+        }
+
+        if (this.ReasoningEffort is { } effort && !Enum.IsDefined(effort))
+        {
+            yield return new ValidationResult(
+                $"Chat endpoint '{alias}' declares a ReasoningEffort of '{(int)effort}', which names no effort. State one of {DeclaredReasoningEfforts}, or leave it unset to send no reasoning parameter.",
+                [nameof(this.ReasoningEffort)]);
         }
 
         if (this.Address.Length > 0 && !IsUsableAddress(this.Address))
@@ -178,7 +217,8 @@ internal sealed class ChatModelOptions : IValidatableObject
     public ChatEndpoint ToEndpoint() => new(
         this.Alias.Trim(),
         this.Address is { Length: > 0 } address ? new Uri(address, UriKind.Absolute) : null,
-        this.Model.Trim());
+        this.Model.Trim(),
+        this.Api);
 
     private static bool IsUsableAddress(string address) =>
         Uri.TryCreate(address, UriKind.Absolute, out var parsed)

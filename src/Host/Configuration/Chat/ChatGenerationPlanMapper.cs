@@ -33,6 +33,7 @@ internal static class ChatGenerationPlanMapper
                 settings.MaxOutputTokens,
                 settings.Temperature,
                 settings.TopP,
+                settings.ReasoningEffort,
                 settings.MaxMessagesPerRequest,
                 settings.MaxRequestCharacters,
                 settings.RequestTimeout)
