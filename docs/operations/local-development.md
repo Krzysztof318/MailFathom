@@ -649,7 +649,7 @@ A dispatch takes an optional `ref` to run against and `run_ai_provider_contract_
 
 ## Pull request checks
 
-Four workflows run for every pull request targeting `main`. Two of them always run; `Typo check` and `CodeQL` always run except on a draft. `CI` also runs on every push to `main`, which [`CI` after a merge to `main`](#ci-after-a-merge-to-main) below describes. It carries six jobs:
+Five workflows run for every pull request targeting `main`. Three of them always run; `Typo check` and `CodeQL` always run except on a draft. `CI` also runs on every push to `main`, which [`CI` after a merge to `main`](#ci-after-a-merge-to-main) below describes. It carries six jobs:
 
 - `Detect changes` reads the change with `dorny/paths-filter` and publishes three decisions: whether it can affect the build, whether it can affect formatting, and whether it can affect the EF Core model. It takes seconds and holds `contents: read` and `pull-requests: read` because how it reads the change follows from the event. A pull request is compared through the GitHub REST API and checks nothing out; a push is compared with `git diff` against the commit `main` carried before it, which is what the `base` input naming the pushed branch selects and what the checkout step conditional on the same event provides. That checkout takes `fetch-depth: 0`, so the earlier commit is already in the clone: without it the action would fetch that commit by bare SHA from an origin whose credentials the same step strips, which holds only while the repository is public. A manual dispatch has neither a pull request nor a preceding commit to compare against, so all three decisions are `true` there and an explicitly started run always does the work.
 - `Build and unit test` runs when the change touches production code, tests, the solution or SDK selection, shared build and package configuration, coverage tooling, or the workflow file. It restores `MailFathom.slnx` in locked mode and repository-local tools, builds the solution in Release configuration, runs all unit-test projects through Microsoft Testing Platform with unique coverage prefixes, merges their Cobertura reports, and fails below 85% aggregate line coverage for the complete configured production scope. It uploads raw and merged coverage artifacts and TRX results even when the threshold fails.
@@ -689,6 +689,16 @@ The fourth workflow, `CodeQL`, carries one job, `Analyze C#`, and is the only ch
 Three of its decisions are the ones a reader would otherwise have to reconstruct, and the workflow file argues each at length. It is an advanced setup rather than GitHub's default setup, so the check that reads this repository's source is a file a pull request can change and a reviewer can read, and so it can see the SDK pin and the locked restore. Its build mode is `manual` rather than `none`, so the analysis sees the graph the committed lock files fix instead of one CodeQL resolved for itself. And its last step compares the extracted source archive against what `src/` contains, because a bundle that cannot extract this SDK's output produces an empty database and a green check — an answer that looks like "no findings" and means "no analysis". The weekly run exists for a fourth reason that has nothing to do with this repository: a query pack updates upstream, so a commit that was clean when it merged can become a finding with nothing here having changed.
 
 On a pull request from a fork the run gets the token GitHub grants that event, which is not the token a branch in this repository gets, and whether the alert upload succeeds there follows from GitHub's rules rather than from anything in this file. The check is required by nothing either way, so no merge waits on how it resolves, and the push to `main` after the merge analyses the same code under a token that certainly can upload.
+
+The fifth workflow, `Apply pull request labels`, carries one job and is the only one here that writes
+anything to the pull request. It runs when a pull request is opened, reopened, marked ready, or
+edited, checks out the base commit for one script, and applies the labels
+`.github/pull-request-labels/select-labels.sh` says the change earns — today, `security` when any
+issue the body refers to carries it, whether the change closes that issue or merely names it. It reports no status check and blocks nothing; a draft runs it,
+because a label is worth having while the change is still being written. It only ever adds, so a
+label a hand applied stays. [Labels on the pull
+request](agent-workflow.md#labels-on-the-pull-request) carries the reasoning, including why it takes
+`pull_request` rather than the trigger `Fathom review` holds and what that costs on a fork.
 
 ### `CI` after a merge to `main`
 
@@ -837,9 +847,11 @@ notices.
 The retention rows, the fork approval, and the package access are the ones to re-read after any
 settings change, because no API exposes them and nothing else will notice them moving.
 
-**A fork's pull request** runs `CI`, `Protected paths`, `Typo check`, and `CodeQL` on the
-`pull_request` event with a read-only token and no repository secret, which is what makes running a
-contribution's code safe at all. `Fathom review` is the exception and stays one: it holds an App
+**A fork's pull request** runs `CI`, `Protected paths`, `Typo check`, `CodeQL`, and `Apply pull
+request labels` on the `pull_request` event with a read-only token and no repository secret, which is
+what makes running a contribution's code safe at all. The last of those is the one whose work that
+token refuses: it resolves the labels and reports that it could not apply them, so a fork's pull
+request is labelled by a maintainer's hand exactly as its review is started by one. `Fathom review` is the exception and stays one: it holds an App
 private key, so a fork's own pushes never start it and only a maintainer's `fathom-review` label or
 comment does.
 [Why `pull_request_target` is a granted exception](agent-workflow.md#why-pull_request_target-is-a-granted-exception)

@@ -1,6 +1,6 @@
 # Agent workflow
 
-<!-- describes: scripts/**, .agents/skills/**, .github/workflows/**, .github/fathom-review/**, **/.editorconfig, .gitignore, .worktreeinclude -->
+<!-- describes: scripts/**, .agents/skills/**, .github/workflows/**, .github/fathom-review/**, .github/pull-request-labels/**, **/.editorconfig, .gitignore, .worktreeinclude -->
 
 Codex and Claude Code share one repository-owned workflow. Deterministic Git and
 .NET operations live in scripts, while repository-specific judgment lives in
@@ -411,6 +411,48 @@ Skills live under `.agents/skills/`. Claude Code consumes the same directory
 through the relative symlink `.claude/skills -> ../.agents/skills`; do not copy
 or maintain a second skill tree.
 
+## Labels on the pull request
+
+What a change *is* gets recorded on the issues it closes, and nothing carried that to the
+pull request — which is where the change is actually read: a list, a notification, a
+reviewer deciding how closely to look. `Apply pull request labels` does. It runs on
+`pull_request` when one is opened, reopened, marked ready, or **edited**, that last one
+because the body is an input: a closing reference added afterwards changes which issues
+describe the change and therefore which labels it earns.
+
+Every condition lives in `.github/pull-request-labels/select-labels.sh` and none of them in
+the workflow, so a new condition is one edit to a script the contract suite runs rather
+than a rule spread across whichever workflows happen to care. One condition exists today:
+a pull request earns `security` when any issue it **refers to** carries `security`, the
+label [Issue tracking](issue-tracking.md#labels) defines as *needs a security review before
+it merges*.
+
+Refers to, not closes, and the difference is the point. `collect-referenced-issues.sh`
+collects every issue the body names — a closing reference, a bare `#123`, and a link to an
+issue in this repository alike — where `collect-closing-references.sh`, which the
+reviewer's collection uses, deliberately leaves a mention out. The two answer different
+questions: what merging *completes* is a contract a review holds the change to, while what
+the change is *about* is what a label says, and "part of #123" against a security issue is
+a change somebody wants read that way whether or not it finishes the issue. A
+cross-repository `owner/repo#123` is neither, in both scripts: that number belongs to
+another project, and reading it here would earn a label from whichever local issue happens
+to hold the same number.
+
+The workflow only ever adds. A label a hand applied answers a question this pipeline cannot
+see — `fathom-review` is the worked example, and it means *somebody asked* — so nothing
+here removes one, and re-applying a label already present changes nothing and fires no
+event. An issue that cannot be fetched earns nothing rather than stopping the walk: reading
+a label is how a condition is decided, so an unreadable issue is a condition that was not
+met rather than one to guess at.
+
+It uses `pull_request` rather than `pull_request_target`, which stays reserved for
+`Fathom review` alone. Nothing here needs that trigger's elevated token: the branch is
+never checked out, nothing from it runs, and the workspace holds the base commit for one
+script. The cost of that choice is a fork's pull request, where GitHub hands every workflow
+a read-only token whatever the file declares — the write is refused, the run says so and
+ends green, and a maintainer labels a fork's pull request by hand exactly as they already
+start its review by hand.
+
 ## Review on the pull request
 
 `review-change` reviews the diff before it leaves the workspace. Two reviewers
@@ -735,8 +777,9 @@ because each closes a different way the bill could grow:
 - the comment trigger requires an `OWNER`, `MEMBER`, or `COLLABORATOR` author, so
   nobody outside the project can spend the subscription by typing;
 - an automatic review is capped per pull request, as described above;
-- the model is `claude-sonnet-5` rather than the costlier Opus, which a review
-  request reaches only by asking for it by name;
+- the model is `claude-sonnet-5` rather than the costlier Opus, which exactly two
+  things reach: a review request asking for it by name, and the `security` label
+  on the pull request, described below;
 - `--effort high` rather than the `xhigh` that would otherwise apply;
 - every collected input carries an explicit ceiling, and what a ceiling dropped is
   stated in the review body.
@@ -746,6 +789,39 @@ with one number, and it is deliberately not done: the gate above already stops
 anyone outside the project from spending anything, so the remaining cost is the
 owner's own pushing, and a second credential to provision, rotate, and register
 buys no protection against that.
+
+### What the security label decides
+
+`security` on the pull request — put there by `Apply pull request labels`, from an
+issue the change refers to, which need not be one it closes — is the one input that
+changes how the review is *conducted* rather than only what it concludes. Two things follow from it, and the
+reviewer reads the label off the pull request for both rather than deriving it from
+the issues again: which conditions earn which label is that pipeline's decision, and
+a second implementation of it could disagree with the label a reader sees.
+
+The prompt applies the security rubric to every file in the change rather than to
+the ones whose diff invites it, confirms the weakness the issue names is closed on
+every path the change reaches rather than the one the diff illustrates, and says in
+the summary that the pass ran and what surface it covered — under an approval as
+much as under findings, because a verdict that does not say what was examined is not
+evidence a security review happened. It widens what the reviewer reads and nothing
+about what it reports: a defect in code the change does not touch is still not a
+finding. The absence of the label changes nothing, and an unlabelled change is not
+read more loosely for it.
+
+The second is the model. `claude-opus-5` performs that pass, which is the same shape
+of exception as a maintainer writing `opus` in a request, taken by the project rather
+than by a hand: the change whose defect would be a security defect is the one a
+second, costlier opinion most repays. Nothing else escalates.
+
+Because both workflows start from the same event, the reviewer waits for the
+labelling run on that head to finish before reading the labels — otherwise a security
+change opened or pushed a moment ago would be reviewed with the default model and no
+pass, on exactly the changes where that costs most. Only a run still in flight is
+waited for, so a comment or a label event, which arrives long after that head was
+labelled, waits not at all. The wait is bounded at two minutes and then reads the
+labels as they stand: this decides which model reviews rather than whether a review
+happens, so a stuck labelling run must not hold a review open or fail one.
 
 ### What the reviewer is measured against
 

@@ -110,10 +110,18 @@ jobs:
     permissions:
       contents: read
       pull-requests: read
+      # Whether `Apply pull request labels` is still deciding this head's labels, which the step
+      # below waits on before it reads them. Listing a workflow's runs is `actions`, and it is read
+      # rather than write: nothing here starts, cancels, or reruns anything.
+      actions: read
     outputs:
       review: ${{ steps.gate.outputs.review }}
       pull_request_number: ${{ steps.gate.outputs.pull_request_number }}
-      model: ${{ steps.gate.outputs.model }}
+      # The gate picks the default and the step that reads the labels may raise it, so the answer is
+      # the second value where one exists. A skipped step has no output at all, which GitHub renders
+      # as the empty string and this expression treats as *nothing was decided here* — the same shape
+      # the gate itself relies on when it declines to review and no model is ever read.
+      model: ${{ steps.security.outputs.model || steps.gate.outputs.model }}
     steps:
       - name: Decide whether this event asks for a review
         id: gate
@@ -155,7 +163,9 @@ jobs:
           # Sonnet 5 by default, at the exact identifier rather than the `sonnet` alias: an alias
           # silently re-points at whatever ships next, and a review's findings are only comparable
           # across runs when the model that produced them is the one this file names. The prompt is
-          # written for this model, so a run on another one is a deliberate exception.
+          # written for this model, so a run on another one is a deliberate exception. Exactly two
+          # are taken: a maintainer writing `opus` in the request below, and the step after this one
+          # when the pull request carries the `security` label.
           model='claude-sonnet-5'
           reason='no rule matched this event'
 
@@ -304,6 +314,104 @@ jobs:
           } >> "$GITHUB_OUTPUT"
 
           echo "Review: ${review} (${reason})."
+
+      # `security` says this change needs a security review before it merges. It is written on the
+      # issue — `docs/operations/issue-tracking.md` § "Labels" — and `Apply pull request labels`
+      # carries it onto the pull request, which is the only place this workflow reads it from. That
+      # split is deliberate: which conditions put which label on a pull request is one decision, it
+      # is going to grow more conditions than this one, and a reviewer that re-derived the answer
+      # would be a second implementation of it that can disagree with the label a reader sees.
+      #
+      # What it decides here is who performs the review. The prompt applies the security rubric to
+      # every file rather than to the ones whose diff invites it, and this hands that pass to the
+      # costlier model: the same shape of exception as the `opus` request in the gate above, taken by
+      # the project rather than by a hand, because the change whose defect would be a security defect
+      # is the one a second opinion most repays. Nothing else escalates, so an ordinary change is
+      # reviewed by the default model exactly as before.
+      #
+      # It waits for that workflow rather than racing it. Both start from the same event when a pull
+      # request is opened, reopened, or marked ready, so the label is being decided at the moment
+      # this runs, and reading too early would review a security change with the default model and
+      # no pass. Only a run that is still going is waited for, which is why a push waits not at all:
+      # the labelling does not run on one — a label follows from the body and the issues it names
+      # rather than from the diff — so what is already on the pull request is the answer.
+      - name: Read the labels the change carries
+        id: security
+        if: steps.gate.outputs.review == 'true'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          PULL_REQUEST_NUMBER: ${{ steps.gate.outputs.pull_request_number }}
+          MODEL: ${{ steps.gate.outputs.model }}
+          # The costlier model, at its exact identifier for the reason the gate names the default at
+          # one: a review's findings are comparable across runs only when the model is the one this
+          # file states.
+          SECURITY_MODEL: 'claude-opus-5'
+          SECURITY_LABEL: security
+          LABELLING_WORKFLOW: apply-pull-request-labels.yml
+          # A short wait, because the labelling run reads a body and a handful of issues and posts
+          # one label. Past the ceiling the review proceeds on the labels the pull request carries
+          # now: this decides which model reviews rather than whether a review happens, so a stuck
+          # labelling run must not hold a review open or fail one.
+          LABELLING_LIMIT_SECONDS: '120'
+          LABELLING_POLL_SECONDS: '10'
+        run: |
+          set -euo pipefail
+
+          # Every read here leaves the default in place when it fails rather than failing the step.
+          # Nothing downstream survives a failed `decide`, so an unreachable API would cost the whole
+          # review to answer a question about which model performs it.
+          head_sha="$(gh api "repos/${REPOSITORY}/pulls/${PULL_REQUEST_NUMBER}" --jq '.head.sha')" \
+            || head_sha=''
+
+          # `status=in_progress` covers queued and running alike; a run that has concluded is not
+          # returned, so a count of zero is the ordinary case and ends the wait immediately. A failed
+          # query, an empty answer, and a head nobody could read all mean *nothing to wait for*, for
+          # the same reason the ceiling exists.
+          labelling_in_flight() {
+            local pending
+
+            [[ -n "$head_sha" ]] || return 1
+
+            pending="$(
+              gh api "repos/${REPOSITORY}/actions/workflows/${LABELLING_WORKFLOW}/runs?head_sha=${head_sha}&status=in_progress&per_page=1" \
+                --jq '.total_count'
+            )" || pending='0'
+
+            [[ -n "$pending" && "$pending" != '0' ]]
+          }
+
+          waited=0
+
+          while labelling_in_flight; do
+            if (( waited >= LABELLING_LIMIT_SECONDS )); then
+              printf 'The labelling of %s was still running after %ss, so the labels are read as they stand.\n' \
+                "$head_sha" "$waited"
+              break
+            fi
+
+            sleep "$LABELLING_POLL_SECONDS"
+            waited=$(( waited + LABELLING_POLL_SECONDS ))
+          done
+
+          security_review='false'
+          model="$MODEL"
+          reason="the pull request carries no ${SECURITY_LABEL} label"
+
+          if gh api "repos/${REPOSITORY}/pulls/${PULL_REQUEST_NUMBER}" --jq '.labels[].name' \
+               | grep -qxF "$SECURITY_LABEL"; then
+            security_review='true'
+            model="$SECURITY_MODEL"
+            reason="the pull request carries the ${SECURITY_LABEL} label"
+          fi
+
+          {
+            echo "security_review=${security_review}"
+            echo "model=${model}"
+          } >> "$GITHUB_OUTPUT"
+
+          echo "Security review: ${security_review}, model: ${model} (${reason})."
 
   # The board says a review is running, from the moment it starts rather than when it concludes. A
   # review takes minutes, and until this job existed the column said whatever the last event left
@@ -566,8 +674,13 @@ jobs:
           snapshot_taken="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
           echo "snapshot_taken=${snapshot_taken}" >> "$GITHUB_OUTPUT"
 
+          # The labels come with it because one of them changes how the change is read: `security`
+          # says a security review is owed before this merges, and `Apply pull request labels` is
+          # what puts it here. The prompt turns it into a pass over every file, and the job above
+          # reads the same label to decide which model performs that pass — one label, read twice,
+          # written once.
           gh api "repos/${REPOSITORY}/pulls/${PULL_REQUEST_NUMBER}" \
-            --jq '{number, title, body, draft, author: .user.login, head_sha: .head.sha, base_sha: .base.sha, base_ref: .base.ref, changed_files, additions, deletions}' \
+            --jq '{number, title, body, draft, author: .user.login, labels: [.labels[].name], head_sha: .head.sha, base_sha: .base.sha, base_ref: .base.ref, changed_files, additions, deletions}' \
             > "$REVIEW_DIRECTORY/pull-request.json"
 
           head_sha="$(jq -r '.head_sha' "$REVIEW_DIRECTORY/pull-request.json")"
@@ -726,13 +839,21 @@ jobs:
           while IFS= read -r issue_number; do
             [[ -n "$issue_number" ]] || continue
 
+            # The labels come with the body because they are where the pull request's own labels
+            # came from: `security` is on the pull request because an issue here carries it, and the
+            # reviewer that has both can say which contract asked for the pass it performed. What it
+            # keys off is still the pull request's label, for the reason the job above gives.
+            #
             # A reference to an issue that cannot be fetched — deleted, or in a repository this
             # token does not reach — is recorded as the number alone rather than dropped, so the
             # reviewer can say the contract was unreadable instead of silently reviewing without it.
-            gh api "repos/${REPOSITORY}/issues/${issue_number}" --jq '{number, title, body}' \
+            # Its labels are `null` for the same reason its title is: an empty array would say this
+            # issue carries no `security` label, which is the one thing the run does not know.
+            gh api "repos/${REPOSITORY}/issues/${issue_number}" \
+              --jq '{number, title, body, labels: [.labels[].name]}' \
               >> "$REVIEW_DIRECTORY/issues.ndjson" \
               || jq -nc --argjson number "$issue_number" \
-                   '{number: $number, title: null, body: null}' \
+                   '{number: $number, title: null, body: null, labels: null}' \
                    >> "$REVIEW_DIRECTORY/issues.ndjson"
           done < "$REVIEW_DIRECTORY/closing-references.txt"
 

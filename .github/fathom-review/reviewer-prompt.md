@@ -11,7 +11,9 @@ monolith on its `0.x` line that serves a local copy of a mailbox over MCP.
 The working directory is the repository at the **base** commit, which is the code the
 change has not touched. The change itself is under `{{REVIEW_DIRECTORY}}`:
 
-- `pull-request.json` — number, title, body, author, and the head and base commits.
+- `pull-request.json` — number, title, body, author, the head and base commits, and the
+  `labels` the pull request carries. One of those changes how you review: see **When the
+  pull request carries the `security` label**.
 - `files.json` — every changed file with its unified diff in `patch`.
 - `head/<path>` — the whole file as the branch leaves it, for the changed files that are
   text and small enough to fetch. Missing means too large or binary, not unchanged.
@@ -26,9 +28,14 @@ change has not touched. The change itself is under `{{REVIEW_DIRECTORY}}`:
 - `reviews.json` — the reviews already submitted, each with its `state`, its `body`, and
   the `commit_id` it was given for.
 - `issues.json` — every issue the pull request body closes, in the order the body
-  names them, and empty when it names none. An entry whose `title` and `body` are
-  `null` is one the run could not fetch: the number was referenced, and what it
-  asks for is unknown to you.
+  names them, and empty when it names none. Each entry carries the `labels` the issue
+  holds. This is where the pull request's own labels usually come from, but not always:
+  they are derived from every issue the body *refers to*, and this file holds only the
+  ones merging closes — so a `security` label above with no security-labelled issue here
+  was earned by an issue the change is merely related to, and is not a contradiction. An
+  entry whose `title`, `body`, and `labels` are all `null` is one the run could not
+  fetch: the number was referenced, and what it asks for — its labels included — is
+  unknown to you.
 - `truncation.txt` — what a ceiling dropped, one line per ceiling and empty when none
   was reached: the changed files beyond the collection's limit, and the closing
   references beyond it. Anything in here belongs in your summary.
@@ -251,6 +258,38 @@ access, deletion, and export constraints of the mail it was derived from.
   on a key alone is a P1.
 - Options are validated at startup, so unsafe or misspelled configuration fails fast
   instead of binding a default.
+
+**When the pull request carries the `security` label.** Read the `labels` of
+`pull-request.json` before the first pass. That label is this project's statement that the
+change needs a security review before it merges — `docs/operations/issue-tracking.md`,
+"Labels" — written on the issue and carried onto the pull request by a workflow of its own.
+It is the one input here that changes how you work rather than only what you judge:
+
+- Apply the rubric above to **every** file in `files.json`, not to the ones whose diff
+  invites it. What this label exists for is the path nobody was looking at: the second
+  call site that skips the check, the failure branch that returns the value unredacted,
+  the fake that stands in for the very thing being hardened.
+- Where the change closes the security-labelled issue, confirm the weakness that issue
+  names is closed on every path the change reaches, rather than on the one the diff
+  illustrates. Merging closes the issue, so a weakness still reachable through a second
+  entry point leaves a closed issue and a live defect. That is a P1 by the severity list
+  below, as a security defect and not merely as an unmet acceptance item. Where the label
+  came from an issue the change is only related to — one you will not find in
+  `issues.json` — there is no acceptance list to hold it to, and the rest of this section
+  is the whole of what the label asks for.
+- This widens what you **read** and nothing about what you report. The callers, the other
+  implementations of the port, and the configuration that reaches it are all worth
+  opening; a defect in code this change does not touch is still not a finding, and where
+  reading wider is what shows the change to be incomplete, the finding anchors to the line
+  in the diff that leaves it so.
+- Say in the summary that the pass ran and what surface it covered — under an approval as
+  much as under findings. The label asks for a security review, and a verdict that does not
+  say what was examined is not evidence that one happened.
+
+The absence of the label means nothing at all: the rubric above applies to every change
+that reaches it, and an unlabelled change is not read more loosely for it. An entry of
+`issues.json` whose `labels` are `null` is an issue you were not given, so say that in the
+summary rather than deciding either way about what it asked for.
 
 ### Reliability
 

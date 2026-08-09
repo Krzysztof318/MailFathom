@@ -1,0 +1,130 @@
+# Copyright © 2026 Krzysztof Kasprowicz
+# Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
+# Project repository: https://github.com/Krzysztof318/MailFathom
+
+name: Apply pull request labels
+
+# What a change *is* is recorded on the issues it closes, and nothing carried it to the pull request,
+# which is where the change is actually read: a list, a notification, a reviewer deciding how closely
+# to look. This puts it there. `.github/pull-request-labels/select-labels.sh` holds every condition
+# and this file holds none, so a new condition is one edit to a script the contract suite runs rather
+# than a rule spread across the workflows that happen to care.
+#
+# It only ever adds. A label a hand applied answers a question this workflow cannot see, so nothing
+# here removes one — `Fathom review`'s own `fathom-review` label is the worked example of a label
+# that means *somebody asked*, and a workflow that tidied the list would erase it.
+#
+# `pull_request` rather than `pull_request_target`, which is reserved for `Fathom review` alone and
+# is what `only_the_reviewer_workflow_uses_pull_request_target` in `scripts/test-agent-workflow.sh`
+# keeps true. Nothing here needs the elevated token that trigger carries: the branch is never checked
+# out, nothing from it is executed, and the workspace holds the base commit for one script. What that
+# choice costs is a fork's pull request, where GitHub hands every workflow a read-only token whatever
+# this file declares — the write is refused there and the run says so rather than failing, and the
+# maintainer labels a fork's pull request by hand exactly as they already start its review by hand.
+on:
+  pull_request:
+    types:
+      # `edited` is here because the body is an input: a closing reference added after the pull
+      # request was opened changes which issues describe the change, and therefore which labels it
+      # earns. The other three are the points at which a pull request becomes something a reader
+      # reaches for.
+      - opened
+      - reopened
+      - ready_for_review
+      - edited
+    branches:
+      - main
+
+concurrency:
+  # One run per pull request, and a newer one supersedes whatever is still deciding: the answer is a
+  # function of the body and the issues it names, so a run reading an older body has nothing to
+  # contribute. `Fathom review` waits for exactly this group to go quiet before it reads the labels.
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  label:
+    name: Apply the labels the change earns
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      # The labels on the issues the body closes. `pull-requests` reaches the pull request and not
+      # the issues it names, so this is stated rather than inherited from the repository being
+      # public.
+      issues: read
+      # The one write in this workflow, and the whole of what it exists to do. On a pull request from
+      # a fork GitHub downgrades it to read whatever is written here, which is the case the run
+      # reports and passes over.
+      pull-requests: write
+    steps:
+      # For `select-labels.sh` and the closing-reference parsing it calls, from the base commit
+      # rather than from the branch: which issues a merge closes must not be decided by the code
+      # being merged.
+      - name: Check out the base commit
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          persist-credentials: false
+
+      - name: Apply the labels
+        id: label
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          PULL_REQUEST_NUMBER: ${{ github.event.pull_request.number }}
+          SELECT_LABELS_SCRIPT: ${{ github.workspace }}/.github/pull-request-labels/select-labels.sh
+          REFERENCED_ISSUES_SCRIPT: ${{ github.workspace }}/.github/pull-request-labels/collect-referenced-issues.sh
+          # Twice the reviewer's closing-reference ceiling, because this reads every issue the body
+          # names rather than only the ones merging closes, and a body that names one of each is the
+          # ordinary shape rather than a large one. It is still a ceiling: a body is untrusted text,
+          # and one issue is fetched per line.
+          REFERENCE_LIMIT: '10'
+        run: |
+          set -euo pipefail
+
+          labels_file="$(mktemp)"
+
+          # What the ceiling cut reaches the log, because a label the pull request did not earn only
+          # because a reference fell off the end is a decision somebody has to be able to see.
+          "$SELECT_LABELS_SCRIPT" \
+            "$REPOSITORY" "$PULL_REQUEST_NUMBER" "$REFERENCED_ISSUES_SCRIPT" "$REFERENCE_LIMIT" \
+            > "$labels_file"
+
+          if [[ ! -s "$labels_file" ]]; then
+            echo 'The change earns no label.'
+            exit 0
+          fi
+
+          # One request carrying every label, and additive by definition: this endpoint adds to the
+          # list rather than replacing it, so a label already present stays exactly once and a label
+          # somebody applied by hand is untouched. Re-applying one changes nothing and fires no
+          # event, which is what keeps a second run from relabelling and from waking anything that
+          # listens for `labeled`.
+          arguments=()
+
+          while IFS= read -r label; do
+            [[ -n "$label" ]] || continue
+
+            arguments+=(-f "labels[]=${label}")
+          done < "$labels_file"
+
+          # A file holding nothing but blank lines is the empty case reached the other way, and it is
+          # answered here rather than left to expand into a request that names no label.
+          if ((${#arguments[@]} == 0)); then
+            echo 'The change earns no label.'
+            exit 0
+          fi
+
+          # A refused write is reported and passed over. This runs on a fork's pull request with a
+          # read-only token by design, and a red job there would say the pipeline is broken when what
+          # happened is the trigger doing what it is documented to do.
+          if gh api "repos/${REPOSITORY}/issues/${PULL_REQUEST_NUMBER}/labels" \
+               --method POST "${arguments[@]}" --silent; then
+            printf 'Applied: %s\n' "$(tr '\n' ' ' < "$labels_file")"
+          else
+            echo "::notice::The labels could not be applied, which is expected on a pull request from a fork."
+          fi
