@@ -135,11 +135,13 @@ internal sealed class ChatModelOptions : IValidatableObject
         {
             // A section carrying settings but no alias is the one shape worth naming: an operator who wrote a model, an
             // address, or a credential and expects the provider to be in use has to be told that nothing reads any of
-            // it. Every member checked here has no useful default, so writing one is unambiguous intent; the bounds and
-            // the timeout are not, because a deployment that accepted their defaults is indistinguishable from one that
-            // wrote them out.
+            // it. What each member contributes here is whether writing it was unambiguous intent. Most have no useful
+            // default, so any value at all is; the API has one, so what counts is a value other than it, which nobody
+            // writes by accident. The bounds and the timeout contribute nothing either way, because a deployment that
+            // accepted their defaults is indistinguishable from one that wrote them out.
             if (this.Model.Trim().Length > 0
                 || this.Address.Trim().Length > 0
+                || this.Api != ChatProviderApi.ChatCompletions
                 || this.ReasoningEffort is not null
                 || this.ApiKey is not null
                 || this.EntraCredential is not null

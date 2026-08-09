@@ -46,6 +46,7 @@ public sealed class ChatModelOptionsTests
     [InlineData("api-key")]
     [InlineData("entra-credential")]
     [InlineData("reasoning-effort")]
+    [InlineData("api")]
     public void Validate_SettingsWithNoAlias_AreRefusedRatherThanIgnored(string writtenSetting)
     {
         // Arrange
@@ -274,6 +275,7 @@ public sealed class ChatModelOptionsTests
         "address" => new ChatModelOptions { Address = "https://resource.cloud.invalid/openai/v1/" },
         "api-key" => new ChatModelOptions { ApiKey = new ConfiguredSecret { SecretReference = "env:CHAT_KEY" } },
         "reasoning-effort" => new ChatModelOptions { ReasoningEffort = ChatReasoningEffort.Low },
+        "api" => new ChatModelOptions { Api = ChatProviderApi.Responses },
         _ => new ChatModelOptions
         {
             EntraCredential = new ProviderEntraCredentialOptions
