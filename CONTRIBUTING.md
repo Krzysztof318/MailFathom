@@ -23,7 +23,7 @@ Two things are unchanged by whoever or whatever typed the code:
 
 ## Before you start
 
-**Every change starts from an issue.** Open one before writing code, or comment on an existing one to say you are working on it. That is not ceremony: it is where scope is agreed, and it is what a pull request closes. For anything larger than a typo, wait for a maintainer's reply before investing time — MailFathom is pre-release and its direction changes faster than its issue list.
+**Every change starts from an issue.** Open one before writing code, or comment on an existing one to say you are working on it. That is not ceremony: it is where scope is agreed, and it is what a pull request closes. For anything larger than a typo, wait for a maintainer's reply before investing time — MailFathom is on its `0.x` line and its direction changes faster than its issue list.
 
 **Everything you write here is in English.** [`AGENTS.md`](AGENTS.md#critical-repository-rules) states that rule once, for every artifact and every directory, and it reaches a contribution exactly as it reaches the maintainer's agents.
 

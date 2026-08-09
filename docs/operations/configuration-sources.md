@@ -157,8 +157,8 @@ spec:
     spec:
       containers:
         - name: mailfathom
-          # Substitute the image your deployment uses. MailFathom publishes none yet; the image contract is
-          # tracked separately and this page does not define it.
+          # Substitute the image your deployment uses. This page does not define the image contract;
+          # docs/operations/container-image.md names the published references and the tags they carry.
           image: mailfathom:replace-me
           env:
             - name: ConfigurationSources__Directory
