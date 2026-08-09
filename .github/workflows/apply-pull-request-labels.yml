@@ -60,13 +60,25 @@ jobs:
       # reports and passes over.
       pull-requests: write
     steps:
-      # For `select-labels.sh` and the closing-reference parsing it calls, from the base commit
-      # rather than from the branch: which issues a merge closes must not be decided by the code
-      # being merged.
-      - name: Check out the base commit
+      # For `select-labels.sh` and the reference collection it calls. The default ref for this
+      # trigger is the merge commit the pull request would produce, and that is deliberately kept
+      # rather than pinned to the base.
+      #
+      # `Fathom review` pins the base for the opposite reason, and the two are not in conflict:
+      # `pull_request_target` runs the workflow file from the default branch, so pinning the base
+      # there is what stops the branch supplying any of the code that judges it. `pull_request` runs
+      # the workflow file from the *head*, so the branch already supplies the job — pinning the base
+      # would not withhold anything from it, and would only guarantee that a change adding a script
+      # and the call to it runs the new call against the old tree. It did exactly that on the pull
+      # request that introduced this workflow, which failed with `No such file or directory`.
+      #
+      # Nothing is granted by the merge ref that the trigger does not already grant. A fork's pull
+      # request receives a read-only token on this event whatever the block above declares, so a
+      # script it authored can read and post nothing; a branch in this repository is pushed by
+      # somebody who can already run anything here.
+      - name: Check out the pull request
         uses: actions/checkout@v7
         with:
-          ref: ${{ github.event.pull_request.base.sha }}
           persist-credentials: false
 
       - name: Apply the labels

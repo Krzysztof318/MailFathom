@@ -692,7 +692,7 @@ On a pull request from a fork the run gets the token GitHub grants that event, w
 
 The fifth workflow, `Apply pull request labels`, carries one job and is the only one here that writes
 anything to the pull request. It runs when a pull request is opened, reopened, marked ready, or
-edited, checks out the base commit for one script, and applies the labels
+edited, checks out the merge commit for one script, and applies the labels
 `.github/pull-request-labels/select-labels.sh` says the change earns — today, `security` when any
 issue the body refers to carries it, whether the change closes that issue or merely names it. It reports no status check and blocks nothing; a draft runs it,
 because a label is worth having while the change is still being written. It only ever adds, so a

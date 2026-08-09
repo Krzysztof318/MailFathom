@@ -446,12 +446,22 @@ a label is how a condition is decided, so an unreadable issue is a condition tha
 met rather than one to guess at.
 
 It uses `pull_request` rather than `pull_request_target`, which stays reserved for
-`Fathom review` alone. Nothing here needs that trigger's elevated token: the branch is
-never checked out, nothing from it runs, and the workspace holds the base commit for one
-script. The cost of that choice is a fork's pull request, where GitHub hands every workflow
-a read-only token whatever the file declares — the write is refused, the run says so and
-ends green, and a maintainer labels a fork's pull request by hand exactly as they already
-start its review by hand.
+`Fathom review` alone. Nothing here needs that trigger's elevated token, and the cost of not
+taking it is a fork's pull request: GitHub hands every workflow a read-only token there
+whatever the file declares, so the write is refused, the run says so and ends green, and a
+maintainer labels a fork's pull request by hand exactly as they already start its review by
+hand.
+
+What it checks out follows from that trigger rather than from `Fathom review`'s rule, and
+the two look opposite for a reason. `pull_request_target` runs the workflow file from the
+default branch, so pinning the checkout to the base is what stops a branch supplying any of
+the code that judges it. `pull_request` runs the workflow file from the *head*, so the
+branch already supplies the job: pinning the base would withhold nothing from it and would
+only guarantee that a change adding a script together with the call to it runs the new call
+against a tree without the script. That is not hypothetical — it is how the pull request
+introducing this workflow failed, with `No such file or directory`. So the checkout is the
+merge ref this trigger defaults to, which is the tree the workflow file itself came from,
+and the read-only token on a fork is what bounds what a script from there can do.
 
 ## Review on the pull request
 
