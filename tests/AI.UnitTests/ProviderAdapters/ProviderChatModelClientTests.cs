@@ -411,15 +411,18 @@ public sealed class ProviderChatModelClientTests
     /// be reachable, and the wire name of each effort is what the provider reads. Asserted on the request rather than on
     /// the plan, because a value that reached the plan and not the request would leave the refusal exactly where it was.
     /// </summary>
+    /// <remarks>
+    /// The last two cases are the point of the parameter being a word rather than a member of a set: <c>xhigh</c>
+    /// arrived after the levels beneath it, and a level released after this build has to reach the provider without one.
+    /// </remarks>
     [Theory]
-    [InlineData(ChatReasoningEffort.None, "none")]
-    [InlineData(ChatReasoningEffort.Low, "low")]
-    [InlineData(ChatReasoningEffort.Medium, "medium")]
-    [InlineData(ChatReasoningEffort.High, "high")]
-    [InlineData(ChatReasoningEffort.ExtraHigh, "xhigh")]
-    public async Task AnswerAsync_ADeclaredReasoningEffort_ReachesTheRequestUnderItsWireName(
-        ChatReasoningEffort effort,
-        string wireName)
+    [InlineData("none")]
+    [InlineData("minimal")]
+    [InlineData("low")]
+    [InlineData("high")]
+    [InlineData("xhigh")]
+    [InlineData("a-level-released-later")]
+    public async Task AnswerAsync_ADeclaredReasoningEffort_ReachesTheRequestAsWritten(string effort)
     {
         // Arrange
         using var provider = ScriptedProvider.Answering(Completion("an answer", "stop"));
@@ -429,7 +432,7 @@ public sealed class ProviderChatModelClientTests
         await client.AnswerAsync(Conversation, TestContext.Current.CancellationToken);
 
         // Assert
-        Assert.Contains($"\"reasoning_effort\":\"{wireName}\"", provider.LastRequestBody, StringComparison.Ordinal);
+        Assert.Contains($"\"reasoning_effort\":\"{effort}\"", provider.LastRequestBody, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -474,20 +477,22 @@ public sealed class ProviderChatModelClientTests
     }
 
     /// <summary>The responses API states the effort in a block of its own, so the mapping has to survive the other surface too.</summary>
-    [Fact]
-    public async Task AnswerAsync_AReasoningEffortOverTheResponsesApi_ReachesTheRequest()
+    [Theory]
+    [InlineData("low")]
+    [InlineData("a-level-released-later")]
+    public async Task AnswerAsync_AReasoningEffortOverTheResponsesApi_ReachesTheRequest(string effort)
     {
         // Arrange
         using var provider = ScriptedProvider.Answering(Response("an answer"));
         var client = provider.ClientOver(ChatDeclarations.Plan(
             ChatDeclarations.Endpoint(api: ChatProviderApi.Responses),
-            reasoningEffort: ChatReasoningEffort.Low));
+            reasoningEffort: effort));
 
         // Act
         await client.AnswerAsync(Conversation, TestContext.Current.CancellationToken);
 
         // Assert
-        Assert.Contains("\"reasoning\":{\"effort\":\"low\"}", provider.LastRequestBody, StringComparison.Ordinal);
+        Assert.Contains($"\"reasoning\":{{\"effort\":\"{effort}\"}}", provider.LastRequestBody, StringComparison.Ordinal);
     }
 
     /// <summary>

@@ -274,7 +274,7 @@ public sealed class ChatModelOptionsTests
         "model" => new ChatModelOptions { Model = "a-chat-model" },
         "address" => new ChatModelOptions { Address = "https://resource.cloud.invalid/openai/v1/" },
         "api-key" => new ChatModelOptions { ApiKey = new ConfiguredSecret { SecretReference = "env:CHAT_KEY" } },
-        "reasoning-effort" => new ChatModelOptions { ReasoningEffort = ChatReasoningEffort.Low },
+        "reasoning-effort" => new ChatModelOptions { ReasoningEffort = "low" },
         "api" => new ChatModelOptions { Api = ChatProviderApi.Responses },
         _ => new ChatModelOptions
         {
@@ -286,35 +286,56 @@ public sealed class ChatModelOptionsTests
     };
 
     /// <summary>
-    /// The binder accepts any number for an enum, so a value no member declares reads as a choice while naming nothing.
-    /// For the API that is a request sent to a path this deployment cannot reach; for the effort it is a parameter the
-    /// provider refuses. Both are learned at startup rather than from the first question a client is waiting on.
+    /// The binder accepts any number for an enum, so a value no member declares reads as a choice while naming nothing —
+    /// for the API, a request sent to a path this deployment cannot reach. Learned at startup rather than from the first
+    /// question a client is waiting on.
     /// </summary>
     [Fact]
-    public void Validate_AnApiOrAReasoningEffortNamingNoValue_IsRefused()
+    public void Validate_AnApiNamingNoValue_IsRefused()
     {
         // Arrange
-        var withAnUndeclaredApi = Declared();
-        withAnUndeclaredApi.Api = (ChatProviderApi)7;
-
-        var withAnUndeclaredEffort = Declared();
-        withAnUndeclaredEffort.ReasoningEffort = (ChatReasoningEffort)9;
+        var settings = Declared();
+        settings.Api = (ChatProviderApi)7;
 
         // Act
-        var apiErrors = Validate(withAnUndeclaredApi);
-        var effortErrors = Validate(withAnUndeclaredEffort);
+        var errors = Validate(settings);
 
         // Assert
-        Assert.Contains(apiErrors, error => error.Contains("Api", StringComparison.Ordinal));
-        Assert.Contains(effortErrors, error => error.Contains("ReasoningEffort", StringComparison.Ordinal));
+        Assert.Contains(errors, error => error.Contains("Api", StringComparison.Ordinal));
     }
 
-    /// <summary>Both APIs and every declared effort are accepted, so nothing an operator may legitimately write is refused.</summary>
+    /// <summary>
+    /// The effort's shape is checked and its vocabulary is not, so what startup refuses is a value no provider could
+    /// read as a level whatever it supports.
+    /// </summary>
+    [Theory]
+    [InlineData("")]
+    [InlineData("  ")]
+    [InlineData("very high")]
+    [InlineData(" high")]
+    public void Validate_AReasoningEffortNoProviderCouldRead_IsRefused(string effort)
+    {
+        // Arrange
+        var settings = Declared();
+        settings.ReasoningEffort = effort;
+
+        // Act
+        var errors = Validate(settings);
+
+        // Assert
+        Assert.Contains(errors, error => error.Contains("ReasoningEffort", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// Both APIs are accepted, and so is a level this build has never heard of: which levels a model offers is the
+    /// model's, and refusing the next one a provider adds would make a release the price of using it.
+    /// </summary>
     [Theory]
     [InlineData(ChatProviderApi.ChatCompletions, null)]
-    [InlineData(ChatProviderApi.Responses, ChatReasoningEffort.None)]
-    [InlineData(ChatProviderApi.Responses, ChatReasoningEffort.ExtraHigh)]
-    public void Validate_ADeclaredApiAndEffort_AreAccepted(ChatProviderApi api, ChatReasoningEffort? effort)
+    [InlineData(ChatProviderApi.Responses, "none")]
+    [InlineData(ChatProviderApi.Responses, "xhigh")]
+    [InlineData(ChatProviderApi.Responses, "a-level-released-later")]
+    public void Validate_ADeclaredApiAndEffort_AreAccepted(ChatProviderApi api, string? effort)
     {
         // Arrange
         var settings = Declared();

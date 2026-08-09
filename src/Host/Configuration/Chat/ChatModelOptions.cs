@@ -33,10 +33,6 @@ namespace MailFathom.Host.Configuration.Chat;
 [SuppressMessage("Performance", "CA1812:Avoid uninstantiated internal classes", Justification = "The options framework materializes this type during configuration binding.")]
 internal sealed class ChatModelOptions : IValidatableObject
 {
-    /// <summary>Names every reasoning effort a declaration may state, for the message that reports one it may not.</summary>
-    /// <remarks>Read from the enumeration rather than written out, so a member added later reaches the message without a second edit.</remarks>
-    private static readonly string DeclaredReasoningEfforts = string.Join(", ", Enum.GetNames<ChatReasoningEffort>());
-
     /// <summary>Gets or sets the deployment's own name for the chat endpoint.</summary>
     /// <remarks>
     /// Everything else here is an address or a credential and neither may be written down, so this is the name a log
@@ -89,11 +85,19 @@ internal sealed class ChatModelOptions : IValidatableObject
 
     /// <summary>Gets or sets the reasoning effort every call states, left unset to send no reasoning parameter at all.</summary>
     /// <remarks>
+    /// <para>
     /// Nullable for the reason <see cref="Temperature" /> is: a model that does not reason rejects the parameter
-    /// outright. <c>None</c> is not the same as leaving it out — it states an effort of none and sends it, which is what
-    /// a provider refusing function tools beside an unstated effort asks for.
+    /// outright. Writing <c>none</c> is not the same as leaving it out — it states an effort of none and sends it, which
+    /// is what a provider refusing function tools beside an unstated effort asks for.
+    /// </para>
+    /// <para>
+    /// The provider's own word rather than a name chosen here, and unvalidated against any list for the reason
+    /// <see cref="Model" /> is: which levels exist belongs to the model, <c>xhigh</c> arrived after the levels beneath
+    /// it, and a set fixed at build time would make a release the price of using the next one. What startup checks is
+    /// the shape, so a value no provider could read as a level fails here rather than on the first question.
+    /// </para>
     /// </remarks>
-    public ChatReasoningEffort? ReasoningEffort { get; set; }
+    public string? ReasoningEffort { get; set; }
 
     /// <summary>Gets or sets the greatest number of turns one request carries.</summary>
     [Range(1, 512)]
@@ -180,10 +184,12 @@ internal sealed class ChatModelOptions : IValidatableObject
                 [nameof(this.Api)]);
         }
 
-        if (this.ReasoningEffort is { } effort && !Enum.IsDefined(effort))
+        // The shape alone, never the vocabulary: which levels a model offers is the model's, so a list held here would
+        // refuse the next one a provider adds and make a release the price of using it.
+        if (this.ReasoningEffort is { } effort && !ChatGenerationPlan.IsUsableReasoningEffort(effort))
         {
             yield return new ValidationResult(
-                $"Chat endpoint '{alias}' declares a ReasoningEffort of '{(int)effort}', which names no effort. State one of {DeclaredReasoningEfforts}, or leave it unset to send no reasoning parameter.",
+                $"Chat endpoint '{alias}' declares a ReasoningEffort that is not a single word a provider could read as a level. Write the level the model documents, such as 'none', 'low', or 'high', or leave it unset to send no reasoning parameter.",
                 [nameof(this.ReasoningEffort)]);
         }
 

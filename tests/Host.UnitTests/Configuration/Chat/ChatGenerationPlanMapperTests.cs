@@ -25,7 +25,7 @@ public sealed class ChatGenerationPlanMapperTests
             MaxOutputTokens = 512,
             Temperature = 0.3f,
             TopP = 0.8f,
-            ReasoningEffort = ChatReasoningEffort.High,
+            ReasoningEffort = "high",
             MaxMessagesPerRequest = 12,
             MaxRequestCharacters = 60_000,
             RequestTimeout = TimeSpan.FromSeconds(90),
@@ -43,7 +43,7 @@ public sealed class ChatGenerationPlanMapperTests
         Assert.Equal(512, plan.MaximumOutputTokens);
         Assert.Equal(0.3f, plan.Temperature);
         Assert.Equal(0.8f, plan.TopP);
-        Assert.Equal(ChatReasoningEffort.High, plan.ReasoningEffort);
+        Assert.Equal("high", plan.ReasoningEffort);
         Assert.Equal(12, plan.MaximumMessagesPerRequest);
         Assert.Equal(60_000, plan.MaximumRequestCharacters);
         Assert.Equal(TimeSpan.FromSeconds(90), plan.RequestTimeout);

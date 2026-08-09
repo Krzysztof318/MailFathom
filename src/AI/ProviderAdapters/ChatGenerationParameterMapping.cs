@@ -4,6 +4,8 @@
 
 using MailFathom.AI.Chat;
 using Microsoft.Extensions.AI;
+using OpenAI.Chat;
+using OpenAI.Responses;
 
 namespace MailFathom.AI.ProviderAdapters;
 
@@ -32,38 +34,52 @@ internal static class ChatGenerationParameterMapping
     {
         ArgumentNullException.ThrowIfNull(plan);
 
-        return new ChatOptions
+        var options = new ChatOptions
         {
             MaxOutputTokens = plan.MaximumOutputTokens,
             Temperature = plan.Temperature,
             TopP = plan.TopP,
-            Reasoning = ToReasoningOptions(plan.ReasoningEffort),
         };
+
+        if (plan.ReasoningEffort is { } effort)
+        {
+            options.RawRepresentationFactory = ReasoningEffortFactoryFor(plan.Endpoint.Api, effort);
+        }
+
+        return options;
     }
 
-    /// <summary>Reads the declared effort into the reasoning block a request carries, or into nothing at all.</summary>
+    /// <summary>Builds the per-request hook that states the declared effort in the form its API reads.</summary>
     /// <remarks>
-    /// The null branch is the whole point of the property being nullable: a model that does not reason refuses the
-    /// parameter, so an absent declaration has to leave the block off the request rather than send an effort of none.
+    /// <para>
+    /// The effort is stated through the client library's own request options rather than through the provider-neutral
+    /// reasoning member, and that is what lets a deployment name a level this build has never heard of. The neutral
+    /// member carries a closed set fixed when its package was compiled, so a level a model gains later — as <c>xhigh</c>
+    /// was gained — would be unsendable until a release of MailFathom caught up. The library's own type is built from a
+    /// string, so the value the operator wrote is the value that goes out.
+    /// </para>
+    /// <para>
+    /// The two APIs frame it differently, which is why the factory is chosen per API rather than shared: chat
+    /// completions carries a top-level member and the responses API carries a reasoning block. Everything else on the
+    /// options is left alone — the abstraction fills the members it owns over whatever this returns, so the bounds, the
+    /// sampling parameters, the instruction, and the tools all still reach the request.
+    /// </para>
     /// </remarks>
-    private static ReasoningOptions? ToReasoningOptions(ChatReasoningEffort? effort) =>
-        effort is { } declared
-            ? new ReasoningOptions { Effort = ToReasoningEffort(declared) }
-            : null;
-
-    /// <summary>Reads a declared effort into the one a request carries.</summary>
-    /// <remarks>
-    /// The refusing arm is unreachable through a plan, which refuses an undeclared value at startup, and it is written
-    /// rather than collapsed into one of the named results because the alternative is a request that silently states an
-    /// effort nobody wrote. A provider answers such a request rather than refusing it, so nothing downstream could tell.
-    /// </remarks>
-    private static ReasoningEffort ToReasoningEffort(ChatReasoningEffort effort) => effort switch
-    {
-        ChatReasoningEffort.None => ReasoningEffort.None,
-        ChatReasoningEffort.Low => ReasoningEffort.Low,
-        ChatReasoningEffort.Medium => ReasoningEffort.Medium,
-        ChatReasoningEffort.High => ReasoningEffort.High,
-        ChatReasoningEffort.ExtraHigh => ReasoningEffort.ExtraHigh,
-        _ => throw new ArgumentOutOfRangeException(nameof(effort), effort, "The declared reasoning effort names no value a request can carry."),
-    };
+    // Every reasoning member of both request-option types carries the evaluation-only marker in this release of the
+    // client library, so the suppression covers the whole choice rather than one expression. It stays confined to this
+    // method, and to the reasoning members alone — nothing else in the file inherits it.
+#pragma warning disable OPENAI001
+    private static Func<IChatClient, object?> ReasoningEffortFactoryFor(ChatProviderApi api, string effort) =>
+        api switch
+        {
+            ChatProviderApi.Responses => _ => new CreateResponseOptions
+            {
+                ReasoningOptions = new ResponseReasoningOptions
+                {
+                    ReasoningEffortLevel = new ResponseReasoningEffortLevel(effort),
+                },
+            },
+            _ => _ => new ChatCompletionOptions { ReasoningEffortLevel = new ChatReasoningEffortLevel(effort) },
+        };
+#pragma warning restore OPENAI001
 }

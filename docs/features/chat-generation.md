@@ -116,10 +116,18 @@ this version can be declared without one.
   writing nothing has to mean sending nothing.
 - `ReasoningEffort` states how much reasoning a model is asked to spend before it answers, and follows the same rule for
   the same reason: a model that does not reason rejects the parameter, so a section that writes none sends none and the
-  request is exactly what it was. `None`, `Low`, `Medium`, `High`, and `ExtraHigh` are what may be written, and
-  `ExtraHigh` reaches the provider as its `xhigh`. **`None` is not the same as writing nothing** — it states an effort of
-  none and sends it, which is precisely what a provider refusing function tools beside an *unstated* effort asks for.
-  Not every reasoning model accepts every level, and one that does not refuses the request rather than falling back.
+  request is exactly what it was. **`none` is not the same as writing nothing** — it states an effort of none and sends
+  it, which is precisely what a provider refusing function tools beside an *unstated* effort asks for. Not every
+  reasoning model accepts every level, and one that does not refuses the request rather than falling back.
+
+  **The level is the provider's word, carried through as written.** Write what the model's own documentation calls it —
+  `none`, `minimal`, `low`, `medium`, `high`, `xhigh` — and a level a model gains after this release works without one,
+  which is the whole reason it is not a set fixed here. `xhigh` is the worked example: it arrived after the levels
+  beneath it, and a deployment on a build that predates it would otherwise have had to wait for a release to use it.
+  This is the same choice `Model` makes and for the same reason. What startup checks is therefore the *shape* — one
+  word, no spaces, not absurdly long — and never the vocabulary, because a list held here could only be the list that
+  was true when it was written. A level the model does not know is a *request refused*, learned on the first question
+  rather than pre-empted.
 
 **What a model must support for `ask_mail` to work at all.** The answering run offers the model function tools and
 requires it to call them, so a model that cannot be given tools cannot answer a question here whatever else is declared.

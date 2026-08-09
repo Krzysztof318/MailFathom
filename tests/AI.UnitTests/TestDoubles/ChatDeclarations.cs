@@ -26,7 +26,7 @@ internal static class ChatDeclarations
         int maximumOutputTokens = 256,
         float? temperature = null,
         float? topP = null,
-        ChatReasoningEffort? reasoningEffort = null,
+        string? reasoningEffort = null,
         int maximumMessagesPerRequest = 8,
         int maximumRequestCharacters = 4000,
         TimeSpan? requestTimeout = null) =>
