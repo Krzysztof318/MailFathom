@@ -347,7 +347,10 @@ Five parts of it are worth reading before a caller writes against them:
 - **`contentBase64` is the whole file or nothing, and `contentState` says which.** An attachment above
   `EmailContent:MaxAttachmentBytes`, or reached after `EmailContent:MaxAttachmentBytesPerRead` is spent, is described
   with `contentBase64` absent and `contentState` naming the bound: `exceededAttachmentByteLimit` is the same answer in
-  every call, while `readByteBudgetExhausted` returns the file when this email is named on its own. No attachment is
+  every call, while `readByteBudgetExhausted` may come back in a narrower one. *May*, because the budget falls to the
+  attachments of one message as much as to the emails of one call — a message carrying more than the budget in files
+  withholds its later ones however few emails were named, and no configuration makes the retry guaranteed the way the
+  floor under `MaxCharactersPerRead` does for bodies. No attachment is
   ever returned in part, because a fragment of a file is indistinguishable from a whole one to anything downstream.
   That property is the only one in the whole published contract that carries message-part bytes, and nothing reachable
   from the result can hold a raw byte array or a stream at all; `Mcp.UnitTests` asserts both structurally over the

@@ -430,6 +430,46 @@ public sealed class EmailContentReaderTests
     }
 
     /// <summary>
+    /// The budget falls to the attachments of one message as much as to the emails of one call, so a message carrying
+    /// more than the budget in files withholds its later ones even when nothing else was named. That is what stops
+    /// <c>ReadByteBudgetExhausted</c> from being a promise that a narrower call returns the file, and it is the one
+    /// place the attachment pair is weaker than the character pair — nothing bounds how many attachments a message
+    /// carries, so no floor on the budget could cover a single email the way the one on the character budget does.
+    /// </summary>
+    [Fact]
+    public async Task ReadContentAsync_OneEmailWhoseOwnAttachmentsExceedTheBudget_WithholdsTheLaterOnes()
+    {
+        // Arrange
+        var summary = SyntheticEmailSummaries.Create(attachmentCount: 3);
+        var reader = ReaderOver(
+            summary,
+            new BoundedBodyEmailContentRenderer("Body", attachmentOctetCounts: [400, 400, 400]),
+            readOptions: new EmailContentReadOptions
+            {
+                MaxAttachmentBytes = 500,
+                MaxAttachmentBytesPerRead = 1000,
+            });
+
+        // Act
+        var result = await reader.ReadContentAsync(
+            RequestFor([summary.StoredEmailId], includeAttachmentDetails: true),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        var attachments = ContentOf(Assert.Single(result.Emails)).Attachments;
+        Assert.Equal(
+            [
+                EmailAttachmentContentAvailability.Returned,
+                EmailAttachmentContentAvailability.Returned,
+                EmailAttachmentContentAvailability.ReadByteBudgetExhausted,
+            ],
+            attachments?.Select(attachment => attachment.Content.Availability));
+
+        // Every one of them is under the per-attachment bound, so nothing here is a file this deployment refuses.
+        Assert.All(attachments ?? [], attachment => Assert.Equal(400, attachment.Description.DecodedSizeOctets));
+    }
+
+    /// <summary>
     /// A read that did not ask about attachments must not decode any, which is a bound on the work as much as on what
     /// is published: the bounds are absent, so the adapter is never asked to retain an octet.
     /// </summary>

@@ -47,7 +47,7 @@ internal sealed record RetrievedEmailAttachment
     public required long SizeBytes { get; init; }
 
     /// <summary>Gets whether the content came back, and which bound stopped it when it did not.</summary>
-    [Description("Whether the attachment's content is present: 'returned' when contentBase64 holds the whole file, 'exceededAttachmentByteLimit' when the file is larger than this deployment returns in one attachment, or 'readByteBudgetExhausted' when the attachments returned before it spent the call's budget. The last one is worth retrying by naming this email alone; the first is not, because the limit applies to every call.")]
+    [Description("Whether the attachment's content is present: 'returned' when contentBase64 holds the whole file, 'exceededAttachmentByteLimit' when the file is larger than this deployment returns in one attachment, or 'readByteBudgetExhausted' when the attachments returned before it spent the call's budget. The last one is worth retrying by naming this email alone, though it will not help when it was this same email's earlier attachments that spent the budget; the first is never worth retrying, because the limit applies to every call.")]
     public required EmailAttachmentContentState ContentState { get; init; }
 
     /// <summary>Gets the attachment's decoded octets as base64, or <see langword="null" /> when a bound withheld them.</summary>

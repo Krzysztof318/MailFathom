@@ -157,11 +157,20 @@ on a body cuts the text and reports the cut.
 |---|---|---|
 | `Returned` | The content is present and is the whole file | Nothing |
 | `ExceededAttachmentByteLimit` | The file is larger than one attachment may return | Nothing; this deployment does not serve a file this size |
-| `ReadByteBudgetExhausted` | The attachments returned before it spent the call's budget | Name this email alone, or fewer emails at once |
+| `ReadByteBudgetExhausted` | The attachments returned before it spent the call's budget | Name fewer emails at once — which helps only when it was another email that spent it |
 
 The budget is spent in the order the emails were named and, within an email, in the order the message's structure was
 walked. Only content that was actually returned draws on it: an attachment a bound withheld cost the caller nothing, so
 charging the budget for it would withhold the next file on the strength of one that was never sent.
+
+**`ReadByteBudgetExhausted` is therefore not a promise that a narrower call returns the file.** The budget falls to the
+attachments of one message as much as to the emails of one call, so a message carrying more than the budget in files
+withholds its later ones however few emails were named. That is the one place the attachment pair is weaker than the
+character pair, and deliberately: `MaxCharactersPerRead` is refused below twice `MaxBodyCharacters` precisely so that a
+one-email call can never be cut by the call's budget, and no equivalent floor exists here because a call is bounded to
+ten emails and a body to two representations while nothing bounds how many attachments a message carries. An operator
+who wants every attachment of every message served raises `MaxAttachmentBytesPerRead`; a caller cannot buy the same
+thing by asking for less.
 
 Inline resources and cryptographic parts carry no content here for the same reason they carry no description — they
 never enter the list at all.

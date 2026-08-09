@@ -97,9 +97,10 @@ Six parts of the result exist so that an agent does not misreport a message:
   the sender chose and the file is the message's most sensitive part, so an ordinary read of a body publishes neither.
 - **A file comes back whole or not at all.** `contentState` is `returned` when `contentBase64` holds the entire file,
   `exceededAttachmentByteLimit` when the file is larger than the server hands over in one attachment, and
-  `readByteBudgetExhausted` when the files returned before it used up the call's shared byte budget — the one case
-  where naming this message on its own returns the file. Nothing is ever returned in part, so what you decode is either
-  the file or nothing. The server's operator sets both limits.
+  `readByteBudgetExhausted` when the files returned before it used up the call's shared byte budget — worth retrying in
+  a call naming fewer messages, though it will not help when this message's own earlier attachments are what used the
+  budget up. Nothing is ever returned in part, so what you decode is either the file or nothing. The server's operator
+  sets both limits, and raising the budget is the only way to get a message whose files exceed it served in full.
 - **File names are sanitized.** An attachment name is untrusted text from the message; what is published is a bare,
   normalized name, with a flag saying whether it had to be rewritten.
 - **A too-long or repetitive list is refused, not trimmed.** More than ten identifiers, none at all, or the same one
