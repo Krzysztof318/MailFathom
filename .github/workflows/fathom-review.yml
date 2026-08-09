@@ -365,18 +365,25 @@ jobs:
           head_sha="$(gh api "repos/${REPOSITORY}/pulls/${PULL_REQUEST_NUMBER}" --jq '.head.sha')" \
             || head_sha=''
 
-          # `status=in_progress` covers queued and running alike; a run that has concluded is not
-          # returned, so a count of zero is the ordinary case and ends the wait immediately. A failed
-          # query, an empty answer, and a head nobody could read all mean *nothing to wait for*, for
-          # the same reason the ceiling exists.
+          # Every run for this head that has not concluded, asked for without a `status` filter and
+          # counted here. The filter looks like the shorter way to ask and is the wrong one:
+          # `queued`, `waiting`, `requested`, and `pending` are values of that parameter in their own
+          # right rather than phases of `in_progress`, so `status=in_progress` answers zero for a run
+          # that has been created and not yet started — which is exactly the case this wait exists
+          # for, since both workflows are started by one event and the labelling is the one whose
+          # runner is still being found. The label would then be read before it was applied, and a
+          # security change would be reviewed by the default model with nothing saying so.
+          #
+          # A failed query, an empty answer, and a head nobody could read all mean *nothing to wait
+          # for*, for the same reason the ceiling exists.
           labelling_in_flight() {
             local pending
 
             [[ -n "$head_sha" ]] || return 1
 
             pending="$(
-              gh api "repos/${REPOSITORY}/actions/workflows/${LABELLING_WORKFLOW}/runs?head_sha=${head_sha}&status=in_progress&per_page=1" \
-                --jq '.total_count'
+              gh api "repos/${REPOSITORY}/actions/workflows/${LABELLING_WORKFLOW}/runs?head_sha=${head_sha}&per_page=100" \
+                --jq '[.workflow_runs[] | select(.status != "completed")] | length'
             )" || pending='0'
 
             [[ -n "$pending" && "$pending" != '0' ]]

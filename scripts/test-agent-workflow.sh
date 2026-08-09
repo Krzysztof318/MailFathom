@@ -1586,11 +1586,15 @@ case "$endpoint" in
     exit 0
     ;;
   */actions/workflows/*/runs*)
-    # How many labelling runs are still deciding this head. A countdown file rather than a constant,
-    # so a contract can hold the answer above zero for a fixed number of polls and then let it go —
-    # which is the only way to assert that the reviewer waited rather than that it happened to read
-    # late.
-    pending="${FAKE_LABELLING_PENDING:-0}"
+    # The labelling runs for this head. A countdown file rather than a constant, so a contract can
+    # hold one open for a fixed number of polls and then let it go — which is the only way to assert
+    # that the reviewer waited rather than that it happened to read late.
+    #
+    # The run it holds open is `queued` rather than `in_progress`, deliberately: that is a status of
+    # its own rather than a phase of running, and a step asking `status=in_progress` sees none of
+    # them. A contract that answered `in_progress` would pass against the query that misses the very
+    # case the wait exists for.
+    pending='0'
 
     if [[ -n "${FAKE_LABELLING_COUNTDOWN:-}" ]]; then
       remaining="$(cat "$FAKE_LABELLING_COUNTDOWN" 2>/dev/null || printf '0')"
@@ -1598,12 +1602,28 @@ case "$endpoint" in
       if ((remaining > 0)); then
         pending='1'
         printf '%s' "$((remaining - 1))" > "$FAKE_LABELLING_COUNTDOWN"
-      else
-        pending='0'
       fi
     fi
 
-    response="{\"total_count\":${pending}}"
+    if [[ "$pending" == '0' ]]; then
+      runs='[{"status":"completed","conclusion":"success"}]'
+    else
+      runs='[{"status":"queued","conclusion":null}]'
+    fi
+
+    # A `status=` in the query is honoured the way the API honours it: an exact match on the value,
+    # never a family of them. That is the whole of what makes the contract above discriminate — a
+    # fake that ignored the parameter would answer the same runs to a step asking for the wrong
+    # status, and would pass against the query that cannot see a queued run.
+    case "$endpoint" in
+      *status=*)
+        wanted="${endpoint##*status=}"
+        wanted="${wanted%%&*}"
+        runs="$(printf '%s' "$runs" | jq -c --arg wanted "$wanted" '[.[] | select(.status == $wanted)]')"
+        ;;
+    esac
+
+    response="$(printf '%s' "$runs" | jq -c '{total_count: length, workflow_runs: .}')"
     ;;
   */contents/*)
     printf 'unchanged\nadded\nunchanged\n'
@@ -1810,10 +1830,15 @@ fathom_review_keeps_the_default_model_for_an_ordinary_change() {
   assert_contains 'carries no security label' "$output_file"
 }
 
-# The dependency itself. Both workflows start from the same event, so on a freshly opened or freshly
-# pushed pull request the label is being decided while this runs; a read that did not wait would
-# review a security change with the default model and no pass, and would do it on exactly the changes
-# where that costs most.
+# The dependency itself. Both workflows start from the same event, so on a freshly opened pull
+# request the label is being decided while this runs; a read that did not wait would review a
+# security change with the default model and no pass, and would do it on exactly the changes where
+# that costs most.
+#
+# The run this waits through is `queued`, which is the state the fake answers with and the one the
+# first version of this step could not see: it asked the API for `status=in_progress`, and `queued`
+# is a value of that parameter rather than a phase of it, so a labelling run that had been created
+# and not yet started read as nothing to wait for.
 fathom_review_waits_for_the_labelling_run_before_reading_the_labels() {
   local output_file="$test_directory/fathom-review-model-waited-output"
   local step_output_file="$test_directory/fathom-review-model-waited-step-output"
