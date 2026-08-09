@@ -22,15 +22,21 @@ namespace MailFathom.Host.Configuration.Providers;
 /// </para>
 /// <para>
 /// One source for both declared sections, keyed by the alias alone. Startup refuses a chat endpoint whose alias an
-/// embedding endpoint already uses, which is what lets the lookup stay a search over one name rather than a name paired
-/// with the section it came from — and the same rule is what keeps two endpoints from sharing one resilience circuit
-/// and one log identity.
+/// embedding endpoint already uses, and so does every reloaded chat declaration, which is what lets the lookup stay a
+/// search over one name rather than a name paired with the section it came from — and the same rule is what keeps two
+/// endpoints from sharing one resilience circuit and one log identity.
+/// </para>
+/// <para>
+/// The chat declaration is read from the published snapshot and the embedding chain from the composed options, because
+/// that is what each of them is: the chat endpoint is reloadable down to its alias, so a lookup reading the startup
+/// value would fail to find an endpoint an operator renamed, while the embedding chain is read once while the host
+/// composes itself and takes a restart to change.
 /// </para>
 /// </remarks>
 [SuppressMessage("Performance", "CA1812:Avoid uninstantiated internal classes", Justification = "The dependency injection container materializes this credential source.")]
 internal sealed class ConfiguredProviderEndpointCredentialSource(
     IOptions<EmbeddingOptions> embeddingSettings,
-    IOptions<ChatModelOptions> chatSettings,
+    ISettingsSnapshot<ChatModelOptions> chatSettings,
     ISecretReferenceResolver secretReferenceResolver) : IProviderEndpointCredentialSource
 {
     /// <inheritdoc />
@@ -40,7 +46,7 @@ internal sealed class ConfiguredProviderEndpointCredentialSource(
 
         var declaration = this.FindDeclaration(endpointAlias)
             ?? throw new InvalidOperationException(
-                $"AI endpoint '{endpointAlias}' is not present in the configuration this deployment started with.");
+                $"AI endpoint '{endpointAlias}' is not present in the configuration currently in force.");
 
         return declaration.Entra is { } entra
             ? this.ResolveEntraCredentialAsync(endpointAlias, entra, cancellationToken)
@@ -62,7 +68,7 @@ internal sealed class ConfiguredProviderEndpointCredentialSource(
             return new ProviderCredentialDeclaration(embeddingEndpoint.ApiKey, embeddingEndpoint.EntraCredential);
         }
 
-        var chat = chatSettings.Value;
+        var chat = chatSettings.Current;
 
         return chat.IsConfigured && NamesEndpoint(chat.Alias, endpointAlias)
             ? new ProviderCredentialDeclaration(chat.ApiKey, chat.EntraCredential)

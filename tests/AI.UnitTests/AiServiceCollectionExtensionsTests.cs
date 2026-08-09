@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.AI.Chat;
 using MailFathom.AI.Embeddings;
 using MailFathom.AI.ProviderAdapters;
 using MailFathom.AI.Providers;
@@ -140,7 +141,8 @@ public sealed class AiServiceCollectionExtensionsTests
         var services = new ServiceCollection();
         services.AddHttpClient();
         services.AddLogging();
-        services.AddSingleton(ChatDeclarations.Plan());
+        services.AddSingleton(ChatDeclarations.PlanSource());
+        services.AddScoped(provider => provider.GetRequiredService<IChatGenerationPlanSource>().Current);
         services.AddSingleton(Substitute.For<IProviderEndpointCredentialSource>());
         services.AddSingleton(Substitute.For<IOutboundOperationRunner>());
         services.AddSingleton(Substitute.For<IAiProviderHealthRecorder>());
@@ -150,7 +152,8 @@ public sealed class AiServiceCollectionExtensionsTests
 
         // Assert
         using var provider = services.BuildServiceProvider();
-        var client = provider.GetRequiredService<IChatModelClient>();
+        using var scope = provider.CreateScope();
+        var client = scope.ServiceProvider.GetRequiredService<IChatModelClient>();
         using var transport = provider
             .GetRequiredService<IHttpClientFactory>()
             .CreateClient(ProviderChatModelClient.TransportName);
@@ -158,7 +161,39 @@ public sealed class AiServiceCollectionExtensionsTests
         Assert.NotNull(client);
 
         // The bounds live in the registration rather than at a call site, so a client asked for by name carries them.
+        // They are read from the plan source, because the factory builds a client on the root provider while the plan
+        // itself belongs to an operation's scope.
         Assert.Equal(ChatDeclarations.RequestTimeout + TimeSpan.FromSeconds(30), transport.Timeout);
+    }
+
+    /// <summary>
+    /// The declaration behind the plan reloads, so a client built once for the process would go on calling the model
+    /// the process started with. One scope is one operation, and the client belongs to it.
+    /// </summary>
+    [Fact]
+    public void AddChatProviderAdapter_ResolvesTheChatClientOncePerScope()
+    {
+        // Arrange
+        var services = new ServiceCollection();
+        services.AddHttpClient();
+        services.AddLogging();
+        services.AddSingleton(ChatDeclarations.PlanSource());
+        services.AddScoped(provider => provider.GetRequiredService<IChatGenerationPlanSource>().Current);
+        services.AddSingleton(Substitute.For<IProviderEndpointCredentialSource>());
+        services.AddSingleton(Substitute.For<IOutboundOperationRunner>());
+        services.AddSingleton(Substitute.For<IAiProviderHealthRecorder>());
+
+        // Act
+        services.AddChatProviderAdapter();
+
+        // Assert
+        using var provider = services.BuildServiceProvider();
+        using var scope = provider.CreateScope();
+        using var otherScope = provider.CreateScope();
+
+        Assert.NotSame(
+            scope.ServiceProvider.GetRequiredService<IChatModelClient>(),
+            otherScope.ServiceProvider.GetRequiredService<IChatModelClient>());
     }
 
     /// <summary>
@@ -173,7 +208,8 @@ public sealed class AiServiceCollectionExtensionsTests
         services.AddHttpClient();
         services.AddLogging();
         services.AddSingleton(EmbeddingDeclarations.Plan());
-        services.AddSingleton(ChatDeclarations.Plan());
+        services.AddSingleton(ChatDeclarations.PlanSource());
+        services.AddScoped(provider => provider.GetRequiredService<IChatGenerationPlanSource>().Current);
         services.AddSingleton(Substitute.For<IProviderEndpointCredentialSource>());
         services.AddSingleton(Substitute.For<IOutboundOperationRunner>());
         services.AddSingleton(Substitute.For<IAiProviderHealthRecorder>());
@@ -184,9 +220,10 @@ public sealed class AiServiceCollectionExtensionsTests
 
         // Assert
         using var provider = services.BuildServiceProvider();
+        using var scope = provider.CreateScope();
 
         Assert.NotNull(provider.GetRequiredService<ITextEmbeddingGenerator>());
-        Assert.NotNull(provider.GetRequiredService<IChatModelClient>());
+        Assert.NotNull(scope.ServiceProvider.GetRequiredService<IChatModelClient>());
         Assert.Single(services, service => service.ServiceType == typeof(OpenAiCompatibleClientFactory));
     }
 
@@ -208,7 +245,8 @@ public sealed class AiServiceCollectionExtensionsTests
         var services = new ServiceCollection();
         services.AddHttpClient();
         services.AddLogging();
-        services.AddSingleton(ChatDeclarations.Plan());
+        services.AddSingleton(ChatDeclarations.PlanSource());
+        services.AddScoped(provider => provider.GetRequiredService<IChatGenerationPlanSource>().Current);
         services.AddSingleton(MailAnsweringRunBounds.Default);
         services.AddSingleton(Substitute.For<IProviderEndpointCredentialSource>());
         services.AddSingleton(Substitute.For<IOutboundOperationRunner>());

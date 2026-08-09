@@ -26,9 +26,12 @@ namespace MailFathom.Host.Configuration;
 /// only the newest one, so a burst of reloads costs one validation rather than a queue of stale ones.
 /// </para>
 /// <para>
-/// The initial snapshot is published without being validated here, because the startup validator has already proven
-/// the whole deployment's secret configuration and failed the host if it could not. Validating it again would double
-/// every startup retrieval for no additional guarantee.
+/// The initial snapshot is published without being validated here. It is the configuration the process was composed
+/// from rather than a candidate, and for the groups the startup validator covers it has already been proven — so
+/// validating it again would double every startup retrieval for no additional guarantee. The chat declaration is the
+/// one group outside that gate, deliberately: a chat provider is an optional capability whose absence degrades an
+/// instance rather than breaking it, so an unresolvable key there is reported by the first question instead of taking
+/// a deployment that serves search perfectly well offline at startup.
 /// </para>
 /// </remarks>
 [SuppressMessage("Performance", "CA1812:Avoid uninstantiated internal classes", Justification = "The dependency injection container materializes this hosted service.")]

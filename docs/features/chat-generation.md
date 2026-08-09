@@ -52,9 +52,9 @@ credential, and neither may be written down — an address identifies a tenant a
 line, a metric tag, a resilience circuit, and a failure message carry instead.
 
 **An alias names one endpoint across the whole deployment.** A chat endpoint reusing an embedding endpoint's alias is
-refused at startup, because the alias is what a credential is resolved by, what a resilience circuit is keyed by, and
-what every log line naming an endpoint carries. Two endpoints answering to one name would share all three, so a chat
-outage would open the circuit the embeddings were being served through.
+refused at startup and again on every reloaded declaration, because the alias is what a credential is resolved by, what
+a resilience circuit is keyed by, and what every log line naming an endpoint carries. Two endpoints answering to one
+name would share all three, so a chat outage would open the circuit the embeddings were being served through.
 
 ## Two providers, one client
 
@@ -104,7 +104,8 @@ both sections, keyed by the alias, which is what the deployment-wide uniqueness 
 ## The model and its parameters come from configuration
 
 None of them is a compile-time constant, so changing model is an edit rather than a rebuild and a model released after
-this version can be declared without one.
+this version can be declared without one. Nor is any of them read once: the declaration in force is read again for
+every question, which the section below states in full.
 
 - `Model` is what a request is routed to. For a cloud deployment that is the name the operator gave the deployment
   rather than the vendor's model identifier, because that is the string the endpoint recognizes.
@@ -133,6 +134,35 @@ this version can be declared without one.
 requires it to call them, so a model that cannot be given tools cannot answer a question here whatever else is declared.
 Where a reasoning model refuses tools beside a stated effort, `Api` is the setting that resolves it, and the two are
 therefore chosen together rather than independently.
+
+## Changing the model does not restart the host
+
+The declaration is read again after an edit rather than once while the host composes itself, and the reason is the case
+an operator actually hits. A model the provider will not serve is only discovered from a refusal on a real question, so
+correcting one is the ordinary path rather than a rare one — and the process being corrected is synchronizing mailboxes
+and holding an IMAP IDLE connection. Restarting it to change a string is a cost paid on every correction.
+
+What that means in practice:
+
+- **The next question uses the edited declaration.** Every key of the endpoint is in this — the model, the address, the
+  API, the parameters, the bounds, the deadline, the credential reference, and the relevance filter's two numbers.
+- **A question already in flight keeps the declaration it began with.** A run resolves the declaration once and holds it
+  until it answers, so a reload landing mid-run cannot answer half of one question in one model's voice and half in
+  another's — which is the same thing the one-endpoint rule above exists to prevent.
+- **A candidate that breaks a rule is refused whole.** Everything startup checks is checked again: the bounds, the
+  section's own rules, the deployment-wide alias uniqueness, the filter's agreement with what a retrieval hands over,
+  and whether the credential reference still resolves. A refused candidate is logged with the key an operator has to
+  fix, the previous declaration goes on answering, and the process stays up — which is what makes correcting a mistake
+  in a correction possible at all.
+- **Two things still take a restart**, because each decided which services this deployment registered: whether `Alias`
+  names an endpoint at all, and whether the relevance filter runs. Going from no chat section to one is therefore a
+  restart, and so is turning the second pass on or off. Both are refused with that message rather than adopted and
+  quietly ignored. *Renaming* a declared alias is not one of them — the credential and the circuit are looked up by
+  whatever the declaration in force calls the endpoint.
+
+[ADR 0002](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0002-configuration-reading-mapping-and-reload-boundary.md)
+classifies this group as reloadable for new operations and states the rules a reloadable group follows;
+[configuration reference § `Chat`](../operations/configuration-reference.md#chat) marks each key.
 
 ## Bounds every call carries
 

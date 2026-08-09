@@ -332,18 +332,29 @@ endpoint.
 
 | Key | Type | Default | Constraint | Change |
 | --- | --- | --- | --- | --- |
-| `Chat:Alias` | string | *(empty)* | writing one is what configures a chat provider at all; unique across every AI endpoint the deployment declares, embedding endpoints included. A section carrying other settings without it is refused rather than ignored | restart |
-| `Chat:Model` | string | — | required once an alias is written; what a request is routed to, which for a cloud deployment is the deployment's own name rather than the vendor's model identifier | restart |
-| `Chat:Address` | string | *(empty)* | absolute HTTPS; empty uses the provider library's default. A cloud resource's OpenAI-compatible address ends in `/openai/v1/` | restart |
-| `Chat:Api` | enum | `ChatCompletions` | `ChatCompletions` or `Responses`; which of the provider's two request APIs a call goes to under the declared address. Declared rather than derived, because the routed model name is the operator's own deployment name and nothing about it says which paths the server serves. State `Responses` for a reasoning model that refuses function tools beside a stated effort; a server that does not serve that path answers *request refused* | restart |
-| `Chat:MaxOutputTokens` | int | `1024` | 1 – 200000; what one answer may occupy. Reaching it is not a failure — the answer arrives marked as cut short | restart |
-| `Chat:Temperature` | float | *(unset)* | 0 – 2; left unset sends nothing, which is required by the models that reject the parameter outright | restart |
-| `Chat:TopP` | float | *(unset)* | 0 – 1; unset the same way, and for the same reason | restart |
-| `Chat:ReasoningEffort` | string | *(unset)* | the level the model documents, written as the provider spells it — `none`, `minimal`, `low`, `medium`, `high`, `xhigh`, or whatever a later model adds. Unset sends no reasoning parameter at all, which a model that does not reason requires. `none` is not the same as unset — it states an effort of none and sends it, which is what a provider refusing tools beside an unstated effort asks for. Startup checks the shape and not the vocabulary, because which levels exist belongs to the model; a level this deployment's model does not accept refuses the request rather than falling back | restart |
-| `Chat:MaxMessagesPerRequest` | int | `64` | 1 – 512; the turns one request carries, refused rather than truncated | restart |
-| `Chat:MaxRequestCharacters` | int | `120000` | 1 – 4000000; what those turns may add up to. Stated in characters rather than tokens because counting tokens would mean carrying the model's own tokenizer; set it below what the model's context window allows | restart |
-| `Chat:RequestTimeout` | TimeSpan | `00:02:00` | positive; one request. Longer than an embedding request's by default, because generating an answer takes as long as the answer is | restart |
-| `Chat:ApiKey` | secret block | *(absent)* | the provider key. Exactly one of this and `EntraCredential` is declared | restart, value read per request |
+| `Chat:Alias` | string | *(empty)* | writing one is what configures a chat provider at all; unique across every AI endpoint the deployment declares, embedding endpoints included. A section carrying other settings without it is refused rather than ignored | reload to rename, restart to declare or remove |
+| `Chat:Model` | string | — | required once an alias is written; what a request is routed to, which for a cloud deployment is the deployment's own name rather than the vendor's model identifier | reload |
+| `Chat:Address` | string | *(empty)* | absolute HTTPS; empty uses the provider library's default. A cloud resource's OpenAI-compatible address ends in `/openai/v1/` | reload |
+| `Chat:Api` | enum | `ChatCompletions` | `ChatCompletions` or `Responses`; which of the provider's two request APIs a call goes to under the declared address. Declared rather than derived, because the routed model name is the operator's own deployment name and nothing about it says which paths the server serves. State `Responses` for a reasoning model that refuses function tools beside a stated effort; a server that does not serve that path answers *request refused* | reload |
+| `Chat:MaxOutputTokens` | int | `1024` | 1 – 200000; what one answer may occupy. Reaching it is not a failure — the answer arrives marked as cut short | reload |
+| `Chat:Temperature` | float | *(unset)* | 0 – 2; left unset sends nothing, which is required by the models that reject the parameter outright | reload |
+| `Chat:TopP` | float | *(unset)* | 0 – 1; unset the same way, and for the same reason | reload |
+| `Chat:ReasoningEffort` | string | *(unset)* | the level the model documents, written as the provider spells it — `none`, `minimal`, `low`, `medium`, `high`, `xhigh`, or whatever a later model adds. Unset sends no reasoning parameter at all, which a model that does not reason requires. `none` is not the same as unset — it states an effort of none and sends it, which is what a provider refusing tools beside an unstated effort asks for. Startup checks the shape and not the vocabulary, because which levels exist belongs to the model; a level this deployment's model does not accept refuses the request rather than falling back | reload |
+| `Chat:MaxMessagesPerRequest` | int | `64` | 1 – 512; the turns one request carries, refused rather than truncated | reload |
+| `Chat:MaxRequestCharacters` | int | `120000` | 1 – 4000000; what those turns may add up to. Stated in characters rather than tokens because counting tokens would mean carrying the model's own tokenizer; set it below what the model's context window allows | reload |
+| `Chat:RequestTimeout` | TimeSpan | `00:02:00` | positive; one request. Longer than an embedding request's by default, because generating an answer takes as long as the answer is | reload |
+| `Chat:ApiKey` | secret block | *(absent)* | the provider key. Exactly one of this and `EntraCredential` is declared | reload, value read per request |
+
+**What a reload changes here, and what it does not.** Everything the declared endpoint says is read again per
+question, so correcting a model the provider refused — the ordinary case, because a wrong model is only discovered from
+a refusal — costs an edit rather than a restart of a process that is synchronizing mailboxes and holding an IMAP IDLE
+connection. A run already in flight keeps the declaration it began with, so a reload landing mid-question changes the
+next question and not that one. A candidate that breaks any rule in the table is refused whole, logged with the key to
+fix, and leaves the previous declaration answering; the process stays up either way. What stays a restart is the pair
+that decides which services this deployment registered at all: whether `Chat:Alias` names an endpoint, and whether
+`Chat:RelevanceFilter:Enabled` turns the second pass on. Renaming a declared alias reloads, because the credential and
+the resilience circuit are both looked up by whatever the declaration in force calls it; going from no chat section to
+one, or the reverse, does not, and is refused with that message rather than silently ignored.
 
 **What the declared model has to be able to do.** `ask_mail` answers by offering the model a retrieval tool and requiring it to call one, so a model that cannot be given function tools cannot answer a question here whatever else is written above. That is what the two settings in the middle of the table exist for: a current reasoning model refuses function tools beside an *unstated* reasoning effort and names the responses API as the way to have both, so such a model needs `Chat:Api` set to `Responses` and `Chat:ReasoningEffort` written — including written as `none`, which states an effort rather than omitting the parameter. A model this deployment cannot use is not detected at startup, because nothing here can ask a provider what a routed name supports without paying for a call; it surfaces as *request refused* on the first question. [Chat generation](../features/chat-generation.md#two-apis-and-the-deployment-says-which) holds the whole reasoning, and [Mail answering](../features/mail-answering.md) describes the run that imposes the requirement.
 
@@ -351,7 +362,9 @@ endpoint.
 
 The same block, with the same keys, defaults, and rules as
 [`Embeddings:Endpoints:<n>:EntraCredential`](#microsoft-entra-credential--embeddingsendpointsnentracredential) above.
-One credential source resolves both sections, which is why the alias uniqueness rule spans them.
+One credential source resolves both sections, which is why the alias uniqueness rule spans them. Its keys reload here
+and take a restart there, for the reason the table above gives: this section is read again per question and the
+embedding chain is read once while the host composes itself.
 
 ### Relevance filter — `Chat:RelevanceFilter`
 
@@ -368,8 +381,8 @@ describes what it drops, what it keeps, and what it does when the provider canno
 | Key | Type | Default | Constraint | Change |
 | --- | --- | --- | --- | --- |
 | `Chat:RelevanceFilter:Enabled` | bool | `false` | turning it on requires a declared `Chat:Alias`, and a `Chat:MaxMessagesPerRequest` of at least 2, because a judgement is an instruction and a candidate | restart |
-| `Chat:RelevanceFilter:MaxCandidates` | int | *(unset)* | 1 – [`MailAnswering:MaxPassagesPerRetrieval`](#mailanswering), which is everything one retrieval hands over; a higher value would name candidates that never exist and is refused at startup rather than accepted and never met. Unset judges every passage the retrieval hands over, which is why there is no literal default here: one would go on saying 8 after the retrieval it follows was narrowed. The ceiling on what one lookup spends and how long it takes; set below what retrieval returns it buys a weaker filter rather than a shorter result, because a passage nobody judged keeps its place | restart |
-| `Chat:RelevanceFilter:MinimumRelevance` | int | `50` | 1 – 100, on the scale the model answers a judgement on. A threshold of 0 is refused: it would pay for a judgement that can drop nothing | restart |
+| `Chat:RelevanceFilter:MaxCandidates` | int | *(unset)* | 1 – [`MailAnswering:MaxPassagesPerRetrieval`](#mailanswering), which is everything one retrieval hands over; a higher value would name candidates that never exist and is refused at startup rather than accepted and never met. Unset judges every passage the retrieval hands over, which is why there is no literal default here: one would go on saying 8 after the retrieval it follows was narrowed. The ceiling on what one lookup spends and how long it takes; set below what retrieval returns it buys a weaker filter rather than a shorter result, because a passage nobody judged keeps its place | reload |
+| `Chat:RelevanceFilter:MinimumRelevance` | int | `50` | 1 – 100, on the scale the model answers a judgement on. A threshold of 0 is refused: it would pay for a judgement that can drop nothing | reload |
 
 ## `MailAnswering`
 
