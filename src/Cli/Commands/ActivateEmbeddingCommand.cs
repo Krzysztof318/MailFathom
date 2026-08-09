@@ -66,7 +66,7 @@ internal static class ActivateEmbeddingCommand
         var profile = await context.Deployment().ReachAsync(requestedDeployment, cancellationToken);
 
         using var transport = context.OpenTransport(profile.Endpoint, profile.Trust);
-        var client = new AdminApiClient(transport);
+        var client = new AdminApiClient(transport, context.Console);
 
         var assessment = await client.ReadEmbeddingActivationAsync(profile.Token, cancellationToken);
 

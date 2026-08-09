@@ -70,7 +70,7 @@ reverse proxy, write the public URL and keep the path: `https://mail.example.tes
 
 | Route | What it does |
 | --- | --- |
-| `GET /api/admin/session` | Reports the credential that authenticated and the running version. This is what `login` and `status` ask. |
+| `GET /api/admin/session` | Reports the credential that authenticated and the running version. `login` and `status` report what it answers; every other command reads it first to [check the two versions against each other](#take-the-command-from-the-deployments-own-release-line). |
 | `POST /api/admin/mailbox/refresh-token` | Stores a mailbox refresh token for one configured account, sealed under the deployment's data-encryption key. This is what [`mfctl mailbox authorize --account`](mailbox-oauth.md#sending-the-token-to-the-deployment) sends. |
 | `GET /api/admin/mailbox/mutations/audit` | Reads one account's record of the changes MailFathom made to its mailbox, where that account [keeps one](../features/imap-synchronization.md#an-account-can-keep-a-record-of-what-was-done-to-it-and-none-does-by-default). |
 | `GET /api/admin/answering/audit` | Reads one account's record of the questions answered from its mailbox, where that account [keeps one](../features/mail-answering.md#an-account-can-keep-a-record-of-what-a-question-read-and-none-does-by-default). |
@@ -400,6 +400,39 @@ install above, because a release newer than what the review has accepted is the 
 this page cannot know which. Whenever the answer is none,
 [the releases page](https://github.com/Krzysztof318/MailFathom/releases) is where the command comes from on every
 platform.
+
+### Take the command from the deployment's own release line
+
+**`mfctl` and the deployment it administers have to agree on `major.minor`.** Every command that reaches a deployment
+reads `GET /api/admin/session` before it asks for anything else, compares the version that comes back with its own, and
+stops there when the two name different release lines:
+
+```console
+$ mfctl embedding status
+mfctl is 0.5.0 and the deployment is 0.4.2. A minor release is permitted to change the administrative contract, so a
+command is refused rather than sent to a deployment from another release line. Run the mfctl published with that
+deployment's release, or upgrade the deployment to this one.
+```
+
+Nothing is sent when that happens, which is the point: the refusal lands before the request it is protecting, so a
+command that would have started a provider bill starts none.
+
+The rule follows the version's own promise rather than adding one. Within `0.x` a minor release may change any public
+surface and a patch may change none, so the release line is the whole of what the two builds have to share —
+[ADR 0004](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0004-versioning-and-release-policy.md)
+records that policy.
+
+Everything below the line is a difference the command reports and carries on past:
+
+| The pair | What happens |
+| --- | --- |
+| Identical versions | Nothing is said. |
+| Same `major.minor`, different patch — `0.5.0` and `0.5.1` | The command runs, and writes one line to standard error saying the builds differ and problems may occur. |
+| Same `major.minor`, one of them a nightly — `0.5.0` and `0.5.0-nightly.41` | The same. A nightly is a preview of the release it will become, not a line of its own. |
+| A version either side cannot read | The command runs and says which of the two it could not read. A build reporting `unknown` is an unstamped one rather than an incompatible one, so it is never refused on that alone. |
+
+The warning is written once per command rather than once per request, and it goes to standard error, so a command whose
+output you redirect still captures the result alone.
 
 ## Signing in
 
@@ -731,6 +764,9 @@ encryption answers the copy. Holding the credential in the platform's own secret
 | `The deployment refused the grant without saying why.` | The request was refused with no reason in the answer, which is what something in front of the endpoint answering `400` looks like. Check that `--endpoint` reaches the deployment itself. |
 | `rather than storing the token` | The endpoint answered with neither an acceptance nor an explained refusal. The token was not stored and the account is unchanged. A `500` here is most often a deployment with no `DataEncryption` key ring, which is what a stored token is sealed under; its own log names the cause. |
 | `did not identify itself as MailFathom` | Something else is answering on that port — a proxy, or another service. |
+| `refused rather than sent to a deployment from another release line` | The command and the deployment are from different `major.minor` releases, and [nothing was sent](#take-the-command-from-the-deployments-own-release-line). Take the command from the deployment's own release, or upgrade the deployment. |
+| `not the same build and problems may occur` | The two share a release line and so agree on the administrative contract, but are different builds of it — a patch apart, or one of them a nightly. The command ran. |
+| `is unchecked` | One of the two reported a version that could not be read, which is what an unstamped or locally built binary looks like. The command ran, and whether the two agree is unknown. |
 | `could not be reached` | Nothing is listening, or a firewall is in the way. The endpoint binds only what `BindAddress` names; `127.0.0.1` is unreachable from another machine by design. |
 | `presented a certificate this machine does not trust` | On `login`, the question described in [when the connection is weaker than the default](#when-the-connection-is-weaker-than-the-default). On any other command, a profile that holds no pin met a certificate that stopped validating — sign in again to review it. Nothing was sent either way. |
 | `presented a certificate this profile has not pinned` | The deployment's certificate is not the one this profile accepted. Both fingerprints are named. A renewal is the ordinary cause and `mfctl login` is the answer; anything else is worth finding out about before you accept it. |

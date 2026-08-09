@@ -2,10 +2,13 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using System.Globalization;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Text;
+using MailFathom.Cli.Administration;
 using MailFathom.TestSupport;
+using MailFathom.Versioning;
 
 namespace MailFathom.Cli.UnitTests;
 
@@ -17,13 +20,42 @@ namespace MailFathom.Cli.UnitTests;
 /// </remarks>
 internal static class FakeAdminEndpoint
 {
+    /// <summary>Gets the version this command was stamped with, which is what a deployment reports for the two to agree.</summary>
+    /// <remarks>
+    /// Read from the assembly rather than written as a literal, because the declared prefix moves every release and a
+    /// literal would turn the release that moves it into a suite that refuses its own deployment. A test that is about
+    /// the version difference names the version it wants; every other one takes this and meets no warning.
+    /// </remarks>
+    internal static string CommandVersion { get; } =
+        StampedAssemblyVersion.ReadFrom(typeof(AdminApiClient).Assembly).Version;
+
+    /// <summary>Gets a version on the release line after this command's, which is the pair every command refuses.</summary>
+    internal static string AnotherReleaseLine { get; } = LineAfter(CommandVersion);
+
+    /// <summary>Gets a different build of this command's own line, which is what a nightly of the same release is.</summary>
+    internal static string AnotherBuildOfThisLine { get; } = $"{CoreOf(CommandVersion)}-nightly.41";
+
+    /// <summary>Builds an endpoint that accepts whatever credential it is given, reporting this command's own version.</summary>
+    /// <param name="credentialName">The name it reports for the credential.</param>
+    /// <returns>The endpoint.</returns>
+    internal static FakeHttpMessageHandler Accepting(string credentialName) =>
+        Accepting(credentialName, CommandVersion);
+
     /// <summary>Builds an endpoint that accepts whatever credential it is given.</summary>
     /// <param name="credentialName">The name it reports for the credential.</param>
     /// <param name="version">The version it reports.</param>
     /// <returns>The endpoint.</returns>
     internal static FakeHttpMessageHandler Accepting(string credentialName, string version) => AnsweringBody(
         HttpStatusCode.OK,
-        $$"""{"service":"MailFathom","version":"{{version}}","credential":"{{credentialName}}"}""");
+        SessionBody(credentialName, version));
+
+    /// <summary>Builds the body the session route answers with.</summary>
+    /// <param name="credentialName">The name it reports for the credential.</param>
+    /// <param name="version">The version it reports.</param>
+    /// <returns>The JSON body.</returns>
+    /// <remarks>Shared with the doubles that route by path, so every one of them reports a session the same way and a change to that shape lands in one place.</remarks>
+    internal static string SessionBody(string credentialName, string version) =>
+        $$"""{"service":"MailFathom","version":"{{version}}","credential":"{{credentialName}}"}""";
 
     /// <summary>Builds an endpoint that answers with a status and no usable body.</summary>
     /// <param name="status">The status it answers with.</param>
@@ -72,6 +104,15 @@ internal static class FakeAdminEndpoint
             && presented.Count > 0
                 ? AuthenticationHeaderValue.Parse(presented[0])
                 : null;
+
+    private static string LineAfter(string version)
+    {
+        var line = Version.Parse(CoreOf(version));
+
+        return string.Create(CultureInfo.InvariantCulture, $"{line.Major}.{line.Minor + 1}.0");
+    }
+
+    private static string CoreOf(string version) => version.Split('-', '+')[0];
 
     private static RecordedHttpRequest? LastRequest(FakeHttpMessageHandler endpoint)
     {

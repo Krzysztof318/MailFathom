@@ -38,7 +38,7 @@ public sealed class KeyPairSignInTests : IDisposable
         // Arrange
         var store = this.CreateStore();
         var privateKeyPath = this.WriteKeyPair();
-        using var handler = FakeAdminEndpoint.Accepting("nightly-digest", "0.4.0");
+        using var handler = FakeAdminEndpoint.Accepting("nightly-digest");
 
         // Act
         var exitCode = await RunAsync(
@@ -65,7 +65,7 @@ public sealed class KeyPairSignInTests : IDisposable
     {
         // Arrange
         var privateKeyPath = this.WriteKeyPair();
-        using var handler = FakeAdminEndpoint.Accepting("nightly-digest", "0.4.0");
+        using var handler = FakeAdminEndpoint.Accepting("nightly-digest");
 
         // Act
         await RunAsync(
@@ -92,7 +92,7 @@ public sealed class KeyPairSignInTests : IDisposable
         // Arrange
         var store = this.CreateStore();
         var privateKeyPath = this.WriteKeyPair();
-        using var handler = FakeAdminEndpoint.Accepting("nightly-digest", "0.4.0");
+        using var handler = FakeAdminEndpoint.Accepting("nightly-digest");
 
         await RunAsync(
             this.Context(store, handler),
@@ -128,7 +128,7 @@ public sealed class KeyPairSignInTests : IDisposable
         // Arrange
         var store = this.CreateStore();
         var privateKeyPath = this.WriteKeyPair();
-        using var handler = FakeAdminEndpoint.Accepting("nightly-digest", "0.4.0");
+        using var handler = FakeAdminEndpoint.Accepting("nightly-digest");
 
         // Act
         await RunAsync(
@@ -150,7 +150,7 @@ public sealed class KeyPairSignInTests : IDisposable
     public async Task Login_WithAKeyPairAndNoKey_SaysWhatToPassWithoutReachingTheDeployment()
     {
         // Arrange
-        using var handler = FakeAdminEndpoint.Accepting("nightly-digest", "0.4.0");
+        using var handler = FakeAdminEndpoint.Accepting("nightly-digest");
 
         // Act
         var exitCode = await RunAsync(
@@ -167,7 +167,7 @@ public sealed class KeyPairSignInTests : IDisposable
     public async Task Login_WithThePublicHalfOfTheKeyPair_SaysWhichHalfToPass()
     {
         // Arrange
-        using var handler = FakeAdminEndpoint.Accepting("nightly-digest", "0.4.0");
+        using var handler = FakeAdminEndpoint.Accepting("nightly-digest");
         var publicKeyPath = this.WriteKeyPair().Replace(".key", ".pub", StringComparison.Ordinal);
 
         // Act
@@ -191,7 +191,7 @@ public sealed class KeyPairSignInTests : IDisposable
     public async Task Login_WithAKeyThatIsNotThere_ReportsTheFileRatherThanCrashing()
     {
         // Arrange
-        using var handler = FakeAdminEndpoint.Accepting("nightly-digest", "0.4.0");
+        using var handler = FakeAdminEndpoint.Accepting("nightly-digest");
 
         // Act
         var exitCode = await RunAsync(

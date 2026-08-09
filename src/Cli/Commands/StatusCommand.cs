@@ -46,7 +46,7 @@ internal static class StatusCommand
         var profile = await context.Deployment().ReachAsync(requestedDeployment, cancellationToken);
 
         using var transport = context.OpenTransport(profile.Endpoint, profile.Trust);
-        var session = await new AdminApiClient(transport).ReadSessionAsync(profile.Token, cancellationToken);
+        var session = await new AdminApiClient(transport, context.Console).ReadSessionAsync(profile.Token, cancellationToken);
 
         context.Console.WriteLine(
             $"'{profile.Name}' ({profile.Endpoint.GetLeftPart(UriPartial.Authority)}) accepts the stored credential as '{session.Credential}' (MailFathom {session.Version}).");

@@ -9,27 +9,46 @@ using System.Text.Json;
 using System.Text.Json.Serialization.Metadata;
 using MailFathom.Cli.Administration.Embeddings;
 using MailFathom.Cli.Transport;
+using MailFathom.Versioning;
 
 namespace MailFathom.Cli.Administration;
 
 /// <summary>Reaches the administrative endpoint of one deployment.</summary>
 /// <remarks>
+/// <para>
 /// Every operation the command performs is a request through here. There is no second path to a deployment — no
 /// configuration file it reads, no database it opens — so what this class can do is the whole of what the command can
 /// do, and the endpoint's own authentication is what bounds it.
+/// </para>
+/// <para>
+/// Being that one path is also what makes it the place the two versions are settled. The session is read before the
+/// first operation whichever command is running, so a deployment this build cannot be sure it speaks to is refused
+/// before anything is asked of it rather than after — an activation that would start a provider bill is the case that
+/// decides where the check belongs. It happens once per client, and a client is made once per command, so an operator
+/// running a command whose builds merely differ is told once rather than once per request.
+/// </para>
 /// </remarks>
 internal sealed class AdminApiClient
 {
+    private static readonly string CommandVersion =
+        StampedAssemblyVersion.ReadFrom(typeof(AdminApiClient).Assembly).Version;
+
     private readonly DeploymentTransport transport;
+    private readonly ICliConsole console;
+
+    private AdminSession? settledSession;
 
     /// <summary>Initializes a client over a transport the caller owns.</summary>
     /// <param name="transport">The transport, whose base address names the deployment.</param>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="transport" /> is <see langword="null" />.</exception>
-    internal AdminApiClient(DeploymentTransport transport)
+    /// <param name="console">The terminal a version difference the command carries on past is reported to.</param>
+    /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
+    internal AdminApiClient(DeploymentTransport transport, ICliConsole console)
     {
         ArgumentNullException.ThrowIfNull(transport);
+        ArgumentNullException.ThrowIfNull(console);
 
         this.transport = transport;
+        this.console = console;
     }
 
     /// <summary>Asks the deployment who the presented credential makes the caller.</summary>
@@ -68,7 +87,11 @@ internal sealed class AdminApiClient
             throw new CliFailure($"The deployment answered {(int)response.StatusCode} rather than a session.");
         }
 
-        return await ReadSessionBodyAsync(response, cancellationToken);
+        var session = await ReadSessionBodyAsync(response, cancellationToken);
+
+        this.Settle(session);
+
+        return session;
     }
 
     /// <summary>Hands a deployment the refresh token it should keep for one of its mail accounts.</summary>
@@ -93,6 +116,8 @@ internal sealed class AdminApiClient
         ArgumentNullException.ThrowIfNull(token);
         ArgumentNullException.ThrowIfNull(account);
         ArgumentNullException.ThrowIfNull(refreshToken);
+
+        await this.EnsureSettledAsync(token, cancellationToken);
 
         using var request = new HttpRequestMessage(HttpMethod.Post, AdminEndpointRoutes.MailboxRefreshTokenPath)
         {
@@ -220,6 +245,8 @@ internal sealed class AdminApiClient
     {
         ArgumentNullException.ThrowIfNull(token);
 
+        await this.EnsureSettledAsync(token, cancellationToken);
+
         using var request = new HttpRequestMessage(method, path);
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
 
@@ -259,6 +286,44 @@ internal sealed class AdminApiClient
             throw new CliFailure(
                 "The address answered, but not with anything MailFathom would send. Check that it is the administrative endpoint rather than another service on the same host.",
                 failure);
+        }
+    }
+
+    /// <summary>Reads the session where the command has not asked for one, so every operation is preceded by the version check.</summary>
+    /// <remarks>
+    /// One request, before the first operation and never again on the same client. <c>login</c> and <c>status</c> ask
+    /// for the session themselves and therefore reach this having already settled, which is what keeps the check at one
+    /// request per command whichever command is running.
+    /// </remarks>
+    private async Task EnsureSettledAsync(string token, CancellationToken cancellationToken)
+    {
+        if (this.settledSession is null)
+        {
+            _ = await this.ReadSessionAsync(token, cancellationToken);
+        }
+    }
+
+    /// <summary>Applies what the deployment's version means for this command, and reports it where it means anything.</summary>
+    /// <exception cref="CliFailure">Thrown when the deployment is from another release line, which no command is sent to.</exception>
+    private void Settle(AdminSession session)
+    {
+        if (this.settledSession is not null)
+        {
+            return;
+        }
+
+        this.settledSession = session;
+
+        var agreement = DeploymentVersionAgreement.Settle(CommandVersion, session.Version);
+
+        if (agreement is { PermitsCommands: false, Concern: { } refusal })
+        {
+            throw new CliFailure(refusal);
+        }
+
+        if (agreement.Concern is { } warning)
+        {
+            this.console.WriteError(warning);
         }
     }
 

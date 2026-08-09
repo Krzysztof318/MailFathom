@@ -382,7 +382,7 @@ internal static class AuthorizeMailboxCommand
             destination.Deployment.Endpoint,
             destination.Deployment.Trust);
 
-        await new AdminApiClient(transport).StoreMailboxRefreshTokenAsync(
+        await new AdminApiClient(transport, context.Console).StoreMailboxRefreshTokenAsync(
             destination.Deployment.Token,
             destination.AccountId,
             grant.RefreshToken,

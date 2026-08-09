@@ -167,7 +167,7 @@ internal static class LoginCommand
         // accepted would turn a wrong client registration or a narrow scope into a failure at some later command. For a
         // key pair it also proves the deployment holds the matching public key, which nothing else on this machine can.
         var deploymentSession = await connection.RunAsync(
-            transport => new AdminApiClient(transport).ReadSessionAsync(token, cancellationToken));
+            transport => new AdminApiClient(transport, context.Console).ReadSessionAsync(token, cancellationToken));
         var credentialName = deploymentSession.Credential ?? "unnamed";
 
         // The minted assertion is deliberately not the stored token: it is spent within the minute and every later

@@ -118,7 +118,7 @@ internal sealed class FakeOAuthDeployment
                 $$"""{"device_code":"a-device-code","user_code":"WDJB-MJHT","verification_uri":"{{this.VerificationUri}}","expires_in":600,"interval":1}"""),
             "/api/admin/session" => Json(
                 HttpStatusCode.OK,
-                """{"service":"MailFathom","version":"0.2.0","credential":"kasia"}"""),
+                FakeAdminEndpoint.SessionBody("kasia", FakeAdminEndpoint.CommandVersion)),
             _ => new HttpResponseMessage(HttpStatusCode.NotFound),
         };
     }
