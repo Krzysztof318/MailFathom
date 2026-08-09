@@ -73,6 +73,7 @@ internal static class RegisteredMcpToolSurface
         services.AddSingleton(Substitute.For<IEmailContentRepairRequestStore>());
         services.AddSingleton<IMailAccountCatalog>(new StubMailAccountCatalog("personal"));
         services.AddSingleton<MailboxScopeResolver>();
+        services.AddSingleton<MailAccountDirectoryReader>();
         services.AddSingleton<MailboxTimelineReader>();
         services.AddSingleton<EmailContentReader>();
         services.AddSingleton<MailboxSearchReader>();

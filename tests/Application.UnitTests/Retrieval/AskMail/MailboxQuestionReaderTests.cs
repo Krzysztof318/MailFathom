@@ -16,6 +16,7 @@ using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Answering.Audit;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Folders;
+using MailFathom.TestSupport;
 using Microsoft.Extensions.Time.Testing;
 using NSubstitute;
 using Xunit;
@@ -68,7 +69,7 @@ public sealed class MailboxQuestionReaderTests
             new AskMailRequest
             {
                 QuestionText = "what did the insurer agree to pay",
-                AccountIds = [MailAccountId.Create(ServedAccountId)],
+                Accounts = [MailAccountSelector.Create(ServedAccountId)],
                 FolderAliases = [MailFolderAlias.Create("archive")],
             });
 
@@ -92,7 +93,7 @@ public sealed class MailboxQuestionReaderTests
             new AskMailRequest
             {
                 QuestionText = "was the invoice attached",
-                AccountIds = [MailAccountId.Create("somebody-elses")],
+                Accounts = [MailAccountSelector.Create("somebody-elses")],
             }));
 
         // Assert
@@ -598,7 +599,7 @@ public sealed class MailboxQuestionReaderTests
     private static IMailAccountCatalog CatalogServing(params MailAccountId[] servedAccountIds)
     {
         var catalog = Substitute.For<IMailAccountCatalog>();
-        catalog.ServedAccountIds.Returns([.. servedAccountIds]);
+        catalog.ServedAccounts.Returns([.. servedAccountIds.Select(SyntheticServedAccount.Of)]);
 
         return catalog;
     }

@@ -39,7 +39,7 @@ the same reason. It stays distinguishable from a message whose body was genuinel
 | Field | Meaning | Absent means |
 |---|---|---|
 | `QueryText` | The text to search for | refused — see below |
-| `AccountIds` | The accounts to search | every account this deployment serves |
+| `Accounts` | The accounts to search, each named by its identifier or by its display name | every account this deployment serves |
 | `FolderAliases` | The folder aliases to search | every folder of those accounts |
 | `SenderAddress` | The address the sender must carry, in any case | any sender |
 | `RecipientAddress` | The address a `To` or `Cc` recipient must carry | any recipient |

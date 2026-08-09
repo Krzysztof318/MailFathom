@@ -15,6 +15,7 @@ using MailFathom.Mcp.Tools;
 using MailFathom.Mcp.Tools.Results;
 using MailFathom.Mcp.Tools.Summaries;
 using MailFathom.Mcp.UnitTests.TestDoubles;
+using MailFathom.TestSupport;
 using Xunit;
 
 namespace MailFathom.Mcp.UnitTests.Tools;
@@ -69,7 +70,7 @@ public sealed class ListEmailsToolTests
 
         // Act
         await tool.ListEmailsAsync(
-            accountIds: [ServedAccountId],
+            accounts: [ServedAccountId],
             folderAliases: ["archive"],
             senderAddress: "sender@example.test",
             recipientAddress: "recipient@example.test",
@@ -125,7 +126,7 @@ public sealed class ListEmailsToolTests
 
         // Act
         var failure = await Assert.ThrowsAsync<MailboxQueryFilterInvalidException>(
-            () => tool.ListEmailsAsync(accountIds: [blank], cancellationToken: TestContext.Current.CancellationToken));
+            () => tool.ListEmailsAsync(accounts: [blank], cancellationToken: TestContext.Current.CancellationToken));
 
         // Assert
         Assert.Equal(MailFathomErrorCode.MailboxQueryFilterInvalid, failure.ErrorCode);
@@ -168,7 +169,7 @@ public sealed class ListEmailsToolTests
 
         // Act
         var failure = await Assert.ThrowsAsync<MailboxQueryFilterInvalidException>(
-            () => tool.ListEmailsAsync(accountIds: namedAccounts, cancellationToken: TestContext.Current.CancellationToken));
+            () => tool.ListEmailsAsync(accounts: namedAccounts, cancellationToken: TestContext.Current.CancellationToken));
 
         // Assert
         Assert.Equal("accounts", failure.FilterName);
@@ -207,7 +208,7 @@ public sealed class ListEmailsToolTests
 
         // Act
         var failure = await Assert.ThrowsAsync<MailboxQueryFilterInvalidException>(
-            () => tool.ListEmailsAsync(accountIds: [unusable], cancellationToken: TestContext.Current.CancellationToken));
+            () => tool.ListEmailsAsync(accounts: [unusable], cancellationToken: TestContext.Current.CancellationToken));
 
         // Assert
         Assert.Equal(MailFathomErrorCode.MailboxQueryFilterInvalid, failure.ErrorCode);
@@ -225,7 +226,7 @@ public sealed class ListEmailsToolTests
         // Act
         var failure = await Assert.ThrowsAsync<MailboxQueryFilterInvalidException>(
             () => tool.ListEmailsAsync(
-                accountIds: [new string('a', 257)],
+                accounts: [new string('a', 257)],
                 cancellationToken: TestContext.Current.CancellationToken));
 
         // Assert
@@ -262,7 +263,7 @@ public sealed class ListEmailsToolTests
         // Act
         var failure = await Assert.ThrowsAsync<MailAccountNotAccessibleException>(
             () => tool.ListEmailsAsync(
-                accountIds: [ServedAccountId, "someone-elses"],
+                accounts: [ServedAccountId, "someone-elses"],
                 cancellationToken: TestContext.Current.CancellationToken));
 
         // Assert
@@ -366,6 +367,7 @@ public sealed class ListEmailsToolTests
         var published = Assert.Single(result.Emails);
         Assert.Equal(storedEmailId.ToString(), published.StoredEmailId);
         Assert.Equal(ServedAccountId, published.AccountId);
+        Assert.Equal(SyntheticServedAccount.DisplayNameOf(MailAccountId.Create(ServedAccountId)).Value, published.AccountDisplayName);
         Assert.Equal("INBOX", published.FolderAlias);
         Assert.Equal("<abc@example.test>", published.InternetMessageId);
         Assert.Equal("Quarterly invoice", published.Subject);
@@ -489,6 +491,29 @@ public sealed class ListEmailsToolTests
             [.. result.FolderFreshness.Select(entry => (entry.FolderAlias, entry.WasSynchronized))]);
         Assert.Equal(synchronizedAt, result.FolderFreshness[0].SynchronizedAt);
         Assert.Null(result.FolderFreshness[1].SynchronizedAt);
+        Assert.All(
+            result.FolderFreshness,
+            entry => Assert.Equal(
+                SyntheticServedAccount.DisplayNameOf(MailAccountId.Create(ServedAccountId)).Value,
+                entry.AccountDisplayName));
+    }
+
+    /// <summary>The display name is what a person recognizes a mailbox by, so naming an account with it reads the same mailbox the identifier does.</summary>
+    [Fact]
+    public async Task ListEmailsAsync_AnAccountNamedByItsDisplayName_ReadsTheSameAccountTheIdentifierNames()
+    {
+        // Arrange
+        var timeline = new StubStoredEmailTimelineReader();
+        var tool = ToolOver(timeline);
+
+        // Act
+        await tool.ListEmailsAsync(
+            accounts: [SyntheticServedAccount.DisplayNameOf(MailAccountId.Create(ServedAccountId)).Value.ToUpperInvariant()],
+            cancellationToken: TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.NotNull(timeline.LastFilter);
+        Assert.Equal([MailAccountId.Create(ServedAccountId)], timeline.LastFilter.Selection.Scope.AccountIds);
     }
 
     [Fact]
@@ -524,5 +549,6 @@ public sealed class ListEmailsToolTests
         new MailboxTimelineReader(
             timeline,
             freshness ?? new StubSynchronizationFreshnessReader(),
-            new MailboxScopeResolver(new StubMailAccountCatalog(ServedAccountId))));
+            new MailboxScopeResolver(new StubMailAccountCatalog(ServedAccountId))),
+        new StubMailAccountCatalog(ServedAccountId));
 }

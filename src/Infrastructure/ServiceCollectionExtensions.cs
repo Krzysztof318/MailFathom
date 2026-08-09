@@ -303,6 +303,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<MailboxReconciler>();
         services.AddScoped<StoredEmailExtractionBackfill>();
         services.AddScoped<MailboxScopeResolver>();
+        services.AddScoped<MailAccountDirectoryReader>();
         services.AddScoped<MailboxTimelineReader>();
         services.AddScoped<EmailContentReader>();
         services.AddScoped<MailboxSearchReader>();

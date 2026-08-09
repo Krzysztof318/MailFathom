@@ -13,6 +13,7 @@ using MailFathom.Application.UnitTests.TestDoubles;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Folders;
+using MailFathom.TestSupport;
 using NSubstitute;
 using Xunit;
 
@@ -296,11 +297,11 @@ public sealed class MailboxTimelineReaderTests
 
         // Act
         var failure = await Assert.ThrowsAsync<MailAccountNotAccessibleException>(() => reader.ListEmailsAsync(
-            new ListEmailsRequest { AccountIds = [MailAccountId.Create("unknown")] },
+            new ListEmailsRequest { Accounts = [MailAccountSelector.Create("unknown")] },
             TestContext.Current.CancellationToken));
 
         // Assert
-        Assert.Equal(MailAccountId.Create("unknown"), failure.AccountId);
+        Assert.Equal(MailAccountSelector.Create("unknown"), failure.RequestedAccount);
         Assert.Empty(timeline.Calls);
     }
 
@@ -407,7 +408,7 @@ public sealed class MailboxTimelineReaderTests
 
         // Act
         var result = await reader.ListEmailsAsync(
-            new ListEmailsRequest { AccountIds = [MailAccountId.Create("primary")] },
+            new ListEmailsRequest { Accounts = [MailAccountSelector.Create("primary")] },
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -618,7 +619,7 @@ public sealed class MailboxTimelineReaderTests
         var result = await reader.ListEmailsAsync(
             new ListEmailsRequest
             {
-                AccountIds = [MailAccountId.Create("primary")],
+                Accounts = [MailAccountSelector.Create("primary")],
                 FolderAliases = [MailFolderAlias.Create("ARCHIVE")],
                 SubjectFragment = "invoice",
                 SenderAddress = "anna@example.test",
@@ -644,7 +645,7 @@ public sealed class MailboxTimelineReaderTests
 
         // Act
         var result = await reader.ListEmailsAsync(
-            new ListEmailsRequest { AccountIds = [MailAccountId.Create("primary")] },
+            new ListEmailsRequest { Accounts = [MailAccountSelector.Create("primary")] },
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -719,9 +720,11 @@ public sealed class MailboxTimelineReaderTests
     private static IMailAccountCatalog CatalogServing(params MailAccountId[] servedAccountIds)
     {
         var catalog = Substitute.For<IMailAccountCatalog>();
-        catalog.ServedAccountIds.Returns(
+        catalog.ServedAccounts.Returns(
         [
-            .. servedAccountIds.OrderBy(accountId => accountId.Value, StringComparer.Ordinal),
+            .. servedAccountIds
+                .OrderBy(accountId => accountId.Value, StringComparer.Ordinal)
+                .Select(SyntheticServedAccount.Of),
         ]);
 
         return catalog;

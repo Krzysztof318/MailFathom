@@ -106,7 +106,7 @@ internal sealed partial class MailSynchronizationCoordinator : BackgroundService
         CancellationToken schedulingToken,
         CancellationToken workUnitToken)
     {
-        foreach (var accountId in this.settings.Current.ServedAccountIds)
+        foreach (var accountId in this.settings.Current.ServedAccounts.Select(static account => account.Id))
         {
             if (this.supervisedAccounts.TryGetValue(accountId.Value, out var supervision) && !supervision.IsCompleted)
             {

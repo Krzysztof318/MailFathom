@@ -33,6 +33,10 @@ internal sealed record ListedEmailSummary
     [Description("The configured MailFathom account identifier the email was synchronized from.")]
     public required string AccountId { get; init; }
 
+    /// <summary>Gets the name that account is published under.</summary>
+    [Description("The display name the account is published under, which is the operator's own name for the mailbox. Quote this rather than accountId when telling a person which mailbox an email came from; either value may be used to name the account in a later request.")]
+    public required string AccountDisplayName { get; init; }
+
     /// <summary>Gets the folder alias the email was synchronized under.</summary>
     [Description("The MailFathom folder alias the email was synchronized under, such as INBOX. This is MailFathom's own name for the folder rather than the path the mail server advertises.")]
     public required string FolderAlias { get; init; }
@@ -81,16 +85,19 @@ internal sealed record ListedEmailSummary
 
     /// <summary>Publishes one summary a read returned.</summary>
     /// <param name="summary">The application summary to publish.</param>
+    /// <param name="accountNames">Reads the name the summary's account is published under.</param>
     /// <returns>The wire representation of <paramref name="summary" />.</returns>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="summary" /> is <see langword="null" />.</exception>
-    public static ListedEmailSummary From(EmailSummary summary)
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="summary" /> or <paramref name="accountNames" /> is <see langword="null" />.</exception>
+    public static ListedEmailSummary From(EmailSummary summary, PublishedAccountNames accountNames)
     {
         ArgumentNullException.ThrowIfNull(summary);
+        ArgumentNullException.ThrowIfNull(accountNames);
 
         return new ListedEmailSummary
         {
             StoredEmailId = summary.StoredEmailId.ToString(),
             AccountId = summary.AccountId.Value,
+            AccountDisplayName = accountNames.For(summary.AccountId),
             FolderAlias = summary.FolderAlias.Value,
             InternetMessageId = summary.InternetMessageId,
             Subject = summary.Subject,

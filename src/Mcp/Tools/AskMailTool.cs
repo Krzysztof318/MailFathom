@@ -4,6 +4,7 @@
 
 using System.ComponentModel;
 using System.Diagnostics.CodeAnalysis;
+using MailFathom.Application.Accounts;
 using MailFathom.Application.Emails.Mailboxes;
 using MailFathom.Application.Retrieval.AskMail;
 using MailFathom.Domain.Failures;
@@ -15,6 +16,7 @@ namespace MailFathom.Mcp.Tools;
 /// <summary>Publishes the <c>ask_mail</c> tool over the <see cref="MailboxQuestionReader" /> use case.</summary>
 /// <param name="mailboxQuestionReader">Answers the question from the local mailbox copy.</param>
 /// <param name="answerBounds">How much of one run's outcome this deployment lets a single answer publish.</param>
+/// <param name="accountCatalog">Names the accounts a result publishes, which is the outward half of what the scope arguments do inward.</param>
 /// <remarks>
 /// <para>
 /// The tool translates and nothing more. It converts the caller's strings into the domain identities the request is
@@ -45,7 +47,8 @@ namespace MailFathom.Mcp.Tools;
 [SuppressMessage("Performance", "CA1812:Avoid uninstantiated internal classes", Justification = "The MCP server materializes this tool type per tool call.")]
 internal sealed class AskMailTool(
     MailboxQuestionReader mailboxQuestionReader,
-    MailAnswerBounds answerBounds)
+    MailAnswerBounds answerBounds,
+    IMailAccountCatalog accountCatalog)
 {
     /// <summary>The name the tool is advertised and called under.</summary>
     /// <remarks>Snake case because it is the naming the Model Context Protocol tool ecosystem uses; the C# member naming stops at the boundary.</remarks>
@@ -53,11 +56,11 @@ internal sealed class AskMailTool(
 
     /// <summary>Answers one question about the local mailbox copy, citing the emails the answer was drawn from.</summary>
     /// <param name="question">What to answer.</param>
-    /// <param name="accountIds">The accounts the answer may be drawn from, or none for every account this deployment serves.</param>
+    /// <param name="accounts">The accounts the answer may be drawn from, named by identifier or display name, or none for every account this deployment serves.</param>
     /// <param name="folderAliases">The folder aliases the answer may be drawn from, or none for every folder of those accounts.</param>
     /// <param name="cancellationToken">Cancels the run when the caller disconnects or the host shuts down.</param>
     /// <returns>The answer, the emails it cites, and whether either had to be cut.</returns>
-    /// <exception cref="MailboxQueryFilterInvalidException">Thrown when an account identifier or folder alias is not a value this system could have issued.</exception>
+    /// <exception cref="MailboxQueryFilterInvalidException">Thrown when text naming an account or a folder alias is not a value this system could have issued.</exception>
     /// <exception cref="MailFathomException">
     /// Raised by the use case for a question, a scope, or an account it refuses, and for a deployment that cannot answer.
     /// The call-tool filter turns every one of them into the coded result a client reads, so this tool neither catches
@@ -85,8 +88,8 @@ internal sealed class AskMailTool(
     public async Task<AskMailToolResult> AskMailAsync(
         [Description("The question to answer, up to 1000 characters. Write it as a person would ask it; it is not a search query and its words are not matched against the mail.")]
         string question,
-        [Description("Configured MailFathom account identifiers the answer may be drawn from. Omit to draw on every account this deployment serves. At most 64 may be named, and an identifier this deployment does not serve is refused rather than answered from the rest.")]
-        string[]? accountIds = null,
+        [Description("MailFathom accounts the answer may be drawn from, each named by its configured account identifier or by the display name it is published under. Omit to draw on every account this deployment serves; call list_accounts to see what they are. At most 64 may be named, and a name this deployment does not serve is refused rather than answered from the rest.")]
+        string[]? accounts = null,
         [Description("MailFathom folder aliases the answer may be drawn from, such as INBOX. Omit to draw on every folder of the accounts in scope. At most 64 may be named. An alias is MailFathom's own name for a folder and is matched without regard to case.")]
         string[]? folderAliases = null,
         CancellationToken cancellationToken = default)
@@ -94,12 +97,12 @@ internal sealed class AskMailTool(
         var request = new AskMailRequest
         {
             QuestionText = question,
-            AccountIds = MailboxScopeArguments.AccountIds(accountIds),
+            Accounts = MailboxScopeArguments.Accounts(accounts),
             FolderAliases = MailboxScopeArguments.FolderAliases(folderAliases),
         };
 
         var result = await mailboxQuestionReader.AnswerQuestionAsync(request, cancellationToken);
 
-        return AskMailToolResult.From(result, answerBounds);
+        return AskMailToolResult.From(result, answerBounds, PublishedAccountNames.From(accountCatalog));
     }
 }

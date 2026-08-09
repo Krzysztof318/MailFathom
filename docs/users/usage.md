@@ -2,13 +2,13 @@
 
 <!-- describes: src/Mcp/Tools/** -->
 
-MailFathom publishes four MCP tools, and together they are the whole surface: an agent can list mail, read one
-message, search, and ask a question — nothing else. This page is the user's view of that surface: what each tool
-answers, what every result carries, what the deliberate limits are, and how to read a failure. The full contracts —
-every argument, every field, every bound — live in [MCP tools](../features/mcp-tools.md) and the feature pages it links,
-and this page does not restate them.
+MailFathom publishes five MCP tools, and together they are the whole surface: an agent can see which mailboxes exist,
+list mail, read one message, search, and ask a question — nothing else. This page is the user's view of that surface:
+what each tool answers, what every result carries, what the deliberate limits are, and how to read a failure. The full
+contracts — every argument, every field, every bound — live in [MCP tools](../features/mcp-tools.md) and the feature
+pages it links, and this page does not restate them.
 
-Three of the four are always there. `ask_mail` needs a chat model and an embedding model configured and working, so a
+Four of the five are always there. `ask_mail` needs a chat model and an embedding model configured and working, so a
 deployment that has neither does not offer it at all; its absence from a tool listing is that deployment saying it
 cannot answer questions rather than something being broken.
 
@@ -25,6 +25,20 @@ body at most the configured character bound, a search extract at most a few doze
 deployment's privacy control on how much mail one call can draw out, so they are refused rather than stretched when a
 caller asks for more, and none of them is a client argument to widen.
 
+## `list_accounts` — which mailboxes exist
+
+Takes no arguments and returns the mailboxes this deployment serves. Call it first: every other tool narrows by account,
+and this is where the names to narrow with come from. Each entry carries two of them — the `accountId` an operator
+configured and the `displayName` they gave it — and **either one names the account** in a later call, the display name
+matched without regard to case. Quote the display name to a person; the identifier is what other results report and what
+stays stable if the readable name is changed.
+
+Each account also lists its folders with the same freshness statement a listing carries, and the result says whether
+synchronization is running at all. An account with no folders listed has never been synchronized, which is a different
+thing from a mailbox that holds nothing.
+
+Nothing about how MailFathom reaches a mailbox is returned: no server, no port, no user name, no credential.
+
 ## `list_emails` — the timeline
 
 Returns a page of summaries, newest received first by default, filtered by any combination of account, folder, sender,
@@ -32,7 +46,9 @@ recipient, subject fragment, received range, seen state, and attachment presence
 call reads every folder of every served account.
 
 A summary is enough to recognize a message — subject, sender, recipients, timestamps, size, attachment counts, remote
-flags — and carries `storedEmailId`, the identifier a content read uses. Two fields prevent common misreadings:
+flags — and carries `storedEmailId`, the identifier a content read uses. It names its account both ways, as `accountId`
+and `accountDisplayName`, so telling a person which mailbox a message came from needs no second call. Two fields prevent
+common misreadings:
 
 - `attachments` counts real attachments separately from inline images, so a message whose only payload is a logo in
   its signature does not read as one carrying a document.
@@ -188,7 +204,7 @@ The codes a user meets in practice:
 | `51005` | A content read named no messages, or more than the ten one call serves | Split the list into calls of at most ten |
 | `51006` | A content read named the same message twice | Remove the repeat; results are not served twice |
 | `52001` / `52002` | A cursor this system did not issue, or one reused after the filters changed | Restart the walk from the first page |
-| `53001` | The named account is not served here | Check `AccountId` spelling against the deployment's configuration |
+| `53001` | The named account is not served here | Call `list_accounts` and use an `accountId` or `displayName` it returns |
 | `53002` | No such email in the local copy | The identifier is stale, or the mail was removed; list again |
 | `55001` | The email exists but its stored content is currently unreadable; a repair has been queued | Retry later — this is a local-consistency state, not a mail-server problem |
 | `56001` | This deployment cannot answer questions about mail, either at all or for now | Nothing about the question caused it; the message says which, and only the operator can change it |

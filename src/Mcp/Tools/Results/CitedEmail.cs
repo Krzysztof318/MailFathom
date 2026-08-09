@@ -24,6 +24,10 @@ internal sealed record CitedEmail
     [Description("The configured MailFathom account identifier the email was read from.")]
     public required string AccountId { get; init; }
 
+    /// <summary>Gets the name that account is published under.</summary>
+    [Description("The display name the account is published under, which is the operator's own name for the mailbox. Name this rather than accountId when telling a person which mailbox a claim came from.")]
+    public required string AccountDisplayName { get; init; }
+
     /// <summary>Gets the folder alias the email was read from.</summary>
     [Description("The MailFathom folder alias the email was read from, such as INBOX. This is MailFathom's own name for the folder rather than the path the mail server advertises.")]
     public required string FolderAlias { get; init; }
@@ -38,16 +42,19 @@ internal sealed record CitedEmail
 
     /// <summary>Publishes one citation the use case produced.</summary>
     /// <param name="citation">The citation to publish.</param>
+    /// <param name="accountNames">Reads the name the citation's account is published under.</param>
     /// <returns>The wire representation of <paramref name="citation" />.</returns>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="citation" /> is <see langword="null" />.</exception>
-    public static CitedEmail From(MailAnswerCitation citation)
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="citation" /> or <paramref name="accountNames" /> is <see langword="null" />.</exception>
+    public static CitedEmail From(MailAnswerCitation citation, PublishedAccountNames accountNames)
     {
         ArgumentNullException.ThrowIfNull(citation);
+        ArgumentNullException.ThrowIfNull(accountNames);
 
         return new CitedEmail
         {
             StoredEmailId = citation.StoredEmailId.ToString(),
             AccountId = citation.AccountId.Value,
+            AccountDisplayName = accountNames.For(citation.AccountId),
             FolderAlias = citation.FolderAlias.Value,
             Subject = citation.Subject,
             ReceivedAt = citation.ReceivedAt,

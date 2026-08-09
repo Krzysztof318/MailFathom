@@ -25,7 +25,7 @@ divergence neither copy would look wrong for on its own.
 
 | Field | Meaning | Absent means |
 |---|---|---|
-| `AccountIds` | The accounts to list from | every account this deployment serves |
+| `Accounts` | The accounts to list from, each named by its identifier or by its display name | every account this deployment serves |
 | `FolderAliases` | The folder aliases to list from | every folder of those accounts |
 | `SenderAddress` | The address the sender must carry, in any case | any sender |
 | `RecipientAddress` | The address a `To` or `Cc` recipient must carry | any recipient |
@@ -80,7 +80,21 @@ and its result would read as an answer about the mailbox.
   cursor.
 - **An account nobody serves** is refused with `53001 MailAccountNotAccessible` before anything is read. One failure
   covers both "no such account" and "not yours", and an empty page is deliberately not the answer: it would confirm the
-  identifier and turn a listing into a way to enumerate accounts.
+  name and turn a listing into a way to enumerate accounts. Text matching neither an identifier nor a display name meets
+  that same failure, so a caller cannot learn from it which of the two spellings it was holding.
+
+### Naming an account
+
+An account may be named two ways, and a caller is not required to know which it is holding. The configured `AccountId`
+is matched exactly, because it is a key everything else compares exactly; the `DisplayName` it is published under is
+matched without regard to case, because it is prose an operator wrote for a person to retype. Neither is ever matched as
+a fragment, so naming one account can never select another whose name contains it.
+
+The two are resolved into one identity before a query runs, which is what keeps the rest of this page true: the scope a
+cursor is fingerprinted from holds identifiers, so naming the same account both ways is one account, and a cursor issued
+for one spelling stays valid for the other. Configuration is what makes this unambiguous — a display name another
+account's identifier or display name already carries fails startup — so resolution never has to choose between two
+matches. [`list_accounts`](mcp-tools.md#list_accounts) is where a caller learns both names.
 
 ### Which accounts an unscoped request reads
 
@@ -228,7 +242,7 @@ configuration bounds.
   identically.
 - `MailFathom.Application.Emails.Summaries` — the summary a read model publishes and the two reader ports that produce
   it.
-- `MailFathom.Application.Accounts` — `IMailAccountCatalog`, the port that names which accounts this deployment serves. One
+- `MailFathom.Application.Accounts` — `IMailAccountCatalog`, the port that describes which accounts this deployment serves, and `MailAccountDirectoryReader`, the one use case that publishes that set rather than bounding a read with it. One
   member answers both questions asked of it: whether the account a request named is accepted, and which accounts an
   unscoped request is narrowed to. `MailSynchronizationOptions` implements it, so the answer comes from the configuration
   that defines the accounts.

@@ -13,10 +13,11 @@ serves.
 
 `ModelContextProtocol.AspNetCore` 2.0.0 hosts the server. The `Mcp` project owns the tool descriptors, the conversion of
 protocol arguments into the domain identities a use case is expressed in, and the mapping from a use case's result back
-onto the published contract. It holds no query, no persistence, and no mail-protocol code: `list_emails` calls the
-`MailboxTimelineReader` use case and nothing else, `get_email_content` calls the `EmailContentReader` use case and
-nothing else, `search_emails` calls the `MailboxSearchReader` use case and nothing else, and `ask_mail` calls the
-`MailboxQuestionReader` use case and nothing else.
+onto the published contract. It holds no query, no persistence, and no mail-protocol code: `list_accounts` calls the
+`MailAccountDirectoryReader` use case and nothing else, `list_emails` calls the `MailboxTimelineReader` use case and
+nothing else, `get_email_content` calls the `EmailContentReader` use case and nothing else, `search_emails` calls the
+`MailboxSearchReader` use case and nothing else, and `ask_mail` calls the `MailboxQuestionReader` use case and nothing
+else.
 
 It holds no AI code either, and cannot. The project references `Domain` and `Application` and no other MailFathom assembly,
 which `Mcp.UnitTests` asserts against the compiled reference list rather than against a convention — so no tool on this
@@ -53,10 +54,10 @@ Three properties hold for every tool and are proven by test rather than asserted
   any of them, and the last set is the operator's to lower or raise in
   [`MailAnswering`](../operations/configuration-reference.md#mailanswering).
 
-One property holds for three of the four and is stated where it stops. `list_emails`, `get_email_content`, and
-`search_emails` are advertised by every deployment, because the local mailbox copy is all they need. `ask_mail` needs two
-AI providers an operator configures separately, so it is advertised only while both are configured and working; the
-[`ask_mail`](#ask_mail) section records what decides that and what a call meets when it arrives anyway.
+One property holds for four of the five and is stated where it stops. `list_accounts`, `list_emails`,
+`get_email_content`, and `search_emails` are advertised by every deployment, because local state is all they need.
+`ask_mail` needs two AI providers an operator configures separately, so it is advertised only while both are configured
+and working; the [`ask_mail`](#ask_mail) section records what decides that and what a call meets when it arrives anyway.
 
 ## Descriptor conventions
 
@@ -65,8 +66,8 @@ it calls anything:
 
 | Element | Convention |
 |---|---|
-| `name` | Snake case, as the MCP tool ecosystem spells tool names — `list_emails`, `get_email_content`, `search_emails`, `ask_mail` |
-| `title` | A human-readable label for display — `List emails`, `Get email content`, `Search emails`, `Ask about mail` |
+| `name` | Snake case, as the MCP tool ecosystem spells tool names — `list_accounts`, `list_emails`, `get_email_content`, `search_emails`, `ask_mail` |
+| `title` | A human-readable label for display — `List accounts`, `List emails`, `Get email content`, `Search emails`, `Ask about mail` |
 | `description` | States what the tool reads, that it reads the local copy only, that it changes nothing, and what it bounds |
 | `inputSchema` | Every argument is a top-level property carrying its own description, unit, and absence meaning |
 | `outputSchema` | Generated from the result type, whose properties carry descriptions of their own |
@@ -163,6 +164,58 @@ The tool name a call arrived with is recorded only when it is spelled the way a 
 recorded as one fixed placeholder. On an unknown tool that name is unvalidated caller input on its way into a retained
 log, and a log is not a place to let a caller write.
 
+## `list_accounts`
+
+Returns the mail accounts this deployment serves, with the names a request may use for each and how current the local
+copy of each of their folders is.
+
+It is the tool a client calls first. Every other tool takes an account filter, and a caller that cannot see the accounts
+has no way to fill one in — the identifier an operator configured is a key they invented, not something a model can
+guess. This is also the one tool that publishes the account set rather than using it as a bound; the others answer only
+about an account the caller already named, and refuse a name they do not serve.
+
+### Arguments
+
+None. The tool answers about the deployment rather than about a request, so there is nothing for a caller to get wrong
+and nothing to bound.
+
+### Result
+
+`accounts` carries one entry per served account, ordered by account identifier, and `synchronizationEnabled` says whether
+the deployment is refreshing its local copy at all.
+
+| Field | Meaning |
+|---|---|
+| `accountId` | The configured identifier. It is what every other result reports as `accountId`, and it is stable across a change of the display name |
+| `displayName` | The readable name the operator gave the account |
+| `synchronizationMode` | `polling` or `push`, stating what the operator asked to start the account's next pass |
+| `folders` | One entry per folder local state knows of, in the same shape `folderFreshness` takes elsewhere: the alias, when synchronization last committed progress for it, and whether it ever has |
+
+**Either name may be used to select the account.** The identifier is matched exactly and the display name without regard
+to case, and configuration refuses a display name that another account's identifier or display name already carries, so
+a name always names one mailbox. Both spellings resolve to one identity before a query runs, which is why a continuation
+cursor issued for one stays valid for the other.
+
+**`synchronizationMode` states what was asked for, not what a folder is getting.** Whether push is served is decided per
+folder against what the mail server advertises and how recent attempts went, which is an observation about a run rather
+than a property of the account.
+
+**An empty `folders` list is a statement.** It says synchronization has never reached the account, which means its mail
+may be absent entirely rather than merely out of date — a distinction an empty listing cannot make for itself.
+`synchronizationEnabled` answers the other half: `false` means the timestamps below it are as current as any answer will
+get, because nothing is advancing them.
+
+### What it deliberately does not publish
+
+Nothing about how MailFathom reaches a mailbox. The mail server, the port, the IMAP user name, and every secret
+reference are absent, and the descriptor test asserts their absence rather than trusting it, so a field carrying one
+cannot arrive unnoticed. The display name is what makes a mailbox recognizable to a caller; the connection detail is the
+operator's, and an assistant choosing which mailbox to ask about needs none of it.
+
+An account this deployment stopped serving is absent as well, because the read is scoped to the served accounts exactly
+as every other read is. Local state still holds its folders, and that is not a reason to name it in the one answer that
+lists what exists.
+
 ## `list_emails`
 
 Returns a bounded page of summaries from the local mailbox copy, newest received first by default.
@@ -173,7 +226,7 @@ Every argument is optional.
 
 | Argument | Type | Meaning |
 |---|---|---|
-| `accountIds` | `string[]` | Accounts to read. Omitted reads every account this deployment serves; an account it does not serve is refused with `53001` |
+| `accounts` | `string[]` | Accounts to read, each named by its configured account identifier or by the display name it is published under. Omitted reads every account this deployment serves; a name it does not serve is refused with `53001` |
 | `folderAliases` | `string[]` | MailFathom folder aliases such as `INBOX`. Omitted reads every folder of the accounts in scope. Case is normalized, so a repeated spelling names one folder |
 | `senderAddress` | `string` | The whole address the sender must carry, in any case — not a fragment |
 | `recipientAddress` | `string` | The whole address a `To` or `Cc` recipient must carry. `Reply-To` is stored and filterable through the use case but not searched here |
@@ -192,24 +245,29 @@ identifier a million times is refused after the value that crosses the limit rat
 materialized. Every one of those bounds lives in the use case rather than here, which is what makes them hold for an
 entrypoint added later; naming one served account repeatedly is legal and is read once.
 
-Both identifier lists are converted to domain values at this boundary, and their counts are checked against the query's
-own limits *before* any element is converted — a ceiling applied after the trimming and upper-casing it exists to prevent
-has already run over a million-element array is not a ceiling. Text that names no identifier this system issues is then
+Both lists are converted to domain values at this boundary, and their counts are checked against the query's own limits
+*before* any element is converted — a ceiling applied after the trimming and upper-casing it exists to prevent has
+already run over a million-element array is not a ceiling. Text that could name nothing this system issues is then
 refused with `51002`, and the refusal never repeats the value.
 
-The boundary applies one rule to both lists: at most 256 characters and no control characters. The domain types differ on
-that point, since a folder alias refuses control characters and an account identifier does not, and the stricter rule is
-applied to both because an identifier travels even when it matches nothing — an account this deployment does not serve is
-named back in the `53001` refusal a client reads, so an unbounded string carrying newlines would otherwise be a way to
-write arbitrary text into that contract and into the log beside it.
+**Which account a name refers to is not settled here.** An account may be named by its identifier or by its display
+name, and the two are matched against the served accounts inside the use case, so text naming nothing meets exactly the
+refusal an account the deployment stopped serving meets. The identifier is matched exactly and the display name without
+regard to case, and neither is ever matched as a fragment; naming the same account both ways is one account in the
+resolved scope, so a continuation cursor issued for one spelling stays valid for the other.
+
+The boundary applies one rule to both lists: at most 256 characters and no control characters. It holds whatever each
+domain type goes on to check for itself, because a name travels even when it matches nothing — an account this
+deployment does not serve is named back in the `53001` refusal a client reads, so an unbounded string carrying newlines
+would otherwise be a way to write arbitrary text into that contract and into the log beside it.
 
 ### Result
 
 `emails` carries the page, `nextCursor` reads the following one and is absent on the last page, and `folderFreshness`
 states how current the local copy of each covered folder is.
 
-Each summary carries the stable local identifier a content read is performed by, the account and folder alias, the message
-identifier, the subject, the sender address and display name, the `To` addresses, the sent and received timestamps, the
+Each summary carries the stable local identifier a content read is performed by, the account identifier and the display
+name it is published under, the folder alias, the message identifier, the subject, the sender address and display name, the `To` addresses, the sent and received timestamps, the
 size in bytes, the attachment summary, the remote flags with the time they were observed, and whether raw content is
 available locally. It is the use case's projection published as it stands, not narrowed a second time here — a boundary
 that re-decided what a listing may carry would put the privacy rule in two places and leave the one a client reads
@@ -253,10 +311,15 @@ deployment authorized — and leaves that port unchanged, so every admitted call
 accounts. Deriving the account set from the authenticated identity is the later step, and it replaces the implementation
 behind that port rather than introducing authorization for the first time.
 
-An unknown account identifier is refused with `53001` rather than answered with an empty page, so a listing cannot be used
-to discover which account identifiers exist; "no such account" and "not yours" are deliberately one answer. A request that
-names no account is narrowed to the served accounts rather than left unrestricted, because removing an account from
-configuration leaves its stored rows in place.
+A name no served account answers to is refused with `53001` rather than answered with an empty page; "no such account"
+and "not yours" are deliberately one answer, and so is "that is not a name of anything". A request that names no account
+is narrowed to the served accounts rather than left unrestricted, because removing an account from configuration leaves
+its stored rows in place.
+
+That refusal is about a name a caller *guessed*. Which accounts exist is published deliberately and in one place —
+[`list_accounts`](#list_accounts) — because a caller that cannot see the accounts cannot fill in the filter above, and a
+filter nobody can fill in is a filter nobody uses. What stays unpublished either way is everything about how MailFathom
+reaches a mailbox.
 
 ## `get_email_content`
 
@@ -393,7 +456,7 @@ how the extracts are cut, and why there is no cursor — where those are enforce
 | Argument | Type | Meaning |
 |---|---|---|
 | `queryText` | `string` | **Required.** The text to search for, up to 512 characters. Blank is refused with `51002`, because a search with no text is a listing |
-| `accountIds` | `string[]` | Accounts to search. Omitted searches every account this deployment serves; an account it does not serve is refused with `53001` |
+| `accounts` | `string[]` | Accounts to search, each named by its configured account identifier or by the display name it is published under. Omitted searches every account this deployment serves; a name it does not serve is refused with `53001` |
 | `folderAliases` | `string[]` | MailFathom folder aliases such as `INBOX`. Omitted searches every folder of the accounts in scope |
 | `senderAddress` | `string` | The whole address the sender must carry, in any case — not a fragment |
 | `recipientAddress` | `string` | The whole address a `To` or `Cc` recipient must carry |
@@ -534,7 +597,7 @@ messages, search when the messages themselves are what is wanted.
 | Argument | Type | Meaning |
 |---|---|---|
 | `question` | `string` | **Required.** The question to answer, up to 1000 characters. It is not a search query: its words are not matched against the mail, and the lookups are written by the model |
-| `accountIds` | `string[]` | Accounts the answer may be drawn from. Omitted draws on every account this deployment serves; an account it does not serve is refused with `53001` |
+| `accounts` | `string[]` | Accounts the answer may be drawn from, each named by its configured account identifier or by the display name it is published under. Omitted draws on every account this deployment serves; a name it does not serve is refused with `53001` |
 | `folderAliases` | `string[]` | MailFathom folder aliases such as `INBOX`. Omitted draws on every folder of the accounts in scope. Case is normalized, so a repeated spelling names one folder |
 
 There is no structured filter beside the scope, and that is a decision rather than an omission. A sender or a date range
@@ -559,9 +622,10 @@ same refusals; the section above records that rule once.
 | `citationsTruncated` | Whether the run reached more emails than `citations` names |
 | `retrievalTruncated` | Whether the run hit this deployment's ceiling on how much mail one question may read |
 
-Each citation carries the `storedEmailId` a content read is performed by, the account and folder alias, the subject, and
-the received time. It deliberately carries no extract: the passage the run retrieved has already reached a model, and
-returning it here would put mail content into a response whose purpose is an answer. The subject and the received time
+Each citation carries the `storedEmailId` a content read is performed by, the account identifier and the display name it
+is published under, the folder alias, the subject, and the received time. It deliberately carries no extract: the passage
+the run retrieved has already reached a model, and returning it here would put mail content into a response whose purpose
+is an answer. The subject and the received time
 are what let a reader recognize a message before fetching it.
 
 **The citations are what the run retrieved, not what the model demonstrably used.** Nothing outside the model knows which
@@ -617,8 +681,8 @@ says whether this deployment answers no questions at all or answers them and cur
 
 ## Pending
 
-The four read-only tools of the first release are complete. `list_emails`, `get_email_content`, and `search_emails` read
-the PostgreSQL read models, the lexical index, and the content store that landed with their use cases, and `ask_mail`
-answers over the retrieval and the agent composition above them, under the ceilings an operator sets on what one
-question and one period may spend. What is still pending on this surface is the run trace an operator reads afterwards,
+The five read-only tools of this release are complete. `list_accounts` publishes the accounts a caller may name,
+`list_emails`, `get_email_content`, and `search_emails` read the PostgreSQL read models, the lexical index, and the
+content store that landed with their use cases, and `ask_mail` answers over the retrieval and the agent composition
+above them, under the ceilings an operator sets on what one question and one period may spend. What is still pending on this surface is the run trace an operator reads afterwards,
 its own change, and any tool that writes: SMTP delivery is deliberately absent from the first public tool set.

@@ -36,23 +36,24 @@ To evaluate MailFathom from the checkout instead of deploying it, the local Aspi
 
 ## What exists today
 
-What is implemented is read-only synchronization and four tools, and this README is split on that line: this section and [What it does well](https://github.com/Krzysztof318/MailFathom#what-it-does-well) describe the code as it stands, while [Where it is going](https://github.com/Krzysztof318/MailFathom#where-it-is-going) is the roadmap.
+What is implemented is read-only synchronization and five tools, and this README is split on that line: this section and [What it does well](https://github.com/Krzysztof318/MailFathom#what-it-does-well) describe the code as it stands, while [Where it is going](https://github.com/Krzysztof318/MailFathom#where-it-is-going) is the roadmap.
 
 Two properties hold everywhere, and much of the rest of the design follows from them:
 
 - **Reading is local.** A tool call answers from your copy and never contacts a mail server, so it is fast, it works while the server is down, and it cannot change anything remotely. Every result states how fresh the local copy is.
 - **Synchronization never writes to your mailbox.** Fetching mail never sets the remote `\Seen` flag, so mail MailFathom has copied still shows as unread in your own mail client until you read it there.
 
-What an agent gets is four tools, and they are the whole surface:
+What an agent gets is five tools, and they are the whole surface:
 
 | Tool | What it answers |
 | --- | --- |
+| `list_accounts` | Which mailboxes this deployment serves, each with the readable name you gave it and how current its local copy is — the tool an agent calls first, so it knows what to narrow the others to |
 | `list_emails` | A page of the timeline, newest first, filtered by account, folder, sender, recipient, subject, date range, seen state, or attachment presence |
 | `search_emails` | Ranked matches for a text query across subjects, participants, and body text, each with short extracts around what matched — ranked lexically, and by embedding similarity beside it once an embedding model is configured |
 | `get_email_content` | Up to ten messages in full: normalized headers, plain-text body, optionally sanitized HTML, every attachment by name, type, and size, and — on request — the files themselves as base64 |
 | `ask_mail` | A question answered from the mail a chat model looks up while answering, citing the identifiers of every message it drew on so each claim can be read for yourself |
 
-The first three are always there. `ask_mail` needs a chat model and an embedding model you configure and point at, so a deployment with neither does not advertise it at all rather than offering a tool that would fail on first use.
+The first four are always there. `ask_mail` needs a chat model and an embedding model you configure and point at, so a deployment with neither does not advertise it at all rather than offering a tool that would fail on first use.
 
 The screenshot at the top of this page is `list_emails`. Two of the other tools, answering the same client over the same mailbox:
 
@@ -90,7 +91,7 @@ MailFathom is built as an enterprise-grade system from the first line, even whil
 
 ### Nothing on the surface writes, and no setting changes that
 
-- The MCP surface is four tools — `list_emails`, `get_email_content`, `search_emails`, `ask_mail` — and that is all of it. There is no write tool to enable.
+- The MCP surface is five tools — `list_accounts`, `list_emails`, `get_email_content`, `search_emails`, `ask_mail` — and that is all of it. There is no write tool to enable.
 - Synchronization is incapable of marking remote mail as read.
 - Attachment content is returned only where a call asks for it by name, under a per-attachment limit and a per-call byte budget the operator sets, and a file is returned whole or not at all.
 
@@ -182,7 +183,7 @@ None of it depends on somebody else's service. The copy is yours, the database i
 
 ## Where it is going
 
-The four tools are the foundation, not the product. What follows turns a synchronized, searchable copy of your mail into something an agent can reason over and eventually act on. The direction is set and the order is not fixed:
+The five tools are the foundation, not the product. What follows turns a synchronized, searchable copy of your mail into something an agent can reason over and eventually act on. The direction is set and the order is not fixed:
 
 - **Continuous synchronization.** Today a run is periodic reconciliation. Long-lived IMAP `IDLE` and `NOTIFY` connections, with `CONDSTORE` for cheap flag reconciliation, make new mail arrive in seconds instead of on an interval.
 - **Bounding what answering costs.** `ask_mail` is here, and what one question may spend is not yet yours to set: a ceiling on the provider calls a single run makes, and a trace of what a run actually did, are each their own step.

@@ -79,6 +79,7 @@ config:
           "Accounts": [
             {
               "AccountId": "primary",
+              "DisplayName": "Personal mail",
               "Host": "imap.example.test",
               "Port": 993,
               "UserName": "you@example.test",

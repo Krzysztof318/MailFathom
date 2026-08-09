@@ -29,8 +29,9 @@ public sealed record SearchEmailsRequest
     /// <remarks>Required: a search with no text is a listing, which the timeline read model answers in a stable order and with a cursor.</remarks>
     public string? QueryText { get; init; }
 
-    /// <summary>Gets the accounts to search, or empty for every account this deployment serves.</summary>
-    public IReadOnlyList<MailAccountId> AccountIds { get; init; } = [];
+    /// <summary>Gets the text naming the accounts to search, or empty for every account this deployment serves.</summary>
+    /// <remarks>An account may be named by its configured identifier or by the display name it is published under, and the use case settles which against the accounts it serves.</remarks>
+    public IReadOnlyList<MailAccountSelector> Accounts { get; init; } = [];
 
     /// <summary>Gets the folder aliases to search, or empty for every folder of the named accounts.</summary>
     public IReadOnlyList<MailFolderAlias> FolderAliases { get; init; } = [];

@@ -123,7 +123,7 @@ The coordinator re-reads the published snapshot on the configured interval and s
 account that has none running. One mechanism therefore covers three things: an account a configuration reload adds
 begins synchronizing without a restart, a supervisor that ended unexpectedly is started again instead of leaving one
 account silently unsynchronized, and an account a reload removes ends its own supervision at the start of its next run.
-Removing an account is not the same as disabling synchronization: `ServedAccountIds` drops it, and the read side
+Removing an account is not the same as disabling synchronization: the served-account catalog drops it, and the read side
 resolves its mailbox scopes from that same catalog, so the mail already stored for a removed account stops being
 readable as well as stopping being synchronized. Turning `Enabled` off stops the runs and leaves the stored copy
 readable; removing the account does both.
@@ -455,6 +455,7 @@ accumulates one. An account turns it on and states how long it keeps entries:
 MailSynchronization:
   Accounts:
     - AccountId: work
+      DisplayName: Work mail
       AuditTrail:
         Enabled: true
         Retention: 90.00:00:00
@@ -1245,6 +1246,7 @@ Synchronization is disabled by default:
     "Accounts": [
       {
         "AccountId": "primary",
+        "DisplayName": "Personal mail",
         "Host": "imap.example.test",
         "Port": 993,
         "UserName": "mailfathom@example.test",
@@ -1306,6 +1308,8 @@ The extraction backfill has a section of its own rather than a block inside the 
 `MaxReconciledEmailsPerRun` bounds the backward pass the way the batch settings bound the forward one, and `RemotelyDeletedEmailDisposition` is the per-account choice [Reconciling against the server](#reconciling-against-the-server) describes. It binds as one of the two names `RetainTombstone` and `EraseLocalCopy`, and a value that is neither **fails startup** rather than falling back to a default: the setting decides whether stored mail is destroyed, and a typo in it must never be the reason mail survives or does not. That check is explicit rather than left to the binder, because a bare number binds onto an enum whether or not any member carries it — strict binding rejects unknown keys and failed conversions, and this conversion succeeds.
 
 `AuthoredDeleteEmailDisposition` answers the same question for the opposite act — a deletion MailFathom performed on the owner's instruction rather than one it observed — and [takes precedence over the setting above](#what-becomes-of-a-message-mailfathom-deleted-itself) for every such deletion. It binds as `RetainLocalCopy`, `RetainTombstone`, or `EraseLocalCopy`, is validated the same way, fails startup the same way, and defaults to keeping the local copy readable.
+
+Every configured account carries a `DisplayName`, whether or not synchronization is enabled, because the stored copy stays readable after the switch is turned off and the name is what a caller reads the account back as. There is no fallback to `AccountId`: a name MailFathom invented would be published to callers as though an operator had chosen it. The two share one naming space — a request may name an account by either — so startup refuses a display name another account's identifier or display name already carries, compared without regard to case; one equal to the account's own identifier is accepted, since both spellings then reach the same mailbox.
 
 When enabled, at least one account with a non-blank `AccountId`, host, and user name must be configured. The account password is not a configuration value at all: `Secrets.Password` carries a reference, and startup fails when it cannot be resolved. Each entry of `Folders` names an alias and exactly one of `RemotePath` and `SpecialUse`; naming both, naming neither, or naming a role that does not exist fails startup with a message identifying the alias. Supported roles are `Inbox`, `Archive`, `Drafts`, `Sent`, `Junk`, `Trash`, `All`, `Flagged`, and `Important`. If an account omits `Folders`, its supervisor applies the post-binding default of one alias `inbox` mapped to the inbox role; explicit folder lists replace that default.
 

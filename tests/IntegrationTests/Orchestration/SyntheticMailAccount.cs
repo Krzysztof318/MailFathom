@@ -63,7 +63,15 @@ internal sealed class SyntheticMailAccount(
     /// reads a row, so a harness that answered nothing here would make a mailbox query return an empty window over mail
     /// the same run had just written — an arrangement failure that reads exactly like the query being wrong.
     /// </remarks>
-    public IReadOnlyList<MailAccountId> ServedAccountIds => [AccountId];
+    public IReadOnlyList<ServedMailAccount> ServedAccounts =>
+        [new(AccountId, MailAccountDisplayName.Create(OrchestrationContract.ServedMailAccountDisplayName), MailSynchronizationMode.Polling)];
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// On, because every orchestrated test arranges a deployment that synchronizes: the flag reports the operator's
+    /// switch and nothing in the suite exercises a deployment that turned it off.
+    /// </remarks>
+    public bool SynchronizationEnabled => true;
 
     /// <inheritdoc />
     /// <remarks>

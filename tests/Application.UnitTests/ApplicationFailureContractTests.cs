@@ -171,7 +171,7 @@ public sealed class ApplicationFailureContractTests
 
         // Assert
         Assert.Equal(MailFathomErrorCode.MailAccountNotAccessible, failure.ErrorCode);
-        Assert.Equal(accountId, failure.AccountId);
+        Assert.Equal(MailAccountSelector.For(accountId), failure.RequestedAccount);
         Assert.Contains("primary", failure.Message, StringComparison.Ordinal);
     }
 

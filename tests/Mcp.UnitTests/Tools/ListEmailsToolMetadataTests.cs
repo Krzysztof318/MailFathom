@@ -63,7 +63,7 @@ public sealed class ListEmailsToolMetadataTests
         // Arrange
         string[] expectedProperties =
         [
-            "accountIds",
+            "accounts",
             "folderAliases",
             "senderAddress",
             "recipientAddress",
@@ -165,13 +165,13 @@ public sealed class ListEmailsToolMetadataTests
         Assert.True(properties.TryGetProperty("folderFreshness", out _));
     }
 
-    /// <summary>The surface is the four read-only tools of this release, so a fifth arriving unnoticed is a change to the published contract.</summary>
+    /// <summary>The surface is the five read-only tools of this release, so a sixth arriving unnoticed is a change to the published contract.</summary>
     /// <remarks>
     /// Registration is not advertisement for one of them: <c>ask_mail</c> is registered by every deployment and listed
     /// only by one that can answer, which <see cref="AskMailAdvertisementTests" /> covers where that is decided.
     /// </remarks>
     [Fact]
-    public void AddMailFathomServer_RegistersTheListingTheContentTheSearchAndTheAnsweringTool()
+    public void AddMailFathomServer_RegistersTheAccountsTheListingTheContentTheSearchAndTheAnsweringTool()
     {
         // Arrange, Act
         var registeredNames = RegisteredMcpToolSurface
@@ -184,6 +184,7 @@ public sealed class ListEmailsToolMetadataTests
             [
                 AskMailTool.ToolName,
                 GetEmailContentTool.ToolName,
+                ListAccountsTool.ToolName,
                 ListEmailsTool.ToolName,
                 SearchEmailsTool.ToolName,
             ],

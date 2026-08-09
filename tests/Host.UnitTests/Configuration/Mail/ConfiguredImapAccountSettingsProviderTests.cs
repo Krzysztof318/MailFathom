@@ -112,6 +112,7 @@ public sealed class ConfiguredImapAccountSettingsProviderTests
             [
                 new MailSynchronizationAccountOptions
                 {
+                    DisplayName = "The configured mailbox",
                     AccountId = "primary",
                     Host = "imap.example.test",
                     UserName = "mailfathom@example.test",

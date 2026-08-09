@@ -73,7 +73,7 @@ public sealed class SearchEmailsToolTests
         // Act
         await tool.SearchEmailsAsync(
             Query,
-            accountIds: [ServedAccountId],
+            accounts: [ServedAccountId],
             folderAliases: ["archive"],
             senderAddress: "sender@example.test",
             recipientAddress: "recipient@example.test",
@@ -240,7 +240,7 @@ public sealed class SearchEmailsToolTests
         var failure = await Assert.ThrowsAsync<MailAccountNotAccessibleException>(
             () => tool.SearchEmailsAsync(
                 Query,
-                accountIds: [ServedAccountId, "someone-elses"],
+                accounts: [ServedAccountId, "someone-elses"],
                 cancellationToken: TestContext.Current.CancellationToken));
 
         // Assert
@@ -539,6 +539,7 @@ public sealed class SearchEmailsToolTests
                 freshness ?? new StubSynchronizationFreshnessReader(),
                 new MailboxScopeResolver(new StubMailAccountCatalog(ServedAccountId)),
                 bounds),
-            bounds);
+            bounds,
+            new StubMailAccountCatalog(ServedAccountId));
     }
 }

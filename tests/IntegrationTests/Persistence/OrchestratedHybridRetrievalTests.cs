@@ -10,6 +10,7 @@ using MailFathom.Application.Emails.SearchEmails;
 using MailFathom.Application.Persistence;
 using MailFathom.Application.Retrieval;
 using MailFathom.Application.Synchronization;
+using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Folders;
 using MailFathom.Infrastructure.Persistence;
@@ -168,7 +169,7 @@ public sealed class OrchestratedHybridRetrievalTests(MailFathomOrchestrationFixt
     private static SearchEmailsRequest SearchRequest() => new()
     {
         QueryText = QueryTerm,
-        AccountIds = [SyntheticMailAccount.AccountId],
+        Accounts = [MailAccountSelector.For(SyntheticMailAccount.AccountId)],
         FolderAliases = [MailFolderAlias.Create(FolderAlias)],
         ResultLimit = 10,
     };

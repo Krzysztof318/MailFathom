@@ -43,8 +43,9 @@ internal sealed record SearchEmailsToolResult
     /// <summary>Publishes a window the use case answered.</summary>
     /// <param name="result">The window to publish.</param>
     /// <param name="snippetBounds">How much of a message's body this deployment lets one result show.</param>
+    /// <param name="accountNames">Reads the name each named account is published under.</param>
     /// <returns>The wire representation of <paramref name="result" />.</returns>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="result" /> or <paramref name="snippetBounds" /> is <see langword="null" />.</exception>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="result" />, <paramref name="snippetBounds" />, or <paramref name="accountNames" /> is <see langword="null" />.</exception>
     /// <remarks>
     /// The window is bounded again here against the greatest number of results a search serves, for the reason each
     /// extract is: it is the control on how much mail content one call can draw out of a mailbox, and a control a
@@ -52,10 +53,14 @@ internal sealed record SearchEmailsToolResult
     /// request asked for, which stays the use case's to decide and to refuse.
     /// </remarks>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when the result reports a retrieval mode or a semantic capability this contract has no wire value for.</exception>
-    public static SearchEmailsToolResult From(SearchEmailsResult result, EmailSearchSnippetBounds snippetBounds)
+    public static SearchEmailsToolResult From(
+        SearchEmailsResult result,
+        EmailSearchSnippetBounds snippetBounds,
+        PublishedAccountNames accountNames)
     {
         ArgumentNullException.ThrowIfNull(result);
         ArgumentNullException.ThrowIfNull(snippetBounds);
+        ArgumentNullException.ThrowIfNull(accountNames);
 
         return new SearchEmailsToolResult
         {
@@ -63,11 +68,11 @@ internal sealed record SearchEmailsToolResult
             [
                 .. result.Matches
                     .Take(EmailSearchResultLimit.MaximumValue)
-                    .Select(match => SearchedEmailMatch.From(match, snippetBounds)),
+                    .Select(match => SearchedEmailMatch.From(match, snippetBounds, accountNames)),
             ],
             RetrievalMode = Published(result.RetrievalMode),
             SemanticSearch = Published(result.SemanticSearch),
-            FolderFreshness = [.. result.FolderFreshness.Select(FolderCopyFreshness.From)],
+            FolderFreshness = [.. result.FolderFreshness.Select(freshness => FolderCopyFreshness.From(freshness, accountNames))],
         };
     }
 

@@ -19,6 +19,7 @@ using MailFathom.Application.UnitTests.TestDoubles;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Failures;
+using MailFathom.TestSupport;
 using NSubstitute;
 using Xunit;
 
@@ -990,7 +991,7 @@ public sealed class EmailContentReaderTests
     private static IMailAccountCatalog CatalogServing(params MailAccountId[] servedAccountIds)
     {
         var catalog = Substitute.For<IMailAccountCatalog>();
-        catalog.ServedAccountIds.Returns([.. servedAccountIds]);
+        catalog.ServedAccounts.Returns([.. servedAccountIds.Select(SyntheticServedAccount.Of)]);
 
         return catalog;
     }

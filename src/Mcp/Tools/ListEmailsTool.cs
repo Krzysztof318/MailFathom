@@ -4,6 +4,7 @@
 
 using System.ComponentModel;
 using System.Diagnostics.CodeAnalysis;
+using MailFathom.Application.Accounts;
 using MailFathom.Application.Emails.ListEmails;
 using MailFathom.Application.Emails.Mailboxes;
 using MailFathom.Domain.Emails;
@@ -15,6 +16,7 @@ namespace MailFathom.Mcp.Tools;
 
 /// <summary>Publishes the <c>list_emails</c> tool over the <see cref="MailboxTimelineReader" /> use case.</summary>
 /// <param name="mailboxTimelineReader">Answers the listing from the local mailbox copy.</param>
+/// <param name="accountCatalog">Names the accounts a result publishes, which is the outward half of what the scope arguments do inward.</param>
 /// <remarks>
 /// <para>
 /// The tool translates and nothing more. It converts the caller's strings into the domain identities the request is
@@ -33,14 +35,16 @@ namespace MailFathom.Mcp.Tools;
 /// </remarks>
 [McpServerToolType]
 [SuppressMessage("Performance", "CA1812:Avoid uninstantiated internal classes", Justification = "The MCP server materializes this tool type per tool call.")]
-internal sealed class ListEmailsTool(MailboxTimelineReader mailboxTimelineReader)
+internal sealed class ListEmailsTool(
+    MailboxTimelineReader mailboxTimelineReader,
+    IMailAccountCatalog accountCatalog)
 {
     /// <summary>The name the tool is advertised and called under.</summary>
     /// <remarks>Snake case because it is the naming the Model Context Protocol tool ecosystem uses; the C# member naming stops at the boundary.</remarks>
     public const string ToolName = "list_emails";
 
     /// <summary>Lists a bounded page of summaries from the local mailbox copy.</summary>
-    /// <param name="accountIds">The accounts to read, or none to read every account this deployment serves.</param>
+    /// <param name="accounts">The accounts to read, named by identifier or display name, or none to read every account this deployment serves.</param>
     /// <param name="folderAliases">The folder aliases to read, or none to read every folder of those accounts.</param>
     /// <param name="senderAddress">The address the sender must carry.</param>
     /// <param name="recipientAddress">The address a <c>To</c> or <c>Cc</c> recipient must carry.</param>
@@ -54,7 +58,7 @@ internal sealed class ListEmailsTool(MailboxTimelineReader mailboxTimelineReader
     /// <param name="cursor">The cursor a previous page returned.</param>
     /// <param name="cancellationToken">Cancels the read when the caller disconnects or the host shuts down.</param>
     /// <returns>The page, with the cursor of the next one and how current each covered folder is.</returns>
-    /// <exception cref="MailboxQueryFilterInvalidException">Thrown when an account identifier or folder alias is not a value this system could have issued.</exception>
+    /// <exception cref="MailboxQueryFilterInvalidException">Thrown when text naming an account or a folder alias is not a value this system could have issued.</exception>
     /// <exception cref="MailFathomException">
     /// Raised by the use case for a filter, page size, account, or cursor it refuses. The call-tool filter turns every one
     /// of them into the coded result a client reads, so this tool neither catches nor re-describes any.
@@ -75,8 +79,8 @@ internal sealed class ListEmailsTool(MailboxTimelineReader mailboxTimelineReader
         + "summaries per call, with an opaque cursor for the next page and a per-folder statement of how current the "
         + "local copy is.")]
     public async Task<ListEmailsToolResult> ListEmailsAsync(
-        [Description("Configured MailFathom account identifiers to read. Omit to read every account this deployment serves. At most 64 may be named, and an identifier this deployment does not serve is refused rather than answered with an empty page.")]
-        string[]? accountIds = null,
+        [Description("MailFathom accounts to read, each named by its configured account identifier or by the display name it is published under. Omit to read every account this deployment serves; call list_accounts to see what they are. At most 64 may be named, and a name this deployment does not serve is refused rather than answered with an empty page.")]
+        string[]? accounts = null,
         [Description("MailFathom folder aliases to read, such as INBOX. Omit to read every folder of the accounts in scope. At most 64 may be named. An alias is MailFathom's own name for a folder and is matched without regard to case.")]
         string[]? folderAliases = null,
         [Description("Return only emails sent from this mail address. Matched as a whole address rather than as a fragment, without regard to case; a non-empty value that is not a usable mail address is refused. Omit to match any sender, which an empty string does too.")]
@@ -103,7 +107,7 @@ internal sealed class ListEmailsTool(MailboxTimelineReader mailboxTimelineReader
     {
         var request = new ListEmailsRequest
         {
-            AccountIds = MailboxScopeArguments.AccountIds(accountIds),
+            Accounts = MailboxScopeArguments.Accounts(accounts),
             FolderAliases = MailboxScopeArguments.FolderAliases(folderAliases),
             SenderAddress = senderAddress,
             RecipientAddress = recipientAddress,
@@ -119,7 +123,7 @@ internal sealed class ListEmailsTool(MailboxTimelineReader mailboxTimelineReader
 
         var result = await mailboxTimelineReader.ListEmailsAsync(request, cancellationToken);
 
-        return ListEmailsToolResult.From(result);
+        return ListEmailsToolResult.From(result, PublishedAccountNames.From(accountCatalog));
     }
 
     /// <summary>Reads the domain direction the protocol value names.</summary>

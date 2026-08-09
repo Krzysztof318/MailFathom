@@ -232,6 +232,7 @@ public sealed class MailAccountOAuthValidationTests
     private static MailSynchronizationAccountOptions CreatePasswordAuthenticatedAccount() => new()
     {
         AccountId = "primary",
+        DisplayName = "The primary mailbox",
         Host = "imap.example.test",
         UserName = "mailfathom@example.test",
         Secrets = new MailAccountSecretOptions

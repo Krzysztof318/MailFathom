@@ -4,6 +4,7 @@
 
 using MailFathom.Application.Accounts;
 using MailFathom.Domain.Accounts;
+using MailFathom.TestSupport;
 using NSubstitute;
 using Xunit;
 
@@ -50,7 +51,7 @@ public sealed class MailboxRefreshTokenRecorderTests
             () => recorder.RecordAsync(unknown, refreshToken, TestContext.Current.CancellationToken));
 
         // Assert
-        Assert.Equal(unknown, failure.AccountId);
+        Assert.Equal(MailAccountSelector.For(unknown), failure.RequestedAccount);
         await this.store.DidNotReceive().SaveTokenAsync(
             Arg.Any<MailAccountId>(),
             Arg.Any<MailboxRefreshToken>(),
@@ -105,7 +106,7 @@ public sealed class MailboxRefreshTokenRecorderTests
     private MailboxRefreshTokenRecorder RecorderServing(params MailAccountId[] servedAccountIds)
     {
         var catalog = Substitute.For<IMailAccountCatalog>();
-        catalog.ServedAccountIds.Returns(servedAccountIds);
+        catalog.ServedAccounts.Returns([.. servedAccountIds.Select(SyntheticServedAccount.Of)]);
 
         return new MailboxRefreshTokenRecorder(catalog, this.store);
     }

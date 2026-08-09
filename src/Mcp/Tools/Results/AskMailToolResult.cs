@@ -47,18 +47,23 @@ internal sealed record AskMailToolResult
     /// <summary>Publishes an answer the use case produced.</summary>
     /// <param name="result">The answer to publish.</param>
     /// <param name="answerBounds">How much of one run's outcome this deployment lets a single answer publish.</param>
+    /// <param name="accountNames">Reads the name each cited account is published under.</param>
     /// <returns>The wire representation of <paramref name="result" />.</returns>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="result" /> or <paramref name="answerBounds" /> is <see langword="null" />.</exception>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="result" />, <paramref name="answerBounds" />, or <paramref name="accountNames" /> is <see langword="null" />.</exception>
     /// <remarks>
     /// The citation count is bounded again here for the reason a search's window is: it is the control on how many of a
     /// mailbox's messages one call names, and a control a defective adapter could widen is not one. The answer's own
     /// length is not re-cut, because cutting it a second time would risk reporting a truncation the use case did not
     /// make; what this boundary republishes is the flag the use case set.
     /// </remarks>
-    public static AskMailToolResult From(AskMailResult result, MailAnswerBounds answerBounds)
+    public static AskMailToolResult From(
+        AskMailResult result,
+        MailAnswerBounds answerBounds,
+        PublishedAccountNames accountNames)
     {
         ArgumentNullException.ThrowIfNull(result);
         ArgumentNullException.ThrowIfNull(answerBounds);
+        ArgumentNullException.ThrowIfNull(accountNames);
 
         return new AskMailToolResult
         {
@@ -67,7 +72,7 @@ internal sealed record AskMailToolResult
             [
                 .. result.Citations
                     .Take(answerBounds.MaximumCitations)
-                    .Select(CitedEmail.From),
+                    .Select(citation => CitedEmail.From(citation, accountNames)),
             ],
             AnswerTruncated = result.AnswerWasTruncated,
             CitationsTruncated = result.CitationsWereTruncated

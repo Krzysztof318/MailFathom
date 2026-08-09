@@ -99,7 +99,7 @@ public sealed class MailboxTimelineReader
 
     /// <summary>Validates the request's filters and restricts the query to the accounts this deployment serves.</summary>
     private EmailTimelineFilter ReadableFilter(ListEmailsRequest request) => EmailTimelineFilter.Create(
-        this.scopeResolver.ReadableScope(request.AccountIds, request.FolderAliases),
+        this.scopeResolver.ReadableScope(request.Accounts, request.FolderAliases),
         request.SenderAddress,
         request.RecipientAddress,
         request.SubjectFragment,

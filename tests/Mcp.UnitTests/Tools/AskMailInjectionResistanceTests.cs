@@ -82,7 +82,7 @@ public sealed class AskMailInjectionResistanceTests
         // Act
         await tool.AskMailAsync(
             demand,
-            accountIds: [AnsweringDeployment.ServedAccountId],
+            accounts: [AnsweringDeployment.ServedAccountId],
             folderAliases: ["inbox"],
             cancellationToken: TestContext.Current.CancellationToken);
 
@@ -172,7 +172,10 @@ public sealed class AskMailInjectionResistanceTests
     }
 
     private static AskMailTool ToolOver(StubMailQuestionAnswerer answerer) =>
-        new(AnsweringDeployment.QuestionReader(answerer), MailAnswerBounds.Default);
+        new(
+            AnsweringDeployment.QuestionReader(answerer),
+            MailAnswerBounds.Default,
+            AnsweringDeployment.AccountCatalog());
 
     private static EmailKnowledgePassage PassageOf(int position) => new()
     {
