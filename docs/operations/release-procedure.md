@@ -289,9 +289,11 @@ microsoft/winget-pkgs also asks a contributor to have signed Microsoft's open-so
 That is a one-time act by the account the token belongs to, and it says nothing about this repository's own position:
 MailFathom asks for no contributor agreement, and this is somebody else's repository under somebody else's rules.
 
-Until the first submission is accepted, `winget install MailFathom.mfctl` finds nothing. The sentence saying so in
-[administering a deployment](admin-endpoint.md#getting-the-command) is removed by the release that sees the first
-manifest merged, and checking it is part of that release rather than of the next change to this page.
+Until a submission is accepted, `winget install MailFathom.mfctl` finds nothing.
+[Administering a deployment](admin-endpoint.md#on-windows-through-winget) states that as a condition rather than as a
+claim about what winget carries today, and sends a reader to `winget search MailFathom.mfctl` for the current answer.
+So no release owes that page an edit when a manifest first merges, and none owes it one when the review falls behind a
+release either.
 
 ### When one registry published and the other did not
 
