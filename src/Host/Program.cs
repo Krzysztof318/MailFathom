@@ -295,6 +295,8 @@ try
         {
             MaxBodyCharacters = contentSettings.MaxBodyCharacters,
             MaxCharactersPerRead = contentSettings.MaxCharactersPerRead,
+            MaxAttachmentBytes = contentSettings.MaxAttachmentBytes,
+            MaxAttachmentBytesPerRead = contentSettings.MaxAttachmentBytesPerRead,
         };
     });
     builder.Services.AddScoped(provider =>

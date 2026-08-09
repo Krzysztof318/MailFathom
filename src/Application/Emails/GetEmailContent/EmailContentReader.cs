@@ -28,10 +28,11 @@ namespace MailFathom.Application.Emails.GetEmailContent;
 /// before anything is read.
 /// </para>
 /// <para>
-/// Two bounds stand between a caller and a mailbox, and both are the deployment's rather than the request's. Each body
-/// representation is bounded on its own, and the call as a whole has a character budget spent in the order the emails
-/// were named. Every representation states which of the two cut it, so a caller can tell a message worth reading alone
-/// from a batch worth splitting.
+/// Four bounds stand between a caller and a mailbox, and every one of them is the deployment's rather than the
+/// request's. Each body representation is bounded on its own and the call as a whole has a character budget; each
+/// attachment's content is bounded on its own and the call as a whole has an octet budget. Both budgets are spent in
+/// the order the emails were named, and everything they cut says which bound cut it, so a caller can tell a message
+/// worth reading alone from a batch worth splitting.
 /// </para>
 /// <para>
 /// It reaches no mail server. That is the acceptance criterion this operation exists under rather than a property it
@@ -52,10 +53,10 @@ public sealed class EmailContentReader
     /// <summary>Initializes the use case.</summary>
     /// <param name="summaryReader">Reads one stored email's summary by its identity.</param>
     /// <param name="contentStore">Reads the raw MIME stored for an email, with what was recorded about it.</param>
-    /// <param name="renderer">Turns stored raw MIME into headers, a body, and attachment metadata.</param>
+    /// <param name="renderer">Turns stored raw MIME into headers, a body, and the attachments the bounds allow.</param>
     /// <param name="repairRequestStore">Records durably that a local copy has to be fetched or read again.</param>
     /// <param name="accountCatalog">Answers which accounts this deployment serves.</param>
-    /// <param name="readOptions">The bounds on how much body text one call returns.</param>
+    /// <param name="readOptions">The bounds on how much body text and attachment content one call returns.</param>
     /// <exception cref="ArgumentNullException">Thrown when any argument is <see langword="null" />.</exception>
     public EmailContentReader(
         IStoredEmailSummaryReader summaryReader,
@@ -91,9 +92,9 @@ public sealed class EmailContentReader
     /// repair request a damaged local copy produces, which is idempotent per email for exactly that reason.
     /// </para>
     /// <para>
-    /// The emails are read one after another rather than concurrently, because the character budget is carried from one
-    /// to the next: what an email is allowed to return depends on what the emails before it returned, and that is what
-    /// makes the bound on a whole call exact rather than approximate.
+    /// The emails are read one after another rather than concurrently, because both budgets are carried from one to the
+    /// next: what an email is allowed to return depends on what the emails before it returned, and that is what makes
+    /// the bounds on a whole call exact rather than approximate.
     /// </para>
     /// </remarks>
     public async Task<GetEmailContentResult> ReadContentAsync(
@@ -104,12 +105,19 @@ public sealed class EmailContentReader
 
         var outcomes = new List<EmailContentReadOutcome>(request.StoredEmailIds.Count);
         var remainingCharacters = this.readOptions.MaxCharactersPerRead;
+        var remainingAttachmentOctets = this.readOptions.MaxAttachmentBytesPerRead;
 
         foreach (var storedEmailId in request.StoredEmailIds)
         {
-            var outcome = await this.ReadOneAsync(storedEmailId, request, remainingCharacters, cancellationToken);
+            var outcome = await this.ReadOneAsync(
+                storedEmailId,
+                request,
+                remainingCharacters,
+                remainingAttachmentOctets,
+                cancellationToken);
 
             remainingCharacters -= CharactersReturnedBy(outcome);
+            remainingAttachmentOctets -= AttachmentOctetsReturnedBy(outcome);
             outcomes.Add(outcome);
         }
 
@@ -121,6 +129,7 @@ public sealed class EmailContentReader
         StoredEmailId storedEmailId,
         GetEmailContentRequest request,
         int remainingCharacters,
+        int remainingAttachmentOctets,
         CancellationToken cancellationToken)
     {
         var summary = await this.summaryReader.FindAsync(storedEmailId, cancellationToken);
@@ -156,7 +165,8 @@ public sealed class EmailContentReader
             new EmailContentRenderingBounds(
                 request.IncludeSanitizedHtml,
                 this.readOptions.MaxBodyCharacters,
-                remainingCharacters),
+                remainingCharacters,
+                this.AttachmentContentBoundsFor(request, remainingAttachmentOctets)),
             cancellationToken);
 
         return rendering.Rendering is { } rendered
@@ -173,6 +183,29 @@ public sealed class EmailContentReader
     private static int CharactersReturnedBy(EmailContentReadOutcome outcome) =>
         outcome.Content is { } content
             ? content.Body.PlainText.Text.Length + (content.Body.SanitizedHtml?.Text.Length ?? 0)
+            : 0;
+
+    /// <summary>States how much attachment content this email may return, or that it may return none.</summary>
+    /// <remarks>
+    /// The bounds are absent when the request did not ask to describe the attachments, which is what keeps a read of
+    /// bodies from decoding files nobody asked about. The same argument asks for both the descriptions and the octets,
+    /// because a caller that wants a file has to be told what the file is to make anything of it.
+    /// </remarks>
+    private EmailAttachmentContentBounds? AttachmentContentBoundsFor(
+        GetEmailContentRequest request,
+        int remainingAttachmentOctets) =>
+        request.IncludeAttachmentDetails
+            ? new EmailAttachmentContentBounds(this.readOptions.MaxAttachmentBytes, remainingAttachmentOctets)
+            : null;
+
+    /// <summary>Counts what one outcome drew from the read's attachment budget.</summary>
+    /// <remarks>
+    /// Only content that was actually returned is counted. An attachment a bound withheld cost the caller nothing, so
+    /// charging the budget for it would withhold the next attachment on the strength of one that was never sent.
+    /// </remarks>
+    private static int AttachmentOctetsReturnedBy(EmailContentReadOutcome outcome) =>
+        outcome.Content?.Attachments is { } attachments
+            ? attachments.Sum(attachment => attachment.Content.Octets.Length)
             : 0;
 
     /// <summary>Records the defect durably and produces the outcome to report for it.</summary>
@@ -200,8 +233,10 @@ public sealed class EmailContentReader
     /// wrong in the one direction a caller cannot check.
     /// <para>
     /// The counts are published whether or not the caller asked to describe the attachments, because how many a message
-    /// carries is what tells a caller that asking again would describe something. Only the names, media types, and sizes
-    /// are withheld.
+    /// carries is what tells a caller that asking again would describe something. The names, media types, sizes, and
+    /// content are what the request decides, and the request is read again here rather than inferred from what the
+    /// rendering returned: withholding them is this use case's guarantee, and one an adapter cannot be trusted to keep
+    /// on its behalf.
     /// </para>
     /// </remarks>
     private static ReadEmailContent ContentFrom(
@@ -219,8 +254,8 @@ public sealed class EmailContentReader
             Body = rendering.BodyIsEncrypted
                 ? EmailContentBody.EncryptedNotReadableLocally
                 : EmailContentBody.Readable(rendering.PlainTextBody, rendering.SanitizedHtmlBody),
-            AttachmentSummary = SummaryOf(rendering.Attachments),
-            Attachments = request.IncludeAttachmentDetails ? rendering.Attachments.Attachments : null,
+            AttachmentSummary = SummaryOf(rendering.AttachmentSummary),
+            Attachments = request.IncludeAttachmentDetails ? rendering.Attachments : null,
             RemoteFlags = summary.RemoteFlags,
         };
     }

@@ -11,7 +11,11 @@ namespace MailFathom.Application.EmailContent.Rendering;
 /// <param name="PlainTextBody">The body as a reader would see it, already bounded and carrying its truncation metadata.</param>
 /// <param name="SanitizedHtmlBody">The sanitized HTML body, present only when it was asked for and the message actually has an HTML body part.</param>
 /// <param name="BodyIsEncrypted">Whether the message's own body arrived inside a cryptographic envelope and could not be read here.</param>
-/// <param name="Attachments">What the message carries besides its body, with one entry per attachment and no bytes.</param>
+/// <param name="AttachmentSummary">What the message carries besides its body, counted whether or not anything asked to describe it.</param>
+/// <param name="Attachments">
+/// One entry per attachment, each pairing the description with the octets the bounds allowed, or <see langword="null" />
+/// when the bounds asked for no attachment content.
+/// </param>
 /// <remarks>
 /// <para>
 /// One rendering answers every question this read asks, because they are all answers about the same parse. Producing
@@ -34,4 +38,5 @@ public sealed record EmailContentRendering(
     EmailBodyRepresentation PlainTextBody,
     EmailBodyRepresentation? SanitizedHtmlBody,
     bool BodyIsEncrypted,
-    EmailAttachmentSummary Attachments);
+    EmailAttachmentSummary AttachmentSummary,
+    IReadOnlyList<RenderedEmailAttachment>? Attachments);

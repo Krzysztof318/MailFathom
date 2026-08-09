@@ -49,7 +49,7 @@ What an agent gets is four tools, and they are the whole surface:
 | --- | --- |
 | `list_emails` | A page of the timeline, newest first, filtered by account, folder, sender, recipient, subject, date range, seen state, or attachment presence |
 | `search_emails` | Ranked matches for a text query across subjects, participants, and body text, each with short extracts around what matched — ranked lexically, and by embedding similarity beside it once an embedding model is configured |
-| `get_email_content` | Up to ten messages in full: normalized headers, plain-text body, optionally sanitized HTML, and attachment names, types, and sizes — never attachment bytes |
+| `get_email_content` | Up to ten messages in full: normalized headers, plain-text body, optionally sanitized HTML, and — on request — each attachment with its name, type, size, and content as base64 |
 | `ask_mail` | A question answered from the mail a chat model looks up while answering, citing the identifiers of every message it drew on so each claim can be read for yourself |
 
 The first three are always there. `ask_mail` needs a chat model and an embedding model you configure and point at, so a deployment with neither does not advertise it at all rather than offering a tool that would fail on first use.
@@ -92,7 +92,7 @@ MailFathom is built as an enterprise-grade system from the first line, even whil
 
 - The MCP surface is four tools — `list_emails`, `get_email_content`, `search_emails`, `ask_mail` — and that is all of it. There is no write tool to enable.
 - Synchronization is incapable of marking remote mail as read.
-- Attachment bytes are never returned; a content read reports names, types, and sizes.
+- Attachment content is returned only where a call asks for the attachments by name, under a per-attachment limit and a per-call byte budget the operator sets, and a file is returned whole or not at all.
 
 → [MCP tools](https://krzysztof318.github.io/MailFathom/features/mcp-tools.html)
 

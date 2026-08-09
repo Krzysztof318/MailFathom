@@ -8,7 +8,7 @@ using Xunit;
 
 namespace MailFathom.Host.UnitTests.Configuration.Persistence;
 
-/// <summary>Covers the two bounds a deployment may configure on what one read of message bodies returns.</summary>
+/// <summary>Covers the four bounds a deployment may configure on what one read of message content returns.</summary>
 public sealed class EmailContentOptionsTests
 {
     /// <summary>A deployment that configures nothing reads mail under bounds rather than under none.</summary>
@@ -125,6 +125,103 @@ public sealed class EmailContentOptionsTests
         {
             MaxBodyCharacters = 100_000,
             MaxCharactersPerRead = 200_000,
+        };
+
+        // Act
+        var results = Validate(options);
+
+        // Assert
+        Assert.Empty(results);
+    }
+
+    /// <summary>The attachment bounds have defaults of their own, so a deployment that configures nothing still has them.</summary>
+    [Fact]
+    public void Validate_UnconfiguredDeployment_AcceptsTheDefaultAttachmentBounds()
+    {
+        // Arrange
+        var options = new EmailContentOptions();
+
+        // Act
+        var results = Validate(options);
+
+        // Assert
+        Assert.Empty(results);
+        Assert.Equal(5 * 1024 * 1024, options.MaxAttachmentBytes);
+        Assert.Equal(10 * 1024 * 1024, options.MaxAttachmentBytesPerRead);
+    }
+
+    /// <summary>An attachment cannot be larger than the message carrying it, and a negative bound is nothing at all.</summary>
+    [Theory]
+    [InlineData(-1)]
+    [InlineData((25 * 1024 * 1024) + 1)]
+    public void Validate_AttachmentBoundOutsideTheAcceptedRange_FailsStartup(int maxAttachmentBytes)
+    {
+        // Arrange
+        var options = new EmailContentOptions
+        {
+            MaxAttachmentBytes = maxAttachmentBytes,
+            MaxAttachmentBytesPerRead = 100 * 1024 * 1024,
+        };
+
+        // Act
+        var results = Validate(options);
+
+        // Assert
+        Assert.Contains(
+            results,
+            result => result.MemberNames.Contains(nameof(EmailContentOptions.MaxAttachmentBytes)));
+    }
+
+    /// <summary>Zero is how a deployment says attachments are described and never handed over, so it is a setting rather than a defect.</summary>
+    [Fact]
+    public void Validate_AttachmentBoundsOfZero_AreAccepted()
+    {
+        // Arrange
+        var options = new EmailContentOptions
+        {
+            MaxAttachmentBytes = 0,
+            MaxAttachmentBytesPerRead = 0,
+        };
+
+        // Act
+        var results = Validate(options);
+
+        // Assert
+        Assert.Empty(results);
+    }
+
+    /// <summary>
+    /// A budget that cannot carry one permitted attachment would withhold a file the other bound was set to allow, in
+    /// every call including one naming a single email.
+    /// </summary>
+    [Fact]
+    public void Validate_AttachmentBudgetBelowThePerAttachmentBound_FailsStartup()
+    {
+        // Arrange
+        var options = new EmailContentOptions
+        {
+            MaxAttachmentBytes = 5 * 1024 * 1024,
+            MaxAttachmentBytesPerRead = (5 * 1024 * 1024) - 1,
+        };
+
+        // Act
+        var results = Validate(options);
+
+        // Assert
+        var result = Assert.Single(results);
+        Assert.Equal([nameof(EmailContentOptions.MaxAttachmentBytesPerRead)], result.MemberNames);
+        Assert.Contains("5242880", result.ErrorMessage, StringComparison.Ordinal);
+    }
+
+    /// <summary>A budget of exactly one permitted attachment serves a one-email call in full, so it is accepted.</summary>
+    [Fact]
+    public void Validate_AttachmentBudgetOfExactlyThePerAttachmentBound_IsAccepted()
+    {
+        // Arrange
+        var options = new EmailContentOptions
+        {
+            MaxAttachmentBytes = 5 * 1024 * 1024,
+            MaxAttachmentBytesPerRead = 5 * 1024 * 1024,
         };
 
         // Act

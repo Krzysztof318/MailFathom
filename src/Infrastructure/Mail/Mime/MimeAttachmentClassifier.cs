@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.Text.RegularExpressions;
+using MailFathom.Application.EmailContent.Rendering;
 using MailFathom.Application.Emails.Extraction;
 using MailFathom.Application.Emails.Summaries;
 using MailFathom.Domain.Emails;
@@ -41,6 +42,7 @@ internal sealed partial class MimeAttachmentClassifier
 
     private readonly List<MimeEntity> bodyBranchLeaves = [];
     private readonly List<MimeEntity> unclassifiedEntities = [];
+    private int inlineResourceCount;
     private bool isEncrypted;
     private bool bodyBranchIsEncrypted;
     private bool carriesUnverifiedSignature;
@@ -48,15 +50,22 @@ internal sealed partial class MimeAttachmentClassifier
 
     /// <summary>Classifies one message's parts, measures the attachments among them, and names its body text parts.</summary>
     /// <param name="message">The parsed message.</param>
+    /// <param name="attachmentContent">How much attachment content to retain, or <see langword="null" /> to retain none.</param>
     /// <param name="cancellationToken">Cancels the measurement.</param>
     /// <returns>What the message carries besides its body, together with the textual parts that are its body.</returns>
-    public static async Task<MimeContentClassification> ClassifyAsync(MimeMessage message, CancellationToken cancellationToken)
+    public static async Task<MimeContentClassification> ClassifyAsync(
+        MimeMessage message,
+        EmailAttachmentContentBounds? attachmentContent,
+        CancellationToken cancellationToken)
     {
         var classifier = new MimeAttachmentClassifier();
         classifier.WalkEntity(message.Body, isInBodyBranch: true);
 
+        var attachments = await classifier.ReadAttachmentsAsync(attachmentContent, cancellationToken);
+
         return new MimeContentClassification(
-            await classifier.SummarizeAsync(cancellationToken),
+            classifier.Summarize(attachments),
+            attachmentContent is null ? null : attachments,
             [.. classifier.bodyBranchLeaves.OfType<TextPart>()],
             classifier.bodyBranchIsEncrypted);
     }
@@ -267,17 +276,24 @@ internal sealed partial class MimeAttachmentClassifier
             ?? multipart.FirstOrDefault();
     }
 
-    private async Task<EmailAttachmentSummary> SummarizeAsync(CancellationToken cancellationToken)
+    /// <summary>Reads every part the rules left as an attachment, in the order the message's structure was walked.</summary>
+    /// <remarks>
+    /// The read's octet budget is spent here rather than by the caller, because it falls to the attachments of one
+    /// message in the order they are reached: only the walk knows what an earlier part of the same message retained.
+    /// </remarks>
+    private async Task<IReadOnlyList<RenderedEmailAttachment>> ReadAttachmentsAsync(
+        EmailAttachmentContentBounds? attachmentContent,
+        CancellationToken cancellationToken)
     {
         var embeddedContentIds = this.FindContentIdsTheHtmlBodyReferences();
-        var attachments = new List<ExtractedEmailAttachment>();
-        var inlineResourceCount = 0;
+        var attachments = new List<RenderedEmailAttachment>();
+        var remainingOctetsForRead = attachmentContent?.RemainingOctetsForRead ?? 0;
 
         foreach (var entity in this.unclassifiedEntities)
         {
             if (IsEmbeddedResource(entity, embeddedContentIds))
             {
-                inlineResourceCount++;
+                this.inlineResourceCount++;
 
                 continue;
             }
@@ -287,16 +303,27 @@ internal sealed partial class MimeAttachmentClassifier
                 this.containsUnexpandedTnefPart = true;
             }
 
-            attachments.Add(await DescribeAttachmentAsync(entity, cancellationToken));
+            var attachment = await ReadAttachmentAsync(
+                entity,
+                attachmentContent is null
+                    ? null
+                    : EmailAttachmentContentAllowance.Of(attachmentContent.MaxOctetsPerAttachment, remainingOctetsForRead),
+                cancellationToken);
+
+            remainingOctetsForRead -= attachment.Content.Octets.Length;
+            attachments.Add(attachment);
         }
 
-        return EmailAttachmentSummary.Create(
-            attachments,
-            inlineResourceCount,
+        return attachments;
+    }
+
+    private EmailAttachmentSummary Summarize(IReadOnlyList<RenderedEmailAttachment> attachments) =>
+        EmailAttachmentSummary.Create(
+            attachments.Select(attachment => attachment.Description),
+            this.inlineResourceCount,
             this.isEncrypted,
             this.carriesUnverifiedSignature,
             this.containsUnexpandedTnefPart);
-    }
 
     /// <summary>Collects the identifiers an HTML body embeds, which is what makes a part a resource rather than a file.</summary>
     private HashSet<string> FindContentIdsTheHtmlBodyReferences()
@@ -377,18 +404,46 @@ internal sealed partial class MimeAttachmentClassifier
         return contentId is not null && embeddedContentIds.Contains(contentId);
     }
 
-    private static async Task<ExtractedEmailAttachment> DescribeAttachmentAsync(
+    /// <summary>Describes one attachment and, where an allowance permits it, keeps the octets it decoded to.</summary>
+    /// <remarks>
+    /// The size is measured for every attachment and the content is kept for those that fit, both from the single pass
+    /// this method makes over the part. A part above its allowance is described exactly as it would be otherwise and
+    /// carries nothing, because a partially returned file is worse than an absent one.
+    /// </remarks>
+    private static async Task<RenderedEmailAttachment> ReadAttachmentAsync(
         MimeEntity entity,
+        EmailAttachmentContentAllowance? allowance,
         CancellationToken cancellationToken)
     {
         var fileName = AttachmentFileName.TryNormalize(ReadDeclaredFileName(entity), out var normalizedFileName)
             ? normalizedFileName
             : (AttachmentFileName?)null;
 
-        return new ExtractedEmailAttachment(
+        await using var measured = new DecodedAttachmentContentStream(allowance?.MaxOctets ?? 0);
+
+        await DecodeToAsync(entity, measured, cancellationToken);
+
+        var description = new ExtractedEmailAttachment(
             fileName,
             entity.ContentType.MimeType,
-            await MeasureDecodedOctetsAsync(entity, cancellationToken));
+            measured.WrittenOctets);
+
+        return new RenderedEmailAttachment(description, ContentOf(measured, allowance));
+    }
+
+    /// <summary>Decides whether the octets a part decoded to may be returned, and names the bound when they may not.</summary>
+    private static EmailAttachmentContent ContentOf(
+        DecodedAttachmentContentStream measured,
+        EmailAttachmentContentAllowance? allowance)
+    {
+        if (allowance is not { } permitted)
+        {
+            return EmailAttachmentContent.NotRequested;
+        }
+
+        return measured.WrittenOctets > permitted.MaxOctets
+            ? EmailAttachmentContent.Withheld(permitted.AvailabilityWhenExceeded)
+            : EmailAttachmentContent.Returned(measured.TakeRetainedOctets());
     }
 
     /// <summary>Reads the name the message declared, already decoded from its RFC 2047 or RFC 2231 form.</summary>
@@ -398,26 +453,29 @@ internal sealed partial class MimeAttachmentClassifier
         _ => entity.ContentDisposition?.FileName ?? entity.ContentType.Name,
     };
 
-    /// <summary>Measures a part by streaming it through a counter, so no attachment content is ever retained.</summary>
-    private static async Task<long> MeasureDecodedOctetsAsync(MimeEntity entity, CancellationToken cancellationToken)
+    /// <summary>Streams a part's decoded octets into the stream that measures them, and keeps none of them here.</summary>
+    /// <remarks>
+    /// A part shaped like neither of the two cases decodes to nothing, which is a measurement rather than a failure: an
+    /// empty multipart left unclassified carries no octets of its own.
+    /// </remarks>
+    private static async Task DecodeToAsync(
+        MimeEntity entity,
+        DecodedAttachmentContentStream measured,
+        CancellationToken cancellationToken)
     {
-        await using var counter = new DecodedOctetCountingStream();
-
         switch (entity)
         {
             case MimePart { Content: { } content }:
-                await content.DecodeToAsync(counter, cancellationToken);
+                await content.DecodeToAsync(measured, cancellationToken);
                 break;
 
             case MessagePart { Message: { } nestedMessage }:
-                await nestedMessage.WriteToAsync(counter, cancellationToken);
+                await nestedMessage.WriteToAsync(measured, cancellationToken);
                 break;
 
             default:
-                return 0;
+                break;
         }
-
-        return counter.WrittenOctets;
     }
 
     /// <summary>Turns a <c>cid:</c> URL body back into the identifier a <c>Content-ID</c> header carries.</summary>

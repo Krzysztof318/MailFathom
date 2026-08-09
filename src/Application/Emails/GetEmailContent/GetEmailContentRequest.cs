@@ -56,10 +56,17 @@ public sealed record GetEmailContentRequest
     /// </remarks>
     public bool IncludeSanitizedHtml { get; }
 
-    /// <summary>Gets whether to also describe each attachment rather than only count them.</summary>
+    /// <summary>Gets whether to also return each attachment, with its content, rather than only count them.</summary>
     /// <remarks>
-    /// Opt-in because a file name is sender-chosen mail content that a read of the body never asked for. What is
-    /// withheld is a description, never a count: how many attachments an email carries is answered either way.
+    /// <para>
+    /// Opt-in because a file name is sender-chosen mail content that a read of the body never asked for, and the file
+    /// itself all the more so. What is withheld is the description and the content, never a count: how many
+    /// attachments an email carries is answered either way.
+    /// </para>
+    /// <para>
+    /// One flag rather than two, because a caller that wants a file has to be told what the file is to make anything
+    /// of it, and a caller that wants only the names is served by the counts it already receives.
+    /// </para>
     /// </remarks>
     public bool IncludeAttachmentDetails { get; }
 

@@ -115,7 +115,13 @@ internal sealed class MimeKitEmailMimeReader : IEmailMimeReader
         MimeMessage message,
         CancellationToken cancellationToken)
     {
-        var classification = await MimeAttachmentClassifier.ClassifyAsync(message, cancellationToken);
+        // Extraction fills the lexical index and never publishes a part's octets, so it asks for none: the walk then
+        // measures every attachment and retains nothing of any of them.
+        var classification = await MimeAttachmentClassifier.ClassifyAsync(
+            message,
+            attachmentContent: null,
+            cancellationToken);
+
         var headers = MimeMessageHeaderReader.Read(message);
 
         return new ExtractedEmailMetadata(
@@ -125,7 +131,7 @@ internal sealed class MimeKitEmailMimeReader : IEmailMimeReader
             headers.ReceivedAt,
             headers.Participants,
             headers.ThreadReferences,
-            classification.Attachments,
+            classification.Summary,
             EmailBodyTextExtractor.Extract(classification, this.options.MaxExtractedTextCharacters));
     }
 }

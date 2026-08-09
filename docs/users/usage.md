@@ -76,14 +76,14 @@ second page could silently skip or repeat matches; ask a narrower question inste
 
 Takes the `storedEmailId` values a listing or search returned — at most ten, each named once — and returns, for each
 one, normalized headers, the plain-text body, optionally a sanitized HTML body, and how many attachments it carries.
-Set `includeAttachmentDetails` to also receive each attachment's name, type, and size — **never bytes**. Attachment
-download is out of scope for the first release.
+Set `includeAttachmentDetails` to also receive each attachment's name, type, size, and **its content as base64** — the
+one place a file leaves the server. Expect a much larger response for a message that carries any.
 
 Reading the top few results of a search is therefore one call rather than one per message. The entries come back in the
 order you named them, and each carries either `content` or a `failure` saying why there is none, so one message this
 deployment cannot serve does not discard the others.
 
-Five parts of the result exist so that an agent does not misreport a message:
+Six parts of the result exist so that an agent does not misreport a message:
 
 - **Truncation is explicit, and says which limit cut.** Each body representation carries `truncatedBy` and the original
   character count, so a cut message is never summarized as a whole one. `bodyCharacterLimit` means the message is longer
@@ -92,9 +92,14 @@ Five parts of the result exist so that an agent does not misreport a message:
 - **An absent body has a reason.** `availability` distinguishes a message that displayed nothing from one MailFathom
   cannot decrypt, from one whose content the size limit deliberately kept out of storage, and from one that is simply
   waiting for storage room — which is the one case where asking again later returns the body.
-- **Attachments are counted always, named on request.** `attachmentCounts` says how many there are whatever you asked
-  for; `attachments` is `null` when you did not ask and `[]` when the message carries none. A file name is text the
-  sender chose, so an ordinary read of a body does not publish it.
+- **Attachments are counted always, returned on request.** `attachmentCounts` says how many there are whatever you
+  asked for; `attachments` is `null` when you did not ask and `[]` when the message carries none. A file name is text
+  the sender chose and the file is the message's most sensitive part, so an ordinary read of a body publishes neither.
+- **A file comes back whole or not at all.** `contentState` is `returned` when `contentBase64` holds the entire file,
+  `exceededAttachmentByteLimit` when the file is larger than the server hands over in one attachment, and
+  `readByteBudgetExhausted` when the files returned before it used up the call's shared byte budget — the one case
+  where naming this message on its own returns the file. Nothing is ever returned in part, so what you decode is either
+  the file or nothing. The server's operator sets both limits.
 - **File names are sanitized.** An attachment name is untrusted text from the message; what is published is a bare,
   normalized name, with a flag saying whether it had to be rewritten.
 - **A too-long or repetitive list is refused, not trimmed.** More than ten identifiers, none at all, or the same one

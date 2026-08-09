@@ -277,7 +277,7 @@ public sealed class MimeKitEmailContentRendererTests
         Assert.Equal("The readable alternative.", rendering.PlainTextBody.Text);
 
         // The summary still records that the message carries encrypted content, which is a different question.
-        Assert.True(rendering.Attachments.IsEncrypted);
+        Assert.True(rendering.AttachmentSummary.IsEncrypted);
     }
 
     /// <summary>
@@ -400,10 +400,140 @@ public sealed class MimeKitEmailContentRendererTests
         // Assert
         Assert.True(rendering.BodyIsEncrypted);
         Assert.Equal(string.Empty, rendering.PlainTextBody.Text);
-        Assert.True(rendering.Attachments.IsEncrypted);
+        Assert.True(rendering.AttachmentSummary.IsEncrypted);
     }
 
-    /// <summary>The per-attachment list is what the same parse found, with names normalized and no bytes.</summary>
+    /// <summary>
+    /// The octets a caller receives are what the transfer encoding decoded to, which is the whole point of returning
+    /// them: a caller handed the encoded form would be handed the message's storage rather than the file.
+    /// </summary>
+    [Fact]
+    public async Task RenderAsync_AttachmentContentAskedForAndWithinTheBounds_ReturnsTheDecodedOctets()
+    {
+        // Act
+        var rendering = await RenderAsync(
+            MessageAttaching("pdf-bytes"),
+            attachmentContent: new EmailAttachmentContentBounds(MaxOctetsPerAttachment: 1024, RemainingOctetsForRead: 1024));
+
+        // Assert
+        var attachment = Assert.Single(rendering.Attachments ?? []);
+        Assert.Equal(EmailAttachmentContentAvailability.Returned, attachment.Content.Availability);
+        Assert.Equal("pdf-bytes"u8.ToArray(), attachment.Content.Octets.ToArray());
+        Assert.Equal("pdf-bytes".Length, attachment.Description.DecodedSizeOctets);
+    }
+
+    /// <summary>A read that asked for no attachment content publishes no attachment list, so nothing can hold octets.</summary>
+    [Fact]
+    public async Task RenderAsync_AttachmentContentNotAskedFor_MeasuresTheAttachmentAndPublishesNoList()
+    {
+        // Act
+        var rendering = await RenderAsync(MessageAttaching("pdf-bytes"));
+
+        // Assert
+        Assert.Null(rendering.Attachments);
+        Assert.Equal("pdf-bytes".Length, Assert.Single(rendering.AttachmentSummary.Attachments).DecodedSizeOctets);
+    }
+
+    /// <summary>
+    /// A file above either bound is measured, described, and released rather than returned in part. The size is still
+    /// what the message holds, because that is what tells a caller what it did not receive.
+    /// </summary>
+    [Theory]
+    [InlineData(4, 1024, nameof(EmailAttachmentContentAvailability.ExceededAttachmentByteLimit))]
+    [InlineData(1024, 4, nameof(EmailAttachmentContentAvailability.ReadByteBudgetExhausted))]
+    public async Task RenderAsync_AttachmentAboveOneOfTheOctetBounds_ReturnsNoContentAndNamesThatBound(
+        int maxOctetsPerAttachment,
+        int remainingOctetsForRead,
+        string expectedAvailability)
+    {
+        // Act
+        var rendering = await RenderAsync(
+            MessageAttaching("pdf-bytes"),
+            attachmentContent: new EmailAttachmentContentBounds(maxOctetsPerAttachment, remainingOctetsForRead));
+
+        // Assert
+        var attachment = Assert.Single(rendering.Attachments ?? []);
+        Assert.Equal(expectedAvailability, attachment.Content.Availability.ToString());
+        Assert.True(attachment.Content.Octets.IsEmpty);
+        Assert.Equal("pdf-bytes".Length, attachment.Description.DecodedSizeOctets);
+    }
+
+    /// <summary>
+    /// The budget falls to the attachments of one message in the order they were walked, so a message whose first file
+    /// spends it leaves the second described and empty rather than shortening either of them.
+    /// </summary>
+    [Fact]
+    public async Task RenderAsync_SecondAttachmentReachedAfterTheBudgetIsSpent_ReturnsTheFirstAndWithholdsTheSecond()
+    {
+        // Arrange
+        var content = MimeFixtures.StoredMessage(
+            "From: sender@example.test",
+            "Content-Type: multipart/mixed; boundary=\"mix\"",
+            string.Empty,
+            "--mix",
+            "Content-Type: text/plain; charset=utf-8",
+            string.Empty,
+            "Two files.",
+            "--mix",
+            "Content-Type: application/pdf",
+            "Content-Disposition: attachment; filename=\"first.pdf\"",
+            string.Empty,
+            "first",
+            "--mix",
+            "Content-Type: application/pdf",
+            "Content-Disposition: attachment; filename=\"second.pdf\"",
+            string.Empty,
+            "second",
+            "--mix--");
+
+        // Act
+        var rendering = await RenderAsync(
+            content,
+            attachmentContent: new EmailAttachmentContentBounds(
+                MaxOctetsPerAttachment: 1024,
+                RemainingOctetsForRead: "first".Length));
+
+        // Assert
+        var attachments = rendering.Attachments ?? [];
+        Assert.Equal(2, attachments.Count);
+        Assert.Equal(EmailAttachmentContentAvailability.Returned, attachments[0].Content.Availability);
+        Assert.Equal("first"u8.ToArray(), attachments[0].Content.Octets.ToArray());
+        Assert.Equal(
+            EmailAttachmentContentAvailability.ReadByteBudgetExhausted,
+            attachments[1].Content.Availability);
+    }
+
+    /// <summary>An embedded resource is not a file, so asking for attachment content never returns one.</summary>
+    [Fact]
+    public async Task RenderAsync_AttachmentContentAskedForOnAMessageEmbeddingAnImage_ReturnsNoContentForTheResource()
+    {
+        // Arrange
+        var content = MimeFixtures.StoredMessage(
+            "From: sender@example.test",
+            "Content-Type: multipart/related; boundary=\"rel\"",
+            string.Empty,
+            "--rel",
+            "Content-Type: text/html; charset=utf-8",
+            string.Empty,
+            """<p>Chart:</p><img src="cid:chart@example.test">""",
+            "--rel",
+            "Content-Type: image/png",
+            "Content-ID: <chart@example.test>",
+            string.Empty,
+            "image",
+            "--rel--");
+
+        // Act
+        var rendering = await RenderAsync(
+            content,
+            attachmentContent: new EmailAttachmentContentBounds(MaxOctetsPerAttachment: 1024, RemainingOctetsForRead: 1024));
+
+        // Assert
+        Assert.Empty(rendering.Attachments ?? []);
+        Assert.Equal(1, rendering.AttachmentSummary.InlineResourceCount);
+    }
+
+    /// <summary>The per-attachment list is what the same parse found, with names normalized.</summary>
     [Fact]
     public async Task RenderAsync_MessageCarryingAnAttachment_DescribesItWithoutItsContent()
     {
@@ -428,7 +558,7 @@ public sealed class MimeKitEmailContentRendererTests
         var rendering = await RenderAsync(content);
 
         // Assert
-        var attachment = Assert.Single(rendering.Attachments.Attachments);
+        var attachment = Assert.Single(rendering.AttachmentSummary.Attachments);
         Assert.Equal("report.pdf", attachment.FileName?.Value);
         Assert.Equal("application/pdf", attachment.MediaType);
         Assert.Equal("pdf-bytes".Length, attachment.DecodedSizeOctets);
@@ -459,8 +589,8 @@ public sealed class MimeKitEmailContentRendererTests
         var rendering = await RenderAsync(content);
 
         // Assert
-        Assert.Empty(rendering.Attachments.Attachments);
-        Assert.True(rendering.Attachments.CarriesUnverifiedSignature);
+        Assert.Empty(rendering.AttachmentSummary.Attachments);
+        Assert.True(rendering.AttachmentSummary.CarriesUnverifiedSignature);
         Assert.Equal("Signed words.", rendering.PlainTextBody.Text);
     }
 
@@ -488,8 +618,8 @@ public sealed class MimeKitEmailContentRendererTests
         var rendering = await RenderAsync(content, includeSanitizedHtml: true);
 
         // Assert
-        Assert.Empty(rendering.Attachments.Attachments);
-        Assert.Equal(1, rendering.Attachments.InlineResourceCount);
+        Assert.Empty(rendering.AttachmentSummary.Attachments);
+        Assert.Equal(1, rendering.AttachmentSummary.InlineResourceCount);
         Assert.DoesNotContain("cid:", rendering.SanitizedHtmlBody!.Text, StringComparison.OrdinalIgnoreCase);
     }
 
@@ -569,11 +699,12 @@ public sealed class MimeKitEmailContentRendererTests
         StoredEmailContent content,
         bool includeSanitizedHtml = false,
         int maxBodyCharacters = 100_000,
-        int remainingCharactersForRead = int.MaxValue)
+        int remainingCharactersForRead = int.MaxValue,
+        EmailAttachmentContentBounds? attachmentContent = null)
     {
         var result = await CreateRenderer().RenderAsync(
             content,
-            new EmailContentRenderingBounds(includeSanitizedHtml, maxBodyCharacters, remainingCharactersForRead),
+            BoundsOf(includeSanitizedHtml, maxBodyCharacters, remainingCharactersForRead, attachmentContent),
             TestContext.Current.CancellationToken);
 
         Assert.Equal(EmailContentRenderingOutcome.Rendered, result.Outcome);
@@ -584,8 +715,26 @@ public sealed class MimeKitEmailContentRendererTests
     private static EmailContentRenderingBounds BoundsOf(
         bool includeSanitizedHtml = false,
         int maxBodyCharacters = 100_000,
-        int remainingCharactersForRead = int.MaxValue) =>
-        new(includeSanitizedHtml, maxBodyCharacters, remainingCharactersForRead);
+        int remainingCharactersForRead = int.MaxValue,
+        EmailAttachmentContentBounds? attachmentContent = null) =>
+        new(includeSanitizedHtml, maxBodyCharacters, remainingCharactersForRead, attachmentContent);
+
+    /// <summary>Builds a message whose single attachment is the given text, carried under a transfer encoding.</summary>
+    private static StoredEmailContent MessageAttaching(string attachedText) => MimeFixtures.StoredMessage(
+        "From: sender@example.test",
+        "Content-Type: multipart/mixed; boundary=\"mix\"",
+        string.Empty,
+        "--mix",
+        "Content-Type: text/plain; charset=utf-8",
+        string.Empty,
+        "See the attachment.",
+        "--mix",
+        "Content-Type: application/pdf",
+        "Content-Disposition: attachment; filename=\"report.pdf\"",
+        "Content-Transfer-Encoding: base64",
+        string.Empty,
+        Convert.ToBase64String(Encoding.UTF8.GetBytes(attachedText)),
+        "--mix--");
 
     private static MimeKitEmailContentRenderer CreateRenderer(int maxPartCount = 1000) =>
         new(new EmailMimeExtractionOptions { MaxPartCount = maxPartCount });

@@ -3,7 +3,6 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.EmailContent.Rendering;
-using MailFathom.Application.Emails.Extraction;
 using MailFathom.Application.Emails.Summaries;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
@@ -18,8 +17,9 @@ namespace MailFathom.Application.Emails.GetEmailContent;
 /// classification, retention, access, and erasure constraint of the mail it was read from. Nothing in it may be logged.
 /// </para>
 /// <para>
-/// It carries no attachment bytes in any shape, which is a property of the type rather than of a caller's discipline:
-/// <see cref="ExtractedEmailAttachment" /> describes a part and has nowhere to put its content.
+/// It carries attachment octets only where a request asked to describe the attachments, and only within the two octet
+/// bounds the deployment configured. Everything else about the projection is unchanged by that: no other read model
+/// carries content, and the summary beside the list still counts what the message holds without describing any of it.
 /// </para>
 /// </remarks>
 public sealed record ReadEmailContent
@@ -59,7 +59,7 @@ public sealed record ReadEmailContent
     /// </remarks>
     public StoredEmailAttachmentSummary? AttachmentSummary { get; init; }
 
-    /// <summary>Gets one entry per attachment when the request asked to describe them, and never any of their bytes.</summary>
+    /// <summary>Gets one entry per attachment when the request asked to describe them, each with its octets or the bound that withheld them.</summary>
     /// <remarks>
     /// <para>
     /// It is <see langword="null" /> when the request did not ask, which is not the same finding as an empty list: a
@@ -68,9 +68,9 @@ public sealed record ReadEmailContent
     /// caller can tell that asking again would describe something.
     /// </para>
     /// <para>
-    /// The list is re-derived rather than stored, because file names are mail content that the row deliberately does not
-    /// keep. Deriving it during the parse that produces the body costs nothing extra and guarantees it describes the
-    /// message it was read from.
+    /// The descriptions are re-derived rather than stored, because file names are mail content that the row deliberately
+    /// does not keep. Deriving them during the parse that produces the body costs nothing extra and guarantees they
+    /// describe the message they were read from, and the octets come from that same parse for the same reason.
     /// </para>
     /// <para>
     /// It is empty when the message's raw MIME was never stored locally, which
@@ -78,7 +78,7 @@ public sealed record ReadEmailContent
     /// cryptographic parts never appear here; they are counted in <see cref="AttachmentSummary" /> instead.
     /// </para>
     /// </remarks>
-    public IReadOnlyList<ExtractedEmailAttachment>? Attachments { get; init; }
+    public IReadOnlyList<RenderedEmailAttachment>? Attachments { get; init; }
 
     /// <summary>Gets the flags a mail server last showed for the email, and when they were read.</summary>
     /// <remarks>Reading content never changes them: the whole operation is served from local storage and speaks to no mail server.</remarks>
