@@ -49,6 +49,7 @@ because an OCI tag would reject it later and further from the cause.
 | Where | What it says | Read without running the artifact |
 | --- | --- | --- |
 | Host startup record | `ServiceVersion` and `ServiceRevision` | no |
+| Exported telemetry | `service.version` on the resource of every log record, metric point, and span | no |
 | MCP `initialize` | the server's implementation version | no |
 | `org.opencontainers.image.version` and `.revision` | the image's version and commit | yes |
 | The image's tags, including `latest` | which release this is | yes |
@@ -56,7 +57,7 @@ because an OCI tag would reject it later and further from the cause.
 | The release's `mailfathom-schema-<version>.sql` | which schema that version expects | yes |
 | The published assemblies | `AssemblyInformationalVersion` | yes |
 
-All of them come from the same declaration. The two runtime paths read the assembly's own metadata rather than a
+All of them come from the same declaration. The runtime paths read the assembly's own metadata rather than a
 literal restated in code, and unit tests assert that by deriving their expectation from that metadata; a reporting path
 that regressed to a hardcoded string fails them rather than staying plausible while being wrong.
 
