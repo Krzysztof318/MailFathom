@@ -8,10 +8,15 @@ using MailFathom.Application.Emails.Search;
 using MailFathom.Application.Emails.SearchEmails;
 using MailFathom.Application.Retrieval;
 using MailFathom.Application.Retrieval.AskMail;
+using MailFathom.Infrastructure.Persistence;
 using MailFathom.Infrastructure.Persistence.Connections;
 using MailFathom.Infrastructure.Secrets.Resolution;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 using Npgsql;
 using Xunit;
 
@@ -69,6 +74,33 @@ public sealed class ServiceCollectionExtensionsTests
         Assert.Same(provider.GetRequiredService<NpgsqlDataSource>(), provider.GetRequiredService<NpgsqlDataSource>());
         Assert.IsNotAssignableFrom<IDisposable>(connectionStringProvider);
         Assert.IsNotAssignableFrom<IAsyncDisposable>(connectionStringProvider);
+    }
+
+    /// <summary>
+    /// One record per database round trip is most of what a deployment writes, so the executed-command event is
+    /// emitted at <see cref="LogLevel.Debug" /> rather than at the <see cref="LogLevel.Information" /> EF Core
+    /// defaults to. The distinction the assertion holds is against filtering the category out: the level is configured
+    /// on the event, so lowering the category's minimum brings the records back, and every other event — a failed
+    /// command above all — keeps the level EF Core chose for it.
+    /// </summary>
+    [Fact]
+    public async Task AddInfrastructure_AfterStartup_LogsAnExecutedCommandAtDebugAndLeavesAFailedOneAtItsOwnLevel()
+    {
+        // Arrange
+        await using var provider = BuildConfiguredProvider();
+        var connectionStringProvider = provider.GetServices<IHostedService>()
+            .OfType<IHostedLifecycleService>()
+            .Single();
+        await connectionStringProvider.StartingAsync(TestContext.Current.CancellationToken);
+
+        // Act
+        var coreOptions = provider.GetRequiredService<DbContextOptions<MailFathomDbContext>>()
+            .FindExtension<CoreOptionsExtension>();
+
+        // Assert
+        Assert.NotNull(coreOptions);
+        Assert.Equal(LogLevel.Debug, coreOptions.WarningsConfiguration.GetLevel(RelationalEventId.CommandExecuted));
+        Assert.Null(coreOptions.WarningsConfiguration.GetLevel(RelationalEventId.CommandError));
     }
 
     [Fact]

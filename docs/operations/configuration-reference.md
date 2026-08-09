@@ -779,6 +779,15 @@ among the framework-shaped entries exempt from the strict binding above — a ke
 framework's to accept or to ignore, so a misspelling here leaves a default in force instead of failing startup with
 the path.
 
+**Executed SQL is a `Debug` record.** EF Core reports every command it runs through
+`Microsoft.EntityFrameworkCore.Database.Command`, at `Information` in the library's own configuration. MailFathom logs
+that one event at `Debug` instead, because a synchronization run, a backfill sweep, and every MCP read reach the
+database repeatedly, and one record per round trip would leave the stream mostly SQL. What is lowered is the level of
+the event rather than a filter over the category, so the records come back by asking for them — set
+`Logging:LogLevel:Microsoft.EntityFrameworkCore.Database.Command` to `Debug` for the commands alone, or `Default`
+where a whole run is being read. A command that *fails* is untouched and stays in the default stream: only the
+executed-command event is lowered, and every other EF Core event keeps the level the library gives it.
+
 Select `json` where something parses the stream rather than reads it, and `systemd` where `journalctl` should read
 the level rather than print it as text. Both are worth setting deliberately: `simple` is the default because it is
 what a person reading `docker compose logs` wants, and it is the wrong shape for everything downstream of that.
