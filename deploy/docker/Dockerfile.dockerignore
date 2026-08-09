@@ -6,7 +6,7 @@
 # the build because a line below says it does.
 #
 # The build stage needs the sources and the shared build contract; nothing here decides what reaches the *runtime*
-# image, which copies only the publish output and the generated migration script.
+# image, which copies the publish output and nothing else.
 
 **
 
@@ -29,9 +29,9 @@
 !/LICENSE
 !/NOTICE
 
-# The entrypoint of the migration image. Nothing else under deploy/ enters the build: the Compose file, the chart, and
-# the example configuration are read by an operator's tooling, not baked into an image.
-!/deploy/migrations/apply-schema
+# Nothing under deploy/ is re-included, deliberately. The Dockerfile beside this file is read from the host through
+# `--file` rather than out of the context, and the Compose file, the chart, and the example configuration are read by
+# an operator's tooling rather than baked into an image.
 
 # Build output from the host machine. It is architecture- and configuration-specific, it can be stale, and letting it
 # into the context would let a local build decide what the image contains.

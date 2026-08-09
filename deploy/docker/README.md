@@ -22,7 +22,7 @@ An agent gets four tools, and they are the whole surface:
 | Tool | What it answers |
 | --- | --- |
 | `list_emails` | A page of the timeline, newest first, filtered by account, folder, sender, recipient, subject, date range, seen state, or attachment presence |
-| `search_emails` | Ranked matches for a text query across subjects, participants, and body text, each with short extracts around what matched |
+| `search_emails` | Ranked matches for a text query across subjects, participants, and body text, each with short extracts around what matched — ranked lexically, and by embedding similarity beside it once an embedding model is configured |
 | `get_email_content` | Up to ten messages in full: normalized headers, plain-text body, optionally sanitized HTML, and attachment names, types, and sizes — never attachment bytes |
 | `ask_mail` | A question answered from the mail a chat model looks up while answering, citing the identifiers of every message it drew on |
 
@@ -52,7 +52,7 @@ docker pull krzysztof318/mailfathom:latest
 
 ## The supported Compose deployment
 
-[`deploy/compose/`](https://github.com/Krzysztof318/MailFathom/tree/main/deploy/compose) in the repository is the shape to use for self-hosting on one machine: MailFathom, PostgreSQL, and a one-shot schema step that only ever runs when you ask for it.
+[`deploy/compose/`](https://github.com/Krzysztof318/MailFathom/tree/main/deploy/compose) in the repository is the shape to use for self-hosting on one machine: MailFathom and PostgreSQL, with the schema applied as a step you take yourself. Nothing in that deployment applies one, so bringing the stack up after a version change tells you a migration is outstanding rather than running it.
 
 ```bash
 git clone https://github.com/Krzysztof318/MailFathom.git
