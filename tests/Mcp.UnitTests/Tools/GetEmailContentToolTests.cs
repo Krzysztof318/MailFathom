@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using System.Reflection;
 using System.Security.Cryptography;
 using System.Text;
 using MailFathom.Application.EmailContent;
@@ -63,7 +64,7 @@ public sealed class GetEmailContentToolTests
                 ],
                 EmailThreadReferences.Create("abc@example.test", "root@example.test", ["root@example.test"])),
             plainText: new EmailBodyRepresentation("Please find the invoice attached.", 33, EmailBodyTruncation.None),
-            attachments: [new ExtractedEmailAttachment(AttachmentFileNameOf("invoice.pdf"), "application/pdf", DecodedSizeOctets: 2048)],
+            attachments: [AttachmentOf("invoice.pdf", "application/pdf", decodedSizeOctets: 2048)],
             inlineResourceCount: 1,
             carriesUnverifiedSignature: true);
         var tool = ToolOver(
@@ -73,7 +74,7 @@ public sealed class GetEmailContentToolTests
         // Act
         var result = await tool.GetEmailContentAsync(
             [storedEmailId.ToString()],
-            includeAttachmentDetails: true,
+            includeAttachmentContent: true,
             cancellationToken: TestContext.Current.CancellationToken);
 
         // Assert
@@ -256,14 +257,14 @@ public sealed class GetEmailContentToolTests
         // Act
         var result = await tool.GetEmailContentAsync(
             [Guid.CreateVersion7().ToString()],
-            includeAttachmentDetails: true,
+            includeAttachmentContent: true,
             cancellationToken: TestContext.Current.CancellationToken);
 
         // Assert
         var content = ContentOf(Assert.Single(result.Emails));
         Assert.Equal(EmailBodyAvailabilityState.NotStoredExceededSizeLimit, content.Body.Availability);
         Assert.Empty(content.Body.PlainText.Text);
-        Assert.Empty(content.Attachments ?? []);
+        Assert.Empty(content.Attachments);
         Assert.Null(content.AttachmentCounts);
         Assert.Equal(0, contentStore.ReadCount);
     }
@@ -282,7 +283,7 @@ public sealed class GetEmailContentToolTests
         // Act
         var result = await tool.GetEmailContentAsync(
             [Guid.CreateVersion7().ToString()],
-            includeAttachmentDetails: true,
+            includeAttachmentContent: true,
             cancellationToken: TestContext.Current.CancellationToken);
 
         // Assert
@@ -292,9 +293,12 @@ public sealed class GetEmailContentToolTests
         Assert.Equal(0, contentStore.ReadCount);
     }
 
-    /// <summary>A file name is sender-chosen mail content, so an ordinary read is told how many attachments there are and not what they are called.</summary>
+    /// <summary>
+    /// An ordinary read describes every attachment and decodes none, so a caller can tell what a file is before it
+    /// decides whether the octets are worth a second call. <c>notRequested</c> is what separates that from a bound.
+    /// </summary>
     [Fact]
-    public async Task GetEmailContentAsync_AttachmentDetailsNotRequested_PublishesTheCountsAndNoAttachmentList()
+    public async Task GetEmailContentAsync_AttachmentContentNotRequested_DescribesTheAttachmentAndPublishesNoContent()
     {
         // Arrange
         var tool = ToolOver(
@@ -303,7 +307,11 @@ public sealed class GetEmailContentToolTests
                     RenderingOf(
                         attachments:
                         [
-                            new ExtractedEmailAttachment(AttachmentFileNameOf("medical-results.pdf"), "application/pdf", DecodedSizeOctets: 2048),
+                            AttachmentOf(
+                                "medical-results.pdf",
+                                "application/pdf",
+                                decodedSizeOctets: 2048,
+                                EmailAttachmentContent.NotRequested),
                         ]))));
 
         // Act
@@ -313,7 +321,13 @@ public sealed class GetEmailContentToolTests
 
         // Assert
         var content = ContentOf(Assert.Single(result.Emails));
-        Assert.Null(content.Attachments);
+        var attachment = Assert.Single(content.Attachments);
+        Assert.Equal("medical-results.pdf", attachment.FileName);
+        Assert.Equal("application/pdf", attachment.MediaType);
+        Assert.Equal(2048, attachment.SizeBytes);
+        Assert.Equal(EmailAttachmentContentState.NotRequested, attachment.ContentState);
+        Assert.Null(attachment.ContentBase64);
+
         Assert.NotNull(content.AttachmentCounts);
         Assert.Equal(1, content.AttachmentCounts.AttachmentCount);
         Assert.Equal(2048, content.AttachmentCounts.TotalSizeBytes);
@@ -324,7 +338,7 @@ public sealed class GetEmailContentToolTests
     [InlineData(false)]
     [InlineData(true)]
     public async Task GetEmailContentAsync_EmailWithNoAttachments_PublishesZeroUnderEitherSetting(
-        bool includeAttachmentDetails)
+        bool includeAttachmentContent)
     {
         // Arrange
         var tool = ToolOver();
@@ -332,7 +346,7 @@ public sealed class GetEmailContentToolTests
         // Act
         var result = await tool.GetEmailContentAsync(
             [Guid.CreateVersion7().ToString()],
-            includeAttachmentDetails: includeAttachmentDetails,
+            includeAttachmentContent: includeAttachmentContent,
             cancellationToken: TestContext.Current.CancellationToken);
 
         // Assert
@@ -352,13 +366,13 @@ public sealed class GetEmailContentToolTests
                     RenderingOf(
                         attachments:
                         [
-                            new ExtractedEmailAttachment(AttachmentFileNameOf("invoice.pdf"), "application/pdf", DecodedSizeOctets: 2048),
+                            AttachmentOf("invoice.pdf", "application/pdf", decodedSizeOctets: 2048),
                         ]))));
 
         // Act
         var result = await tool.GetEmailContentAsync(
             [.. Enumerable.Range(0, 3).Select(_ => Guid.CreateVersion7().ToString())],
-            includeAttachmentDetails: true,
+            includeAttachmentContent: true,
             cancellationToken: TestContext.Current.CancellationToken);
 
         // Assert
@@ -497,20 +511,17 @@ public sealed class GetEmailContentToolTests
                     RenderingOf(
                         attachments:
                         [
-                            new ExtractedEmailAttachment(
-                                AttachmentFileNameOf("../../etc/passwd"),
-                                "application/octet-stream",
-                                DecodedSizeOctets: 12),
+                            AttachmentOf("../../etc/passwd", "application/octet-stream", decodedSizeOctets: 12),
                         ]))));
 
         // Act
         var result = await tool.GetEmailContentAsync(
             [Guid.CreateVersion7().ToString()],
-            includeAttachmentDetails: true,
+            includeAttachmentContent: true,
             cancellationToken: TestContext.Current.CancellationToken);
 
         // Assert
-        var attachment = Assert.Single(ContentOf(Assert.Single(result.Emails)).Attachments ?? []);
+        var attachment = Assert.Single(ContentOf(Assert.Single(result.Emails)).Attachments);
         Assert.Equal("passwd", attachment.FileName);
         Assert.True(attachment.WasFileNameNormalized);
     }
@@ -524,27 +535,101 @@ public sealed class GetEmailContentToolTests
             renderer: new StubEmailContentRenderer(
                 EmailContentRenderingResult.Rendered(
                     RenderingOf(
-                        attachments: [new ExtractedEmailAttachment(FileName: null, "image/png", DecodedSizeOctets: 64)]))));
+                        attachments: [AttachmentOf(fileName: null, "image/png", decodedSizeOctets: 64)]))));
 
         // Act
         var result = await tool.GetEmailContentAsync(
             [Guid.CreateVersion7().ToString()],
-            includeAttachmentDetails: true,
+            includeAttachmentContent: true,
             cancellationToken: TestContext.Current.CancellationToken);
 
         // Assert
-        var attachment = Assert.Single(ContentOf(Assert.Single(result.Emails)).Attachments ?? []);
+        var attachment = Assert.Single(ContentOf(Assert.Single(result.Emails)).Attachments);
         Assert.Null(attachment.FileName);
         Assert.False(attachment.WasFileNameNormalized);
     }
 
+    /// <summary>A caller that asked for the attachments receives the files, and what it decodes is what the message carried.</summary>
+    [Fact]
+    public async Task GetEmailContentAsync_AttachmentDetailsRequested_PublishesTheContentAsBase64ThatDecodesToTheBytes()
+    {
+        // Arrange
+        var attachedBytes = "%PDF-1.7 invoice"u8.ToArray();
+        var tool = ToolOver(
+            renderer: new StubEmailContentRenderer(
+                EmailContentRenderingResult.Rendered(
+                    RenderingOf(
+                        attachments:
+                        [
+                            AttachmentOf(
+                                "invoice.pdf",
+                                "application/pdf",
+                                attachedBytes.Length,
+                                EmailAttachmentContent.Returned(attachedBytes)),
+                        ]))));
+
+        // Act
+        var result = await tool.GetEmailContentAsync(
+            [Guid.CreateVersion7().ToString()],
+            includeAttachmentContent: true,
+            cancellationToken: TestContext.Current.CancellationToken);
+
+        // Assert
+        var attachment = Assert.Single(ContentOf(Assert.Single(result.Emails)).Attachments);
+        Assert.Equal(EmailAttachmentContentState.Returned, attachment.ContentState);
+        Assert.NotNull(attachment.ContentBase64);
+        Assert.Equal(attachedBytes, Convert.FromBase64String(attachment.ContentBase64));
+    }
+
     /// <summary>
-    /// Proves the privacy bound structurally rather than result by result: nothing reachable from the published contract
-    /// can hold bytes, so no shape of any response can carry attachment content or raw MIME. An assertion per test would
-    /// only cover the responses someone remembered to check.
+    /// A withheld file is described and says which bound withheld it, because the two lead a caller to different
+    /// actions: one is worth retrying by naming this email alone and the other never will be.
+    /// </summary>
+    [Theory]
+    [InlineData(EmailAttachmentContentAvailability.ExceededAttachmentByteLimit, nameof(EmailAttachmentContentState.ExceededAttachmentByteLimit))]
+    [InlineData(EmailAttachmentContentAvailability.ReadByteBudgetExhausted, nameof(EmailAttachmentContentState.ReadByteBudgetExhausted))]
+    public async Task GetEmailContentAsync_AttachmentABoundWithheld_DescribesItWithNoContentAndNamesTheBound(
+        EmailAttachmentContentAvailability withheldBy,
+        string expectedState)
+    {
+        // Arrange
+        var tool = ToolOver(
+            renderer: new StubEmailContentRenderer(
+                EmailContentRenderingResult.Rendered(
+                    RenderingOf(
+                        attachments:
+                        [
+                            AttachmentOf(
+                                "archive.zip",
+                                "application/zip",
+                                decodedSizeOctets: 64 * 1024 * 1024,
+                                EmailAttachmentContent.Withheld(withheldBy)),
+                        ]))));
+
+        // Act
+        var result = await tool.GetEmailContentAsync(
+            [Guid.CreateVersion7().ToString()],
+            includeAttachmentContent: true,
+            cancellationToken: TestContext.Current.CancellationToken);
+
+        // Assert
+        var attachment = Assert.Single(ContentOf(Assert.Single(result.Emails)).Attachments);
+        Assert.Equal(expectedState, attachment.ContentState.ToString());
+        Assert.Null(attachment.ContentBase64);
+
+        // The description survives the withholding, which is what tells a caller what it did not receive.
+        Assert.Equal("archive.zip", attachment.FileName);
+        Assert.Equal(64 * 1024 * 1024, attachment.SizeBytes);
+    }
+
+    /// <summary>
+    /// Proves structurally rather than result by result that nothing reachable from the published contract can hold raw
+    /// bytes or a stream. Attachment content is published as a bounded base64 string on one property and in no other
+    /// shape, so no response can carry raw MIME, an unbounded payload, or content that escaped the octet bounds — which
+    /// an assertion per test would only establish for the responses someone remembered to check.
     /// </summary>
     [Fact]
-    public void GetEmailContentToolResult_NoPublishedProperty_CanHoldContentBytes()
+    public void GetEmailContentToolResult_NoPublishedProperty_CanHoldRawBytesOrAStream()
     {
         // Arrange
         Type[] byteCarryingTypes =
@@ -561,6 +646,23 @@ public sealed class GetEmailContentToolTests
 
         // Assert
         Assert.Empty(publishedTypes.Intersect(byteCarryingTypes));
+    }
+
+    /// <summary>
+    /// Names the one place content leaves the process, so a second one cannot be added without this test saying so.
+    /// The bounds, the availability state, and the documentation all describe that single property; a payload published
+    /// beside it would inherit none of them.
+    /// </summary>
+    [Fact]
+    public void GetEmailContentToolResult_TheOnlyPublishedPropertyCarryingMessageContentBytes_IsTheAttachmentBase64One()
+    {
+        // Arrange, Act
+        var contentCarryingProperties = PublishedProperties(typeof(GetEmailContentToolResult), [])
+            .Where(property => property.Name.Contains("Base64", StringComparison.Ordinal))
+            .Select(property => $"{property.DeclaringType?.Name}.{property.Name}");
+
+        // Assert
+        Assert.Equal([$"{nameof(RetrievedEmailAttachment)}.{nameof(RetrievedEmailAttachment.ContentBase64)}"], contentCarryingProperties);
     }
 
     [Theory]
@@ -774,6 +876,26 @@ public sealed class GetEmailContentToolTests
         ];
     }
 
+    /// <summary>Walks every property the published contract reaches, in the order the traversal finds them.</summary>
+    private static IReadOnlyList<PropertyInfo> PublishedProperties(Type publishedType, HashSet<Type> visitedTypes)
+    {
+        if (!visitedTypes.Add(publishedType))
+        {
+            return [];
+        }
+
+        PropertyInfo[] properties = [.. publishedType.GetProperties()];
+
+        return
+        [
+            .. properties,
+            .. properties
+                .Select(property => ElementTypeOf(property.PropertyType))
+                .Where(propertyType => propertyType.Assembly == typeof(GetEmailContentToolResult).Assembly)
+                .SelectMany(propertyType => PublishedProperties(propertyType, visitedTypes)),
+        ];
+    }
+
     private static Type ElementTypeOf(Type type) =>
         type.IsGenericType && type.GetGenericTypeDefinition() == typeof(IReadOnlyList<>)
             ? type.GetGenericArguments()[0]
@@ -835,7 +957,7 @@ public sealed class GetEmailContentToolTests
         EmailBodyRepresentation? plainText = null,
         EmailBodyRepresentation? sanitizedHtml = null,
         bool bodyIsEncrypted = false,
-        IReadOnlyList<ExtractedEmailAttachment>? attachments = null,
+        IReadOnlyList<RenderedEmailAttachment>? attachments = null,
         int inlineResourceCount = 0,
         bool carriesUnverifiedSignature = false) => new(
         headers ?? new EmailContentHeaders("Quarterly invoice", SentAt: null, ReceivedAt: null, [], EmailThreadReferences.None),
@@ -845,11 +967,24 @@ public sealed class GetEmailContentToolTests
         sanitizedHtml,
         bodyIsEncrypted,
         EmailAttachmentSummary.Create(
-            attachments ?? [],
+            attachments?.Select(attachment => attachment.Description) ?? [],
             inlineResourceCount,
             bodyIsEncrypted,
             carriesUnverifiedSignature,
-            containsUnexpandedTnefPart: false));
+            containsUnexpandedTnefPart: false),
+        attachments ?? []);
+
+    /// <summary>Builds one attachment a read produced, whose content is the bytes of its own file name by default.</summary>
+    private static RenderedEmailAttachment AttachmentOf(
+        string? fileName,
+        string mediaType,
+        long decodedSizeOctets,
+        EmailAttachmentContent? content = null) => new(
+        new ExtractedEmailAttachment(
+            fileName is null ? null : AttachmentFileNameOf(fileName),
+            mediaType,
+            decodedSizeOctets),
+        content ?? EmailAttachmentContent.Returned(new byte[decodedSizeOctets]));
 
     private static EmailParticipant ParticipantOf(EmailAddressRole role, string? displayName, string address) =>
         EmailAddress.TryCreate(displayName, address, out var emailAddress)

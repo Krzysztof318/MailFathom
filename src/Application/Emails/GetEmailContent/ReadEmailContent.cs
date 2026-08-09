@@ -3,7 +3,6 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.EmailContent.Rendering;
-using MailFathom.Application.Emails.Extraction;
 using MailFathom.Application.Emails.Summaries;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
@@ -18,8 +17,9 @@ namespace MailFathom.Application.Emails.GetEmailContent;
 /// classification, retention, access, and erasure constraint of the mail it was read from. Nothing in it may be logged.
 /// </para>
 /// <para>
-/// It carries no attachment bytes in any shape, which is a property of the type rather than of a caller's discipline:
-/// <see cref="ExtractedEmailAttachment" /> describes a part and has nowhere to put its content.
+/// It describes every attachment a message carries and adds their octets only where a request asked for them, within
+/// the two octet bounds the deployment configured. No other read model carries content at all, and the summary beside
+/// the list still counts what the message holds without describing any of it.
 /// </para>
 /// </remarks>
 public sealed record ReadEmailContent
@@ -59,26 +59,28 @@ public sealed record ReadEmailContent
     /// </remarks>
     public StoredEmailAttachmentSummary? AttachmentSummary { get; init; }
 
-    /// <summary>Gets one entry per attachment when the request asked to describe them, and never any of their bytes.</summary>
+    /// <summary>Gets one entry per attachment, described always and carrying octets only where the request asked for them.</summary>
     /// <remarks>
     /// <para>
-    /// It is <see langword="null" /> when the request did not ask, which is not the same finding as an empty list: a
-    /// file name is sender-chosen mail content and frequently the most identifying string a message carries, so a read
-    /// that only wanted the body publishes none. <see cref="AttachmentSummary" /> still states how many there are, so a
-    /// caller can tell that asking again would describe something.
+    /// Every read describes what a message carries — the file name, the media type, and the decoded size — because a
+    /// caller deciding whether a file is worth asking for needs all three, and a read that answered with a count alone
+    /// would leave it nothing to decide on. Whether the octets travel is what
+    /// <see cref="GetEmailContentRequest.IncludeAttachmentContent" /> asks, and each entry says which of the two it is.
     /// </para>
     /// <para>
-    /// The list is re-derived rather than stored, because file names are mail content that the row deliberately does not
-    /// keep. Deriving it during the parse that produces the body costs nothing extra and guarantees it describes the
-    /// message it was read from.
+    /// The descriptions are re-derived rather than stored, because file names are mail content that the row deliberately
+    /// does not keep. Deriving them during the parse that produces the body costs nothing extra and guarantees they
+    /// describe the message they were read from, and the octets come from that same parse for the same reason.
     /// </para>
     /// <para>
     /// It is empty when the message's raw MIME was never stored locally, which
-    /// <see cref="EmailBodyAvailability.NotStoredExceededSizeLimit" /> on the body states. Inline resources and
-    /// cryptographic parts never appear here; they are counted in <see cref="AttachmentSummary" /> instead.
+    /// <see cref="EmailBodyAvailability.NotStoredExceededSizeLimit" /> on the body states — an emptiness about this
+    /// message's parts never having been read rather than about it carrying no files, which the absent
+    /// <see cref="AttachmentSummary" /> beside it states. Inline resources and cryptographic parts never appear here;
+    /// they are counted in the summary instead.
     /// </para>
     /// </remarks>
-    public IReadOnlyList<ExtractedEmailAttachment>? Attachments { get; init; }
+    public required IReadOnlyList<RenderedEmailAttachment> Attachments { get; init; }
 
     /// <summary>Gets the flags a mail server last showed for the email, and when they were read.</summary>
     /// <remarks>Reading content never changes them: the whole operation is served from local storage and speaks to no mail server.</remarks>

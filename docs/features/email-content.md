@@ -4,8 +4,8 @@
 
 MailFathom serves the content of the emails one call names, from its local copy. `EmailContentReader` is the second read
 use case: it takes the stable local identifiers a listing returned and answers for each of them with normalized headers,
-the body as plain text, optionally a sanitized HTML representation, attachment counts, optionally per-attachment
-metadata without any bytes, the source account and folder alias, and the remote flag snapshot.
+the body as plain text, optionally a sanitized HTML representation, attachment counts, every attachment described and
+optionally carrying its content, the source account and folder alias, and the remote flag snapshot.
 
 It reaches no mail server. That is structural rather than a rule someone keeps: the use case is constructed from a
 summary reader, a content store, a renderer, a repair-request store, and the account catalog, and none of them can open
@@ -23,15 +23,16 @@ tool that maps onto it is documented in [MCP tools](mcp-tools.md#get_email_conte
 |---|---|---|
 | `StoredEmailIds` | The emails to read, named by the identities a listing returned, in the order to read them | — |
 | `IncludeSanitizedHtml` | Whether to also produce the sanitized HTML representation of each body | plain text only |
-| `IncludeAttachmentDetails` | Whether to describe each attachment rather than only count them | counts only |
+| `IncludeAttachmentContent` | Whether to return the octets of each attachment, rather than only describe it | descriptions only |
 
-Both flags govern the whole call rather than one email each. A caller asking for markup or for attachment descriptions
-wants them for what it is about to read, and a flag per identifier would make the argument list grow with the batch while
+Both flags govern the whole call rather than one email each. A caller asking for markup or for the attached files wants
+them for what it is about to read, and a flag per identifier would make the argument list grow with the batch while
 answering a question no caller asks per email.
 
 The HTML representation is opt-in because it costs a sanitization pass over untrusted markup and because plain text is
-what most callers want: a model reading mail is better served by the words than by the layout around them. The attachment
-descriptions are opt-in for a different reason, recorded under [Attachments](#attachments-are-counted-always-and-described-on-request).
+what most callers want: a model reading mail is better served by the words than by the layout around them. The
+attachment octets are opt-in for a different reason, recorded under
+[Attachments](#attachments-are-described-always-and-returned-on-request).
 
 ### Reading several emails, and what bounds it
 
@@ -42,11 +43,16 @@ one read serves. Two bounds close that gap, and they answer different questions.
 |---|---|---|
 | `GetEmailContentRequest.MaximumEmails` | 10 | How many emails one call may name |
 | `EmailContent:MaxCharactersPerRead` | 2 000 – 2 000 000, default 200 000 | How many body characters one call returns in total |
+| `EmailContent:MaxAttachmentBytesPerRead` | 0 – 104 857 600, default 10 MiB | How many attachment bytes one call returns in total |
 
 The count is a `const` rather than configuration, because it bounds a protocol call's shape rather than a deployment's
-appetite; the volume is configured, because how much mail a response can usefully carry depends on what a deployment's
-mail looks like. Neither replaces the other: without the count one call could name a mailbox, and without the budget ten
-emails could each return `MaxBodyCharacters` in full.
+appetite; the volumes are configured, because how much mail a response can usefully carry depends on what a deployment's
+mail looks like. Neither replaces the other: without the count one call could name a mailbox, and without the budgets ten
+emails could each return `MaxBodyCharacters` and `MaxAttachmentBytes` in full.
+
+The two budgets are separate quantities and are spent independently. Attachment bytes are not text, so counting them
+against the character budget would let one file empty the bodies of every email named after it, and counting a long
+thread against the attachment budget would withhold a file for a reason that has nothing to do with files.
 
 Two refusals are decided before anything is read, and both refuse rather than repair:
 
@@ -90,7 +96,7 @@ fact whether it named one email or ten.
 | `Headers` | Subject, sent and received timestamps, every participant under its header role, and the thread identifiers |
 | `Body` | The representations, or the reason there are none |
 | `AttachmentSummary` | The counts for what the message carries besides its body, absent when nobody has counted them |
-| `Attachments` | One entry per attachment when the request asked for them, re-derived from the stored raw MIME, with no bytes |
+| `Attachments` | One entry per attachment, re-derived from the stored raw MIME, each carrying its octets or the reason it carries none |
 | `RemoteFlags` | The flags a server last showed, and when they were read |
 
 ### Headers come from the message, not from the row
@@ -109,25 +115,78 @@ prefix of a message identifier is an identifier another message may legitimately
 same values more narrowly, deliberately — one bound is about what a parse publishes to a reader and the other about
 what a column stores.
 
-### Attachments are counted always, and described on request
+### Attachments are described always, and returned on request
 
-How many attachments an email carries is answered by every read. What each one is *called* is answered only when
-`IncludeAttachmentDetails` asks: a file name is text the sender chose, it is frequently the most identifying string a
-message carries, and a read that only wanted the body never asked for it. `list_emails` already publishes counts and
-never names, so withholding the names here makes the two read models agree about the same data rather than disagree for
-no reason a caller stated.
+Every read answers what a message carries: how many attachments, what each is called, what it declares itself to be, and
+how large it is. Only the octets wait for `IncludeAttachmentContent`, because they are the message's most sensitive part
+and by far its largest — base64 makes an ordinary attachment several times the size of the body beside it.
 
-The default is never silently lossy. `AttachmentSummary` states how many attachments exist, their total decoded size,
-the inline-resource count, and the encryption, signature, and TNEF flags whichever way the flag is set, so a caller can
-tell that asking again would describe something rather than concluding the message carries nothing. `Attachments` is
-absent rather than empty in that case, which keeps "you did not ask" and "there are none" apart.
+The line falls there rather than around the descriptions because of what a caller does with them. Deciding whether a
+file is worth asking for *is* reading its name, its type, and its size; a read that answered with a count alone would
+leave a caller nothing to decide on and force a second call to learn what the first was about. The octets are the part
+that costs something, so they are the part that is asked for.
 
-Attachment bytes are unchanged by any of this: they were never returned under any setting and still are not.
+`list_emails` still counts and never names, and that disagreement between the two read models is deliberate rather than
+an oversight. A listing is a browse over a mailbox, where a file name would be sender-chosen identifying text about mail
+the caller has not opened; a content read has already returned the body in full, so a file name adds nothing about that
+message a caller does not already hold.
+
+A read that asks for no content decodes none. The bounds travel to the renderer only where the flag is set, so an
+ordinary read measures each attachment — which is what produces its size — and retains not one octet of it. The entry
+says so: `NotRequested` is what separates a file nobody asked for from one a bound withheld.
+
+### Attachment content is returned whole, or not at all
+
+An attachment that fits both octet bounds comes back with its decoded content. Two bounds decide that, and they are the
+attachment half of the pair that bounds bodies:
+
+| Bound | Value | What it limits |
+|---|---|---|
+| `EmailContent:MaxAttachmentBytes` | 0 – 25 MiB, default 5 MiB | The decoded size of one attachment whose content is returned |
+| `EmailContent:MaxAttachmentBytesPerRead` | 0 – 100 MiB, default 10 MiB | What one call returns in attachment content in total |
+
+The host refuses a budget below the per-attachment bound at startup, for the reason it refuses a character budget below
+twice `MaxBodyCharacters`: a budget that cannot carry one permitted attachment would withhold a file the other bound was
+set to allow, in every call including one naming a single email. Setting both to `0` is the supported way to say that
+attachments are described and never handed over.
+
+**Neither bound truncates.** A half-returned file has the size of a file, opens as damage, and cannot be told apart from
+a whole one by anything downstream — so a bound removes the content entirely and names itself, where the equivalent bound
+on a body cuts the text and reports the cut.
+
+| `Availability` | Meaning | What a caller does about it |
+|---|---|---|
+| `NotRequested` | The call asked for no content, so the file was described and never decoded | Ask again with `IncludeAttachmentContent` |
+| `Returned` | The content is present and is the whole file | Nothing |
+| `ExceededAttachmentByteLimit` | The file is larger than one attachment may return | Nothing; this deployment does not serve a file this size |
+| `ReadByteBudgetExhausted` | The attachments returned before it spent the call's budget | Name fewer emails at once — which helps only when it was another email that spent it |
+
+The budget is spent in the order the emails were named and, within an email, in the order the message's structure was
+walked. Only content that was actually returned draws on it: an attachment a bound withheld cost the caller nothing, so
+charging the budget for it would withhold the next file on the strength of one that was never sent.
+
+**`ReadByteBudgetExhausted` is therefore not a promise that a narrower call returns the file.** The budget falls to the
+attachments of one message as much as to the emails of one call, so a message carrying more than the budget in files
+withholds its later ones however few emails were named. That is the one place the attachment pair is weaker than the
+character pair, and deliberately: `MaxCharactersPerRead` is refused below twice `MaxBodyCharacters` precisely so that a
+one-email call can never be cut by the call's budget, and no equivalent floor exists here because a call is bounded to
+ten emails and a body to two representations while nothing bounds how many attachments a message carries. An operator
+who wants every attachment of every message served raises `MaxAttachmentBytesPerRead`; a caller cannot buy the same
+thing by asking for less.
+
+Inline resources and cryptographic parts carry no content here for the same reason they carry no description — they
+never enter the list at all. `NotRequested` sits beside the two bounds rather than among them because it says nothing
+about the file: asking for content is what returns it.
+
+The octets are message content in full and inherit every classification, retention, access, and erasure constraint of
+the mail they were read from. They are never logged, never persisted anywhere new, and exist only for as long as the
+read that produced them; the wire form is base64, which costs a third again as much as the file, so the bounds above are
+applied to the file rather than to its encoding.
 
 ### The descriptions are re-derived, never stored
 
-The per-attachment list — the normalized file name, the media type, and the decoded size — is produced by the parse this
-read already performs, following the classification rule
+The per-attachment list — the normalized file name, the media type, the decoded size, and the octets themselves — is
+produced by the parse this read already performs, following the classification rule
 [MIME metadata extraction](imap-synchronization.md#mime-metadata-extraction) defines. It is not persisted, because file
 names are mail content and [the stored schema](../architecture/stored-email-schema.md) deliberately keeps only the
 indexable summary. Re-deriving costs nothing extra and guarantees the list cannot drift from the message it describes.
@@ -153,8 +212,9 @@ what a column stores.
 File names arrive normalized: path structure, control characters, and bidirectional overrides are removed when the name
 is read, and a name is never returned as a path or resolved against one.
 
-The result type has nowhere to put attachment content. That is a property of the contract rather than of a caller's
-discipline, and a unit test asserts it.
+Content leaves the process through that one list and nowhere else. Nothing else reachable from the published result can
+hold bytes at all, and the single property that carries a file is named in a unit test that fails when a second one
+appears — so a payload cannot be added beside it and quietly inherit none of the bounds above.
 
 ## The body, and the three ways there is none
 
@@ -184,9 +244,11 @@ never be read locally when naming it alone returns the readable alternative in f
 
 Neither of the two unstored states is a defect and neither schedules a repair: synchronization recorded the occurrence
 and deliberately stored no content for it, so asking for repair would ask a later run to store what it already decided
-not to. Everything answerable is still answered — the headers from the stored row, the attachment counts from the
-summary written when the occurrence was recorded — and only the per-attachment list is absent, because nothing local can
-derive it.
+not to. Everything answerable is still answered — the headers from the stored row — and everything about the message's
+parts is absent, because nothing local can derive it: the attachment list is empty and the counts beside it are `null`
+rather than zero, for the reason [Attachments](#attachments-are-described-always-and-returned-on-request) gives. The
+empty list is about the parts never having been read rather than about the message carrying no files, and the absent
+counts are what say which of the two it is.
 
 What separates them is whether asking again is worth anything. `NotStoredExceededSizeLimit` is permanent: the same limit
 refuses the same message on every run. `NotStoredAwaitingStorageHeadroom` is a queue — the message was discovered while

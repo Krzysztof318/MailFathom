@@ -15,7 +15,7 @@ namespace MailFathom.Mcp.UnitTests.Tools;
 /// The annotations are contract metadata rather than documentation: a client decides whether a tool is safe to call,
 /// safe to retry, and confined to local state by reading them before it calls anything. The description matters as much
 /// here as on any tool and more than on most, because it is where a model learns that this surface returns message
-/// content and returns no attachment bytes with it.
+/// content in full, and — for a call that asks to describe the attachments — the files themselves.
 /// </remarks>
 public sealed class GetEmailContentToolMetadataTests
 {
@@ -45,7 +45,7 @@ public sealed class GetEmailContentToolMetadataTests
         Assert.False(annotations.OpenWorldHint);
     }
 
-    /// <summary>A model reads this before it calls anything, so it states both what the tool serves and what it never returns.</summary>
+    /// <summary>A model reads this before it calls anything, so it states what the tool serves and what bounds it.</summary>
     [Fact]
     public void AddMailFathomServer_AdvertisesADescriptionStatingTheLocalReadOnlyBoundsOfTheTool()
     {
@@ -55,7 +55,25 @@ public sealed class GetEmailContentToolMetadataTests
         // Assert
         Assert.NotNull(description);
         Assert.Contains("local", description, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("attachment content is never returned", description, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("never marks", description, StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// A model decides whether to ask for attachments from this text alone, so it has to say that the content comes
+    /// back, in what form, and that a bound can withhold it. A caller told only that attachments exist would ask for
+    /// them expecting names and receive a response several times the size it planned for.
+    /// </summary>
+    [Fact]
+    public void AddMailFathomServer_AdvertisesADescriptionStatingThatAttachmentContentComesBackAsBase64AndIsBounded()
+    {
+        // Arrange, Act
+        var description = AdvertisedGetEmailContentTool().Description;
+
+        // Assert
+        Assert.NotNull(description);
+        Assert.Contains("contentBase64", description, StringComparison.Ordinal);
+        Assert.Contains("bounded per attachment", description, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("never returned in part", description, StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>A model reads the count bound and the attachment default here, so both are part of what is advertised.</summary>
@@ -68,14 +86,19 @@ public sealed class GetEmailContentToolMetadataTests
         // Assert
         Assert.NotNull(description);
         Assert.Contains("up to 10 emails", description, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("includeAttachmentDetails", description, StringComparison.Ordinal);
+        Assert.Contains("includeAttachmentContent", description, StringComparison.Ordinal);
+
+        // The default is that attachments are described and not decoded, which is what stops a model from asking for
+        // content merely to learn what a file is called.
+        Assert.Contains("described by file name, media type, and size", description, StringComparison.Ordinal);
+        Assert.Contains("not returned by default", description, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
     public void AddMailFathomServer_AdvertisesTheEmailIdentifiersAndTheTwoFlagsAsInputSchemaProperties()
     {
         // Arrange
-        string[] expectedProperties = ["storedEmailIds", "includeSanitizedHtml", "includeAttachmentDetails"];
+        string[] expectedProperties = ["storedEmailIds", "includeSanitizedHtml", "includeAttachmentContent"];
 
         // Act
         var advertisedProperties = AdvertisedGetEmailContentTool()
@@ -185,6 +208,23 @@ public sealed class GetEmailContentToolMetadataTests
         Assert.Contains("\"none\"", advertisedSchema, StringComparison.Ordinal);
         Assert.Contains("\"bodyCharacterLimit\"", advertisedSchema, StringComparison.Ordinal);
         Assert.Contains("\"readCharacterBudget\"", advertisedSchema, StringComparison.Ordinal);
+    }
+
+    /// <summary>The same holds for the attachment states, which is how a client tells a withheld file from a missing one.</summary>
+    [Fact]
+    public void AddMailFathomServer_AdvertisesTheAttachmentContentStatesUnderTheirPublishedSpellings()
+    {
+        // Arrange, Act
+        var outputSchema = AdvertisedGetEmailContentTool().OutputSchema;
+
+        // Assert
+        Assert.NotNull(outputSchema);
+        var advertisedSchema = SchemaText(outputSchema.Value);
+        Assert.Contains("contentBase64", advertisedSchema, StringComparison.Ordinal);
+        Assert.Contains("\"notRequested\"", advertisedSchema, StringComparison.Ordinal);
+        Assert.Contains("\"returned\"", advertisedSchema, StringComparison.Ordinal);
+        Assert.Contains("\"exceededAttachmentByteLimit\"", advertisedSchema, StringComparison.Ordinal);
+        Assert.Contains("\"readByteBudgetExhausted\"", advertisedSchema, StringComparison.Ordinal);
     }
 
     private static string SchemaText(JsonElement schema) => schema.GetRawText();

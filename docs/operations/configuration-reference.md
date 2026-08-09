@@ -222,10 +222,16 @@ hybridly. [Email search](../features/email-search.md) records how snippets are c
 
 ## `EmailContent`
 
+What one `get_email_content` call may hand back, in text and in files. The two pairs are spent independently, because a
+caller asks for bodies and for attachments separately and base64 makes a byte cost a third more of a response than a
+character does. [Email content](../features/email-content.md) records how each bound is applied and reported.
+
 | Key | Type | Default | Constraint | Change |
 | --- | --- | --- | --- | --- |
 | `EmailContent:MaxBodyCharacters` | int | `100000` | 1000 – 1000000; each body representation is truncated to it, explicitly | restart |
 | `EmailContent:MaxCharactersPerRead` | int | `200000` | 2000 – 2000000, and at least twice `MaxBodyCharacters`; the body characters one call returns across every email it names | restart |
+| `EmailContent:MaxAttachmentBytes` | int | `5242880` | 0 – 26214400; the decoded size of one attachment whose content is returned, where `0` returns no attachment content at all | restart |
+| `EmailContent:MaxAttachmentBytesPerRead` | int | `10485760` | 0 – 104857600, and at least `MaxAttachmentBytes`; the attachment bytes one call returns across every email it names | restart |
 
 ## `Embeddings`
 

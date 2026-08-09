@@ -40,13 +40,15 @@ Three properties hold for every tool and are proven by test rather than asserted
 - No error and no log line carries a filter value, a mailbox address, a subject, body text, raw MIME, an exception type,
   a stack trace, or an internal identifier. What a boundary withholds is not lost: the detail is logged on the server,
   correlated by the trace the request already carries.
-- No result carries raw MIME or attachment bytes. Message content itself is a result only where the tool exists to
-  return it: `get_email_content` returns bounded bodies, `search_emails` returns bounded extracts of one, `list_emails`
-  returns summaries and no body text at all, and `ask_mail` returns prose written about mail plus the subjects of the
-  emails it cites.
+- No result carries raw MIME. Message content itself is a result only where the tool exists to return it:
+  `get_email_content` returns bounded bodies and, for a call that asked to describe the attachments, the files under
+  bounds of their own; `search_emails` returns bounded extracts of a body; `list_emails` returns summaries and no body
+  text at all; and `ask_mail` returns prose written about mail plus the subjects of the emails it cites. Attachment
+  content reaches exactly one property of one result, and no other tool publishes any.
 - Every tool bounds how much mail one call can draw out of a mailbox, in the count of items and in their volume alike:
   `list_emails` pages at 100 summaries, `search_emails` windows at 50 ranked matches, `get_email_content` reads at
-  most 10 emails under a shared character budget, and `ask_mail` publishes by default at most 20 000 characters of
+  most 10 emails under a shared character budget and a shared attachment-byte budget, and `ask_mail` publishes by
+  default at most 20 000 characters of
   answer citing at most 20 emails, having read at most 20 000 characters of mail to write it. A caller can never raise
   any of them, and the last set is the operator's to lower or raise in
   [`MailAnswering`](../operations/configuration-reference.md#mailanswering).
@@ -259,10 +261,10 @@ configuration leaves its stored rows in place.
 ## `get_email_content`
 
 Returns up to ten emails from the local mailbox copy in one call: for each one its normalized headers, the plain-text
-body, optionally a sanitized HTML body, how many attachments it carries, and optionally one entry per attachment.
-[Email content](email-content.md) documents the use case behind it — the representations, the sanitization policy, the
-two bounds, the attachment default, and the consistency behavior — where they are enforced. This section describes the
-surface.
+body, optionally a sanitized HTML body, every attachment it carries described, and — on request — those attachments'
+content. [Email content](email-content.md) documents the use case behind it — the representations, the sanitization
+policy, the four bounds, the attachment default, and the consistency behavior — where they are enforced. This section
+describes the surface.
 
 ### Arguments
 
@@ -270,7 +272,7 @@ surface.
 |---|---|---|
 | `storedEmailIds` | `string[]` | **Required.** The `storedEmailId` values a listing or a search returned, 1 to 10 of them, each named at most once. Each is a UUID; anything else is refused with `51004` |
 | `includeSanitizedHtml` | `boolean` | Whether to also return the sanitized HTML body of each email. Omitted returns plain text alone |
-| `includeAttachmentDetails` | `boolean` | Whether to describe each attachment rather than only count them. Omitted returns the counts alone |
+| `includeAttachmentContent` | `boolean` | Whether to return the content of each attachment as base64, rather than only describing it. Omitted still returns every attachment's file name, media type, and size |
 
 Naming several emails is what the tool exists for: a call that has just listed or searched routinely wants the top few
 results, and one round trip per email spends the protocol overhead, the rate-limit budget, and a turn of the model's own
@@ -317,7 +319,7 @@ in it.
 | `sizeBytes` | The size of the whole email as the mail server reported it |
 | `headers` | Subject, sent and received timestamps, every participant with its header role, and the three threading identifiers |
 | `body` | The representations, or the reason there are none |
-| `attachments` | One entry per attachment when the call asked for them: normalized file name, media type, decoded size — never bytes |
+| `attachments` | One entry per attachment, always: normalized file name, media type, and decoded size, plus the content as base64 within the deployment's byte bounds when the call asked for it |
 | `attachmentCounts` | What the email carries besides its body, returned either way, or `null` when nothing has ever read its parts |
 | `remoteFlags` | The flags a server last showed, and when they were read |
 
@@ -337,14 +339,24 @@ Five parts of it are worth reading before a caller writes against them:
   later synchronization run fetches once there is room. The last three return an empty text because nothing could be
   read, and a caller that ignored the distinction would report an empty message — or would give up on the one state
   where asking again later actually returns the body.
-- **`attachments` is `null` unless it was asked for, which is not an empty list.** A file name is text the sender chose
-  and is often the most identifying string an email carries, so an ordinary read of a body publishes none. `null` means
-  the call did not ask; `[]` means the email carries none. `attachmentCounts` answers how many either way, so a caller
-  can tell that asking again would describe something.
-- **`attachments` carries no content, in any shape.** Nothing reachable from the published result can hold bytes, which
-  `Mcp.UnitTests` asserts structurally over the whole contract rather than response by response. Attachment download and
-  message export are out of scope for the first release, and withholding file names by default narrows what is described
-  rather than beginning to publish what is not.
+- **`attachments` is always present, and `[]` means the email carries none.** Every read describes what a message
+  carries, because deciding whether a file is worth asking for *is* reading its name, its type, and its size — a result
+  answering with a count alone would force a second call to learn what the first was about. `attachmentCounts` answers
+  how many either way. `list_emails` still counts and never names, deliberately: a listing is a browse over mail the
+  caller has not opened, while a content read has already returned the body in full.
+- **`contentBase64` is the whole file or nothing, and `contentState` says which.** It is absent unless the call set
+  `includeAttachmentContent`, which `contentState: notRequested` states rather than leaving a reader to infer. An
+  attachment above
+  `EmailContent:MaxAttachmentBytes`, or reached after `EmailContent:MaxAttachmentBytesPerRead` is spent, is described
+  with `contentBase64` absent and `contentState` naming the bound: `exceededAttachmentByteLimit` is the same answer in
+  every call, while `readByteBudgetExhausted` may come back in a narrower one. *May*, because the budget falls to the
+  attachments of one message as much as to the emails of one call — a message carrying more than the budget in files
+  withholds its later ones however few emails were named, and no configuration makes the retry guaranteed the way the
+  floor under `MaxCharactersPerRead` does for bodies. No attachment is
+  ever returned in part, because a fragment of a file is indistinguishable from a whole one to anything downstream.
+  That property is the only one in the whole published contract that carries message-part bytes, and nothing reachable
+  from the result can hold a raw byte array or a stream at all; `Mcp.UnitTests` asserts both structurally over the
+  contract rather than response by response.
 - **File names are normalized and may say so.** A file name is attacker-controlled text that reaches a model directly, so
   what is published is the domain's normalized form: a bare name, never a path or a traversal segment, never a control
   character or a bidirectional override, at most 200 characters. `wasFileNameNormalized` states whether MailFathom had to

@@ -6,7 +6,7 @@ using MailFathom.Application.EmailContent.Storage;
 
 namespace MailFathom.Application.EmailContent.Rendering;
 
-/// <summary>Turns stored raw MIME into the headers, body, and attachment metadata a reader is shown.</summary>
+/// <summary>Turns stored raw MIME into the headers, body, and attachments a reader is shown.</summary>
 /// <remarks>
 /// <para>
 /// The port is separate from the reader that feeds the lexical index, because the two want different readings of the
@@ -36,6 +36,11 @@ public interface IEmailContentRenderer
     /// <para>
     /// An implementation applies both bounds and reports which one cut each representation. The plain text is bounded
     /// before the markup, because the caller's default representation must not be the one a shared budget starves.
+    /// </para>
+    /// <para>
+    /// Attachment octets are materialized only where <paramref name="bounds" /> asks for them, and only for a part that
+    /// fits both octet bounds. An implementation never returns part of a file: a bound removes the content and names
+    /// itself instead.
     /// </para>
     /// </remarks>
     Task<EmailContentRenderingResult> RenderAsync(

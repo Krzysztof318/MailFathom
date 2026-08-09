@@ -2,13 +2,18 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Application.EmailContent.Rendering;
 using MailFathom.Application.Emails.Summaries;
 using MimeKit;
 
 namespace MailFathom.Infrastructure.Mail.Mime;
 
 /// <summary>Carries the answers one walk of a message's structure produces.</summary>
-/// <param name="Attachments">What the message carries besides its body.</param>
+/// <param name="Summary">What the message carries besides its body, counted and never described.</param>
+/// <param name="Attachments">
+/// One entry per attachment, described whatever the walk was asked for and carrying octets only where it was asked for
+/// content and the bounds allowed it.
+/// </param>
 /// <param name="BodyTextParts">The textual parts the walk resolved as the message's body, in the order it found them.</param>
 /// <param name="BodyIsEncrypted">Whether it was the message's own body that arrived inside a cryptographic envelope.</param>
 /// <remarks>
@@ -27,6 +32,7 @@ namespace MailFathom.Infrastructure.Mail.Mime;
 /// </para>
 /// </remarks>
 internal sealed record MimeContentClassification(
-    EmailAttachmentSummary Attachments,
+    EmailAttachmentSummary Summary,
+    IReadOnlyList<RenderedEmailAttachment> Attachments,
     IReadOnlyList<TextPart> BodyTextParts,
     bool BodyIsEncrypted);
