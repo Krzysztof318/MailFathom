@@ -128,6 +128,13 @@ Nothing else goes: not the accounts and folders in scope as a list, not whole bo
 the participants, the size, the flags, or the attachment summary a listing publishes. Those are dropped before the
 provider is reached rather than filtered out of a log afterwards.
 
+Nor is what does go left behind once the answer comes back. One of the two APIs a provider can be reached over would
+keep the call for a month and show it in that provider's console; MailFathom refuses it on every request it sends there,
+and the other API stores nothing to begin with — see
+[the responses API is used statelessly](../features/chat-generation.md#the-responses-api-is-used-statelessly-and-that-is-not-an-option).
+Neither is a setting the operator chooses. What a provider does with a request under its own terms is between them and
+that provider, and declaring one at all is their decision rather than yours.
+
 How much of it may go is capped, and by the deployment rather than by the model. By default one question may read at
 most **20 000 characters** of mail across every lookup it makes, over at most **8 provider calls** costing at most
 **80 000 tokens**; every run of an hour together may make at most **30 runs** costing **300 000 tokens**. An operator

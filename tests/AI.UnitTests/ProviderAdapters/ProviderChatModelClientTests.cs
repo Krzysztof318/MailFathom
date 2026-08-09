@@ -496,6 +496,76 @@ public sealed class ProviderChatModelClientTests
     }
 
     /// <summary>
+    /// The responses API keeps what it is sent unless the request says otherwise, and what one request here carries is
+    /// the question together with the mail passages retrieval selected for it. Storing that is the provider's default
+    /// rather than this deployment's decision, so the refusal is stated on every call the API conducts — which is why
+    /// it holds over a declaration that wrote no reasoning effort as firmly as over one that did.
+    /// </summary>
+    [Theory]
+    [InlineData(null)]
+    [InlineData("low")]
+    public async Task AnswerAsync_OverTheResponsesApi_LeavesNoStoredCopyAtTheProvider(string? effort)
+    {
+        // Arrange
+        using var provider = ScriptedProvider.Answering(Response("an answer"));
+        var client = provider.ClientOver(ChatDeclarations.Plan(
+            ChatDeclarations.Endpoint(api: ChatProviderApi.Responses),
+            reasoningEffort: effort));
+
+        // Act
+        await client.AnswerAsync(Conversation, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Contains("\"store\":false", provider.LastRequestBody, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Storing nothing at the provider is what makes a run stateless, and a stateless run carries its own reasoning:
+    /// the model returns it encrypted and reads it back on the turn after, but only where the request asked to have it
+    /// included. Without that a tool loop starts every turn without what it worked out in the one before.
+    /// </summary>
+    [Theory]
+    [InlineData(null)]
+    [InlineData("low")]
+    public async Task AnswerAsync_OverTheResponsesApi_AsksForTheReasoningItWillHandBack(string? effort)
+    {
+        // Arrange
+        using var provider = ScriptedProvider.Answering(Response("an answer"));
+        var client = provider.ClientOver(ChatDeclarations.Plan(
+            ChatDeclarations.Endpoint(api: ChatProviderApi.Responses),
+            reasoningEffort: effort));
+
+        // Act
+        await client.AnswerAsync(Conversation, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Contains(
+            "\"include\":[\"reasoning.encrypted_content\"]",
+            provider.LastRequestBody,
+            StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The chat completions API stores nothing unless it is asked to and has no inclusion list at all, so neither
+    /// member belongs on a request it conducts. Sending one would be this deployment restating a default it agrees
+    /// with, on the one surface where a member nobody asked for is what a model rejects the whole request over.
+    /// </summary>
+    [Fact]
+    public async Task AnswerAsync_OverTheChatCompletionsApi_SendsNeitherResponsesOnlyMember()
+    {
+        // Arrange
+        using var provider = ScriptedProvider.Answering(Completion("an answer", "stop"));
+        var client = provider.ClientOver(ChatDeclarations.Plan(reasoningEffort: "low"));
+
+        // Act
+        await client.AnswerAsync(Conversation, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.DoesNotContain("\"store\"", provider.LastRequestBody, StringComparison.Ordinal);
+        Assert.DoesNotContain("\"include\"", provider.LastRequestBody, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// The responses surface names no reason for an answer that simply finished, so this deployment reports the honest
     /// reading rather than claiming the model completed. A truncation and a filtered generation still arrive named,
     /// which is what keeps either from being repeated as though it were a transport fault.

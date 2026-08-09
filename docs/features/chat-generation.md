@@ -93,6 +93,27 @@ that simply finished names nothing and arrives as `Unreported` in the table belo
 truncation and a content filter still arrive named, which is what keeps either from being repeated as though it were a
 transport fault. Nothing else about the two paths is visible above this boundary.
 
+## The responses API is used statelessly, and that is not an option
+
+A request over the responses API carries the question, the run's instruction, and the mail passages retrieval selected
+for it, and that API keeps what it is sent unless the request refuses — for thirty days, readable in the provider's own
+console by anyone holding the account. So every call MailFathom conducts over it states `store: false`. The chat
+completions API keeps nothing unless a request asks it to, so a call over that path carries no such member at all —
+which is what makes the choice of `Api` a choice about capability rather than about what the provider retains.
+
+**It is not a setting, and there is no key that turns it back on.** A deployment whose correspondence is copied into a
+third party's log is not a shape this project offers, so the refusal is a property of the path rather than a default an
+operator may reconsider. What an operator does decide is whether to declare a hosted provider at all, and
+[what leaves the instance when a question is asked](../users/usage.md#what-leaves-your-instance-when-you-ask) is the
+page that states what such a call carries.
+
+**Storing nothing means the run carries its own reasoning.** A reasoning model returns what it worked out as encrypted
+content it cannot read back later unless the caller hands it over on the next turn, and the provider emits that content
+only where the request asked for it — so every call also asks for `reasoning.encrypted_content`. The answering run is a
+tool loop, and without it each turn after the first would begin without what the model had already worked out about the
+mail it read, which the model then pays to work out again. A model that does not reason returns none, and the request is
+otherwise unchanged.
+
 ## Authentication has two shapes
 
 The same two, under the same rules, as an embedding endpoint's: **either** a provider key **or** one of four

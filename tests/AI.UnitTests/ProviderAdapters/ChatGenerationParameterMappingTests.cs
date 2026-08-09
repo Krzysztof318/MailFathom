@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.AI.Chat;
 using MailFathom.AI.ProviderAdapters;
 using MailFathom.AI.UnitTests.TestDoubles;
 using Xunit;
@@ -41,9 +42,12 @@ public sealed class ChatGenerationParameterMappingTests
         Assert.NotNull(options.RawRepresentationFactory);
     }
 
-    /// <summary>A model that does not reason rejects the parameter, so an unwritten effort has to leave the hook off entirely.</summary>
+    /// <summary>
+    /// A model that does not reason rejects the parameter, so an unwritten effort has to leave the hook off entirely —
+    /// on the chat completions API, where the effort is the only thing the hook was ever carrying.
+    /// </summary>
     [Fact]
-    public void ToChatOptions_ADeclarationWithoutAReasoningEffort_CarriesNoRequestHook()
+    public void ToChatOptions_AChatCompletionsDeclarationWithoutAReasoningEffort_CarriesNoRequestHook()
     {
         // Act
         var options = ChatGenerationParameterMapping.ToChatOptions(ChatDeclarations.Plan());
@@ -52,6 +56,24 @@ public sealed class ChatGenerationParameterMappingTests
         Assert.Null(options.RawRepresentationFactory);
         Assert.Null(options.Temperature);
         Assert.Null(options.TopP);
+    }
+
+    /// <summary>
+    /// The responses API carries a decision of its own on every request — what the provider may keep of what it was
+    /// sent — so the hook belongs to the API rather than to a parameter somebody happened to declare. What it puts on
+    /// the request is asserted on the wire in <see cref="ProviderChatModelClientTests" />.
+    /// </summary>
+    [Fact]
+    public void ToChatOptions_AResponsesDeclarationWithoutAReasoningEffort_StillCarriesTheRequestHook()
+    {
+        // Arrange
+        var plan = ChatDeclarations.Plan(ChatDeclarations.Endpoint(api: ChatProviderApi.Responses));
+
+        // Act
+        var options = ChatGenerationParameterMapping.ToChatOptions(plan);
+
+        // Assert
+        Assert.NotNull(options.RawRepresentationFactory);
     }
 
     [Fact]
