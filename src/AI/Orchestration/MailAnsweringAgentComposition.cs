@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.AI.Chat;
+using MailFathom.AI.ProviderAdapters;
 using MailFathom.AI.Retrieval;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
@@ -52,18 +53,16 @@ internal static class MailAnsweringAgentComposition
         ArgumentNullException.ThrowIfNull(retrieval);
         ArgumentNullException.ThrowIfNull(loggerFactory);
 
+        var chatOptions = ChatGenerationParameterMapping.ToChatOptions(plan);
+
+        // Carried as the run's instruction rather than written into a message, which is what keeps it in a position no
+        // retrieved extract can be placed in.
+        chatOptions.Instructions = MailAnsweringInstructions.Text;
+
         var options = new ChatClientAgentOptions
         {
             Name = AgentName,
-            ChatOptions = new ChatOptions
-            {
-                // Carried as the run's instruction rather than written into a message, which is what keeps it in a
-                // position no retrieved extract can be placed in.
-                Instructions = MailAnsweringInstructions.Text,
-                MaxOutputTokens = plan.MaximumOutputTokens,
-                Temperature = plan.Temperature,
-                TopP = plan.TopP,
-            },
+            ChatOptions = chatOptions,
 
             // The one context provider, and the only route by which mail reaches the model.
             AIContextProviders = [retrieval.CreateContextProvider(loggerFactory)],

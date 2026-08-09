@@ -8,6 +8,7 @@ namespace MailFathom.AI.Chat;
 /// <param name="Alias">The deployment's own name for this endpoint, which is what a log, a metric, a resilience circuit, and a failure message call it.</param>
 /// <param name="Address">The base address requests are sent to, or <see langword="null" /> for the provider's own default.</param>
 /// <param name="RoutedModelName">What is sent as the model of a request, which for a cloud deployment is the deployment's name rather than the vendor's model identifier.</param>
+/// <param name="Api">Which of the provider's two request APIs a call is conducted through.</param>
 /// <remarks>
 /// <para>
 /// The alias exists because the other two members are an address and a routing name, and an address may not be written
@@ -23,5 +24,10 @@ namespace MailFathom.AI.Chat;
 /// produced it has to be recorded and proved; an answer is produced, presented, and gone, so nothing downstream ever
 /// has to ask which model wrote it.
 /// </para>
+/// <para>
+/// The API belongs here rather than beside the generation parameters because it is part of where a request goes: the two
+/// surfaces are two paths under one address, reached with one credential over one transport. A deployment that has to
+/// move to the other one is correcting how its endpoint is reached, not how its model is asked to answer.
+/// </para>
 /// </remarks>
-public sealed record ChatEndpoint(string Alias, Uri? Address, string RoutedModelName);
+public sealed record ChatEndpoint(string Alias, Uri? Address, string RoutedModelName, ChatProviderApi Api);

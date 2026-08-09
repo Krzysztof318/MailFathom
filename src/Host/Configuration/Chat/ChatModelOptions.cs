@@ -45,6 +45,16 @@ internal sealed class ChatModelOptions : IValidatableObject
     /// <remarks>For a cloud deployment this is the name the operator gave the deployment rather than the vendor's model identifier, because that is the string the endpoint recognizes.</remarks>
     public string Model { get; set; } = string.Empty;
 
+    /// <summary>Gets or sets which of the provider's two request APIs a call is conducted through.</summary>
+    /// <remarks>
+    /// Declared rather than derived from the model, because the routed model name is not a model identity: for a cloud
+    /// deployment it is whatever the operator called the deployment, so deriving would mean guessing from a string they
+    /// invented and a wrong guess is one nothing here could correct. Chat completions is the default because every
+    /// OpenAI-compatible server offers it; the responses API is what a current reasoning model requires before it will
+    /// take function tools beside a stated reasoning effort.
+    /// </remarks>
+    public ChatProviderApi Api { get; set; } = ChatProviderApi.ChatCompletions;
+
     /// <summary>Gets or sets the base address requests are sent to.</summary>
     /// <remarks>
     /// Empty uses the provider library's own default, which is what a first-party OpenAI endpoint needs. A cloud
@@ -72,6 +82,22 @@ internal sealed class ChatModelOptions : IValidatableObject
     /// <remarks>Nullable for the reason <see cref="Temperature" /> is, and declared beside it rather than instead of it because a provider that accepts both documents setting only one.</remarks>
     [Range(0d, 1d)]
     public float? TopP { get; set; }
+
+    /// <summary>Gets or sets the reasoning effort every call states, left unset to send no reasoning parameter at all.</summary>
+    /// <remarks>
+    /// <para>
+    /// Nullable for the reason <see cref="Temperature" /> is: a model that does not reason rejects the parameter
+    /// outright. Writing <c>none</c> is not the same as leaving it out — it states an effort of none and sends it, which
+    /// is what a provider refusing function tools beside an unstated effort asks for.
+    /// </para>
+    /// <para>
+    /// The provider's own word rather than a name chosen here, and unvalidated against any list for the reason
+    /// <see cref="Model" /> is: which levels exist belongs to the model, <c>xhigh</c> arrived after the levels beneath
+    /// it, and a set fixed at build time would make a release the price of using the next one. What startup checks is
+    /// the shape, so a value no provider could read as a level fails here rather than on the first question.
+    /// </para>
+    /// </remarks>
+    public string? ReasoningEffort { get; set; }
 
     /// <summary>Gets or sets the greatest number of turns one request carries.</summary>
     [Range(1, 512)]
@@ -113,11 +139,14 @@ internal sealed class ChatModelOptions : IValidatableObject
         {
             // A section carrying settings but no alias is the one shape worth naming: an operator who wrote a model, an
             // address, or a credential and expects the provider to be in use has to be told that nothing reads any of
-            // it. Every member checked here has no useful default, so writing one is unambiguous intent; the bounds and
-            // the timeout are not, because a deployment that accepted their defaults is indistinguishable from one that
-            // wrote them out.
+            // it. What each member contributes here is whether writing it was unambiguous intent. Most have no useful
+            // default, so any value at all is; the API has one, so what counts is a value other than it, which nobody
+            // writes by accident. The bounds and the timeout contribute nothing either way, because a deployment that
+            // accepted their defaults is indistinguishable from one that wrote them out.
             if (this.Model.Trim().Length > 0
                 || this.Address.Trim().Length > 0
+                || this.Api != ChatProviderApi.ChatCompletions
+                || this.ReasoningEffort is not null
                 || this.ApiKey is not null
                 || this.EntraCredential is not null
                 || this.RelevanceFilter.Enabled)
@@ -144,6 +173,24 @@ internal sealed class ChatModelOptions : IValidatableObject
             yield return new ValidationResult(
                 $"Chat endpoint '{alias}' declares a RequestTimeout that is not positive, because an unbounded request would hold the work behind it open for as long as the endpoint stays silent.",
                 [nameof(this.RequestTimeout)]);
+        }
+
+        // The binder accepts any number for an enum, and a value no member declares would read as a choice while naming
+        // nothing — for the API, a request sent to a path this cannot reach at all.
+        if (!Enum.IsDefined(this.Api))
+        {
+            yield return new ValidationResult(
+                $"Chat endpoint '{alias}' declares an Api of '{(int)this.Api}', which names no API. State '{nameof(ChatProviderApi.ChatCompletions)}' or '{nameof(ChatProviderApi.Responses)}'.",
+                [nameof(this.Api)]);
+        }
+
+        // The shape alone, never the vocabulary: which levels a model offers is the model's, so a list held here would
+        // refuse the next one a provider adds and make a release the price of using it.
+        if (this.ReasoningEffort is { } effort && !ChatGenerationPlan.IsUsableReasoningEffort(effort))
+        {
+            yield return new ValidationResult(
+                $"Chat endpoint '{alias}' declares a ReasoningEffort that is not a single word a provider could read as a level. Write the level the model documents, such as 'none', 'low', or 'high', or leave it unset to send no reasoning parameter.",
+                [nameof(this.ReasoningEffort)]);
         }
 
         if (this.Address.Length > 0 && !IsUsableAddress(this.Address))
@@ -178,7 +225,8 @@ internal sealed class ChatModelOptions : IValidatableObject
     public ChatEndpoint ToEndpoint() => new(
         this.Alias.Trim(),
         this.Address is { Length: > 0 } address ? new Uri(address, UriKind.Absolute) : null,
-        this.Model.Trim());
+        this.Model.Trim(),
+        this.Api);
 
     private static bool IsUsableAddress(string address) =>
         Uri.TryCreate(address, UriKind.Absolute, out var parsed)

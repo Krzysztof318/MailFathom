@@ -28,11 +28,19 @@ internal static class ChatProviderContractSettings
     private const string ApiKeyVariable = "MAILFATHOM_CHAT_API_KEY";
     private const string AddressVariable = "MAILFATHOM_CHAT_ADDRESS";
     private const string ModelVariable = "MAILFATHOM_CHAT_MODEL";
+    private const string ReasoningEffortVariable = "MAILFATHOM_CHAT_REASONING_EFFORT";
 
-    /// <summary>Builds the plan a contract run calls the provider with.</summary>
+    /// <summary>Builds the plan a contract run calls the provider with, over one of the two request APIs.</summary>
+    /// <param name="api">Which of the provider's two request APIs the plan reaches it through.</param>
     /// <returns>The plan.</returns>
     /// <exception cref="InvalidOperationException">Thrown when the run was asked for without everything it needs.</exception>
-    public static ChatGenerationPlan Plan()
+    /// <remarks>
+    /// The API is a parameter rather than a variable a run sets, because both are covered rather than one chosen: each
+    /// is a distinct wire protocol against the same endpoint, and a surface nobody called is a surface whose first
+    /// failure reaches an operator instead of this suite. The declared model has to serve both, which the first-party
+    /// and cloud endpoints do for a request carrying no tools — and a contract request carries none.
+    /// </remarks>
+    public static ChatGenerationPlan Plan(ChatProviderApi api)
     {
         var model = AiProviderContractRun.Required(ModelVariable);
         var address = Environment.GetEnvironmentVariable(AddressVariable);
@@ -40,16 +48,20 @@ internal static class ChatProviderContractSettings
         var endpoint = new ChatEndpoint(
             "contract",
             address is { Length: > 0 } ? new Uri(address, UriKind.Absolute) : null,
-            model);
+            model,
+            api);
 
         // Neither sampling parameter is sent, because several current models reject one outright and a contract run
         // exists to learn what the provider does with a request MailFathom actually makes, not to learn that a
-        // parameter this suite chose is refused.
+        // parameter this suite chose is refused. The reasoning effort follows the same rule and is therefore unset
+        // unless the run names one: a model that does not reason refuses the parameter, and a reasoning model that
+        // requires it is exactly what a run naming one is pointed at.
         return ChatGenerationPlan.Create(
             endpoint,
             MaximumOutputTokens,
             temperature: null,
             topP: null,
+            Environment.GetEnvironmentVariable(ReasoningEffortVariable) is { Length: > 0 } effort ? effort : null,
             maximumMessagesPerRequest: 8,
             maximumRequestCharacters: 8000,
             requestTimeout: TimeSpan.FromSeconds(60));

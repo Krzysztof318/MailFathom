@@ -103,7 +103,10 @@ OpenAI and Azure OpenAI are the two this release reaches, and one client constru
 v1 data plane is OpenAI-compatible, so a cloud deployment is the same client pointed at the resource's own
 `/openai/v1/` address with the deployment's name as the routed model. The choice reaches beyond embeddings — a declared
 chat endpoint is served by this same wiring rather than by a second one, as [chat
-generation](chat-generation.md#two-providers-one-client) describes.
+generation](chat-generation.md#two-providers-one-client) describes. A chat endpoint may state which of the provider's
+two request APIs its calls go to, which is a path under the declared address rather than a second wiring: the address,
+the credential, the transport, and the retry opt-out are the ones described here either way. An embedding endpoint has
+no such choice, because the provider offers embeddings on one API only.
 
 Support beyond these two is deliberately out of scope and is tracked separately.
 

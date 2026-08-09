@@ -2,13 +2,18 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using System.Net;
+using System.Text;
 using MailFathom.AI.Orchestration;
+using MailFathom.AI.ProviderAdapters;
+using MailFathom.AI.Providers;
 using MailFathom.AI.Retrieval;
 using MailFathom.AI.UnitTests.TestDoubles;
 using MailFathom.Application.Emails.Mailboxes;
 using MailFathom.Application.Retrieval.AskMail;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Folders;
+using MailFathom.TestSupport;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -147,7 +152,11 @@ public sealed class MailAnsweringAgentCompositionTests
             ScopedMailKnowledgeRetrieval.SearchToolName,
             "invoice",
             "The invoice was attached.");
-        var plan = ChatDeclarations.Plan(maximumOutputTokens: 321, temperature: 0.25f, topP: 0.75f);
+        var plan = ChatDeclarations.Plan(
+            maximumOutputTokens: 321,
+            temperature: 0.25f,
+            topP: 0.75f,
+            reasoningEffort: "low");
         var retrieval = new ScopedMailKnowledgeRetrieval(
             knowledgeSearch,
             OnePrimaryAccount,
@@ -168,8 +177,112 @@ public sealed class MailAnsweringAgentCompositionTests
             Assert.Equal(321, call.Options?.MaxOutputTokens);
             Assert.Equal(0.25f, call.Options?.Temperature);
             Assert.Equal(0.75f, call.Options?.TopP);
+            Assert.NotNull(call.Options?.RawRepresentationFactory);
         });
     }
+
+    /// <summary>
+    /// A run is a tool loop, so the effort has to ride every turn rather than only the first: the turn that writes the
+    /// answer is the one after a retrieval, and a provider refusing tools beside an unstated effort would refuse it.
+    /// </summary>
+    [Fact]
+    public async Task Compose_ADeploymentThatStatedNoReasoningEffort_SendsNoneOnAnyTurn()
+    {
+        // Arrange
+        var knowledgeSearch = new RecordingEmailKnowledgeSearch();
+        using var chatClient = ScriptedChatClient.CallingTool(
+            ScopedMailKnowledgeRetrieval.SearchToolName,
+            "invoice",
+            "The invoice was attached.");
+        var agent = AgentOver(chatClient, knowledgeSearch, OnePrimaryAccount, out _);
+
+        // Act
+        await agent.RunAsync("was it attached", session: null, options: null, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(2, chatClient.Calls.Count);
+        Assert.All(chatClient.Calls, call => Assert.Null(call.Options?.RawRepresentationFactory));
+    }
+
+    /// <summary>
+    /// The effort has to reach the wire on **every** turn of the run, and this is the only test that can establish it.
+    /// The declared level is stated through the client library's own request options rather than through a member of the
+    /// provider-neutral abstraction, which is what lets a deployment name a level this build has never heard of — and it
+    /// means a substituted client sees a hook rather than a value, so nothing above the real client can prove the value
+    /// went out. The turn that writes the answer is the one *after* a retrieval, and a provider refusing function tools
+    /// beside an unstated effort would refuse exactly that turn, so a run whose second turn dropped the effort would
+    /// fail in the one place this whole feature exists to fix.
+    /// </summary>
+    /// <remarks>Runs the composed agent over a real provider client and a fake transport, so no network is reached — the same arrangement the chat adapter's own tests use.</remarks>
+    [Fact]
+    public async Task Compose_ADeclaredReasoningEffort_ReachesTheWireOnEveryTurnOfTheRun()
+    {
+        // Arrange
+        const string effort = "a-level-released-later";
+        var sent = new List<string>();
+        using var handler = new FakeHttpMessageHandler(async (request, cancellationToken) =>
+        {
+            sent.Add(request.Content is null
+                ? string.Empty
+                : await request.Content.ReadAsStringAsync(cancellationToken));
+
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(
+                    sent.Count == 1 ? ToolCallCompletion : TextCompletion,
+                    Encoding.UTF8,
+                    "application/json"),
+            };
+        });
+
+        using var transport = new HttpClient(handler, disposeHandler: false);
+        using var credential = ProviderEndpointCredential.FromApiKey("a-configured-key", resolvedMaterial: null);
+        var plan = ChatDeclarations.Plan(reasoningEffort: effort);
+        using var chatClient = new OpenAiCompatibleClientFactory()
+            .OpenChatClient(plan.Endpoint, credential, transport);
+
+        var knowledgeSearch = new RecordingEmailKnowledgeSearch()
+            .Returning("invoice", KnowledgePassages.Create("the invoice is attached"));
+        var retrieval = new ScopedMailKnowledgeRetrieval(
+            knowledgeSearch,
+            OnePrimaryAccount,
+            new MailAnsweringRunLedger(MailAnsweringRunBounds.Default));
+        var agent = MailAnsweringAgentComposition.Compose(
+            chatClient,
+            plan,
+            retrieval,
+            NullLoggerFactory.Instance);
+
+        // Act
+        await agent.RunAsync("was it attached", session: null, options: null, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(2, sent.Count);
+        Assert.All(sent, body =>
+        {
+            Assert.Contains($"\"reasoning_effort\":\"{effort}\"", body, StringComparison.Ordinal);
+
+            // Beside the effort rather than instead of it: the request hook supplies the level and the abstraction fills
+            // the members it owns over the top, so a mapping that stated the effort by discarding the tools would take
+            // the run's only route to mail away while still passing the assertion above.
+            Assert.Contains(ScopedMailKnowledgeRetrieval.SearchToolName, body, StringComparison.Ordinal);
+            Assert.Contains("\"max_completion_tokens\"", body, StringComparison.Ordinal);
+        });
+    }
+
+    /// <summary>A provider answer asking for the retrieval tool, which is what makes the run take a second turn.</summary>
+    private const string ToolCallCompletion =
+        "{\"id\":\"chatcmpl-1\",\"object\":\"chat.completion\",\"created\":1,\"model\":\"a-chat-model\","
+        + "\"choices\":[{\"index\":0,\"message\":{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"call-1\","
+        + "\"type\":\"function\",\"function\":{\"name\":\"" + ScopedMailKnowledgeRetrieval.SearchToolName
+        + "\",\"arguments\":\"{\\\"query\\\":\\\"invoice\\\"}\"}}]},\"finish_reason\":\"tool_calls\"}],"
+        + "\"usage\":{\"prompt_tokens\":1,\"completion_tokens\":1,\"total_tokens\":2}}";
+
+    /// <summary>The answer the run writes once the retrieval has answered.</summary>
+    private const string TextCompletion =
+        "{\"id\":\"chatcmpl-2\",\"object\":\"chat.completion\",\"created\":1,\"model\":\"a-chat-model\","
+        + "\"choices\":[{\"index\":0,\"message\":{\"role\":\"assistant\",\"content\":\"The invoice was attached.\"},"
+        + "\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":1,\"completion_tokens\":1,\"total_tokens\":2}}";
 
     /// <summary>
     /// The instruction is the run's own and rides beside the conversation rather than inside it, so it is carried by

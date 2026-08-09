@@ -406,6 +406,140 @@ public sealed class ProviderChatModelClientTests
         Assert.Contains("0.25", sent, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// The parameter this whole issue exists for: a model that refuses function tools beside an unstated effort has to
+    /// be reachable, and the wire name of each effort is what the provider reads. Asserted on the request rather than on
+    /// the plan, because a value that reached the plan and not the request would leave the refusal exactly where it was.
+    /// </summary>
+    /// <remarks>
+    /// The last two cases are the point of the parameter being a word rather than a member of a set: <c>xhigh</c>
+    /// arrived after the levels beneath it, and a level released after this build has to reach the provider without one.
+    /// </remarks>
+    [Theory]
+    [InlineData("none")]
+    [InlineData("minimal")]
+    [InlineData("low")]
+    [InlineData("high")]
+    [InlineData("xhigh")]
+    [InlineData("a-level-released-later")]
+    public async Task AnswerAsync_ADeclaredReasoningEffort_ReachesTheRequestAsWritten(string effort)
+    {
+        // Arrange
+        using var provider = ScriptedProvider.Answering(Completion("an answer", "stop"));
+        var client = provider.ClientOver(ChatDeclarations.Plan(reasoningEffort: effort));
+
+        // Act
+        await client.AnswerAsync(Conversation, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Contains($"\"reasoning_effort\":\"{effort}\"", provider.LastRequestBody, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A section that writes no effort sends none, because a model that does not reason rejects the parameter outright
+    /// and a literal default would turn every call such a deployment makes into a rejected request.
+    /// </summary>
+    [Fact]
+    public async Task AnswerAsync_WithoutADeclaredReasoningEffort_SendsNoReasoningParameter()
+    {
+        // Arrange
+        using var provider = ScriptedProvider.Answering(Completion("an answer", "stop"));
+        var client = provider.ClientOver(ChatDeclarations.Plan());
+
+        // Act
+        await client.AnswerAsync(Conversation, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.DoesNotContain("reasoning", provider.LastRequestBody, StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// The declared API decides the path, and that is the whole observable difference: the same endpoint, the same
+    /// credential, and the same transport carry both, so what a test can see is where the request went.
+    /// </summary>
+    [Theory]
+    [InlineData(ChatProviderApi.ChatCompletions, "/v1/chat/completions")]
+    [InlineData(ChatProviderApi.Responses, "/v1/responses")]
+    public async Task AnswerAsync_ADeclaredApi_SendsToThatApisPath(ChatProviderApi api, string path)
+    {
+        // Arrange
+        using var provider = ScriptedProvider.Answering(
+            api is ChatProviderApi.Responses ? Response("an answer") : Completion("an answer", "stop"));
+
+        var client = provider.ClientOver(ChatDeclarations.Plan(ChatDeclarations.Endpoint(api: api)));
+
+        // Act
+        var answer = await client.AnswerAsync(Conversation, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(path, provider.LastRequestPath);
+        Assert.Equal("an answer", answer.Text);
+    }
+
+    /// <summary>The responses API states the effort in a block of its own, so the mapping has to survive the other surface too.</summary>
+    [Theory]
+    [InlineData("low")]
+    [InlineData("a-level-released-later")]
+    public async Task AnswerAsync_AReasoningEffortOverTheResponsesApi_ReachesTheRequest(string effort)
+    {
+        // Arrange
+        using var provider = ScriptedProvider.Answering(Response("an answer"));
+        var client = provider.ClientOver(ChatDeclarations.Plan(
+            ChatDeclarations.Endpoint(api: ChatProviderApi.Responses),
+            reasoningEffort: effort));
+
+        // Act
+        await client.AnswerAsync(Conversation, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Contains($"\"reasoning\":{{\"effort\":\"{effort}\"}}", provider.LastRequestBody, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The responses surface names no reason for an answer that simply finished, so this deployment reports the honest
+    /// reading rather than claiming the model completed. A truncation and a filtered generation still arrive named,
+    /// which is what keeps either from being repeated as though it were a transport fault.
+    /// </summary>
+    [Theory]
+    [InlineData(null, ChatGenerationStop.Unreported)]
+    [InlineData("max_output_tokens", ChatGenerationStop.OutputLimitReached)]
+    [InlineData("content_filter", ChatGenerationStop.ContentFiltered)]
+    public async Task AnswerAsync_AResponsesApiOutcome_IsReadIntoTheStopThisPortPublishes(
+        string? incompleteReason,
+        ChatGenerationStop expected)
+    {
+        // Arrange
+        using var provider = ScriptedProvider.Answering(Response("a partial answer", incompleteReason));
+        var client = provider.ClientOver(
+            ChatDeclarations.Plan(ChatDeclarations.Endpoint(api: ChatProviderApi.Responses)));
+
+        // Act
+        var answer = await client.AnswerAsync(Conversation, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(expected, answer.Stop);
+    }
+
+    /// <summary>Builds the responses payload a provider answers with.</summary>
+    /// <remarks>
+    /// The surface reports an outcome rather than a finish reason: a response that completed says so in its status and
+    /// names nothing else, and one that stopped early names why under <c>incomplete_details</c>.
+    /// </remarks>
+    private static string Response(string content, string? incompleteReason = null)
+    {
+        var outcome = incompleteReason is null
+            ? "\"status\":\"completed\""
+            : $"\"status\":\"incomplete\",\"incomplete_details\":{{\"reason\":\"{incompleteReason}\"}}";
+
+        return "{\"id\":\"resp-1\",\"object\":\"response\",\"created_at\":1,\"model\":\"a-chat-model\","
+            + outcome
+            + ",\"output\":[{\"type\":\"message\",\"id\":\"msg-1\",\"status\":\"completed\",\"role\":\"assistant\","
+            + "\"content\":[{\"type\":\"output_text\",\"text\":\""
+            + content
+            + "\",\"annotations\":[]}]}],"
+            + "\"usage\":{\"input_tokens\":11,\"output_tokens\":3,\"total_tokens\":14}}";
+    }
+
     /// <summary>Builds the chat-completion payload a provider answers with.</summary>
     /// <remarks>
     /// A <see langword="null" /> <paramref name="finishReason" /> leaves the member out of the payload, because the
@@ -469,6 +603,7 @@ public sealed class ProviderChatModelClientTests
     private sealed class ScriptedProvider : IDisposable
     {
         private readonly List<string> requestBodies = [];
+        private readonly List<string> requestPaths = [];
         private readonly FakeHttpMessageHandler handler;
 
         private Func<HttpRequestMessage, CancellationToken, Task<HttpResponseMessage>> answer = (_, _) =>
@@ -480,6 +615,7 @@ public sealed class ProviderChatModelClientTests
                 this.requestBodies.Add(request.Content is null
                     ? string.Empty
                     : await request.Content.ReadAsStringAsync(cancellationToken));
+                this.requestPaths.Add(request.RequestUri?.AbsolutePath ?? string.Empty);
 
                 return await this.answer(request, cancellationToken);
             });
@@ -487,6 +623,9 @@ public sealed class ProviderChatModelClientTests
         public int RequestCount => this.requestBodies.Count;
 
         public string LastRequestBody => this.requestBodies[^1];
+
+        /// <summary>The path the last request went to, which is what tells the two provider APIs apart on the wire.</summary>
+        public string LastRequestPath => this.requestPaths[^1];
 
         /// <summary>The health state every call this provider serves reports into, so a test can read what the run established.</summary>
         public IAiProviderHealthRecorder HealthRecorder { get; } = Substitute.For<IAiProviderHealthRecorder>();

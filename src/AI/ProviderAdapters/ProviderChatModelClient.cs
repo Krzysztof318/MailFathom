@@ -170,12 +170,7 @@ internal sealed class ProviderChatModelClient : IChatModelClient
         using var transport = this.transportFactory.CreateClient(TransportName);
         using var client = this.clientFactory.OpenChatClient(endpoint, credential, transport);
 
-        var options = new Microsoft.Extensions.AI.ChatOptions
-        {
-            MaxOutputTokens = this.plan.MaximumOutputTokens,
-            Temperature = this.plan.Temperature,
-            TopP = this.plan.TopP,
-        };
+        var options = ChatGenerationParameterMapping.ToChatOptions(this.plan);
 
         try
         {
@@ -276,10 +271,12 @@ internal sealed class ProviderChatModelClient : IChatModelClient
     /// something the provider did not. A tool call falls here too, because this boundary offers no tools, so a provider
     /// answering with one has answered something nothing asked for.
     /// <para>
-    /// The null branch is for the abstraction rather than for the client behind it today. That client refuses a
-    /// <c>finish_reason</c> of JSON null and substitutes its own default for an absent one, so an answer reaching here
-    /// always names a reason; the contract this method implements allows none, and a branch that assumed otherwise
-    /// would be one an unremarkable package bump could turn into a wrong answer.
+    /// Which reason arrives depends on the API the endpoint declared, and the null branch is where that shows. Chat
+    /// completions always names one — the client refuses a <c>finish_reason</c> of JSON null and substitutes its own
+    /// default for an absent one — while the responses API reports an outcome instead: a response that stopped early
+    /// says why, and one that simply finished names nothing and arrives here as null. Reporting that as
+    /// <see cref="ChatGenerationStop.Completed" /> would claim the model finished on a surface that never said so, which
+    /// is the same claim this method refuses to make everywhere else.
     /// </para>
     /// </remarks>
     private static ChatGenerationStop ToGenerationStop(Microsoft.Extensions.AI.ChatFinishReason? finishReason) =>

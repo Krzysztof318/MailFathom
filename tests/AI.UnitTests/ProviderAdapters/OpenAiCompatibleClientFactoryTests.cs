@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.AI.Chat;
 using MailFathom.AI.ProviderAdapters;
 using MailFathom.AI.Providers;
 using MailFathom.AI.UnitTests.TestDoubles;
@@ -156,5 +157,62 @@ public sealed class OpenAiCompatibleClientFactoryTests
 
         // Assert
         Assert.NotNull(client);
+    }
+
+    /// <summary>
+    /// The responses API is the second surface one endpoint may be reached through, and it is opened over both
+    /// credential shapes for the reason the chat completions one is: a cloud deployment with no key to provision must
+    /// not be the shape nothing exercised.
+    /// </summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void OpenChatClient_AnEndpointDeclaringTheResponsesApi_OpensAClient(bool authenticatedWithAKey)
+    {
+        // Arrange
+        using var handler = new FakeHttpMessageHandler(
+            (_, _) => Task.FromResult(new HttpResponseMessage(System.Net.HttpStatusCode.OK)));
+        using var transport = new HttpClient(handler, disposeHandler: false);
+        using var credential = authenticatedWithAKey
+            ? ProviderEndpointCredential.FromApiKey("a-resolved-key", resolvedMaterial: null)
+            : ProviderEndpointCredential.FromEntra(
+                new EntraCredentialDeclaration(
+                    ProviderEndpointCredentialKind.ManagedIdentity,
+                    "https://ai.example.invalid/.default",
+                    TenantId: null,
+                    ClientId: null,
+                    ClientSecret: null,
+                    CertificatePath: null,
+                    CertificatePassword: null),
+                resolvedMaterial: null);
+
+        // Act
+        using var client = this.factory.OpenChatClient(
+            ChatDeclarations.Endpoint(api: ChatProviderApi.Responses),
+            credential,
+            transport);
+
+        // Assert
+        Assert.NotNull(client);
+    }
+
+    /// <summary>
+    /// The factory takes an endpoint rather than a validated plan, so a value naming no API has to be refused here as
+    /// well: opening the wrong surface would send a credential-bearing request to a path nobody declared.
+    /// </summary>
+    [Fact]
+    public void OpenChatClient_AnEndpointNamingNoApi_IsRefused()
+    {
+        // Arrange
+        using var handler = new FakeHttpMessageHandler(
+            (_, _) => Task.FromResult(new HttpResponseMessage(System.Net.HttpStatusCode.OK)));
+        using var transport = new HttpClient(handler, disposeHandler: false);
+        using var credential = ProviderEndpointCredential.FromApiKey("a-resolved-key", resolvedMaterial: null);
+
+        // Act, Assert
+        Assert.Throws<ArgumentOutOfRangeException>(() => this.factory.OpenChatClient(
+            ChatDeclarations.Endpoint(api: (ChatProviderApi)7),
+            credential,
+            transport));
     }
 }

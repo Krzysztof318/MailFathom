@@ -619,9 +619,13 @@ A run that was asked for and finds a variable missing fails rather than skipping
 | Adapter | Variables |
 |---|---|
 | Embedding | `MAILFATHOM_EMBEDDING_API_KEY`, `MAILFATHOM_EMBEDDING_MODEL`, `MAILFATHOM_EMBEDDING_DIMENSION`, and optionally `MAILFATHOM_EMBEDDING_ADDRESS` and `MAILFATHOM_EMBEDDING_ROUTED_MODEL` |
-| Chat | `MAILFATHOM_CHAT_API_KEY`, `MAILFATHOM_CHAT_MODEL`, and optionally `MAILFATHOM_CHAT_ADDRESS` |
+| Chat | `MAILFATHOM_CHAT_API_KEY`, `MAILFATHOM_CHAT_MODEL`, and optionally `MAILFATHOM_CHAT_ADDRESS` and `MAILFATHOM_CHAT_REASONING_EFFORT` |
 
 An absent address means the provider library's own default, which is what a first-party OpenAI endpoint needs; a cloud deployment sets the resource's OpenAI-compatible address. Turning the switch on with only one adapter's variables configured therefore fails the other adapter's tests, which is the same asymmetry rather than a separate rule.
+
+The chat adapter's two tests each run **twice**, once over each of the provider's two request APIs, because each is a distinct wire protocol against the same endpoint and a surface nobody called is one whose first failure reaches an operator instead of this suite. Which API a call goes to is therefore not a variable a run sets; the declared model has to serve both, which the first-party and cloud endpoints do for a request carrying no tools, and a contract request carries none. The four chat calls a requested run makes are two answers and two refusals, and a refusal is answered before a model runs, so it costs a round trip and no tokens.
+
+`MAILFATHOM_CHAT_REASONING_EFFORT` is the chat adapter's one optional choice, carrying whatever level the model documents, exactly as [`Chat:ReasoningEffort`](configuration-reference.md#chat) does. Unset by default, which sends what the tests always sent. A value the provider does not recognize fails the run as a refused request rather than passing quietly, which is the point of pointing a run at a reasoning model in the first place.
 
 [ADR 0006](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0006-embedding-profile-identity-lifecycle-and-activation-cost.md) holds the reasoning, and `tests/AGENTS.md` states how such a test is written.
 

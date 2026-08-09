@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.ComponentModel.DataAnnotations;
+using MailFathom.AI.Chat;
 using MailFathom.AI.Providers;
 using MailFathom.Host.Configuration.Chat;
 using MailFathom.Host.Configuration.Providers;
@@ -44,6 +45,8 @@ public sealed class ChatModelOptionsTests
     [InlineData("address")]
     [InlineData("api-key")]
     [InlineData("entra-credential")]
+    [InlineData("reasoning-effort")]
+    [InlineData("api")]
     public void Validate_SettingsWithNoAlias_AreRefusedRatherThanIgnored(string writtenSetting)
     {
         // Arrange
@@ -271,6 +274,8 @@ public sealed class ChatModelOptionsTests
         "model" => new ChatModelOptions { Model = "a-chat-model" },
         "address" => new ChatModelOptions { Address = "https://resource.cloud.invalid/openai/v1/" },
         "api-key" => new ChatModelOptions { ApiKey = new ConfiguredSecret { SecretReference = "env:CHAT_KEY" } },
+        "reasoning-effort" => new ChatModelOptions { ReasoningEffort = "low" },
+        "api" => new ChatModelOptions { Api = ChatProviderApi.Responses },
         _ => new ChatModelOptions
         {
             EntraCredential = new ProviderEntraCredentialOptions
@@ -279,6 +284,70 @@ public sealed class ChatModelOptionsTests
             },
         },
     };
+
+    /// <summary>
+    /// The binder accepts any number for an enum, so a value no member declares reads as a choice while naming nothing —
+    /// for the API, a request sent to a path this deployment cannot reach. Learned at startup rather than from the first
+    /// question a client is waiting on.
+    /// </summary>
+    [Fact]
+    public void Validate_AnApiNamingNoValue_IsRefused()
+    {
+        // Arrange
+        var settings = Declared();
+        settings.Api = (ChatProviderApi)7;
+
+        // Act
+        var errors = Validate(settings);
+
+        // Assert
+        Assert.Contains(errors, error => error.Contains("Api", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// The effort's shape is checked and its vocabulary is not, so what startup refuses is a value no provider could
+    /// read as a level whatever it supports.
+    /// </summary>
+    [Theory]
+    [InlineData("")]
+    [InlineData("  ")]
+    [InlineData("very high")]
+    [InlineData(" high")]
+    public void Validate_AReasoningEffortNoProviderCouldRead_IsRefused(string effort)
+    {
+        // Arrange
+        var settings = Declared();
+        settings.ReasoningEffort = effort;
+
+        // Act
+        var errors = Validate(settings);
+
+        // Assert
+        Assert.Contains(errors, error => error.Contains("ReasoningEffort", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// Both APIs are accepted, and so is a level this build has never heard of: which levels a model offers is the
+    /// model's, and refusing the next one a provider adds would make a release the price of using it.
+    /// </summary>
+    [Theory]
+    [InlineData(ChatProviderApi.ChatCompletions, null)]
+    [InlineData(ChatProviderApi.Responses, "none")]
+    [InlineData(ChatProviderApi.Responses, "xhigh")]
+    [InlineData(ChatProviderApi.Responses, "a-level-released-later")]
+    public void Validate_ADeclaredApiAndEffort_AreAccepted(ChatProviderApi api, string? effort)
+    {
+        // Arrange
+        var settings = Declared();
+        settings.Api = api;
+        settings.ReasoningEffort = effort;
+
+        // Act
+        var errors = Validate(settings);
+
+        // Assert
+        Assert.Empty(errors);
+    }
 
     private static ChatModelOptions Declared() => new()
     {

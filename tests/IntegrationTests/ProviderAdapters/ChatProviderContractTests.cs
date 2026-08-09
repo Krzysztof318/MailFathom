@@ -29,6 +29,15 @@ namespace MailFathom.IntegrationTests.ProviderAdapters;
 /// provider cost and belongs there.
 /// </para>
 /// <para>
+/// Each runs over **both** of the provider's request APIs, because each is a distinct wire protocol reaching the same
+/// endpoint: the request is framed differently, the answer is framed differently, and a refusal arrives in a body of its
+/// own shape. Proving one and inferring the other would leave the surface a deployment reaches a reasoning model
+/// through as the one nothing ever called, so its first real failure would reach an operator instead of this suite.
+/// That is still two tests rather than four — the claim is the same on each surface, and the surface is the case — and
+/// it is why a contract request carries no tools: a model refusing tools beside an unstated effort on chat completions
+/// is the very configuration under test, so a run must not fail for the arrangement's own reason.
+/// </para>
+/// <para>
 /// Skipped unless somebody asks, through the one switch every provider-calling test in this suite shares. See
 /// <see cref="AiProviderContractRun" />.
 /// </para>
@@ -53,15 +62,17 @@ public sealed class ChatProviderContractTests
     /// <remarks>Public and static because that is the shape xUnit reads a skip condition from.</remarks>
     public static bool ProviderContractTestsRequested => AiProviderContractRun.Requested;
 
-    [RetryFact(
+    [RetryTheory(
         MaxAttempts,
         DelayBetweenAttemptsMs,
         Skip = AiProviderContractRun.SkipReason,
         SkipUnless = nameof(ProviderContractTestsRequested))]
-    public async Task AnswerAsync_AgainstTheRealProvider_ReturnsAnAnswerWithinTheDeclaredBudget()
+    [InlineData(ChatProviderApi.ChatCompletions)]
+    [InlineData(ChatProviderApi.Responses)]
+    public async Task AnswerAsync_AgainstTheRealProvider_ReturnsAnAnswerWithinTheDeclaredBudget(ChatProviderApi api)
     {
         // Arrange
-        var plan = ChatProviderContractSettings.Plan();
+        var plan = ChatProviderContractSettings.Plan(api);
         using var composition = Compose(ChatProviderContractSettings.ApiKey());
         var client = ClientOver(plan, composition);
 
@@ -93,15 +104,22 @@ public sealed class ChatProviderContractTests
     /// The one failure worth a paid call to prove: the classification the adapter derives has to match what the
     /// provider actually answers to a credential it does not accept, and no unit test can establish that.
     /// </summary>
-    [RetryFact(
+    /// <remarks>
+    /// Over both APIs like the test above, and cheaper than it: a refused credential is answered before a model runs, so
+    /// the second surface costs a round trip and no tokens. What it establishes is that the classification is read from
+    /// the status rather than from a body whose shape the two surfaces do not share.
+    /// </remarks>
+    [RetryTheory(
         MaxAttempts,
         DelayBetweenAttemptsMs,
         Skip = AiProviderContractRun.SkipReason,
         SkipUnless = nameof(ProviderContractTestsRequested))]
-    public async Task AnswerAsync_WithACredentialTheProviderRefuses_IsClassifiedAsSuch()
+    [InlineData(ChatProviderApi.ChatCompletions)]
+    [InlineData(ChatProviderApi.Responses)]
+    public async Task AnswerAsync_WithACredentialTheProviderRefuses_IsClassifiedAsSuch(ChatProviderApi api)
     {
         // Arrange
-        var plan = ChatProviderContractSettings.Plan();
+        var plan = ChatProviderContractSettings.Plan(api);
         using var composition = Compose("mailfathom-contract-test-key-the-provider-will-refuse");
         var client = ClientOver(plan, composition);
 
