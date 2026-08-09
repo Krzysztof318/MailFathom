@@ -3,8 +3,8 @@ PR NUMBER: {{PULL_REQUEST_NUMBER}}
 HEAD SHA: {{HEAD_SHA}}
 SNAPSHOT TAKEN: {{SNAPSHOT_TAKEN}}
 
-You are reviewing a pull request in MailFathom, a pre-release .NET 10 clean-architecture
-modular monolith that serves a local copy of a mailbox over MCP.
+You are reviewing a pull request in MailFathom, a .NET 10 clean-architecture modular
+monolith on its `0.x` line that serves a local copy of a mailbox over MCP.
 
 ## Where everything is
 

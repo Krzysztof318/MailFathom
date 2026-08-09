@@ -332,14 +332,31 @@ not a list of edits:
 
 ```bash
 git grep -nEi \
-  'not (yet )?(been )?(released|published|distributed)|no (versioned |published |binary )?(artifact|release|image|chart) (exists|yet)|first release is|has not had|until (the )?(first )?release|is (still )?pre-?release|unreleased|no release (has|yet)|a release will' \
-  -- ':(glob)**/*.md' ':(glob)**/*.yaml' ':(glob)**/*.yml' \
-     ':(exclude)CHANGELOG.md' ':(exclude)docs/decisions/**' ':(exclude).agents/skills/prepare-release/**'
+  'not (yet )?(been )?(released|published|distributed)|no (versioned |published |binary )?(artifact|release|image|chart) (exists|yet)|first release is|has not had|until (the )?(first )?release|is (still )?pre-?release|unreleased|no release (has|yet)|a release will|no [A-Za-z]+ (release|version|image|chart|artifact) (has|have)|been (published|accepted|submitted) yet|before (the )?first release|MailFathom,? (is|a) (still )?pre-?release|MailFathom publishes none' \
+  -- . ':(exclude)CHANGELOG.md' ':(exclude)docs/decisions/**' ':(exclude).agents/skills/prepare-release/**'
 ```
 
 It is written to return a handful of lines rather than a page of them, because a pass that reports ninety hits is a
 pass nobody reads to the end. Widen it when a release turns up a stale sentence it missed, and record what the new
 alternative is for.
+
+Five of the alternatives exist because a narrower sweep let seven stale lines through, one of which then reached an
+operator configuring a deployment. Each records the shape that got past it:
+
+- `no [A-Za-z]+ (release|version|image|chart|artifact) (has|have)` — one word between the negation and the noun defeats
+  a pattern anchored on the pair. "No MailFathom release has been published yet" is the sentence that proved it.
+- `been (published|accepted|submitted) yet` — the negation can sit in the noun phrase rather than on the verb, so
+  nothing in "No version has been accepted yet" reads as *not published* to a pattern looking for one.
+- `before (the )?first release` — work written as due before a release that has since shipped, which asserts the state
+  by scheduling against it rather than by describing it.
+- `MailFathom,? (is|a) (still )?pre-?release` — anchored on the project name deliberately: the bare word appears in
+  every passage about a prerelease *identifier*, which is a versioning term and never a claim.
+- `MailFathom publishes none` — same reason. "Publishes none" alone matches prose about a tool returning no attachment
+  names, which is a page of noise for one sentence.
+
+The file set is every tracked file rather than Markdown and YAML for the same reason: the line that reached that
+operator was a comment in `deploy/compose/.env.example`. A claim of this shape sits wherever a reader makes a
+deployment decision, and that is as often a commented-out variable, a script header, or a code comment as it is a page.
 
 One shape is deliberately left to the table above rather than added here: prose naming a version as the threshold a
 capability arrives at — "from `0.2.0` each release attaches". Catching it needs a pattern anchored on a version number,
