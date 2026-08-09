@@ -5,6 +5,7 @@
 using MailFathom.Host.Observability;
 using MailFathom.TestSupport;
 using Microsoft.Extensions.Logging;
+using OpenTelemetry.Resources;
 using Xunit;
 
 namespace MailFathom.Host.UnitTests.Observability;
@@ -107,6 +108,30 @@ public sealed class BootstrapLoggerTests
 
         // Assert
         Assert.Equal("MailFathom.Host.Startup", loggerFactory.CategoryName);
+    }
+
+    /// <summary>
+    /// The startup records travel to the same collector as everything the container pipeline exports, so a build named
+    /// on one and not on the other is one process arriving as two. The service name stays the SDK's to resolve, which
+    /// is the other half of that agreement.
+    /// </summary>
+    [Fact]
+    public void CreateResourceBuilder_Always_NamesTheBuildAndLeavesTheServiceNameToTheSdk()
+    {
+        // Arrange
+        var sdkResolved = ResourceBuilder.CreateDefault().Build();
+
+        // Act
+        var resource = BootstrapLogger.CreateResourceBuilder().Build();
+
+        // Assert
+        var version = Assert.Single(
+            resource.Attributes,
+            attribute => attribute.Key == ServiceVersionResourceExtensions.ServiceVersionAttributeName);
+        Assert.Equal(ServiceVersionResourceExtensions.StampedServiceVersion, version.Value);
+        Assert.Equal(
+            sdkResolved.Attributes.Single(attribute => attribute.Key == "service.name").Value,
+            resource.Attributes.Single(attribute => attribute.Key == "service.name").Value);
     }
 
     [Fact]

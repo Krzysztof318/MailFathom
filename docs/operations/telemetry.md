@@ -49,6 +49,24 @@ three tool names, an outcome — so none of them opens a time series per message
 metric with a resource URI, but only for the protocol's resource methods, and MailFathom's server publishes tools
 alone: no resources and no prompts, so the tag never arises.
 
+## The build every record names
+
+Every record the process exports carries `service.version` on its resource — a log record, a metric point, and a span
+alike — read from the host assembly's own build-time metadata. That is what makes a deployment serving two versions at
+once readable: a regression is grouped by the build it appeared in rather than inferred from the moment it started, and
+a collector's history stays attributable to a build long after the rollout it belonged to.
+
+The value is the assembly's stamp rather than a configured one, so a deployment cannot make its telemetry claim a build
+the process is not running — and a `service.version` written into `OTEL_RESOURCE_ATTRIBUTES` does not override it. That
+precedence is deliberate rather than incidental: the build is a fact about the running process, and the variable is the
+one thing that could make it wrong. It is the same version the startup records report as a property and the same one the
+MCP surface reports to a client during `initialize`, from the same source, so no two of them can disagree.
+
+The rest of the resource is left to the OpenTelemetry SDK. `service.name` comes from `OTEL_SERVICE_NAME`, or from the
+SDK's `unknown_service:{processName}` fallback where that is unset, and nothing names the service a second time;
+[host startup telemetry](host-startup-telemetry.md) records why one process reporting under two identities is the
+failure that arrangement avoids.
+
 ## What MailFathom publishes under its own name
 
 Everything above arrives from a library. MailFathom publishes under a name of its own, and there is exactly one of
@@ -238,7 +256,7 @@ variables itself:
 | `OTEL_EXPORTER_OTLP_PROTOCOL` | `grpc` (the default) or `http/protobuf` |
 | `OTEL_EXPORTER_OTLP_HEADERS` | Headers sent with every export, which is where a collector's credential travels |
 | `OTEL_EXPORTER_OTLP_TIMEOUT` | The per-export timeout |
-| `OTEL_SERVICE_NAME`, `OTEL_RESOURCE_ATTRIBUTES` | The resource identity the records carry |
+| `OTEL_SERVICE_NAME`, `OTEL_RESOURCE_ATTRIBUTES` | The resource identity the records carry, except the version [above](#the-build-every-record-names) |
 
 The variable has to be an **environment variable**, not a configuration key. That is deliberate, and
 [host startup telemetry](host-startup-telemetry.md) records why: the bootstrap pipeline that reports startup failures

@@ -126,12 +126,7 @@ internal sealed partial class BootstrapLogger : IDisposable
                 openTelemetry.IncludeFormattedMessage = true;
                 openTelemetry.IncludeScopes = true;
 
-                // The resource is left exactly as the SDK resolves it, with no AddService call, because that is what
-                // the container pipeline does too. Naming the service here would agree with it only while
-                // OTEL_SERVICE_NAME is set and would otherwise report this process under a second identity, since the
-                // SDK's own fallback is unknown_service:{processName}. The application name and version stay where
-                // they are already useful and cannot disagree with anything: the properties of the records below.
-                openTelemetry.SetResourceBuilder(ResourceBuilder.CreateDefault());
+                openTelemetry.SetResourceBuilder(CreateResourceBuilder());
 
                 if (settings.ExportsToCollector)
                 {
@@ -140,6 +135,18 @@ internal sealed partial class BootstrapLogger : IDisposable
                 }
             });
         });
+
+    /// <summary>Composes the resource the startup records are exported with.</summary>
+    /// <returns>The resource builder the bootstrap logging pipeline exports under.</returns>
+    /// <remarks>
+    /// The service is left unnamed, with no <c>AddService</c> call, because that is what the container pipeline does
+    /// too. Naming it here would agree with that pipeline only while <c>OTEL_SERVICE_NAME</c> is set and would
+    /// otherwise report this process under a second identity, since the SDK's own fallback is
+    /// <c>unknown_service:{processName}</c>. The version is the one part both pipelines do put on the resource, from
+    /// the same stamped source, so a startup record and everything exported after it name one build.
+    /// </remarks>
+    internal static ResourceBuilder CreateResourceBuilder() =>
+        ResourceBuilder.CreateDefault().AddStampedServiceVersion();
 
     [LoggerMessage(
         Level = LogLevel.Information,
