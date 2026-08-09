@@ -72,6 +72,10 @@ internal sealed partial class MailEmbeddingBackfillWorker : BackgroundService
     {
         if (!this.settings.Enabled)
         {
+            // Said before returning, because this is the one loop that would ever take a pass: without it an
+            // activation would record a due instant nothing is going to reach, and the status surface would report an
+            // overdue pass for the life of the process.
+            this.schedule.NoPassWillRun();
             this.LogBackfillDisabled();
 
             return;

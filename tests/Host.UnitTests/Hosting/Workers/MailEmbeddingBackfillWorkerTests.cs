@@ -45,6 +45,26 @@ public sealed class MailEmbeddingBackfillWorkerTests
     }
 
     /// <summary>
+    /// This loop is the only thing that ever takes a pass, so a worker that never runs one has to say so: otherwise an
+    /// activation records a due instant nothing will reach, and every later status read reports a pass overdue by
+    /// however long the process has been up.
+    /// </summary>
+    [Fact]
+    public async Task ExecuteAsync_BackfillDisabled_LeavesAnActivationUnableToScheduleAPassNothingWouldTake()
+    {
+        // Arrange
+        using var world = CreateWorld(new EmbeddingBackfillOptions { Enabled = false });
+
+        // Act
+        await world.Worker.StartAsync(CancellationToken.None);
+        await world.Worker.ExecuteTask!;
+        world.Schedule.BringForward();
+
+        // Assert
+        Assert.Null(world.Schedule.NextPassDueAt);
+    }
+
+    /// <summary>
     /// The walk is a repeating sweep rather than one that finishes, so reaching the end starts another pass instead of
     /// ending the worker — which is what makes the promise that a refused call and a full live queue are reached later
     /// something this keeps.

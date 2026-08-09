@@ -106,6 +106,61 @@ public sealed class EmbeddingBackfillScheduleTests
         Assert.Null(dueAt);
     }
 
+    /// <summary>
+    /// A deployment whose walk is turned off has no worker to release, so recording a due instant for an activation
+    /// would leave the status surface reporting a pass that is overdue for the life of the process — the same
+    /// unreadable state this type exists to remove, arrived at from the other side.
+    /// </summary>
+    [Fact]
+    public void BringForward_WhereNoPassWillRun_SchedulesNothing()
+    {
+        // Arrange
+        var schedule = new EmbeddingBackfillSchedule(new FakeTimeProvider(Now));
+        schedule.NoPassWillRun();
+
+        // Act
+        schedule.BringForward();
+
+        // Assert
+        Assert.Null(schedule.NextPassDueAt);
+    }
+
+    /// <summary>
+    /// An activation can reach the process before its worker has run far enough to report that it takes no pass, so
+    /// the report clears what got in first rather than leaving one stale instant behind.
+    /// </summary>
+    [Fact]
+    public void NoPassWillRun_APassAlreadyAskedFor_ClearsIt()
+    {
+        // Arrange
+        var schedule = new EmbeddingBackfillSchedule(new FakeTimeProvider(Now));
+        schedule.BringForward();
+
+        // Act
+        schedule.NoPassWillRun();
+
+        // Assert
+        Assert.Null(schedule.NextPassDueAt);
+    }
+
+    /// <summary>The latched request goes with the instant, so a walk that runs no pass cannot answer one either.</summary>
+    [Fact]
+    public async Task WaitForNextPassAsync_AfterNoPassWillRunClearedARequest_PausesRatherThanReturningImmediately()
+    {
+        // Arrange
+        var clock = new FakeTimeProvider(Now);
+        var schedule = new EmbeddingBackfillSchedule(clock);
+        schedule.BringForward();
+        schedule.NoPassWillRun();
+
+        // Act
+        var waiting = schedule.WaitForNextPassAsync(IdleSweepInterval, TestContext.Current.CancellationToken);
+        clock.Advance(IdleSweepInterval);
+
+        // Assert
+        Assert.False(await waiting);
+    }
+
     /// <summary>A stopping process ends the wait rather than taking one more pass on the way out.</summary>
     [Fact]
     public async Task WaitForNextPassAsync_TheProcessStopping_EndsTheWaitAsCancelled()

@@ -130,9 +130,11 @@ with nothing to do, which is exactly the instance that should stop asking the da
 **When the next pass is due is readable while it is being waited for.** `mfctl embedding status` reports it on the
 `Next pass` line, and that line is what separates a deployment that is waiting from one that is failing — every other
 reading in that output says the same thing during a pause as it does on a broken instance: nothing serving, nothing
-embedded, and a provider nothing has been asked of. A deployment reporting no pass at all has scheduled none, which is
-what `EmbeddingBackfill:Enabled` set to `false` leaves behind. The log says the same at `Debug` after every pass, and
-says at `Information` when an act cut a pause short.
+embedded, and a provider nothing has been asked of. A deployment reporting no pass at all has scheduled none, which
+happens for two reasons and neither is a fault: it has only just started, or `EmbeddingBackfill:Enabled` is `false` and
+its worker reports outright that it will take no pass — which is also what keeps an activation on such a deployment
+from recording a pass nothing would ever reach. The log says the same at `Debug` after every pass, and says at
+`Information` when an act cut a pause short.
 
 ## What an operator can see
 

@@ -156,7 +156,7 @@ public sealed class EmbeddingCommandTests : IDisposable
 
     /// <summary>A deployment whose walk is turned off schedules nothing, and the line says which setting does that.</summary>
     [Fact]
-    public async Task Status_ADeploymentSchedulingNoBackfillPass_NamesTheSettingThatTurnsTheWalkOff()
+    public async Task Status_ADeploymentSchedulingNoBackfillPass_NamesBothCausesWithoutAssertingEither()
     {
         // Arrange
         using var deployment = FakeEmbeddingDeployment.Answering(status: """
@@ -176,9 +176,14 @@ public sealed class EmbeddingCommandTests : IDisposable
 
         // Assert
         Assert.Equal(CliExitCode.Success, exitCode);
-        Assert.Contains(
+        var nextPass = Assert.Single(
             this.console.Lines,
-            line => line.Contains("EmbeddingBackfill:Enabled", StringComparison.Ordinal));
+            line => line.StartsWith("Next pass:", StringComparison.Ordinal));
+        Assert.Contains("EmbeddingBackfill:Enabled", nextPass, StringComparison.Ordinal);
+
+        // Both causes, because a deployment that has only just started reports the absence as truthfully as one whose
+        // walk is turned off, and naming only the setting sends an operator to a value that is already what they want.
+        Assert.Contains("only just started", nextPass, StringComparison.Ordinal);
     }
 
     /// <summary>The estimate is written before the question is asked, so what is agreed to is a number rather than a word.</summary>

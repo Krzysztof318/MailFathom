@@ -220,8 +220,8 @@ that out rather than from search results that stayed the same.
 `Next pass` is the line for the minutes just after an activation, when a deployment that is waiting and one that is
 failing read identically everywhere else: nothing serving, nothing embedded, and a provider nothing has been asked of.
 An activation asks for a pass immediately, so the instant it names is normally the one now or a moment away rather than
-the end of an interval an earlier pass chose; `none scheduled` means the walk is scheduling nothing at all, which is
-what `EmbeddingBackfill:Enabled` set to `false` leaves. [Embedding
+the end of an interval an earlier pass chose; `none scheduled` means the deployment has only just started, or that
+`EmbeddingBackfill:Enabled` is `false` and it walks no stored mail at all. [Embedding
 backfill](../features/embedding-backfill.md#an-operators-act-does-not-wait-for-the-pause-to-expire) holds the pacing
 this line reports.
 

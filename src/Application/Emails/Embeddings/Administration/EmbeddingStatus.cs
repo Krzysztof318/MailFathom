@@ -28,8 +28,8 @@ namespace MailFathom.Application.Emails.Embeddings.Administration;
 /// <param name="Period">Where the deployment's budget period stands.</param>
 /// <param name="NextBackfillPassDueAt">
 /// When the backfill's next pass is due, or <see langword="null" /> while none is scheduled. An instant already past is
-/// a pass that is running or about to be taken, and the absence is an instance whose backfill worker has scheduled
-/// nothing — which is what <c>EmbeddingBackfill:Enabled</c> set to <see langword="false" /> leaves behind.
+/// a pass that is running or about to be taken; the absence is an instance that has only just started, or one whose
+/// walk is turned off and will schedule nothing at all.
 /// </param>
 public sealed record EmbeddingStatus(
     EmbeddingProfileIdentity? Declared,

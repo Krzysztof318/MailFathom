@@ -31,6 +31,7 @@ public sealed class EmbeddingBackfillSchedule
 
     private TaskCompletionSource? waitingWorker;
     private bool passRequested;
+    private bool passesRun = true;
 
     /// <summary>Initializes a schedule holding no pass.</summary>
     /// <param name="timeProvider">Dates the pause the worker is taking and the moment an act brings a pass forward to.</param>
@@ -46,9 +47,9 @@ public sealed class EmbeddingBackfillSchedule
     /// <remarks>
     /// <para>
     /// An instant already past is a pass that is due now — either running, or about to be taken by a worker that has
-    /// finished waiting. The absence is an instance whose backfill worker has scheduled nothing, which is what
-    /// <c>EmbeddingBackfill:Enabled</c> set to <see langword="false" /> leaves behind and what a process that has only
-    /// just started shows for as long as its first pass takes.
+    /// finished waiting. The absence has two causes and neither is a fault: a process that has only just started shows
+    /// it until its first pass schedules the next one, and a deployment whose walk is turned off shows it for good,
+    /// because <see cref="NoPassWillRun" /> is what its worker reports instead of ever waiting.
     /// </para>
     /// <para>
     /// A nullable <see cref="DateTimeOffset" /> is wider than one atomic write, so the read holds the gate and every
@@ -70,12 +71,38 @@ public sealed class EmbeddingBackfillSchedule
         private set;
     }
 
+    /// <summary>Reports that this process runs no pass at all, so nothing is scheduled and nothing can be asked for.</summary>
+    /// <remarks>
+    /// <para>
+    /// Called by the worker in place of ever waiting, because whether the walk runs is a configuration value the worker
+    /// reads and nothing here can see. Without it an activation would record a due instant on a deployment where no
+    /// pass will ever be taken, and the status surface would report an overdue pass for as long as the process lived —
+    /// which is the reading this whole type exists to prevent, arrived at from the other direction.
+    /// </para>
+    /// <para>
+    /// It also clears a request that got in first, because an activation can reach the process before its worker has
+    /// run far enough to say this. There is no way back: whether the walk runs is read once at startup, so a schedule
+    /// told this keeps saying it until the process ends.
+    /// </para>
+    /// </remarks>
+    public void NoPassWillRun()
+    {
+        lock (this.gate)
+        {
+            this.passesRun = false;
+            this.passRequested = false;
+            this.NextPassDueAt = null;
+        }
+    }
+
     /// <summary>Asks for a pass now, releasing a worker that is waiting out the pause the last pass chose.</summary>
     /// <remarks>
     /// Called by the act that made a pass worth running rather than by anything watching for one, because the state it
     /// reacts to is a row that act has just committed. A request arriving while a pass is already running is held in the
     /// flag rather than dropped, so work an operator asked for is never lost to a worker that was busy instead of
-    /// waiting; a second request against a first nobody has taken yet asks for the same single pass.
+    /// waiting; a second request against a first nobody has taken yet asks for the same single pass. Where
+    /// <see cref="NoPassWillRun" /> has been reported it does nothing at all, because there is no worker to release and
+    /// recording a pass nothing will take would be a worse answer than recording none.
     /// </remarks>
     public void BringForward()
     {
@@ -83,6 +110,11 @@ public sealed class EmbeddingBackfillSchedule
 
         lock (this.gate)
         {
+            if (!this.passesRun)
+            {
+                return;
+            }
+
             this.NextPassDueAt = this.timeProvider.GetUtcNow();
             this.passRequested = true;
             waiting = this.waitingWorker;

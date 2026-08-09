@@ -93,10 +93,15 @@ internal static class EmbeddingStatusCommand
     /// moving, and a provider nothing has been asked of — three readings an operator has no way to tell apart from a
     /// broken instance until one of them says a pass is simply not due yet. The instant is absolute rather than a
     /// countdown, because it is the deployment's clock rather than this terminal's that decides when the pass runs.
+    /// <para>
+    /// The absence names both of its causes and asserts neither, because a deployment that has only just started shows
+    /// it as truthfully as one whose walk is turned off, and a line claiming the second would send an operator to a
+    /// setting that is already what they want it to be.
+    /// </para>
     /// </remarks>
     private static string DescribeNextPass(DateTimeOffset? dueAt) => dueAt is { } moment
         ? $"due at {moment:u}"
-        : "none scheduled. The deployment's backfill has scheduled no pass, which is what 'EmbeddingBackfill:Enabled' set to false leaves.";
+        : "none scheduled — either the deployment has only just started, or 'EmbeddingBackfill:Enabled' is false and it walks no stored mail.";
 
     /// <summary>States what the last call to the provider established, and when.</summary>
     /// <remarks>
