@@ -5,6 +5,7 @@
 using MailFathom.Application.AiProviders;
 using MailFathom.Application.Emails.Embeddings;
 using MailFathom.Application.Emails.Embeddings.Administration;
+using MailFathom.Application.Emails.Embeddings.Backfill;
 using MailFathom.Application.Emails.Embeddings.Generations;
 using MailFathom.Application.Emails.Embeddings.Indexing;
 using MailFathom.Application.Emails.Embeddings.Limits;
@@ -83,6 +84,27 @@ public sealed class EmbeddingProfileEndpointsTests
         Assert.Equal(
             EmbeddingProfileFingerprint.Compute(declared).Value,
             result.Value?.Declared?.Fingerprint);
+    }
+
+    /// <summary>
+    /// The scheduled pass travels with the rest of the answer, because it is what a caller reads a quiet deployment
+    /// against: every other member of this body says the same thing during a pause as it does on a broken instance.
+    /// </summary>
+    [Fact]
+    public async Task ReadStatusAsync_ABackfillPassScheduled_CarriesWhenItIsDue()
+    {
+        // Arrange
+        var world = CreateWorld();
+        world.BackfillSchedule.BringForward();
+
+        // Act
+        var result = await EmbeddingProfileEndpoints.ReadStatusAsync(
+            new DeclaredEmbeddingGeometry(CreateIdentity("a-model")),
+            world.StatusReader,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(Now, result.Value?.NextBackfillPassDueAt);
     }
 
     /// <summary>There is nothing to activate where nothing is declared, and the answer names the setting that would declare one.</summary>
@@ -259,23 +281,26 @@ public sealed class EmbeddingProfileEndpointsTests
             new PersistenceConcurrencyOptions(),
             timeProvider);
         var vectorIndex = Substitute.For<IEmbeddingProfileVectorIndex>();
+        var backfillSchedule = new EmbeddingBackfillSchedule(timeProvider);
 
         return new EndpointWorld(
             generationStore,
             workloadReader,
+            backfillSchedule,
             new CountedEmbeddingActivation(
                 generationStore,
                 workloadReader,
                 spendGate,
-                new EmbeddingProfileActivation(generationStore, vectorIndex, retryPolicy)),
-            new EmbeddingStatusReader(generationStore, workloadReader, spendGate, providerHealth),
-            new EmbeddingReindexCancellation(generationStore, vectorIndex, retryPolicy));
+                new EmbeddingProfileActivation(generationStore, vectorIndex, retryPolicy, backfillSchedule)),
+            new EmbeddingStatusReader(generationStore, workloadReader, spendGate, providerHealth, backfillSchedule),
+            new EmbeddingReindexCancellation(generationStore, vectorIndex, retryPolicy, backfillSchedule));
     }
 
     /// <summary>The ports one request runs against, and the three services the routes resolve.</summary>
     private sealed record EndpointWorld(
         IEmbeddingGenerationStore GenerationStore,
         IEmbeddingWorkloadReader WorkloadReader,
+        EmbeddingBackfillSchedule BackfillSchedule,
         CountedEmbeddingActivation Activation,
         EmbeddingStatusReader StatusReader,
         EmbeddingReindexCancellation Cancellation)

@@ -68,6 +68,38 @@ public sealed class MailEmbeddingBackfillWorkerTests
         await world.Worker.StopAsync(CancellationToken.None);
     }
 
+    /// <summary>
+    /// The wait this worker used to make an operator sit through. Every pass before an activation ends with no
+    /// generation to walk towards and takes the long interval, so the row an activation commits is one the sleeping
+    /// worker cannot observe — and the clock is deliberately never advanced here, because what is being proved is that
+    /// the pass no longer waits for it.
+    /// </summary>
+    [Fact]
+    public async Task ExecuteAsync_APassBroughtForwardWhileIdle_TakesItWithoutWaitingOutTheIdleInterval()
+    {
+        // Arrange
+        using var world = CreateWorld(new EmbeddingBackfillOptions(), activeProfile: null);
+        await world.Worker.StartAsync(CancellationToken.None);
+        await world.Logger.WaitForOccurrences(
+            "No embedding profile is active",
+            occurrences: 1,
+            TestContext.Current.CancellationToken);
+
+        // Act
+        world.Schedule.BringForward();
+        await world.Logger.WaitForOccurrences(
+            "brought the next embedding backfill pass forward",
+            occurrences: 1,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        await world.Logger.WaitForOccurrences(
+            "No embedding profile is active",
+            occurrences: 2,
+            TestContext.Current.CancellationToken);
+        await world.Worker.StopAsync(CancellationToken.None);
+    }
+
     /// <summary>An instance that has activated no profile is a supported state, so it is reported without a warning and costs no walk.</summary>
     [Fact]
     public async Task ExecuteAsync_NoActiveProfile_ReportsItWithoutWalkingTheMail()
@@ -330,6 +362,7 @@ public sealed class MailEmbeddingBackfillWorkerTests
             new MailEmbeddingBackfillWorker(
                 serviceProvider.GetRequiredService<IServiceScopeFactory>(),
                 new EmailEmbeddingBackfillTelemetry(),
+                world.Schedule,
                 Options.Create(settings),
                 world.Logger,
                 world.TimeProvider));
@@ -343,9 +376,13 @@ public sealed class MailEmbeddingBackfillWorkerTests
         private ServiceProvider? serviceProvider;
         private MailEmbeddingBackfillWorker? worker;
 
+        public WorkerWorld() => this.Schedule = new EmbeddingBackfillSchedule(this.TimeProvider);
+
         public AwaitingLogger<MailEmbeddingBackfillWorker> Logger { get; } = new();
 
         public FakeTimeProvider TimeProvider { get; } = new();
+
+        public EmbeddingBackfillSchedule Schedule { get; }
 
         public IStoredEmailEmbeddingBackfillStore BackfillStore { get; } =
             Substitute.For<IStoredEmailEmbeddingBackfillStore>();

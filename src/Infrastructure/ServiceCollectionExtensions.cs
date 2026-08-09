@@ -233,6 +233,11 @@ public static class ServiceCollectionExtensions
         // The only registration here that changes the schema. It is scoped like every other store so that a caller
         // which has opened a persistence session gets its statement inside that session's transaction rather than
         // beside it.
+        // A singleton because the pass it schedules is one thing the process does: a scoped schedule would let an
+        // activation bring forward a pass nothing is waiting on, and would report a due instant whichever request
+        // happened to create it last. Registered whether or not this deployment embeds, because the status surface
+        // reads it on every instance and an act that never happens simply never brings anything forward.
+        services.AddSingleton<EmbeddingBackfillSchedule>();
         services.AddScoped<IEmbeddingProfileVectorIndex, EmbeddingProfileVectorIndex>();
         services.AddScoped<IStoredEmailEmbeddingBackfillStore, StoredEmailEmbeddingBackfillStore>();
         services.AddScoped<IEmbeddingGenerationStore, EmbeddingGenerationStore>();

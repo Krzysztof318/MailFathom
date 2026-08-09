@@ -130,6 +130,31 @@ public sealed class ServiceCollectionExtensionsTests
     }
 
     /// <summary>
+    /// The pass the schedule paces is one thing the process does, so a scoped registration would let an activation
+    /// release a waiter that does not exist and would report a due instant belonging to whichever request created the
+    /// scope last. It is registered whether or not a chain was declared, because the status surface reads it on every
+    /// deployment and an act that never happens simply never brings anything forward.
+    /// </summary>
+    [Fact]
+    public void AddInfrastructure_OnAnyDeployment_RegistersTheBackfillScheduleAsOneInstancePerProcess()
+    {
+        // Arrange
+        var services = new ServiceCollection();
+
+        // Act
+        services.AddInfrastructure(
+            _ => new PostgresConnectionSettings("Host=localhost;Database=mailfathom", null, null),
+            PostgresTextSearchConfiguration.Default,
+            MailAnsweringBudget.Default);
+
+        // Assert
+        Assert.Contains(
+            services,
+            descriptor => descriptor.ServiceType == typeof(EmbeddingBackfillSchedule)
+                && descriptor.Lifetime == ServiceLifetime.Singleton);
+    }
+
+    /// <summary>
     /// The retrieval an answering run reaches mail through is a reading of the search above, so it is registered for
     /// every deployment rather than only where a chat endpoint was declared: an instance that answers no questions
     /// resolves it and never calls it, while one that does would otherwise fail to compose its agent.

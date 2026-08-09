@@ -4,6 +4,7 @@
 
 using MailFathom.Application.Emails.Embeddings;
 using MailFathom.Application.Emails.Embeddings.Administration;
+using MailFathom.Application.Emails.Embeddings.Backfill;
 using MailFathom.Application.Emails.Embeddings.Generations;
 using MailFathom.Application.Emails.Embeddings.Indexing;
 using MailFathom.Application.Emails.Embeddings.Limits;
@@ -233,7 +234,8 @@ public sealed class CountedEmbeddingActivationTests
                 new OptimisticConcurrencyRetryPolicy(
                     sessionFactory,
                     new PersistenceConcurrencyOptions(),
-                    timeProvider)));
+                    timeProvider),
+                new EmbeddingBackfillSchedule(timeProvider)));
 
         return new ActivationWorld(generationStore, workloadReader, ledger, activation);
     }

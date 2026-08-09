@@ -54,6 +54,7 @@ internal static class EmbeddingStatusCommand
         context.Console.WriteLine($"Declared:  {DescribeDeclaration(status)}");
         context.Console.WriteLine($"Serving:   {DescribeServing(status.Serving)}");
         context.Console.WriteLine($"Reindex:   {DescribeReindex(status.Building)}");
+        context.Console.WriteLine($"Next pass: {DescribeNextPass(status.NextBackfillPassDueAt)}");
         context.Console.WriteLine($"Provider:  {DescribeProvider(status.Provider)}");
         context.Console.WriteLine($"Spend:     {status.Spend?.Describe() ?? "not reported"}");
 
@@ -85,6 +86,17 @@ internal static class EmbeddingStatusCommand
     private static string DescribeReindex(EmbeddingGeneration? building) => building is { } present
         ? $"{present.Geometry?.Describe() ?? "an unreported model"} — {present.Progress?.DescribeProgress() ?? "progress not reported"}"
         : "none running.";
+
+    /// <summary>States when the walk next runs, which is what tells a deployment that is waiting from one that is failing.</summary>
+    /// <remarks>
+    /// The line this command was missing. A deployment between passes reports nothing served, nothing outstanding
+    /// moving, and a provider nothing has been asked of — three readings an operator has no way to tell apart from a
+    /// broken instance until one of them says a pass is simply not due yet. The instant is absolute rather than a
+    /// countdown, because it is the deployment's clock rather than this terminal's that decides when the pass runs.
+    /// </remarks>
+    private static string DescribeNextPass(DateTimeOffset? dueAt) => dueAt is { } moment
+        ? $"due at {moment:u}"
+        : "none scheduled. The deployment's backfill has scheduled no pass, which is what 'EmbeddingBackfill:Enabled' set to false leaves.";
 
     /// <summary>States what the last call to the provider established, and when.</summary>
     /// <remarks>

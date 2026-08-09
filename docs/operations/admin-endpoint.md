@@ -205,16 +205,25 @@ production (https://mail.example.test:8443)
 Declared:  openai text-embedding-3-small, 1536 dimensions, Cosine
 Serving:   openai text-embedding-3-small, 1536 dimensions, Cosine — 4,120 of 4,120 messages embedded; nothing outstanding
 Reindex:   none running.
+Next pass: due at 2026-08-08 12:14:30Z
 Provider:  Serving, as of 2026-08-08 11:59:00Z
 Spend:     1,200 of 50,000,000 characters; the period rolls over at 2026-08-09 00:00:00Z
 ```
 
 **`mfctl embedding status` is the command to run when semantic search is not returning what you expected.** It answers
-that question five ways at once, because it has five answers that look nothing alike: no provider declared, a
-declaration nobody activated, a provider refusing the credential, a reindex still running, and a budget period spent.
-The line to read first is `Declared`, which says so outright when an activation is outstanding — an edited
-configuration file changes nothing until one happens, and this is where you find that out rather than from search
-results that stayed the same.
+that question six ways at once, because it has six answers that look nothing alike: no provider declared, a
+declaration nobody activated, a provider refusing the credential, a reindex still running, a budget period spent, and a
+walk whose next pass is simply not due yet. The line to read first is `Declared`, which says so outright when an
+activation is outstanding — an edited configuration file changes nothing until one happens, and this is where you find
+that out rather than from search results that stayed the same.
+
+`Next pass` is the line for the minutes just after an activation, when a deployment that is waiting and one that is
+failing read identically everywhere else: nothing serving, nothing embedded, and a provider nothing has been asked of.
+An activation asks for a pass immediately, so the instant it names is normally the one now or a moment away rather than
+the end of an interval an earlier pass chose; `none scheduled` means the walk is scheduling nothing at all, which is
+what `EmbeddingBackfill:Enabled` set to `false` leaves. [Embedding
+backfill](../features/embedding-backfill.md#an-operators-act-does-not-wait-for-the-pause-to-expire) holds the pacing
+this line reports.
 
 **`mfctl embedding activate` reads the estimate, states it, and asks.** The deployment counts the passages the run
 would send and expresses them as characters and approximate tokens, weighs them against `Embeddings:MaxInputCharactersPerPeriod`,

@@ -109,6 +109,31 @@ reaches no provider, and costs nothing an operator has to consent to, so what pa
 rather than a number beside the ones above. A pass that removed a full batch is followed by the short interval, because
 there is more of that generation behind it.
 
+## An operator's act does not wait for the pause to expire
+
+Every pause above is chosen by the pass that just ended, which means it was chosen without knowing what an operator
+would do next. That is most visible on a first activation. Every pass before one ends with no generation to walk
+towards, so the walk is always sleeping the long interval, and the row the activation commits is one the sleeping
+worker has no way to observe — leaving the first vectors of a mailbox to arrive whenever a quarter-hour timer unrelated
+to the activation happens to expire.
+
+So the acts that create the work say so. **Activating a profile** and **cancelling a reindex** each ask for a pass now,
+and a worker waiting out a pause takes it immediately; the second matters for the same reason the first does, because
+what a cancellation leaves behind is a generation nothing reads whose partial vectors are personal data with no purpose
+left. An act arriving while a pass is already running is held rather than dropped, so the pass after it is the one that
+picks the work up, and two acts in a row ask for one pass rather than two. Nothing else brings a pass forward: a
+message arriving is the [live path](automatic-embedding.md)'s, not this walk's.
+
+The pause itself is unchanged and so is its purpose. `EmbeddingBackfill:IdleSweepInterval` still governs an instance
+with nothing to do, which is exactly the instance that should stop asking the database about nothing.
+
+**When the next pass is due is readable while it is being waited for.** `mfctl embedding status` reports it on the
+`Next pass` line, and that line is what separates a deployment that is waiting from one that is failing — every other
+reading in that output says the same thing during a pause as it does on a broken instance: nothing serving, nothing
+embedded, and a provider nothing has been asked of. A deployment reporting no pass at all has scheduled none, which is
+what `EmbeddingBackfill:Enabled` set to `false` leaves behind. The log says the same at `Debug` after every pass, and
+says at `Information` when an act cut a pause short.
+
 ## What an operator can see
 
 | Signal | What it answers |

@@ -20,13 +20,15 @@ namespace MailFathom.Cli.Administration.Embeddings;
 /// <param name="Building">The generation a reindex is filling, or <see langword="null" /> when no reindex is running.</param>
 /// <param name="Provider">What the deployment's last call to its embedding provider established.</param>
 /// <param name="Spend">Where the deployment's budget period stands.</param>
+/// <param name="NextBackfillPassDueAt">When the deployment's backfill runs its next pass, or <see langword="null" /> while it has scheduled none.</param>
 internal sealed record EmbeddingStatus(
     [property: JsonPropertyName("declared")] EmbeddingGeometry? Declared,
     [property: JsonPropertyName("activationOutstanding")] bool ActivationOutstanding,
     [property: JsonPropertyName("serving")] EmbeddingGeneration? Serving,
     [property: JsonPropertyName("building")] EmbeddingGeneration? Building,
     [property: JsonPropertyName("provider")] EmbeddingProviderHealth? Provider,
-    [property: JsonPropertyName("spend")] EmbeddingSpend? Spend);
+    [property: JsonPropertyName("spend")] EmbeddingSpend? Spend,
+    [property: JsonPropertyName("nextBackfillPassDueAt")] DateTimeOffset? NextBackfillPassDueAt);
 
 /// <summary>One vector space, as a deployment names it.</summary>
 /// <param name="Fingerprint">The digest the deployment's profile row is unique on.</param>

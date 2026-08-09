@@ -159,13 +159,19 @@ internal sealed record EmbeddingSpendResponse(
 /// <param name="Building">The generation a reindex is filling, or <see langword="null" /> when no reindex is running.</param>
 /// <param name="Provider">What the last call to the embedding provider established.</param>
 /// <param name="Spend">Where the budget period stands.</param>
+/// <param name="NextBackfillPassDueAt">
+/// When the backfill's next pass is due, or <see langword="null" /> while none is scheduled. It is what tells a
+/// deployment that is waiting apart from one that is failing, which every other member here reads alike: an instance
+/// between passes reports no vectors, no provider call, and no reason.
+/// </param>
 internal sealed record EmbeddingStatusResponse(
     EmbeddingGeometryResponse? Declared,
     bool ActivationOutstanding,
     EmbeddingGenerationResponse? Serving,
     EmbeddingGenerationResponse? Building,
     EmbeddingProviderHealthResponse Provider,
-    EmbeddingSpendResponse Spend)
+    EmbeddingSpendResponse Spend,
+    DateTimeOffset? NextBackfillPassDueAt)
 {
     /// <summary>Describes one instance's embedding state for the wire.</summary>
     /// <param name="status">The state.</param>
@@ -181,7 +187,8 @@ internal sealed record EmbeddingStatusResponse(
             EmbeddingGenerationResponse.For(status.Serving),
             EmbeddingGenerationResponse.For(status.Building),
             EmbeddingProviderHealthResponse.For(status.ProviderHealth),
-            EmbeddingSpendResponse.For(status.Period));
+            EmbeddingSpendResponse.For(status.Period),
+            status.NextBackfillPassDueAt);
     }
 }
 

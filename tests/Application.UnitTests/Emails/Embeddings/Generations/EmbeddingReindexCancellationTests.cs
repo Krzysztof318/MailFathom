@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.Emails.Embeddings;
+using MailFathom.Application.Emails.Embeddings.Backfill;
 using MailFathom.Application.Emails.Embeddings.Generations;
 using MailFathom.Application.Emails.Embeddings.Indexing;
 using MailFathom.Application.Persistence;
@@ -15,6 +16,8 @@ namespace MailFathom.Application.UnitTests.Emails.Embeddings.Generations;
 
 public sealed class EmbeddingReindexCancellationTests
 {
+    private static readonly DateTimeOffset Now = new(2026, 8, 9, 12, 0, 0, TimeSpan.Zero);
+
     /// <summary>Cancelling ends the reindex and changes nothing about what searches are answered from.</summary>
     [Fact]
     public async Task CancelAsync_AReindexRunning_AbandonsItAndLeavesTheServingGenerationServing()
@@ -58,6 +61,25 @@ public sealed class EmbeddingReindexCancellationTests
     }
 
     /// <summary>
+    /// What a cancellation leaves is a generation nothing reads whose partial vectors are personal data with no purpose
+    /// left, and the pass that removes them is the one the interval before it chose while there was still a reindex to
+    /// pace. Asking for it here is what keeps that removal from waiting out as much as a quarter of an hour.
+    /// </summary>
+    [Fact]
+    public async Task CancelAsync_AReindexRunning_AsksForTheNextBackfillPassNowSoTheAbandonedVectorsGo()
+    {
+        // Arrange
+        var world = CreateWorld();
+        world.GenerationStore.Add(CreateIdentity("a-model"), EmbeddingProfileLifecycleState.Building);
+
+        // Act
+        await world.Cancellation.CancelAsync(TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(Now, world.BackfillSchedule.NextPassDueAt);
+    }
+
+    /// <summary>
     /// This command ends a reindex and is deliberately not a way to turn semantic search off, so an instance with only a
     /// serving generation is left untouched.
     /// </summary>
@@ -75,6 +97,7 @@ public sealed class EmbeddingReindexCancellationTests
         Assert.Equal(EmbeddingReindexCancellationOutcome.NothingBuilding, outcome);
         Assert.Equal(EmbeddingProfileLifecycleState.Active, world.GenerationStore.StateOf(serving.Id));
         await world.VectorIndex.DidNotReceiveWithAnyArgs().RemoveAsync(default, TestContext.Current.CancellationToken);
+        Assert.Null(world.BackfillSchedule.NextPassDueAt);
     }
 
     /// <summary>
@@ -110,7 +133,8 @@ public sealed class EmbeddingReindexCancellationTests
             new OptimisticConcurrencyRetryPolicy(
                 sessionFactory,
                 new PersistenceConcurrencyOptions(),
-                new FakeTimeProvider()));
+                new FakeTimeProvider()),
+            new EmbeddingBackfillSchedule(new FakeTimeProvider(Now)));
 
         // Act
         var outcome = await cancellation.CancelAsync(TestContext.Current.CancellationToken);
@@ -138,20 +162,23 @@ public sealed class EmbeddingReindexCancellationTests
         sessionFactory.BeginSessionAsync(Arg.Any<CancellationToken>())
             .Returns(_ => Substitute.For<IPersistenceSession>());
 
+        var backfillSchedule = new EmbeddingBackfillSchedule(new FakeTimeProvider(Now));
         var cancellation = new EmbeddingReindexCancellation(
             generationStore,
             vectorIndex,
             new OptimisticConcurrencyRetryPolicy(
                 sessionFactory,
                 new PersistenceConcurrencyOptions(),
-                new FakeTimeProvider()));
+                new FakeTimeProvider()),
+            backfillSchedule);
 
-        return new CancellationWorld(generationStore, vectorIndex, cancellation);
+        return new CancellationWorld(generationStore, vectorIndex, backfillSchedule, cancellation);
     }
 
     /// <summary>The generations and the collaborators one cancellation works against.</summary>
     private sealed record CancellationWorld(
         InMemoryEmbeddingGenerationStore GenerationStore,
         IEmbeddingProfileVectorIndex VectorIndex,
+        EmbeddingBackfillSchedule BackfillSchedule,
         EmbeddingReindexCancellation Cancellation);
 }

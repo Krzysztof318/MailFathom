@@ -210,7 +210,9 @@ before it starts. `--yes` agrees up front, for a scripted run.
 
 `mfctl embedding status` is the one to reach for first. It answers, in one output, whether a model is active, whether
 that model is still the one your configuration declares, whether your provider is answering, how much of the mailbox
-is embedded, and what the current budget period has spent.
+is embedded, what the current budget period has spent, and when the walk that embeds your existing mail next runs. That
+last line is the one to read in the minutes after an activation: until the first passages have gone out, a deployment
+that is simply between passes looks exactly like one that is broken.
 
 [Administering the embedding profile](../operations/admin-endpoint.md#administering-the-embedding-profile) is the
 operator's reference for all three, and [changing the embedding model](../operations/embedding-profiles.md) is what a

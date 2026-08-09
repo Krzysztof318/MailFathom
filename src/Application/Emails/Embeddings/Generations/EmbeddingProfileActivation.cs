@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Application.Emails.Embeddings.Backfill;
 using MailFathom.Application.Emails.Embeddings.Indexing;
 using MailFathom.Application.Persistence;
 
@@ -27,24 +28,29 @@ public sealed class EmbeddingProfileActivation
     private readonly IEmbeddingGenerationStore generationStore;
     private readonly IEmbeddingProfileVectorIndex vectorIndex;
     private readonly OptimisticConcurrencyRetryPolicy concurrencyRetryPolicy;
+    private readonly EmbeddingBackfillSchedule backfillSchedule;
 
     /// <summary>Initializes a new activation.</summary>
     /// <param name="generationStore">Reads which generations exist and registers the one being started.</param>
     /// <param name="vectorIndex">Builds the approximate index the new generation will be searched through.</param>
     /// <param name="concurrencyRetryPolicy">Commits the registration, retrying a conflict with a competing writer.</param>
+    /// <param name="backfillSchedule">Brings the next upkeep pass forward once there is a generation for it to walk towards.</param>
     /// <exception cref="ArgumentNullException">Thrown when any argument is <see langword="null" />.</exception>
     public EmbeddingProfileActivation(
         IEmbeddingGenerationStore generationStore,
         IEmbeddingProfileVectorIndex vectorIndex,
-        OptimisticConcurrencyRetryPolicy concurrencyRetryPolicy)
+        OptimisticConcurrencyRetryPolicy concurrencyRetryPolicy,
+        EmbeddingBackfillSchedule backfillSchedule)
     {
         ArgumentNullException.ThrowIfNull(generationStore);
         ArgumentNullException.ThrowIfNull(vectorIndex);
         ArgumentNullException.ThrowIfNull(concurrencyRetryPolicy);
+        ArgumentNullException.ThrowIfNull(backfillSchedule);
 
         this.generationStore = generationStore;
         this.vectorIndex = vectorIndex;
         this.concurrencyRetryPolicy = concurrencyRetryPolicy;
+        this.backfillSchedule = backfillSchedule;
     }
 
     /// <summary>Registers the declared geometry as the generation to build, unless one of it is already there.</summary>
@@ -109,6 +115,8 @@ public sealed class EmbeddingProfileActivation
         // creates it: the index covers one profile and one width, neither of which exists before this call.
         await this.vectorIndex.EnsureBuiltAsync(registered, cancellationToken);
 
+        this.AskForAPassNow();
+
         return new EmbeddingProfileActivationResult(
             EmbeddingProfileActivationOutcome.ReindexStarted,
             registered.Id);
@@ -151,10 +159,23 @@ public sealed class EmbeddingProfileActivation
     {
         await this.vectorIndex.EnsureBuiltAsync(building, cancellationToken);
 
+        this.AskForAPassNow();
+
         return new EmbeddingProfileActivationResult(
             EmbeddingProfileActivationOutcome.AlreadyBuilding,
             building.Id);
     }
+
+    /// <summary>Brings the next upkeep pass forward, because this call is what made one worth running.</summary>
+    /// <remarks>
+    /// The row committed above is the whole of the signal, and a sleeping worker cannot observe it: a pass is paced by
+    /// what the previous one found, and every pass before an activation found no generation to walk towards and took
+    /// the long idle interval. Without this, the first passages of a reindex go out whenever that unrelated interval
+    /// happens to expire rather than because an operator asked for them. The two refusals ask for nothing — an
+    /// activation of what is already serving changed no row, and one refused for a different running reindex is not the
+    /// activation that happened.
+    /// </remarks>
+    private void AskForAPassNow() => this.backfillSchedule.BringForward();
 
     private static EmbeddingProfileFingerprint Fingerprints(RegisteredEmbeddingProfile profile) =>
         EmbeddingProfileFingerprint.Compute(profile.Identity);
