@@ -299,6 +299,35 @@ public sealed class AuthorizeMailboxCommandTests : IDisposable
         Assert.DoesNotContain(this.console.Lines, line => line.Contains("a-refresh-token", StringComparison.Ordinal));
     }
 
+    /// <summary>
+    /// A deployment from another release line is sent nothing at all. This is the request that carries somebody else's
+    /// long-lived credential, so the refusal has to land before it goes out — and the token is not printed as a
+    /// fallback either, which would put it in the scrollback the <c>--account</c> path exists to keep it out of.
+    /// </summary>
+    [Fact]
+    public async Task Authorize_ADeploymentFromAnotherReleaseLine_SendsItNoTokenAndPrintsNone()
+    {
+        // Arrange
+        this.SignInTo("production", "https://mail.example.test:8443", "an-admin-key");
+        using var handler = ProviderIssuingAGrantAndDeploymentAnswering(
+            HttpStatusCode.NoContent,
+            FakeAdminEndpoint.AnotherReleaseLine);
+
+        // Act
+        var exitCode = await this.RunAsync(
+            handler,
+            FakeMailboxRedirect.ApprovingWhenAsked("an-authorization-code", this.StateTheCommandGenerated),
+            "mailbox", "authorize", "--provider", "google", "--client-id", "app", "--account", "workspace");
+
+        // Assert
+        Assert.Equal(CliExitCode.Failure, exitCode);
+        Assert.DoesNotContain(
+            handler.RecordedRequests,
+            recorded => recorded.RequestUri?.AbsolutePath == AdminEndpointRoutes.MailboxRefreshTokenPath);
+        Assert.Contains(this.console.Errors, line => line.Contains("another release line", StringComparison.Ordinal));
+        Assert.DoesNotContain(this.console.Lines, line => line.Contains("a-refresh-token", StringComparison.Ordinal));
+    }
+
     /// <summary>A deployment that refuses the administrative credential is reported as that rather than as a stored grant.</summary>
     [Fact]
     public async Task Authorize_ADeploymentRefusingTheAdministrativeCredential_SaysSoAndStoresNothing()
@@ -428,8 +457,10 @@ public sealed class AuthorizeMailboxCommandTests : IDisposable
     /// answer differently. Routing on the administrative prefix is also what lets a test assert that the grant reached
     /// the write route rather than merely that two requests happened.
     /// </remarks>
-    private static FakeHttpMessageHandler ProviderIssuingAGrantAndDeploymentAnswering(HttpStatusCode deploymentStatus) =>
-        ProviderIssuingAGrantAndDeploymentRefusing(deploymentStatus, string.Empty);
+    private static FakeHttpMessageHandler ProviderIssuingAGrantAndDeploymentAnswering(
+        HttpStatusCode deploymentStatus,
+        string? deploymentVersion = null) =>
+        ProviderIssuingAGrantAndDeploymentRefusing(deploymentStatus, string.Empty, deploymentVersion);
 
     /// <summary>The provider, and a deployment that answers its session route before whatever it does with the grant.</summary>
     /// <remarks>
@@ -439,13 +470,16 @@ public sealed class AuthorizeMailboxCommandTests : IDisposable
     /// </remarks>
     private static FakeHttpMessageHandler ProviderIssuingAGrantAndDeploymentRefusing(
         HttpStatusCode deploymentStatus,
-        string deploymentBody) =>
+        string deploymentBody,
+        string? deploymentVersion = null) =>
         new((request, _) => Task.FromResult(request.RequestUri?.AbsolutePath switch
         {
             AdminEndpointRoutes.SessionPath => new HttpResponseMessage(HttpStatusCode.OK)
             {
                 Content = new StringContent(
-                    FakeAdminEndpoint.SessionBody("workstation", FakeAdminEndpoint.CommandVersion),
+                    FakeAdminEndpoint.SessionBody(
+                        "workstation",
+                        deploymentVersion ?? FakeAdminEndpoint.CommandVersion),
                     Encoding.UTF8,
                     "application/json"),
             },

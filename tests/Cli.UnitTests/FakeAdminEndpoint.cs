@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using System.Globalization;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Text;
@@ -27,6 +28,12 @@ internal static class FakeAdminEndpoint
     /// </remarks>
     internal static string CommandVersion { get; } =
         StampedAssemblyVersion.ReadFrom(typeof(AdminApiClient).Assembly).Version;
+
+    /// <summary>Gets a version on the release line after this command's, which is the pair every command refuses.</summary>
+    internal static string AnotherReleaseLine { get; } = LineAfter(CommandVersion);
+
+    /// <summary>Gets a different build of this command's own line, which is what a nightly of the same release is.</summary>
+    internal static string AnotherBuildOfThisLine { get; } = $"{CoreOf(CommandVersion)}-nightly.41";
 
     /// <summary>Builds an endpoint that accepts whatever credential it is given, reporting this command's own version.</summary>
     /// <param name="credentialName">The name it reports for the credential.</param>
@@ -97,6 +104,15 @@ internal static class FakeAdminEndpoint
             && presented.Count > 0
                 ? AuthenticationHeaderValue.Parse(presented[0])
                 : null;
+
+    private static string LineAfter(string version)
+    {
+        var line = Version.Parse(CoreOf(version));
+
+        return string.Create(CultureInfo.InvariantCulture, $"{line.Major}.{line.Minor + 1}.0");
+    }
+
+    private static string CoreOf(string version) => version.Split('-', '+')[0];
 
     private static RecordedHttpRequest? LastRequest(FakeHttpMessageHandler endpoint)
     {

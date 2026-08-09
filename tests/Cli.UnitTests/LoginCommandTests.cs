@@ -80,6 +80,30 @@ public sealed class LoginCommandTests : IDisposable
     }
 
     /// <summary>
+    /// A deployment from another release line must not reach the store either. The credential itself is fine there —
+    /// what is wrong is the deployment, and a profile saved for one every later command would refuse is a sign-in that
+    /// succeeded into nothing.
+    /// </summary>
+    [Fact]
+    public async Task Login_ADeploymentFromAnotherReleaseLine_StoresNothingAndFails()
+    {
+        // Arrange
+        var store = this.CreateStore();
+        using var handler = FakeAdminEndpoint.Accepting("workstation", FakeAdminEndpoint.AnotherReleaseLine);
+        this.console.SecretToSupply = "not-a-real-key";
+
+        // Act
+        var exitCode = await RunAsync(this.Context(store, handler), "login", "--endpoint", Endpoint);
+
+        // Assert
+        Assert.Equal(1, exitCode);
+        Assert.Empty(store.Read().Profiles);
+        Assert.Contains(
+            this.console.Errors,
+            line => line.Contains("another release line", StringComparison.Ordinal));
+    }
+
+    /// <summary>
     /// A success status is not by itself a MailFathom deployment: a proxy or an unrelated service on the same host can
     /// return one. Requiring the body to name the service is what keeps a stored credential from being one nothing saw.
     /// </summary>

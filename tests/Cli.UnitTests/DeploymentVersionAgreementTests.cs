@@ -2,7 +2,6 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-using System.Globalization;
 using System.Net;
 using MailFathom.Cli.Administration;
 using MailFathom.Cli.Credentials;
@@ -149,7 +148,7 @@ public sealed class DeploymentVersionAgreementTests : IDisposable
         using var deployment = FakeEmbeddingDeployment.Answering(
             assessment: SpendingAssessment,
             activation: (HttpStatusCode.OK, ActivationAnswer),
-            version: AnotherReleaseLine());
+            version: FakeAdminEndpoint.AnotherReleaseLine);
 
         // Act
         var exitCode = await this.RunAsync(deployment, "embedding", "activate", "--endpoint", Endpoint, "--yes");
@@ -170,7 +169,7 @@ public sealed class DeploymentVersionAgreementTests : IDisposable
     public async Task Status_ADeploymentBuiltDifferentlyOnTheSameLine_WarnsAndReportsAnyway()
     {
         // Arrange
-        using var deployment = FakeAdminEndpoint.Accepting("workstation", AnotherBuildOfThisLine());
+        using var deployment = FakeAdminEndpoint.Accepting("workstation", FakeAdminEndpoint.AnotherBuildOfThisLine);
 
         // Act
         var exitCode = await this.RunAsync(deployment, "status", "--endpoint", Endpoint);
@@ -194,7 +193,7 @@ public sealed class DeploymentVersionAgreementTests : IDisposable
         using var deployment = FakeEmbeddingDeployment.Answering(
             assessment: SpendingAssessment,
             activation: (HttpStatusCode.OK, ActivationAnswer),
-            version: AnotherBuildOfThisLine());
+            version: FakeAdminEndpoint.AnotherBuildOfThisLine);
 
         // Act
         var exitCode = await this.RunAsync(deployment, "embedding", "activate", "--endpoint", Endpoint, "--yes");
@@ -238,19 +237,6 @@ public sealed class DeploymentVersionAgreementTests : IDisposable
             Directory.Delete(this.storeDirectory, recursive: true);
         }
     }
-
-    /// <summary>A version on the release line after this build's, whatever this build's is.</summary>
-    private static string AnotherReleaseLine()
-    {
-        var line = System.Version.Parse(CoreOf(FakeAdminEndpoint.CommandVersion));
-
-        return string.Create(CultureInfo.InvariantCulture, $"{line.Major}.{line.Minor + 1}.0");
-    }
-
-    /// <summary>A different build of this build's own line, which is what a nightly of the same release is.</summary>
-    private static string AnotherBuildOfThisLine() => $"{CoreOf(FakeAdminEndpoint.CommandVersion)}-nightly.41";
-
-    private static string CoreOf(string version) => version.Split('-', '+')[0];
 
     private Task<int> RunAsync(FakeHttpMessageHandler deployment, params string[] args)
     {
