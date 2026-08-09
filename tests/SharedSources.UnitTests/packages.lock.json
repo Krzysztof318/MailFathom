@@ -245,6 +245,15 @@
           "xunit.v3.runner.common": "[3.2.2]"
         }
       },
+      "MailFathom.Application": {
+        "type": "Project",
+        "dependencies": {
+          "MailFathom.Domain": "[0.5.0, )"
+        }
+      },
+      "MailFathom.Domain": {
+        "type": "Project"
+      },
       "Microsoft.Extensions.Configuration": {
         "type": "CentralTransitive",
         "requested": "[10.0.10, )",

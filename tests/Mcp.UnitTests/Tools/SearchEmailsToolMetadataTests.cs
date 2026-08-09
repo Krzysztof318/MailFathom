@@ -65,7 +65,7 @@ public sealed class SearchEmailsToolMetadataTests
         string[] expectedProperties =
         [
             "queryText",
-            "accountIds",
+            "accounts",
             "folderAliases",
             "senderAddress",
             "recipientAddress",

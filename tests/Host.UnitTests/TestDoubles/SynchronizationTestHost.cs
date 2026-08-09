@@ -46,6 +46,7 @@ internal static class SynchronizationTestHost
     internal static MailSynchronizationAccountOptions CreateAccount(string accountId, params string[] folders) => new()
     {
         AccountId = accountId,
+        DisplayName = $"The {accountId} mailbox",
         Host = "imap.example.test",
         UserName = "mailfathom@example.test",
         Folders = [.. folders.Select(folder => new MailFolderMappingOptions { Alias = folder, RemotePath = folder })],

@@ -92,7 +92,13 @@ public sealed class ComposedMcpToolContractTests(MailFathomOrchestrationFixture 
                 match => match.GetProperty("summary").GetProperty("subject").GetString() == SeededSubject)
             .GetProperty("summary");
 
+        // Named by its display name on the way in and reported by both names on the way out, which is the whole of what
+        // the two spellings promise a client: either selects the mailbox, and the identifier is what later results are
+        // matched against.
         Assert.Equal(OrchestrationContract.ServedMailAccountId, seeded.GetProperty("accountId").GetString());
+        Assert.Equal(
+            OrchestrationContract.ServedMailAccountDisplayName,
+            seeded.GetProperty("accountDisplayName").GetString());
 
         // The canonical alias rather than the argument's own spelling: an alias is normalized when it is created, and
         // what the tool publishes is the value a client matches later results against. Asserting the literal sent on
@@ -150,7 +156,7 @@ public sealed class ComposedMcpToolContractTests(MailFathomOrchestrationFixture 
                     arguments = new
                     {
                         queryText = QueryTerm,
-                        accountIds = new[] { OrchestrationContract.ServedMailAccountId },
+                        accounts = new[] { OrchestrationContract.ServedMailAccountDisplayName },
                         folderAliases = new[] { FolderAlias },
                     },
                 },

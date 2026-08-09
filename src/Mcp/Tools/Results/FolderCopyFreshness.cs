@@ -20,6 +20,10 @@ internal sealed record FolderCopyFreshness
     [Description("The configured MailFathom account identifier the folder belongs to.")]
     public required string AccountId { get; init; }
 
+    /// <summary>Gets the name that account is published under.</summary>
+    [Description("The display name the account is published under, which is the operator's own name for the mailbox.")]
+    public required string AccountDisplayName { get; init; }
+
     /// <summary>Gets MailFathom's own name for the folder.</summary>
     [Description("The MailFathom folder alias, such as INBOX.")]
     public required string FolderAlias { get; init; }
@@ -34,15 +38,18 @@ internal sealed record FolderCopyFreshness
 
     /// <summary>Publishes the freshness of one folder.</summary>
     /// <param name="freshness">The freshness entry the result carried.</param>
+    /// <param name="accountNames">Reads the name the entry's account is published under.</param>
     /// <returns>The wire representation of <paramref name="freshness" />.</returns>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="freshness" /> is <see langword="null" />.</exception>
-    public static FolderCopyFreshness From(MailboxFolderFreshness freshness)
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="freshness" /> or <paramref name="accountNames" /> is <see langword="null" />.</exception>
+    public static FolderCopyFreshness From(MailboxFolderFreshness freshness, PublishedAccountNames accountNames)
     {
         ArgumentNullException.ThrowIfNull(freshness);
+        ArgumentNullException.ThrowIfNull(accountNames);
 
         return new FolderCopyFreshness
         {
             AccountId = freshness.AccountId.Value,
+            AccountDisplayName = accountNames.For(freshness.AccountId),
             FolderAlias = freshness.FolderAlias.Value,
             SynchronizedAt = freshness.SynchronizedAt,
             WasSynchronized = freshness.WasSynchronized,

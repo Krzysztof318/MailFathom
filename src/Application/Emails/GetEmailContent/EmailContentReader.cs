@@ -137,7 +137,7 @@ public sealed class EmailContentReader
         // An account this deployment no longer serves leaves its stored rows in place, so the row existing is not
         // enough. The two cases produce one answer: telling them apart would let a caller learn which identifiers
         // exist by asking about them.
-        if (summary is null || !this.accountCatalog.ServedAccountIds.Contains(summary.AccountId))
+        if (summary is null || !this.accountCatalog.ServedAccounts.Any(account => account.Id == summary.AccountId))
         {
             return EmailContentReadOutcome.NotFound(storedEmailId);
         }

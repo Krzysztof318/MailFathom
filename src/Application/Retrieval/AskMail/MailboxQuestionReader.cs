@@ -121,7 +121,7 @@ public sealed class MailboxQuestionReader
         ArgumentNullException.ThrowIfNull(request);
 
         var questionText = MailQuestionText.Create(request.QuestionText);
-        var scope = this.scopeResolver.ReadableScope(request.AccountIds, request.FolderAliases);
+        var scope = this.scopeResolver.ReadableScope(request.Accounts, request.FolderAliases);
 
         var gate = await this.capability.ResolveAsync(cancellationToken);
         if (gate.Answerer is not { } answerer)

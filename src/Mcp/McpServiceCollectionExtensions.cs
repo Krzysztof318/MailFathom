@@ -51,6 +51,7 @@ public static class McpServiceCollectionExtensions
                 .AddListToolsFilter(next => (request, cancellationToken) =>
                     new ValueTask<ListToolsResult>(
                         AskMailAdvertisement.WithoutUnavailableAnsweringAsync(next, request, cancellationToken))))
+            .WithTools<ListAccountsTool>(McpToolContractSerialization.Options)
             .WithTools<ListEmailsTool>(McpToolContractSerialization.Options)
             .WithTools<GetEmailContentTool>(McpToolContractSerialization.Options)
             .WithTools<SearchEmailsTool>(McpToolContractSerialization.Options)

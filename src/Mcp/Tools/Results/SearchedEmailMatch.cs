@@ -56,16 +56,21 @@ internal sealed record SearchedEmailMatch
     /// <summary>Publishes one match a search returned.</summary>
     /// <param name="match">The match to publish.</param>
     /// <param name="snippetBounds">How much of a message's body this deployment lets one result show.</param>
+    /// <param name="accountNames">Reads the name the match's account is published under.</param>
     /// <returns>The wire representation of <paramref name="match" />.</returns>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="match" /> or <paramref name="snippetBounds" /> is <see langword="null" />.</exception>
-    public static SearchedEmailMatch From(EmailSearchMatch match, EmailSearchSnippetBounds snippetBounds)
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="match" />, <paramref name="snippetBounds" />, or <paramref name="accountNames" /> is <see langword="null" />.</exception>
+    public static SearchedEmailMatch From(
+        EmailSearchMatch match,
+        EmailSearchSnippetBounds snippetBounds,
+        PublishedAccountNames accountNames)
     {
         ArgumentNullException.ThrowIfNull(match);
         ArgumentNullException.ThrowIfNull(snippetBounds);
+        ArgumentNullException.ThrowIfNull(accountNames);
 
         return new SearchedEmailMatch
         {
-            Summary = ListedEmailSummary.From(match.Summary),
+            Summary = ListedEmailSummary.From(match.Summary, accountNames),
             RelevanceRank = match.RelevanceRank,
             Snippets = PublishedSnippets(match.Snippets, snippetBounds),
         };

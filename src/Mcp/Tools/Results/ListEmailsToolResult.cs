@@ -31,17 +31,19 @@ internal sealed record ListEmailsToolResult
 
     /// <summary>Publishes a page the use case answered.</summary>
     /// <param name="result">The page to publish.</param>
+    /// <param name="accountNames">Reads the name each named account is published under.</param>
     /// <returns>The wire representation of <paramref name="result" />.</returns>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="result" /> is <see langword="null" />.</exception>
-    public static ListEmailsToolResult From(ListEmailsResult result)
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="result" /> or <paramref name="accountNames" /> is <see langword="null" />.</exception>
+    public static ListEmailsToolResult From(ListEmailsResult result, PublishedAccountNames accountNames)
     {
         ArgumentNullException.ThrowIfNull(result);
+        ArgumentNullException.ThrowIfNull(accountNames);
 
         return new ListEmailsToolResult
         {
-            Emails = [.. result.Emails.Select(ListedEmailSummary.From)],
+            Emails = [.. result.Emails.Select(summary => ListedEmailSummary.From(summary, accountNames))],
             NextCursor = result.NextCursor,
-            FolderFreshness = [.. result.FolderFreshness.Select(FolderCopyFreshness.From)],
+            FolderFreshness = [.. result.FolderFreshness.Select(freshness => FolderCopyFreshness.From(freshness, accountNames))],
         };
     }
 }

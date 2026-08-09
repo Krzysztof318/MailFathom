@@ -30,12 +30,17 @@ internal static class MailboxScopeArguments
     /// </remarks>
     private const int MaximumIdentifierLength = 256;
 
-    /// <summary>Turns the account identifiers a caller supplied into domain values.</summary>
-    /// <param name="accountIds">The identifiers the caller named, or <see langword="null" /> when it named none.</param>
+    /// <summary>Turns the text a caller named accounts with into domain values.</summary>
+    /// <param name="accounts">The accounts the caller named, or <see langword="null" /> when it named none.</param>
     /// <returns>The named accounts, empty when the caller named none.</returns>
-    /// <exception cref="MailboxQueryFilterInvalidException">Thrown when more than the accepted number are named, or one of them is not an identifier this system issues.</exception>
-    public static IReadOnlyList<MailAccountId> AccountIds(string[]? accountIds) =>
-        Parse(accountIds, MailAccountId.Create, MailboxScope.MaximumAccountIds, "accounts");
+    /// <exception cref="MailboxQueryFilterInvalidException">Thrown when more than the accepted number are named, or one of them is text no account of this system could be named by.</exception>
+    /// <remarks>
+    /// Which account the text names is deliberately not settled here. An account may be named by its configured
+    /// identifier or by the display name it is published under, and the two are matched against the served accounts
+    /// inside the use case, so text naming nothing meets the same refusal as an account the deployment stopped serving.
+    /// </remarks>
+    public static IReadOnlyList<MailAccountSelector> Accounts(string[]? accounts) =>
+        Parse(accounts, MailAccountSelector.Create, MailboxScope.MaximumAccountIds, "accounts");
 
     /// <summary>Turns the folder aliases a caller supplied into domain values.</summary>
     /// <param name="folderAliases">The aliases the caller named, or <see langword="null" /> when it named none.</param>
@@ -84,13 +89,12 @@ internal static class MailboxScopeArguments
         }
     }
 
-    /// <summary>Refuses text no identifier of this system is spelled with, before a domain type is asked to read it.</summary>
+    /// <summary>Refuses text no name of this system is spelled with, before a domain type is asked to read it.</summary>
     /// <remarks>
-    /// The domain identities differ in what they reject — a folder alias refuses control characters and an account
-    /// identifier does not — while both are equally reachable from an untrusted caller here. The stricter rule is applied
-    /// at this boundary for both, because an identifier that is never matched still travels: an account this deployment
-    /// does not serve is named back in the refusal a client reads, so an unbounded string carrying newlines would be a
-    /// way to write arbitrary text into that contract and into the log beside it.
+    /// One rule is applied to both kinds of name at this boundary, whatever each domain type goes on to check for
+    /// itself, because a name that is never matched still travels: an account this deployment does not serve is named
+    /// back in the refusal a client reads, so an unbounded string carrying newlines would be a way to write arbitrary
+    /// text into that contract and into the log beside it.
     /// </remarks>
     private static string UsableIdentifierText(string value, string filterName)
     {

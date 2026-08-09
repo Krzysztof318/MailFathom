@@ -19,6 +19,7 @@ internal static class ConfiguredAccounts
             Accounts = [.. accounts.Select(account => new MailSynchronizationAccountOptions
             {
                 AccountId = account.AccountId,
+                DisplayName = $"The {account.AccountId} mailbox",
                 Host = "imap.example.test",
                 UserName = "mailfathom@example.test",
                 Secrets = new MailAccountSecretOptions

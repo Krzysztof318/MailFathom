@@ -5,6 +5,7 @@
 using MailFathom.Application.Emails.Mailboxes;
 using MailFathom.Application.Emails.Search;
 using MailFathom.Application.Emails.SearchEmails;
+using MailFathom.Domain.Accounts;
 
 namespace MailFathom.Application.Retrieval;
 
@@ -64,7 +65,7 @@ public sealed class MailboxKnowledgeSearch : IEmailKnowledgeSearch
         var request = new SearchEmailsRequest
         {
             QueryText = validatedQueryText.Value,
-            AccountIds = scope.AccountIds,
+            Accounts = [.. scope.AccountIds.Select(MailAccountSelector.For)],
             FolderAliases = scope.FolderAliases,
             ResultLimit = this.bounds.MaximumPassages,
         };

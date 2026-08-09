@@ -81,7 +81,7 @@ internal static class MailAnsweringAuditEndpoint
 
         var accountId = MailAccountId.Create(account);
 
-        if (!accounts.ServedAccountIds.Contains(accountId))
+        if (!accounts.ServedAccounts.Any(account => account.Id == accountId))
         {
             return TypedResults.Problem(
                 $"This deployment configures no mail account named '{accountId.Value}'.",

@@ -13,6 +13,7 @@ using MailFathom.Application.Synchronization.Checkpoints;
 using MailFathom.Application.UnitTests.TestDoubles;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Folders;
+using MailFathom.TestSupport;
 using Microsoft.Extensions.Time.Testing;
 using NSubstitute;
 using Xunit;
@@ -293,9 +294,11 @@ public sealed class MailboxKnowledgeSearchTests
     private static IMailAccountCatalog CatalogServing(params MailAccountId[] servedAccountIds)
     {
         var catalog = Substitute.For<IMailAccountCatalog>();
-        catalog.ServedAccountIds.Returns(
+        catalog.ServedAccounts.Returns(
         [
-            .. servedAccountIds.OrderBy(accountId => accountId.Value, StringComparer.Ordinal),
+            .. servedAccountIds
+                .OrderBy(accountId => accountId.Value, StringComparer.Ordinal)
+                .Select(SyntheticServedAccount.Of),
         ]);
 
         return catalog;

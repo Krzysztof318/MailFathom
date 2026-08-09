@@ -50,6 +50,7 @@ Synchronization is off until configuration turns it on, and an enabled synchroni
     "Accounts": [
       {
         "AccountId": "primary",
+        "DisplayName": "Personal mail",
         "Host": "imap.example.test",
         "Port": 993,
         "UserName": "you@example.test",
@@ -73,6 +74,10 @@ Points worth knowing before you adapt it:
 
 - **`AccountId` and `Alias` are your names**, not the server's. They are what every tool argument, log line, and error
   message uses, so pick names you are happy to see in a diagnostic.
+- **`DisplayName` is the name an assistant reads back to you.** It is required and has no default: the identifier above
+  is a key, and a person hearing "the email came from `acct-2`" learns nothing. It travels beside the identifier in
+  every tool result, and either spelling narrows a listing, a search, or a question to that mailbox. No two accounts may
+  share one, and none may take another account's identifier, so a name always names one mailbox.
 - **Folders are best named by role.** `SpecialUse` lets discovery find the folder whatever the server calls it —
   a German server's `Gesendet` is still `Sent` — and configuring no folder at all synchronizes the inbox. Naming an
   exact server path is the alternative for folders with no role.
@@ -193,10 +198,10 @@ bearer credential. Any client that supports Streamable HTTP connects with two fa
 | Server URL | `http://127.0.0.1:8080/mcp` under the Compose defaults; your proxy's HTTPS address otherwise |
 | Header | `Authorization: Bearer <the key material>` |
 
-A connected client's tool listing should show at least three tools — `list_emails`, `get_email_content`,
-`search_emails` — each advertising itself as read-only, non-destructive, and idempotent. A fourth, `ask_mail`, appears
-only once you have configured a chat model and an embedding model and both are working; until then its absence is the
-deployment telling you it cannot answer questions yet rather than a fault.
+A connected client's tool listing should show at least four tools — `list_accounts`, `list_emails`,
+`get_email_content`, `search_emails` — each advertising itself as read-only, non-destructive, and idempotent. A fifth,
+`ask_mail`, appears only once you have configured a chat model and an embedding model and both are working; until then
+its absence is the deployment telling you it cannot answer questions yet rather than a fault.
 [Verifying an enabled endpoint](../operations/mcp-endpoint.md#verifying-an-enabled-endpoint) is the checklist form of
 this, including what the refusals look like when the key or the origin is wrong.
 

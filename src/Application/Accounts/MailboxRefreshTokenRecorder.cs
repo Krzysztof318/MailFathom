@@ -63,7 +63,7 @@ public sealed class MailboxRefreshTokenRecorder
     {
         ArgumentNullException.ThrowIfNull(refreshToken);
 
-        if (!this.accountCatalog.ServedAccountIds.Contains(accountId))
+        if (!this.accountCatalog.ServedAccounts.Any(account => account.Id == accountId))
         {
             throw new MailAccountNotAccessibleException(accountId);
         }

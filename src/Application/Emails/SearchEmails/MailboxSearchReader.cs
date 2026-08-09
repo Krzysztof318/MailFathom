@@ -192,7 +192,7 @@ public sealed class MailboxSearchReader
 
     /// <summary>Validates the request's structured filters and restricts the search to the accounts this deployment serves.</summary>
     private MailboxEmailSelection ReadableSelection(SearchEmailsRequest request) => MailboxEmailSelection.Create(
-        this.scopeResolver.ReadableScope(request.AccountIds, request.FolderAliases),
+        this.scopeResolver.ReadableScope(request.Accounts, request.FolderAliases),
         request.SenderAddress,
         request.RecipientAddress,
         request.SubjectFragment,

@@ -28,18 +28,24 @@ public sealed class MailboxScopeResolver
         this.accountCatalog = accountCatalog;
     }
 
-    /// <summary>Normalizes a requested scope and restricts it to the accounts this deployment serves.</summary>
-    /// <param name="accountIds">The accounts a request named, or empty for every served account.</param>
+    /// <summary>Resolves what a request named into the scope a query runs with.</summary>
+    /// <param name="accountSelectors">The text a request named accounts with, or empty for every served account.</param>
     /// <param name="folderAliases">The folder aliases a request named, or empty for every folder.</param>
     /// <returns>The scope a query runs with.</returns>
     /// <exception cref="MailboxQueryFilterInvalidException">Thrown when either list names more values than its limit permits.</exception>
     /// <exception cref="MailAccountNotAccessibleException">Thrown when the request names an account this deployment does not serve.</exception>
     /// <remarks>
     /// <para>
+    /// An account may be named by its configured identifier or by the display name it is published under, and this is
+    /// where the two become one identity. Resolution happens against the served accounts rather than at a protocol
+    /// boundary, so text naming nothing is refused by the same rule and with the same failure as an identifier the
+    /// deployment stopped serving — a caller cannot learn from the refusal which spelling it was holding.
+    /// </para>
+    /// <para>
     /// An account the deployment does not serve is refused before anything is read, rather than narrowed away by a
     /// predicate: a narrowed predicate would answer with an empty result, and an empty result tells a caller that the
-    /// identifier they named exists. The check runs against the normalized scope, so the same request cannot be written
-    /// two ways to reach two answers.
+    /// name they used exists. The resolved identities are what the scope is built from, so the same account named two
+    /// ways is one query with one continuation cursor.
     /// </para>
     /// <para>
     /// A request that names no account is restricted to the served accounts rather than left unrestricted. Removing an
@@ -49,25 +55,37 @@ public sealed class MailboxScopeResolver
     /// </para>
     /// </remarks>
     public MailboxScope ReadableScope(
-        IReadOnlyList<MailAccountId> accountIds,
+        IReadOnlyList<MailAccountSelector> accountSelectors,
         IReadOnlyList<MailFolderAlias> folderAliases)
     {
-        var requestedScope = MailboxScope.Create(accountIds, folderAliases);
-        var servedAccountIds = this.accountCatalog.ServedAccountIds;
+        ArgumentNullException.ThrowIfNull(accountSelectors);
 
-        if (FirstAccountNotServed(requestedScope, servedAccountIds) is { } inaccessibleAccountId)
-        {
-            throw new MailAccountNotAccessibleException(inaccessibleAccountId);
-        }
+        var servedAccounts = this.accountCatalog.ServedAccounts;
+
+        // Counted before anything is resolved, because the count is the caller's and each resolution walks the served
+        // accounts. The scope's own limit is reused rather than a second one invented for the text the identities
+        // arrive as.
+        MailboxQueryFilterInvalidException.ThrowIfCountExceeded(
+            accountSelectors.Count,
+            MailboxScope.MaximumAccountIds,
+            "accounts");
+
+        var requestedScope = MailboxScope.Create(
+            [.. accountSelectors.Select(selector => ResolvedAccountId(selector, servedAccounts))],
+            folderAliases);
 
         return requestedScope.AccountIds.Count is 0
-            ? MailboxScope.RestrictedToServedAccounts(servedAccountIds, requestedScope.FolderAliases)
+            ? MailboxScope.RestrictedToServedAccounts(
+                servedAccounts.Select(static account => account.Id),
+                requestedScope.FolderAliases)
             : requestedScope;
     }
 
-    private static MailAccountId? FirstAccountNotServed(
-        MailboxScope requestedScope,
-        IReadOnlyList<MailAccountId> servedAccountIds) => requestedScope.AccountIds
-        .Select(static accountId => (MailAccountId?)accountId)
-        .FirstOrDefault(accountId => !servedAccountIds.Contains(accountId!.Value));
+    /// <summary>Finds the served account text names, refusing the request when it names none.</summary>
+    /// <exception cref="MailAccountNotAccessibleException">Thrown when no served account carries that identifier or display name.</exception>
+    private static MailAccountId ResolvedAccountId(
+        MailAccountSelector selector,
+        IReadOnlyList<ServedMailAccount> servedAccounts) =>
+        servedAccounts.FirstOrDefault(account => account.IsNamedBy(selector))?.Id
+        ?? throw new MailAccountNotAccessibleException(selector);
 }

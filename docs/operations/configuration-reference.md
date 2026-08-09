@@ -104,6 +104,7 @@ shape the coordinator loop itself, which are read once at start and marked *rest
 | Key | Type | Default | Constraint | Change |
 | --- | --- | --- | --- | --- |
 | `…:AccountId` | string | — | Required; unique across accounts after normalization | reload |
+| `…:DisplayName` | string | — | Required, with no default; at most 128 characters, no control characters, and it may not be another account's identifier or display name compared without regard to case | reload |
 | `…:Host` | string | — | Required when synchronization is enabled | reload |
 | `…:Port` | int | `993` | 1 – 65535 | reload |
 | `…:UserName` | string | — | Required when synchronization is enabled; an identifier, not a secret | reload |
@@ -132,6 +133,15 @@ question reached, so the record grows with how much an instance is asked rather 
 [An account can keep a record of what a question read](../features/mail-answering.md#an-account-can-keep-a-record-of-what-a-question-read-and-none-does-by-default)
 states what an entry holds, what it deliberately does not, and the one way it differs from the trail above — an erased
 message is erased from the runs that read it.
+
+`AccountId` and `DisplayName` are both names for the account and they answer different questions. The identifier is the
+stable key everything else is expressed in — every stored row, every continuation cursor, every log line — and it is
+what you keep unchanged. The display name is what a caller reads: it appears beside the identifier in every MCP result
+that names an account, and either spelling may be used to narrow a listing, a search, or a question to that mailbox.
+There is deliberately no default, because a name MailFathom invented would be published to callers as though you had
+chosen it. The two share one naming space so that a name can never select two mailboxes, which is why startup refuses a
+display name that another account's identifier or display name already carries; a display name equal to the account's
+*own* identifier is fine, since both spellings then reach the same mailbox.
 
 A folder entry names `Alias` (required — your stable name for the folder) and **exactly one** of `RemotePath` (the
 server's own path) or `SpecialUse` (a role discovery resolves: `Inbox`, `Archive`, `Drafts`, `Sent`, `Junk`, `Trash`,

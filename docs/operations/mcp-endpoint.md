@@ -1407,12 +1407,12 @@ against a server record without learning what was searched for.
 
 ## Verifying an enabled endpoint
 
-With the endpoint enabled, the Streamable HTTP transport answers on `/mcp` and advertises three tools, or four. Any MCP
-client that speaks Streamable HTTP can list them; `tools/list` should report `list_emails`, `get_email_content`, and
-`search_emails`, each with `readOnlyHint` true, `destructiveHint` false, `idempotentHint` true, and `openWorldHint`
-false.
+With the endpoint enabled, the Streamable HTTP transport answers on `/mcp` and advertises four tools, or five. Any MCP
+client that speaks Streamable HTTP can list them; `tools/list` should report `list_accounts`, `list_emails`,
+`get_email_content`, and `search_emails`, each with `readOnlyHint` true, `destructiveHint` false, `idempotentHint` true,
+and `openWorldHint` false.
 
-`ask_mail` is the fourth, and it appears only while this deployment can answer a question: a chat endpoint declared and
+`ask_mail` is the fifth, and it appears only while this deployment can answer a question: a chat endpoint declared and
 not currently refusing, and an embedding profile whose space a query can be placed in. Its absence from a listing is
 therefore a statement about the deployment rather than a fault — an instance that declared no chat endpoint never
 advertises it, and one whose chat provider refused within the last minute withholds it and offers it again afterwards, so

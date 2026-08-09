@@ -210,6 +210,7 @@ the account at them. The permitted mechanisms are what switch the account onto t
     "Accounts": [
       {
         "AccountId": "workspace",
+        "DisplayName": "Workspace mail",
         "Host": "imap.gmail.com",
         "Port": 993,
         "UserName": "mailbox@example.com",

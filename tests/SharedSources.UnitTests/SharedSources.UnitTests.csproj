@@ -14,4 +14,10 @@
     <!-- RecordingLoggerProvider from tests/shared implements ILoggerProvider. -->
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
   </ItemGroup>
+
+  <ItemGroup>
+    <!-- SyntheticServedAccount from tests/shared builds an application port's value, so this project references what
+         every consumer of that file already does. Compiling it any other way would not be compiling it as a consumer. -->
+    <ProjectReference Include="..\..\src\Application\Application.csproj" />
+  </ItemGroup>
 </Project>

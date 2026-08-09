@@ -3,14 +3,17 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.Accounts;
-using MailFathom.Domain.Accounts;
+using MailFathom.TestSupport;
 
 namespace MailFathom.Mcp.UnitTests.TestDoubles;
 
-/// <summary>Names the accounts a test's deployment serves.</summary>
+/// <summary>Describes the accounts a test's deployment serves.</summary>
 internal sealed class StubMailAccountCatalog(params string[] servedAccountIds) : IMailAccountCatalog
 {
     /// <inheritdoc />
-    public IReadOnlyList<MailAccountId> ServedAccountIds { get; } =
-        [.. servedAccountIds.Select(MailAccountId.Create)];
+    public bool SynchronizationEnabled { get; init; } = true;
+
+    /// <inheritdoc />
+    public IReadOnlyList<ServedMailAccount> ServedAccounts { get; init; } =
+        [.. servedAccountIds.Select(SyntheticServedAccount.Of)];
 }

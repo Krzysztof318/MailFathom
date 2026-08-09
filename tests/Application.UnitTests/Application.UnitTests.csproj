@@ -7,6 +7,7 @@
 
   <ItemGroup>
     <Compile Include="..\shared\ExceptionHierarchyAssertion.cs" Link="ExceptionHierarchyAssertion.cs" />
+    <Compile Include="..\shared\SyntheticServedAccount.cs" Link="SyntheticServedAccount.cs" />
   </ItemGroup>
 
   <ItemGroup>

@@ -10,7 +10,7 @@ using MailFathom.Application.Emails.Search;
 using MailFathom.Application.Retrieval;
 using MailFathom.Application.Retrieval.AskMail;
 using MailFathom.Application.Retrieval.AskMail.Audit;
-using MailFathom.Domain.Accounts;
+using MailFathom.TestSupport;
 using Microsoft.Extensions.Time.Testing;
 using NSubstitute;
 
@@ -52,6 +52,17 @@ internal static class AnsweringDeployment
             answerer);
     }
 
+    /// <summary>Describes the one account this suite's deployment serves.</summary>
+    /// <returns>The catalog the use case bounds its reads with and the tool publishes names from.</returns>
+    public static IMailAccountCatalog AccountCatalog()
+    {
+        var accountCatalog = Substitute.For<IMailAccountCatalog>();
+        accountCatalog.SynchronizationEnabled.Returns(true);
+        accountCatalog.ServedAccounts.Returns([SyntheticServedAccount.Of(ServedAccountId)]);
+
+        return accountCatalog;
+    }
+
     /// <summary>Composes the use case the tool calls, over the capability the arguments describe.</summary>
     /// <param name="answerer">The answering port, or <see langword="null" /> for a deployment that declared no chat endpoint.</param>
     /// <param name="bounds">How much of one run's outcome a single answer publishes.</param>
@@ -62,12 +73,9 @@ internal static class AnsweringDeployment
         MailAnswerBounds? bounds = null,
         IMailAnsweringSpendLedger? spendLedger = null)
     {
-        var accountCatalog = Substitute.For<IMailAccountCatalog>();
-        accountCatalog.ServedAccountIds.Returns([MailAccountId.Create(ServedAccountId)]);
-
         return new MailboxQuestionReader(
             Capability(answerer),
-            new MailboxScopeResolver(accountCatalog),
+            new MailboxScopeResolver(AccountCatalog()),
             spendLedger ?? LedgerAdmitting(),
             bounds ?? MailAnswerBounds.Default,
 

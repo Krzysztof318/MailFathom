@@ -294,6 +294,14 @@ public static class OrchestrationContract
     /// </remarks>
     public const string ServedMailAccountId = "integration";
 
+    /// <summary>The display name the integration-test topology publishes that account under.</summary>
+    /// <remarks>
+    /// Declared beside the identifier and deliberately different from it, because a display name is required
+    /// configuration and the two spellings are separately resolvable: a topology that reused the identifier here would
+    /// let a contract test pass while only one of the two ways of naming an account worked.
+    /// </remarks>
+    public const string ServedMailAccountDisplayName = "Integration mailbox";
+
     /// <summary>The whole app host argument that selects the integration-test topology.</summary>
     /// <remarks>
     /// Matched against the argument list itself rather than read through <c>IDistributedApplicationBuilder.Configuration</c>,

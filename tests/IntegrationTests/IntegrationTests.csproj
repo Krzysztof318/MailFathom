@@ -28,6 +28,7 @@
     <!-- The same builder the unit suites link, because the certificates a real handshake needs are issued by it rather
          than committed: nothing here provisions material a second way. -->
     <Compile Include="..\shared\TestCertificates.cs" Link="TestCertificates.cs" />
+    <Compile Include="..\shared\SyntheticServedAccount.cs" Link="SyntheticServedAccount.cs" />
   </ItemGroup>
 
   <ItemGroup>

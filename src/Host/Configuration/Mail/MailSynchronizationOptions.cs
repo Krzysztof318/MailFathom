@@ -428,19 +428,31 @@ internal sealed class MailSynchronizationOptions
         this.FindConfiguredAccount(accountId)?.CreateAnsweringAuditSettings() ?? MailAnsweringAuditSettings.Disabled;
 
     /// <inheritdoc />
+    public bool SynchronizationEnabled => this.Enabled;
+
+    /// <inheritdoc />
     /// <remarks>
+    /// <para>
     /// Configuration is what defines the set of accounts, so this answers from the same bound options every other
     /// per-account reader does. It deliberately ignores <see cref="Enabled" />: that switch stops runs from fetching
     /// mail, and an operator who turned it off has not asked for the copy already stored to become unreadable. An
     /// account they removed is a different matter, and its absence here is what makes its stored mail unreadable.
+    /// </para>
+    /// <para>
+    /// An account whose display name is missing or unusable is omitted rather than published under an invented one.
+    /// Startup validation refuses that configuration, so the omission is only reachable while a reload is being
+    /// rejected, and publishing an account under a name no operator chose is the one outcome worse than not publishing
+    /// it at all.
+    /// </para>
     /// </remarks>
-    public IReadOnlyList<MailAccountId> ServedAccountIds =>
+    public IReadOnlyList<ServedMailAccount> ServedAccounts =>
     [
         .. (this.Accounts ?? [])
             .Where(static candidate => !string.IsNullOrWhiteSpace(candidate.AccountId))
-            .Select(static candidate => MailAccountId.Create(candidate.AccountId))
-            .DistinctBy(static accountId => accountId.Value, StringComparer.Ordinal)
-            .OrderBy(static accountId => accountId.Value, StringComparer.Ordinal),
+            .Select(static candidate => candidate.CreateServedAccount())
+            .OfType<ServedMailAccount>()
+            .DistinctBy(static account => account.Id.Value, StringComparer.Ordinal)
+            .OrderBy(static account => account.Id.Value, StringComparer.Ordinal),
     ];
 
     /// <summary>Finds every configured earliest received date that could not mean anything on the supplied date.</summary>
@@ -507,9 +519,52 @@ internal sealed class MailSynchronizationOptions
             yield return new ValidationResult("Account IDs must be unique after normalization.", [nameof(this.Accounts)]);
         }
 
+        foreach (var result in this.FindDisplayNameCollisions())
+        {
+            yield return result;
+        }
+
         foreach (var result in this.Accounts.SelectMany(account => account.ValidateForSynchronization(this.Enabled)))
         {
             yield return result;
+        }
+    }
+
+    /// <summary>Reports every display name a caller could not resolve to exactly one account.</summary>
+    /// <returns>One result per colliding display name, empty when each name selects one account.</returns>
+    /// <remarks>
+    /// <para>
+    /// A request may name an account by its identifier or by its display name, so the two spellings share one naming
+    /// space and a name carried by two accounts would make a filter ambiguous. Resolution takes the first match, which
+    /// means the ambiguity would not fail anything: it would quietly read the wrong mailbox, which is why it is refused
+    /// here instead.
+    /// </para>
+    /// <para>
+    /// A display name equal to its own account's identifier is not a collision. Both spellings reach the same mailbox,
+    /// so nothing is ambiguous, and an operator whose identifier is already readable should not have to invent a second
+    /// spelling of it.
+    /// </para>
+    /// </remarks>
+    private IEnumerable<ValidationResult> FindDisplayNameCollisions()
+    {
+        var named = this.Accounts
+            .Where(static account => !string.IsNullOrWhiteSpace(account.AccountId) && !string.IsNullOrWhiteSpace(account.DisplayName))
+            .Select(static account => (AccountId: account.AccountId.Trim(), DisplayName: account.DisplayName.Trim()))
+            .ToArray();
+
+        foreach (var account in named)
+        {
+            var collidesWithAnother = named.Any(other =>
+                !StringComparer.Ordinal.Equals(other.AccountId, account.AccountId)
+                && (StringComparer.OrdinalIgnoreCase.Equals(other.AccountId, account.DisplayName)
+                    || StringComparer.OrdinalIgnoreCase.Equals(other.DisplayName, account.DisplayName)));
+
+            if (collidesWithAnother)
+            {
+                yield return new ValidationResult(
+                    $"Account '{account.AccountId}': the display name '{account.DisplayName}' is already the identifier or display name of another account, so a request naming it could not say which mailbox it meant.",
+                    [nameof(this.Accounts)]);
+            }
         }
     }
 
@@ -543,6 +598,24 @@ internal sealed class MailSynchronizationAccountOptions : IValidatableObject
     /// <summary>Gets or sets the local account identifier.</summary>
     [Required]
     public string AccountId { get; set; } = string.Empty;
+
+    /// <summary>Gets or sets the name this account is published under.</summary>
+    /// <remarks>
+    /// <para>
+    /// Required, and with no fallback to <see cref="AccountId" />. The identifier is a key an operator invented for
+    /// configuration, and a reader meeting it in an answer has no way to tell which mailbox it means; this is the text
+    /// that answers that, so a deployment states it rather than having MailFathom guess a name and publish it as though
+    /// somebody had chosen it.
+    /// </para>
+    /// <para>
+    /// It shares a naming space with the identifiers, because a caller may name an account by either and one name must
+    /// never select two accounts. Startup therefore refuses a display name that another account's identifier or display
+    /// name already carries, compared without regard to case; an account's own identifier is not a collision, since both
+    /// spellings then reach the same mailbox.
+    /// </para>
+    /// </remarks>
+    [Required]
+    public string DisplayName { get; set; } = string.Empty;
 
     /// <summary>Gets or sets the IMAP server host name.</summary>
     public string Host { get; set; } = string.Empty;
@@ -660,6 +733,14 @@ internal sealed class MailSynchronizationAccountOptions : IValidatableObject
         if (this.Port is < 1 or > 65535)
         {
             yield return new ValidationResult("IMAP port must be between 1 and 65535.", [nameof(this.Port)]);
+        }
+
+        // Required whether or not synchronization is enabled, unlike the connection settings below. The name is what
+        // every result publishing this account carries, and the stored copy stays readable after an operator switches
+        // synchronization off, so an account without one would reach a caller nameless rather than merely unrefreshed.
+        foreach (var result in this.ValidateDisplayName())
+        {
+            yield return result;
         }
 
         // The binder converts a bare number onto an enum without asking whether any member carries it, and
@@ -897,6 +978,63 @@ internal sealed class MailSynchronizationAccountOptions : IValidatableObject
             yield return new ValidationResult(
                 $"Account '{this.AccountId}': the earliest email received date {earliestReceivedDate:yyyy-MM-dd} is later than the current UTC date {today:yyyy-MM-dd}, so it would exclude every email in the mailbox.",
                 [nameof(this.EarliestEmailReceivedDate)]);
+        }
+    }
+
+    /// <summary>Reports a display name this account could not be published under.</summary>
+    /// <returns>One result naming the rule the configured text breaks, empty when the name is usable.</returns>
+    /// <remarks>
+    /// The domain type owns the rules and this translates its refusal into a startup message, so the bound on length and
+    /// the refusal of control characters are stated once. The account is named in the message and the offending text is
+    /// not, because a control character written into a startup log is the thing being refused.
+    /// </remarks>
+    private IEnumerable<ValidationResult> ValidateDisplayName()
+    {
+        if (string.IsNullOrWhiteSpace(this.DisplayName))
+        {
+            return
+            [
+                new ValidationResult(
+                    $"Account '{this.AccountId}': a display name is required. It is the name the account is published under, and there is no default.",
+                    [nameof(this.DisplayName)]),
+            ];
+        }
+
+        try
+        {
+            MailAccountDisplayName.Create(this.DisplayName);
+
+            return [];
+        }
+        catch (ArgumentException exception)
+        {
+            return
+            [
+                new ValidationResult(
+                    $"Account '{this.AccountId}': the display name is not usable [{exception.Message}]",
+                    [nameof(this.DisplayName)]),
+            ];
+        }
+    }
+
+    /// <summary>Builds what this account is published as, or nothing when its configuration cannot name it.</summary>
+    /// <returns>The served account, or <see langword="null" /> when the identifier or the display name is unusable.</returns>
+    /// <remarks>
+    /// The absence is the reload case rather than an ordinary one: startup refuses configuration this returns nothing
+    /// for, so the only way to reach it is a reload being rejected while the previous snapshot is still serving.
+    /// </remarks>
+    internal ServedMailAccount? CreateServedAccount()
+    {
+        try
+        {
+            return new ServedMailAccount(
+                MailAccountId.Create(this.AccountId),
+                MailAccountDisplayName.Create(this.DisplayName),
+                this.Mode);
+        }
+        catch (ArgumentException)
+        {
+            return null;
         }
     }
 

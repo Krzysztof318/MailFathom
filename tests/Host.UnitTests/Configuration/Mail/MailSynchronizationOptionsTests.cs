@@ -216,7 +216,7 @@ public sealed class MailSynchronizationOptionsTests
 
     /// <summary>Configuration defines the served accounts, normalized and ordered the way a resolved query scope needs them.</summary>
     [Fact]
-    public void ServedAccountIds_ConfiguredAccounts_AreNormalizedDeduplicatedAndOrdered()
+    public void ServedAccounts_ConfiguredAccounts_AreNormalizedDeduplicatedAndOrdered()
     {
         // Arrange
         var options = new MailSynchronizationOptions
@@ -225,7 +225,7 @@ public sealed class MailSynchronizationOptionsTests
         };
 
         // Act
-        var servedAccountIds = options.ServedAccountIds;
+        var servedAccountIds = options.ServedAccounts.Select(account => account.Id);
 
         // Assert
         Assert.Equal([MailAccountId.Create("primary"), MailAccountId.Create("secondary")], servedAccountIds);
@@ -233,13 +233,13 @@ public sealed class MailSynchronizationOptionsTests
 
     /// <summary>Casing is part of an account identifier, so two spellings of one name are two accounts here.</summary>
     [Fact]
-    public void ServedAccountIds_AccountNamedInAnotherCase_IsNotTheConfiguredAccount()
+    public void ServedAccounts_AccountNamedInAnotherCase_IsNotTheConfiguredAccount()
     {
         // Arrange
         var options = new MailSynchronizationOptions { Accounts = [CreateAccount("primary")] };
 
         // Act
-        var servedAccountIds = options.ServedAccountIds;
+        var servedAccountIds = options.ServedAccounts.Select(account => account.Id);
 
         // Assert
         Assert.DoesNotContain(MailAccountId.Create("PRIMARY"), servedAccountIds);
@@ -247,34 +247,34 @@ public sealed class MailSynchronizationOptionsTests
 
     /// <summary>Switching synchronization off stops runs from fetching mail; it does not hide the copy already stored.</summary>
     [Fact]
-    public void ServedAccountIds_SynchronizationDisabled_StillNamesTheConfiguredAccount()
+    public void ServedAccounts_SynchronizationDisabled_StillNamesTheConfiguredAccount()
     {
         // Arrange
         var options = new MailSynchronizationOptions { Enabled = false, Accounts = [CreateAccount("primary")] };
 
         // Act, Assert
-        Assert.Equal(MailAccountId.Create("primary"), Assert.Single(options.ServedAccountIds));
+        Assert.Equal(MailAccountId.Create("primary"), Assert.Single(options.ServedAccounts).Id);
     }
 
     [Fact]
-    public void ServedAccountIds_NoAccountsConfigured_ServesNothing()
+    public void ServedAccounts_NoAccountsConfigured_ServesNothing()
     {
         // Arrange
         var options = new MailSynchronizationOptions();
 
         // Act, Assert
-        Assert.Empty(options.ServedAccountIds);
+        Assert.Empty(options.ServedAccounts);
     }
 
     /// <summary>An account whose identifier never bound is not a served account, and reading the set does not fail on it.</summary>
     [Fact]
-    public void ServedAccountIds_AccountWithNoIdentifier_IsSkipped()
+    public void ServedAccounts_AccountWithNoIdentifier_IsSkipped()
     {
         // Arrange
         var options = new MailSynchronizationOptions { Accounts = [CreateAccount("primary"), CreateAccount("   ")] };
 
         // Act, Assert
-        Assert.Equal(MailAccountId.Create("primary"), Assert.Single(options.ServedAccountIds));
+        Assert.Equal(MailAccountId.Create("primary"), Assert.Single(options.ServedAccounts).Id);
     }
 
     [Fact]
@@ -304,7 +304,10 @@ public sealed class MailSynchronizationOptionsTests
         var options = new MailSynchronizationOptions
         {
             Enabled = true,
-            Accounts = [new MailSynchronizationAccountOptions { AccountId = "primary" }],
+            Accounts =
+            [
+                new MailSynchronizationAccountOptions { AccountId = "primary", DisplayName = "The primary mailbox" },
+            ],
         };
 
         // Act
@@ -599,8 +602,8 @@ public sealed class MailSynchronizationOptionsTests
         var options = new MailSynchronizationOptions { Accounts = [followingServer, CreateAccount("archive")] };
 
         // Act
-        var dispositions = options.ServedAccountIds
-            .Select(options.GetDisposition)
+        var dispositions = options.ServedAccounts
+            .Select(account => options.GetDisposition(account.Id))
             .ToArray();
 
         // Assert
@@ -631,6 +634,7 @@ public sealed class MailSynchronizationOptionsTests
             .AddInMemoryCollection(new Dictionary<string, string?>
             {
                 ["MailSynchronization:Accounts:0:AccountId"] = "primary",
+                ["MailSynchronization:Accounts:0:DisplayName"] = "The primary mailbox",
                 ["MailSynchronization:Accounts:0:RemotelyDeletedEmailDisposition"] = "EraseLocalCopy",
             })
             .Build();
@@ -656,6 +660,7 @@ public sealed class MailSynchronizationOptionsTests
             .AddInMemoryCollection(new Dictionary<string, string?>
             {
                 ["MailSynchronization:Accounts:0:AccountId"] = "primary",
+                ["MailSynchronization:Accounts:0:DisplayName"] = "The primary mailbox",
                 ["MailSynchronization:Accounts:0:RemotelyDeletedEmailDisposition"] = "delete",
             })
             .Build();
@@ -681,6 +686,7 @@ public sealed class MailSynchronizationOptionsTests
             .AddInMemoryCollection(new Dictionary<string, string?>
             {
                 ["MailSynchronization:Accounts:0:AccountId"] = "primary",
+                ["MailSynchronization:Accounts:0:DisplayName"] = "The primary mailbox",
                 ["MailSynchronization:Accounts:0:RemotelyDeletedEmailDisposition"] = "2",
             })
             .Build();
@@ -729,8 +735,8 @@ public sealed class MailSynchronizationOptionsTests
         var options = new MailSynchronizationOptions { Accounts = [forgetful, CreateAccount("archive")] };
 
         // Act
-        var dispositions = options.ServedAccountIds
-            .Select(options.GetAuthoredDeleteDisposition)
+        var dispositions = options.ServedAccounts
+            .Select(account => options.GetAuthoredDeleteDisposition(account.Id))
             .ToArray();
 
         // Assert
@@ -747,6 +753,7 @@ public sealed class MailSynchronizationOptionsTests
             .AddInMemoryCollection(new Dictionary<string, string?>
             {
                 ["MailSynchronization:Accounts:0:AccountId"] = "primary",
+                ["MailSynchronization:Accounts:0:DisplayName"] = "The primary mailbox",
                 ["MailSynchronization:Accounts:0:AuthoredDeleteEmailDisposition"] = "RetainTombstone",
             })
             .Build();
@@ -773,6 +780,7 @@ public sealed class MailSynchronizationOptionsTests
             .AddInMemoryCollection(new Dictionary<string, string?>
             {
                 ["MailSynchronization:Accounts:0:AccountId"] = "primary",
+                ["MailSynchronization:Accounts:0:DisplayName"] = "The primary mailbox",
                 ["MailSynchronization:Accounts:0:AuthoredDeleteEmailDisposition"] = "3",
             })
             .Build();
@@ -809,6 +817,7 @@ public sealed class MailSynchronizationOptionsTests
             .AddInMemoryCollection(new Dictionary<string, string?>
             {
                 ["MailSynchronization:Accounts:0:AccountId"] = "primary",
+                ["MailSynchronization:Accounts:0:DisplayName"] = "The primary mailbox",
                 ["MailSynchronization:Accounts:0:Mode"] = "Push",
             })
             .Build();
@@ -833,6 +842,7 @@ public sealed class MailSynchronizationOptionsTests
             .AddInMemoryCollection(new Dictionary<string, string?>
             {
                 ["MailSynchronization:Accounts:0:AccountId"] = "primary",
+                ["MailSynchronization:Accounts:0:DisplayName"] = "The primary mailbox",
                 ["MailSynchronization:Accounts:0:Mode"] = "3",
             })
             .Build();
@@ -1010,6 +1020,7 @@ public sealed class MailSynchronizationOptionsTests
             {
                 ["MailSynchronization:Enabled"] = "true",
                 ["MailSynchronization:Accounts:0:AccountId"] = "primary",
+                ["MailSynchronization:Accounts:0:DisplayName"] = "The primary mailbox",
                 ["MailSynchronization:Accounts:0:Host"] = "imap.example.test",
                 ["MailSynchronization:Accounts:0:UserName"] = "mailfathom@example.test",
                 ["MailSynchronization:Accounts:0:Secrets:Password:SecretReference"] = "systemd-credential:imap-primary-password",
@@ -1033,6 +1044,7 @@ public sealed class MailSynchronizationOptionsTests
             .AddInMemoryCollection(new Dictionary<string, string?>
             {
                 ["MailSynchronization:Accounts:0:AccountId"] = "primary",
+                ["MailSynchronization:Accounts:0:DisplayName"] = "The primary mailbox",
                 ["MailSynchronization:Accounts:0:EarliestEmailReceivedDate"] = "2024-01-01",
             })
             .Build();
@@ -1057,6 +1069,7 @@ public sealed class MailSynchronizationOptionsTests
             .AddInMemoryCollection(new Dictionary<string, string?>
             {
                 ["MailSynchronization:Accounts:0:AccountId"] = "primary",
+                ["MailSynchronization:Accounts:0:DisplayName"] = "The primary mailbox",
                 ["MailSynchronization:Accounts:0:EarliestEmailReceivedDate"] = "last January",
             })
             .Build();
@@ -1076,6 +1089,7 @@ public sealed class MailSynchronizationOptionsTests
         string secretReference = "systemd-credential:imap-primary-password") => new()
         {
             AccountId = accountId,
+            DisplayName = $"The {accountId.Trim()} mailbox",
             Host = "imap.example.test",
             UserName = "mailfathom@example.test",
             Secrets = new MailAccountSecretOptions

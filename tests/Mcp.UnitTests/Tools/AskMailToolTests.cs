@@ -11,6 +11,7 @@ using MailFathom.Domain.Emails;
 using MailFathom.Domain.Folders;
 using MailFathom.Mcp.Tools;
 using MailFathom.Mcp.UnitTests.TestDoubles;
+using MailFathom.TestSupport;
 using Xunit;
 
 namespace MailFathom.Mcp.UnitTests.Tools;
@@ -62,7 +63,7 @@ public sealed class AskMailToolTests
         // Act
         await tool.AskMailAsync(
             Question,
-            accountIds: [AnsweringDeployment.ServedAccountId],
+            accounts: [AnsweringDeployment.ServedAccountId],
             folderAliases: ["archive"],
             cancellationToken: TestContext.Current.CancellationToken);
 
@@ -96,6 +97,9 @@ public sealed class AskMailToolTests
             citation =>
             {
                 Assert.Equal(AnsweringDeployment.ServedAccountId, citation.AccountId);
+                Assert.Equal(
+                    SyntheticServedAccount.DisplayNameOf(MailAccountId.Create(AnsweringDeployment.ServedAccountId)).Value,
+                    citation.AccountDisplayName);
                 Assert.Equal("INBOX", citation.FolderAlias);
                 Assert.Equal("Quarterly invoice", citation.Subject);
                 Assert.Equal(Now, citation.ReceivedAt);
@@ -204,7 +208,7 @@ public sealed class AskMailToolTests
         // Act
         await Assert.ThrowsAsync<MailAccountNotAccessibleException>(() => tool.AskMailAsync(
             Question,
-            accountIds: ["somebody-elses"],
+            accounts: ["somebody-elses"],
             cancellationToken: TestContext.Current.CancellationToken));
 
         // Assert
@@ -222,7 +226,7 @@ public sealed class AskMailToolTests
         // Act
         var failure = await Assert.ThrowsAsync<MailboxQueryFilterInvalidException>(() => tool.AskMailAsync(
             Question,
-            accountIds: ["with\na-newline"],
+            accounts: ["with\na-newline"],
             cancellationToken: TestContext.Current.CancellationToken));
 
         // Assert
@@ -237,7 +241,8 @@ public sealed class AskMailToolTests
         // Arrange
         var tool = new AskMailTool(
             AnsweringDeployment.QuestionReader(answerer: null),
-            MailAnswerBounds.Default);
+            MailAnswerBounds.Default,
+            AnsweringDeployment.AccountCatalog());
 
         // Act
         var failure = await Assert.ThrowsAsync<MailAnsweringUnavailableException>(() =>
@@ -253,7 +258,10 @@ public sealed class AskMailToolTests
         // boundary applies the citation count again to what came back.
         var answerBounds = bounds ?? MailAnswerBounds.Default;
 
-        return new AskMailTool(AnsweringDeployment.QuestionReader(answerer, answerBounds), answerBounds);
+        return new AskMailTool(
+            AnsweringDeployment.QuestionReader(answerer, answerBounds),
+            answerBounds,
+            AnsweringDeployment.AccountCatalog());
     }
 
     private static EmailKnowledgePassage PassageOf(int position) => new()

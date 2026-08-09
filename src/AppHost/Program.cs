@@ -200,6 +200,11 @@ if (runsIntegrationTests)
         .WithEnvironment(
             "MailSynchronization__Accounts__0__AccountId",
             OrchestrationContract.ServedMailAccountId)
+        // Required configuration, so the account carries it whether or not anything reads it back: a host missing it
+        // fails startup, and the topology would then be unreachable rather than merely unnamed.
+        .WithEnvironment(
+            "MailSynchronization__Accounts__0__DisplayName",
+            OrchestrationContract.ServedMailAccountDisplayName)
         // The endpoint is served under the posture worth proving end to end — a credential is required, and the origins
         // are narrowed. Leaving the permissive origin default would let a suite pass while the check was never wired in.
         .WithEnvironment("McpEndpoint__Enabled", "true")
