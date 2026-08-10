@@ -51,16 +51,40 @@ alone: no resources and no prompts, so the tag never arises.
 
 ## The build every record names
 
-Every record the process exports carries `service.version` on its resource — a log record, a metric point, and a span
-alike — read from the host assembly's own build-time metadata. That is what makes a deployment serving two versions at
-once readable: a regression is grouped by the build it appeared in rather than inferred from the moment it started, and
-a collector's history stays attributable to a build long after the rollout it belonged to.
+Every record the process exports carries the build on its resource — a log record, a metric point, and a span alike —
+read from the host assembly's own build-time metadata. That is what makes a deployment serving two versions at once
+readable: a regression is grouped by the build it appeared in rather than inferred from the moment it started, and a
+collector's history stays attributable to a build long after the rollout it belonged to.
 
-The value is the assembly's stamp rather than a configured one, so a deployment cannot make its telemetry claim a build
-the process is not running — and a `service.version` written into `OTEL_RESOURCE_ATTRIBUTES` does not override it. That
-precedence is deliberate rather than incidental: the build is a fact about the running process, and the variable is the
-one thing that could make it wrong. It is the same version the startup records report as a property and the same one the
-MCP surface reports to a client during `initialize`, from the same source, so no two of them can disagree.
+It is two attributes, because the build answers two questions:
+
+| Attribute | What it says |
+| --- | --- |
+| `service.version` | The semantic version, which is the compatibility statement an operator groups deployments by |
+| `vcs.ref.head.revision` | The commit the assemblies were built from, which is what makes a report reproducible |
+
+`service.version` carries the prerelease identifier where the build has one and never the revision, which the stamp
+keeps after SemVer's plus sign. So a release reports the plain three-part version and a nightly reports
+`<version>-nightly.<run number>-<short revision>`, the identifier that image's tag carries, because the two are stamped
+differently at build time rather than told apart at run time. The process holds no notion of the channel it was
+published on, and needs none.
+
+`vcs.ref.head.revision` is the name OpenTelemetry's attribute registry publishes for a head revision. The `service.*`
+namespace has none for build provenance, and an attribute invented here would be one no backend recognizes. It is
+abbreviated to the same seven characters the identifiers above carry, so a value can be pasted into `git show` as it
+stands; the whole object name is on the image's `org.opencontainers.image.revision` label for anything that needs it. It
+reads `unknown` where the build stamped no revision, which is what a build with no repository beside it produces — an
+image built outside the publishing pipeline is the case that occurs — and is a legitimate state rather than a fault.
+
+[ADR 0004](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0004-versioning-and-release-policy.md)
+holds the whole scheme, including which inputs each build shape supplies.
+
+Both values are the assembly's stamp rather than configured ones, so a deployment cannot make its telemetry claim a
+build the process is not running — and neither attribute written into `OTEL_RESOURCE_ATTRIBUTES` overrides the stamped
+one. That precedence is deliberate rather than incidental: the build is a fact about the running process, and the
+variable is the one thing that could make it wrong. They are the same two values the startup records report as
+properties, and the version is the one the MCP surface reports to a client during `initialize`, from the same source, so
+no two of them can disagree.
 
 The rest of the resource is left to the OpenTelemetry SDK. `service.name` comes from `OTEL_SERVICE_NAME`, or from the
 SDK's `unknown_service:{processName}` fallback where that is unset, and nothing names the service a second time;
@@ -256,7 +280,7 @@ variables itself:
 | `OTEL_EXPORTER_OTLP_PROTOCOL` | `grpc` (the default) or `http/protobuf` |
 | `OTEL_EXPORTER_OTLP_HEADERS` | Headers sent with every export, which is where a collector's credential travels |
 | `OTEL_EXPORTER_OTLP_TIMEOUT` | The per-export timeout |
-| `OTEL_SERVICE_NAME`, `OTEL_RESOURCE_ATTRIBUTES` | The resource identity the records carry, except the version [above](#the-build-every-record-names) |
+| `OTEL_SERVICE_NAME`, `OTEL_RESOURCE_ATTRIBUTES` | The resource identity the records carry, except the version and the revision [above](#the-build-every-record-names) |
 
 The variable has to be an **environment variable**, not a configuration key. That is deliberate, and
 [host startup telemetry](host-startup-telemetry.md) records why: the bootstrap pipeline that reports startup failures

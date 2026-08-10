@@ -127,8 +127,12 @@ public sealed class BootstrapLoggerTests
         // Assert
         var version = Assert.Single(
             resource.Attributes,
-            attribute => attribute.Key == ServiceVersionResourceExtensions.ServiceVersionAttributeName);
-        Assert.Equal(ServiceVersionResourceExtensions.StampedServiceVersion, version.Value);
+            attribute => attribute.Key == StampedBuildResourceExtensions.ServiceVersionAttributeName);
+        Assert.Equal(StampedBuildResourceExtensions.StampedServiceVersion, version.Value);
+        var revision = Assert.Single(
+            resource.Attributes,
+            attribute => attribute.Key == StampedBuildResourceExtensions.SourceRevisionAttributeName);
+        Assert.Equal(StampedBuildResourceExtensions.StampedSourceRevision, revision.Value);
         Assert.Equal(
             sdkResolved.Attributes.Single(attribute => attribute.Key == "service.name").Value,
             resource.Attributes.Single(attribute => attribute.Key == "service.name").Value);

@@ -142,11 +142,12 @@ internal sealed partial class BootstrapLogger : IDisposable
     /// The service is left unnamed, with no <c>AddService</c> call, because that is what the container pipeline does
     /// too. Naming it here would agree with that pipeline only while <c>OTEL_SERVICE_NAME</c> is set and would
     /// otherwise report this process under a second identity, since the SDK's own fallback is
-    /// <c>unknown_service:{processName}</c>. The version is the one part both pipelines do put on the resource, from
-    /// the same stamped source, so a startup record and everything exported after it name one build.
+    /// <c>unknown_service:{processName}</c>. The build is what both pipelines do put on the resource, as the version and
+    /// the source revision and from the same stamped source, so a startup record and everything exported after it name
+    /// one build.
     /// </remarks>
     internal static ResourceBuilder CreateResourceBuilder() =>
-        ResourceBuilder.CreateDefault().AddStampedServiceVersion();
+        ResourceBuilder.CreateDefault().AddStampedBuildIdentity();
 
     [LoggerMessage(
         Level = LogLevel.Information,

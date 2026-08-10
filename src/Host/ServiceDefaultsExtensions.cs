@@ -48,7 +48,7 @@ internal static class ServiceDefaultsExtensions
     /// <returns>The same builder instance for chaining.</returns>
     /// <remarks>
     /// The resource is configured once for all three signals, so a log record, a metric point, and a span all name the
-    /// build they came from. <see cref="ServiceVersionResourceExtensions" /> holds what that adds and what it leaves to
+    /// build they came from. <see cref="StampedBuildResourceExtensions" /> holds what that adds and what it leaves to
     /// the OpenTelemetry SDK.
     /// </remarks>
     public static TBuilder ConfigureOpenTelemetry<TBuilder>(this TBuilder builder)
@@ -61,7 +61,7 @@ internal static class ServiceDefaultsExtensions
         });
 
         builder.Services.AddOpenTelemetry()
-            .ConfigureResource(resource => resource.AddStampedServiceVersion())
+            .ConfigureResource(resource => resource.AddStampedBuildIdentity())
             .WithMetrics(metrics =>
             {
                 metrics.AddAspNetCoreInstrumentation()
