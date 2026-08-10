@@ -106,6 +106,10 @@ image:
 database:
   name: mailfathom
   user: mailfathom
+  deploy:
+    # The chart deploys the database, so it names the Secret holding the superuser password — the second one
+    # created above. Replace this block with `deploy: {enabled: false}` and a `host:` to use your own server.
+    superuserPasswordSecret: mailfathom-postgres-superuser
 
 secrets:
   existingSecret: mailfathom-secrets
