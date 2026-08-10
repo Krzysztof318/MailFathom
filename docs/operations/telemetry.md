@@ -280,7 +280,7 @@ variables itself:
 | `OTEL_EXPORTER_OTLP_PROTOCOL` | `grpc` (the default) or `http/protobuf` |
 | `OTEL_EXPORTER_OTLP_HEADERS` | Headers sent with every export, which is where a collector's credential travels |
 | `OTEL_EXPORTER_OTLP_TIMEOUT` | The per-export timeout |
-| `OTEL_SERVICE_NAME`, `OTEL_RESOURCE_ATTRIBUTES` | The resource identity the records carry, except the version [above](#the-build-every-record-names) |
+| `OTEL_SERVICE_NAME`, `OTEL_RESOURCE_ATTRIBUTES` | The resource identity the records carry, except the version and the revision [above](#the-build-every-record-names) |
 
 The variable has to be an **environment variable**, not a configuration key. That is deliberate, and
 [host startup telemetry](host-startup-telemetry.md) records why: the bootstrap pipeline that reports startup failures
