@@ -37,17 +37,20 @@ well as lexically. Both stay dark until you declare the AI endpoints they need, 
 serves exactly what it served before — and pays exactly what it paid before, which for a feature that bills per call is
 the more important half.
 
-**Three things need an edit before this release starts, or before a client reaches it.** Every account states a
-`DisplayName` now; two arguments on the MCP tools were renamed and the previous spellings are refused; and the database
-is **PostgreSQL 18**, which does not read a data directory PostgreSQL 17 wrote. The last of those is the expensive one:
-an existing deployment moves its data across a dump before the new image comes up, and
+**Four things need an edit before this release starts, renders, or answers a client.** Every account states a
+`DisplayName` now; two arguments on the MCP tools were renamed and the previous spellings are refused; a Helm values
+document that names `database.host` — which every `0.4.0` one does — needs `database.deploy.enabled: false` beside it,
+or the chart refuses to render at all; and the database is **PostgreSQL 18**, which does not read a data directory
+PostgreSQL 17 wrote. The last of those is the expensive one: an existing deployment moves its data across a dump
+before the new image comes up, and
 [upgrading a deployment that ran PostgreSQL 17](https://krzysztof318.github.io/MailFathom/operations/deployment-compose.html#upgrading-a-deployment-that-ran-postgresql-17)
 is the procedure, command by command.
 
-**The database schema moves as well**, by six migrations that add three tables, three columns, and two indexes, and
-that change nothing `0.4.0` reads — so the schema step applies while `0.4.0` is still serving, `0.4.0` serves the
-result unchanged if you roll the image back, and this release deploys over the previous release's data. Nothing else
-`0.4.0` promised is withdrawn: every setting not named below still means what it meant, and no tool was removed.
+**The database schema moves as well**, by six migrations that add four tables, four columns on tables that already
+held data, and two indexes on those, and that change nothing `0.4.0` reads — so the schema step applies while `0.4.0`
+is still serving, `0.4.0` serves the result unchanged if you roll the image back, and this release deploys over the
+previous release's data. Nothing else `0.4.0` promised is withdrawn: every setting not named below still means what it
+meant, and no tool was removed.
 
 **The defect `0.4.0` shipped with is gone, and it was the whole image.** The published `0.4.0` container could not
 start: its base image sets `ASPNETCORE_HTTP_PORTS`, `0.4.0` is the release that began refusing that variable, and the
@@ -129,11 +132,13 @@ call; a file over the limit is described and not returned, never truncated
 ([#633](https://github.com/Krzysztof318/MailFathom/pull/633)). Setting `MaxAttachmentBytes` to `0` returns no
 attachment content at all, which is the deployment that wants the metadata and nothing else.
 
-**A record of every change MailFathom makes to a mailbox, off by default and enabled per account.** An audit trail of
-mail movements says where a person's mail has been, when, and at whose instruction, so a deployment that never asked
-for one never accumulates one. `AuditTrail:Enabled` and `AuditTrail:Retention` turn it on per account, one entry is
-written per finished change, and `GET /api/admin/mailbox/mutations/audit` reads it back filterable by account, by
-change, and by time ([#568](https://github.com/Krzysztof318/MailFathom/pull/568)).
+**A record of every change MailFathom makes to a mailbox, off by default and enabled per account.** **Nothing in
+`0.5.0` asks it to make one** — no tool on the MCP surface writes, and the first caller is the rule engine a later
+release brings — so an account that turns the trail on today gets an empty page and keeps getting one until that
+caller exists. What it buys now is that the decision is made and the storage is in place before the first write, and
+that is the whole of it. `AuditTrail:Enabled` and `AuditTrail:Retention` turn it on per account, one entry is written
+per finished change, and `GET /api/admin/mailbox/mutations/audit` reads it back filterable by account, by change, and
+by time ([#568](https://github.com/Krzysztof318/MailFathom/pull/568)).
 
 - **It holds no mail content and it outlives the mail.** Folder paths, identifiers, a five-digit failure code where
   there was one, and MailFathom's own configured names are all an entry carries — no subject, no address, no body
