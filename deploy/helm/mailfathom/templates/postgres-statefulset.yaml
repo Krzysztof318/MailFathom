@@ -110,7 +110,7 @@ spec:
             - name: POSTGRES_DB
               value: postgres
             - name: POSTGRES_PASSWORD_FILE
-              value: {{ printf "%s/%s" (trimSuffix "/" .Values.secrets.mountPath) .Values.database.deploy.superuserPasswordSecretKey | quote }}
+              value: {{ printf "/etc/mailfathom/postgres-superuser/%s" .Values.database.deploy.superuserPasswordSecretKey | quote }}
             {{- /*
               Read by the initialization script, which creates the unprivileged role that owns the database and
               installs the `vector` extension. They are the same values the connection string is built from, so the
@@ -135,6 +135,9 @@ spec:
               readOnly: true
             - name: secrets
               mountPath: {{ .Values.secrets.mountPath }}
+              readOnly: true
+            - name: superuser
+              mountPath: /etc/mailfathom/postgres-superuser
               readOnly: true
             {{- /*
               The two paths the server writes to outside its data directory: the Unix socket it always creates, and the
@@ -191,9 +194,16 @@ spec:
             */}}
             defaultMode: 0555
         {{- /*
-          Two keys of the Secret and no others. The database needs the password it must create the role with and the
-          superuser password it initializes under; mailbox credentials, MCP keys, and the data-encryption key live in
-          the same Secret and have no business inside this pod.
+          One key of the application's Secret and no others: the password this pod must create MailFathom's role with.
+          Mailbox credentials, MCP keys, and the data-encryption key live in the same Secret and have no business
+          inside the database.
+
+          The superuser password arrives from a Secret of its own, and the direction matters. The application pod
+          mounts its Secret whole, because the keys MailFathom reads are named by an operator's configuration rather
+          than by this chart, so anything placed there is readable by the process that parses untrusted mail. Scoping
+          this pod's view of that Secret is therefore only half of it: a credential the application must never hold
+          has to live somewhere the application never mounts. Compose draws the same line by leaving the superuser
+          password off the `mailfathom` service's secret list.
         */}}
         - name: secrets
           secret:
@@ -202,6 +212,11 @@ spec:
             items:
               - key: {{ .Values.database.passwordSecretKey }}
                 path: {{ .Values.database.passwordSecretKey }}
+        - name: superuser
+          secret:
+            secretName: {{ .Values.database.deploy.superuserPasswordSecret }}
+            defaultMode: 0400
+            items:
               - key: {{ .Values.database.deploy.superuserPasswordSecretKey }}
                 path: {{ .Values.database.deploy.superuserPasswordSecretKey }}
         - name: run

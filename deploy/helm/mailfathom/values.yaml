@@ -86,11 +86,17 @@ database:
       pullPolicy: IfNotPresent
       pullSecrets: []
 
-    # The key inside the same mounted Secret holding the superuser password, used by `initdb` on first start and by
-    # nothing afterwards. MailFathom never connects as this role: the initialization script uses it once to create the
-    # unprivileged role that owns the database and to install the `vector` extension, which are the only two things a
-    # superuser is needed for. Exactly two keys of that Secret are mounted into the database pod — this one and
-    # `passwordSecretKey` below — so an IMAP password or an MCP key in the same Secret never reaches it.
+    # The superuser password, used by `initdb` on the first start and by nothing afterwards. MailFathom never connects
+    # as this role: the initialization script uses it once to create the unprivileged role that owns the database and
+    # to install the `vector` extension, which are the only two things a superuser is needed for.
+    #
+    # It lives in a Secret of its own, and the chart refuses one that is also `secrets.existingSecret`. That Secret is
+    # mounted whole into the application pod — it has to be, because the keys MailFathom reads are named by your own
+    # configuration and the chart cannot enumerate them — so a superuser credential placed in it would be readable
+    # from the network-facing pod that parses untrusted MIME, which is exactly the boundary the unprivileged role
+    # exists to draw. The Compose deployment separates the two the same way, by leaving this credential off the
+    # application service's own secret list.
+    superuserPasswordSecret: ""
     superuserPasswordSecretKey: postgres-superuser-password
 
     # The claim holding every synchronized message. It outlives the pod and is deliberately not deleted when the
@@ -140,9 +146,9 @@ database:
 # directory: mailbox passwords, MCP API keys, and a private trust anchor alike. A Secrets Store CSI driver needs no
 # support beyond this, because it mounts files too.
 #
-# A deployed database reads from the same Secret and sees two of its keys and no others: the database password and the
-# superuser password named under `database.deploy`. That is the whole of what it needs, and mounting the rest would put
-# every mailbox credential inside a pod that has no use for one.
+# This Secret is mounted whole, because the keys MailFathom reads are the ones your own configuration names and the
+# chart cannot know them. A deployed database therefore reads one key of it — the database password — and nothing else,
+# and takes the superuser password from a second Secret the application never mounts.
 secrets:
   existingSecret: ""
   mountPath: /etc/mailfathom/secrets

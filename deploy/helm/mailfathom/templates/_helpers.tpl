@@ -128,6 +128,12 @@ run supplies one — see Chart.yaml.
   {{- if .Values.database.host -}}
     {{- fail (printf "database.host is %q while database.deploy.enabled is true. The chart is deploying the server and derives its address from the release name, so a second address here would name somewhere the release did not install. Clear it, or turn database.deploy.enabled off to use a server you already operate." .Values.database.host) -}}
   {{- end -}}
+  {{- if not .Values.database.deploy.superuserPasswordSecret -}}
+    {{- fail "database.deploy.superuserPasswordSecret is not set while the chart is deploying the database. The superuser password initializes the server and belongs in a Secret of its own: secrets.existingSecret is mounted whole into the application pod, because the keys MailFathom reads are named by your configuration rather than by this chart, so a superuser credential in it would be readable from the pod that serves the network." -}}
+  {{- end -}}
+  {{- if eq .Values.database.deploy.superuserPasswordSecret .Values.secrets.existingSecret -}}
+    {{- fail (printf "database.deploy.superuserPasswordSecret and secrets.existingSecret both name %q. The application pod mounts that Secret whole, so the superuser password would reach the process that parses untrusted mail — which is the boundary the unprivileged database role exists to draw. Name a second Secret holding this credential alone." .Values.secrets.existingSecret) -}}
+  {{- end -}}
   {{- if eq .Values.database.deploy.superuserPasswordSecretKey .Values.database.passwordSecretKey -}}
     {{- fail "database.deploy.superuserPasswordSecretKey and database.passwordSecretKey name one key. The superuser initializes the database and MailFathom connects as an unprivileged role that owns it; one password for both would make MailFathom's own credential a superuser's." -}}
   {{- end -}}

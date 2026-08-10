@@ -47,25 +47,34 @@ deployed server is reached at `<release>-postgres` in the release's own namespac
 The role MailFathom connects as is never a superuser, in either arrangement. When the chart deploys the server, its
 initialization script runs once on the empty data directory, creates the role that owns the database, and installs the
 `vector` extension while a superuser is still connected — which is the same script, and the same reasoning, the Compose
-deployment uses. That is why the Secret carries a second key when the database is deployed: `postgres-superuser-password`
-beside `mailfathom-database-password`. Exactly those two keys are mounted into the database pod and no others, so the
-mailbox passwords and MCP keys in the same Secret never reach it.
+deployment uses.
+
+That is why a deployed database needs **two** Secrets rather than one more key. `secrets.existingSecret` is mounted
+whole into the application pod, because the keys MailFathom reads are the ones your own configuration names and the
+chart cannot enumerate them; a superuser credential placed there would be readable by the process that serves the
+network and parses untrusted mail, which is precisely the boundary the unprivileged role exists to draw. So the
+superuser password lives in a Secret of its own, the application never mounts it, and the chart refuses a values
+document that names one Secret for both. The database pod, in turn, sees exactly one key of the application's Secret —
+the password it must create MailFathom's role with — and nothing else. Compose separates the same two credentials the
+same way, by leaving the superuser password off the `mailfathom` service's own secret list.
 
 ```bash
 kubectl create namespace mailfathom
 
 kubectl --namespace mailfathom create secret generic mailfathom-secrets \
   --from-literal=mailfathom-database-password='…' \
-  --from-literal=postgres-superuser-password='…' \
   --from-file=imap-primary-password=./imap-primary-password \
   --from-file=mcp-workstation-key=./mcp-workstation-key \
   --from-file=mailfathom-data-key=./mailfathom-data-key
+
+# Only for a database the chart deploys, and named by database.deploy.superuserPasswordSecret.
+kubectl --namespace mailfathom create secret generic mailfathom-postgres-superuser \
+  --from-literal=postgres-superuser-password='…'
 ```
 
-The superuser line belongs to a deployed database and is unused without one; drop it when `database.deploy.enabled` is
-false. Both database passwords are applied by `initdb` on the first start and never again, so changing either in the
-Secret afterwards changes what MailFathom presents rather than what the server accepts — rotate them in the server as
-well, which [secret rotation](secret-rotation.md) covers.
+Both database passwords are applied by `initdb` on the first start and never again, so changing either in its Secret
+afterwards changes what is presented rather than what the server accepts — rotate them in the server as well, which
+[secret rotation](secret-rotation.md) covers.
 
 The Secret is mounted read-only at `/etc/mailfathom/secrets`, one file per key, so every credential is a `file:`
 reference — the same path and the same references the Compose deployment uses.

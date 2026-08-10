@@ -3,6 +3,9 @@ MailFathom {{ include "mailfathom.versionLabel" . }} is installed as release {{ 
 Image:    {{ include "mailfathom.image" . }}
 Database: {{ include "mailfathom.databaseHost" . }}:{{ .Values.database.port }}/{{ .Values.database.name }} as {{ .Values.database.user }}{{ if .Values.database.deploy.enabled }}, deployed by this release{{ else }}, operated by you{{ end }}
 Secrets:  {{ .Values.secrets.existingSecret }}, mounted read-only at {{ .Values.secrets.mountPath }}
+{{- if .Values.database.deploy.enabled }}
+          {{ .Values.database.deploy.superuserPasswordSecret }}, read by the database alone and never by MailFathom
+{{- end }}
 {{ if eq .Values.image.channel "nightly" }}
   ############################################################################
   #  UNSUPPORTED: this release deploys a nightly build.                      #
