@@ -39,8 +39,9 @@ var postgres = builder
     .WithImageTag("0.8.6-pg18");
 
 // Mounted explicitly rather than through WithDataVolume, which derives this path by parsing a PostgreSQL major version
-// out of the image tag: it reads everything before the first `-`, so a pgvector tag shaped `0.8.6-pg18` yields `0` and
-// falls back to the pre-18 `/var/lib/postgresql/data`. PostgreSQL 18 moved the image's data directory under a
+// out of the image tag: it takes everything before the first `-` — `0.8.6` on a pgvector tag shaped `0.8.6-pg18` — and
+// reads the major component of that, which is `0`, so the version test never sees 18 and it falls back to the pre-18
+// `/var/lib/postgresql/data`. PostgreSQL 18 moved the image's data directory under a
 // version-specific subdirectory and moved the declared volume up to the parent, so a volume mounted at the old path
 // would hold nothing and the database would live in the container's writable layer — lost with the container rather
 // than kept by the volume that was asked for.
