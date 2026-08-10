@@ -580,13 +580,13 @@
       "MailFathom.Application": {
         "type": "Project",
         "dependencies": {
-          "MailFathom.Domain": "[0.5.0, )"
+          "MailFathom.Domain": "[0.6.0, )"
         }
       },
       "MailFathom.Common": {
         "type": "Project",
         "dependencies": {
-          "MailFathom.Domain": "[0.5.0, )"
+          "MailFathom.Domain": "[0.6.0, )"
         }
       },
       "MailFathom.Domain": {
@@ -597,9 +597,9 @@
         "dependencies": {
           "Aspire.Npgsql.EntityFrameworkCore.PostgreSQL": "[13.4.6, )",
           "HtmlSanitizer": "[9.1.974, )",
-          "MailFathom.Application": "[0.5.0, )",
-          "MailFathom.Common": "[0.5.0, )",
-          "MailFathom.Domain": "[0.5.0, )",
+          "MailFathom.Application": "[0.6.0, )",
+          "MailFathom.Common": "[0.6.0, )",
+          "MailFathom.Domain": "[0.6.0, )",
           "MailKit": "[4.17.0, )",
           "Microsoft.EntityFrameworkCore": "[10.0.10, )",
           "Microsoft.EntityFrameworkCore.Relational": "[10.0.10, )",
