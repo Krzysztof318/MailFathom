@@ -38,7 +38,8 @@ serves exactly what it served before — and pays exactly what it paid before, w
 the more important half.
 
 **Four things need an edit before this release starts, renders, or answers a client.** Every account states a
-`DisplayName` now; two arguments on the MCP tools were renamed and the previous spellings are refused; a Helm values
+`DisplayName` now; two arguments on the MCP tools were renamed, and the previous spellings are ignored rather than
+refused — so a client that keeps sending `accountIds` reads every account instead of being stopped; a Helm values
 document that names `database.host` — which every `0.4.0` one does — needs `database.deploy.enabled: false` beside it,
 or the chart refuses to render at all; and the database is **PostgreSQL 18**, which does not read a data directory
 PostgreSQL 17 wrote. The last of those is the expensive one: an existing deployment moves its data across a dump
@@ -201,14 +202,17 @@ deployment can be tied to the code that produced it ([#620](https://github.com/K
   account under `MailSynchronization:Accounts`
   ([#637](https://github.com/Krzysztof318/MailFathom/pull/637)).
 - **Breaking (MCP tool contract)** — **`list_emails` and `search_emails` take `accounts` where they took
-  `accountIds`.** The argument was renamed because it now accepts a display name as readily as an identifier, and a
-  client passing the old name is refused rather than having it ignored. Omitting it still reads every account the
-  deployment serves ([#637](https://github.com/Krzysztof318/MailFathom/pull/637)).
+  `accountIds`.** The argument was renamed because it now accepts a display name as readily as an identifier. **An
+  argument the tool does not declare is ignored rather than refused**, so a client still sending `accountIds` is not
+  stopped — its account filter simply disappears, and the call reads **every** account the deployment serves instead
+  of the one it named. Update every client that names accounts before the upgrade, and read `list_accounts` for the
+  names ([#637](https://github.com/Krzysztof318/MailFathom/pull/637)).
 - **Breaking (MCP tool contract)** — **`get_email_content` takes `includeAttachmentContent` where it took
   `includeAttachmentDetails`**, and every attachment's file name, media type, and decoded size are now returned
   whether or not the call asks for anything. The old argument bought the metadata; the new one buys the bytes, so a
-  client that passed it to see what was attached needs to pass nothing at all
-  ([#633](https://github.com/Krzysztof318/MailFathom/pull/633)).
+  client that passed it to see what was attached needs to pass nothing at all. It is ignored the same way when it is
+  still sent, which here costs nothing — the metadata arrives regardless, and no attachment content is returned
+  without the new argument ([#633](https://github.com/Krzysztof318/MailFathom/pull/633)).
 - **`search_emails` can report a `retrievalMode` it never reported before.** `lexical` was the only value `0.4.0`
   produced; `hybrid` is a second one, and a client matching on the field exactly rather than on the results should
   expect it ([#555](https://github.com/Krzysztof318/MailFathom/pull/555)).
