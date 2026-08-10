@@ -36,7 +36,7 @@ Behavior outside those spaces is in scope only where it makes participation here
 
 ## Reporting
 
-Email <security-mail-fathom@impe.pl>. It reaches the maintainer directly and privately, and it is the same address the [security policy](SECURITY.md) uses, because both need a channel nobody else reads.
+Email <security@mailfathom.org>. It reaches the maintainer directly and privately, and it is the same address the [security policy](SECURITY.md) uses, because both need a channel nobody else reads.
 
 A useful report says what happened, where, and when — links help. Reporting something that turns out not to be a violation carries no cost; the only thing that reliably goes wrong here is an incident nobody mentioned.
 
