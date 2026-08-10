@@ -301,7 +301,18 @@ jobs:
         run: |
           set -euo pipefail
 
-          expected_startup_line="at version ${EXPECTED_VERSION} built from revision ${EXPECTED_REVISION}."
+          # The host abbreviates the revision it reports, so the line to grep for is not the reference this workflow
+          # was handed. StampedAssemblyVersion.Abbreviate shortens the build metadata of InformationalVersion to seven
+          # characters when the whole of it is hexadecimal, and leaves anything else — a workspace revision carrying a
+          # suffix, or the literal `unknown` — as it stands. The rule is mirrored here rather than relaxed into a
+          # prefix match, because what this step exists to prove is that the process reports the commit the registries
+          # will index it under: a match on the version alone would pass an image built from the wrong tree.
+          expected_revision="$EXPECTED_REVISION"
+          if [[ "${#expected_revision}" -gt 7 && "$expected_revision" =~ ^[0-9a-fA-F]+$ ]]; then
+            expected_revision="${expected_revision:0:7}"
+          fi
+
+          expected_startup_line="at version ${EXPECTED_VERSION} built from revision ${expected_revision}."
 
           docker run --detach --name mailfathom-smoke mailfathom:gate > /dev/null
           trap 'docker rm --force mailfathom-smoke > /dev/null 2>&1 || true' EXIT
@@ -345,7 +356,7 @@ jobs:
             exit 1
           fi
 
-          echo "The image starts, reports ${EXPECTED_VERSION} from ${EXPECTED_REVISION}, and publishes the documented runtime contract."
+          echo "The image starts, reports ${EXPECTED_VERSION} from ${expected_revision}, and publishes the documented runtime contract."
 
       # A release publishes nothing when this finds something fixable; a nightly reports and publishes anyway, because a
       # nightly exists to be tried and a blocked one tells nobody what broke. The caller decides which, so the rule lives
