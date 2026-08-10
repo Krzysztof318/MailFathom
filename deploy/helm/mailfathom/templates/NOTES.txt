@@ -32,7 +32,8 @@ The database is this release's own: a single-replica StatefulSet, its claim reta
 The role MailFathom connects as owns its database and is not a superuser; the schema goes in through the server it runs:
 
   kubectl --namespace {{ .Release.Namespace }} exec -i statefulset/{{ include "mailfathom.postgresFullname" . }} -- \
-    psql --username {{ .Values.database.user }} --dbname {{ .Values.database.name }} < mailfathom-schema-<version>.sql
+    psql --username {{ .Values.database.user }} --dbname {{ .Values.database.name }} \
+      --set ON_ERROR_STOP=on < mailfathom-schema-<version>.sql
 
 Back it up the same way, with pg_dump, rather than by copying the volume's files. A store holding every synchronized
 message eventually wants durability and an upgrade path that a claim does not provide by itself — set
