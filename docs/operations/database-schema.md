@@ -64,6 +64,10 @@ created, and no grant is needed. This is the Docker Compose deployment:
 superuser is still connected, precisely so that the schema step afterwards is an ordinary role's work. [Applying it
 there](#docker-compose) is the command, and it connects as `mailfathom`.
 
+A Helm deployment that lets the chart run its own PostgreSQL is the same arrangement for the same reason: the chart's
+initialization script does what Compose's does, on the same terms, so its schema step is also an ordinary role's work.
+A deployment pointing the chart at a server it operates chooses between the two arrangements like any other.
+
 **A separate migrator applies it.** `mailfathom_migrator` owns what it created and `mailfathom` serves, which is the
 shape to reach for wherever the privilege to alter the schema and the privilege to serve requests are meant to differ.
 It costs the grants below: grant the service's role the privileges it needs, and set default privileges so the next
@@ -171,6 +175,15 @@ kubectl --namespace databases port-forward service/postgres 5432:5432 &
 psql "postgresql://mailfathom_migrator@127.0.0.1:5432/mailfathom" \
   --set ON_ERROR_STOP=on \
   --file 'mailfathom-schema-<version>.sql'
+```
+
+Where the chart deployed the database, it is already reachable through its own pod, and the role that connects there is
+the one that serves:
+
+```bash
+kubectl --namespace mailfathom exec -i statefulset/<release>-postgres -- \
+  psql --username mailfathom --dbname mailfathom \
+    --set ON_ERROR_STOP=on < 'mailfathom-schema-<version>.sql'
 ```
 
 The chart renders no Job and no `initContainer` for this, deliberately. [Why the artifact is a SQL

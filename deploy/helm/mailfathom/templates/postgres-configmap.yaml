@@ -1,0 +1,70 @@
+{{- /*
+Copyright © 2026 Krzysztof Kasprowicz
+Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
+Project repository: https://github.com/Krzysztof318/MailFathom
+*/ -}}
+{{- if .Values.database.deploy.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "mailfathom.postgresFullname" . }}-init
+  labels:
+    {{- include "mailfathom.postgresLabels" . | nindent 4 }}
+data:
+  {{- /*
+    The same statements the Compose deployment's initialization script runs, restated here because a packaged chart
+    carries no file from outside its own directory. Both exist so that MailFathom never has to be a superuser: creating
+    a role and installing an extension are the only two things one is needed for, and doing both here leaves the schema
+    step and the running service connecting as an ordinary role that owns its own database and nothing else.
+
+    It runs once, on an empty data directory, from the image's own initialization hook. Editing it changes nothing
+    about a database that already exists — apply the same statements by hand when a role has to be added to one.
+  */}}
+  10-create-mailfathom-database.sh: |
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    readonly database_name="${MAILFATHOM_DATABASE:?The MailFathom database name was not set.}"
+    readonly database_role="${MAILFATHOM_DATABASE_ROLE:?The MailFathom database role was not set.}"
+    readonly password_file="${MAILFATHOM_DATABASE_PASSWORD_FILE:?The MailFathom database password file was not named.}"
+
+    if [[ ! -r "$password_file" ]]; then
+      printf 'The MailFathom database password was not mounted at %s.\n' "$password_file" >&2
+      exit 1
+    fi
+
+    # One trailing newline is stripped, because a secret written by an editor almost always ends with one and an
+    # untrimmed byte becomes part of the password. This is the same rule MailFathom's own secret resolution applies,
+    # and the `x` sentinel is what keeps it to one: command substitution strips every trailing newline on its own, so a
+    # password genuinely ending in two would be created here with both removed and presented later with only one.
+    database_password="$(cat -- "$password_file"; printf 'x')"
+    database_password="${database_password%x}"
+    database_password="${database_password%$'\n'}"
+
+    if [[ -z "$database_password" ]]; then
+      printf 'The MailFathom database password at %s is empty.\n' "$password_file" >&2
+      exit 1
+    fi
+
+    # The password reaches psql as a variable rather than as interpolated SQL, so a value containing a quotation mark
+    # cannot end the string it was meant to be inside. `:'name'` is psql's own quoting of a variable as a literal.
+    psql --no-psqlrc --quiet --set ON_ERROR_STOP=1 \
+      --username "$POSTGRES_USER" \
+      --dbname "$POSTGRES_DB" \
+      --set database_role="$database_role" \
+      --set database_name="$database_name" \
+      --set database_password="$database_password" <<'INITIALIZE_ROLE_AND_DATABASE'
+    CREATE ROLE :"database_role" WITH LOGIN PASSWORD :'database_password';
+    CREATE DATABASE :"database_name" WITH OWNER :"database_role";
+    INITIALIZE_ROLE_AND_DATABASE
+
+    # Connected to the new database, still as the superuser, because installing an extension is the second thing an
+    # ordinary role may not do. Nothing else in the schema is created here: the tables, indexes, and constraints are
+    # the release's SQL artifact, and creating any of them now would leave two mechanisms describing one schema.
+    psql --no-psqlrc --quiet --set ON_ERROR_STOP=1 \
+      --username "$POSTGRES_USER" \
+      --dbname "$database_name" \
+      --command 'CREATE EXTENSION IF NOT EXISTS vector;'
+
+    printf 'Created database %s owned by role %s, with the vector extension installed.\n' "$database_name" "$database_role"
+{{- end }}

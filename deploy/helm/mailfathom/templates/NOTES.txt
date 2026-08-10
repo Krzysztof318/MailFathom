@@ -1,8 +1,11 @@
 MailFathom {{ include "mailfathom.versionLabel" . }} is installed as release {{ .Release.Name }} in namespace {{ .Release.Namespace }}.
 
 Image:    {{ include "mailfathom.image" . }}
-Database: {{ .Values.database.host }}:{{ .Values.database.port }}/{{ .Values.database.name }} as {{ .Values.database.user }}
+Database: {{ include "mailfathom.databaseHost" . }}:{{ .Values.database.port }}/{{ .Values.database.name }} as {{ .Values.database.user }}{{ if .Values.database.deploy.enabled }}, deployed by this release{{ else }}, operated by you{{ end }}
 Secrets:  {{ .Values.secrets.existingSecret }}, mounted read-only at {{ .Values.secrets.mountPath }}
+{{- if .Values.database.deploy.enabled }}
+          {{ .Values.database.deploy.superuserPasswordSecret }}, read by the database alone and never by MailFathom
+{{- end }}
 {{ if eq .Values.image.channel "nightly" }}
   ############################################################################
   #  UNSUPPORTED: this release deploys a nightly build.                      #
@@ -24,6 +27,18 @@ migration that arrangement prevents, and an initContainer would run one apply pe
 migration, back up {{ .Values.database.name }}, read the release's mailfathom-schema-<version>.sql, apply it, and
 let the rollout continue. docs/operations/database-schema.md states the privileges it needs and what each failure
 means.
+{{ if .Values.database.deploy.enabled }}
+The database is this release's own: a single-replica StatefulSet, its claim retained when the release is uninstalled.
+The role MailFathom connects as owns its database and is not a superuser; the schema goes in through the server it runs:
+
+  kubectl --namespace {{ .Release.Namespace }} exec -i statefulset/{{ include "mailfathom.postgresFullname" . }} -- \
+    psql --username {{ .Values.database.user }} --dbname {{ .Values.database.name }} \
+      --set ON_ERROR_STOP=on < mailfathom-schema-<version>.sql
+
+Back it up the same way, with pg_dump, rather than by copying the volume's files. A store holding every synchronized
+message eventually wants durability and an upgrade path that a claim does not provide by itself — set
+database.deploy.enabled=false and name a server you operate when it does.
+{{ end }}
 {{ if not .Values.ingress.enabled }}
 No Ingress is configured, so the endpoint is reachable only from inside the cluster. Reach it for a check with:
 

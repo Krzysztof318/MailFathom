@@ -237,6 +237,31 @@ migration, which is the reason applying one is a step you decide to take.
 [Rolling back](database-schema.md#rolling-back) states when that is necessary and when rolling only the image back is
 enough.
 
+### Upgrading a deployment that ran PostgreSQL 17
+
+The database image is now `pgvector/pgvector:0.8.6-pg18`, and PostgreSQL does not read a data directory written by an
+earlier major version. **An existing volume is not upgraded in place by bringing the new image up** — it is a different
+data directory entirely, because PostgreSQL 18 moved this image's `PGDATA` into a version-specific subdirectory and the
+Compose file now mounts the volume at the parent that holds it. A server started against the old volume initializes an
+empty database beside the one that is there and comes up with no mail in it.
+
+Move the data across a dump, which is the migration path between majors:
+
+```bash
+docker compose exec -T postgres pg_dump --username mailfathom --format custom mailfathom > mailfathom-pg17.dump
+
+docker compose down
+docker volume rm mailfathom-postgres-data           # or MAILFATHOM_POSTGRES_VOLUME, if you named it
+docker compose up -d postgres                       # initializes 18 and re-creates the role, database, and extension
+
+docker compose exec -T postgres pg_restore --username mailfathom --dbname mailfathom --clean --if-exists < mailfathom-pg17.dump
+docker compose up -d
+```
+
+Resynchronizing from IMAP instead of restoring is also a complete answer, and a slower one: delete the volume, bring the
+deployment up, apply the schema artifact, and let synchronization refill it. What it costs beyond time is everything
+that is not in the mailbox — the answering audit trail and the embeddings, which are regenerated rather than refetched.
+
 ## Backup and what survives removal
 
 The synchronized mail lives in a named volume, `mailfathom-postgres-data` by default.

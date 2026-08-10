@@ -4,8 +4,9 @@
 
 # Default values for the MailFathom chart.
 #
-# Two things have no default and must be supplied: the image, and the database. Everything else below is a working
-# value that a deployment may leave alone. `values.schema.json` beside this file rejects a values document that omits
+# Two things have no default and must be supplied: the image, and the Secret carrying the credentials. Everything else
+# below is a working value that a deployment may leave alone — including the database, which the chart runs itself
+# unless told to use one you already operate. `values.schema.json` beside this file rejects a values document that omits
 # what is required or that combines settings which cannot both hold, so a mistake fails at `helm install` rather than
 # as a pod that never becomes ready.
 
@@ -60,12 +61,70 @@ image:
 
 ### The database
 #
-# MailFathom needs PostgreSQL with the `vector` extension. The chart installs none: a database holding every synchronized
-# message needs backup, durability, and an upgrade path that belong to whoever operates it. Point this at one you own.
+# MailFathom needs PostgreSQL with the `vector` extension. The chart runs one for you by default, as a single-replica
+# StatefulSet on a PersistentVolumeClaim, so an install needs nothing beyond a Secret and an image reference. Point it
+# at a server you already operate instead by turning `deploy.enabled` off and naming the host — which is the shape to
+# choose once backup, durability, failover, and the upgrade path are somebody's job rather than a volume's.
 database:
+  deploy:
+    # The one value here that changes what the chart renders rather than what it connects to. On, the chart creates the
+    # StatefulSet, its Service, and its initialization script, and `host` below is derived from the release name and
+    # must be left empty. Off, nothing of the sort is rendered and `host` is required.
+    enabled: true
+
+    # pgvector rather than plain postgres: the schema declares the `vector` extension, and the stock image cannot create
+    # it. This is the same pin the Compose deployment and the local orchestration use, so a schema reviewed against one
+    # is reviewed against the same server version everywhere.
+    #
+    # Unlike the application image above, this one carries a default, and the two are different questions: MailFathom's
+    # own version is what a deployment chooses and this is a dependency the chart operates. It is still an immutable
+    # tag naming both halves — the extension's version, then the PostgreSQL major.
+    image:
+      registry: docker.io
+      repository: pgvector/pgvector
+      tag: 0.8.6-pg18
+      pullPolicy: IfNotPresent
+      pullSecrets: []
+
+    # The superuser password, used by `initdb` on the first start and by nothing afterwards. MailFathom never connects
+    # as this role: the initialization script uses it once to create the unprivileged role that owns the database and
+    # to install the `vector` extension, which are the only two things a superuser is needed for.
+    #
+    # It lives in a Secret of its own, and the chart refuses one that is also `secrets.existingSecret`. That Secret is
+    # mounted whole into the application pod — it has to be, because the keys MailFathom reads are named by your own
+    # configuration and the chart cannot enumerate them — so a superuser credential placed in it would be readable
+    # from the network-facing pod that parses untrusted MIME, which is exactly the boundary the unprivileged role
+    # exists to draw. The Compose deployment separates the two the same way, by leaving this credential off the
+    # application service's own secret list.
+    superuserPasswordSecret: ""
+    superuserPasswordSecretKey: postgres-superuser-password
+
+    # The claim holding every synchronized message. It outlives the pod and is deliberately not deleted when the
+    # release is: `helm uninstall` leaves the claim behind, and removing the data is a separate `kubectl delete pvc`.
+    persistence:
+      size: 20Gi
+      # Empty uses the cluster's default StorageClass. Name one whose volumes suit a database rather than a cache.
+      storageClassName: ""
+      accessMode: ReadWriteOnce
+
+    resources:
+      requests:
+        cpu: 250m
+        memory: 512Mi
+      limits:
+        cpu: "2"
+        memory: 2Gi
+
+    nodeSelector: {}
+    tolerations: []
+    affinity: {}
+
   # Everything except the password. The password arrives as a mounted secret, named below, because a connection string
   # in a ConfigMap would put a credential into an object that is neither encrypted at rest nor access-controlled like
   # a Secret.
+  #
+  # `host` is required when `deploy.enabled` is off and refused when it is on, where the chart derives it from the
+  # release name: two values naming one server is how a deployment ends up connecting somewhere it did not install.
   host: ""
   port: 5432
   name: mailfathom
@@ -86,6 +145,10 @@ database:
 # at /etc/mailfathom/secrets — one file per key. Every credential MailFathom reads is a `file:` reference into that
 # directory: mailbox passwords, MCP API keys, and a private trust anchor alike. A Secrets Store CSI driver needs no
 # support beyond this, because it mounts files too.
+#
+# This Secret is mounted whole, because the keys MailFathom reads are the ones your own configuration names and the
+# chart cannot know them. A deployed database therefore reads one key of it — the database password — and nothing else,
+# and takes the superuser password from a second Secret the application never mounts.
 secrets:
   existingSecret: ""
   mountPath: /etc/mailfathom/secrets

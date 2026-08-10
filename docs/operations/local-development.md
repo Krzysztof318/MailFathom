@@ -213,7 +213,9 @@ An MCP client then connects to `http://localhost:8080/mcp`, or to `https://local
 the database volume outlives the container and the container outlives the run. The container is stopped rather than
 left running, so the next start is a restart of the server that was there.
 
-The AppHost PostgreSQL resource uses the `pgvector/pgvector:0.8.2-pg17` image so local development starts with a PostgreSQL server that can support the `vector` extension required by the RAG and embedding slices. It keeps its data in a named Docker volume, so synchronized mail survives a restart instead of costing a full IMAP synchronization every time the orchestration stops.
+The AppHost PostgreSQL resource uses the `pgvector/pgvector:0.8.6-pg18` image so local development starts with a PostgreSQL server that can support the `vector` extension required by the RAG and embedding slices. It keeps its data in a named Docker volume, so synchronized mail survives a restart instead of costing a full IMAP synchronization every time the orchestration stops.
+
+That volume is mounted at `/var/lib/postgresql` rather than through Aspire's `WithDataVolume`, which would choose the wrong path here. PostgreSQL 18 moved the image's data directory into a version-specific subdirectory and moved the declared volume up to the parent, and Aspire picks between the two by parsing a major version out of the image tag — taking everything before the first `-`, which on a pgvector tag shaped `0.8.6-pg18` is `0.8.6`, and reading the major component of that, which is `0`. The version test therefore never sees 18: it would mount the pre-18 path, the server would write to neither, and the database would live in the container's writable layer until the container was removed. The volume keeps the name `WithDataVolume` would have generated, so it is still one database per checkout.
 
 The resource is also given a persistent container lifetime, which the ephemeral integration-test topology deliberately
 is not. A session lifetime removes the server on every shutdown and builds it again on the next start — an image check,

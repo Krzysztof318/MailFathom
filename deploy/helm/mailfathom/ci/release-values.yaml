@@ -13,7 +13,12 @@ image:
   tag: 0.1.0-verification
   allowVersionMismatch: true
 
+# The external-database shape, which is the half of the choice the nightly values do not render: nothing of the
+# StatefulSet, its Service, or its initialization script is produced, and the connection string names the server given
+# here. Between the two files both branches of `database.deploy.enabled` are rendered by the repository's verification.
 database:
+  deploy:
+    enabled: false
   host: postgres.mailfathom.svc.cluster.local
   name: mailfathom
   user: mailfathom

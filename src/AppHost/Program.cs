@@ -36,7 +36,16 @@ var postgresPassword = builder.AddParameter("postgres-password", OrchestrationCo
 var postgres = builder
     .AddPostgres(OrchestrationContract.PostgresResourceName, postgresUserName, postgresPassword)
     .WithImage("pgvector/pgvector")
-    .WithImageTag("0.8.2-pg17");
+    .WithImageTag("0.8.6-pg18");
+
+// Mounted explicitly rather than through WithDataVolume, which derives this path by parsing a PostgreSQL major version
+// out of the image tag: it takes everything before the first `-` — `0.8.6` on a pgvector tag shaped `0.8.6-pg18` — and
+// reads the major component of that, which is `0`, so the version test never sees 18 and it falls back to the pre-18
+// `/var/lib/postgresql/data`. PostgreSQL 18 moved the image's data directory under a
+// version-specific subdirectory and moved the declared volume up to the parent, so a volume mounted at the old path
+// would hold nothing and the database would live in the container's writable layer — lost with the container rather
+// than kept by the volume that was asked for.
+const string postgresDataDirectory = "/var/lib/postgresql";
 
 if (runsIntegrationTests)
 {
@@ -50,7 +59,7 @@ if (runsIntegrationTests)
     // a volume reused across runs would quietly turn every later run into an upgrade of the first one's database.
     postgres
         .WithContainerName($"{ephemeralResourceNamePrefix}-postgres")
-        .WithDataVolume($"{ephemeralResourceNamePrefix}-postgres-data");
+        .WithVolume($"{ephemeralResourceNamePrefix}-postgres-data", postgresDataDirectory);
 }
 else
 {
@@ -76,8 +85,12 @@ else
     // The host port is fixed for the same reason the host's own ports are: a connection string typed into a database
     // tool once should keep working. PostgreSQL's own port is the convenient one, and Aspire publishes it on the
     // loopback address, so the server a developer reaches is not one anything else on their network can.
+    //
+    // The volume keeps the name WithDataVolume would have given it, which is what makes it still one volume per
+    // checkout: the generated name carries a hash of the app host's path, so a clone and a worktree own different
+    // databases instead of racing for one. Only the path it is mounted at is stated here, for the reason above.
     postgres
-        .WithDataVolume()
+        .WithVolume(VolumeNameGenerator.Generate(postgres, "data"), postgresDataDirectory)
         .WithLifetime(ContainerLifetime.Persistent)
         .WithHostPort(5432);
 
