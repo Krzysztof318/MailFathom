@@ -2,41 +2,73 @@
 
 <!-- describes: deploy/helm/** -->
 
-`deploy/helm/mailfathom/` is the chart. It installs MailFathom and the objects around it, and deliberately installs neither a
-database nor a Secret: both belong to whoever operates the cluster, and the chart is written so that it cannot pretend
-otherwise.
+`deploy/helm/mailfathom/` is the chart. It installs MailFathom, the objects around it, and — unless you tell it
+otherwise — the PostgreSQL server it stores mail in. It deliberately installs no Secret: credentials belong to whoever
+operates the cluster, and the chart is written so that it cannot pretend otherwise.
 
 | It renders | It does not render |
 | --- | --- |
 | Deployment, Service, ConfigMap, ServiceAccount | Any `Secret` |
-| An optional Ingress | Any certificate material |
-|  | Any database, and any schema step |
+| A PostgreSQL StatefulSet, its Service, and its initialization script, unless `database.deploy.enabled` is false | Any certificate material |
+| An optional Ingress | Any schema step |
 
 ## What you supply
 
-Two things have no default and the chart refuses to render without them.
+Two things have no default and the chart refuses to render without them. The third has one, and choosing it is the
+decision this section is mostly about.
 
 **An image.** Released images are on both registries under the same digest, and the chart still defaults to none of
 them: a default would pin every install to whichever version this chart happened to name, and a moving one would let a
 cluster follow a version nobody chose. You name the immutable reference your deployment runs.
 
-**A database.** PostgreSQL with the `vector` extension. A store holding every synchronized message needs backup,
-durability, and an upgrade path that a subchart cannot own.
+**A Secret.** The chart names one rather than creating it.
 
-A Secret is the third thing, and the chart names it rather than creating one.
+**A database is the third thing, and it has a default.** The chart runs PostgreSQL with the `vector` extension as a
+single-replica StatefulSet on a retained PersistentVolumeClaim, from the `pgvector/pgvector` image the Compose
+deployment and the local orchestration pin to the same version. It is not a subchart: the templates are in this
+repository and change in the diff that changes them.
+
+That default is the smaller of two arrangements, and it is worth knowing which one you are choosing. A claim gives the
+data a lifetime longer than the pod's and nothing else — no backup schedule, no failover, no point-in-time recovery,
+and no upgrade path across a PostgreSQL major. Point the chart at a server you already operate once any of those is
+somebody's job:
+
+```yaml
+database:
+  deploy:
+    enabled: false
+  host: postgres.databases.svc.cluster.local
+```
+
+The two are exclusive and the chart says so rather than preferring one: `database.host` is required when
+`deploy.enabled` is false, and refused when it is true, where the address is derived from the release name. A
+deployed server is reached at `<release>-postgres` in the release's own namespace.
+
+The role MailFathom connects as is never a superuser, in either arrangement. When the chart deploys the server, its
+initialization script runs once on the empty data directory, creates the role that owns the database, and installs the
+`vector` extension while a superuser is still connected — which is the same script, and the same reasoning, the Compose
+deployment uses. That is why the Secret carries a second key when the database is deployed: `postgres-superuser-password`
+beside `mailfathom-database-password`. Exactly those two keys are mounted into the database pod and no others, so the
+mailbox passwords and MCP keys in the same Secret never reach it.
 
 ```bash
 kubectl create namespace mailfathom
 
 kubectl --namespace mailfathom create secret generic mailfathom-secrets \
   --from-literal=mailfathom-database-password='…' \
+  --from-literal=postgres-superuser-password='…' \
   --from-file=imap-primary-password=./imap-primary-password \
   --from-file=mcp-workstation-key=./mcp-workstation-key \
   --from-file=mailfathom-data-key=./mailfathom-data-key
 ```
 
-It is mounted read-only at `/etc/mailfathom/secrets`, one file per key, so every credential is a `file:` reference — the
-same path and the same references the Compose deployment uses.
+The superuser line belongs to a deployed database and is unused without one; drop it when `database.deploy.enabled` is
+false. Both database passwords are applied by `initdb` on the first start and never again, so changing either in the
+Secret afterwards changes what MailFathom presents rather than what the server accepts — rotate them in the server as
+well, which [secret rotation](secret-rotation.md) covers.
+
+The Secret is mounted read-only at `/etc/mailfathom/secrets`, one file per key, so every credential is a `file:`
+reference — the same path and the same references the Compose deployment uses.
 
 The last entry is the data-encryption key, and it belongs in this Secret rather than in a chart value: the chart creates
 no Secret and generates nothing, deliberately, because a Helm-generated key would be replaced on any upgrade that did
@@ -63,7 +95,6 @@ image:
   digest: sha256:…              # or an immutable tag
 
 database:
-  host: postgres.databases.svc.cluster.local
   name: mailfathom
   user: mailfathom
 
@@ -170,6 +201,20 @@ psql "postgresql://mailfathom_migrator@127.0.0.1:5432/mailfathom" \
   --set ON_ERROR_STOP=on \
   --file 'mailfathom-schema-<version>.sql'
 ```
+
+A database this chart deployed is reached through its own pod, and the extension half of the paragraph below is already
+done there — the initialization script installed `vector` while a superuser was connected, so the script's
+`CREATE EXTENSION IF NOT EXISTS vector` finds it present:
+
+```bash
+kubectl --namespace mailfathom exec -i statefulset/mailfathom-postgres -- \
+  psql --username mailfathom --dbname mailfathom \
+    --set ON_ERROR_STOP=on < 'mailfathom-schema-<version>.sql'
+```
+
+That applies the DDL as `database.user`, which then owns every object it created and needs no grants afterwards. Back
+the database up the same way, with `pg_dump` through the pod, rather than by copying the claim's files: a file copy of
+a running server's data directory is not a backup of it.
 
 The role that applies it needs privileges `database.user` does not — the `vector` extension is one an ordinary role may
 not create — and PostgreSQL leaves whoever ran the DDL owning every object it created, so `database.user` needs grants

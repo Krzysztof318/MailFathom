@@ -41,16 +41,19 @@ cd MailFathom
 | Shape | Choose it when | Guide |
 | --- | --- | --- |
 | **Docker Compose** | You self-host on one machine and want the database, the network boundary, and the secret mounts arranged for you | [Deploying with Docker Compose](../operations/deployment-compose.md) |
-| **Kubernetes with Helm** | You operate a cluster and bring your own PostgreSQL and Secret management | [Deploying to Kubernetes](../operations/deployment-kubernetes.md) |
+| **Kubernetes with Helm** | You operate a cluster and bring your own Secret management | [Deploying to Kubernetes](../operations/deployment-kubernetes.md) |
 | **Native process** | You run services under systemd without a container runtime, and want secrets delivered as systemd credentials | [Below](#native-process), then [secret provisioning](../operations/secret-provisioning.md#native-systemd-service) |
 
-Docker Compose is the recommended first installation. It is the only shape that provisions PostgreSQL for you —
-`compose.yaml` creates the role, the database, and the `vector` extension on first start — and its defaults publish
-both ports on loopback, so nothing is reachable from another machine until you decide it should be.
+Docker Compose is the recommended first installation. It provisions PostgreSQL for you — `compose.yaml` creates the
+role, the database, and the `vector` extension on first start — and its defaults publish both ports on loopback, so
+nothing is reachable from another machine until you decide it should be.
 
-The Helm chart deliberately installs neither a database nor a Secret. It needs an image reference, a PostgreSQL server
-with the `vector` extension, and a Secret carrying the credentials; [what you supply](../operations/deployment-kubernetes.md#what-you-supply)
-lists all three before the install command.
+The Helm chart provisions one too, as a StatefulSet on a persistent claim, and turns it off for a deployment that has a
+server of its own. It creates no Secret, deliberately, so it needs an image reference and a Secret carrying the
+credentials; [what you supply](../operations/deployment-kubernetes.md#what-you-supply) covers both, and the trade-off
+between the deployed database and one you operate, before the install command.
+
+The native process is the shape that brings no database at all.
 
 ## What every shape needs
 
@@ -61,7 +64,8 @@ lists all three before the install command.
   there, nothing in this repository is verified against it, and a defect that reproduces only on Windows is not one
   this project can act on today.
 - **PostgreSQL with the `vector` extension.** The synchronized mail, its indexes, and the raw message content all live
-  there. The Compose deployment brings its own (`pgvector/pgvector`, PostgreSQL 17); the other shapes expect yours.
+  there. The Compose deployment and the Helm chart bring their own (`pgvector/pgvector`, PostgreSQL 18); a native
+  process expects yours, and the chart uses yours when you ask it to.
 - **An IMAP account to synchronize** and its password or app password, provisioned as a
   [secret reference](../operations/secret-provisioning.md) rather than written into configuration.
 - **A data-encryption key, if any mailbox authenticates with OAuth.** MailFathom seals the refresh tokens it stores

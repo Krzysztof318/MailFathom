@@ -15,8 +15,7 @@ image:
   tag: 0.0.0-nightly.1-0000000
   nightlyAcknowledgement: i-understand-this-is-unsupported
 
-database:
-  host: postgres.mailfathom.svc.cluster.local
-
+# Nothing here names a database, which is the point: the chart deploys one by default, so this file also renders the
+# StatefulSet, its Service, and its initialization ConfigMap that the release values deliberately do not.
 secrets:
   existingSecret: mailfathom-secrets

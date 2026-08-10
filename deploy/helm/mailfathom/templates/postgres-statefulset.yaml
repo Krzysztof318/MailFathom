@@ -1,0 +1,211 @@
+{{- /*
+Copyright © 2026 Krzysztof Kasprowicz
+Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
+Project repository: https://github.com/Krzysztof318/MailFathom
+*/ -}}
+{{- if .Values.database.deploy.enabled }}
+{{- include "mailfathom.validate" . -}}
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "mailfathom.postgresFullname" . }}
+  labels:
+    {{- include "mailfathom.postgresLabels" . | nindent 4 }}
+spec:
+  {{- /*
+    One replica, and no value to change it. A second PostgreSQL pod against a ReadWriteOnce claim is not a replica of
+    anything — it is a second server that cannot mount the volume, or worse, two servers over one data directory.
+    Replication is an operator's arrangement and belongs to a database somebody runs, which is what turning
+    `database.deploy.enabled` off is for.
+  */}}
+  replicas: 1
+  serviceName: {{ include "mailfathom.postgresFullname" . }}
+  selector:
+    matchLabels:
+      {{- include "mailfathom.postgresSelectorLabels" . | nindent 6 }}
+  {{- /*
+    The claim outlives the release: `helm uninstall` deletes neither a StatefulSet's claims nor this one, so removing
+    the release does not remove the mail. Deleting the data is a deliberate `kubectl delete pvc` afterwards.
+  */}}
+  persistentVolumeClaimRetentionPolicy:
+    whenDeleted: Retain
+    whenScaled: Retain
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+        labels:
+          {{- include "mailfathom.postgresLabels" . | nindent 10 }}
+      spec:
+        accessModes:
+          - {{ .Values.database.deploy.persistence.accessMode }}
+        {{- with .Values.database.deploy.persistence.storageClassName }}
+        storageClassName: {{ . | quote }}
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ .Values.database.deploy.persistence.size }}
+  template:
+    metadata:
+      labels:
+        {{- include "mailfathom.postgresSelectorLabels" . | nindent 8 }}
+    spec:
+      {{- with .Values.database.deploy.image.pullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- /*
+        The uid and gid the image's own `postgres` account carries. Stated rather than left to the image because the
+        Restricted Pod Security Standard refuses a container that may run as root, and because `initdb` looks its
+        effective user up in /etc/passwd and fails on a uid that is not there — which is what rules out an arbitrary
+        one. fsGroup is what makes the mounted claim writable by that account without the entrypoint needing to be
+        root to chown it.
+      */}}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 999
+        runAsGroup: 999
+        fsGroup: 999
+        seccompProfile:
+          type: RuntimeDefault
+      automountServiceAccountToken: false
+      {{- /*
+        Long enough for a checkpoint. The container is stopped with SIGTERM, which PostgreSQL reads as a smart shutdown
+        that waits for clients to disconnect; the entrypoint sends a fast shutdown of its own during the image's stop
+        handling, and this budget is what lets that finish rather than becoming a SIGKILL over an open data directory.
+      */}}
+      terminationGracePeriodSeconds: 120
+      {{- with .Values.database.deploy.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.database.deploy.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.database.deploy.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: postgres
+          image: {{ include "mailfathom.postgresImage" . | quote }}
+          imagePullPolicy: {{ .Values.database.deploy.image.pullPolicy }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          ports:
+            - name: postgresql
+              containerPort: 5432
+              protocol: TCP
+          env:
+            {{- /*
+              The superuser exists to run the initialization below and is connected as by nothing afterwards. Its
+              password is read from the mounted file rather than passed as a value, so no credential is in this object.
+            */}}
+            - name: POSTGRES_USER
+              value: postgres
+            - name: POSTGRES_DB
+              value: postgres
+            - name: POSTGRES_PASSWORD_FILE
+              value: {{ printf "%s/%s" (trimSuffix "/" .Values.secrets.mountPath) .Values.database.deploy.superuserPasswordSecretKey | quote }}
+            {{- /*
+              Read by the initialization script, which creates the unprivileged role that owns the database and
+              installs the `vector` extension. They are the same values the connection string is built from, so the
+              role MailFathom connects as is the role that gets created.
+            */}}
+            - name: MAILFATHOM_DATABASE
+              value: {{ .Values.database.name | quote }}
+            - name: MAILFATHOM_DATABASE_ROLE
+              value: {{ .Values.database.user | quote }}
+            - name: MAILFATHOM_DATABASE_PASSWORD_FILE
+              value: {{ printf "%s/%s" (trimSuffix "/" .Values.secrets.mountPath) .Values.database.passwordSecretKey | quote }}
+          volumeMounts:
+            {{- /*
+              The parent of the data directory rather than the data directory itself. PostgreSQL 18 moved this image's
+              PGDATA into a version-specific subdirectory and moved the declared volume up to `/var/lib/postgresql`
+              with it, so mounting the old path would leave the database in the container's writable layer.
+            */}}
+            - name: data
+              mountPath: /var/lib/postgresql
+            - name: initialization
+              mountPath: /docker-entrypoint-initdb.d
+              readOnly: true
+            - name: secrets
+              mountPath: {{ .Values.secrets.mountPath }}
+              readOnly: true
+            {{- /*
+              The two paths the server writes to outside its data directory: the Unix socket it always creates, and the
+              temporary files initialization and sorting use. Both are what makes a read-only root filesystem workable.
+            */}}
+            - name: run
+              mountPath: /var/run/postgresql
+            - name: temporary
+              mountPath: /tmp
+          {{- /*
+            pg_isready over TCP rather than the socket, because that is the listener a client actually reaches, and
+            against the MailFathom database rather than the superuser's: the readiness that matters is the one where
+            the initialization script has finished creating it.
+          */}}
+          readinessProbe:
+            exec:
+              command:
+                - pg_isready
+                - --quiet
+                - --host=127.0.0.1
+                - --username=postgres
+                - --dbname={{ .Values.database.name }}
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          {{- /*
+            A generous startup budget rather than a liveness probe with a short one: the first start runs initdb and
+            the initialization script, and a restart after an unclean stop replays the write-ahead log for as long as
+            that takes. Restarting a server part-way through recovery is how a database that would have come back does
+            not.
+          */}}
+          startupProbe:
+            exec:
+              command:
+                - pg_isready
+                - --quiet
+                - --host=127.0.0.1
+                - --username=postgres
+                - --dbname={{ .Values.database.name }}
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 60
+          resources:
+            {{- toYaml .Values.database.deploy.resources | nindent 12 }}
+      volumes:
+        - name: initialization
+          configMap:
+            name: {{ include "mailfathom.postgresFullname" . }}-init
+            {{- /*
+              Executable, so the image's entrypoint runs the script as a program. A script it cannot execute is sourced
+              into the entrypoint's own shell instead, where `set -u` would then apply to everything the entrypoint
+              does after it.
+            */}}
+            defaultMode: 0555
+        {{- /*
+          Two keys of the Secret and no others. The database needs the password it must create the role with and the
+          superuser password it initializes under; mailbox credentials, MCP keys, and the data-encryption key live in
+          the same Secret and have no business inside this pod.
+        */}}
+        - name: secrets
+          secret:
+            secretName: {{ .Values.secrets.existingSecret }}
+            defaultMode: 0400
+            items:
+              - key: {{ .Values.database.passwordSecretKey }}
+                path: {{ .Values.database.passwordSecretKey }}
+              - key: {{ .Values.database.deploy.superuserPasswordSecretKey }}
+                path: {{ .Values.database.deploy.superuserPasswordSecretKey }}
+        - name: run
+          emptyDir: {}
+        - name: temporary
+          emptyDir: {}
+{{- end }}

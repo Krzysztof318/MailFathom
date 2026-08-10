@@ -1,0 +1,29 @@
+{{- /*
+Copyright © 2026 Krzysztof Kasprowicz
+Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
+Project repository: https://github.com/Krzysztof318/MailFathom
+*/ -}}
+{{- if .Values.database.deploy.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "mailfathom.postgresFullname" . }}
+  labels:
+    {{- include "mailfathom.postgresLabels" . | nindent 4 }}
+spec:
+  {{- /*
+    An ordinary ClusterIP rather than the headless Service a StatefulSet is usually paired with, because the one thing
+    headless would add here is per-pod DNS for a set that holds one pod, and the thing it would take away is the port
+    mapping: a headless Service resolves to the pod's own address, so `database.port` would have to be the port the
+    server itself listens on rather than the port it is reached at. This way the container keeps 5432 and an operator
+    moving `database.port` moves what MailFathom dials and what the Service answers on together.
+  */}}
+  type: ClusterIP
+  selector:
+    {{- include "mailfathom.postgresSelectorLabels" . | nindent 4 }}
+  ports:
+    - name: postgresql
+      port: {{ .Values.database.port }}
+      targetPort: postgresql
+      protocol: TCP
+{{- end }}

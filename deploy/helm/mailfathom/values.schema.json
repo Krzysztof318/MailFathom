@@ -100,6 +100,7 @@
     "database": {
       "type": "object",
       "required": [
+        "deploy",
         "host",
         "port",
         "name",
@@ -107,9 +108,109 @@
         "passwordSecretKey"
       ],
       "properties": {
+        "deploy": {
+          "type": "object",
+          "required": [
+            "enabled",
+            "image",
+            "superuserPasswordSecretKey",
+            "persistence",
+            "resources"
+          ],
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "description": "Whether the chart runs PostgreSQL itself, as a single-replica StatefulSet on a PersistentVolumeClaim. Turn it off to use a server you already operate, and name it in database.host."
+            },
+            "image": {
+              "type": "object",
+              "required": [
+                "repository",
+                "tag"
+              ],
+              "properties": {
+                "registry": {
+                  "type": "string"
+                },
+                "repository": {
+                  "type": "string",
+                  "minLength": 1,
+                  "description": "pgvector rather than plain postgres: the schema declares the vector extension and the stock image cannot create it."
+                },
+                "tag": {
+                  "type": "string",
+                  "minLength": 1,
+                  "pattern": "^[A-Za-z0-9_][A-Za-z0-9._-]*$",
+                  "not": {
+                    "pattern": "^latest$",
+                    "description": "A moving tag would let a cluster follow a database version nobody chose, on the one object in this chart that holds data."
+                  }
+                },
+                "pullPolicy": {
+                  "type": "string",
+                  "enum": [
+                    "Always",
+                    "IfNotPresent",
+                    "Never"
+                  ]
+                },
+                "pullSecrets": {
+                  "type": "array",
+                  "items": {
+                    "type": "object"
+                  }
+                }
+              },
+              "additionalProperties": false
+            },
+            "superuserPasswordSecretKey": {
+              "type": "string",
+              "minLength": 1,
+              "description": "The key in the mounted Secret holding the superuser password. It initializes the database and creates the unprivileged role MailFathom connects as; the two keys must differ, which the chart's own validation checks."
+            },
+            "persistence": {
+              "type": "object",
+              "required": [
+                "size",
+                "accessMode"
+              ],
+              "properties": {
+                "size": {
+                  "type": "string",
+                  "pattern": "^[0-9]+(\\.[0-9]+)?(E|P|T|G|M|k|Ei|Pi|Ti|Gi|Mi|Ki)?$"
+                },
+                "storageClassName": {
+                  "type": "string"
+                },
+                "accessMode": {
+                  "type": "string",
+                  "enum": [
+                    "ReadWriteOnce",
+                    "ReadWriteOncePod"
+                  ],
+                  "description": "One server owns one data directory, so a mode that lets a second node mount it would describe an arrangement PostgreSQL does not support."
+                }
+              },
+              "additionalProperties": false
+            },
+            "resources": {
+              "type": "object"
+            },
+            "nodeSelector": {
+              "type": "object"
+            },
+            "tolerations": {
+              "type": "array"
+            },
+            "affinity": {
+              "type": "object"
+            }
+          },
+          "additionalProperties": false
+        },
         "host": {
           "type": "string",
-          "description": "The chart installs no database. MailFathom needs PostgreSQL with the vector extension, and the store holding every synchronized message belongs to whoever operates it."
+          "description": "The server MailFathom connects to when database.deploy.enabled is false. It needs the vector extension. Leave it empty when the chart deploys the database, which derives the address from the release name."
         },
         "port": {
           "type": "integer",

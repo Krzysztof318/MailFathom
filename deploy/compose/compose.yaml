@@ -25,7 +25,7 @@ services:
     # pgvector rather than plain postgres: the schema declares the `vector` extension, and the stock image cannot
     # create it. This is the same pin the local Aspire orchestration uses, so a schema reviewed locally is reviewed
     # against this server version.
-    image: ${MAILFATHOM_POSTGRES_IMAGE:-pgvector/pgvector:0.8.2-pg17}
+    image: ${MAILFATHOM_POSTGRES_IMAGE:-pgvector/pgvector:0.8.6-pg18}
     restart: unless-stopped
     environment:
       # The superuser of this container, used by initdb and by nothing else afterwards. The role MailFathom connects as is
@@ -39,7 +39,10 @@ services:
       - postgres-superuser-password
       - mailfathom-database-password
     volumes:
-      - postgres-data:/var/lib/postgresql/data
+      # The parent rather than the data directory itself. PostgreSQL 18 moved this image's PGDATA into a
+      # version-specific subdirectory and moved the declared volume up to `/var/lib/postgresql` with it, so mounting
+      # the old path would leave the database in the container's writable layer and lose it with the container.
+      - postgres-data:/var/lib/postgresql
       # Runs once, on an empty data directory. It creates the unprivileged role and the database MailFathom uses, and
       # installs the `vector` extension while a superuser is still the one connected.
       - ./postgres/10-create-mailfathom-database.sh:/docker-entrypoint-initdb.d/10-create-mailfathom-database.sh:ro

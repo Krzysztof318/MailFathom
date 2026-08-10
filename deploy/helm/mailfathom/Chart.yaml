@@ -98,6 +98,9 @@ annotations:
     - name: support
       url: https://github.com/Krzysztof318/MailFathom/issues
 
-# No dependencies, deliberately. The chart installs no database: MailFathom needs PostgreSQL with the `vector` extension,
-# and a subchart bundled here would make the chart responsible for the durability, backup, and upgrade of the store
-# that holds every synchronized message. `database` in values.yaml points at one the operator owns.
+# No dependencies, deliberately, which is not the same as no database. The chart deploys PostgreSQL itself — a
+# single-replica StatefulSet on a retained claim, from templates in this directory — so that an install needs nothing
+# but a Secret and an image reference, and `database.deploy.enabled=false` hands the server back to an operator who has
+# one. What is refused is a *subchart*: a bundled dependency would put another project's templates, values, and release
+# cadence between this chart and the store holding every synchronized message, and its upgrade path would become part
+# of MailFathom's. Templates the repository owns can be read in the diff that changes them.
