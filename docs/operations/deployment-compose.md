@@ -240,23 +240,47 @@ enough.
 ### Upgrading a deployment that ran PostgreSQL 17
 
 The database image is now `pgvector/pgvector:0.8.6-pg18`, and PostgreSQL does not read a data directory written by an
-earlier major version. **An existing volume is not upgraded in place by bringing the new image up** — it is a different
-data directory entirely, because PostgreSQL 18 moved this image's `PGDATA` into a version-specific subdirectory and the
-Compose file now mounts the volume at the parent that holds it. A server started against the old volume initializes an
-empty database beside the one that is there and comes up with no mail in it.
+earlier major version. **An existing volume is not upgraded in place by bringing the new image up**, and what that
+costs is worth knowing before it happens rather than after: PostgreSQL 18 moved this image's `PGDATA` into a
+version-specific subdirectory and the Compose file now mounts the volume at the parent that holds it, so the image
+finds a PostgreSQL 17 data directory where it expects that parent and **refuses to start**. The container exits `1`
+carrying the image's own message — *there appears to be PostgreSQL data in: `/var/lib/postgresql`* — the server never
+listens, the health check never passes, and nothing that depends on it comes up. The attempt writes nothing, so the
+old data directory is intact and still dumpable afterwards.
 
-Move the data across a dump, which is the migration path between majors:
+Move the data across a dump, which is the migration path between majors. The dump has to come from a running
+PostgreSQL 17 server, and the upgraded Compose file no longer starts one, so the first step is getting that server
+back — against the same volume, mounted where 17 expects it:
 
 ```bash
-docker compose exec -T postgres pg_dump --username mailfathom --format custom mailfathom > mailfathom-pg17.dump
-
 docker compose down
+
+docker run --detach --name mailfathom-pg17 \
+  --volume mailfathom-postgres-data:/var/lib/postgresql/data \
+  pgvector/pgvector:0.8.2-pg17                      # whichever image the deployment ran before the upgrade
+
+docker exec mailfathom-pg17 \
+  pg_dump --username mailfathom --format custom --exclude-extension=vector mailfathom > mailfathom-pg17.dump
+docker rm --force mailfathom-pg17
+
 docker volume rm mailfathom-postgres-data           # or MAILFATHOM_POSTGRES_VOLUME, if you named it
 docker compose up -d postgres                       # initializes 18 and re-creates the role, database, and extension
 
-docker compose exec -T postgres pg_restore --username mailfathom --dbname mailfathom --clean --if-exists < mailfathom-pg17.dump
+docker compose exec -T postgres pg_restore --username mailfathom --dbname mailfathom < mailfathom-pg17.dump
 docker compose up -d
 ```
+
+Two details of those commands are what keep the restore clean, and both follow from the database being owned by an
+unprivileged role. The dump **excludes the `vector` extension**, because the extension belongs to initialization rather
+than to the data: a superuser installs it, `mailfathom` does not own it, and a dump carrying it makes `pg_restore`
+fail on `COMMENT ON EXTENSION` with `must be owner of extension vector`. The restore takes **no `--clean`**, because
+the database it restores into was created moments earlier and holds nothing to drop — and `--clean` would reach for
+that same extension. Either one left in place ends the restore at exit `1` with the rows already in, which reads like a
+failed migration and is not one.
+
+Neither `pg_dump` nor `pg_restore` passes a password, because both reach the server over its Unix socket from inside
+the container, where the image's own `initdb` left local connections trusted. Nothing on the `backend` network can
+take that path: `pg_hba.conf` answers a connection arriving from there with `scram-sha-256`.
 
 Resynchronizing from IMAP instead of restoring is also a complete answer, and a slower one: delete the volume, bring the
 deployment up, apply the schema artifact, and let synchronization refill it. What it costs beyond time is everything
