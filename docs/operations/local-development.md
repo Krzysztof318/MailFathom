@@ -217,6 +217,19 @@ The AppHost PostgreSQL resource uses the `pgvector/pgvector:0.8.6-pg18` image so
 
 That volume is mounted at `/var/lib/postgresql` rather than through Aspire's `WithDataVolume`, which would choose the wrong path here. PostgreSQL 18 moved the image's data directory into a version-specific subdirectory and moved the declared volume up to the parent, and Aspire picks between the two by parsing a major version out of the image tag — taking everything before the first `-`, which on a pgvector tag shaped `0.8.6-pg18` is `0.8.6`, and reading the major component of that, which is `0`. The version test therefore never sees 18: it would mount the pre-18 path, the server would write to neither, and the database would live in the container's writable layer until the container was removed. The volume keeps the name `WithDataVolume` would have generated, so it is still one database per checkout.
 
+That name is also the one a checkout used before PostgreSQL 18, which is what a first start after this change runs
+into: the volume holding a PostgreSQL 17 data directory is mounted at the parent path, and the image refuses to start
+against it rather than initializing a second cluster beside it. The container exits `1` saying *there appears to be
+PostgreSQL data in: `/var/lib/postgresql`*, so the server never listens and the resource never becomes healthy. A
+local database is resynchronized rather than preserved, so remove the volume and let the next start build it — the
+deployment path, where the mail is worth a dump and a restore, is
+[Upgrading a deployment that ran PostgreSQL 17](deployment-compose.md#upgrading-a-deployment-that-ran-postgresql-17):
+
+```bash
+docker volume ls --filter name=postgres-data      # one per checkout, named after its AppHost
+docker volume rm <the volume this checkout owns>
+```
+
 The resource is also given a persistent container lifetime, which the ephemeral integration-test topology deliberately
 is not. A session lifetime removes the server on every shutdown and builds it again on the next start — an image check,
 an initialization pass, and a health wait, several times a day, against data that was never in question. A persistent
