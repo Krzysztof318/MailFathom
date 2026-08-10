@@ -29,6 +29,232 @@ previous tag, and that same pull request is the one whose merge commit is tagged
 registries. `CHANGELOG.md` is a protected path for the same reason: an edit to it outside that flow changes what a
 release claims it shipped.
 
+## [0.5.0] - 2026-08-10
+
+The fifth release, and the one that lets a client **ask about your mail rather than only look through it**. `ask_mail`
+answers a question in prose and cites the messages the answer was drawn from, and `search_emails` ranks semantically as
+well as lexically. Both stay dark until you declare the AI endpoints they need, so a deployment that declares none
+serves exactly what it served before — and pays exactly what it paid before, which for a feature that bills per call is
+the more important half.
+
+**Four things need an edit before this release starts, renders, or answers a client.** Every account states a
+`DisplayName` now; two arguments on the MCP tools were renamed, and the previous spellings are ignored rather than
+refused — so a client that keeps sending `accountIds` reads every account instead of being stopped; a Helm values
+document that names `database.host` — which every `0.4.0` one does — needs `database.deploy.enabled: false` beside it,
+or the chart refuses to render at all; and the database is **PostgreSQL 18**, which does not read a data directory
+PostgreSQL 17 wrote. The last of those is the expensive one: an existing deployment moves its data across a dump
+before the new image comes up, and
+[upgrading a deployment that ran PostgreSQL 17](https://krzysztof318.github.io/MailFathom/operations/deployment-compose.html#upgrading-a-deployment-that-ran-postgresql-17)
+is the procedure, command by command.
+
+**The database schema moves as well**, by six migrations that add four tables, four columns on tables that already
+held data, and two indexes on those, and that change nothing `0.4.0` reads — so the schema step applies while `0.4.0`
+is still serving, `0.4.0` serves the result unchanged if you roll the image back, and this release deploys over the
+previous release's data. Nothing else `0.4.0` promised is withdrawn: every setting not named below still means what it
+meant, and no tool was removed.
+
+**The defect `0.4.0` shipped with is gone, and it was the whole image.** The published `0.4.0` container could not
+start: its base image sets `ASPNETCORE_HTTP_PORTS`, `0.4.0` is the release that began refusing that variable, and the
+Dockerfile never cleared the inherited value — so every container built from that image failed startup on a setting
+nobody wrote.
+
+### Added
+
+**`ask_mail` — a question about your mail, answered in prose and cited back to the messages it came from.** The
+question is not a search query: its words are never matched against your mail, and the lookups behind it are written by
+the model, which is what lets *did the supplier ever confirm the March delivery date* find the message that says so
+without containing any of those words
+([#579](https://github.com/Krzysztof318/MailFathom/pull/579)). Every answer carries `citations`, one entry per email
+the run actually read, so nothing it says is un-checkable.
+
+- **It is advertised only where it can work** — a declared `Chat` endpoint, and mail that is embedded. A server with
+  neither does not publish the tool, so a client never sees an ability the deployment does not have. Called on a
+  deployment that cannot answer, it fails with `56001` and the message says which half is missing.
+- **Configuring it is one section.** `Chat:Alias`, `Chat:Model`, and one credential — an API key or a Microsoft Entra
+  credential — declare the endpoint; `Chat:Api` states whether the deployment's server serves chat completions or the
+  responses API, because the routed name is your own deployment's and nothing about it says which paths exist. A
+  reasoning model states `Chat:ReasoningEffort` as the provider spells it, and unset sends no reasoning parameter at
+  all ([#557](https://github.com/Krzysztof318/MailFathom/pull/557),
+  [#624](https://github.com/Krzysztof318/MailFathom/pull/624)).
+- **What one question may spend is bounded before it is asked, and what a period may spend is bounded above that.**
+  `MailAnswering` sets how many passages a lookup draws on, how much of any one message it draws out, how much
+  retrieved mail may leave the process for one question, how many provider calls and tokens one run may spend, and how
+  many runs and tokens a period may. A run that reaches a ceiling stops with `57001` rather than continuing quietly,
+  and a run that reaches only the retrieval ceiling answers from what it has and says the mailbox was not read in full
+  ([#592](https://github.com/Krzysztof318/MailFathom/pull/592)).
+- **An optional second filter judges the retrieved passages with the model** before they reach the answer, dropping
+  what scores below `Chat:RelevanceFilter:MinimumRelevance`. It is off by default, because it is a second call per
+  lookup ([#573](https://github.com/Krzysztof318/MailFathom/pull/573)).
+- **An account can keep a record of what each question read**, off by default and enabled per account with
+  `AnsweringAuditTrail:Enabled` and a retention window. It names the mail a run drew on and holds none of it, and
+  `GET /api/admin/answering/audit` reads it back in bounded pages
+  ([#610](https://github.com/Krzysztof318/MailFathom/pull/610)).
+- The model is composed over Agent Framework and the mail it reads is fenced away from the instructions it follows, so
+  an instruction written into a message is data rather than a command
+  ([#564](https://github.com/Krzysztof318/MailFathom/pull/564),
+  [#565](https://github.com/Krzysztof318/MailFathom/pull/565),
+  [#603](https://github.com/Krzysztof318/MailFathom/pull/603)).
+  [Mail answering](https://krzysztof318.github.io/MailFathom/features/mail-answering.html) is the page.
+
+**`search_emails` ranks semantically as well as lexically.** Where an embedding profile is active, a search fuses the
+two rankings with Reciprocal Rank Fusion and reports `retrievalMode: hybrid`; where none is, it answers exactly as
+`0.4.0` did and says `lexical` ([#555](https://github.com/Krzysztof318/MailFathom/pull/555)). Every response also
+carries `semanticSearch` — `inactive`, `available`, or `degraded` — so a client can tell a server that never embedded
+anything from one whose provider is failing right now, which the two modes alone cannot distinguish
+([#562](https://github.com/Krzysztof318/MailFathom/pull/562)).
+
+- **A failing provider degrades the search rather than the deployment.** An unhealthy profile falls back to lexical
+  ranking and says so, instead of failing the call.
+- **Changing the model is a reindex with no search outage.** A new vector generation is built beside the one that is
+  serving and takes over only when it is complete, and `POST /api/admin/embeddings/reindex/cancellation` stops one
+  under way and leaves the serving generation where it is
+  ([#570](https://github.com/Krzysztof318/MailFathom/pull/570)).
+- **What embedding may cost is bounded before it is spent.** `Embeddings:MaxRequestsPerMinute` paces a provider whose
+  quota is per minute, `Embeddings:MaxInputCharactersPerPeriod` and `Embeddings:SpendPeriod` cap what a fixed window
+  may send, and `Embeddings:MaxCharactersPerEmail` bounds a single enormous message rather than refusing it
+  ([#581](https://github.com/Krzysztof318/MailFathom/pull/581)).
+- **`mfctl` administers it.** `mfctl embedding status` reports whether semantic search is working, how far behind it
+  is, and when the next backfill pass is due; `mfctl embedding activate` forecasts what taking up the declared model
+  would cost before it starts, and starting it wakes the backfill instead of leaving the deployment to look broken for
+  up to fifteen minutes ([#593](https://github.com/Krzysztof318/MailFathom/pull/593),
+  [#626](https://github.com/Krzysztof318/MailFathom/pull/626)).
+  [Embedding profiles](https://krzysztof318.github.io/MailFathom/operations/embedding-profiles.html) states the whole
+  lifecycle.
+
+**`list_accounts`, so a client can find out what it may ask about.** It reports each account's identifier, the display
+name you gave it, whether its next pass polls or listens, and one entry per folder with how fresh that folder's local
+copy is — and deliberately publishes no address, no credential, and no server name
+([#637](https://github.com/Krzysztof318/MailFathom/pull/637)). Every tool that takes accounts now accepts either the
+identifier or the display name, so a person can say *work* where the configuration says `work-imap-01`.
+
+**`get_email_content` returns attachment content.** Pass `includeAttachmentContent` and each attachment arrives as
+base64, bounded by `EmailContent:MaxAttachmentBytes` per file and `EmailContent:MaxAttachmentBytesPerRead` across the
+call; a file over the limit is described and not returned, never truncated
+([#633](https://github.com/Krzysztof318/MailFathom/pull/633)). Setting `MaxAttachmentBytes` to `0` returns no
+attachment content at all, which is the deployment that wants the metadata and nothing else.
+
+**A record of every change MailFathom makes to a mailbox, off by default and enabled per account.** **Nothing in
+`0.5.0` asks it to make one** — no tool on the MCP surface writes, and the first caller is the rule engine a later
+release brings — so an account that turns the trail on today gets an empty page and keeps getting one until that
+caller exists. What it buys now is that the decision is made and the storage is in place before the first write, and
+that is the whole of it. `AuditTrail:Enabled` and `AuditTrail:Retention` turn it on per account, one entry is written
+per finished change, and `GET /api/admin/mailbox/mutations/audit` reads it back filterable by account, by change, and
+by time ([#568](https://github.com/Krzysztof318/MailFathom/pull/568)).
+
+- **It holds no mail content and it outlives the mail.** Folder paths, identifiers, a five-digit failure code where
+  there was one, and MailFathom's own configured names are all an entry carries — no subject, no address, no body
+  fragment, no filename — and erasing the email leaves the entry standing, including where the change recorded *was*
+  that deletion.
+- Retention rides the account's own run and erases at most five thousand entries a pass, so shortening a long window
+  clears the backlog over several runs rather than in one delete that locks the trail.
+- `AuthoredDeleteEmailDisposition` decides what becomes of the local copy of mail MailFathom itself deleted —
+  `RetainLocalCopy`, `RetainTombstone`, or `EraseLocalCopy` — separately from the setting that governs mail somebody
+  else deleted, because a deletion of ours and a deletion of theirs are different facts
+  ([#554](https://github.com/Krzysztof318/MailFathom/pull/554),
+  [#561](https://github.com/Krzysztof318/MailFathom/pull/561),
+  [#563](https://github.com/Krzysztof318/MailFathom/pull/563)).
+
+**A ceiling on how much mail one deployment stores, and how much one run brings in.**
+`MailSynchronization:MaxStoredContentBytes` is what stops a large mailbox from filling the volume: past it, ingestion
+degrades to metadata only and keeps listing and searching rather than failing, and the messages it skipped are picked
+up once there is room. `MaxContentBytesPerRun` ends a folder run at its checkpoint instead of at the end of the
+mailbox, and `MaxInFlightRawMimeBytes` bounds what a run holds in memory at once
+([#580](https://github.com/Krzysztof318/MailFathom/pull/580)).
+
+**`mfctl` reaches a deployment whose certificate this machine does not trust, by asking once.** `mfctl login` shows
+the fingerprint, asks, and pins what you accept to that profile, so a later renewal is a question rather than a silent
+acceptance; `--trust-untrusted-certificate` and `--allow-clear-text` answer the same two questions where there is no
+terminal to ask on ([#560](https://github.com/Krzysztof318/MailFathom/pull/560)).
+
+**Every exported record names the build it came from.** `service.version` carries the semantic version and
+`vcs.ref.head.revision` the commit, on every log record, metric, and span the host exports, so a report from a
+deployment can be tied to the code that produced it ([#620](https://github.com/Krzysztof318/MailFathom/pull/620),
+[#655](https://github.com/Krzysztof318/MailFathom/pull/655)).
+
+### Changed
+
+- **Breaking (deployment contract)** — **the database is PostgreSQL 18.4 with pgvector 0.8.6**, where `0.4.0` ran 17.
+  PostgreSQL does not read a data directory an earlier major version wrote, so **bringing the new image up over an
+  existing volume does not upgrade it** — the container exits `1` naming the data it found, the server never listens,
+  and nothing that depends on it comes up. The attempt writes nothing, so the old directory is intact and still
+  dumpable afterwards. Move the data across a dump from a PostgreSQL 17 server before the upgrade, or delete the volume
+  and let synchronization refill it from IMAP — which costs the embeddings and the audit trails, since neither is in
+  the mailbox ([#658](https://github.com/Krzysztof318/MailFathom/pull/658)).
+  [Upgrading a deployment that ran PostgreSQL 17](https://krzysztof318.github.io/MailFathom/operations/deployment-compose.html#upgrading-a-deployment-that-ran-postgresql-17)
+  is the sequence for Compose, and the same reasoning holds for a claim the chart wrote.
+- **Breaking (deployment contract)** — **the Helm chart runs PostgreSQL itself unless you tell it not to**, where
+  `0.4.0` installed none and required `database.host`. A values document that names a host now fails to render, because
+  `database.host` is refused while `database.deploy.enabled` is on and the address is derived from the release name
+  instead: two values naming one server is how a deployment ends up connecting somewhere it did not install. **Keep
+  your own server by setting `database.deploy.enabled: false` beside the `host` you already have.** A deployment that
+  takes the default instead names a second Secret in `database.deploy.superuserPasswordSecret` — separate from
+  `secrets.existingSecret`, and refused if it is the same one — because the application's Secret is mounted whole into
+  the pod that parses untrusted mail ([#658](https://github.com/Krzysztof318/MailFathom/pull/658)).
+- **Breaking (deployment contract)** — **`mfctl` refuses a deployment from another release line before it sends
+  anything.** A `0.4.x` command against a `0.5.x` deployment stops with a message naming both versions, because the
+  administrative contract is what a minor may break and a command that guesses at it is worse than one that declines.
+  Take `mfctl` from the deployment's own release; two builds that share a `major.minor` and differ otherwise warn and
+  run, and a version that cannot be read warns and runs
+  ([#628](https://github.com/Krzysztof318/MailFathom/pull/628)).
+- **Breaking (configuration schema)** — **every account states a `DisplayName`**, and startup fails naming the account
+  that has none. It is what a client sees and what a person names an account by, it is at most 128 characters, and it
+  may not collide with another account's identifier or display name compared without regard to case. Add one line per
+  account under `MailSynchronization:Accounts`
+  ([#637](https://github.com/Krzysztof318/MailFathom/pull/637)).
+- **Breaking (MCP tool contract)** — **`list_emails` and `search_emails` take `accounts` where they took
+  `accountIds`.** The argument was renamed because it now accepts a display name as readily as an identifier. **An
+  argument the tool does not declare is ignored rather than refused**, so a client still sending `accountIds` is not
+  stopped — its account filter simply disappears, and the call reads **every** account the deployment serves instead
+  of the one it named. Update every client that names accounts before the upgrade, and read `list_accounts` for the
+  names ([#637](https://github.com/Krzysztof318/MailFathom/pull/637)).
+- **Breaking (MCP tool contract)** — **`get_email_content` takes `includeAttachmentContent` where it took
+  `includeAttachmentDetails`**, and every attachment's file name, media type, and decoded size are now returned
+  whether or not the call asks for anything. The old argument bought the metadata; the new one buys the bytes, so a
+  client that passed it to see what was attached needs to pass nothing at all. It is ignored the same way when it is
+  still sent, which here costs nothing — the metadata arrives regardless, and no attachment content is returned
+  without the new argument ([#633](https://github.com/Krzysztof318/MailFathom/pull/633)).
+- **`search_emails` can report a `retrievalMode` it never reported before.** `lexical` was the only value `0.4.0`
+  produced; `hybrid` is a second one, and a client matching on the field exactly rather than on the results should
+  expect it ([#555](https://github.com/Krzysztof318/MailFathom/pull/555)).
+- **Every SQL statement MailFathom runs is logged at `Debug` rather than `Information`.** A deployment at the default
+  level no longer writes one log record per database command, which is where the bulk of its log volume was going —
+  and those records carry the text of every query the mailbox is read with. Set
+  `Logging:LogLevel:Microsoft.EntityFrameworkCore.Database.Command` to `Debug` to get them back
+  ([#654](https://github.com/Krzysztof318/MailFathom/pull/654)).
+
+### Fixed
+
+- **The published `0.4.0` container could not start.** Its base image sets `ASPNETCORE_HTTP_PORTS`, `0.4.0` refuses
+  that variable by design, and the Dockerfile did not clear the inherited value — so the image failed startup on a
+  setting nobody had written, with a message naming a variable that is not in any configuration file
+  ([#575](https://github.com/Krzysztof318/MailFathom/pull/575)).
+- **An MCP endpoint configured with OAuth and nothing else threw on every request that carried no credential**,
+  including the health probes, which are documented as carrying none. The endpoint now answers an uncredentialed
+  request with the challenge it is supposed to, and the probes are served without one
+  ([#577](https://github.com/Krzysztof318/MailFathom/pull/577)).
+- **A `list_emails` date filter written at a non-zero UTC offset failed the whole listing.** `receivedOnOrAfter` and
+  `receivedBefore` reached the database unconverted, and anything but `+00:00` was refused there — so a client in a
+  time zone sent the value its clock produced and got a failure rather than a page. Both bounds are held as instants
+  now, and every offset names the same moment ([#612](https://github.com/Krzysztof318/MailFathom/pull/612)).
+
+### Security
+
+- **A question and the mail that answered it leave no copy at the provider.** A chat endpoint declaring
+  `Api: Responses` reached an API that retains what it is sent for thirty days by default and makes it readable in the
+  provider's dashboard — so adopting that API would have placed the operator's correspondence in a third party's log
+  because of a default nobody wrote. Every request states that it is stateless, and the model's reasoning is carried
+  between turns as the encrypted content the provider returns rather than by leaving the conversation behind
+  ([#636](https://github.com/Krzysztof318/MailFathom/pull/636)).
+- **What leaves the process to answer one question is bounded and countable.** The passages a run may send, how much of
+  any single message goes with them, and the total that may cross the boundary for one question are each configured and
+  each enforced before the call rather than after it
+  ([#592](https://github.com/Krzysztof318/MailFathom/pull/592)).
+- **A database the chart deploys keeps its superuser credential out of the pod that parses mail.** The application's
+  Secret is mounted whole, because MailFathom reads the keys your own configuration names, so the superuser password
+  lives in a second Secret the application never mounts and the chart refuses a values document that names one Secret
+  for both. The role MailFathom connects as is never a superuser in either arrangement
+  ([#658](https://github.com/Krzysztof318/MailFathom/pull/658)).
+
 ## [0.4.0] - 2026-08-07
 
 The fourth release, and the first that asks every deployment to edit its configuration before it will start. Two things
@@ -548,6 +774,7 @@ is the whole surface, key by key, including which keys reload and which need a r
   [`THIRD_PARTY_LICENSES.md`](https://github.com/Krzysztof318/MailFathom/blob/main/THIRD_PARTY_LICENSES.md) registers
   every dependency it ships beside ([#173](https://github.com/Krzysztof318/MailFathom/pull/173)).
 
+[0.5.0]: https://github.com/Krzysztof318/MailFathom/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/Krzysztof318/MailFathom/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/Krzysztof318/MailFathom/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/Krzysztof318/MailFathom/compare/v0.1.0...v0.2.0
