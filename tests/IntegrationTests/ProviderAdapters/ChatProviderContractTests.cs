@@ -89,9 +89,16 @@ public sealed class ChatProviderContractTests
         // that expected a particular word would fail on a correct answer phrased differently.
         Assert.False(string.IsNullOrWhiteSpace(answer.Text));
 
-        // Both stops are a real answer. A model that spends its budget reasoning reaches the ceiling on a question this
-        // short, and the text before the cut is still what the adapter had to return.
-        ChatGenerationStop[] answered = [ChatGenerationStop.Completed, ChatGenerationStop.OutputLimitReached];
+        // Which stop a finished answer carries belongs to the surface rather than to the model: chat completions names
+        // the reason generation stopped, while the responses API names one only where it stopped early, so an answer
+        // that simply finished reaches the port unreported. Both stops below are a real answer either way — a model
+        // that spends its budget reasoning reaches the ceiling on a question this short, and the text before the cut is
+        // still what the adapter had to return.
+        var finished = api is ChatProviderApi.Responses
+            ? ChatGenerationStop.Unreported
+            : ChatGenerationStop.Completed;
+
+        ChatGenerationStop[] answered = [finished, ChatGenerationStop.OutputLimitReached];
         Assert.Contains(answer.Stop, answered);
 
         // Usage is what a spend ceiling is measured in, so a provider that reports none is worth knowing about here
