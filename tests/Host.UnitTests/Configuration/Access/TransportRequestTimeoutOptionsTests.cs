@@ -24,7 +24,7 @@ public sealed class TransportRequestTimeoutOptionsTests
     /// Pins the product ceiling itself and nothing beyond it. It deliberately asserts no relationship to what an
     /// answering run may spend, because there is none to assert: a run is bounded by
     /// <c>MailAnswering:MaxProviderCallsPerRun</c> at eight AI provider invocations, and a ceiling enclosing that
-    /// maximum would sit past three-quarters of an hour. The default is chosen against what a request costs to hold
+    /// maximum would sit at forty minutes. The default is chosen against what a request costs to hold
     /// instead, so a maximal run being abandoned is the trade rather than a defect, and a test claiming to guard a
     /// relationship across the two sections would be describing a guarantee the code does not make.
     /// </summary>
