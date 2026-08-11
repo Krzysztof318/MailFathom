@@ -284,6 +284,21 @@ you out of `/api/admin`.
 
 Turning the limits off is an explicit value and costs one startup warning, as it does on the MCP endpoint.
 
+## Request timeouts
+
+`AdminEndpoint:RequestTimeout` bounds how long one administrative request may run before it is abandoned, answering
+`504` and releasing the concurrency permit it held. It is the same section the MCP endpoint carries, with the same keys
+and the same ten-minute default, configured independently.
+[Request timeouts](mcp-endpoint.md#request-timeouts) records the settings and the reasoning in full.
+
+**This is the endpoint whose default is worth narrowing.** The ten minutes exist to enclose two sequential AI provider
+invocations, which is what an `ask_mail` call can spend; no administrative route reaches a provider at all. Their work
+is a bounded database read or a configuration inspection, so a ceiling of a minute or less costs these routes nothing
+and shortens how long a stalled request can hold one of this endpoint's twenty permits.
+
+That matters more here than on the MCP surface for the reason the shared bucket does: the permits an administrative
+caller holds are the ones you need free to reach `/api/admin` while something else is going wrong.
+
 ## Three postures the endpoint warns about
 
 None is refused, because each is legitimate somewhere and only you know which you have.

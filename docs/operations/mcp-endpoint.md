@@ -1433,8 +1433,9 @@ the origin check, the certificate check, and authentication, so the work those d
 and comparing every configured key, on every request — happens before a permit is taken. The order is what makes the
 per-client limit possible at all: run ahead of authentication and there is no client to count against, and every request
 shares the anonymous bucket. What a bad credential costs the sender is therefore a partition it shares with every other
-unidentified request, not the work the server already did to refuse it. Bounding connections that never authenticate is a
-job for whatever fronts the process.
+unidentified request, not the work the server already did to refuse it. What bounds the connections underneath all of
+that — including the ones that never send a request at all — is [`ConnectionLimits`](configuration-reference.md#connectionlimits),
+which is a ceiling on the process rather than on this endpoint.
 
 Turning the limits off is an explicit value and costs one startup warning:
 
@@ -1445,6 +1446,66 @@ warn: MailFathom.Host.Hosting.Warnings.TransportRateLimitingStartupReport
       where something in front of this process already bounds the traffic reaching it. Remove
       McpEndpoint:RateLimiting:Enabled to run under the product defaults.
 ```
+
+## Request timeouts
+
+Rate limiting decides how much traffic is admitted. It does not decide how long an admitted request may hold what it was
+admitted with, and those are separate bounds on separate resources — which is why `RequestTimeout` is its own section
+beside `RateLimiting` rather than another number inside it.
+
+A concurrency permit is taken on the way in and released when the request ends. Without a ceiling, `MaxConcurrentRequests`
+bounds how many requests run at once and nothing bounds how long any of them lasts, so twenty slow requests take the
+endpoint out of service without exceeding any rate. An enabled endpoint therefore carries a ceiling by default, on the
+same reasoning the limits do.
+
+```json
+{
+  "McpEndpoint": {
+    "RequestTimeout": {
+      "Enabled": true,
+      "Duration": "00:10:00"
+    }
+  }
+}
+```
+
+| Setting | Default | Range | Meaning |
+|---|---|---|---|
+| `Enabled` | `true` | — | Whether a request that outlives `Duration` is abandoned |
+| `Duration` | `00:10:00` | 1s–1h | How long one request may run |
+
+A request that reaches the ceiling is abandoned: its `CancellationToken` is signalled, the response is `504`, and the
+concurrency permit it held is released. `AdminEndpoint:RequestTimeout` takes the same keys and the same default and is
+configured independently, exactly as the limits are.
+
+**Ten minutes is derived, not round.** An `ask_mail` call embeds the question and then generates an answer, which is two
+sequential invocations of the `AiProviderInvocation` resilience class, and that class's own `TotalTimeout` defaults to
+five minutes. A ceiling below the budget a provider was granted would abandon the request while it was still inside that
+budget, and the operator would read a gateway timeout where the provider's own classified failure belonged — the same
+nesting rule the resilience classes already follow among themselves.
+
+So the ceiling is a bound on a hang rather than a tight bound on a request, and narrowing it is what changes that. A
+deployment serving no AI-backed tool can drop it to a minute: every other tool answers from the local mailbox copy with
+a bounded query. The administrative endpoint reaches no provider at all, which makes it the one to narrow without having
+to ask what a tool call needs.
+
+**The ceiling is applied ahead of the rate limiter**, so time spent waiting for a limiter lease is inside it rather than
+outside. Under the default queue limits of `0` that wait is nothing; once a queue is configured it is the whole point,
+because a request queued for its client's tokens is already holding a concurrency permit.
+
+The probes are outside it. A named policy is attached to each endpoint rather than a default policy applied to every
+route, so a readiness answer is never abandoned because a mailbox query was slow — which would take the instance out of
+traffic for the one thing that was still working.
+
+What is in force is stated once at startup, one line per enabled endpoint:
+
+```text
+info: MailFathom.Host.Hosting.Warnings.TransportRequestTimeoutStartupReport
+      The MCP endpoint on /mcp abandons a request that has run for 00:10:00, answering 504 and releasing the
+      concurrency permit it held.
+```
+
+Turning it off is an explicit value and costs one startup warning, in the shape the rate limits use.
 
 ## What the endpoint records
 

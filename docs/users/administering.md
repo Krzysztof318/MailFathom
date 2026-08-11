@@ -60,6 +60,10 @@ Four things about that block are worth understanding before you copy it:
   caller may present wrong credentials, so the limits apply the moment you enable it and the applied numbers are stated
   at startup. [Rate limiting](../operations/admin-endpoint.md#rate-limiting) is where the settings and the one way this
   endpoint's limit differs from the MCP endpoint's are recorded.
+- **A request that runs too long is abandoned, also without your writing a number.** The ceiling defaults to ten
+  minutes because the MCP endpoint shares the setting and an AI-backed answer can legitimately take that long; no
+  administrative route reaches a provider, so this is the endpoint worth narrowing.
+  [Request timeouts](../operations/admin-endpoint.md#request-timeouts) is where that is recorded.
 
 ## Getting the command
 

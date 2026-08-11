@@ -94,6 +94,10 @@ internal sealed class McpEndpointOptions
     /// <remarks>Unlike the settings above, every value in this section has a product default, so an endpoint an operator enabled is bounded whether or not they wrote a number. The administrative endpoint configures its own copy of the same section, and neither endpoint's limits reach the other's traffic.</remarks>
     public TransportRateLimitingOptions RateLimiting { get; set; } = new();
 
+    /// <summary>Gets or sets how long one request may run before the endpoint abandons it.</summary>
+    /// <remarks>Defaulted throughout like <see cref="RateLimiting" /> and separate from it, because how much traffic is admitted and how long an admitted request may hold its permit are different questions a deployment answers independently.</remarks>
+    public TransportRequestTimeoutOptions RequestTimeout { get; set; } = new();
+
     /// <summary>Gets whether a client may authenticate with one of the configured API keys.</summary>
     public bool AllowsApiKey => this.ApiKeys().Count > 0;
 
@@ -222,6 +226,9 @@ internal sealed class McpEndpointOptions
 
         errors.AddRange(this.RateLimiting.FindConfigurationErrors()
             .Select(error => $"{SectionName}:{nameof(this.RateLimiting)}:{error}"));
+
+        errors.AddRange(this.RequestTimeout.FindConfigurationErrors()
+            .Select(error => $"{SectionName}:{nameof(this.RequestTimeout)}:{error}"));
 
         errors.AddRange(this.FindClientCertificateProfileErrors());
 

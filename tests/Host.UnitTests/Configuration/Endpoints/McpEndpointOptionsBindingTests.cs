@@ -47,6 +47,7 @@ public sealed class McpEndpointOptionsBindingTests
             ["McpEndpoint:RateLimiting:TokenCapacity"] = "40",
             ["McpEndpoint:RateLimiting:TokensPerReplenishmentPeriod"] = "10",
             ["McpEndpoint:RateLimiting:ReplenishmentPeriod"] = "00:00:30",
+            ["McpEndpoint:RequestTimeout:Duration"] = "00:02:00",
         });
 
         // Act
@@ -67,6 +68,7 @@ public sealed class McpEndpointOptionsBindingTests
         Assert.Equal(40, options.RateLimiting.TokenCapacity);
         Assert.Equal(10, options.RateLimiting.TokensPerReplenishmentPeriod);
         Assert.Equal(TimeSpan.FromSeconds(30), options.RateLimiting.ReplenishmentPeriod);
+        Assert.Equal(TimeSpan.FromMinutes(2), options.RequestTimeout.Duration);
         Assert.Empty(options.FindConfigurationErrors());
     }
 
@@ -245,6 +247,9 @@ public sealed class McpEndpointOptionsBindingTests
     [InlineData("McpEndpoint:RateLimiting:Enabeld", "false")]
     [InlineData("McpEndpoint:RateLimiting:MaxConcurrentRequest", "5")]
     [InlineData("McpEndpoint:RateLimit:MaxConcurrentRequests", "5")]
+    [InlineData("McpEndpoint:RequestTimeout:Enabeld", "false")]
+    [InlineData("McpEndpoint:RequestTimeout:Timeout", "00:02:00")]
+    [InlineData("McpEndpoint:RequestTimeouts:Duration", "00:02:00")]
     public void ReadFrom_AnUnrecognizedKey_FailsRatherThanBeingIgnored(string key, string value)
     {
         // Arrange

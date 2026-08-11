@@ -649,6 +649,30 @@ carries is who they are believed from, and **an unconfigured section believes ev
 `X-Forwarded-For` is never read, so the peer MailFathom observes stays the one that opened the connection, and the
 configured OAuth `Resource` stays a value you wrote rather than anything derived from a header.
 
+## `ConnectionLimits`
+
+How many connections this process accepts at once, across every listener it opens. The other section that belongs to
+the whole process rather than to a surface, and for a stronger reason than `ReverseProxy`: a connection is accepted
+before any routing has decided which endpoint it was for, so there is no per-surface form of this question to ask.
+
+**Read it as the process's ceiling, never as the sum of what the endpoints permit.** `McpEndpoint:RateLimiting:MaxConcurrentRequests`
+bounds what one surface serves at once; this bounds what the machine accepts at all, the probe listener included. The
+two numbers are deliberately far apart, because a connection is not a request — a client holds one open across several,
+and an idle one survives until the keep-alive timeout — so a ceiling near the request limit would refuse ordinary
+clients long before it refused a flood.
+
+It exists because every other limit is reached too late to see this. The rate limiter partitions a request that already
+has an `HttpContext`, and what a connection flood spends before that point — the accept, the TLS handshake, and on the
+MCP surface the client certificate's chain building — is the most expensive per-connection work the process does.
+
+| Key | Type | Default | Constraint | Change |
+| --- | --- | --- | --- | --- |
+| `ConnectionLimits:Enabled` | bool | `true` | Turning it off restores the framework's own default, which accepts connections until the operating system stops supplying them; it costs a startup warning | restart |
+| `ConnectionLimits:MaxConcurrentConnections` | int | `1000` | 1 – 100000; process-wide, across every listener | restart |
+
+Like every limit here it is counted in this process alone, so a deployment running several instances enforces it once
+per instance rather than once in total, and none of it is protection against a distributed flood.
+
 ## `McpEndpoint`
 
 Whether the protocol surface is served and what a client must present. The whole section is **restart** — it decides
@@ -768,6 +792,34 @@ that surface judges a credential behind the limiter.
 | `…:ReplenishmentPeriod` | TimeSpan | `00:01:00` | 1 s – 1 h | restart |
 | `…:RequestQueueLimit` | int | `0` | 0 – 1000, and below `MaxConcurrentRequests` | restart |
 
+### Request timeout — `McpEndpoint:RequestTimeout` and `AdminEndpoint:RequestTimeout`
+
+How long one request may run before the endpoint abandons it, answering `504` and releasing the concurrency permit it
+held. Defaulted throughout like the rate limits, carried by both endpoints with the same keys, and configured
+independently of them — because how much traffic is admitted and how long an admitted request may hold what it was
+admitted with are different questions, and a deployment may already have one answered in front of the process without
+the other.
+
+Without it, `MaxConcurrentRequests` bounds how many requests run at once and nothing bounds how long any of them lasts,
+so twenty slow requests take a surface out of service without exceeding any rate.
+
+| Key | Type | Default | Constraint | Change |
+| --- | --- | --- | --- | --- |
+| `…:Enabled` | bool | `true` | Turning it off costs a startup warning | restart |
+| `…:Duration` | TimeSpan | `00:10:00` | 1 s – 1 h | restart |
+
+**The default is derived rather than round, and narrowing it has one interaction worth knowing.** An `ask_mail` call
+embeds the question and then generates an answer, which is two sequential invocations of the `AiProviderInvocation`
+resilience class, whose own `TotalTimeout` defaults to five minutes — so ten minutes is what encloses both. Narrowing
+this below what a configured AI provider is allowed to spend reports a gateway timeout where that provider's own
+classified failure belonged. A deployment serving no AI-backed tool is the case to narrow it on: every other MCP tool
+answers from the local mailbox copy with a bounded query, so a minute is generous there. `AdminEndpoint` reaches no
+provider at all, which makes it the endpoint to narrow without having to ask what a tool call needs.
+
+The ceiling is applied ahead of the rate limiter, so time a request spends waiting for a limiter lease is inside it.
+That wait is nothing under the default queue limits of `0`, and is the whole point of the ordering once a queue is
+configured: a request queued for its caller's tokens already holds a concurrency permit.
+
 ## `AdminEndpoint`
 
 Whether the administrative surface the `mfctl` command reaches is served, and what a client must present. Its own
@@ -785,6 +837,7 @@ request or per handshake. [Administering a deployment](admin-endpoint.md) is the
 | `AdminEndpoint:Https:Endpoints:<n>` | list of profiles | empty | Same shape and rules as `McpEndpoint:Https:Endpoints:<n>`, read under the two `Transport` modes that terminate TLS | restart; material per handshake |
 | `AdminEndpoint:Https:Redirect` | block | on | Same shape and rules as `McpEndpoint:Https:Redirect`; its socket is this surface's own `BindAddress` and `Port`, so terminating TLS on both surfaces opens two clear-text ports that do not collide | restart |
 | `AdminEndpoint:RateLimiting` | block | bounded | Same shape, defaults, and rules as `McpEndpoint:RateLimiting` above; applied whether or not it is written | restart |
+| `AdminEndpoint:RequestTimeout` | block | bounded | Same shape, defaults, and rules as [`McpEndpoint:RequestTimeout`](#request-timeout--mcpendpointrequesttimeout-and-adminendpointrequesttimeout) above; applied whether or not it is written. This surface reaches no AI provider, so it is the one the default can be narrowed on freely | restart |
 
 The routes are served beneath `/api/admin`, which is a constant rather than a setting: a client is configured with a
 host and a port and appends the rest.

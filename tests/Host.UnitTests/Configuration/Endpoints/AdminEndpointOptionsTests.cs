@@ -136,6 +136,7 @@ public sealed class AdminEndpointOptionsTests
             TransportSurface.Admin.ApiKeySchemeName,
             TransportSurface.Admin.AccessPolicyName,
             TransportSurface.Admin.RateLimitingPolicyName,
+            TransportSurface.Admin.RequestTimeoutPolicyName,
             TransportSurface.Admin.OAuthSchemeNameFor("workforce"),
         ];
 
@@ -145,6 +146,7 @@ public sealed class AdminEndpointOptionsTests
             TransportSurface.Mcp.ApiKeySchemeName,
             TransportSurface.Mcp.AccessPolicyName,
             TransportSurface.Mcp.RateLimitingPolicyName,
+            TransportSurface.Mcp.RequestTimeoutPolicyName,
             TransportSurface.Mcp.OAuthSchemeNameFor("workforce"),
         ];
 
@@ -294,6 +296,57 @@ public sealed class AdminEndpointOptionsTests
         Assert.Equal(30, settings.RateLimiting.TokenCapacity);
         Assert.Equal(TimeSpan.FromSeconds(30), settings.RateLimiting.ReplenishmentPeriod);
         Assert.Empty(settings.FindConfigurationErrors());
+    }
+
+    /// <summary>
+    /// The administrative endpoint carries the same ceiling as the MCP one and configures it separately, which is the
+    /// point worth asserting: it is the surface that reaches no AI provider, so it is the one an operator narrows
+    /// without having to ask what a tool call needs.
+    /// </summary>
+    [Fact]
+    public void ReadFrom_TheRequestTimeoutSection_BindsIndependentlyOfTheMcpEndpoint()
+    {
+        // Arrange
+        var configuration = Configuration(new Dictionary<string, string?>
+        {
+            ["AdminEndpoint:Enabled"] = "true",
+            ["AdminEndpoint:RequestTimeout:Duration"] = "00:00:30",
+        });
+
+        // Act
+        var settings = AdminEndpointOptions.ReadFrom(configuration);
+
+        // Assert
+        Assert.True(settings.RequestTimeout.Enabled);
+        Assert.Equal(TimeSpan.FromSeconds(30), settings.RequestTimeout.Duration);
+        Assert.Empty(settings.FindConfigurationErrors());
+    }
+
+    [Fact]
+    public void RequestTimeout_WithNothingConfigured_BoundsTheEndpointOnTheProductDefault()
+    {
+        // Act
+        var settings = AdminEndpointOptions.ReadFrom(new ConfigurationBuilder().Build());
+
+        // Assert
+        Assert.True(settings.RequestTimeout.Enabled);
+        Assert.Equal(new TransportRequestTimeoutOptions().Duration, settings.RequestTimeout.Duration);
+    }
+
+    [Fact]
+    public void FindConfigurationErrors_AnUnusableRequestCeiling_IsRefusedUnderThisEndpointsSection()
+    {
+        // Arrange
+        var settings = EnabledEndpoint();
+        settings.RequestTimeout.Duration = TimeSpan.Zero;
+
+        // Act
+        var errors = settings.FindConfigurationErrors();
+
+        // Assert
+        Assert.Contains(
+            errors,
+            error => error.StartsWith("AdminEndpoint:RequestTimeout:Duration", StringComparison.Ordinal));
     }
 
     /// <summary>The same rules, reported under this section's own path so an operator knows which endpoint to fix.</summary>

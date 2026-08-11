@@ -624,6 +624,11 @@ try
     builder.Services.AddHostedService<McpTransportEncryptionWarning>();
     builder.Services.AddHostedService<ReverseProxyTrustWarning>();
     builder.Services.AddHostedService<TransportRateLimitingStartupReport>();
+
+    // Registered beside the rate-limiting report and unconditionally for the same reason: each report is what decides
+    // whether it has anything to say. They stay separate services because an operator turns either bound off alone.
+    builder.Services.AddHostedService<TransportRequestTimeoutStartupReport>();
+    builder.Services.AddHostedService<ConnectionLimitsStartupReport>();
     // Composed from the environment rather than resolved from the container, because the value it reports is one
     // OpenSSL read while it initialized and no configuration source can influence it afterwards. Registered
     // unconditionally for the same reason the warnings above are: the condition belongs in one place.
@@ -647,6 +652,22 @@ try
     }
 
     builder.Services.AddTrustedReverseProxy(reverseProxySettings);
+
+    // Read beside the reverse-proxy posture rather than with the endpoint sections, because it is the other setting
+    // that belongs to the process instead of to a surface: a connection is accepted before any routing has decided
+    // which endpoint it was for. Bound strictly like every section that settles a security posture.
+    var connectionLimitSettings = ConnectionLimitsOptions.ReadFrom(builder.Configuration);
+    builder.Services.AddSingleton(Options.Create(connectionLimitSettings));
+
+    var connectionLimitConfigurationErrors = connectionLimitSettings.FindConfigurationErrors();
+
+    if (connectionLimitConfigurationErrors.Count > 0)
+    {
+        throw new OptionsValidationException(
+            ConnectionLimitsOptions.SectionName,
+            typeof(ConnectionLimitsOptions),
+            connectionLimitConfigurationErrors);
+    }
 
     // Read once and registered, so the value that decides the route is the one every consumer resolves. Whether the
     // endpoint exists is decided while the application is being built, before a container that could resolve a snapshot
@@ -797,6 +818,36 @@ try
         builder.Services.AddTransportRateLimiting(boundedSurfaces);
     }
 
+    // Mapped beside the rate limits and read the same way: null means an operator turned the ceiling off, or the
+    // endpoint is not served, which are the two cases in which no policy is registered for it rather than one
+    // permitting an unbounded request.
+    var mcpRequestTimeout = mcpEndpointSettings is { Enabled: true, RequestTimeout.Enabled: true }
+        ? mcpEndpointSettings.RequestTimeout.Duration
+        : (TimeSpan?)null;
+
+    var adminRequestTimeout = adminEndpointSettings is { Enabled: true, RequestTimeout.Enabled: true }
+        ? adminEndpointSettings.RequestTimeout.Duration
+        : (TimeSpan?)null;
+
+    // Named policies rather than the framework's default policy, which would apply to every route in the process and
+    // so to the probes as well: a readiness answer abandoned because a mailbox query was slow would take the instance
+    // out of traffic for the one thing that was still working.
+    if (mcpRequestTimeout is not null || adminRequestTimeout is not null)
+    {
+        builder.Services.AddRequestTimeouts(requestTimeoutOptions =>
+        {
+            if (mcpRequestTimeout is { } mcpTimeout)
+            {
+                requestTimeoutOptions.AddPolicy(TransportSurface.Mcp.RequestTimeoutPolicyName, mcpTimeout);
+            }
+
+            if (adminRequestTimeout is { } adminTimeout)
+            {
+                requestTimeoutOptions.AddPolicy(TransportSurface.Admin.RequestTimeoutPolicyName, adminTimeout);
+            }
+        });
+    }
+
     const string adminCertificateStoreKey = "mailfathom.admin";
 
     // Registered whether or not any profile is configured, because the store is what the certificates are loaded into
@@ -833,6 +884,15 @@ try
     if (adminEndpointSettings.Enabled)
     {
         builder.Services.AddAdminTransportSecurity(adminEndpointSettings);
+    }
+
+    // A separate callback from the listener binding below, and unconditional, because the two decide different things:
+    // that one opens the sockets each surface asked for, and this one bounds what the server accepts on all of them at
+    // once. Several callbacks compose, so keeping them apart costs nothing and leaves each one about one decision.
+    if (connectionLimitSettings.Enabled)
+    {
+        builder.WebHost.ConfigureKestrel(kestrelOptions =>
+            kestrelOptions.Limits.MaxConcurrentConnections = connectionLimitSettings.MaxConcurrentConnections);
     }
 
     if (composedListeners.Listeners.Count > 0)
@@ -894,6 +954,10 @@ try
     // The same holds for the rate limiter, which is one middleware serving whichever endpoints carry a policy. Adding
     // it twice would acquire a lease from both limiters twice and count one request as two.
     var rateLimiterMiddlewareAdded = false;
+
+    // And for the request-timeout middleware, for the same reason again: it is one middleware reading whichever policy
+    // the resolved endpoint names, and a second copy would start a second timer over the same request.
+    var requestTimeoutMiddlewareAdded = false;
 
     // First, ahead of the exception handler and of every isolation check, so that nothing downstream ever reads a
     // scheme or host the proxy already corrected. Discovery, the challenge, and any address composed from a request
@@ -1006,6 +1070,17 @@ try
                 mcpBranch => mcpBranch.UseAuthentication());
         }
 
+        if (mcpRequestTimeout is not null || adminRequestTimeout is not null)
+        {
+            // Ahead of the rate limiter, so the ceiling covers the time a request spends waiting for a lease as well as
+            // the time it spends being served. That wait is nothing under the default queue limits of zero, and is the
+            // whole point of the ordering under a configured queue: a request queued for a caller's tokens is already
+            // holding a concurrency permit, so leaving it outside the ceiling would leave the one wait that can last
+            // until the next replenishment unbounded.
+            app.UseRequestTimeouts();
+            requestTimeoutMiddlewareAdded = true;
+        }
+
         if (boundedSurfaces.Count > 0)
         {
             // Behind authentication, so the MCP endpoint's per-client limit is counted under the identity that
@@ -1035,6 +1110,13 @@ try
             attachmentDownload.RequireRateLimiting(TransportSurface.Mcp.RateLimitingPolicyName);
         }
 
+        if (mcpRequestTimeout is not null)
+        {
+            // On the endpoint rather than as the default policy, for the reason the limiter is: the probes answer on
+            // routes this ceiling must never reach.
+            mcpEndpoint.WithRequestTimeout(TransportSurface.Mcp.RequestTimeoutPolicyName);
+        }
+
         if (mcpEndpointSettings.RequiresAuthentication)
         {
             app.UseAuthorization();
@@ -1054,6 +1136,13 @@ try
         // about to be refused for a wrong key has already spent capacity. That ordering is the whole point of bounding
         // this endpoint: unbounded key guessing is what it is exposed to, and the guesses are the traffic authorization
         // turns away.
+        // Ahead of the limiter for the reason it is ahead of it on the MCP branch, so a request queued for a lease is
+        // inside the ceiling rather than outside it.
+        if (adminRequestTimeout is not null && !requestTimeoutMiddlewareAdded)
+        {
+            app.UseRequestTimeouts();
+        }
+
         if (adminRateLimits is not null && !rateLimiterMiddlewareAdded)
         {
             app.UseRateLimiter();
@@ -1077,6 +1166,11 @@ try
         if (adminRateLimits is not null)
         {
             adminApi.RequireRateLimiting(TransportSurface.Admin.RateLimitingPolicyName);
+        }
+
+        if (adminRequestTimeout is not null)
+        {
+            adminApi.WithRequestTimeout(TransportSurface.Admin.RequestTimeoutPolicyName);
         }
 
         if (adminEndpointSettings.RequiresAuthentication)
