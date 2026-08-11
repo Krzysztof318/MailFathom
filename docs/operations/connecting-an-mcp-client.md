@@ -197,8 +197,8 @@ promises never to reuse, and an address is reassigned to whoever holds the mailb
 **In Keycloak** it is the **ID** shown on the user's own page under **Users**, a UUID.
 
 The reliable way is to ask the server, because it answers with the value the token will actually carry rather than with
-whatever the console labels an identifier. With an access token in hand — see the next step for one way to get one —
-the standard endpoint answers it:
+whatever the console labels an identifier. With an access token in hand —
+[step 8](#8-verify-before-you-touch-the-client) is one way to get one — the standard endpoint answers it:
 
 ```console
 $ curl -sS -H "Authorization: Bearer $ACCESS_TOKEN" \
@@ -300,17 +300,25 @@ Keycloak a public client with **Direct access grants** on and **Standard flow** 
 depends on is never modified for a probe, and delete it when you are done:
 
 ```console
-$ ACCESS_TOKEN=$(curl -sS -X POST \
+$ read -rs PROVIDER_PASSWORD
+$ ACCESS_TOKEN=$(printf '%s' "$PROVIDER_PASSWORD" | curl -sS -X POST \
     https://sso.example.test/realms/mailfathom/protocol/openid-connect/token \
     -d grant_type=password \
     -d client_id=mailfathom-connection-check \
-    -d 'scope=openid mailfathom.read' \
-    -d username=operator -d password="$PROVIDER_PASSWORD" | jq -r .access_token)
+    -d username=operator \
+    --data-urlencode 'scope=openid mailfathom.read' \
+    --data-urlencode 'password@-' | jq -r .access_token)
 ```
 
 Assign the client scope from step 2 to that probe client as well, or the token comes back without the audience and the
-check below fails for a reason that has nothing to do with MailFathom. The password reaches `curl` as a variable
-reference rather than as a literal on purpose: an argument list is readable by every process on the machine. Then:
+check below fails for a reason that has nothing to do with MailFathom.
+
+**The password goes in over standard input for a reason.** `--data-urlencode 'password@-'` reads the value from there and
+URL-encodes it, which is what keeps it out of `curl`'s argument list; writing `-d password="$PROVIDER_PASSWORD"` would
+not, because the shell expands the variable before `curl` starts and the plaintext then sits in `/proc/<pid>/cmdline` for
+the life of the request, readable by anything else on the machine exactly as a typed literal would be. `read -rs` is what
+keeps it out of the shell history and off the screen, which is a different exposure and the one a variable does answer.
+Then:
 
 ```console
 $ curl -sS -o /dev/null -w '%{http_code}\n' -X POST https://mail.example.com/mcp \
