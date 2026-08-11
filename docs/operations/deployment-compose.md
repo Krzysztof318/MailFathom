@@ -110,8 +110,8 @@ password is never on a path the service can read.
 
 **The encrypted systemd credentials the native installation uses do not reach this deployment**, and running it under
 Podman does not change that: Compose starts no per-service systemd unit under either engine, so a `systemd-credential:`
-reference resolves to nothing here. These files are protected by their own mode and by the host they sit on, which is
-what the directory permissions above are for.
+reference resolves to nothing here. These files are protected by the host they sit on and by the `0700` on `secrets/`
+above, which the page already names as the whole of the access control.
 [What an encrypted credential is bound to](secret-provisioning.md#what-an-encrypted-credential-is-bound-to) states the
 whole of that boundary, including which container shape does reach the path.
 
