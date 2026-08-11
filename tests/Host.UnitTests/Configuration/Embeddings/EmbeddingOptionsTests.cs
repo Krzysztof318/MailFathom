@@ -158,11 +158,11 @@ public sealed class EmbeddingOptionsTests
         Assert.Contains(errors, error => error.ErrorMessage!.Contains("Exactly one", StringComparison.Ordinal));
     }
 
-    /// <summary>The request carries a credential, so an unencrypted address would publish it to anyone on the path.</summary>
+    /// <summary>Only the two schemes a request could be sent over are addresses at all.</summary>
     [Theory]
-    [InlineData("http://provider.invalid/v1/")]
     [InlineData("provider.invalid/v1/")]
-    public void Validate_AnAddressThatIsNotAbsoluteHttps_IsRefused(string address)
+    [InlineData("ftp://provider.invalid/v1/")]
+    public void Validate_AnAddressThatIsNotAbsoluteHttpOrHttps_IsRefused(string address)
     {
         // Arrange
         var settings = new EmbeddingOptions();
@@ -172,7 +172,60 @@ public sealed class EmbeddingOptionsTests
         var errors = Validate(settings);
 
         // Assert
-        Assert.Contains(errors, error => error.ErrorMessage!.Contains("HTTPS", StringComparison.Ordinal));
+        Assert.Contains(errors, error => error.ErrorMessage!.Contains("absolute HTTP or HTTPS", StringComparison.Ordinal));
+    }
+
+    /// <summary>The declared endpoint carries a credential, so an unencrypted address would publish it to anything on the path.</summary>
+    [Fact]
+    public void Validate_ACredentialOverAPlainAddress_IsRefused()
+    {
+        // Arrange
+        var settings = new EmbeddingOptions();
+        settings.Endpoints.Add(Endpoint("primary", address: "http://127.0.0.1:11434/v1"));
+
+        // Act
+        var errors = Validate(settings);
+
+        // Assert
+        Assert.Contains(errors, error => error.ErrorMessage!.Contains("plain http Address", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// The shape of a model server the operator runs themselves, and the reason this role reaches the shared rule rather
+    /// than keeping a copy: a scheme rule of its own would refuse what the other role accepts.
+    /// </summary>
+    [Fact]
+    public void Validate_AnEndpointNeedingNoCredentialOnAPlainAddress_IsAccepted()
+    {
+        // Arrange
+        var settings = new EmbeddingOptions();
+        var endpoint = Endpoint("local-server", address: "http://model-server:8000/v1");
+        endpoint.ApiKey = null;
+        endpoint.Unauthenticated = true;
+        settings.Endpoints.Add(endpoint);
+
+        // Act
+        var errors = Validate(settings);
+
+        // Assert
+        Assert.Empty(errors);
+    }
+
+    /// <summary>Needing no credential is one of the three shapes rather than a fourth thing beside them.</summary>
+    [Fact]
+    public void Validate_AnEndpointDeclaringBothAKeyAndNoCredential_IsRefused()
+    {
+        // Arrange
+        var settings = new EmbeddingOptions();
+        var endpoint = Endpoint("primary");
+        endpoint.Unauthenticated = true;
+        settings.Endpoints.Add(endpoint);
+
+        // Act
+        var errors = Validate(settings);
+
+        // Assert
+        Assert.Contains(errors, error => error.ErrorMessage!.Contains("more than one", StringComparison.Ordinal));
     }
 
     /// <summary>An alias keys a credential, a resilience circuit, and every log line, so two endpoints cannot share one.</summary>
@@ -335,6 +388,27 @@ public sealed class EmbeddingOptionsTests
 
         // Assert
         Assert.Contains(errors, error => error.ErrorMessage!.Contains("kind ApiKey", StringComparison.Ordinal));
+    }
+
+    /// <summary>Needing no credential is declared on the endpoint, so naming it here would give a deployment two places to say it.</summary>
+    [Fact]
+    public void Validate_AnEntraCredentialOfKindUnauthenticated_IsRefused()
+    {
+        // Arrange
+        var settings = new EmbeddingOptions();
+        var endpoint = Endpoint("primary");
+        endpoint.ApiKey = null;
+        endpoint.EntraCredential = new ProviderEntraCredentialOptions
+        {
+            Kind = ProviderEndpointCredentialKind.Unauthenticated,
+        };
+        settings.Endpoints.Add(endpoint);
+
+        // Act
+        var errors = Validate(settings);
+
+        // Assert
+        Assert.Contains(errors, error => error.ErrorMessage!.Contains("kind Unauthenticated", StringComparison.Ordinal));
     }
 
     /// <summary>

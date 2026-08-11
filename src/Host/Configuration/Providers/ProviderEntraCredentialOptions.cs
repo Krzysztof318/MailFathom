@@ -25,7 +25,7 @@ namespace MailFathom.Host.Configuration.Providers;
 internal sealed class ProviderEntraCredentialOptions
 {
     /// <summary>Gets or sets which non-interactive shape the deployment holds.</summary>
-    /// <remarks><see cref="ProviderEndpointCredentialKind.ApiKey" /> is rejected here: a key is declared as one, in the endpoint's own key block.</remarks>
+    /// <remarks>The two members naming something other than a Microsoft Entra credential are rejected here: a key is declared as one in the endpoint's own key block, and an endpoint needing no credential declares that on the endpoint rather than inside a credential.</remarks>
     public ProviderEndpointCredentialKind Kind { get; set; } = ProviderEndpointCredentialKind.ManagedIdentity;
 
     /// <summary>Gets or sets the scope an access token is requested for.</summary>
@@ -62,6 +62,13 @@ internal sealed class ProviderEntraCredentialOptions
         if (this.Kind is ProviderEndpointCredentialKind.ApiKey)
         {
             yield return Error(endpointAlias, "declares a Microsoft Entra credential of kind ApiKey. A provider key is declared in the endpoint's ApiKey block instead.");
+
+            yield break;
+        }
+
+        if (this.Kind is ProviderEndpointCredentialKind.Unauthenticated)
+        {
+            yield return Error(endpointAlias, "declares a Microsoft Entra credential of kind Unauthenticated. An endpoint that asks for no credential declares Unauthenticated on the endpoint and no credential block at all.");
 
             yield break;
         }

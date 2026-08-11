@@ -485,6 +485,9 @@ try
     if (declaredEmbeddings?.IsConfigured is true || declaredChat?.IsConfigured is true)
     {
         builder.Services.AddSingleton<IProviderEndpointCredentialSource, ConfiguredProviderEndpointCredentialSource>();
+        // Registered under the same condition and for the same reason: an instance that declared no endpoint at all
+        // reaches none, so it has nothing to report about how it reaches them.
+        builder.Services.AddHostedService<AiProviderTransportEncryptionWarning>();
     }
 
     if (declaredEmbeddings?.IsConfigured is true)

@@ -120,6 +120,60 @@ public sealed class ConfiguredProviderEndpointCredentialSourceTests
         Assert.DoesNotContain("MISSING_KEY", failure.Message, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// A model server the operator runs themselves asks for no credential, so the request presents one that carries
+    /// nothing and no reference is resolved on its behalf — an endpoint with no key must not reach the resolver at all,
+    /// because a resolver asked for nothing reports a failure and would take the endpoint out of service.
+    /// </summary>
+    [Fact]
+    public async Task ResolveAsync_AnEndpointNeedingNoCredential_ResolvesNothingAndPresentsNothing()
+    {
+        // Arrange
+        var embeddings = new EmbeddingOptions();
+        embeddings.Endpoints.Add(new EmbeddingEndpointOptions
+        {
+            Alias = "local-server",
+            Provider = "self-hosted",
+            Model = "an-embedding-model",
+            Dimension = 4,
+            Address = "http://model-server:8000/v1",
+            Unauthenticated = true,
+        });
+
+        var source = SourceOver(embeddings, new ChatModelOptions());
+
+        // Act
+        using var credential = await source.ResolveAsync("local-server", TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(ProviderEndpointCredentialKind.Unauthenticated, credential.Kind);
+        Assert.Null(credential.ApiKey);
+        Assert.Null(credential.Entra);
+    }
+
+    /// <summary>The chat role reaches the same shape through the same lookup, so one role cannot resolve what the other does not.</summary>
+    [Fact]
+    public async Task ResolveAsync_AChatEndpointNeedingNoCredential_PresentsNothing()
+    {
+        // Arrange
+        var chat = new ChatModelOptions
+        {
+            Alias = "answering",
+            Model = "a-chat-model",
+            Address = "http://model-server:8000/v1",
+            Unauthenticated = true,
+        };
+
+        var source = SourceOver(new EmbeddingOptions(), chat);
+
+        // Act
+        using var credential = await source.ResolveAsync("answering", TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(ProviderEndpointCredentialKind.Unauthenticated, credential.Kind);
+        Assert.Null(credential.ApiKey);
+    }
+
     private static EmbeddingOptions EmbeddingsDeclaring(string alias, string secretReference)
     {
         var settings = new EmbeddingOptions();

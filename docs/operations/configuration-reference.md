@@ -326,14 +326,18 @@ disagree, naming both aliases and the property.
 
 An entry declares any service reachable over the OpenAI wire protocol, not one of a fixed set: `Provider`, `Model`, and
 `ModelVersion` are what the profile records, while `RoutedModelName` — or `Model` where that is empty — is the string a
-request is routed on. Two rules bind the address and the credential: an address is absolute HTTPS or startup refuses it,
-because the request carries a credential, and exactly one of `ApiKey` and `EntraCredential` is declared, because
-neither is what a forgotten reference looks like and both leaves unsaid which one a request presents. [Embedding
+request is routed on. Two rules bind the address and the credential, and one implementation applies them to this section
+and to `Chat` alike: an address is absolute HTTP or HTTPS, with a plain `http` one refused wherever the endpoint holds a
+credential, because the request would publish it to everything on the path; and exactly one of `ApiKey`,
+`EntraCredential`, and `Unauthenticated` is declared, because none of them is what a forgotten reference looks like and
+two leaves unsaid which one a request presents. [Embedding
 generation § An endpoint is any
 service that speaks the OpenAI wire
 protocol](../features/embedding-generation.md#an-endpoint-is-any-service-that-speaks-the-openai-wire-protocol) holds
 both rules with their reasons, what each setting decides, and a worked example of an endpoint that is neither OpenAI
-nor Azure.
+nor Azure. [Embedding generation § A model server you run
+yourself](../features/embedding-generation.md#a-model-server-you-run-yourself) covers the plain-address case, what it
+gains, what it gives up, and the startup warning an instance holding such an endpoint writes.
 
 | Key | Type | Default | Constraint | Change |
 | --- | --- | --- | --- | --- |
@@ -347,9 +351,10 @@ nor Azure.
 | `…:InputCharacterLimit` | int | `8000` | positive; what a passage is cut to before it is sent, which is what the model saw and therefore part of what a vector means | restart |
 | `…:PassageInstruction` | string | *(empty)* | at most 512 characters; empty for a model that requires none. Whitespace is refused, because it would register a second profile for a space identical to one already registered | restart |
 | `…:NormalizeVectors` | bool | `true` | whether the space's vectors are of unit length | restart |
-| `…:Address` | string | *(empty)* | absolute HTTPS; empty uses the provider library's default. A cloud resource's OpenAI-compatible address ends in `/openai/v1/` | restart |
+| `…:Address` | string | *(empty)* | absolute HTTP or HTTPS; a plain `http` one only for an endpoint declaring `Unauthenticated`. Empty uses the provider library's default. A cloud resource's OpenAI-compatible address ends in `/openai/v1/` | restart |
 | `…:SupportsRequestedDimension` | bool | `true` | whether the endpoint honours a requested width, so the narrower space is asked for rather than cut out of a wider answer | restart |
-| `…:ApiKey` | secret block | *(absent)* | the provider key. Exactly one of this and `EntraCredential` is declared | restart, value read per request |
+| `…:ApiKey` | secret block | *(absent)* | the provider key. Exactly one of this, `EntraCredential`, and `Unauthenticated` is declared | restart, value read per request |
+| `…:Unauthenticated` | bool | `false` | that this endpoint asks for no credential, so a request presents none — the shape of a model server you run yourself. Written rather than inferred from the other two being absent, because that is what a forgotten key reference looks like | restart |
 
 ### Microsoft Entra credential — `Embeddings:Endpoints:<n>:EntraCredential`
 
@@ -359,7 +364,7 @@ reaches an interactive browser credential and the developer-tool credentials of 
 
 | Key | Type | Default | Constraint | Change |
 | --- | --- | --- | --- | --- |
-| `…:Kind` | enum | `ManagedIdentity` | `ManagedIdentity`, `WorkloadIdentity`, `ClientSecret`, `ClientCertificate`. `ApiKey` is refused here; a key is declared as one | restart |
+| `…:Kind` | enum | `ManagedIdentity` | `ManagedIdentity`, `WorkloadIdentity`, `ClientSecret`, `ClientCertificate`. `ApiKey` and `Unauthenticated` are refused here; a key is declared as one, and an endpoint needing no credential says so on the endpoint | restart |
 | `…:TokenScope` | string | `https://ai.azure.com/.default` | required; the audience an access token is minted for. Declared rather than derived from the address, so a renamed service does not silently mint tokens for the wrong audience | restart |
 | `…:TenantId` | string | *(empty)* | required for `ClientSecret` and `ClientCertificate` | restart |
 | `…:ClientId` | string | *(empty)* | required for `ClientSecret` and `ClientCertificate`; optional for `ManagedIdentity`, where it selects a user-assigned identity | restart |
@@ -381,8 +386,9 @@ model's voice with nothing above able to tell. An operator who wants failover pu
 endpoint.
 
 The endpoint is any service reachable over the OpenAI wire protocol, under the same two rules the embedding chain
-follows: an absolute HTTPS address, and exactly one credential. [Chat generation § An endpoint is any service that
-speaks the OpenAI wire
+follows and through the same implementation of them: an absolute HTTP or HTTPS address with a plain `http` one refused
+wherever a credential is held, and exactly one of `ApiKey`, `EntraCredential`, and `Unauthenticated`. [Chat generation §
+An endpoint is any service that speaks the OpenAI wire
 protocol](../features/chat-generation.md#an-endpoint-is-any-service-that-speaks-the-openai-wire-protocol) carries a
 worked example of one that is neither OpenAI nor Azure, and `Chat:Api` is the key most often decided by which of the
 two paths such a service serves.
@@ -391,7 +397,7 @@ two paths such a service serves.
 | --- | --- | --- | --- | --- |
 | `Chat:Alias` | string | *(empty)* | writing one is what configures a chat provider at all; unique across every AI endpoint the deployment declares, embedding endpoints included. A section carrying other settings without it is refused rather than ignored | reload to rename, restart to declare or remove |
 | `Chat:Model` | string | — | required once an alias is written; what a request is routed to, which for a cloud deployment is the deployment's own name rather than the vendor's model identifier | reload |
-| `Chat:Address` | string | *(empty)* | absolute HTTPS; empty uses the provider library's default. A cloud resource's OpenAI-compatible address ends in `/openai/v1/` | reload |
+| `Chat:Address` | string | *(empty)* | absolute HTTP or HTTPS; a plain `http` one only for an endpoint declaring `Chat:Unauthenticated`. Empty uses the provider library's default. A cloud resource's OpenAI-compatible address ends in `/openai/v1/` | reload |
 | `Chat:Api` | enum | `ChatCompletions` | `ChatCompletions` or `Responses`; which of the provider's two request APIs a call goes to under the declared address. Declared rather than derived, because the routed model name is the operator's own deployment name and nothing about it says which paths the server serves. State `Responses` for a reasoning model that refuses function tools beside a stated effort; a server that does not serve that path answers *request refused* | reload |
 | `Chat:MaxOutputTokens` | int | `1024` | 1 – 200000; what one answer may occupy. Reaching it is not a failure — the answer arrives marked as cut short | reload |
 | `Chat:Temperature` | float | *(unset)* | 0 – 2; left unset sends nothing, which is required by the models that reject the parameter outright | reload |
@@ -400,7 +406,8 @@ two paths such a service serves.
 | `Chat:MaxMessagesPerRequest` | int | `64` | 1 – 512; the turns one request carries, refused rather than truncated | reload |
 | `Chat:MaxRequestCharacters` | int | `120000` | 1 – 4000000; what those turns may add up to. Stated in characters rather than tokens because counting tokens would mean carrying the model's own tokenizer; set it below what the model's context window allows | reload |
 | `Chat:RequestTimeout` | TimeSpan | `00:02:00` | positive; one request. Longer than an embedding request's by default, because generating an answer takes as long as the answer is | reload |
-| `Chat:ApiKey` | secret block | *(absent)* | the provider key. Exactly one of this and `EntraCredential` is declared | reload, value read per request |
+| `Chat:ApiKey` | secret block | *(absent)* | the provider key. Exactly one of this, `EntraCredential`, and `Unauthenticated` is declared | reload, value read per request |
+| `Chat:Unauthenticated` | bool | `false` | that this endpoint asks for no credential, so a request presents none — the shape of a model server you run yourself. Written rather than inferred from the other two being absent, because that is what a forgotten key reference looks like | reload |
 
 **What a reload changes here, and what it does not.** Everything the declared endpoint says is read again per
 question, so correcting a model the provider refused — the ordinary case, because a wrong model is only discovered from

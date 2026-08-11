@@ -48,6 +48,14 @@ internal sealed class ConfiguredProviderEndpointCredentialSource(
             ?? throw new InvalidOperationException(
                 $"AI endpoint '{endpointAlias}' is not present in the configuration currently in force.");
 
+        if (declaration.Unauthenticated)
+        {
+            // Nothing to resolve and nothing to release: the endpoint asked for no credential, so the request presents
+            // none. Startup already refused this beside a key or a Microsoft Entra credential, so reading it first
+            // decides the shape rather than competing with them.
+            return Task.FromResult(ProviderEndpointCredential.Unauthenticated());
+        }
+
         return declaration.Entra is { } entra
             ? this.ResolveEntraCredentialAsync(endpointAlias, entra, cancellationToken)
             : this.ResolveApiKeyAsync(endpointAlias, declaration.ApiKey, cancellationToken);
@@ -65,13 +73,16 @@ internal sealed class ConfiguredProviderEndpointCredentialSource(
 
         if (embeddingEndpoint is not null)
         {
-            return new ProviderCredentialDeclaration(embeddingEndpoint.ApiKey, embeddingEndpoint.EntraCredential);
+            return new ProviderCredentialDeclaration(
+                embeddingEndpoint.ApiKey,
+                embeddingEndpoint.EntraCredential,
+                embeddingEndpoint.Unauthenticated);
         }
 
         var chat = chatSettings.Current;
 
         return chat.IsConfigured && NamesEndpoint(chat.Alias, endpointAlias)
-            ? new ProviderCredentialDeclaration(chat.ApiKey, chat.EntraCredential)
+            ? new ProviderCredentialDeclaration(chat.ApiKey, chat.EntraCredential, chat.Unauthenticated)
             : null;
     }
 
@@ -153,8 +164,9 @@ internal sealed class ConfiguredProviderEndpointCredentialSource(
 
     private static string? NullWhenEmpty(string value) => value.Trim() is { Length: > 0 } trimmed ? trimmed : null;
 
-    /// <summary>The two credential blocks an endpoint of either section declares, once the section it came from stops mattering.</summary>
+    /// <summary>The three credential shapes an endpoint of either section chooses between, once the section it came from stops mattering.</summary>
     private sealed record ProviderCredentialDeclaration(
         ConfiguredSecret? ApiKey,
-        ProviderEntraCredentialOptions? Entra);
+        ProviderEntraCredentialOptions? Entra,
+        bool Unauthenticated);
 }

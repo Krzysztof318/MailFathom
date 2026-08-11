@@ -1,6 +1,6 @@
 # Chat generation
 
-<!-- describes: src/AI/Chat/**, src/AI/Providers/**, src/AI/ProviderAdapters/Chat*.cs, src/AI/ProviderAdapters/ProviderChatModelClient.cs, src/AI/ProviderAdapters/ProviderCallFailure*.cs, src/Application/Chat/**, src/Application/AiProviders/**, src/Host/Configuration/Chat/**, src/Host/Configuration/Providers/**, src/Host/Hosting/AiProviderHealthCheck.cs, src/Infrastructure/Observability/AiProviderHealthTracker.cs -->
+<!-- describes: src/AI/Chat/**, src/AI/Providers/**, src/AI/ProviderAdapters/Chat*.cs, src/AI/ProviderAdapters/ProviderChatModelClient.cs, src/AI/ProviderAdapters/ProviderCallFailure*.cs, src/Application/Chat/**, src/Application/AiProviders/**, src/Host/Configuration/Chat/**, src/Host/Configuration/Providers/**, src/Host/Hosting/AiProviderHealthCheck.cs, src/Host/Hosting/Warnings/AiProviderTransportEncryptionWarning.cs, src/Infrastructure/Observability/AiProviderHealthTracker.cs -->
 
 Text in, generated text out. This page describes the second kind of outbound AI call MailFathom makes: what a
 deployment declares to enable it, what one call is allowed to spend, what a failing call is classified as, and how an
@@ -75,11 +75,20 @@ There is no vendor and no model identity in the declaration beside the routed na
 embedding endpoint rather than an omission. A vector is stored and later compared against other vectors, so which model
 produced it has to be recorded and proved; an answer is produced, presented, and gone.
 
-**The address rule is the same one, for the same reason.** An address is absolute and HTTPS or startup refuses it,
-because the request carries a credential; an empty address means the provider library's own default, which is the
-first-party OpenAI API, so any other service writes its own address out. [What an address has to
-be](embedding-generation.md#what-an-address-has-to-be) carries the rule and what it costs an operator with a
-plain-HTTP model server.
+**The address and credential rules are the same ones, for the same reasons, and one implementation judges both roles.**
+An address is absolute HTTP or HTTPS; a plain `http` one is refused wherever the endpoint holds a credential, because
+the request would publish it to everything on the path; and exactly one of a provider key, a Microsoft Entra credential,
+and `Unauthenticated` says what a request presents. An empty address means the provider library's own default, which is
+the first-party OpenAI API, so any other service writes its own address out. [What an address has to
+be](embedding-generation.md#what-an-address-has-to-be) and [authentication has three
+shapes](embedding-generation.md#authentication-has-three-shapes) carry both rules with their reasoning.
+
+**A chat model you run yourself is declared here the same way an embedding model is** — the plain address plus
+`"Unauthenticated": true` — and what such a deployment gains and gives up is set out under [a model server you run
+yourself](embedding-generation.md#a-model-server-you-run-yourself). One thing is worth repeating on this page, because
+this role is where it bites hardest: the hop carries the question asked, the mail passages the model is given to answer
+it, and the answer it returns, all readable by anything on the network path. The startup report names the endpoint so
+that fact is visible rather than inferred.
 
 ### A worked example: an endpoint that is neither
 
@@ -161,13 +170,15 @@ tool loop, and without it each turn after the first would begin without what the
 mail it read, which the model then pays to work out again. A model that does not reason returns none, and the request is
 otherwise unchanged.
 
-## Authentication has two shapes
+## Authentication has three shapes
 
-The same two, under the same rules, as an embedding endpoint's: **either** a provider key **or** one of four
-non-interactive Microsoft Entra credentials, never both and never neither. [Embedding generation § Authentication has
-two shapes](embedding-generation.md#authentication-has-two-shapes) states them in full, including why
-`DefaultAzureCredential` is deliberately not used and what rotating each shape costs. One credential source resolves
-both sections, keyed by the alias, which is what the deployment-wide uniqueness rule above exists to make safe.
+The same three, under the same rules and through the same implementation of them as an embedding endpoint's: **exactly
+one** of a provider key, one of four non-interactive Microsoft Entra credentials, and `Unauthenticated`. [Embedding
+generation § Authentication has three
+shapes](embedding-generation.md#authentication-has-three-shapes) states them in full, including why
+`DefaultAzureCredential` is deliberately not used, what rotating each shape costs, and why needing no credential is
+written rather than left out. One credential source resolves both sections, keyed by the alias, which is what the
+deployment-wide uniqueness rule above exists to make safe.
 
 ## The model and its parameters come from configuration
 
