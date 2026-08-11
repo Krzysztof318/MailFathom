@@ -202,6 +202,47 @@ public sealed class EmailContentReaderTests
         Assert.Empty(linkIssuer.Requested);
     }
 
+    /// <summary>
+    /// A link list shorter than the attachment list must not cost the descriptions. The key ring is reloadable, so an
+    /// operator emptying it between the guard and the call gets fewer links back than the message has files — and an
+    /// email answered with no attachments at all, beside counts saying it has some, is the one inconsistency a caller
+    /// has no way to detect.
+    /// </summary>
+    [Fact]
+    public async Task ReadContentAsync_FewerLinksThanAttachments_KeepsEveryDescriptionAndReportsTheRestUnavailable()
+    {
+        // Arrange
+        var summary = SyntheticEmailSummaries.Create(attachmentCount: 3);
+        var reader = ReaderOver(
+            summary,
+            RendererReturning(RenderingOf(
+                attachments:
+                [
+                    AttachmentOf("first.pdf", "application/pdf", 1024),
+                    AttachmentOf("second.pdf", "application/pdf", 2048),
+                    AttachmentOf("third.pdf", "application/pdf", 4096),
+                ])),
+            linkIssuer: new RecordingAttachmentDownloadLinkIssuer(issueAtMost: 1));
+
+        // Act
+        var result = await reader.ReadContentAsync(
+            RequestFor([summary.StoredEmailId], includeAttachmentDownloadLinks: true),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        var attachments = ContentOf(Assert.Single(result.Emails)).Attachments;
+        Assert.Equal(
+            ["first.pdf", "second.pdf", "third.pdf"],
+            attachments.Select(attachment => attachment.Description.FileName?.Value));
+        Assert.Equal(
+            [
+                AttachmentDownloadAvailability.Issued,
+                AttachmentDownloadAvailability.Unavailable,
+                AttachmentDownloadAvailability.Unavailable,
+            ],
+            attachments.Select(attachment => attachment.Download.Availability));
+    }
+
     /// <summary>Minting resolves key material, so a message with nothing to mint for must not reach the issuer at all.</summary>
     [Fact]
     public async Task ReadContentAsync_EmailCarryingNoAttachments_MintsNothingEvenWhenLinksWereRequested()

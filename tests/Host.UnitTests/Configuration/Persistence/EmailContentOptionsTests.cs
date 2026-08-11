@@ -8,7 +8,7 @@ using Xunit;
 
 namespace MailFathom.Host.UnitTests.Configuration.Persistence;
 
-/// <summary>Covers the four bounds a deployment may configure on what one read of message content returns.</summary>
+/// <summary>Covers the two bounds a deployment may configure on what one read of message content returns, and the download block beside them.</summary>
 public sealed class EmailContentOptionsTests
 {
     /// <summary>A deployment that configures nothing reads mail under bounds rather than under none.</summary>
@@ -134,9 +134,9 @@ public sealed class EmailContentOptionsTests
         Assert.Empty(results);
     }
 
-    /// <summary>The attachment bounds have defaults of their own, so a deployment that configures nothing still has them.</summary>
+    /// <summary>The download block has a default of its own, so a deployment that configures nothing still has one.</summary>
     [Fact]
-    public void Validate_UnconfiguredDeployment_AcceptsTheDefaultAttachmentBounds()
+    public void Validate_UnconfiguredDeployment_AcceptsTheDefaultAttachmentDownloadWindow()
     {
         // Arrange
         var options = new EmailContentOptions();
@@ -146,7 +146,6 @@ public sealed class EmailContentOptionsTests
 
         // Assert
         Assert.Empty(results);
-        Assert.Null(options.AttachmentDownloads.PublicBaseAddress);
         Assert.Equal(TimeSpan.FromMinutes(10), options.AttachmentDownloads.LinkLifetime);
     }
 

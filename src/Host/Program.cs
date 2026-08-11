@@ -138,6 +138,15 @@ try
             binderOptions => binderOptions.ErrorOnUnknownConfiguration = true)
         .ValidateDataAnnotations()
         .ValidateOnStart();
+    // A configuration root of its own rather than a block inside the feature that first needed it. The address clients
+    // reach this deployment at is a property of the installation, so an operator answers it once and whatever else has
+    // to hand back an absolute address later reads the same key instead of adding a second one beside it.
+    builder.Services.AddOptions<DeploymentOptions>()
+        .Bind(
+            builder.Configuration.GetSection(DeploymentOptions.SectionName),
+            binderOptions => binderOptions.ErrorOnUnknownConfiguration = true)
+        .ValidateDataAnnotations()
+        .ValidateOnStart();
     // A configuration root of its own, because what a deployment embeds with is a property of that deployment rather
     // than of its database or its mail accounts, and a root is also what gives its keys their own secret-name
     // uniqueness scope. An absent section is a deployment that embeds nothing and serves lexical search, which
@@ -299,17 +308,15 @@ try
         };
     });
     // A singleton beside the scoped read bounds above, because what it carries is where this deployment publishes itself
-    // and how long a capability it hands out lives — two facts about the process rather than about a request. The route
-    // is composed onto the declared address here, so the address a link points at and the route this host maps below are
-    // one decision written once.
-    builder.Services.AddSingleton(provider =>
-    {
-        var downloadSettings = provider.GetRequiredService<IOptions<EmailContentOptions>>().Value.AttachmentDownloads;
-
-        return new AttachmentDownloadSettings(
-            downloadSettings.ComposeDownloadAddressPrefix(EmailAttachmentDownloadEndpoint.RoutePrefix),
-            downloadSettings.LinkLifetime);
-    });
+    // and how long a capability it hands out lives — two facts about the process rather than about a request. The two
+    // come from different sections deliberately: the address is a property of the installation that anything handing
+    // back an absolute URL will want, and the lifetime belongs to the capability this one feature issues. The route is
+    // composed onto the address here, so the address a link points at and the route this host maps below are one
+    // decision written once.
+    builder.Services.AddSingleton(provider => new AttachmentDownloadSettings(
+        provider.GetRequiredService<IOptions<DeploymentOptions>>().Value
+            .ComposeAddressFor(EmailAttachmentDownloadEndpoint.RoutePrefix),
+        provider.GetRequiredService<IOptions<EmailContentOptions>>().Value.AttachmentDownloads.LinkLifetime));
     builder.Services.AddScoped(provider =>
     {
         var backfillSettings = provider.GetRequiredService<IOptions<MailExtractionBackfillOptions>>().Value;

@@ -17,8 +17,9 @@ namespace MailFathom.Host.Configuration.Persistence;
 /// </para>
 /// <para>
 /// Attachments are bounded by neither, and have no byte bound of their own, because no response carries their octets.
-/// What a caller receives for a file is a link to fetch it, and what that block configures is where the link points and
-/// how long it lives rather than how much of a file it may carry.
+/// What a caller receives for a file is a link to fetch it, and what that block configures is how long the link lives
+/// rather than how much of a file it may carry. Where it points is a fact about the deployment rather than about
+/// attachments, so it is <see cref="DeploymentOptions.PublicBaseAddress" /> instead.
 /// </para>
 /// </remarks>
 [SuppressMessage("Performance", "CA1812:Avoid uninstantiated internal classes", Justification = "The options framework materializes this type during configuration binding.")]
@@ -58,8 +59,8 @@ internal sealed class EmailContentOptions : IValidatableObject
     [Range(2_000, 2_000_000)]
     public int MaxCharactersPerRead { get; set; } = 200_000;
 
-    /// <summary>Gets or sets where an attachment download link points and how long it stays redeemable.</summary>
-    /// <remarks>An absent block is a deployment that has declared no public address, which issues no link and serves every other part of a read exactly as it would otherwise.</remarks>
+    /// <summary>Gets or sets how long an attachment download link stays redeemable.</summary>
+    /// <remarks>An absent block takes the working default. Whether any link is issued at all is decided elsewhere, by whether the deployment declared a public address.</remarks>
     public AttachmentDownloadOptions AttachmentDownloads { get; set; } = new();
 
     /// <summary>Checks what no range attribute can state on its own.</summary>

@@ -220,6 +220,25 @@ The ring holds several keys so that rotation needs no downtime: move `ActiveKeyI
 key configured, and every value still carrying it keeps opening under it. Removing a key the database still references
 makes those values unopenable, and the failure appears at the next read rather than at the edit.
 
+## `Deployment`
+
+What this installation is, rather than what any one surface it serves does. One key today, and a root of its own for
+that reason: the address clients reach this deployment at is not a property of the feature that first needed it, so an
+operator answers it once and whatever else has to hand back an absolute address later reads the same key.
+
+| Key | Type | Default | Constraint | Change |
+| --- | --- | --- | --- | --- |
+| `Deployment:PublicBaseAddress` | url | — | Absolute, `https` unless the host is loopback, no path, no query, no fragment | restart |
+
+**It has no default on purpose.** Only an operator knows which name a client reaches this process by, and a guess would
+produce addresses that resolve to nothing or, worse, to somebody else. Nothing derives it from a request either: an
+address composed from a `Host` header would let whoever called a tool decide where the URL it receives points.
+
+It carries no path because this process serves its routes at its root, and clear text is refused off this machine
+because what is composed beneath it may be a capability — a secret in transit. Today the one consumer is the
+[attachment download link](../features/email-content.md#what-a-download-link-is-and-what-bounds-it); a deployment that
+declares no address issues none, which is a supported posture rather than a misconfiguration.
+
 ## `MailboxSearch`
 
 The deployment-wide privacy bound on what a search result may quote, whether the result was ranked lexically or
@@ -240,14 +259,12 @@ weighs. [Email content](../features/email-content.md) records how each bound is 
 | --- | --- | --- | --- | --- |
 | `EmailContent:MaxBodyCharacters` | int | `100000` | 1000 – 1000000; each body representation is truncated to it, explicitly | restart |
 | `EmailContent:MaxCharactersPerRead` | int | `200000` | 2000 – 2000000, and at least twice `MaxBodyCharacters`; the body characters one call returns across every email it names | restart |
-| `EmailContent:AttachmentDownloads:PublicBaseAddress` | url | — | Absolute, `https` unless the host is loopback, no path, no query, no fragment; a deployment that declares none issues no attachment link at all | restart |
 | `EmailContent:AttachmentDownloads:LinkLifetime` | duration | `00:10:00` | 1 to 30 minutes; how long a minted link stays redeemable, refused outside that range rather than clamped | restart |
 
-**`PublicBaseAddress` is the address clients reach this deployment at, and it has no default on purpose.** A link is
-composed from it rather than from the request's `Host` header, so nothing a caller sends can decide where the URL it
-receives points. Issuing links also needs a [data-encryption key ring](#dataencryption): the signing key is derived from
-it rather than provisioned separately, so a deployment that configures no ring serves every other part of a read and
-issues no link.
+Two things decide whether any link is issued at all, and neither is here. [`Deployment`](#deployment) has to declare the
+address a link is composed from, and [`DataEncryption`](#dataencryption) has to configure a ring, because the signing
+key is derived from it rather than provisioned separately. A deployment missing either serves every other part of a
+read and answers each attachment with `downloadState: unavailable`.
 
 ## `Embeddings`
 

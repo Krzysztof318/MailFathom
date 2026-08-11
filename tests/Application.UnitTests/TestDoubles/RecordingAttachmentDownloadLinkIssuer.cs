@@ -16,9 +16,14 @@ namespace MailFathom.Application.UnitTests.TestDoubles;
 /// </remarks>
 /// <param name="canIssueLinks">Whether this deployment is configured to mint anything.</param>
 /// <param name="expiresAt">The expiry every minted link carries.</param>
+/// <param name="issueAtMost">
+/// A ceiling on how many links come back, which models the key ring being emptied between the guard and the call — the
+/// one way the real issuer answers with fewer links than the message has attachments.
+/// </param>
 internal sealed class RecordingAttachmentDownloadLinkIssuer(
     bool canIssueLinks = true,
-    DateTimeOffset? expiresAt = null)
+    DateTimeOffset? expiresAt = null,
+    int? issueAtMost = null)
     : IAttachmentDownloadLinkIssuer
 {
     /// <summary>The instant a minted link expires when a test states none.</summary>
@@ -42,7 +47,8 @@ internal sealed class RecordingAttachmentDownloadLinkIssuer(
 
         return Task.FromResult<IReadOnlyList<AttachmentDownloadLink>>(
         [
-            .. Enumerable.Range(0, attachmentCount).Select(position => new AttachmentDownloadLink(
+            .. Enumerable.Range(0, Math.Min(attachmentCount, issueAtMost ?? attachmentCount))
+                .Select(position => new AttachmentDownloadLink(
                 new Uri($"https://mailfathom.example.test/attachments/{storedEmailId.Value:N}-{position}"),
                 expiresAt ?? DefaultExpiry)),
         ]);

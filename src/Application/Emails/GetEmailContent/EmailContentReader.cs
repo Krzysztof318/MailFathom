@@ -220,9 +220,17 @@ public sealed class EmailContentReader
 
         var links = await this.linkIssuer.IssueAsync(storedEmailId, attachments.Count, cancellationToken);
 
-        return [.. attachments.Zip(
-            links,
-            (description, link) => new ReadEmailAttachment(description, AttachmentDownload.Issued(link)))];
+        // Paired by position rather than zipped, because a zip over a shorter link list would drop the descriptions
+        // beyond it rather than report them without a link. The lists can differ: the issuer reads the key ring at the
+        // moment it mints, and the ring is reloadable, so an operator emptying it between the check above and the call
+        // here gets an empty list back — and an email answered with no attachments at all, beside counts saying it has
+        // some, is the one inconsistency a caller has no way to detect.
+        return
+        [
+            .. attachments.Select((description, position) => new ReadEmailAttachment(
+                description,
+                position < links.Count ? AttachmentDownload.Issued(links[position]) : AttachmentDownload.Unavailable)),
+        ];
     }
 
     /// <summary>Counts what one outcome drew from the read's character budget.</summary>

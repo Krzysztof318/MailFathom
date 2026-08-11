@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Common.ClientAssertions;
+using MailFathom.Host.Api;
 using MailFathom.Host.Configuration.Endpoints;
 using MailFathom.Host.Security.ApiKeys;
 using MailFathom.Mcp;
@@ -42,16 +43,33 @@ internal readonly record struct TransportSurface
     private readonly string? name;
     private readonly string? routePrefix;
     private readonly string? clientAssertionAudience;
+    private readonly string[]? furtherRoutePrefixes;
 
-    private TransportSurface(string name, string routePrefix, string clientAssertionAudience)
+    private TransportSurface(
+        string name,
+        string routePrefix,
+        string clientAssertionAudience,
+        string[]? furtherRoutePrefixes = null)
     {
         this.name = name;
         this.routePrefix = routePrefix;
         this.clientAssertionAudience = clientAssertionAudience;
+        this.furtherRoutePrefixes = furtherRoutePrefixes;
     }
 
     /// <summary>Gets the surface serving the MCP protocol.</summary>
-    internal static TransportSurface Mcp { get; } = new("Mcp", McpEndpointRoute.Path, ClientAssertion.McpAudience);
+    /// <remarks>
+    /// It serves the attachment download route as well as the protocol route. The two carry opposite credential
+    /// policies — one requires whatever the endpoint configured, the other admits a signed capability and nothing else —
+    /// and they are still one surface, because what a surface bounds is the process's own capacity rather than a
+    /// caller's authority: both read the same mailbox, hold the same response streams open, and are enabled and
+    /// disabled together.
+    /// </remarks>
+    internal static TransportSurface Mcp { get; } = new(
+        "Mcp",
+        McpEndpointRoute.Path,
+        ClientAssertion.McpAudience,
+        [EmailAttachmentDownloadEndpoint.RoutePrefix]);
 
     /// <summary>Gets the surface serving the administrative API the <c>mfctl</c> command reaches.</summary>
     /// <remarks>Separate from <see cref="Mcp" /> because reading a mailbox and administering the service that reads it are different authorities, and a credential provisioned for one authenticates nothing on the other.</remarks>
@@ -78,6 +96,22 @@ internal readonly record struct TransportSurface
     /// </remarks>
     internal string RoutePrefix => this.routePrefix
         ?? throw new InvalidOperationException("The value is the default of the struct and names no transport surface.");
+
+    /// <summary>Reports whether a request path is one this surface serves.</summary>
+    /// <param name="path">The path the request arrived at.</param>
+    /// <returns><see langword="true" /> when the path is beneath one of this surface's prefixes.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when the value is the struct default rather than a surface.</exception>
+    /// <remarks>
+    /// A surface may serve routes under more than one prefix, so recognizing one from a request is asking this rather
+    /// than comparing against <see cref="RoutePrefix" />. The difference is not cosmetic: the process-wide rate limiter
+    /// rides on one application-wide limiter and gives whatever it does not recognize no limiter at all, so a route this
+    /// method failed to claim would be served with no concurrency bound rather than with a wrong one.
+    /// </remarks>
+    internal bool Serves(PathString path) =>
+        path.StartsWithSegments(this.RoutePrefix)
+        || Array.Exists(
+            this.furtherRoutePrefixes ?? [],
+            prefix => path.StartsWithSegments(prefix));
 
     /// <summary>Gets the name this surface's rate-limiting policy is registered under.</summary>
     /// <exception cref="InvalidOperationException">Thrown when the value is the struct default rather than a surface.</exception>

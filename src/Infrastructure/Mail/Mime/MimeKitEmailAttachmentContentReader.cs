@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.Diagnostics.CodeAnalysis;
+using System.Text.RegularExpressions;
 using MailFathom.Application.EmailContent.Attachments;
 using MailFathom.Application.EmailContent.Storage;
 using MailFathom.Application.Emails.Extraction;
@@ -107,6 +108,15 @@ internal sealed class MimeKitEmailAttachmentContentReader : IEmailAttachmentCont
         {
             // Bytes that no longer parse are a damaged or badly formed local copy, which is the caller's to act on and
             // is the same finding the renderer reports for the same message.
+            return OpenedEmailAttachmentResult.Unreadable();
+        }
+        catch (RegexMatchTimeoutException)
+        {
+            // The walk runs the same bounded scan for embedded-resource references the renderer does, and a match
+            // timeout is a wall-clock decision that varies with load — so the message the renderer let through can
+            // defeat the scan here moments later. Reported identically, because the alternative is this route answering
+            // 500 for one stored message while every other refusal is a 404, which tells whoever holds a capability
+            // that this message is different from a forgery.
             return OpenedEmailAttachmentResult.Unreadable();
         }
         finally

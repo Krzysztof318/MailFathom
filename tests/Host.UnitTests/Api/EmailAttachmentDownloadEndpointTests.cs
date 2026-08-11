@@ -88,6 +88,32 @@ public sealed class EmailAttachmentDownloadEndpointTests
     }
 
     /// <summary>
+    /// The response is mail content on an ordinary cacheable `GET`, and the deployments this route is documented for
+    /// put a reverse proxy in front of it. An intermediary applying a default freshness lifetime would keep serving the
+    /// file for that URL after the capability expired, which takes the expiry out of the revocation model it is the
+    /// whole of and copies the octets somewhere MailFathom does not control.
+    /// </summary>
+    [Fact]
+    public async Task DownloadAsync_ValidCapability_ForbidsAnIntermediaryFromStoringTheResponse()
+    {
+        // Arrange
+        var context = new DefaultHttpContext();
+        using var body = new MemoryStream();
+        context.Response.Body = body;
+
+        // Act
+        await EmailAttachmentDownloadEndpoint.DownloadAsync(
+            "capability",
+            TicketReaderRedeeming(new AttachmentDownloadTicket(StoredEmailId.Create(Guid.CreateVersion7()), 0)),
+            AttachmentOpening(new StubOpenedEmailAttachment("invoice.pdf", "application/pdf", "%PDF-1.7"u8.ToArray())),
+            context,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal("no-store", context.Response.Headers.CacheControl.ToString());
+    }
+
+    /// <summary>
     /// A file name is text a sender chose, so it reaches the header through the type that encodes it rather than by
     /// being concatenated into one. A name that could otherwise close the quoting or open a second header must not.
     /// </summary>

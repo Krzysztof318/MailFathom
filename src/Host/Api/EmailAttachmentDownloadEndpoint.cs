@@ -111,6 +111,13 @@ internal static class EmailAttachmentDownloadEndpoint
     /// The length is the size the same parse measured, so a reader knows what to expect and a truncated transfer is
     /// visible as one rather than as a shorter file.
     /// </para>
+    /// <para>
+    /// <c>no-store</c> is what keeps the window meaningful. This is an ordinary cacheable <c>GET</c> whose response is
+    /// mail content, and the deployments this route is documented for put a reverse proxy in front of it: an
+    /// intermediary applying a default freshness lifetime would keep serving the file for that URL after the capability
+    /// expired, which would put the octets somewhere MailFathom does not control and take the expiry out of the
+    /// revocation model it is the whole of.
+    /// </para>
     /// </remarks>
     private static void Describe(HttpResponse response, ExtractedEmailAttachment description)
     {
@@ -127,6 +134,7 @@ internal static class EmailAttachmentDownloadEndpoint
 
         response.Headers.ContentDisposition = disposition.ToString();
         response.Headers.XContentTypeOptions = "nosniff";
+        response.Headers.CacheControl = "no-store";
     }
 
     private static NotFound<ProblemDetails> Refused() =>

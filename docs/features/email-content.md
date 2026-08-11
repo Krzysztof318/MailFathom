@@ -132,7 +132,7 @@ an oversight. A listing is a browse over a mailbox, where a file name would be s
 the caller has not opened; a content read has already returned the body in full, so a file name adds nothing about that
 message a caller does not already hold.
 
-A read that asks for no link mints none, and one whose message carries no attachment reaches the issuer at all. Both
+A read that asks for no link mints none, and one whose message carries no attachment never reaches the issuer at all. Both
 matter because minting resolves the deployment's key material: an ordinary read of ordinary mail touches the key ring
 zero times. The entry says which case it was.
 
@@ -155,14 +155,16 @@ of what they name.
 
 | Setting | Value | What it decides |
 |---|---|---|
-| `EmailContent:AttachmentDownloads:PublicBaseAddress` | absolute, no default | Where a link points, and whether any is issued at all |
+| `Deployment:PublicBaseAddress` | absolute, no default | Where a link points, and whether any is issued at all |
 | `EmailContent:AttachmentDownloads:LinkLifetime` | 1 – 30 minutes, default 10 minutes | How long a minted link stays redeemable |
 
 **The address is declared, never derived from the request.** A URL composed from a `Host` header would let whoever
-called the tool decide where the link it receives points. A deployment that declares none serves every other part of a
-read and issues no link, which the attachment reports as `Unavailable`; so does one that configures no
-[data-encryption key ring](../operations/secret-provisioning.md#the-data-encryption-key), because the signing key is derived
-from that ring rather than from a secret of its own.
+called the tool decide where the link it receives points. It sits under `Deployment` rather than beside the lifetime
+because it is a fact about the installation rather than about attachments: anything that later hands a caller an
+absolute address asks the same question, and an operator should answer it once. A deployment that declares none serves
+every other part of a read and issues no link, which the attachment reports as `Unavailable`; so does one that
+configures no [data-encryption key ring](../operations/secret-provisioning.md#the-data-encryption-key), because the
+signing key is derived from that ring rather than from a secret of its own.
 
 **The lifetime is the whole of a link's revocation model**, which is why both ends of its range belong to the product
 rather than to the operator. Below a minute nothing could reliably be redeemed — the URL still has to cross a protocol
@@ -181,7 +183,8 @@ prefetch would each spend it. The window is the control, not the count.
 signature is the whole of the access control, deliberately: a link exists to be handed to whatever actually fetches
 files — a browser, a downloader, a client's HTTP stack — and none of those can attach an MCP credential, so requiring
 one would make the capability unusable by its only callers. What stands beside the signature is the ten-minute window,
-the scope of one attachment of one email, the MCP surface's own transport and rate limiting, and the resolution below.
+the scope of one attachment of one email, the MCP surface's own transport, its per-caller rate limit and its
+process-wide concurrency limit — the route belongs to that surface for exactly this reason — and the resolution below.
 
 Redemption reads the attachment through the same store, the same integrity check, and the same MIME walk
 `get_email_content` reads it through, then streams that one part's decoded octets to the response. Reading afresh is
@@ -198,7 +201,9 @@ The response states the attachment's own media type and file name, both of which
 is parsed before it is echoed and falls back to `application/octet-stream` when it is not a media type, and the file name
 travels through the header type that applies RFC 5987 encoding. It is always served as `Content-Disposition: attachment`
 with `X-Content-Type-Options: nosniff`, because these are sender-controlled bytes on the address the operator publishes
-MailFathom at. Neither the URL, the capability, the file name, nor any octet reaches a log.
+MailFathom at, and with `Cache-Control: no-store`, because an intermediary that stored the response would keep serving
+the file for that URL after the capability expired — which would take the expiry out of the revocation model it is the
+whole of. Neither the URL, the capability, the file name, nor any octet reaches a log.
 
 ### The descriptions are re-derived, never stored
 

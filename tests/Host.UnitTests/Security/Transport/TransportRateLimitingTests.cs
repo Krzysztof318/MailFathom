@@ -122,6 +122,49 @@ public sealed class TransportRateLimitingTests
         DisposeAll(leases);
     }
 
+    /// <summary>
+    /// The attachment download route belongs to the MCP surface and must take a permit from its process-wide limiter.
+    /// It is the one route in the process that admits no credential, and each redemption loads a stored message,
+    /// parses it, and holds a response stream open — so a route this partition failed to claim would be served with no
+    /// concurrency bound at all while the authenticated route doing the same work is bounded.
+    /// </summary>
+    [Fact]
+    public void PartitionForProcess_ForAttachmentDownloads_SpendsTheMcpSurfacesConcurrency()
+    {
+        // Arrange
+        var boundedSurfaces = McpOnly(Limits(maxConcurrentRequests: 2));
+        using var limiter = ProcessLimiter(boundedSurfaces);
+
+        // Act
+        var leases = AcquireAll(limiter, () => RequestTo("/attachments/AQIDBAUGBwgJ.CgsMDQ4PEBES"), attempts: 3);
+
+        // Assert
+        Assert.Equal([true, true, false], leases.Select(lease => lease.IsAcquired));
+
+        DisposeAll(leases);
+    }
+
+    /// <summary>The two routes share one permit count, because what the limit bounds is the process rather than a caller.</summary>
+    [Fact]
+    public void PartitionForProcess_ForAttachmentDownloadsBesideProtocolRequests_CountsThemAgainstOneLimit()
+    {
+        // Arrange
+        var boundedSurfaces = McpOnly(Limits(maxConcurrentRequests: 2));
+        using var limiter = ProcessLimiter(boundedSurfaces);
+
+        // Act
+        var onTheProtocolRoute = limiter.AttemptAcquire(McpRequest());
+        var onTheDownloadRoute = limiter.AttemptAcquire(RequestTo("/attachments/AQIDBAUGBwgJ.CgsMDQ4PEBES"));
+        var beyondTheLimit = limiter.AttemptAcquire(RequestTo("/attachments/EhMUFRYXGBka.GxwdHh8gISIj"));
+
+        // Assert
+        Assert.Equal(
+            [true, true, false],
+            new[] { onTheProtocolRoute, onTheDownloadRoute, beyondTheLimit }.Select(lease => lease.IsAcquired));
+
+        DisposeAll([onTheProtocolRoute, onTheDownloadRoute, beyondTheLimit]);
+    }
+
     [Fact]
     public void PartitionForProcess_ForAdministrativeRequests_AdmitsExactlyTheConfiguredConcurrency()
     {
