@@ -202,16 +202,27 @@ internal sealed class OpenAiCompatibleClientFactory
         options.RetryPolicy = new ClientRetryPolicy(maxRetries: 0);
     }
 
-    /// <summary>Resolves the bearer-token policy for an endpoint authenticated with Microsoft Entra.</summary>
+    /// <summary>Resolves the policy every request to one endpoint is sent under, for each shape that is not a key.</summary>
     /// <remarks>
-    /// The credential is built once per endpoint and kept, because fetching an access token is what it exists to do
+    /// <para>
+    /// An endpoint declaring no credential is reached through the policy that adds nothing, because the client library
+    /// offers no construction taking neither a key nor a policy. Everything else here is a Microsoft Entra credential.
+    /// </para>
+    /// <para>
+    /// That credential is built once per endpoint and kept, because fetching an access token is what it exists to do
     /// and it caches the token it fetched. Building one per request would discard that cache and turn every provider
     /// call into a token request as well. The consequence is that rotating the client secret of a registered
     /// application takes effect at the next restart, while rotating a provider key — the shape with no token to cache —
     /// takes effect on the next call.
+    /// </para>
     /// </remarks>
-    private BearerTokenPolicy AuthenticationPolicyFor(string endpointAlias, ProviderEndpointCredential credential)
+    private AuthenticationPolicy AuthenticationPolicyFor(string endpointAlias, ProviderEndpointCredential credential)
     {
+        if (credential.Kind is ProviderEndpointCredentialKind.Unauthenticated)
+        {
+            return UnauthenticatedRequestPolicy.Instance;
+        }
+
         var declaration = credential.Entra!;
         var tokenCredential = this.entraCredentials.GetOrAdd(
             endpointAlias,

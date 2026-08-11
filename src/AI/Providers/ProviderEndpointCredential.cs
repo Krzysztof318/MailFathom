@@ -72,6 +72,19 @@ public sealed class ProviderEndpointCredential : IDisposable
         return new ProviderEndpointCredential(declaration.Kind, apiKey: null, declaration, resolvedMaterial);
     }
 
+    /// <summary>Builds the credential of an endpoint that asks for none, which presents nothing.</summary>
+    /// <returns>The credential.</returns>
+    /// <remarks>
+    /// A value rather than a null credential, so every caller goes on receiving one and the request that carries no
+    /// authentication is a declared shape instead of a missing object nobody has to handle. It holds no material, so
+    /// disposing it releases nothing.
+    /// </remarks>
+    public static ProviderEndpointCredential Unauthenticated() => new(
+        ProviderEndpointCredentialKind.Unauthenticated,
+        apiKey: null,
+        entra: null,
+        resolvedMaterial: null);
+
     /// <inheritdoc />
     public void Dispose() => this.resolvedMaterial?.Dispose();
 }

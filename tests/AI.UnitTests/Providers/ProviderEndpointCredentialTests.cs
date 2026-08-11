@@ -53,6 +53,22 @@ public sealed class ProviderEndpointCredentialTests
     }
 
     /// <summary>
+    /// An endpoint that asks for no credential still hands one to the client construction, so nothing above has a null
+    /// to handle. What it carries is nothing at all, in both shapes and in material.
+    /// </summary>
+    [Fact]
+    public void Unauthenticated_CarriesNeitherAKeyNorAnEntraDeclaration()
+    {
+        // Act
+        using var credential = ProviderEndpointCredential.Unauthenticated();
+
+        // Assert
+        Assert.Equal(ProviderEndpointCredentialKind.Unauthenticated, credential.Kind);
+        Assert.Null(credential.ApiKey);
+        Assert.Null(credential.Entra);
+    }
+
+    /// <summary>
     /// The window in which a process dump could hold the material is bounded by one request rather than by uptime, so
     /// releasing the credential has to release what it was read from.
     /// </summary>

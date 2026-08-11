@@ -2,6 +2,9 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using System.Globalization;
+using System.Net.Http.Headers;
+using System.Text;
 using MailFathom.AI.Chat;
 using MailFathom.AI.ProviderAdapters;
 using MailFathom.AI.Providers;
@@ -66,6 +69,78 @@ public sealed class OpenAiCompatibleClientFactoryTests
 
         // Assert
         Assert.NotNull(generator);
+    }
+
+    /// <summary>The shape of a model server the operator runs themselves, which asks for no credential at all.</summary>
+    [Fact]
+    public void OpenEmbeddingGenerator_AnEndpointNeedingNoCredential_OpensAGenerator()
+    {
+        // Arrange
+        using var handler = new FakeHttpMessageHandler(
+            (_, _) => Task.FromResult(new HttpResponseMessage(System.Net.HttpStatusCode.OK)));
+        using var transport = new HttpClient(handler, disposeHandler: false);
+        using var credential = ProviderEndpointCredential.Unauthenticated();
+
+        var endpoint = EmbeddingDeclarations.Endpoint("local-server", address: "http://model-server:8000/v1");
+
+        // Act
+        using var generator = this.factory.OpenEmbeddingGenerator(endpoint, credential, transport);
+
+        // Assert
+        Assert.NotNull(generator);
+    }
+
+    /// <summary>
+    /// What "no credential" has to mean on the wire. The client library takes either a key or an authentication policy,
+    /// so the shape with neither is a policy that adds nothing — and a placeholder key put there instead would send an
+    /// authorization header the operator never wrote, which is the failure this proves does not happen.
+    /// </summary>
+    [Fact]
+    public async Task OpenEmbeddingGenerator_AnEndpointNeedingNoCredential_SendsNoAuthorizationHeader()
+    {
+        // Arrange
+        HttpRequestHeaders? sentHeaders = null;
+        using var handler = new FakeHttpMessageHandler((request, _) =>
+        {
+            sentHeaders = request.Headers;
+
+            return Task.FromResult(new HttpResponseMessage(System.Net.HttpStatusCode.OK)
+            {
+                Content = new StringContent(OneVectorOfWidth(4), Encoding.UTF8, "application/json"),
+            });
+        });
+        using var transport = new HttpClient(handler, disposeHandler: false);
+        using var credential = ProviderEndpointCredential.Unauthenticated();
+
+        var endpoint = EmbeddingDeclarations.Endpoint("local-server", address: "http://model-server:8000/v1");
+        using var generator = this.factory.OpenEmbeddingGenerator(endpoint, credential, transport);
+
+        // Act
+        await generator.GenerateAsync(["a passage"], cancellationToken: TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.NotNull(sentHeaders);
+        Assert.Null(sentHeaders.Authorization);
+        Assert.DoesNotContain(sentHeaders, header => header.Key.Contains("api-key", StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>The other role reaches the same server through the same construction, so neither is left unreachable.</summary>
+    [Fact]
+    public void OpenChatClient_AnEndpointNeedingNoCredential_OpensAClient()
+    {
+        // Arrange
+        using var handler = new FakeHttpMessageHandler(
+            (_, _) => Task.FromResult(new HttpResponseMessage(System.Net.HttpStatusCode.OK)));
+        using var transport = new HttpClient(handler, disposeHandler: false);
+        using var credential = ProviderEndpointCredential.Unauthenticated();
+
+        var endpoint = ChatDeclarations.Endpoint("local-server", address: "http://model-server:8000/v1");
+
+        // Act
+        using var client = this.factory.OpenChatClient(endpoint, credential, transport);
+
+        // Assert
+        Assert.NotNull(client);
     }
 
     /// <summary>An endpoint with no address of its own is the provider's first-party API at the library's default.</summary>
@@ -214,5 +289,17 @@ public sealed class OpenAiCompatibleClientFactoryTests
             ChatDeclarations.Endpoint(api: (ChatProviderApi)7),
             credential,
             transport));
+    }
+
+    /// <summary>The narrowest embeddings answer a client will read, so a request can be sent and its headers inspected.</summary>
+    private static string OneVectorOfWidth(int width)
+    {
+        var components = Enumerable
+            .Range(0, width)
+            .Select(_ => (1d / Math.Sqrt(width)).ToString("R", CultureInfo.InvariantCulture));
+
+        return "{\"object\":\"list\",\"model\":\"an-embedding-model\",\"data\":[{\"object\":\"embedding\","
+            + $"\"index\":0,\"embedding\":[{string.Join(',', components)}]}}],"
+            + "\"usage\":{\"prompt_tokens\":1,\"total_tokens\":1}}";
     }
 }

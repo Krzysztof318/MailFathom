@@ -37,4 +37,13 @@ public enum ProviderEndpointCredentialKind
 
     /// <summary>A registered application authenticating with its certificate.</summary>
     ClientCertificate = 4,
+
+    /// <summary>Nothing at all: the endpoint asks for no credential, and the request carries none.</summary>
+    /// <remarks>
+    /// The ordinary shape of a model server the operator runs themselves, which admits a caller by being reachable only
+    /// from the network it was put on. It is a member of this set rather than an absence outside it, because an
+    /// endpoint that needs no credential has to be able to say so: an omission is what a forgotten key reference looks
+    /// like, and startup goes on refusing that.
+    /// </remarks>
+    Unauthenticated = 5,
 }

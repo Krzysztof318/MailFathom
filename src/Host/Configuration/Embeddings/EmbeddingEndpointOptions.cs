@@ -25,7 +25,7 @@ namespace MailFathom.Host.Configuration.Embeddings;
 /// and so a model released after this version can be declared without one.
 /// </para>
 /// </remarks>
-internal sealed class EmbeddingEndpointOptions
+internal sealed class EmbeddingEndpointOptions : IProviderEndpointReachDeclaration
 {
     /// <summary>Gets or sets the deployment's own name for this endpoint.</summary>
     /// <remarks>
@@ -80,9 +80,10 @@ internal sealed class EmbeddingEndpointOptions
     /// <summary>Gets or sets the base address requests are sent to.</summary>
     /// <remarks>
     /// Empty uses the provider library's own default, which is what a first-party OpenAI endpoint needs. A cloud
-    /// deployment sets the resource's OpenAI-compatible address, which ends in <c>/openai/v1/</c>. The scheme is not a
-    /// preference: the request carries a credential, so an <c>http</c> address would publish it to anyone on the path
-    /// and startup refuses one.
+    /// deployment sets the resource's OpenAI-compatible address, which ends in <c>/openai/v1/</c>. A plain <c>http</c>
+    /// address is refused wherever this endpoint holds a credential, because the request would publish it to anything
+    /// on the path; it is accepted for an endpoint declaring <see cref="Unauthenticated" />, which is the shape of a
+    /// model server the operator runs themselves.
     /// </remarks>
     public string Address { get; set; } = string.Empty;
 
@@ -96,12 +97,20 @@ internal sealed class EmbeddingEndpointOptions
     public bool SupportsRequestedDimension { get; set; } = true;
 
     /// <summary>Gets or sets the reference to the provider key this endpoint is authenticated with.</summary>
-    /// <remarks>Absent for an endpoint authenticated with Microsoft Entra, and absent by default rather than an empty block, so secret discovery does not find an unresolvable reference nobody wrote.</remarks>
+    /// <remarks>Absent for an endpoint reached with Microsoft Entra or with no credential at all, and absent by default rather than an empty block, so secret discovery does not find an unresolvable reference nobody wrote.</remarks>
     public ConfiguredSecret? ApiKey { get; set; }
 
     /// <summary>Gets or sets the non-interactive Microsoft Entra credential this endpoint is authenticated with.</summary>
-    /// <remarks>Absent for an endpoint authenticated with a key. Exactly one of the two is declared, and startup refuses both or neither.</remarks>
+    /// <remarks>Absent for an endpoint reached with a key or with no credential at all. Exactly one of the three shapes is declared, and startup refuses none of them or more than one.</remarks>
     public ProviderEntraCredentialOptions? EntraCredential { get; set; }
+
+    /// <summary>Gets or sets whether this endpoint asks for no credential, so a request presents none.</summary>
+    /// <remarks>
+    /// The shape of a model server the operator runs themselves, which admits a caller by being reachable only from the
+    /// network it was put on. Written rather than inferred from the absence of the other two, because an omission is
+    /// exactly what a forgotten key reference looks like and startup has to go on refusing that.
+    /// </remarks>
+    public bool Unauthenticated { get; set; }
 
     /// <summary>Reports every reason this endpoint could not be used, by reading the declaration alone.</summary>
     /// <returns>One result per rule this declaration breaks.</returns>
@@ -129,16 +138,9 @@ internal sealed class EmbeddingEndpointOptions
                 $"declares a Dimension of {this.Dimension}, above the {IndexableVectorWidth.GreatestStorable} a vector column stores.");
         }
 
-        if (this.ApiKey is null == this.EntraCredential is null)
+        foreach (var error in ProviderEndpointReachRules.FindConfigurationErrors(DescribeEndpoint(alias), this))
         {
-            yield return Error(
-                alias,
-                "declares neither a provider key nor a Microsoft Entra credential, or declares both. Exactly one authenticates an endpoint.");
-        }
-
-        if (this.Address.Length > 0 && !IsUsableAddress(this.Address))
-        {
-            yield return Error(alias, "declares an Address that is not an absolute HTTPS address.");
+            yield return error;
         }
 
         if (this.PassageInstruction.Length > 0 && this.PassageInstruction.Trim().Length == 0)
@@ -180,10 +182,8 @@ internal sealed class EmbeddingEndpointOptions
             this.SupportsRequestedDimension);
     }
 
-    private static bool IsUsableAddress(string address) =>
-        Uri.TryCreate(address, UriKind.Absolute, out var parsed)
-        && parsed.Scheme == Uri.UriSchemeHttps;
+    private static string DescribeEndpoint(string endpointAlias) => $"Embedding endpoint '{endpointAlias}'";
 
     private static ValidationResult Error(string endpointAlias, string detail) =>
-        new($"Embedding endpoint '{endpointAlias}' {detail}");
+        new($"{DescribeEndpoint(endpointAlias)} {detail}");
 }

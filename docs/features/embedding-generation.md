@@ -1,6 +1,6 @@
 # Embedding generation
 
-<!-- describes: src/AI/Embeddings/**, src/AI/Providers/**, src/AI/ProviderAdapters/**, src/Application/Emails/Embeddings/**, src/Host/Configuration/Embeddings/**, src/Host/Configuration/Providers/** -->
+<!-- describes: src/AI/Embeddings/**, src/AI/Providers/**, src/AI/ProviderAdapters/**, src/Application/Emails/Embeddings/**, src/Host/Configuration/Embeddings/**, src/Host/Configuration/Providers/**, src/Host/Hosting/Warnings/AiProviderTransportEncryptionWarning.cs -->
 
 A chunk is a passage of text. A vector is where that passage lands in a space a model defines, and two vectors of one
 space can be compared, which is what makes semantic search possible at all. This page describes how MailFathom turns
@@ -106,7 +106,7 @@ parameter would be a list of model names in code, and it would be wrong the week
 
 **`Address` and the credential are where the endpoint is and what it presents.** Neither is part of a profile — moving
 either changes where a vector is bought, never what it means. Both carry a rule, stated in full in [what an address has
-to be](#what-an-address-has-to-be) and [authentication has two shapes](#authentication-has-two-shapes) below.
+to be](#what-an-address-has-to-be) and [authentication has three shapes](#authentication-has-three-shapes) below.
 
 ## Vector width is a database decision
 
@@ -204,32 +204,80 @@ nothing here can ask a service what it serves without paying for a request.
 
 ## What an address has to be
 
-**Absolute, and HTTPS.** Startup refuses anything else, naming the endpoint alias and the rule. The scheme is not a
-preference: the request carries a credential, so a plain `http` address would publish that credential to everyone on
-the path between this deployment and the service, and an endpoint declared once wrongly would go on doing it on every
-call.
+**Absolute, and HTTP or HTTPS.** Startup refuses anything else, naming the endpoint alias and the rule.
+
+**A credential never travels in the clear.** A plain `http` address is refused wherever the endpoint declares a provider
+key or a Microsoft Entra credential, because the request would publish that credential to everything on the path between
+this deployment and the service, and an endpoint declared once wrongly would go on doing it on every call. That is the
+rule the whole scheme check was ever about: what makes a plain address dangerous is the secret travelling on it, so an
+endpoint holding no secret is a different situation rather than an exception to the same one, and it is the one shape a
+plain address is accepted for.
 
 **Empty means the provider library's own default**, which is the first-party OpenAI API. That is a convenience for the
 one case it fits and a trap for every other, so any endpoint that is not first-party OpenAI writes the address out —
 including a cloud deployment, whose resource has an address of its own ending in `/openai/v1/`.
 
-One consequence is worth stating plainly, because it is the shape an operator most often arrives with: a model server
-on a private address, serving plain HTTP with no credential at all, cannot be declared. Neither rule reads the network —
-a loopback or private address is accepted where it is HTTPS and carries a credential, and refused where it is not,
-exactly as a public one would be.
+## A model server you run yourself
 
-## Authentication has two shapes
+Every local inference server presents one shape: the OpenAI wire protocol, on a private or loopback address, over plain
+HTTP, with no credential in front of it. Declaring one is an ordinary endpoint entry that writes the plain address and
+`"Unauthenticated": true`, and it reaches the same client construction, the same resilience pipeline, and the same
+ceilings as a vendor endpoint.
 
-An endpoint carries **either** a provider key **or** a Microsoft Entra credential, never both and never neither, and
-startup refuses any other combination, naming the alias. Neither is the shape a forgotten reference takes — an operator
+```json
+{
+  "Embeddings": {
+    "Endpoints": [
+      {
+        "Alias": "house-embeddings",
+        "Provider": "example-ai",
+        "Model": "example-embed-2",
+        "Dimension": 1024,
+        "SupportsRequestedDimension": false,
+        "Address": "http://model-server:8000/v1",
+        "Unauthenticated": true
+      }
+    ]
+  }
+}
+```
+
+**What it gains** is that no mail content leaves the machines the operator runs. The passages that are embedded, and on
+the chat side the questions and the answers, reach a service the operator started rather than an account with a vendor;
+there is no third-party processor, no per-token invoice, and no key to provision or rotate.
+
+**What it gives up** is the confidentiality of that hop, and MailFathom cannot judge how much that costs. A container
+network name and a public host name are the same string in a configuration file, so no startup rule can tell a server
+beside this process from one across the internet — which is why nothing here reads the address to decide whether the
+plain scheme is allowed. What runs instead is a report: an instance holding an endpoint on a plain address writes one
+warning per endpoint at startup, naming the alias and what crosses the hop readable, and leaving the judgement about the
+network with the person who built it. The address itself is never written to a log, for the reason no address or
+credential is.
+
+**MailFathom reaches such a server; it does not run one.** No model, no weights, and no inference runtime are loaded
+into this process or shipped in its image — that would make MailFathom responsible for model distribution, licensing,
+hardware sizing, and a second failure domain inside its own process, for a capability an operator gets by starting one
+container beside it. Which servers the project has actually exercised is stated under [compatible is not
+verified](#compatible-is-not-verified), and that set is unchanged by this: the mechanism reaches a service, and reaching
+it is not a claim that it was tested.
+
+## Authentication has three shapes
+
+An endpoint declares **exactly one** of a provider key, a Microsoft Entra credential, and `Unauthenticated`, and startup
+refuses any other combination, naming the alias. Declaring none is the shape a forgotten reference takes — an operator
 who wrote the address and the model and expects the endpoint to work learns it here rather than from a rejected call
-they paid for — and both is a declaration that does not say which one a request should present, which is a question no
-default here should answer on an operator's behalf. The rules below govern a declared chat endpoint identically, and
+they paid for — which is why an endpoint that genuinely needs no credential says so rather than leaving the blocks out;
+and declaring two does not say which one a request should present, which is a question no default here should answer on
+an operator's behalf. The rules below govern a declared chat endpoint identically, and
 one credential source resolves both — which is why an alias names one endpoint across the whole deployment rather than
 within one section.
 
 A key is a secret reference like every other credential this deployment holds, resolved per request — so rotating it
 behind an unchanged reference takes effect on the next call, with no cache to invalidate and no restart.
+
+`Unauthenticated` resolves nothing and presents nothing: the request carries no authorization header at all, rather than
+a placeholder one. It is the shape [a model server you run yourself](#a-model-server-you-run-yourself) needs, and it is
+what makes a plain address permitted.
 
 A Microsoft Entra credential exists for the deployment where there is no secret to provision at all. Four shapes are
 supported and they are the whole of the set: managed identity, workload identity, client secret, and client

@@ -45,6 +45,7 @@ public sealed class ChatModelOptionsTests
     [InlineData("address")]
     [InlineData("api-key")]
     [InlineData("entra-credential")]
+    [InlineData("unauthenticated")]
     [InlineData("reasoning-effort")]
     [InlineData("api")]
     public void Validate_SettingsWithNoAlias_AreRefusedRatherThanIgnored(string writtenSetting)
@@ -107,12 +108,12 @@ public sealed class ChatModelOptionsTests
         Assert.Contains(errors, error => error.Contains("Model", StringComparison.Ordinal));
     }
 
-    /// <summary>The request carries a credential, so an unencrypted address would publish it to anyone on the path.</summary>
+    /// <summary>Only the two schemes a request could be sent over are addresses at all.</summary>
     [Theory]
-    [InlineData("http://provider.invalid/v1/")]
     [InlineData("/openai/v1/")]
     [InlineData("not an address")]
-    public void Validate_AnAddressThatIsNotAbsoluteHttps_IsRefused(string address)
+    [InlineData("ftp://provider.invalid/v1/")]
+    public void Validate_AnAddressThatIsNotAbsoluteHttpOrHttps_IsRefused(string address)
     {
         // Arrange
         var settings = Declared();
@@ -123,6 +124,56 @@ public sealed class ChatModelOptionsTests
 
         // Assert
         Assert.Contains(errors, error => error.Contains("Address", StringComparison.Ordinal));
+    }
+
+    /// <summary>The declared endpoint carries a credential, so an unencrypted address would publish it to anything on the path.</summary>
+    [Fact]
+    public void Validate_ACredentialOverAPlainAddress_IsRefused()
+    {
+        // Arrange
+        var settings = Declared();
+        settings.Address = "http://127.0.0.1:11434/v1";
+
+        // Act
+        var errors = Validate(settings);
+
+        // Assert
+        Assert.Contains(errors, error => error.Contains("plain http Address", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// The shape of a model server the operator runs themselves, and the reason this role reaches the shared rule rather
+    /// than keeping a copy: a scheme rule of its own would refuse what the other role accepts.
+    /// </summary>
+    [Fact]
+    public void Validate_AnEndpointNeedingNoCredentialOnAPlainAddress_IsAccepted()
+    {
+        // Arrange
+        var settings = Declared();
+        settings.Address = "http://model-server:8000/v1";
+        settings.ApiKey = null;
+        settings.Unauthenticated = true;
+
+        // Act
+        var errors = Validate(settings);
+
+        // Assert
+        Assert.Empty(errors);
+    }
+
+    /// <summary>Needing no credential is one of the three shapes rather than a fourth thing beside them.</summary>
+    [Fact]
+    public void Validate_AnEndpointDeclaringBothAKeyAndNoCredential_IsRefused()
+    {
+        // Arrange
+        var settings = Declared();
+        settings.Unauthenticated = true;
+
+        // Act
+        var errors = Validate(settings);
+
+        // Assert
+        Assert.Contains(errors, error => error.Contains("more than one", StringComparison.Ordinal));
     }
 
     /// <summary>Exactly one credential authenticates an endpoint, so both and neither are equally wrong.</summary>
@@ -174,6 +225,25 @@ public sealed class ChatModelOptionsTests
 
         // Assert
         Assert.Contains(errors, error => error.Contains("ApiKey", StringComparison.Ordinal));
+    }
+
+    /// <summary>Needing no credential is declared on the endpoint, so naming it as a Microsoft Entra shape is a declaration to correct.</summary>
+    [Fact]
+    public void Validate_AnEntraCredentialOfKindUnauthenticated_IsRefused()
+    {
+        // Arrange
+        var settings = Declared();
+        settings.ApiKey = null;
+        settings.EntraCredential = new ProviderEntraCredentialOptions
+        {
+            Kind = ProviderEndpointCredentialKind.Unauthenticated,
+        };
+
+        // Act
+        var errors = Validate(settings);
+
+        // Assert
+        Assert.Contains(errors, error => error.Contains("kind Unauthenticated", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -274,6 +344,7 @@ public sealed class ChatModelOptionsTests
         "model" => new ChatModelOptions { Model = "a-chat-model" },
         "address" => new ChatModelOptions { Address = "https://resource.cloud.invalid/openai/v1/" },
         "api-key" => new ChatModelOptions { ApiKey = new ConfiguredSecret { SecretReference = "env:CHAT_KEY" } },
+        "unauthenticated" => new ChatModelOptions { Unauthenticated = true },
         "reasoning-effort" => new ChatModelOptions { ReasoningEffort = "low" },
         "api" => new ChatModelOptions { Api = ChatProviderApi.Responses },
         _ => new ChatModelOptions
