@@ -775,7 +775,8 @@ plain-HTTP deployment presents none, which a `Required` profile refuses.
 
 ### Rate limiting — `McpEndpoint:RateLimiting` and `AdminEndpoint:RateLimiting`
 
-The one endpoint subsection where every value has a product default, so an enabled endpoint is bounded whether or not
+One of the two endpoint subsections where every value has a product default — [request timeout](#request-timeout--mcpendpointrequesttimeout-and-adminendpointrequesttimeout)
+is the other — so an enabled endpoint is bounded whether or not
 anyone wrote a number. Both endpoints carry it, with the same keys, defaults, and validation, and configure it
 independently: neither one's traffic reaches the other's limits. [Rate limiting](mcp-endpoint.md#rate-limiting) records
 whose capacity a request spends, and [administering a deployment](admin-endpoint.md#rate-limiting) records the one

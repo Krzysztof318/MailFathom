@@ -1133,10 +1133,6 @@ try
 
     if (adminEndpointSettings.Enabled)
     {
-        // Ahead of the authorization middleware below, which is what judges this surface's credential, so a request
-        // about to be refused for a wrong key has already spent capacity. That ordering is the whole point of bounding
-        // this endpoint: unbounded key guessing is what it is exposed to, and the guesses are the traffic authorization
-        // turns away.
         // Ahead of the limiter for the reason it is ahead of it on the MCP branch, so a request queued for a lease is
         // inside the ceiling rather than outside it.
         if (adminRequestTimeout is not null && !requestTimeoutMiddlewareAdded)
@@ -1144,6 +1140,10 @@ try
             app.UseRequestTimeouts();
         }
 
+        // Ahead of the authorization middleware below, which is what judges this surface's credential, so a request
+        // about to be refused for a wrong key has already spent capacity. That ordering is the whole point of bounding
+        // this endpoint: unbounded key guessing is what it is exposed to, and the guesses are the traffic authorization
+        // turns away.
         if (adminRateLimits is not null && !rateLimiterMiddlewareAdded)
         {
             app.UseRateLimiter();
