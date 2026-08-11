@@ -85,11 +85,12 @@ What bounds it instead:
   decides where the URL it receives resolves to.
 - Redemption reads the mailbox afresh, so a link dies with the message it points at. An expired capability, a forged
   one, and one whose mail is gone are all `404` with the same body.
-- It rides this endpoint's listeners, its transport, and both of its rate limits. It spends the surface's shared
-  anonymous per-caller bucket, because it presents no credential to partition on, and it takes a permit from the same
-  process-wide concurrency limiter the protocol route does — each redemption loads a stored message, parses it, and
-  holds a response stream open, so an unauthenticated route left outside that limit would be the one place a burst of
-  slow readers is unbounded.
+- It rides this endpoint's listeners, its transport, both of its rate limits, and its
+  [request ceiling](#request-timeouts). It spends the surface's shared anonymous per-caller bucket, because it presents
+  no credential to partition on, and it takes a permit from the same process-wide concurrency limiter the protocol
+  route does — each redemption loads a stored message, parses it, and holds a response stream open. The ceiling is what
+  bounds how long it holds that permit: a client reading just above Kestrel's minimum response rate is otherwise the
+  one place a burst of slow readers is unbounded, and it needs no credential to be that client.
 - The response is `Cache-Control: no-store`. A proxy that cached it would keep serving the file for that URL after the
   capability expired, which is the one way an intermediary can outlive the window.
 
@@ -1499,8 +1500,13 @@ no provider at all, which makes it the one to narrow without having to ask what 
 outside. Under the default queue limits of `0` that wait is nothing; once a queue is configured it is the whole point,
 because a request queued for its client's tokens is already holding a concurrency permit.
 
-The probes are outside it. A named policy is attached to each endpoint rather than a default policy applied to every
-route, so a readiness answer is never abandoned because a mailbox query was slow — which would take the instance out of
+**Both routes on this surface carry it**, the protocol route and the
+[attachment download](#the-one-route-on-this-surface-that-admits-no-credential). The download is the one that most
+needs it: it holds a response stream open for as long as its reader takes, so without a ceiling a client reading just
+above Kestrel's minimum response rate holds a concurrency permit indefinitely, and it presents no credential.
+
+The probes are outside it. A named policy is attached to each route rather than a default policy applied to every one,
+so a readiness answer is never abandoned because a mailbox query was slow — which would take the instance out of
 traffic for the one thing that was still working.
 
 What is in force is stated once at startup, one line per enabled endpoint:

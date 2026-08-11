@@ -1116,6 +1116,12 @@ try
             // On the endpoint rather than as the default policy, for the reason the limiter is: the probes answer on
             // routes this ceiling must never reach.
             mcpEndpoint.WithRequestTimeout(TransportSurface.Mcp.RequestTimeoutPolicyName);
+
+            // And on the download route, for the reason the rate limit is on it: it takes a permit from the same
+            // concurrency limiter, and it is the one route here that holds a response stream open for as long as its
+            // reader takes. A client reading just above Kestrel's minimum response rate is the case the ceiling exists
+            // for, and it needs no credential to be that client.
+            attachmentDownload.WithRequestTimeout(TransportSurface.Mcp.RequestTimeoutPolicyName);
         }
 
         if (mcpEndpointSettings.RequiresAuthentication)
