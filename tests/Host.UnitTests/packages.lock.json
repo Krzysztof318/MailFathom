@@ -142,6 +142,11 @@
           "System.Diagnostics.EventLog": "6.0.0"
         }
       },
+      "ExtendedNumerics.BigDecimal": {
+        "type": "Transitive",
+        "resolved": "3003.2.0.161",
+        "contentHash": "VMTiP6rMaghsAILVw+2W7FzReJH0kuF+YU9/4u110IWtsCWe+5HvzJqWxyknd860zFEbA9N37+qk5IjRLdF5UQ=="
+      },
       "Google.Protobuf": {
         "type": "Transitive",
         "resolved": "3.30.2",
@@ -611,6 +616,31 @@
           "Microsoft.Extensions.Logging.Abstractions": "10.0.10"
         }
       },
+      "NCalc.Core": {
+        "type": "Transitive",
+        "resolved": "7.1.0",
+        "contentHash": "AW0R2aiRkZqSv2GZcO5QJ3dirCuiE+1U53NYF2ONzKts9fbE3J3oZPzujJzBuLO1EaXiirzibghgPRavufiDGg==",
+        "dependencies": {
+          "ExtendedNumerics.BigDecimal": "3003.2.0.161",
+          "Microsoft.Extensions.Logging.Abstractions": "10.0.10",
+          "NCalc.Parser": "7.1.0",
+          "Parlot": "1.5.8"
+        }
+      },
+      "NCalc.Domain": {
+        "type": "Transitive",
+        "resolved": "7.1.0",
+        "contentHash": "+TJaDQ1EkWE9v672uwf2PjjTS9Pd5IxZKPOL/KjvH06DdgFqBGAC+7ws1VVn1vXR59SWfCM1wm1K/Dr5msiMRQ=="
+      },
+      "NCalc.Parser": {
+        "type": "Transitive",
+        "resolved": "7.1.0",
+        "contentHash": "I93ttSN4BVQ6nC9QB41ttjVTOVlNFRY/5UyGJLNvqiuLAVDW2YLONyyf0CVInI0zMKg6F7TIvaVhDMrtQQ32MA==",
+        "dependencies": {
+          "NCalc.Domain": "7.1.0",
+          "Parlot": "1.5.8"
+        }
+      },
       "Npgsql": {
         "type": "Transitive",
         "resolved": "10.0.3",
@@ -660,6 +690,11 @@
           "Microsoft.Extensions.DependencyInjection.Abstractions": "10.0.0",
           "OpenTelemetry.Api": "1.15.3"
         }
+      },
+      "Parlot": {
+        "type": "Transitive",
+        "resolved": "1.5.8",
+        "contentHash": "QBFNAMKQPRvBwrXOl6Gp24a2nbhzqJ5X4pe0I1g1RtR4SqoT2ThyE6RwFAOZLcWMQxzo8YC08VmHspPDeOLYWg=="
       },
       "Pgvector": {
         "type": "Transitive",
@@ -831,6 +866,7 @@
           "Microsoft.Extensions.Options.ConfigurationExtensions": "[10.0.10, )",
           "Microsoft.Extensions.Options.DataAnnotations": "[10.0.10, )",
           "MimeKit": "[4.17.0, )",
+          "NCalc": "[7.1.0, )",
           "Npgsql.EntityFrameworkCore.PostgreSQL": "[10.0.3, )",
           "Pgvector.EntityFrameworkCore": "[0.3.0, )",
           "Polly.Core": "[8.7.0, )",
@@ -1061,6 +1097,15 @@
         "contentHash": "dXrB7sBpQjUQU0UcdyFPJbOTFw7yaceD+OgAZVAeBveRzbiBlg89jEygAtcgOwd/L+O+YpM98zfwaXz067NFDQ==",
         "dependencies": {
           "ModelContextProtocol": "[2.0.0]"
+        }
+      },
+      "NCalc": {
+        "type": "CentralTransitive",
+        "requested": "[7.1.0, )",
+        "resolved": "7.1.0",
+        "contentHash": "/Z8tzTKYvOIkGQHtKrd4zwvx8ZPqkBi7U5GbQ+LhGxqJd1LOM5R/xF/VIhRIcN9XLAy/RE5t2gN3YmDRNFBYHw==",
+        "dependencies": {
+          "NCalc.Core": "7.1.0"
         }
       },
       "Npgsql.EntityFrameworkCore.PostgreSQL": {

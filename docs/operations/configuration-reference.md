@@ -551,6 +551,30 @@ The worker that extracts text for messages stored before extraction existed or b
 | `MailExtractionBackfill:BatchSize` | int | `50` | 1 – 500 | restart |
 | `MailExtractionBackfill:MaxBatchesPerRun` | int | `10` | 1 – 1000 | restart |
 
+## `MailRules`
+
+The rules that select mail, written here rather than held in a table, because a rule is a statement about how an
+instance is configured. [Mail rules](../features/mail-rules.md) documents the whole authoring surface a condition may
+use — every fact, every function, every operator — and this section documents the shape the rules are declared in.
+
+| Key | Type | Default | Constraint | Change |
+| --- | --- | --- | --- | --- |
+| `MailRules:MaxConditionLength` | int | `1000` | 1 – 10000 characters; a condition over it is refused naming the rule | reload |
+| `MailRules:MaxConditionNestingDepth` | int | `16` | 1 – 64 levels of the parsed condition. A length limit alone would admit a short expression nested past reading | reload |
+| `MailRules:ConditionEvaluationTimeout` | TimeSpan | `00:00:01` | Greater than zero; bounds one condition against one email, including resolving the facts it names | reload |
+| `MailRules:Rules` | list | empty | At most 200 rules, evaluated in the order they are written | reload |
+| `MailRules:Rules:0:Name` | string | required | 1 – 64 characters of letters, digits, spaces, and `.`, `_`, `-`; unique across the section, ignoring case | reload |
+| `MailRules:Rules:0:Condition` | string | required | One expression producing a boolean, within the two limits above | reload |
+| `MailRules:Rules:0:StopWhenMatched` | bool | `false` | A match ends the pass and the rules below it are not reached | reload |
+| `MailRules:Rules:0:Enabled` | bool | `true` | A rule switched off is left out of the set entirely | reload |
+
+Every condition is read while the host composes itself, and a defect in one — an unparseable expression, a name that is
+not a fact, a call that is not an available function, a comparison between shapes that could never match, a result that
+is not a boolean — fails startup naming the rule and what was wrong. Every defect in every rule is reported together.
+
+An edit that does not validate is **refused and logged, and the previously valid rule set stays in effect**. That is
+deliberately stronger than the framework's own reload behaviour, which would drop the candidate without saying so.
+
 ## Where each surface is served
 
 Every socket this process opens is named by the section of the surface that owns it, and by nothing else. `McpEndpoint`

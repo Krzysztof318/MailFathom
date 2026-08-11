@@ -21,6 +21,8 @@ using MailFathom.Application.Mail.Mutations.Audit;
 using MailFathom.Application.Mail.Mutations.Convergence;
 using MailFathom.Application.Persistence;
 using MailFathom.Application.Retrieval.AskMail.Audit;
+using MailFathom.Application.Rules;
+using MailFathom.Application.Rules.Conditions;
 using MailFathom.Application.SensitiveContent.Detection;
 using MailFathom.Application.SensitiveContent.Redaction;
 using MailFathom.Application.Synchronization;
@@ -38,6 +40,7 @@ using MailFathom.Host.Configuration.Mail;
 using MailFathom.Host.Configuration.Persistence;
 using MailFathom.Host.Configuration.Providers;
 using MailFathom.Host.Configuration.Provisioning;
+using MailFathom.Host.Configuration.Rules;
 using MailFathom.Host.Configuration.SensitiveContent;
 using MailFathom.Host.Hosting;
 using MailFathom.Host.Hosting.Startup;
@@ -54,6 +57,7 @@ using MailFathom.Infrastructure.Mail;
 using MailFathom.Infrastructure.Mail.OAuth;
 using MailFathom.Infrastructure.Persistence.Connections;
 using MailFathom.Infrastructure.Resilience;
+using MailFathom.Infrastructure.Rules;
 using MailFathom.Infrastructure.Secrets.Resolution;
 using MailFathom.Mcp;
 using Microsoft.AspNetCore.Authentication;
@@ -237,6 +241,54 @@ try
         // path from drifting into two redactions of the same message.
         builder.Services.AddSingleton<SensitiveContentRedactor>();
     }
+
+    // Rules are authored in configuration rather than in a table, which ADR 0010 records: what an instance will do to a
+    // mailbox is then reviewable in a diff before it runs and reproducible from a repository afterwards. Bound strictly
+    // for the reason mail transport is — a misspelled key would otherwise be ignored, and the rule it belonged to would
+    // go on running while meaning something its author did not write.
+    builder.Services.AddOptions<MailRulesOptions>()
+        .Bind(
+            builder.Configuration.GetSection(MailRulesOptions.SectionName),
+            binderOptions => binderOptions.ErrorOnUnknownConfiguration = true)
+        .ValidateDataAnnotations()
+        .ValidateOnStart();
+    // Every condition is read here, while the host is being composed, because the condition language has no static type
+    // checker of its own: an unknown fact or a comparison that could never hold would otherwise be discovered on real
+    // mail. A rule set that cannot be read is a startup failure, and one compiler serves composition, every reload, and
+    // every pass, because it holds no state.
+    var mailRuleConditionCompiler = new NCalcMailRuleConditionCompiler();
+    var declaredMailRules = builder.Configuration
+        .GetSection(MailRulesOptions.SectionName)
+        .Get<MailRulesOptions>(binderOptions => binderOptions.ErrorOnUnknownConfiguration = true);
+    var mailRuleDeclarationErrors = MailRuleDeclarationRules.FindDeclarationErrors(
+        declaredMailRules,
+        mailRuleConditionCompiler);
+
+    if (mailRuleDeclarationErrors.Count > 0)
+    {
+        throw new OptionsValidationException(
+            MailRulesOptions.SectionName,
+            typeof(MailRulesOptions),
+            mailRuleDeclarationErrors);
+    }
+
+    builder.Services.AddSingleton<IMailRuleConditionCompiler>(mailRuleConditionCompiler);
+    builder.Services.AddSingleton<MailRuleSetEvaluator>();
+    builder.Services.AddSingleton<IMailRuleSetSource, ConfiguredMailRuleSetSource>();
+    // The rule section validates itself on reload instead of letting the options framework drop an invalid candidate in
+    // silence. That default is the wrong behavior here above everywhere else: an owner who mistypes a fact name would
+    // get an instance that goes on acting on mail under the previous rules while their file says otherwise. A refused
+    // candidate is logged and the last proven rule set stays in effect.
+    builder.Services.AddSingleton(provider => new ValidatedSettingsSnapshot<MailRulesOptions>(
+        provider.GetRequiredService<IOptionsMonitor<MailRulesOptions>>(),
+        (candidate, _) => Task.FromResult(
+            MailRuleDeclarationRules.FindDeclarationErrors(candidate, mailRuleConditionCompiler)),
+        MailRulesOptions.SectionName,
+        provider.GetRequiredService<ILogger<ValidatedSettingsSnapshot<MailRulesOptions>>>()));
+    builder.Services.AddSingleton<ISettingsSnapshot<MailRulesOptions>>(
+        provider => provider.GetRequiredService<ValidatedSettingsSnapshot<MailRulesOptions>>());
+    builder.Services.AddHostedService(
+        provider => provider.GetRequiredService<ValidatedSettingsSnapshot<MailRulesOptions>>());
     // The published snapshot, not the bound one, is what every consumer reads: a reload whose secret references do not
     // resolve is rejected and leaves the previous configuration active for new operations.
     builder.Services.AddSingleton<DatabaseConnectionSettingsMapper>();

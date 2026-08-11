@@ -25,6 +25,10 @@
     <PackageReference Include="Microsoft.Extensions.Http.Resilience" />
     <PackageReference Include="Microsoft.Extensions.Options.ConfigurationExtensions" />
     <PackageReference Include="Microsoft.Extensions.Options.DataAnnotations" />
+    <!-- The condition language a mail rule is authored in. Referenced by this project alone, so the parser, its AST,
+         and every NCalc type stay inside the adapter that compiles and evaluates a condition; Application and Domain
+         see a compiled condition through their own port and never an expression. -->
+    <PackageReference Include="NCalc" />
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
     <PackageReference Include="Pgvector.EntityFrameworkCore" />
     <PackageReference Include="Polly.Core" />

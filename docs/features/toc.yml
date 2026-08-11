@@ -27,5 +27,7 @@
   href: mail-answering.md
 - name: Sensitive-content scanning
   href: sensitive-content-scanning.md
+- name: Mail rules
+  href: mail-rules.md
 - name: MCP tools
   href: mcp-tools.md
