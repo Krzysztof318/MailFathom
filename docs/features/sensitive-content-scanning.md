@@ -12,7 +12,8 @@ a detection is, what replaces it, what one scan may spend, and what happens when
 
 ## What is scanned, and what is never touched
 
-The boundary is **egress and derived data**, never ingestion.
+The boundary is **egress and derived data**, never ingestion. The table names the paths this contract is written for;
+the note below states which of them redact through it today.
 
 | Kind of text | What scanning does to it |
 | --- | --- |
@@ -39,9 +40,11 @@ entirely rather than accept the second.
 All four combinations are supported configurations. With both off nothing is scanned, nothing is constructed, and no
 cost lands on any path.
 
-> This release ships the contract and no detector behind it. Switching either scanner on therefore fails startup,
-> naming the scanner that has nothing registered for it — which is the same refusal that protects a deployment whose
-> analyzer went missing. The detectors themselves arrive with their own changes.
+> This release ships the contract and nothing on either side of it. **No detector is registered**, so switching either
+> scanner on fails startup naming the scanner that has nothing behind it — the same refusal that protects a deployment
+> whose analyzer went missing. **No consumer redacts through it either**: none of the rows in the table above redacts
+> today, so each states the path the contract is written for rather than one that is covered. The detectors and the
+> consumers arrive with their own changes, and this note narrows as they do.
 
 ## A finding names a position, never a value
 
