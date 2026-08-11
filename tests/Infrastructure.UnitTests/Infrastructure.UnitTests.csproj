@@ -21,5 +21,8 @@
          double is hand-written because a substitute cannot override the protected send path. -->
     <Compile Include="..\shared\FakeHttpMessageHandler.cs" Link="FakeHttpMessageHandler.cs" />
     <Compile Include="..\shared\RecordedHttpRequest.cs" Link="RecordedHttpRequest.cs" />
+    <!-- The body text is the one mail-rule fact whose resolution costs a read, and both this project and
+         Application.UnitTests prove a claim about how often it happens. -->
+    <Compile Include="..\shared\RecordingMailRuleBodyTextReader.cs" Link="RecordingMailRuleBodyTextReader.cs" />
   </ItemGroup>
 </Project>

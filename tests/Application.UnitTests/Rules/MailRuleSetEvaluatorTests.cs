@@ -6,6 +6,7 @@ using MailFathom.Application.Rules;
 using MailFathom.Application.Rules.Conditions;
 using MailFathom.Application.Rules.Facts;
 using MailFathom.Application.UnitTests.TestDoubles;
+using MailFathom.TestSupport;
 using Microsoft.Extensions.Time.Testing;
 using Xunit;
 

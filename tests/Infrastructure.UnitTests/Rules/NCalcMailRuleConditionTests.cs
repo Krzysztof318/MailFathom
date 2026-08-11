@@ -5,7 +5,7 @@
 using MailFathom.Application.Rules.Conditions;
 using MailFathom.Application.Rules.Facts;
 using MailFathom.Infrastructure.Rules;
-using MailFathom.Infrastructure.UnitTests.TestDoubles;
+using MailFathom.TestSupport;
 using Xunit;
 
 namespace MailFathom.Infrastructure.UnitTests.Rules;
