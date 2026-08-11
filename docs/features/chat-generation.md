@@ -109,8 +109,9 @@ under that address a request goes to, and it is the setting most likely to need 
 one of the two; and `MaxOutputTokens` bounds what a single answer may cost, which no provider default does.
 
 Whether such an endpoint can serve `ask_mail` at all is a separate question from whether it answers: the run offers the
-model function tools and requires it to call them, so a service or model that cannot be given tools cannot answer here.
-That is discovered from a *request refused* on the first question rather than at startup.
+model function tools and the model calls them when it decides it needs mail, so a service or model that cannot be given
+function tools cannot answer here. That is discovered from a *request refused* on the first question rather than at
+startup.
 
 ## Two APIs, and the deployment says which
 
@@ -198,9 +199,9 @@ every question, which the section below states in full.
   rather than ruled out in advance.
 
 **What a model must support for `ask_mail` to work at all.** The answering run offers the model function tools and
-requires it to call them, so a model that cannot be given tools cannot answer a question here whatever else is declared.
-Where a reasoning model refuses tools beside a stated effort, `Api` is the setting that resolves it, and the two are
-therefore chosen together rather than independently.
+retrieves mail when the model calls one, so a model that cannot be given tools cannot answer a question here whatever
+else is declared. Where a reasoning model refuses tools beside a stated effort, `Api` is the setting that resolves it,
+and the two are therefore chosen together rather than independently.
 
 ## Changing the model does not restart the host
 
