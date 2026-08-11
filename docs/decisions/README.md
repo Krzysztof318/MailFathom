@@ -30,3 +30,4 @@ For background on ADRs, see <https://adr.github.io/>.
 - [0007: Write to the remote mailbox through a session type no read path can obtain, and scope the never-marks-read guarantee to retrieval](0007-remote-mailbox-mutation-boundary-and-write-session.md)
 - [0008: Store a copied message as a second local email, and leave the occurrence the only identity a stored row carries](0008-copied-message-local-identity.md)
 - [0009: Keep the job store in MailFathom's own schema, claim a row with `FOR UPDATE SKIP LOCKED`, and let the enqueuer compose the one key that identifies an execution](0009-durable-job-store-and-execution-identity.md)
+- [0010: Author a rule in the configuration the deployment already carries, and write its condition as one NCalc expression](0010-rule-authoring-in-configuration-and-ncalc-conditions.md)
