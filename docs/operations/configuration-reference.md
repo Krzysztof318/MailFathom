@@ -372,7 +372,10 @@ protocol](../features/embedding-generation.md#an-endpoint-is-any-service-that-sp
 both rules with their reasons, what each setting decides, and a worked example of an endpoint that is neither OpenAI
 nor Azure. [Embedding generation § A model server you run
 yourself](../features/embedding-generation.md#a-model-server-you-run-yourself) covers the plain-address case, what it
-gains, what it gives up, and the startup warning an instance holding such an endpoint writes.
+gains, what it gives up, and the startup warning an instance holding such an endpoint writes. [Provider
+endpoints](provider-endpoints.md) is the register of services somebody checked — what each one's `Address` and
+credential are, whether it serves an embeddings route at all, and whether `SupportsRequestedDimension` may stay at its
+default.
 
 | Key | Type | Default | Constraint | Change |
 | --- | --- | --- | --- | --- |
@@ -426,7 +429,8 @@ wherever a credential is held, and exactly one of `ApiKey`, `EntraCredential`, a
 An endpoint is any service that speaks the OpenAI wire
 protocol](../features/chat-generation.md#an-endpoint-is-any-service-that-speaks-the-openai-wire-protocol) carries a
 worked example of one that is neither OpenAI nor Azure, and `Chat:Api` is the key most often decided by which of the
-two paths such a service serves.
+two paths such a service serves. [Provider endpoints](provider-endpoints.md) records which paths each checked service
+was found to serve.
 
 | Key | Type | Default | Constraint | Change |
 | --- | --- | --- | --- | --- |

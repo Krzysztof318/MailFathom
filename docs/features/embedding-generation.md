@@ -202,6 +202,13 @@ name matches one elsewhere may answer at a different width or with vectors that 
 surfaces as a *request refused* or an *unexpected vector shape* on the first call rather than at startup, because
 nothing here can ask a service what it serves without paying for a request.
 
+What an operator has instead of a check at startup is a record of checks somebody made. [Provider
+endpoints](../operations/provider-endpoints.md) is that record: which roles each checked service serves, the address
+and credential its entry writes, whether it honours a requested width, and — on every row — whether the entry rests on
+a call through this adapter or on the service's own documentation read on a stated date. Presence on it is a check at a
+point in time and absence from it is not a refusal, which is the same statement this section makes and the reason the
+two are one page apart rather than one list.
+
 ## What an address has to be
 
 **Absolute, and HTTP or HTTPS.** Startup refuses anything else, naming the endpoint alias and the rule.
@@ -259,7 +266,9 @@ into this process or shipped in its image — that would make MailFathom respons
 hardware sizing, and a second failure domain inside its own process, for a capability an operator gets by starting one
 container beside it. Which servers the project has actually exercised is stated under [compatible is not
 verified](#compatible-is-not-verified), and that set is unchanged by this: the mechanism reaches a service, and reaching
-it is not a claim that it was tested.
+it is not a claim that it was tested. [Provider endpoints § a model server you run
+yourself](../operations/provider-endpoints.md#a-model-server-you-run-yourself) is the register of the servers somebody
+checked, with the address shape and the requested-width answer each was found to have.
 
 ## Authentication has three shapes
 
