@@ -56,15 +56,62 @@ refused at startup and again on every reloaded declaration, because the alias is
 a resilience circuit is keyed by, and what every log line naming an endpoint carries. Two endpoints answering to one
 name would share all three, so a chat outage would open the circuit the embeddings were being served through.
 
-## Two providers, one client
+## An endpoint is any service that speaks the OpenAI wire protocol
 
-OpenAI and Azure OpenAI are the two this release reaches, through the same client construction the embedding adapter
-uses: an Azure resource's v1 data plane is OpenAI-compatible, so a cloud deployment is the same client pointed at the
-resource's own `/openai/v1/` address with the deployment's name as the routed model.
+The declared endpoint is reached through the same client construction the embedding adapter uses, and nothing in the
+declaration is a compile-time constant: the model, the address, the API, the output budget, and the sampling parameters
+are all read from configuration. Pointing this deployment at a different service is therefore a configuration entry
+rather than a feature request.
+
+**OpenAI and Azure OpenAI are what this project declares, which is a different statement from what the mechanism
+reaches.** Azure is already the second case rather than a special one: an Azure resource's v1 data plane is
+OpenAI-compatible, so a cloud deployment is that same client pointed at the resource's own `/openai/v1/` address with
+the deployment's name as the routed model. A third-party service speaking the same protocol is declared by the same
+values and reaches the same code — and "compatible" is that service's claim about itself rather than something checked
+here, which [embedding generation § Compatible is not
+verified](embedding-generation.md#compatible-is-not-verified) states in full for both roles.
 
 There is no vendor and no model identity in the declaration beside the routed name, and that is the difference from an
 embedding endpoint rather than an omission. A vector is stored and later compared against other vectors, so which model
 produced it has to be recorded and proved; an answer is produced, presented, and gone.
+
+**The address rule is the same one, for the same reason.** An address is absolute and HTTPS or startup refuses it,
+because the request carries a credential; an empty address means the provider library's own default, which is the
+first-party OpenAI API, so any other service writes its own address out. [What an address has to
+be](embedding-generation.md#what-an-address-has-to-be) carries the rule and what it costs an operator with a
+plain-HTTP model server.
+
+### A worked example: an endpoint that is neither
+
+The names are placeholders, and nothing in the declaration is matched against a list of vendors, models, or hosts:
+
+```json
+{
+  "Chat": {
+    "Alias": "house-chat",
+    "Model": "example-chat-2",
+    "Api": "ChatCompletions",
+    "Address": "https://chat.example.test/v1",
+    "MaxOutputTokens": 2048,
+    "ApiKey": {
+      "Name": "house-chat-key",
+      "SecretReference": "file:/etc/mailfathom/secrets/house-chat-key"
+    }
+  }
+}
+```
+
+Read across it: `Alias` is what every log line, metric tag, and circuit calls this endpoint, and it may not repeat an
+alias an embedding endpoint declared, because one credential source resolves both sections; `Model` is what the request
+routes on, written as the service knows it rather than as a vendor's catalogue spells it; `Address` carries the whole
+base path the service documents for its OpenAI-compatible surface, including any version segment; `Api` says which path
+under that address a request goes to, and it is the setting most likely to need changing for a service that serves only
+one of the two; and `MaxOutputTokens` bounds what a single answer may cost, which no provider default does.
+
+Whether such an endpoint can serve `ask_mail` at all is a separate question from whether it answers: the run offers the
+model function tools and the model calls them when it decides it needs mail, so a service or model that cannot be given
+function tools cannot answer here. That is discovered from a *request refused* on the first question rather than at
+startup.
 
 ## Two APIs, and the deployment says which
 
@@ -152,9 +199,9 @@ every question, which the section below states in full.
   rather than ruled out in advance.
 
 **What a model must support for `ask_mail` to work at all.** The answering run offers the model function tools and
-requires it to call them, so a model that cannot be given tools cannot answer a question here whatever else is declared.
-Where a reasoning model refuses tools beside a stated effort, `Api` is the setting that resolves it, and the two are
-therefore chosen together rather than independently.
+retrieves mail when the model calls one, so a model that cannot be given tools cannot answer a question here whatever
+else is declared. Where a reasoning model refuses tools beside a stated effort, `Api` is the setting that resolves it,
+and the two are therefore chosen together rather than independently.
 
 ## Changing the model does not restart the host
 
