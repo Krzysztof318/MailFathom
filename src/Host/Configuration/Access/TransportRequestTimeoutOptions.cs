@@ -23,12 +23,12 @@ namespace MailFathom.Host.Configuration.Access;
 /// without giving up the other.
 /// </para>
 /// <para>
-/// The ceiling encloses the outbound budgets a request can spend, rather than being chosen as a round number. An
-/// <c>ask_mail</c> call embeds the question and then generates an answer, which is two sequential invocations of the
-/// AI provider class, and that class's own total timeout is five minutes — so a shorter ceiling here would abandon a
-/// request that was still inside the budget its own configuration granted it, and the operator would read a gateway
-/// timeout where the provider's classified failure belonged. <see cref="DefaultDuration" /> states the resulting number
-/// and what changes it.
+/// It is a bound on a hang rather than a guarantee that no legitimate request is ever abandoned, and the difference is
+/// worth stating because the two cannot both hold here. An <c>ask_mail</c> run is a conversation whose length the model
+/// decides, bounded by <c>MailAnswering:MaxProviderCallsPerRun</c> at eight calls, and every one of them is an
+/// <c>AiProviderInvocation</c> whose own total timeout is five minutes. A ceiling that enclosed the maximum would have
+/// to be past half an hour, which is not a request ceiling at all and would let one stalled run hold a concurrency
+/// permit for that long. <see cref="DefaultDuration" /> states which way that is resolved.
 /// </para>
 /// <para>
 /// The section is read once, while the host is being composed, because the policy is attached to a route as the
@@ -52,11 +52,13 @@ internal sealed class TransportRequestTimeoutOptions
 
     /// <summary>Gets or sets how long one request may run before it is abandoned.</summary>
     /// <remarks>
-    /// Ten minutes, which is what encloses the longest request this system can legitimately produce rather than a
-    /// number chosen for its shape: two sequential AI provider invocations at that class's five-minute total timeout,
-    /// with the database and composition work around them already inside it. A deployment serving no AI-backed tool is
-    /// the case to narrow this on — every other MCP tool answers from the local mailbox copy with a bounded query, so a
-    /// minute is generous there, and narrowing it is what turns this from a bound on a hang into a bound on a request.
+    /// Ten minutes, which is chosen against what a request costs to hold rather than against what the slowest one may
+    /// legitimately spend. It clears an ordinary answering run by a wide margin and is deliberately below the
+    /// three-quarters of an hour a maximal one could reach, so a run that walks its whole provider budget is abandoned:
+    /// that is the trade taken, because a ceiling sized for the maximum would leave twenty permits holdable for longer
+    /// than any caller waits. An operator who raises <c>MailAnswering:MaxProviderCallsPerRun</c>, or whose questions
+    /// genuinely run long, raises this with it. A deployment serving no AI-backed tool narrows it instead — every other
+    /// MCP tool answers from the local mailbox copy with a bounded query, so a minute is generous there.
     /// </remarks>
     public TimeSpan Duration { get; set; } = DefaultDuration;
 

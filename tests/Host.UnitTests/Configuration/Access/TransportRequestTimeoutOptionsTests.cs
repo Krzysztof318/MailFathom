@@ -10,14 +10,6 @@ namespace MailFathom.Host.UnitTests.Configuration.Access;
 /// <summary>Covers the ceiling one request runs under, and what an operator may state for it.</summary>
 public sealed class TransportRequestTimeoutOptionsTests
 {
-    /// <summary>The longest budget one outbound AI provider invocation may spend, which the default has to enclose twice.</summary>
-    /// <remarks>
-    /// Restated here rather than read from the resilience defaults, because the point of the assertion is that the two
-    /// numbers are related at all: a change to either one that broke the relationship would otherwise pass silently and
-    /// leave an <c>ask_mail</c> call abandoned while it was still inside the budget its own configuration granted it.
-    /// </remarks>
-    private static readonly TimeSpan AiProviderTotalTimeout = TimeSpan.FromMinutes(5);
-
     [Fact]
     public void Enabled_WithNothingConfigured_BoundsTheRequest()
     {
@@ -28,18 +20,22 @@ public sealed class TransportRequestTimeoutOptionsTests
         Assert.True(settings.Enabled);
     }
 
+    /// <summary>
+    /// Pins the product ceiling itself and nothing beyond it. It deliberately asserts no relationship to what an
+    /// answering run may spend, because there is none to assert: a run is bounded by
+    /// <c>MailAnswering:MaxProviderCallsPerRun</c> at eight AI provider invocations, and a ceiling enclosing that
+    /// maximum would sit past three-quarters of an hour. The default is chosen against what a request costs to hold
+    /// instead, so a maximal run being abandoned is the trade rather than a defect, and a test claiming to guard a
+    /// relationship across the two sections would be describing a guarantee the code does not make.
+    /// </summary>
     [Fact]
-    public void Duration_WithNothingConfigured_EnclosesTwoSequentialAiProviderInvocations()
+    public void Duration_WithNothingConfigured_IsTheProductCeiling()
     {
         // Act
         var settings = new TransportRequestTimeoutOptions();
 
         // Assert
-        // An ask_mail call embeds the question and then generates an answer, so the ceiling has to clear both budgets
-        // or the request is abandoned before the provider's own failure could be classified and reported.
-        Assert.True(
-            settings.Duration >= AiProviderTotalTimeout + AiProviderTotalTimeout,
-            $"The default ceiling of {settings.Duration} is below the {AiProviderTotalTimeout + AiProviderTotalTimeout} two sequential AI provider invocations may spend.");
+        Assert.Equal(TimeSpan.FromMinutes(10), settings.Duration);
     }
 
     [Fact]

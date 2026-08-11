@@ -44,7 +44,7 @@ service that reads it are different authorities.
 }
 ```
 
-Four things about that block are worth understanding before you copy it:
+Five things about that block are worth understanding before you copy it:
 
 - **It binds a socket of its own.** `127.0.0.1` above is the safe starting point — reachable from the machine the
   service runs on and nowhere else, which is what an SSH tunnel is for. Publishing it more widely is a decision, not a
@@ -61,7 +61,7 @@ Four things about that block are worth understanding before you copy it:
   at startup. [Rate limiting](../operations/admin-endpoint.md#rate-limiting) is where the settings and the one way this
   endpoint's limit differs from the MCP endpoint's are recorded.
 - **A request that runs too long is abandoned, also without your writing a number.** The ceiling defaults to ten
-  minutes because the MCP endpoint shares the setting and an AI-backed answer can legitimately take that long; no
+  minutes because the MCP endpoint shares the setting and an AI-backed answer can legitimately take minutes; no
   administrative route reaches a provider, so this is the endpoint worth narrowing.
   [Request timeouts](../operations/admin-endpoint.md#request-timeouts) is where that is recorded.
 

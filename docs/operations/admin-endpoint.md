@@ -291,10 +291,10 @@ Turning the limits off is an explicit value and costs one startup warning, as it
 and the same ten-minute default, configured independently.
 [Request timeouts](mcp-endpoint.md#request-timeouts) records the settings and the reasoning in full.
 
-**This is the endpoint whose default is worth narrowing.** The ten minutes exist to enclose two sequential AI provider
-invocations, which is what an `ask_mail` call can spend; no administrative route reaches a provider at all. Their work
-is a bounded database read or a configuration inspection, so a ceiling of a minute or less costs these routes nothing
-and shortens how long a stalled request can hold one of this endpoint's twenty permits.
+**This is the endpoint whose default is worth narrowing.** The ten minutes are sized for the MCP surface, where an
+`ask_mail` run can legitimately spend minutes against an AI provider; no administrative route reaches a provider at all.
+Their work is a bounded database read or a configuration inspection, so a ceiling of a minute or less costs these routes
+nothing and shortens how long a stalled request can hold one of this endpoint's twenty permits.
 
 That matters more here than on the MCP surface for the reason the shared bucket does: the permits an administrative
 caller holds are the ones you need free to reach `/api/admin` while something else is going wrong.

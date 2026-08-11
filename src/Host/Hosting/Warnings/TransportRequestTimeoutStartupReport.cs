@@ -118,9 +118,9 @@ internal sealed partial class TransportRequestTimeoutStartupReport : IHostedServ
     [LoggerMessage(
         Level = LogLevel.Information,
         Message = "The {EndpointName} endpoint on {EndpointPath} abandons a request that has run for {RequestTimeout}, "
-            + "answering 504 and releasing the concurrency permit it held. The ceiling encloses the outbound budgets a "
-            + "request spends, so narrowing it below what a configured AI provider is allowed would report a gateway "
-            + "timeout where that provider's own classified failure belonged.")]
+            + "answering 504 and releasing the concurrency permit it held. This bounds how long a request may hold that "
+            + "permit rather than guaranteeing that no long-running one is abandoned, so a tool whose configured "
+            + "outbound budgets exceed it is refused at the ceiling by design.")]
     private partial void LogEndpointRequestTimeout(
         string endpointName,
         string endpointPath,

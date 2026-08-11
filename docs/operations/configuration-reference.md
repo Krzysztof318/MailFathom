@@ -808,13 +808,15 @@ so twenty slow requests take a surface out of service without exceeding any rate
 | `…:Enabled` | bool | `true` | Turning it off costs a startup warning | restart |
 | `…:Duration` | TimeSpan | `00:10:00` | 1 s – 1 h | restart |
 
-**The default is derived rather than round, and narrowing it has one interaction worth knowing.** An `ask_mail` call
-embeds the question and then generates an answer, which is two sequential invocations of the `AiProviderInvocation`
-resilience class, whose own `TotalTimeout` defaults to five minutes — so ten minutes is what encloses both. Narrowing
-this below what a configured AI provider is allowed to spend reports a gateway timeout where that provider's own
-classified failure belonged. A deployment serving no AI-backed tool is the case to narrow it on: every other MCP tool
-answers from the local mailbox copy with a bounded query, so a minute is generous there. `AdminEndpoint` reaches no
-provider at all, which makes it the endpoint to narrow without having to ask what a tool call needs.
+**The default is a bound on a hang rather than a promise that no legitimate request is abandoned.** An `ask_mail` run is
+a conversation whose length the model decides, bounded by `MailAnswering:MaxProviderCallsPerRun` at eight calls, each an
+`AiProviderInvocation` whose own `TotalTimeout` defaults to five minutes — so a ceiling enclosing the maximum would sit
+past three-quarters of an hour, which is not a request ceiling and would let one stalled run hold a concurrency permit
+that long. Ten minutes clears an ordinary answering run by a wide margin and abandons one that walks its whole provider
+budget, which is the trade taken. Raise it alongside `MailAnswering:MaxProviderCallsPerRun` if you raise that. A
+deployment serving no AI-backed tool narrows it instead: every other MCP tool answers from the local mailbox copy with a
+bounded query, so a minute is generous there. `AdminEndpoint` reaches no provider at all, which makes it the endpoint to
+narrow without having to ask what a tool call needs.
 
 The ceiling is applied ahead of the rate limiter, so time a request spends waiting for a limiter lease is inside it.
 That wait is nothing under the default queue limits of `0`, and is the whole point of the ordering once a queue is

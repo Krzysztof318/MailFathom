@@ -1478,16 +1478,21 @@ A request that reaches the ceiling is abandoned: its `CancellationToken` is sign
 concurrency permit it held is released. `AdminEndpoint:RequestTimeout` takes the same keys and the same default and is
 configured independently, exactly as the limits are.
 
-**Ten minutes is derived, not round.** An `ask_mail` call embeds the question and then generates an answer, which is two
-sequential invocations of the `AiProviderInvocation` resilience class, and that class's own `TotalTimeout` defaults to
-five minutes. A ceiling below the budget a provider was granted would abandon the request while it was still inside that
-budget, and the operator would read a gateway timeout where the provider's own classified failure belonged — the same
-nesting rule the resilience classes already follow among themselves.
+**Ten minutes is a bound on a hang, not a promise that no legitimate request is abandoned**, and the two cannot both
+hold here. An `ask_mail` run is a conversation whose length the model decides — bounded by
+[`MailAnswering:MaxProviderCallsPerRun`](../features/mail-answering.md#what-one-question-may-spend) at eight calls, each one an
+`AiProviderInvocation` whose own `TotalTimeout` defaults to five minutes. A ceiling that enclosed the maximum would have
+to sit past three-quarters of an hour, which is not a request ceiling at all and would let one stalled run hold a
+concurrency permit for that long.
 
-So the ceiling is a bound on a hang rather than a tight bound on a request, and narrowing it is what changes that. A
-deployment serving no AI-backed tool can drop it to a minute: every other tool answers from the local mailbox copy with
-a bounded query. The administrative endpoint reaches no provider at all, which makes it the one to narrow without having
-to ask what a tool call needs.
+So the number is chosen against what a request costs to hold rather than against what the slowest one may spend. It
+clears an ordinary answering run by a wide margin, and **a run that walks its whole provider budget is abandoned with a
+`504`** — deliberately, and worth knowing before you read one as a fault. Raise this alongside
+`MailAnswering:MaxProviderCallsPerRun` if you raise that, or if your questions genuinely run long.
+
+Narrowing is the other direction and the more common one. A deployment serving no AI-backed tool can drop it to a
+minute: every other tool answers from the local mailbox copy with a bounded query. The administrative endpoint reaches
+no provider at all, which makes it the one to narrow without having to ask what a tool call needs.
 
 **The ceiling is applied ahead of the rate limiter**, so time spent waiting for a limiter lease is inside it rather than
 outside. Under the default queue limits of `0` that wait is nothing; once a queue is configured it is the whole point,
