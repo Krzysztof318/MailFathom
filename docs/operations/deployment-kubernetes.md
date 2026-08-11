@@ -83,7 +83,8 @@ reference — the same path and the same references the Compose deployment uses.
 shape if they did: nothing schedules a systemd unit here, and that encryption binds material to one machine while every
 replica has to open what any other replica sealed. What protects these at rest is the cluster's own Secret encryption,
 configured on the API server rather than here.
-[What an encrypted credential is bound to](secret-provisioning.md#what-an-encrypted-credential-is-bound-to) states why.
+[What an encrypted credential is bound to](secret-provisioning.md#what-an-encrypted-credential-is-bound-to) states the
+binding that makes it a poor fit here.
 
 The last entry is the data-encryption key, and it belongs in this Secret rather than in a chart value: the chart creates
 no Secret and generates nothing, deliberately, because a Helm-generated key would be replaced on any upgrade that did

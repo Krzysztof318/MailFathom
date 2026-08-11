@@ -113,7 +113,8 @@ Podman does not change that: Compose starts no per-service systemd unit under ei
 reference resolves to nothing here. These files are protected by the host they sit on and by the `0700` on `secrets/`
 above, which the page already names as the whole of the access control.
 [What an encrypted credential is bound to](secret-provisioning.md#what-an-encrypted-credential-is-bound-to) states the
-whole of that boundary, including which container shape does reach the path.
+binding, and [Docker or Podman Compose](secret-provisioning.md#docker-or-podman-compose) which container shape does
+reach the path.
 
 **The data-encryption key is `-base64 32`, not the `-base64 33` on every other line here.** It is the one credential
 generated to a length rather than to a strength: the material has to decode to exactly 32 bytes, and startup refuses
