@@ -40,6 +40,7 @@ endpoint exposes synchronized mailboxes to whoever can reach it and satisfy what
 | `Cors.AllowedOrigins` | `["*"]` | The browser origins served: `*` for every one, a list for exactly those, an empty list for none |
 | `ClientCertificateProfiles` | empty | The client applications whose certificates are accepted, each with its own authorities and expected names |
 | `RateLimiting` | bounded — see [Rate limiting](#rate-limiting) | How much traffic the endpoint accepts, per process and per client |
+| `RequestTimeout` | bounded — see [Request timeouts](#request-timeouts) | How long one request may run before the endpoint abandons it |
 | `BindAddress`, `Port`, `Transport` | `0.0.0.0`, `8080`, `Http` | Where the endpoint is served, and under which schemes |
 | `Https.Endpoints` | empty | The domains MailFathom terminates TLS for, read under the two `Transport` modes that terminate TLS |
 
@@ -84,11 +85,12 @@ What bounds it instead:
   decides where the URL it receives resolves to.
 - Redemption reads the mailbox afresh, so a link dies with the message it points at. An expired capability, a forged
   one, and one whose mail is gone are all `404` with the same body.
-- It rides this endpoint's listeners, its transport, and both of its rate limits. It spends the surface's shared
-  anonymous per-caller bucket, because it presents no credential to partition on, and it takes a permit from the same
-  process-wide concurrency limiter the protocol route does — each redemption loads a stored message, parses it, and
-  holds a response stream open, so an unauthenticated route left outside that limit would be the one place a burst of
-  slow readers is unbounded.
+- It rides this endpoint's listeners, its transport, both of its rate limits, and its
+  [request ceiling](#request-timeouts). It spends the surface's shared anonymous per-caller bucket, because it presents
+  no credential to partition on, and it takes a permit from the same process-wide concurrency limiter the protocol
+  route does — each redemption loads a stored message, parses it, and holds a response stream open. The ceiling is what
+  bounds how long it holds that permit: a client reading just above Kestrel's minimum response rate is otherwise the
+  one place a burst of slow readers is unbounded, and it needs no credential to be that client.
 - The response is `Cache-Control: no-store`. A proxy that cached it would keep serving the file for that URL after the
   capability expired, which is the one way an intermediary can outlive the window.
 
@@ -1433,8 +1435,9 @@ the origin check, the certificate check, and authentication, so the work those d
 and comparing every configured key, on every request — happens before a permit is taken. The order is what makes the
 per-client limit possible at all: run ahead of authentication and there is no client to count against, and every request
 shares the anonymous bucket. What a bad credential costs the sender is therefore a partition it shares with every other
-unidentified request, not the work the server already did to refuse it. Bounding connections that never authenticate is a
-job for whatever fronts the process.
+unidentified request, not the work the server already did to refuse it. What bounds the connections underneath all of
+that — including the ones that never send a request at all — is [`ConnectionLimits`](configuration-reference.md#connectionlimits),
+which is a ceiling on the process rather than on this endpoint.
 
 Turning the limits off is an explicit value and costs one startup warning:
 
@@ -1445,6 +1448,76 @@ warn: MailFathom.Host.Hosting.Warnings.TransportRateLimitingStartupReport
       where something in front of this process already bounds the traffic reaching it. Remove
       McpEndpoint:RateLimiting:Enabled to run under the product defaults.
 ```
+
+## Request timeouts
+
+Rate limiting decides how much traffic is admitted. It does not decide how long an admitted request may hold what it was
+admitted with, and those are separate bounds on separate resources — which is why `RequestTimeout` is its own section
+beside `RateLimiting` rather than another number inside it.
+
+A concurrency permit is taken on the way in and released when the request ends. Without a ceiling, `MaxConcurrentRequests`
+bounds how many requests run at once and nothing bounds how long any of them lasts, so twenty slow requests take the
+endpoint out of service without exceeding any rate. An enabled endpoint therefore carries a ceiling by default, on the
+same reasoning the limits do.
+
+```json
+{
+  "McpEndpoint": {
+    "RequestTimeout": {
+      "Enabled": true,
+      "Duration": "00:10:00"
+    }
+  }
+}
+```
+
+| Setting | Default | Range | Meaning |
+|---|---|---|---|
+| `Enabled` | `true` | — | Whether a request that outlives `Duration` is abandoned |
+| `Duration` | `00:10:00` | 1s–1h | How long one request may run |
+
+A request that reaches the ceiling is abandoned: its `CancellationToken` is signalled, the response is `504`, and the
+concurrency permit it held is released. `AdminEndpoint:RequestTimeout` takes the same keys and the same default and is
+configured independently, exactly as the limits are.
+
+**Ten minutes is a bound on a hang, not a promise that no legitimate request is abandoned**, and the two cannot both
+hold here. An `ask_mail` run is a conversation whose length the model decides — bounded by
+[`MailAnswering:MaxProviderCallsPerRun`](../features/mail-answering.md#what-one-question-may-spend) at eight calls, each one an
+`AiProviderInvocation` whose own `TotalTimeout` defaults to five minutes. A ceiling that enclosed the maximum would have
+to sit at forty minutes, which is not a request ceiling at all and would let one stalled run hold a
+concurrency permit for that long.
+
+So the number is chosen against what a request costs to hold rather than against what the slowest one may spend. It
+clears an ordinary answering run by a wide margin, and **a run that walks its whole provider budget is abandoned with a
+`504`** — deliberately, and worth knowing before you read one as a fault. Raise this alongside
+`MailAnswering:MaxProviderCallsPerRun` if you raise that, or if your questions genuinely run long.
+
+Narrowing is the other direction and the more common one. A deployment serving no AI-backed tool can drop it to a
+minute: every other tool answers from the local mailbox copy with a bounded query. The administrative endpoint reaches
+no provider at all, which makes it the one to narrow without having to ask what a tool call needs.
+
+**The ceiling is applied ahead of the rate limiter**, so time spent waiting for a limiter lease is inside it rather than
+outside. Under the default queue limits of `0` that wait is nothing; once a queue is configured it is the whole point,
+because a request queued for its client's tokens is already holding a concurrency permit.
+
+**Both routes on this surface carry it**, the protocol route and the
+[attachment download](#the-one-route-on-this-surface-that-admits-no-credential). The download is the one that most
+needs it: it holds a response stream open for as long as its reader takes, so without a ceiling a client reading just
+above Kestrel's minimum response rate holds a concurrency permit indefinitely, and it presents no credential.
+
+The probes are outside it. A named policy is attached to each route rather than a default policy applied to every one,
+so a readiness answer is never abandoned because a mailbox query was slow — which would take the instance out of
+traffic for the one thing that was still working.
+
+What is in force is stated once at startup, one line per enabled endpoint:
+
+```text
+info: MailFathom.Host.Hosting.Warnings.TransportRequestTimeoutStartupReport
+      The MCP endpoint on /mcp abandons a request that has run for 00:10:00, answering 504 and releasing the
+      concurrency permit it held.
+```
+
+Turning it off is an explicit value and costs one startup warning, in the shape the rate limits use.
 
 ## What the endpoint records
 

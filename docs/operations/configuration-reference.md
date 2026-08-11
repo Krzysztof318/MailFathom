@@ -512,7 +512,7 @@ put a database write on the path of every provider call in every run.
 | `MailAnswering:MaxPassagesPerRetrieval` | int | `20` | 1 – 50; how many messages one lookup may draw on. Capped by what one search can rank, because a retrieval is answered from a search window, and defaulted to the window `search_emails` itself returns so that asking a question reaches as many messages per lookup as searching for the same thing would | restart |
 | `MailAnswering:MaxCharactersPerPassage` | int | `1200` | 1 – 100000; how much of any single message a lookup may draw out. Separate from the count above, because one enormous extract and a spread across several messages say different things about a mailbox | restart |
 | `MailAnswering:MaxRetrievedCharactersPerRun` | int | `20000` | 1 – 10000000, and at least `MaxCharactersPerPassage` or no lookup could hand over even one passage. The ceiling on how much retrieved mail leaves the process to answer one question, whatever the model asks for, and the one that decides how many lookups a run fits: a lookup whose every passage reached the per-passage ceiling would exhaust a run on its own. Reaching it cuts rather than refuses: the run answers from what it has and the response says the mailbox was not read in full | restart |
-| `MailAnswering:MaxProviderCallsPerRun` | int | `8` | 1 – 1000; the ceiling that holds whatever the provider reports, because a run is a tool loop whose length is the model's decision. Reaching it stops the run with `57001` | restart |
+| `MailAnswering:MaxProviderCallsPerRun` | int | `8` | 1 – 1000; the ceiling that holds whatever the provider reports, because a run is a tool loop whose length is the model's decision. Reaching it stops the run with `57001`. The run is also bounded by wall clock: raising this means raising [`McpEndpoint:RequestTimeout:Duration`](#request-timeout--mcpendpointrequesttimeout-and-adminendpointrequesttimeout) with it, or the extra calls are bought and then abandoned with a `504` | restart |
 | `MailAnswering:MaxTokensPerRun` | long | `80000` | 1 – 100000000; the cost ceiling, stated in the unit a provider bills by. Checked before each call against what the calls before it reported, so the call that crosses it is paid for — what a call will cost is not knowable until it is answered. Reaching it stops the run with `57001` | restart |
 | `MailAnswering:MaxAnswerCharacters` | int | `20000` | 1 – 1000000; how much of the model's answer one response carries. Cut rather than refused, and the response says it was cut | restart |
 | `MailAnswering:MaxCitations` | int | `20` | 1 – 1000; how many messages one response names. Cut the same way and reported the same way | restart |
@@ -649,6 +649,30 @@ carries is who they are believed from, and **an unconfigured section believes ev
 `X-Forwarded-For` is never read, so the peer MailFathom observes stays the one that opened the connection, and the
 configured OAuth `Resource` stays a value you wrote rather than anything derived from a header.
 
+## `ConnectionLimits`
+
+How many connections this process accepts at once, across every listener it opens. The other section that belongs to
+the whole process rather than to a surface, and for a stronger reason than `ReverseProxy`: a connection is accepted
+before any routing has decided which endpoint it was for, so there is no per-surface form of this question to ask.
+
+**Read it as the process's ceiling, never as the sum of what the endpoints permit.** `McpEndpoint:RateLimiting:MaxConcurrentRequests`
+bounds what one surface serves at once; this bounds what the machine accepts at all, the probe listener included. The
+two numbers are deliberately far apart, because a connection is not a request — a client holds one open across several,
+and an idle one survives until the keep-alive timeout — so a ceiling near the request limit would refuse ordinary
+clients long before it refused a flood.
+
+It exists because every other limit is reached too late to see this. The rate limiter partitions a request that already
+has an `HttpContext`, and what a connection flood spends before that point — the accept, the TLS handshake, and on the
+MCP surface the client certificate's chain building — is the most expensive per-connection work the process does.
+
+| Key | Type | Default | Constraint | Change |
+| --- | --- | --- | --- | --- |
+| `ConnectionLimits:Enabled` | bool | `true` | Turning it off restores the framework's own default, which accepts connections until the operating system stops supplying them; it costs a startup warning | restart |
+| `ConnectionLimits:MaxConcurrentConnections` | int | `1000` | 1 – 100000; process-wide, across every listener | restart |
+
+Like every limit here it is counted in this process alone, so a deployment running several instances enforces it once
+per instance rather than once in total, and none of it is protection against a distributed flood.
+
 ## `McpEndpoint`
 
 Whether the protocol surface is served and what a client must present. The whole section is **restart** — it decides
@@ -751,7 +775,8 @@ plain-HTTP deployment presents none, which a `Required` profile refuses.
 
 ### Rate limiting — `McpEndpoint:RateLimiting` and `AdminEndpoint:RateLimiting`
 
-The one endpoint subsection where every value has a product default, so an enabled endpoint is bounded whether or not
+One of the two endpoint subsections where every value has a product default — [request timeout](#request-timeout--mcpendpointrequesttimeout-and-adminendpointrequesttimeout)
+is the other — so an enabled endpoint is bounded whether or not
 anyone wrote a number. Both endpoints carry it, with the same keys, defaults, and validation, and configure it
 independently: neither one's traffic reaches the other's limits. [Rate limiting](mcp-endpoint.md#rate-limiting) records
 whose capacity a request spends, and [administering a deployment](admin-endpoint.md#rate-limiting) records the one
@@ -767,6 +792,36 @@ that surface judges a credential behind the limiter.
 | `…:TokensPerReplenishmentPeriod` | int | `60` | 1 – 1000000, and not above `TokenCapacity` | restart |
 | `…:ReplenishmentPeriod` | TimeSpan | `00:01:00` | 1 s – 1 h | restart |
 | `…:RequestQueueLimit` | int | `0` | 0 – 1000, and below `MaxConcurrentRequests` | restart |
+
+### Request timeout — `McpEndpoint:RequestTimeout` and `AdminEndpoint:RequestTimeout`
+
+How long one request may run before the endpoint abandons it, answering `504` and releasing the concurrency permit it
+held. Defaulted throughout like the rate limits, carried by both endpoints with the same keys, and configured
+independently of them — because how much traffic is admitted and how long an admitted request may hold what it was
+admitted with are different questions, and a deployment may already have one answered in front of the process without
+the other.
+
+Without it, `MaxConcurrentRequests` bounds how many requests run at once and nothing bounds how long any of them lasts,
+so twenty slow requests take a surface out of service without exceeding any rate.
+
+| Key | Type | Default | Constraint | Change |
+| --- | --- | --- | --- | --- |
+| `…:Enabled` | bool | `true` | Turning it off costs a startup warning | restart |
+| `…:Duration` | TimeSpan | `00:10:00` | 1 s – 1 h | restart |
+
+**The default is a bound on a hang rather than a promise that no legitimate request is abandoned.** An `ask_mail` run is
+a conversation whose length the model decides, bounded by `MailAnswering:MaxProviderCallsPerRun` at eight calls, each an
+`AiProviderInvocation` whose own `TotalTimeout` defaults to five minutes — so a ceiling enclosing the maximum would sit
+at forty minutes, which is not a request ceiling and would let one stalled run hold a concurrency permit
+that long. Ten minutes clears an ordinary answering run by a wide margin and abandons one that walks its whole provider
+budget, which is the trade taken. Raise it alongside `MailAnswering:MaxProviderCallsPerRun` if you raise that. A
+deployment serving no AI-backed tool narrows it instead: every other MCP tool answers from the local mailbox copy with a
+bounded query, so a minute is generous there. `AdminEndpoint` reaches no provider at all, which makes it the endpoint to
+narrow without having to ask what a tool call needs.
+
+The ceiling is applied ahead of the rate limiter, so time a request spends waiting for a limiter lease is inside it.
+That wait is nothing under the default queue limits of `0`, and is the whole point of the ordering once a queue is
+configured: a request queued for its caller's tokens already holds a concurrency permit.
 
 ## `AdminEndpoint`
 
@@ -785,6 +840,7 @@ request or per handshake. [Administering a deployment](admin-endpoint.md) is the
 | `AdminEndpoint:Https:Endpoints:<n>` | list of profiles | empty | Same shape and rules as `McpEndpoint:Https:Endpoints:<n>`, read under the two `Transport` modes that terminate TLS | restart; material per handshake |
 | `AdminEndpoint:Https:Redirect` | block | on | Same shape and rules as `McpEndpoint:Https:Redirect`; its socket is this surface's own `BindAddress` and `Port`, so terminating TLS on both surfaces opens two clear-text ports that do not collide | restart |
 | `AdminEndpoint:RateLimiting` | block | bounded | Same shape, defaults, and rules as `McpEndpoint:RateLimiting` above; applied whether or not it is written | restart |
+| `AdminEndpoint:RequestTimeout` | block | bounded | Same shape, defaults, and rules as [`McpEndpoint:RequestTimeout`](#request-timeout--mcpendpointrequesttimeout-and-adminendpointrequesttimeout) above; applied whether or not it is written. This surface reaches no AI provider, so it is the one the default can be narrowed on freely | restart |
 
 The routes are served beneath `/api/admin`, which is a constant rather than a setting: a client is configured with a
 host and a port and appends the rest.

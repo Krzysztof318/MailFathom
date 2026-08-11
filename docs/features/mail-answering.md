@@ -1,6 +1,6 @@
 # Mail answering
 
-<!-- describes: src/AI/Orchestration/**, src/AI/Retrieval/**, src/AI/ProviderAdapters/ResilientChatClient.cs, src/Application/Retrieval/**, src/Domain/Answering/**, src/Infrastructure/Persistence/Answering/**, src/Host/Configuration/Mail/MailAnsweringAuditTrailOptions.cs -->
+<!-- describes: src/AI/Orchestration/**, src/AI/Retrieval/**, src/AI/ProviderAdapters/ResilientChatClient.cs, src/Application/Retrieval/**, src/Domain/Answering/**, src/Infrastructure/Persistence/Answering/**, src/Host/Configuration/Mail/MailAnsweringAuditTrailOptions.cs, src/Host/Configuration/Access/TransportRequestTimeoutOptions.cs -->
 
 A question about the mailbox, answered from the mail the model looks up while answering. This page describes the
 composition that does it: what the model may reach, when it reaches it, how much of it leaves the process, and what an
@@ -127,6 +127,18 @@ ceiling unreachable while a tool loop went round.
 A token ceiling can only be checked against what earlier calls reported, so the call that crosses it is paid for. That
 is inherent rather than an oversight — what a call will cost is not knowable until the provider has answered, and the
 alternative is refusing calls on an estimate.
+
+**A fourth bound sits outside all three, and it is not a spend ceiling.** The MCP request carrying the question runs
+under [`McpEndpoint:RequestTimeout`](../operations/mcp-endpoint.md#request-timeouts), ten minutes by default, and it is
+wall clock rather than budget: it is not checked before the next provider call, it abandons the run wherever it has got
+to, and the caller receives a `504` instead of `57001`. A run that spent its whole call budget on slow answers can reach
+it — eight invocations at the `AiProviderInvocation` class's five-minute total timeout is forty minutes — so the
+transport ceiling, not `MaxProviderCallsPerRun`, is what a long question actually stops on first.
+
+That is the deliberate trade rather than an oversight, because a ceiling sized for forty minutes would let one stalled
+run hold an MCP concurrency permit for that long. What follows from it is one rule worth carrying: **raising
+`MaxProviderCallsPerRun` to let long questions finish means raising `McpEndpoint:RequestTimeout:Duration` with it**, or
+the extra calls are bought and then abandoned unanswered.
 
 ### The retrieval ceiling cuts; the other two stop the run
 

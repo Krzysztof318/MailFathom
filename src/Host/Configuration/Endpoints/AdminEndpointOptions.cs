@@ -106,6 +106,10 @@ internal sealed class AdminEndpointOptions
     /// </remarks>
     public TransportRateLimitingOptions RateLimiting { get; set; } = new();
 
+    /// <summary>Gets or sets how long one request may run before the endpoint abandons it.</summary>
+    /// <remarks>The same section the MCP endpoint carries and configured separately, with the same default. An administrative request reaches no AI provider, so it is the one this can be narrowed on without asking what a tool call needs.</remarks>
+    public TransportRequestTimeoutOptions RequestTimeout { get; set; } = new();
+
     /// <summary>Gets whether a client may authenticate with one of the configured API keys.</summary>
     public bool AllowsApiKey => this.ApiKeys().Count > 0;
 
@@ -214,6 +218,9 @@ internal sealed class AdminEndpointOptions
 
         errors.AddRange(this.RateLimiting.FindConfigurationErrors()
             .Select(error => $"{SectionName}:{nameof(this.RateLimiting)}:{error}"));
+
+        errors.AddRange(this.RequestTimeout.FindConfigurationErrors()
+            .Select(error => $"{SectionName}:{nameof(this.RequestTimeout)}:{error}"));
 
         // The platform capability is read here rather than passed in, because whether this host can serve HTTP/3 is a
         // property of the machine the process is running on and not a decision composition takes.

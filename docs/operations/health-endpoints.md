@@ -131,6 +131,19 @@ limiting. That is the stated posture, not an omission:
   [administrative endpoint's](admin-endpoint.md#rate-limiting) ever extend to it — the process-wide limiter recognizes a
   request by the route prefix it arrived under and explicitly applies no limit to one belonging to neither surface.
 
+**One bound does reach this listener**, and it is the exception that proves how the rule above is drawn.
+[`ConnectionLimits`](configuration-reference.md#connectionlimits) is a ceiling on connections rather than on requests,
+and a connection is accepted before routing has decided which listener it was for — so unlike every limit named above,
+it cannot recognize a probe and cannot be made to exempt one. The framework exposes no per-listener form of it.
+
+What that means operationally: a flood that saturates the process-wide ceiling against `/mcp` leaves this listener
+unable to accept, liveness stops answering, and the orchestrator restarts the container. Narrowing `ConnectionLimits`
+brings that point closer; the ceiling is not what creates the failure, since a flood left unbounded exhausts the
+process's file descriptors and produces the same outcome less predictably, but it is what decides the number at which it
+happens. Size it against the connections a real client population holds open rather than against the request limits,
+and publish the probe port on a network the flood cannot reach — which is the same control every other line in this
+section rests on.
+
 Exposure is controlled by which network the port is published on, and by the transport it is served under. Nothing
 else on this listener depends on a credential, and the TLS listener asks for no client certificate even where the MCP
 endpoint's own listeners ask every client for one.

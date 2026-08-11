@@ -123,6 +123,15 @@ internal readonly record struct TransportSurface
     /// </remarks>
     internal string RateLimitingPolicyName => $"MailFathom:{this.Name}:RateLimiting";
 
+    /// <summary>Gets the name this surface's request-timeout policy is registered under.</summary>
+    /// <exception cref="InvalidOperationException">Thrown when the value is the struct default rather than a surface.</exception>
+    /// <remarks>
+    /// A named policy keeps the two surfaces' ceilings apart for the same reason the rate-limiting name does, and it is
+    /// what lets one endpoint carry a ceiling while the other is served without one — a default policy would apply to
+    /// every route in the process, including the probes, which must keep answering while an endpoint is refusing.
+    /// </remarks>
+    internal string RequestTimeoutPolicyName => $"MailFathom:{this.Name}:RequestTimeout";
+
     /// <summary>Gets the scheme that decides which credential a request presented and forwards it to the handler that judges it.</summary>
     /// <exception cref="InvalidOperationException">Thrown when the value is the struct default rather than a surface.</exception>
     internal string RoutingSchemeName => $"MailFathom:{this.Name}:Transport";

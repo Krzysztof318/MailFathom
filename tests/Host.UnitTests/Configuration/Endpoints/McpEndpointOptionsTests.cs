@@ -333,6 +333,33 @@ public sealed class McpEndpointOptionsTests
         Assert.StartsWith("McpEndpoint:RateLimiting:MaxConcurrentRequests", error, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void FindConfigurationErrors_AnUnusableRequestCeiling_IsReportedUnderTheSectionThatCarriesIt()
+    {
+        // Arrange
+        var options = Enabled();
+        options.RequestTimeout.Duration = TimeSpan.Zero;
+
+        // Act
+        var error = Assert.Single(options.FindConfigurationErrors());
+
+        // Assert
+        Assert.StartsWith("McpEndpoint:RequestTimeout:Duration", error, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void RequestTimeout_WithNothingConfigured_BoundsTheEndpoint()
+    {
+        // Act
+        var options = new McpEndpointOptions();
+
+        // Assert
+        // Defaulted like the rate limits, so an endpoint somebody enabled cannot hold a permit indefinitely because
+        // nobody wrote a number.
+        Assert.True(options.RequestTimeout.Enabled);
+        Assert.Equal(new TransportRequestTimeoutOptions().Duration, options.RequestTimeout.Duration);
+    }
+
     /// <summary>
     /// The limits apply to an enabled endpoint whether or not an operator wrote any of them down, so a section nobody
     /// configured has to pass validation rather than demanding numbers the product already has.

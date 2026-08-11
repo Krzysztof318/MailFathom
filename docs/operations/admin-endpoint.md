@@ -284,7 +284,22 @@ you out of `/api/admin`.
 
 Turning the limits off is an explicit value and costs one startup warning, as it does on the MCP endpoint.
 
-## Three postures the endpoint warns about
+## Request timeouts
+
+`AdminEndpoint:RequestTimeout` bounds how long one administrative request may run before it is abandoned, answering
+`504` and releasing the concurrency permit it held. It is the same section the MCP endpoint carries, with the same keys
+and the same ten-minute default, configured independently.
+[Request timeouts](mcp-endpoint.md#request-timeouts) records the settings and the reasoning in full.
+
+**This is the endpoint whose default is worth narrowing.** The ten minutes are sized for the MCP surface, where an
+`ask_mail` run can legitimately spend minutes against an AI provider; no administrative route reaches a provider at all.
+Their work is a bounded database read or a configuration inspection, so a ceiling of a minute or less costs these routes
+nothing and shortens how long a stalled request can hold one of this endpoint's twenty permits.
+
+That matters more here than on the MCP surface for the reason the shared bucket does: the permits an administrative
+caller holds are the ones you need free to reach `/api/admin` while something else is going wrong.
+
+## Four postures the endpoint warns about
 
 None is refused, because each is legitimate somewhere and only you know which you have.
 
@@ -293,6 +308,7 @@ None is refused, because each is legitimate somewhere and only you know which yo
 | No authentication method turned on | Anything that can reach the address can administer the service. Right only for a loopback bind or a network you control. |
 | Served in clear text | Any credential a client presents is readable on the path. Right only behind a TLS-terminating reverse proxy, or on a loopback bind. |
 | `AdminEndpoint:RateLimiting:Enabled` set to `false` | Nothing bounds how fast a caller may present wrong credentials. Right only where something in front of the process already bounds the traffic reaching it. |
+| `AdminEndpoint:RequestTimeout:Enabled` set to `false` | Nothing bounds how long one administrative request may hold a concurrency permit. Right only where something in front of the process already abandons a stalled request. |
 
 Configure `AdminEndpoint:Https:Endpoints` to have Kestrel terminate TLS itself. It takes the same profile shape the MCP
 endpoint's does, including `HttpProtocols`, which defaults to HTTP/1.1 and HTTP/2. Naming any profile binds those

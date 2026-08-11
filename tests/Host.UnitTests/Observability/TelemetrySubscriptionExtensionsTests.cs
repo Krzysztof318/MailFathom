@@ -10,6 +10,7 @@ using MailFathom.Host.Observability;
 using MailFathom.Host.UnitTests.TestDoubles;
 using Microsoft.EntityFrameworkCore.Infrastructure.Internal;
 using ModelContextProtocol.Server;
+using OpenTelemetry.Metrics;
 using Xunit;
 
 namespace MailFathom.Host.UnitTests.Observability;
@@ -99,6 +100,27 @@ public sealed class TelemetrySubscriptionExtensionsTests
 
         // Assert
         Assert.DoesNotContain("Npgsql", metrics.SubscribedMeters);
+    }
+
+    /// <summary>
+    /// The transport limiter's refusals are reported under the framework's own rate-limiting meter, which the ASP.NET
+    /// Core instrumentation supplies rather than <see cref="TelemetrySubscriptionExtensions.AddLibraryMeters" />. That
+    /// is why the name appears in no registration here and why it is asserted instead: it arrives with a package
+    /// version, an instrumentation release that stopped subscribing it would leave every 429 uncounted, and nothing in
+    /// this process would say so. <c>TransportSurface.RateLimitingPolicyName</c> is documented as the tag an operator
+    /// reads a refusal by, and this is what keeps that true.
+    /// </summary>
+    [Fact]
+    public void AddAspNetCoreInstrumentation_SubscribesTheMeterTransportRefusalsAreCountedOn()
+    {
+        // Arrange
+        var metrics = new RecordingMeterProviderBuilder();
+
+        // Act
+        metrics.AddAspNetCoreInstrumentation();
+
+        // Assert
+        Assert.Contains("Microsoft.AspNetCore.RateLimiting", metrics.SubscribedMeters);
     }
 
     [Fact]
