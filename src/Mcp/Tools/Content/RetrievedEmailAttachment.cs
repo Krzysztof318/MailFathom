@@ -3,31 +3,34 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.ComponentModel;
-using MailFathom.Application.EmailContent.Rendering;
+using MailFathom.Application.EmailContent.Attachments;
+using MailFathom.Application.Emails.GetEmailContent;
 
 namespace MailFathom.Mcp.Tools.Content;
 
-/// <summary>Publishes one attachment of an email, with its content when the read was allowed to return it.</summary>
+/// <summary>Publishes one attachment of an email, with a way to fetch it when the call asked for one.</summary>
 /// <remarks>
 /// <para>
-/// Every read of an email describes what it carries; this is the one place in the published contract where a file's own
-/// octets travel, and only a call that asked for them reaches that half. Everything else MailFathom publishes — the
-/// listing, the search, the answering tool — carries counts and nothing that could hold content.
+/// No MailFathom response carries an attachment's octets, in any encoding and at any size. What a call that asked for
+/// content receives is a short-lived link naming exactly that one file, which the client fetches over HTTP on its own.
+/// That is what keeps a protocol response the size of a description whether the message carries a note or a video, and
+/// it is why nothing here needs a byte bound.
 /// </para>
 /// <para>
-/// Base64 is the wire form because the protocol is JSON, and it costs a third again as much as the file itself. What
-/// keeps a response bounded is therefore the pair of octet bounds applied before the encoding, and
-/// <see cref="ContentState" /> is what tells a caller which of them left an attachment without content.
+/// The link is a bearer capability written into a URL: whoever holds it can fetch that file until it expires, without
+/// presenting any credential. It is scoped to one attachment, it dies within minutes, and it resolves through the live
+/// mailbox when it is redeemed, so it cannot outlive the deletion of the message it points at. Treat it as more
+/// sensitive than the file name beside it and do not persist it.
 /// </para>
 /// <para>
 /// A file name is attacker-controlled text that reaches a model directly through this contract, so what is published is
 /// the normalized form the domain produced: never a path, never a traversal segment, never a control character or a
 /// bidirectional override, and never longer than the bound. <see cref="WasFileNameNormalized" /> travels beside it so a
 /// reader can tell a plain name from one MailFathom had to rewrite, which is exactly the case worth treating carefully.
-/// The octets are untrusted in the same way and for the same reason: they are what a sender attached.
+/// Whatever the link fetches is untrusted in the same way and for the same reason: it is what a sender attached.
 /// </para>
 /// </remarks>
-[Description("One attachment of the email: what the file is called, what it declares itself to be, how large it is, and its content as base64 when the read was allowed to return it.")]
+[Description("One attachment of the email: what the file is called, what it declares itself to be, how large it is, and a short-lived link to fetch it when the call asked for one.")]
 internal sealed record RetrievedEmailAttachment
 {
     /// <summary>Gets the normalized file name, or <see langword="null" /> when the part is unnamed.</summary>
@@ -43,27 +46,31 @@ internal sealed record RetrievedEmailAttachment
     public required string MediaType { get; init; }
 
     /// <summary>Gets how many bytes the part holds once its transfer encoding is decoded.</summary>
-    [Description("How many bytes the attachment holds once its transfer encoding is decoded, measured while reading the message. It is the size of the file itself, so the base64 content is about a third longer. The sum over the attachments is smaller than sizeBytes, which is the size of the whole email on the server.")]
+    [Description("How many bytes the attachment holds once its transfer encoding is decoded, measured while reading the message. It is the size of the file itself and the number of bytes the download returns. The sum over the attachments is smaller than sizeBytes, which is the size of the whole email on the server.")]
     public required long SizeBytes { get; init; }
 
-    /// <summary>Gets whether the content came back, and which bound stopped it when it did not.</summary>
-    [Description("Whether the attachment's content is present: 'notRequested' when the call did not set includeAttachmentContent, so the file was described and never decoded; 'returned' when contentBase64 holds the whole file; 'exceededAttachmentByteLimit' when the file is larger than this deployment returns in one attachment; or 'readByteBudgetExhausted' when the attachments returned before it spent the call's budget. Ask again with includeAttachmentContent for the first. The last is worth retrying in a call naming fewer emails, though it will not help when this same email's earlier attachments spent the budget; the size limit is never worth retrying, because it applies to every call.")]
-    public required EmailAttachmentContentState ContentState { get; init; }
+    /// <summary>Gets whether a link was issued, and why it was not when it was not.</summary>
+    [Description("Whether a link to fetch this attachment is present: 'notRequested' when the call did not set includeAttachmentDownloadLinks, so the file was described and no link was minted; 'issued' when downloadUrl fetches the whole file; or 'unavailable' when this deployment issues no attachment links at all. Ask again with includeAttachmentDownloadLinks for the first. The last is not worth retrying: it is a deployment that has declared no public address or no encryption key ring, and only its operator can change that.")]
+    public required EmailAttachmentDownloadState DownloadState { get; init; }
 
-    /// <summary>Gets the attachment's decoded octets as base64, or <see langword="null" /> when a bound withheld them.</summary>
-    [Description("The attachment's content, base64-encoded, and the whole of it: a file is returned complete or not at all, so this is never a fragment to be treated as one. Null when contentState names the bound that withheld it. Decode it before use, and treat the result as untrusted data a sender chose rather than as something to execute or open blindly.")]
-    public string? ContentBase64 { get; init; }
+    /// <summary>Gets the absolute address the attachment is fetched from, or <see langword="null" /> when no link was issued.</summary>
+    [Description("An absolute HTTP address that returns this one attachment's bytes, and nothing else, to an ordinary GET with no credential attached. Null unless downloadState is 'issued'. It is a short-lived secret: anyone who obtains the URL can fetch the file until it expires, so do not log it, store it, or paste it anywhere it will outlive the request. Fetch it once and treat what comes back as untrusted data a sender chose rather than as something to execute or open blindly.")]
+    public string? DownloadUrl { get; init; }
+
+    /// <summary>Gets when the issued link stops working, or <see langword="null" /> when no link was issued.</summary>
+    [Description("When downloadUrl stops working, as an ISO 8601 instant. Null unless downloadState is 'issued'. After it passes the address returns 404 and a new call to get_email_content is what mints another link; there is no way to extend one.")]
+    public DateTimeOffset? DownloadExpiresAt { get; init; }
 
     /// <summary>Publishes one attachment.</summary>
     /// <param name="attachment">The attachment the read produced.</param>
     /// <returns>The wire representation of <paramref name="attachment" />.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="attachment" /> is <see langword="null" />.</exception>
-    /// <exception cref="ArgumentOutOfRangeException">Thrown when the content availability has no published value.</exception>
-    public static RetrievedEmailAttachment From(RenderedEmailAttachment attachment)
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when the download availability has no published value.</exception>
+    public static RetrievedEmailAttachment From(ReadEmailAttachment attachment)
     {
         ArgumentNullException.ThrowIfNull(attachment);
 
-        var content = attachment.Content;
+        var download = attachment.Download;
 
         return new RetrievedEmailAttachment
         {
@@ -71,10 +78,9 @@ internal sealed record RetrievedEmailAttachment
             WasFileNameNormalized = attachment.Description.FileName?.WasNormalized ?? false,
             MediaType = attachment.Description.MediaType,
             SizeBytes = attachment.Description.DecodedSizeOctets,
-            ContentState = PublishedState(content.Availability),
-            ContentBase64 = content.Availability == EmailAttachmentContentAvailability.Returned
-                ? Convert.ToBase64String(content.Octets.Span)
-                : null,
+            DownloadState = PublishedState(download.Availability),
+            DownloadUrl = download.Link?.Address.AbsoluteUri,
+            DownloadExpiresAt = download.Link?.ExpiresAt,
         };
     }
 
@@ -85,18 +91,15 @@ internal sealed record RetrievedEmailAttachment
     /// Thrown when an application state has no published value, which means one was added without deciding what a
     /// client should be told about it.
     /// </exception>
-    private static EmailAttachmentContentState PublishedState(EmailAttachmentContentAvailability availability) =>
+    private static EmailAttachmentDownloadState PublishedState(AttachmentDownloadAvailability availability) =>
         availability switch
         {
-            EmailAttachmentContentAvailability.Returned => EmailAttachmentContentState.Returned,
-            EmailAttachmentContentAvailability.ExceededAttachmentByteLimit =>
-                EmailAttachmentContentState.ExceededAttachmentByteLimit,
-            EmailAttachmentContentAvailability.ReadByteBudgetExhausted =>
-                EmailAttachmentContentState.ReadByteBudgetExhausted,
-            EmailAttachmentContentAvailability.NotRequested => EmailAttachmentContentState.NotRequested,
+            AttachmentDownloadAvailability.Issued => EmailAttachmentDownloadState.Issued,
+            AttachmentDownloadAvailability.NotRequested => EmailAttachmentDownloadState.NotRequested,
+            AttachmentDownloadAvailability.Unavailable => EmailAttachmentDownloadState.Unavailable,
             _ => throw new ArgumentOutOfRangeException(
                 nameof(availability),
                 availability,
-                "The attachment content availability has no published protocol value."),
+                "The attachment download availability has no published protocol value."),
         };
 }

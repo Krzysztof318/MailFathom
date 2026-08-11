@@ -324,10 +324,10 @@ reaches a mailbox.
 ## `get_email_content`
 
 Returns up to ten emails from the local mailbox copy in one call: for each one its normalized headers, the plain-text
-body, optionally a sanitized HTML body, every attachment it carries described, and — on request — those attachments'
-content. [Email content](email-content.md) documents the use case behind it — the representations, the sanitization
-policy, the four bounds, the attachment default, and the consistency behavior — where they are enforced. This section
-describes the surface.
+body, optionally a sanitized HTML body, every attachment it carries described, and — on request — a short-lived link
+that fetches each of those attachments. [Email content](email-content.md) documents the use case behind it — the
+representations, the sanitization policy, the two bounds, the attachment default, and what a link authorizes — where
+they are enforced. This section describes the surface.
 
 ### Arguments
 
@@ -335,7 +335,7 @@ describes the surface.
 |---|---|---|
 | `storedEmailIds` | `string[]` | **Required.** The `storedEmailId` values a listing or a search returned, 1 to 10 of them, each named at most once. Each is a UUID; anything else is refused with `51004` |
 | `includeSanitizedHtml` | `boolean` | Whether to also return the sanitized HTML body of each email. Omitted returns plain text alone |
-| `includeAttachmentContent` | `boolean` | Whether to return the content of each attachment as base64, rather than only describing it. Omitted still returns every attachment's file name, media type, and size |
+| `includeAttachmentDownloadLinks` | `boolean` | Whether to mint a link for fetching each attachment, rather than only describing it. Omitted still returns every attachment's file name, media type, and size |
 
 Naming several emails is what the tool exists for: a call that has just listed or searched routinely wants the top few
 results, and one round trip per email spends the protocol overhead, the rate-limit budget, and a turn of the model's own
@@ -382,11 +382,11 @@ in it.
 | `sizeBytes` | The size of the whole email as the mail server reported it |
 | `headers` | Subject, sent and received timestamps, every participant with its header role, and the three threading identifiers |
 | `body` | The representations, or the reason there are none |
-| `attachments` | One entry per attachment, always: normalized file name, media type, and decoded size, plus the content as base64 within the deployment's byte bounds when the call asked for it |
+| `attachments` | One entry per attachment, always: normalized file name, media type, and decoded size, plus a short-lived address to fetch it from when the call asked for one |
 | `attachmentCounts` | What the email carries besides its body, returned either way, or `null` when nothing has ever read its parts |
 | `remoteFlags` | The flags a server last showed, and when they were read |
 
-Five parts of it are worth reading before a caller writes against them:
+Six parts of it are worth reading before a caller writes against them:
 
 - **Truncation travels inside each representation, and names the bound.** `plainText` and `sanitizedHtml` each carry
   `text`, `originalCharacterCount`, and `truncatedBy`, because a body and the fact that it is incomplete are never useful
@@ -403,23 +403,21 @@ Five parts of it are worth reading before a caller writes against them:
   read, and a caller that ignored the distinction would report an empty message — or would give up on the one state
   where asking again later actually returns the body.
 - **`attachments` is always present, and `[]` means the email carries none.** Every read describes what a message
-  carries, because deciding whether a file is worth asking for *is* reading its name, its type, and its size — a result
+  carries, because deciding whether a file is worth fetching *is* reading its name, its type, and its size — a result
   answering with a count alone would force a second call to learn what the first was about. `attachmentCounts` answers
   how many either way. `list_emails` still counts and never names, deliberately: a listing is a browse over mail the
   caller has not opened, while a content read has already returned the body in full.
-- **`contentBase64` is the whole file or nothing, and `contentState` says which.** It is absent unless the call set
-  `includeAttachmentContent`, which `contentState: notRequested` states rather than leaving a reader to infer. An
-  attachment above
-  `EmailContent:MaxAttachmentBytes`, or reached after `EmailContent:MaxAttachmentBytesPerRead` is spent, is described
-  with `contentBase64` absent and `contentState` naming the bound: `exceededAttachmentByteLimit` is the same answer in
-  every call, while `readByteBudgetExhausted` may come back in a narrower one. *May*, because the budget falls to the
-  attachments of one message as much as to the emails of one call — a message carrying more than the budget in files
-  withholds its later ones however few emails were named, and no configuration makes the retry guaranteed the way the
-  floor under `MaxCharactersPerRead` does for bodies. No attachment is
-  ever returned in part, because a fragment of a file is indistinguishable from a whole one to anything downstream.
-  That property is the only one in the whole published contract that carries message-part bytes, and nothing reachable
-  from the result can hold a raw byte array or a stream at all; `Mcp.UnitTests` asserts both structurally over the
-  contract rather than response by response.
+- **No response carries a file's bytes, and `downloadState` says what it carries instead.** `downloadUrl` is an absolute
+  address that returns exactly one attachment to an ordinary `GET` with no credential attached, and `downloadExpiresAt`
+  is when it stops working; both are absent unless `downloadState` is `issued`. `notRequested` is the call that did not
+  set `includeAttachmentDownloadLinks`, and `unavailable` is a deployment that declares no public address or no
+  data-encryption key ring — asking again helps with the first and can never help with the second. Nothing reachable
+  from the result can hold a raw byte array, a stream, or a base64 payload at all; `Mcp.UnitTests` asserts that
+  structurally over the contract rather than response by response.
+- **A link is a bearer capability, so treat the URL as a secret.** Anyone holding it can fetch that file until it
+  expires, which is ten minutes by default and never more than thirty. Fetch it once, do not log it, and do not store
+  it anywhere it will outlive the request; after it expires a new `get_email_content` call is what mints another, and
+  there is no way to extend one.
 - **File names are normalized and may say so.** A file name is attacker-controlled text that reaches a model directly, so
   what is published is the domain's normalized form: a bare name, never a path or a traversal segment, never a control
   character or a bidirectional override, at most 200 characters. `wasFileNameNormalized` states whether MailFathom had to

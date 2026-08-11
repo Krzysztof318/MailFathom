@@ -8,6 +8,7 @@ using MailFathom.AI.Providers;
 using MailFathom.Application.Accounts;
 using MailFathom.Application.AiProviders;
 using MailFathom.Application.EmailContent;
+using MailFathom.Application.EmailContent.Attachments;
 using MailFathom.Application.EmailContent.Storage;
 using MailFathom.Application.Emails.Embeddings.Backfill;
 using MailFathom.Application.Emails.Embeddings.Generation;
@@ -134,6 +135,15 @@ try
     builder.Services.AddOptions<EmailContentOptions>()
         .Bind(
             builder.Configuration.GetSection("EmailContent"),
+            binderOptions => binderOptions.ErrorOnUnknownConfiguration = true)
+        .ValidateDataAnnotations()
+        .ValidateOnStart();
+    // A configuration root of its own rather than a block inside the feature that first needed it. The address clients
+    // reach this deployment at is a property of the installation, so an operator answers it once and whatever else has
+    // to hand back an absolute address later reads the same key instead of adding a second one beside it.
+    builder.Services.AddOptions<DeploymentOptions>()
+        .Bind(
+            builder.Configuration.GetSection(DeploymentOptions.SectionName),
             binderOptions => binderOptions.ErrorOnUnknownConfiguration = true)
         .ValidateDataAnnotations()
         .ValidateOnStart();
@@ -295,10 +305,18 @@ try
         {
             MaxBodyCharacters = contentSettings.MaxBodyCharacters,
             MaxCharactersPerRead = contentSettings.MaxCharactersPerRead,
-            MaxAttachmentBytes = contentSettings.MaxAttachmentBytes,
-            MaxAttachmentBytesPerRead = contentSettings.MaxAttachmentBytesPerRead,
         };
     });
+    // A singleton beside the scoped read bounds above, because what it carries is where this deployment publishes itself
+    // and how long a capability it hands out lives — two facts about the process rather than about a request. The two
+    // come from different sections deliberately: the address is a property of the installation that anything handing
+    // back an absolute URL will want, and the lifetime belongs to the capability this one feature issues. The route is
+    // composed onto the address here, so the address a link points at and the route this host maps below are one
+    // decision written once.
+    builder.Services.AddSingleton(provider => new AttachmentDownloadSettings(
+        provider.GetRequiredService<IOptions<DeploymentOptions>>().Value
+            .ComposeAddressFor(EmailAttachmentDownloadEndpoint.RoutePrefix),
+        provider.GetRequiredService<IOptions<EmailContentOptions>>().Value.AttachmentDownloads.LinkLifetime));
     builder.Services.AddScoped(provider =>
     {
         var backfillSettings = provider.GetRequiredService<IOptions<MailExtractionBackfillOptions>>().Value;
@@ -921,6 +939,16 @@ try
             .MapMcp(McpEndpointRoute.Path)
             .RequireCors(McpTransportSecurityExtensions.CorsPolicyName);
 
+        // Mapped with the MCP surface because it belongs to it: the links it answers are minted by an MCP tool, and
+        // serving it here gives it that endpoint's transport, its rate limits, and its enablement without a listener of
+        // its own. What it does not inherit is what the two middlewares above scope to the protocol path themselves —
+        // the origin allow-list and the client-certificate profiles — and that is the right side of the line: both ask
+        // which program is calling, which is the question this route deliberately does not have an answer to. It
+        // carries no authorization either, since the signed capability in the URL is what admits a request and the
+        // things that fetch files cannot attach an MCP credential, which is why it is mapped outside the group the
+        // access policy is applied to below.
+        var attachmentDownload = app.MapEmailAttachmentDownload();
+
         if (mcpEndpointSettings.RequiresAuthentication)
         {
             // Authentication also serves the protected resource metadata document, which the MCP authentication scheme
@@ -956,6 +984,14 @@ try
             // answering while this one is refusing. The process-wide half of the policy cannot be attached here, because
             // an endpoint resolves one limiter, so it rides on the global limiter and excludes every other route itself.
             mcpEndpoint.RequireRateLimiting(TransportSurface.Mcp.RateLimitingPolicyName);
+
+            // The same per-caller policy on the download route, which admits no credential and therefore spends the
+            // surface's shared anonymous bucket. That is the point rather than a limitation: an unauthenticated route
+            // serving mail content is exactly the one that must not be unbounded. The process-wide half reaches it as
+            // well, because the surface names this prefix among the ones it serves, so a redemption takes a permit
+            // from the same concurrency limiter the protocol route does rather than opening an unbounded second door
+            // onto the same message store and MIME parser.
+            attachmentDownload.RequireRateLimiting(TransportSurface.Mcp.RateLimitingPolicyName);
         }
 
         if (mcpEndpointSettings.RequiresAuthentication)

@@ -6,6 +6,7 @@ using MailFathom.AI;
 using MailFathom.AI.Chat;
 using MailFathom.Application.Accounts;
 using MailFathom.Application.EmailContent;
+using MailFathom.Application.EmailContent.Attachments;
 using MailFathom.Application.EmailContent.Storage;
 using MailFathom.Application.Emails.Embeddings.Backfill;
 using MailFathom.Application.Emails.Embeddings.Generation;
@@ -174,6 +175,12 @@ internal sealed class OrchestratedMailFathomServices : IAsyncDisposable
             MaxExtractedTextCharacters = 10_000,
         });
         builder.Services.AddSingleton(new EmailContentReadOptions { MaxBodyCharacters = 10_000 });
+        // Where attachment links point and how long they live, which a composition root reads from the EmailContent
+        // section. Declared here rather than left null so the suite exercises the path that mints a capability; the
+        // address is synthetic because nothing in this suite fetches one over the network.
+        builder.Services.AddSingleton(new AttachmentDownloadSettings(
+            new Uri("https://mailfathom.integration.test/attachments/"),
+            TimeSpan.FromMinutes(10)));
         // Registered by the composition root rather than by AddInfrastructure, so the write-connection pool would fail
         // to resolve here for the same reason every bound setting above is supplied: the suite does not start the host.
         builder.Services.AddSingleton(new MailboxWriteSessionOptions());

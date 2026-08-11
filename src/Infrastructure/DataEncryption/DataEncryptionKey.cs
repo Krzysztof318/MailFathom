@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.Security.Cryptography;
+using System.Text;
 using MailFathom.Common;
 using MailFathom.Infrastructure.Secrets.Resolution;
 
@@ -107,6 +108,28 @@ public sealed class DataEncryptionKey : IDisposable
     /// <exception cref="ObjectDisposedException">Thrown when the key has already been erased.</exception>
     internal SealedValue Seal(DataEncryptionBinding binding, ReadOnlySpan<byte> plaintext) =>
         new(this.KeyId, AesGcmEnvelope.Seal(this.material.RevealBytes(), plaintext, binding.ComposeAssociatedData(this.KeyId)));
+
+    /// <summary>Derives a key for a purpose that signs rather than seals.</summary>
+    /// <param name="purpose">What the derived key is for, which is bound in as the derivation's info label.</param>
+    /// <param name="destination">Where the derived key is written, whose length decides how much material is produced.</param>
+    /// <exception cref="ObjectDisposedException">Thrown when the key has already been erased.</exception>
+    /// <remarks>
+    /// HKDF rather than the ring key itself, so the material that signs is never the material that seals: an attacker
+    /// who obtained one subkey learns nothing about the other or about the key both came from. The derivation is
+    /// deterministic and takes no salt, which is what lets a signature produced by one process be verified by another
+    /// holding the same ring — the domain separation comes from the purpose alone, exactly as it does for a sealed value.
+    /// <para>
+    /// The caller owns the destination and is responsible for erasing it, the same way this type erases its own material
+    /// on disposal.
+    /// </para>
+    /// </remarks>
+    internal void DeriveKeyFor(DataEncryptionPurpose purpose, Span<byte> destination) =>
+        HKDF.DeriveKey(
+            HashAlgorithmName.SHA256,
+            this.material.RevealBytes(),
+            destination,
+            salt: default,
+            info: Encoding.UTF8.GetBytes(purpose.Identity));
 
     /// <summary>Opens a value sealed under this key.</summary>
     /// <param name="binding">What the value belongs to.</param>

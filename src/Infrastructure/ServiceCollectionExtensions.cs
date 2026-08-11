@@ -4,9 +4,11 @@
 
 using MailFathom.Application.Accounts;
 using MailFathom.Application.AiProviders;
+using MailFathom.Application.EmailContent.Attachments;
 using MailFathom.Application.EmailContent.Rendering;
 using MailFathom.Application.EmailContent.Repair;
 using MailFathom.Application.EmailContent.Storage;
+using MailFathom.Application.Emails.DownloadAttachment;
 using MailFathom.Application.Emails.Embeddings;
 using MailFathom.Application.Emails.Embeddings.Administration;
 using MailFathom.Application.Emails.Embeddings.Backfill;
@@ -36,9 +38,11 @@ using MailFathom.Application.Synchronization.Reconciliation;
 using MailFathom.Application.Synchronization.Sessions;
 using MailFathom.CodeCoverage;
 using MailFathom.Infrastructure.Certificates;
+using MailFathom.Infrastructure.DataEncryption;
 using MailFathom.Infrastructure.Embeddings;
 using MailFathom.Infrastructure.Folders;
 using MailFathom.Infrastructure.Mail;
+using MailFathom.Infrastructure.Mail.Attachments;
 using MailFathom.Infrastructure.Mail.MailKit;
 using MailFathom.Infrastructure.Mail.MailKit.Writes;
 using MailFathom.Infrastructure.Mail.Mime;
@@ -304,6 +308,21 @@ public static class ServiceCollectionExtensions
         // be changed by one request and observed by another.
         services.AddScoped<IEmailContentRenderer>(provider => new MimeKitEmailContentRenderer(
             provider.GetRequiredService<EmailMimeExtractionOptions>()));
+        // Beside the renderer because it parses the same bytes under the same structural limits, and separate from it
+        // because it holds one part open while the renderer holds nothing: a download states what it is serving and then
+        // streams it, which is two steps a rendering has no use for.
+        services.AddScoped<IEmailAttachmentContentReader>(provider => new MimeKitEmailAttachmentContentReader(
+            provider.GetRequiredService<EmailMimeExtractionOptions>()));
+        // Both halves of the attachment capability, registered as singletons because neither holds anything a scope
+        // owns: the key behind a signature is resolved per operation and erased with it, exactly as the encryptor's is.
+        // The settings arrive as a value because where this deployment publishes itself is a restart-level fact.
+        services.AddSingleton<IAttachmentDownloadLinkIssuer>(provider => new SignedAttachmentDownloadLinkIssuer(
+            provider.GetRequiredService<DataEncryptionKeyRing>(),
+            provider.GetRequiredService<AttachmentDownloadSettings>(),
+            provider.GetRequiredService<TimeProvider>()));
+        services.AddSingleton<IAttachmentDownloadTicketReader>(provider => new SignedAttachmentDownloadTicketReader(
+            provider.GetRequiredService<DataEncryptionKeyRing>(),
+            provider.GetRequiredService<TimeProvider>()));
         services.AddScoped<IMailFolderResolutionStore, MailFolderResolutionStore>();
         services.AddScoped<IMailFolderMappingChangeAuditor, LoggedMailFolderMappingChangeAuditor>();
         services.AddScoped<OptimisticConcurrencyRetryPolicy>();
@@ -315,6 +334,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<MailAccountDirectoryReader>();
         services.AddScoped<MailboxTimelineReader>();
         services.AddScoped<EmailContentReader>();
+        services.AddScoped<EmailAttachmentDownloadReader>();
         services.AddScoped<MailboxSearchReader>();
         // Registered for every deployment rather than only where a chat endpoint was declared, because what it is is a
         // reading of the search above: an instance that answers no questions simply resolves it and never calls it, and

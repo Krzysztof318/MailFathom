@@ -22,8 +22,8 @@ namespace MailFathom.Infrastructure.Mail.Mime;
 /// </para>
 /// <para>
 /// Every reason a parse fails is reported as one unreadable outcome, because this caller acts identically on all of
-/// them. Attachment content is materialized only where the bounds ask for it and only up to what they allow: sizes are
-/// measured by streaming either way, and a part above its allowance is measured and released rather than held.
+/// them. No attachment octet is ever materialized: a part's size is measured by streaming its decode into a counter, and
+/// what the decode produced is discarded as it arrives.
 /// </para>
 /// <para>
 /// What bounds the work is the size limit the message was stored under. A body is read in full and then cut to what is
@@ -111,10 +111,7 @@ internal sealed class MimeKitEmailContentRenderer : IEmailContentRenderer
         EmailContentRenderingBounds bounds,
         CancellationToken cancellationToken)
     {
-        var classification = await MimeAttachmentClassifier.ClassifyAsync(
-            message,
-            bounds.AttachmentContent,
-            cancellationToken);
+        var classification = await MimeAttachmentClassifier.ClassifyAsync(message, cancellationToken);
 
         var plainTextBody = ReadPlainTextBody(
             classification,

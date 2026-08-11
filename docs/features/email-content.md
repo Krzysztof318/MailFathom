@@ -1,15 +1,16 @@
 # Email content
 
-<!-- describes: src/Application/EmailContent/**, src/Application/Emails/GetEmailContent/**, src/Infrastructure/Mail/Mime/**, src/Infrastructure/Persistence/Emails/** -->
+<!-- describes: src/Application/EmailContent/**, src/Application/Emails/GetEmailContent/**, src/Application/Emails/DownloadAttachment/**, src/Infrastructure/Mail/Mime/**, src/Infrastructure/Mail/Attachments/**, src/Infrastructure/Persistence/Emails/**, src/Host/Api/EmailAttachmentDownloadEndpoint.cs, src/Host/Configuration/Persistence/AttachmentDownloadOptions.cs -->
 
 MailFathom serves the content of the emails one call names, from its local copy. `EmailContentReader` is the second read
 use case: it takes the stable local identifiers a listing returned and answers for each of them with normalized headers,
 the body as plain text, optionally a sanitized HTML representation, attachment counts, every attachment described and
-optionally carrying its content, the source account and folder alias, and the remote flag snapshot.
+optionally carrying a short-lived link that fetches it, the source account and folder alias, and the remote flag
+snapshot.
 
 It reaches no mail server. That is structural rather than a rule someone keeps: the use case is constructed from a
-summary reader, a content store, a renderer, a repair-request store, and the account catalog, and none of them can open
-an IMAP session. Reading an email therefore cannot download it and cannot set the remote `\Seen` flag, whether or not
+summary reader, a content store, a renderer, a repair-request store, the account catalog, and the link issuer, and none
+of them can open an IMAP session. Reading an email therefore cannot download it and cannot set the remote `\Seen` flag, whether or not
 the local copy turns out to be usable.
 
 The protocol adapter is not part of this. `EmailContentReader` is an application use case; the `get_email_content` MCP
@@ -23,16 +24,16 @@ tool that maps onto it is documented in [MCP tools](mcp-tools.md#get_email_conte
 |---|---|---|
 | `StoredEmailIds` | The emails to read, named by the identities a listing returned, in the order to read them | — |
 | `IncludeSanitizedHtml` | Whether to also produce the sanitized HTML representation of each body | plain text only |
-| `IncludeAttachmentContent` | Whether to return the octets of each attachment, rather than only describe it | descriptions only |
+| `IncludeAttachmentDownloadLinks` | Whether to mint a link for fetching each attachment, rather than only describe it | descriptions only |
 
 Both flags govern the whole call rather than one email each. A caller asking for markup or for the attached files wants
 them for what it is about to read, and a flag per identifier would make the argument list grow with the batch while
 answering a question no caller asks per email.
 
 The HTML representation is opt-in because it costs a sanitization pass over untrusted markup and because plain text is
-what most callers want: a model reading mail is better served by the words than by the layout around them. The
-attachment octets are opt-in for a different reason, recorded under
-[Attachments](#attachments-are-described-always-and-returned-on-request).
+what most callers want: a model reading mail is better served by the words than by the layout around them. The links
+are opt-in for a different reason, recorded under
+[Attachments](#attachments-are-described-always-and-fetched-through-a-link).
 
 ### Reading several emails, and what bounds it
 
@@ -43,16 +44,15 @@ one read serves. Two bounds close that gap, and they answer different questions.
 |---|---|---|
 | `GetEmailContentRequest.MaximumEmails` | 10 | How many emails one call may name |
 | `EmailContent:MaxCharactersPerRead` | 2 000 – 2 000 000, default 200 000 | How many body characters one call returns in total |
-| `EmailContent:MaxAttachmentBytesPerRead` | 0 – 104 857 600, default 10 MiB | How many attachment bytes one call returns in total |
 
 The count is a `const` rather than configuration, because it bounds a protocol call's shape rather than a deployment's
-appetite; the volumes are configured, because how much mail a response can usefully carry depends on what a deployment's
-mail looks like. Neither replaces the other: without the count one call could name a mailbox, and without the budgets ten
-emails could each return `MaxBodyCharacters` and `MaxAttachmentBytes` in full.
+appetite; the volume is configured, because how much mail a response can usefully carry depends on what a deployment's
+mail looks like. Neither replaces the other: without the count one call could name a mailbox, and without the budget ten
+emails could each return `MaxBodyCharacters` in full.
 
-The two budgets are separate quantities and are spent independently. Attachment bytes are not text, so counting them
-against the character budget would let one file empty the bodies of every email named after it, and counting a long
-thread against the attachment budget would withhold a file for a reason that has nothing to do with files.
+Attachments are subject to neither, and have no byte bound of their own, because no response carries their octets. What
+a caller receives for a file is a link, whose size is the same few hundred characters whatever the file weighs — so a
+message carrying a video costs a response exactly what one carrying a note does.
 
 Two refusals are decided before anything is read, and both refuse rather than repair:
 
@@ -96,7 +96,7 @@ fact whether it named one email or ten.
 | `Headers` | Subject, sent and received timestamps, every participant under its header role, and the thread identifiers |
 | `Body` | The representations, or the reason there are none |
 | `AttachmentSummary` | The counts for what the message carries besides its body, absent when nobody has counted them |
-| `Attachments` | One entry per attachment, re-derived from the stored raw MIME, each carrying its octets or the reason it carries none |
+| `Attachments` | One entry per attachment, re-derived from the stored raw MIME, each carrying a link to fetch it or the reason it carries none |
 | `RemoteFlags` | The flags a server last showed, and when they were read |
 
 ### Headers come from the message, not from the row
@@ -115,78 +115,100 @@ prefix of a message identifier is an identifier another message may legitimately
 same values more narrowly, deliberately — one bound is about what a parse publishes to a reader and the other about
 what a column stores.
 
-### Attachments are described always, and returned on request
+### Attachments are described always, and fetched through a link
 
 Every read answers what a message carries: how many attachments, what each is called, what it declares itself to be, and
-how large it is. Only the octets wait for `IncludeAttachmentContent`, because they are the message's most sensitive part
-and by far its largest — base64 makes an ordinary attachment several times the size of the body beside it.
+how large it is. **No response carries a file's octets, in any encoding and at any size.** What
+`IncludeAttachmentDownloadLinks` adds is a short-lived signed URL per attachment, which the caller fetches over HTTP on
+its own.
 
 The line falls there rather than around the descriptions because of what a caller does with them. Deciding whether a
-file is worth asking for *is* reading its name, its type, and its size; a read that answered with a count alone would
-leave a caller nothing to decide on and force a second call to learn what the first was about. The octets are the part
-that costs something, so they are the part that is asked for.
+file is worth fetching *is* reading its name, its type, and its size; a read that answered with a count alone would
+leave a caller nothing to decide on and force a second call to learn what the first was about. A link is what costs
+something — it is a bearer capability over the message's most sensitive part — so it is the part that is asked for.
 
 `list_emails` still counts and never names, and that disagreement between the two read models is deliberate rather than
 an oversight. A listing is a browse over a mailbox, where a file name would be sender-chosen identifying text about mail
 the caller has not opened; a content read has already returned the body in full, so a file name adds nothing about that
 message a caller does not already hold.
 
-A read that asks for no content decodes none. The bounds travel to the renderer only where the flag is set, so an
-ordinary read measures each attachment — which is what produces its size — and retains not one octet of it. The entry
-says so: `NotRequested` is what separates a file nobody asked for from one a bound withheld.
-
-### Attachment content is returned whole, or not at all
-
-An attachment that fits both octet bounds comes back with its decoded content. Two bounds decide that, and they are the
-attachment half of the pair that bounds bodies:
-
-| Bound | Value | What it limits |
-|---|---|---|
-| `EmailContent:MaxAttachmentBytes` | 0 – 25 MiB, default 5 MiB | The decoded size of one attachment whose content is returned |
-| `EmailContent:MaxAttachmentBytesPerRead` | 0 – 100 MiB, default 10 MiB | What one call returns in attachment content in total |
-
-The host refuses a budget below the per-attachment bound at startup, for the reason it refuses a character budget below
-twice `MaxBodyCharacters`: a budget that cannot carry one permitted attachment would withhold a file the other bound was
-set to allow, in every call including one naming a single email. Setting both to `0` is the supported way to say that
-attachments are described and never handed over.
-
-**Neither bound truncates.** A half-returned file has the size of a file, opens as damage, and cannot be told apart from
-a whole one by anything downstream — so a bound removes the content entirely and names itself, where the equivalent bound
-on a body cuts the text and reports the cut.
+A read that asks for no link mints none, and one whose message carries no attachment never reaches the issuer at all. Both
+matter because minting resolves the deployment's key material: an ordinary read of ordinary mail touches the key ring
+zero times. The entry says which case it was.
 
 | `Availability` | Meaning | What a caller does about it |
 |---|---|---|
-| `NotRequested` | The call asked for no content, so the file was described and never decoded | Ask again with `IncludeAttachmentContent` |
-| `Returned` | The content is present and is the whole file | Nothing |
-| `ExceededAttachmentByteLimit` | The file is larger than one attachment may return | Nothing; this deployment does not serve a file this size |
-| `ReadByteBudgetExhausted` | The attachments returned before it spent the call's budget | Name fewer emails at once — which helps only when it was another email that spent it |
+| `NotRequested` | The call asked for no link, so the file was described and no capability was minted | Ask again with `IncludeAttachmentDownloadLinks` |
+| `Issued` | A link is present and fetches the whole file until it expires | Fetch it |
+| `Unavailable` | This deployment issues no attachment links at all | Nothing; only its operator can change that |
 
-The budget is spent in the order the emails were named and, within an email, in the order the message's structure was
-walked. Only content that was actually returned draws on it: an attachment a bound withheld cost the caller nothing, so
-charging the budget for it would withhold the next file on the strength of one that was never sent.
+Inline resources and cryptographic parts carry no link here for the same reason they carry no description — they never
+enter the list at all.
 
-**`ReadByteBudgetExhausted` is therefore not a promise that a narrower call returns the file.** The budget falls to the
-attachments of one message as much as to the emails of one call, so a message carrying more than the budget in files
-withholds its later ones however few emails were named. That is the one place the attachment pair is weaker than the
-character pair, and deliberately: `MaxCharactersPerRead` is refused below twice `MaxBodyCharacters` precisely so that a
-one-email call can never be cut by the call's budget, and no equivalent floor exists here because a call is bounded to
-ten emails and a body to two representations while nothing bounds how many attachments a message carries. An operator
-who wants every attachment of every message served raises `MaxAttachmentBytesPerRead`; a caller cannot buy the same
-thing by asking for less.
+### What a download link is, and what bounds it
 
-Inline resources and cryptographic parts carry no content here for the same reason they carry no description — they
-never enter the list at all. `NotRequested` sits beside the two bounds rather than among them because it says nothing
-about the file: asking for content is what returns it.
+A link is `https://<declared address>/attachments/<capability>`, where the capability is one opaque value carrying a
+format marker, the key it was signed with, the email, the attachment's position in the message's walk order, the expiry
+instant, and 128 bits of cryptographically secure randomness, followed by an HMAC-SHA256 tag over all of it. The tag is
+compared in constant time; the randomness is what makes two links for one file unrelated values rather than a function
+of what they name.
 
-The octets are message content in full and inherit every classification, retention, access, and erasure constraint of
-the mail they were read from. They are never logged, never persisted anywhere new, and exist only for as long as the
-read that produced them; the wire form is base64, which costs a third again as much as the file, so the bounds above are
-applied to the file rather than to its encoding.
+| Setting | Value | What it decides |
+|---|---|---|
+| `Deployment:PublicBaseAddress` | absolute, no default | Where a link points, and whether any is issued at all |
+| `EmailContent:AttachmentDownloads:LinkLifetime` | 1 – 30 minutes, default 10 minutes | How long a minted link stays redeemable |
+
+**The address is declared, never derived from the request.** A URL composed from a `Host` header would let whoever
+called the tool decide where the link it receives points. It sits under `Deployment` rather than beside the lifetime
+because it is a fact about the installation rather than about attachments: anything that later hands a caller an
+absolute address asks the same question, and an operator should answer it once. A deployment that declares none serves
+every other part of a read and issues no link, which the attachment reports as `Unavailable`; so does one that
+configures no [data-encryption key ring](../operations/secret-provisioning.md#the-data-encryption-key), because the
+signing key is derived from that ring rather than from a secret of its own.
+
+**The lifetime is the whole of a link's revocation model**, which is why both ends of its range belong to the product
+rather than to the operator. Below a minute nothing could reliably be redeemed — the URL still has to cross a protocol
+response, a client, and often a separate process before anything fetches it. Above half an hour a URL copied into a
+proxy log, a browser history, or a chat transcript stops being a capability and becomes a credential this deployment
+cannot revoke. A configured value outside the range fails startup rather than being clamped, and expiry is decided
+against the injected `TimeProvider`.
+
+A link is **redeemable repeatedly until it expires**. Single use would need durable, replicated, pruned server-side
+state, and it breaks the ordinary behaviour of the things that fetch files: a range retry, a redirect, or a proxy
+prefetch would each spend it. The window is the control, not the count.
+
+### Redeeming a link
+
+`GET /attachments/<capability>` is served on the MCP endpoint's own listeners and **requires no credential**. The
+signature is the whole of the access control, deliberately: a link exists to be handed to whatever actually fetches
+files — a browser, a downloader, a client's HTTP stack — and none of those can attach an MCP credential, so requiring
+one would make the capability unusable by its only callers. What stands beside the signature is the ten-minute window,
+the scope of one attachment of one email, the MCP surface's own transport, its per-caller rate limit and its
+process-wide concurrency limit — the route belongs to that surface for exactly this reason — and the resolution below.
+
+Redemption reads the attachment through the same store, the same integrity check, and the same MIME walk
+`get_email_content` reads it through, then streams that one part's decoded octets to the response. Reading afresh is
+what makes a link unable to outlive the deletion of its own message: an attachment is mail content in full and inherits
+every retention, access, and erasure constraint of the message it belongs to.
+
+**Every refusal is one refusal.** An expired capability, a forged one, one naming an email this deployment no longer
+serves, one whose local copy is damaged, and one naming a position the message does not carry are all `404` with the
+same body — telling them apart would let whoever holds a capability learn what became of mail they can no longer read. A
+damaged or missing local copy records a repair request first, exactly as a read of the same message would, because the
+finding is about the stored copy rather than about who asked for it.
+
+The response states the attachment's own media type and file name, both of which are text a sender wrote: the media type
+is parsed before it is echoed and falls back to `application/octet-stream` when it is not a media type, and the file name
+travels through the header type that applies RFC 5987 encoding. It is always served as `Content-Disposition: attachment`
+with `X-Content-Type-Options: nosniff`, because these are sender-controlled bytes on the address the operator publishes
+MailFathom at, and with `Cache-Control: no-store`, because an intermediary that stored the response would keep serving
+the file for that URL after the capability expired — which would take the expiry out of the revocation model it is the
+whole of. Neither the URL, the capability, the file name, nor any octet reaches a log.
 
 ### The descriptions are re-derived, never stored
 
-The per-attachment list — the normalized file name, the media type, the decoded size, and the octets themselves — is
-produced by the parse this read already performs, following the classification rule
+The per-attachment list — the normalized file name, the media type, and the decoded size — is produced by the parse
+this read already performs, following the classification rule
 [MIME metadata extraction](imap-synchronization.md#mime-metadata-extraction) defines. It is not persisted, because file
 names are mail content and [the stored schema](../architecture/stored-email-schema.md) deliberately keeps only the
 indexable summary. Re-deriving costs nothing extra and guarantees the list cannot drift from the message it describes.
@@ -246,7 +268,7 @@ Neither of the two unstored states is a defect and neither schedules a repair: s
 and deliberately stored no content for it, so asking for repair would ask a later run to store what it already decided
 not to. Everything answerable is still answered — the headers from the stored row — and everything about the message's
 parts is absent, because nothing local can derive it: the attachment list is empty and the counts beside it are `null`
-rather than zero, for the reason [Attachments](#attachments-are-described-always-and-returned-on-request) gives. The
+rather than zero, for the reason [Attachments](#attachments-are-described-always-and-fetched-through-a-link) gives. The
 empty list is about the parts never having been read rather than about the message carrying no files, and the absent
 counts are what say which of the two it is.
 

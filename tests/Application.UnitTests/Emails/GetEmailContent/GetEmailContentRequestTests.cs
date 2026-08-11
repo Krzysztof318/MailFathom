@@ -29,7 +29,7 @@ public sealed class GetEmailContentRequestTests
         // Assert
         Assert.Equal(storedEmailIds, request.StoredEmailIds);
         Assert.False(request.IncludeSanitizedHtml);
-        Assert.False(request.IncludeAttachmentContent);
+        Assert.False(request.IncludeAttachmentDownloadLinks);
     }
 
     /// <summary>A read naming nothing and a read naming too much are one finding about a count the caller chose.</summary>

@@ -50,7 +50,7 @@ What an agent gets is five tools, and they are the whole surface:
 | `list_accounts` | Which mailboxes this deployment serves, each with the readable name you gave it and how current its local copy is — the tool an agent calls first, so it knows what to narrow the others to |
 | `list_emails` | A page of the timeline, newest first, filtered by account, folder, sender, recipient, subject, date range, seen state, or attachment presence |
 | `search_emails` | Ranked matches for a text query across subjects, participants, and body text, each with short extracts around what matched — ranked lexically, and by embedding similarity beside it once an embedding model is configured |
-| `get_email_content` | Up to ten messages in full: normalized headers, plain-text body, optionally sanitized HTML, every attachment by name, type, and size, and — on request — the files themselves as base64 |
+| `get_email_content` | Up to ten messages in full: normalized headers, plain-text body, optionally sanitized HTML, every attachment by name, type, and size, and — on request — a short-lived link that fetches each file |
 | `ask_mail` | A question answered from the mail a chat model looks up while answering, citing the identifiers of every message it drew on so each claim can be read for yourself |
 
 The first four are always there. `ask_mail` needs a chat model and an embedding model you configure and point at, so a deployment with neither does not advertise it at all rather than offering a tool that would fail on first use.
@@ -93,7 +93,7 @@ MailFathom is built as an enterprise-grade system from the first line, even whil
 
 - The MCP surface is five tools — `list_accounts`, `list_emails`, `get_email_content`, `search_emails`, `ask_mail` — and that is all of it. There is no write tool to enable.
 - Synchronization is incapable of marking remote mail as read.
-- Attachment content is returned only where a call asks for it by name, under a per-attachment limit and a per-call byte budget the operator sets, and a file is returned whole or not at all.
+- No response carries an attachment's bytes. A call that asks for them by name receives a signed link per file instead, valid for minutes, scoped to that one attachment, and resolved through the live mailbox so it dies with the message it points at.
 
 → [MCP tools](https://krzysztof318.github.io/MailFathom/features/mcp-tools.html)
 

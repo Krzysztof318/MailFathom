@@ -15,7 +15,8 @@ namespace MailFathom.Mcp.UnitTests.Tools;
 /// The annotations are contract metadata rather than documentation: a client decides whether a tool is safe to call,
 /// safe to retry, and confined to local state by reading them before it calls anything. The description matters as much
 /// here as on any tool and more than on most, because it is where a model learns that this surface returns message
-/// content in full, and — for a call that asks to describe the attachments — the files themselves.
+/// content in full, and — for a call that asks for them — a short-lived unauthenticated capability over each attached
+/// file.
 /// </remarks>
 public sealed class GetEmailContentToolMetadataTests
 {
@@ -59,21 +60,21 @@ public sealed class GetEmailContentToolMetadataTests
     }
 
     /// <summary>
-    /// A model decides whether to ask for attachments from this text alone, so it has to say that the content comes
-    /// back, in what form, and that a bound can withhold it. A caller told only that attachments exist would ask for
-    /// them expecting names and receive a response several times the size it planned for.
+    /// A model decides whether to ask for attachments from this text alone, so it has to say what comes back and that
+    /// it is not the file. A caller told only that attachments exist would ask expecting bytes and receive an address,
+    /// and one told nothing about the address would not know it has to fetch anything.
     /// </summary>
     [Fact]
-    public void AddMailFathomServer_AdvertisesADescriptionStatingThatAttachmentContentComesBackAsBase64AndIsBounded()
+    public void AddMailFathomServer_AdvertisesADescriptionStatingThatAttachmentsComeBackAsALinkRatherThanBytes()
     {
         // Arrange, Act
         var description = AdvertisedGetEmailContentTool().Description;
 
         // Assert
         Assert.NotNull(description);
-        Assert.Contains("contentBase64", description, StringComparison.Ordinal);
-        Assert.Contains("bounded per attachment", description, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("never returned in part", description, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("downloadUrl", description, StringComparison.Ordinal);
+        Assert.Contains("no response ever carries an attachment's bytes", description, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("short-lived", description, StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>A model reads the count bound and the attachment default here, so both are part of what is advertised.</summary>
@@ -86,19 +87,18 @@ public sealed class GetEmailContentToolMetadataTests
         // Assert
         Assert.NotNull(description);
         Assert.Contains("up to 10 emails", description, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("includeAttachmentContent", description, StringComparison.Ordinal);
+        Assert.Contains("includeAttachmentDownloadLinks", description, StringComparison.Ordinal);
 
-        // The default is that attachments are described and not decoded, which is what stops a model from asking for
-        // content merely to learn what a file is called.
+        // The default is that attachments are described and no capability is minted, which is what stops a model from
+        // asking for a link merely to learn what a file is called.
         Assert.Contains("described by file name, media type, and size", description, StringComparison.Ordinal);
-        Assert.Contains("not returned by default", description, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
     public void AddMailFathomServer_AdvertisesTheEmailIdentifiersAndTheTwoFlagsAsInputSchemaProperties()
     {
         // Arrange
-        string[] expectedProperties = ["storedEmailIds", "includeSanitizedHtml", "includeAttachmentContent"];
+        string[] expectedProperties = ["storedEmailIds", "includeSanitizedHtml", "includeAttachmentDownloadLinks"];
 
         // Act
         var advertisedProperties = AdvertisedGetEmailContentTool()
@@ -210,9 +210,13 @@ public sealed class GetEmailContentToolMetadataTests
         Assert.Contains("\"readCharacterBudget\"", advertisedSchema, StringComparison.Ordinal);
     }
 
-    /// <summary>The same holds for the attachment states, which is how a client tells a withheld file from a missing one.</summary>
+    /// <summary>
+    /// The same holds for the attachment download states, which is how a client tells a link it did not ask for from
+    /// one this deployment cannot issue. The advertised schema is also where a client learns that the address and its
+    /// expiry are what an attachment carries, and that no field on it holds the file.
+    /// </summary>
     [Fact]
-    public void AddMailFathomServer_AdvertisesTheAttachmentContentStatesUnderTheirPublishedSpellings()
+    public void AddMailFathomServer_AdvertisesTheAttachmentDownloadStatesUnderTheirPublishedSpellings()
     {
         // Arrange, Act
         var outputSchema = AdvertisedGetEmailContentTool().OutputSchema;
@@ -220,11 +224,12 @@ public sealed class GetEmailContentToolMetadataTests
         // Assert
         Assert.NotNull(outputSchema);
         var advertisedSchema = SchemaText(outputSchema.Value);
-        Assert.Contains("contentBase64", advertisedSchema, StringComparison.Ordinal);
+        Assert.Contains("downloadUrl", advertisedSchema, StringComparison.Ordinal);
+        Assert.Contains("downloadExpiresAt", advertisedSchema, StringComparison.Ordinal);
         Assert.Contains("\"notRequested\"", advertisedSchema, StringComparison.Ordinal);
-        Assert.Contains("\"returned\"", advertisedSchema, StringComparison.Ordinal);
-        Assert.Contains("\"exceededAttachmentByteLimit\"", advertisedSchema, StringComparison.Ordinal);
-        Assert.Contains("\"readByteBudgetExhausted\"", advertisedSchema, StringComparison.Ordinal);
+        Assert.Contains("\"issued\"", advertisedSchema, StringComparison.Ordinal);
+        Assert.Contains("\"unavailable\"", advertisedSchema, StringComparison.Ordinal);
+        Assert.DoesNotContain("contentBase64", advertisedSchema, StringComparison.Ordinal);
     }
 
     private static string SchemaText(JsonElement schema) => schema.GetRawText();

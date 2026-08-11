@@ -45,6 +45,10 @@ public sealed class ComposedMcpEndpointSecurityTests
     /// <summary>A route of the administrative surface, which this topology serves on a socket of its own.</summary>
     private const string AdministrativeRouteServedOnItsOwnSocket = "/api/admin/session";
 
+    /// <summary>What the attachment download route says to every request it refuses, whatever the reason was.</summary>
+    /// <remarks>Written out rather than read from the host assembly, which this suite does not reference: the literal is what a client actually receives.</remarks>
+    private const string AttachmentLinkRefusal = "This attachment link is not valid.";
+
     private readonly MailFathomOrchestrationFixture orchestration;
 
     /// <summary>Initializes the tests against the assembly's orchestration.</summary>
@@ -261,6 +265,53 @@ public sealed class ComposedMcpEndpointSecurityTests
         // Assert
         Assert.Equal(HttpStatusCode.OK, probe.StatusCode);
         Assert.Equal(HttpStatusCode.NotFound, administrativeRoute.StatusCode);
+    }
+
+    /// <summary>
+    /// The attachment download route is the one route on this surface that admits no credential, and only a composed
+    /// host shows that it is mapped at all — a unit test reaches the handler directly and would pass on a route nothing
+    /// ever mapped.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A forged capability is presented deliberately: what the response has to prove is not that a file comes back but
+    /// that the request reached the handler rather than the credential check in front of it. `404` with the handler's
+    /// own body is that proof, and `401` would mean an authorization requirement had been attached to a route whose
+    /// callers cannot satisfy one — the defect this route exists to avoid, and one nothing below a real pipeline sees.
+    /// </para>
+    /// <para>
+    /// The administrative socket is asked the same thing, because a route the MCP surface owns must not answer on a
+    /// listener that serves another surface. That refusal carries no body, which is what distinguishes isolation
+    /// refusing the path from the handler refusing the capability.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task AttachmentDownload_ForgedCapabilityWithNoCredential_ReachesTheHandlerOnTheMcpSocketAlone()
+    {
+        // Arrange
+        using var mcpSocket = await this.orchestration.OpenMcpEndpointClientAsync(TestContext.Current.CancellationToken);
+        using var administrativeSocket = await this.orchestration.OpenAdminEndpointClientAsync(
+            TestContext.Current.CancellationToken);
+        var forged = new Uri("/attachments/AQIDBAUGBwgJCgsMDQ4PEA.ERITFBUWFxgZGhscHR4fIA", UriKind.Relative);
+
+        // Act
+        using var onTheMcpSocket = await mcpSocket.GetAsync(forged, TestContext.Current.CancellationToken);
+        using var onTheAdministrativeSocket = await administrativeSocket.GetAsync(
+            forged,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(HttpStatusCode.NotFound, onTheMcpSocket.StatusCode);
+        Assert.Contains(
+            AttachmentLinkRefusal,
+            await onTheMcpSocket.Content.ReadAsStringAsync(TestContext.Current.CancellationToken),
+            StringComparison.Ordinal);
+
+        Assert.Equal(HttpStatusCode.NotFound, onTheAdministrativeSocket.StatusCode);
+        Assert.DoesNotContain(
+            AttachmentLinkRefusal,
+            await onTheAdministrativeSocket.Content.ReadAsStringAsync(TestContext.Current.CancellationToken),
+            StringComparison.Ordinal);
     }
 
     /// <summary>Builds a JSON-RPC request for the tool listing, optionally presenting a bearer credential.</summary>

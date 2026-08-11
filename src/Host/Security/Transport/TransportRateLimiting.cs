@@ -113,7 +113,7 @@ internal static class TransportRateLimiting
         ArgumentNullException.ThrowIfNull(boundedSurfaces);
 
         var boundedSurface = boundedSurfaces.FirstOrDefault(
-            candidate => httpContext.Request.Path.StartsWithSegments(candidate.Surface.RoutePrefix));
+            candidate => candidate.Surface.Serves(httpContext.Request.Path));
 
         return boundedSurface is null
             ? RateLimitPartition.GetNoLimiter(UnlimitedPartitionKey)

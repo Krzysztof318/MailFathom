@@ -65,6 +65,60 @@ the host is being composed, because whether an endpoint exists and what guards i
 Changing any of it takes effect on restart; it does not participate in configuration reload. The *material* behind a
 configured key is a separate matter and is re-read on every request, which is what lets a key rotate without one.
 
+## The one route on this surface that admits no credential
+
+Beside the protocol route, an enabled MCP endpoint serves `GET /attachments/<capability>` on the same listeners. It is
+what a `get_email_content` link points at, and it **requires no credential**: the signed capability in the URL is the
+whole of its access control. A link exists to be handed to whatever actually fetches files — a browser, a downloader, a
+client's own HTTP stack — and none of those can attach this endpoint's key, certificate, or token, so requiring one
+would make the capability unusable by its only callers.
+
+What bounds it instead:
+
+- The capability names exactly one attachment of one email, carries an HMAC-SHA256 tag verified in constant time, and
+  expires within minutes — ten by default, thirty at the most this product permits.
+- The signing key is derived per operation from the deployment's
+  [data-encryption key ring](secret-provisioning.md#the-data-encryption-key). A deployment configuring none issues no link,
+  and neither does one that has not declared `Deployment:PublicBaseAddress`.
+- The address a link points at is that declared value rather than the request's `Host` header, so nothing a caller sends
+  decides where the URL it receives resolves to.
+- Redemption reads the mailbox afresh, so a link dies with the message it points at. An expired capability, a forged
+  one, and one whose mail is gone are all `404` with the same body.
+- It rides this endpoint's listeners, its transport, and both of its rate limits. It spends the surface's shared
+  anonymous per-caller bucket, because it presents no credential to partition on, and it takes a permit from the same
+  process-wide concurrency limiter the protocol route does — each redemption loads a stored message, parses it, and
+  holds a response stream open, so an unauthenticated route left outside that limit would be the one place a burst of
+  slow readers is unbounded.
+- The response is `Cache-Control: no-store`. A proxy that cached it would keep serving the file for that URL after the
+  capability expired, which is the one way an intermediary can outlive the window.
+
+**What does not cover it are the two checks written for the protocol route**, both of which are scoped to `/mcp`
+deliberately. A configured `ClientCertificateProfiles` list is not enforced here, because a client certificate is
+exactly the kind of credential a downloader cannot present, and the origin allow-list is not consulted, because a
+browser navigating to a URL sends no `Origin` header to check. A deployment that requires mutual TLS on this endpoint is
+therefore still handing out links anything on the network can redeem within their window; if that is not the posture you
+want, leave `Deployment:PublicBaseAddress` unset and no link is ever issued.
+
+Two consequences for a deployment. **Serve this endpoint over HTTPS if anything but this machine reaches it**, since a
+capability in a URL is a secret in transit; the address setting refuses clear text to a non-loopback host for that
+reason. And **a reverse proxy in front of this endpoint must pass `/attachments/` through**, or every issued link
+resolves to nothing while the rest of the tool keeps working; it must also honour `no-store` rather than override it
+with a freshness policy of its own.
+
+**Nothing records the capability.** MailFathom writes no log line about a download, and the request span this host
+exports carries the route template `/attachments/{capability}` in place of the path the request actually arrived with —
+otherwise a deployment exporting traces would be shipping short-lived bearer credentials over mail to whatever stores
+them. The exported log records carry no request scope either, which is why: the scope ASP.NET Core opens around every
+request holds the path exactly as it arrived, so a database command logged during a download would have carried the
+capability with it. Two operator settings undo that, and both are ordinary things to reach for while diagnosing
+something else: lowering `Logging:LogLevel:Microsoft.AspNetCore` from its shipped `Warning` turns on the framework's own
+request logging, which writes the whole URL, and setting `Logging:Console:FormatterOptions:IncludeScopes` puts the
+unredacted request path on every console record a download produces — which a container log collector ships exactly as
+an exporter would. Turn either on and the capabilities issued during the window are in the log until they expire.
+
+[Email content](../features/email-content.md#what-a-download-link-is-and-what-bounds-it) records what the capability
+carries and how it is verified.
+
 ## Authentication
 
 **`Authentication` is a list of credentials.** The three methods identify different kinds of caller — a key belongs to a

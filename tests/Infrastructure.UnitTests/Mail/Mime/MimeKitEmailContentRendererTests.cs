@@ -404,72 +404,48 @@ public sealed class MimeKitEmailContentRendererTests
     }
 
     /// <summary>
-    /// The octets a caller receives are what the transfer encoding decoded to, which is the whole point of returning
-    /// them: a caller handed the encoded form would be handed the message's storage rather than the file.
+    /// The size a read publishes is what the transfer encoding decoded to rather than what the message stores, because
+    /// the decoded size is the size of the file a caller is about to fetch.
     /// </summary>
     [Fact]
-    public async Task RenderAsync_AttachmentContentAskedForAndWithinTheBounds_ReturnsTheDecodedOctets()
-    {
-        // Act
-        var rendering = await RenderAsync(
-            MessageAttaching("pdf-bytes"),
-            attachmentContent: new EmailAttachmentContentBounds(MaxOctetsPerAttachment: 1024, RemainingOctetsForRead: 1024));
-
-        // Assert
-        var attachment = Assert.Single(rendering.Attachments);
-        Assert.Equal(EmailAttachmentContentAvailability.Returned, attachment.Content.Availability);
-        Assert.Equal("pdf-bytes"u8.ToArray(), attachment.Content.Octets.ToArray());
-        Assert.Equal("pdf-bytes".Length, attachment.Description.DecodedSizeOctets);
-    }
-
-    /// <summary>
-    /// A read that asked for no attachment content still describes every attachment — the same walk measures each part
-    /// either way — and retains not one octet of any of them.
-    /// </summary>
-    [Fact]
-    public async Task RenderAsync_AttachmentContentNotAskedFor_DescribesTheAttachmentAndRetainsNoOctets()
+    public async Task RenderAsync_AttachmentUnderATransferEncoding_MeasuresWhatItDecodedTo()
     {
         // Act
         var rendering = await RenderAsync(MessageAttaching("pdf-bytes"));
 
         // Assert
         var attachment = Assert.Single(rendering.Attachments);
-        Assert.Equal("report.pdf", attachment.Description.FileName?.Value);
-        Assert.Equal("pdf-bytes".Length, attachment.Description.DecodedSizeOctets);
-        Assert.Equal(EmailAttachmentContentAvailability.NotRequested, attachment.Content.Availability);
-        Assert.True(attachment.Content.Octets.IsEmpty);
+        Assert.Equal("report.pdf", attachment.FileName?.Value);
+        Assert.Equal("application/pdf", attachment.MediaType);
+        Assert.Equal("pdf-bytes".Length, attachment.DecodedSizeOctets);
     }
 
     /// <summary>
-    /// A file above either bound is measured, described, and released rather than returned in part. The size is still
-    /// what the message holds, because that is what tells a caller what it did not receive.
-    /// </summary>
-    [Theory]
-    [InlineData(4, 1024, nameof(EmailAttachmentContentAvailability.ExceededAttachmentByteLimit))]
-    [InlineData(1024, 4, nameof(EmailAttachmentContentAvailability.ReadByteBudgetExhausted))]
-    public async Task RenderAsync_AttachmentAboveOneOfTheOctetBounds_ReturnsNoContentAndNamesThatBound(
-        int maxOctetsPerAttachment,
-        int remainingOctetsForRead,
-        string expectedAvailability)
-    {
-        // Act
-        var rendering = await RenderAsync(
-            MessageAttaching("pdf-bytes"),
-            attachmentContent: new EmailAttachmentContentBounds(maxOctetsPerAttachment, remainingOctetsForRead));
-
-        // Assert
-        var attachment = Assert.Single(rendering.Attachments);
-        Assert.Equal(expectedAvailability, attachment.Content.Availability.ToString());
-        Assert.True(attachment.Content.Octets.IsEmpty);
-        Assert.Equal("pdf-bytes".Length, attachment.Description.DecodedSizeOctets);
-    }
-
-    /// <summary>
-    /// The budget falls to the attachments of one message in the order they were walked, so a message whose first file
-    /// spends it leaves the second described and empty rather than shortening either of them.
+    /// A rendering carries not one octet of any attachment, whatever a caller asked for, and there is no setting that
+    /// changes it. The type is what makes that structural: a description with nowhere to put bytes cannot acquire them.
     /// </summary>
     [Fact]
-    public async Task RenderAsync_SecondAttachmentReachedAfterTheBudgetIsSpent_ReturnsTheFirstAndWithholdsTheSecond()
+    public void ExtractedEmailAttachment_NoMember_CanHoldContent()
+    {
+        // Arrange
+        var byteBearingTypes = new[] { typeof(byte[]), typeof(ReadOnlyMemory<byte>), typeof(Memory<byte>), typeof(Stream) };
+
+        // Act
+        var contentCarryingMembers = typeof(ExtractedEmailAttachment)
+            .GetProperties()
+            .Where(property => byteBearingTypes.Contains(property.PropertyType));
+
+        // Assert
+        Assert.Empty(contentCarryingMembers);
+    }
+
+    /// <summary>A message carrying several files describes each of them, in the order the structure was walked.</summary>
+    /// <remarks>
+    /// That order is what a download link's position refers to, so a rendering that reordered or dropped one would hand
+    /// a caller the wrong file rather than fail.
+    /// </remarks>
+    [Fact]
+    public async Task RenderAsync_MessageCarryingSeveralAttachments_DescribesThemInWalkOrder()
     {
         // Arrange
         var content = MimeFixtures.StoredMessage(
@@ -493,25 +469,17 @@ public sealed class MimeKitEmailContentRendererTests
             "--mix--");
 
         // Act
-        var rendering = await RenderAsync(
-            content,
-            attachmentContent: new EmailAttachmentContentBounds(
-                MaxOctetsPerAttachment: 1024,
-                RemainingOctetsForRead: "first".Length));
+        var rendering = await RenderAsync(content);
 
         // Assert
-        var attachments = rendering.Attachments;
-        Assert.Equal(2, attachments.Count);
-        Assert.Equal(EmailAttachmentContentAvailability.Returned, attachments[0].Content.Availability);
-        Assert.Equal("first"u8.ToArray(), attachments[0].Content.Octets.ToArray());
         Assert.Equal(
-            EmailAttachmentContentAvailability.ReadByteBudgetExhausted,
-            attachments[1].Content.Availability);
+            ["first.pdf", "second.pdf"],
+            rendering.Attachments.Select(attachment => attachment.FileName?.Value));
     }
 
-    /// <summary>An embedded resource is not a file, so asking for attachment content never returns one.</summary>
+    /// <summary>An embedded resource is not a file, so it never appears among the attachments a read describes.</summary>
     [Fact]
-    public async Task RenderAsync_AttachmentContentAskedForOnAMessageEmbeddingAnImage_ReturnsNoContentForTheResource()
+    public async Task RenderAsync_MessageEmbeddingAnImage_CountsTheResourceRatherThanDescribingIt()
     {
         // Arrange
         var content = MimeFixtures.StoredMessage(
@@ -530,9 +498,7 @@ public sealed class MimeKitEmailContentRendererTests
             "--rel--");
 
         // Act
-        var rendering = await RenderAsync(
-            content,
-            attachmentContent: new EmailAttachmentContentBounds(MaxOctetsPerAttachment: 1024, RemainingOctetsForRead: 1024));
+        var rendering = await RenderAsync(content);
 
         // Assert
         Assert.Empty(rendering.Attachments);
@@ -705,12 +671,11 @@ public sealed class MimeKitEmailContentRendererTests
         StoredEmailContent content,
         bool includeSanitizedHtml = false,
         int maxBodyCharacters = 100_000,
-        int remainingCharactersForRead = int.MaxValue,
-        EmailAttachmentContentBounds? attachmentContent = null)
+        int remainingCharactersForRead = int.MaxValue)
     {
         var result = await CreateRenderer().RenderAsync(
             content,
-            BoundsOf(includeSanitizedHtml, maxBodyCharacters, remainingCharactersForRead, attachmentContent),
+            BoundsOf(includeSanitizedHtml, maxBodyCharacters, remainingCharactersForRead),
             TestContext.Current.CancellationToken);
 
         Assert.Equal(EmailContentRenderingOutcome.Rendered, result.Outcome);
@@ -721,9 +686,8 @@ public sealed class MimeKitEmailContentRendererTests
     private static EmailContentRenderingBounds BoundsOf(
         bool includeSanitizedHtml = false,
         int maxBodyCharacters = 100_000,
-        int remainingCharactersForRead = int.MaxValue,
-        EmailAttachmentContentBounds? attachmentContent = null) =>
-        new(includeSanitizedHtml, maxBodyCharacters, remainingCharactersForRead, attachmentContent);
+        int remainingCharactersForRead = int.MaxValue) =>
+        new(includeSanitizedHtml, maxBodyCharacters, remainingCharactersForRead);
 
     /// <summary>Builds a message whose single attachment is the given text, carried under a transfer encoding.</summary>
     private static StoredEmailContent MessageAttaching(string attachedText) => MimeFixtures.StoredMessage(
