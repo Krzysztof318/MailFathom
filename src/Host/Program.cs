@@ -940,10 +940,13 @@ try
             .RequireCors(McpTransportSecurityExtensions.CorsPolicyName);
 
         // Mapped with the MCP surface because it belongs to it: the links it answers are minted by an MCP tool, and
-        // serving it here gives it that endpoint's transport, its origin policy, and its enablement without a listener
-        // of its own. It deliberately carries no authorization — the signed capability in the URL is what admits a
-        // request, because the things that fetch files cannot attach an MCP credential — which is why it is mapped
-        // outside the group the access policy is applied to below.
+        // serving it here gives it that endpoint's transport, its rate limits, and its enablement without a listener of
+        // its own. What it does not inherit is what the two middlewares above scope to the protocol path themselves —
+        // the origin allow-list and the client-certificate profiles — and that is the right side of the line: both ask
+        // which program is calling, which is the question this route deliberately does not have an answer to. It
+        // carries no authorization either, since the signed capability in the URL is what admits a request and the
+        // things that fetch files cannot attach an MCP credential, which is why it is mapped outside the group the
+        // access policy is applied to below.
         var attachmentDownload = app.MapEmailAttachmentDownload();
 
         if (mcpEndpointSettings.RequiresAuthentication)
@@ -984,8 +987,10 @@ try
 
             // The same per-caller policy on the download route, which admits no credential and therefore spends the
             // surface's shared anonymous bucket. That is the point rather than a limitation: an unauthenticated route
-            // serving mail content is exactly the one that must not be unbounded, and the process-wide half of the
-            // policy does not reach it because that half partitions by the MCP route prefix.
+            // serving mail content is exactly the one that must not be unbounded. The process-wide half reaches it as
+            // well, because the surface names this prefix among the ones it serves, so a redemption takes a permit
+            // from the same concurrency limiter the protocol route does rather than opening an unbounded second door
+            // onto the same message store and MIME parser.
             attachmentDownload.RequireRateLimiting(TransportSurface.Mcp.RateLimitingPolicyName);
         }
 
