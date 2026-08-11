@@ -11,6 +11,8 @@
       href: configuration-reference.md
     - name: Configuration sources
       href: configuration-sources.md
+    - name: Provider endpoints
+      href: provider-endpoints.md
     - name: Secret provisioning
       href: secret-provisioning.md
     - name: Secret rotation

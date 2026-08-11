@@ -69,7 +69,9 @@ OpenAI-compatible, so a cloud deployment is that same client pointed at the reso
 the deployment's name as the routed model. A third-party service speaking the same protocol is declared by the same
 values and reaches the same code — and "compatible" is that service's claim about itself rather than something checked
 here, which [embedding generation § Compatible is not
-verified](embedding-generation.md#compatible-is-not-verified) states in full for both roles.
+verified](embedding-generation.md#compatible-is-not-verified) states in full for both roles. [Provider
+endpoints](../operations/provider-endpoints.md) is where a service somebody checked is recorded, including which of the
+two request APIs below it was found to serve.
 
 There is no vendor and no model identity in the declaration beside the routed name, and that is the difference from an
 embedding endpoint rather than an omission. A vector is stored and later compared against other vectors, so which model
