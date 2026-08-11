@@ -29,6 +29,11 @@ namespace MailFathom.AI.Orchestration;
 /// written into the envelope the retrieval formats. Neither is ever composed into the other, so no message can arrive
 /// where an instruction is read.
 /// </para>
+/// <para>
+/// The scope is not among the tool's arguments and cannot be, because the tool is built by the retrieval the scope was
+/// bound into. That is visible here as an absence, which is why it is stated: a composition that passed the scope
+/// through the same options the model reads would have made the boundary a rule rather than a shape.
+/// </para>
 /// </remarks>
 internal static class MailAnsweringAgentComposition
 {
@@ -59,13 +64,15 @@ internal static class MailAnsweringAgentComposition
         // retrieved extract can be placed in.
         chatOptions.Instructions = MailAnsweringInstructions.Text;
 
+        // The one tool, and the only route by which mail reaches the model. It is offered as a tool rather than through
+        // the framework's text-search context provider because that provider publishes a query and nothing else, and
+        // the narrowing a lookup needs is the greater part of what makes an answer reach the mail a search would.
+        chatOptions.Tools = [retrieval.CreateSearchTool()];
+
         var options = new ChatClientAgentOptions
         {
             Name = AgentName,
             ChatOptions = chatOptions,
-
-            // The one context provider, and the only route by which mail reaches the model.
-            AIContextProviders = [retrieval.CreateContextProvider(loggerFactory)],
         };
 
         return new ChatClientAgent(chatClient, options, loggerFactory);

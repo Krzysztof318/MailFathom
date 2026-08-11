@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.AI.Retrieval;
 using Microsoft.Extensions.AI;
 
 namespace MailFathom.AI.UnitTests.TestDoubles;
@@ -44,21 +45,34 @@ internal sealed class ScriptedChatClient : IChatClient
             },
         ]);
 
-    /// <summary>Builds a client that calls one tool with one argument and then answers with text.</summary>
+    /// <summary>Builds a client that looks mail up with a query alone and then answers with text.</summary>
     /// <param name="toolName">The tool to call, which the run must have offered.</param>
-    /// <param name="argument">The single argument to call it with, whose name is read from the offered tool's schema.</param>
+    /// <param name="query">The text to look up.</param>
+    /// <param name="text">What to answer once the tool has answered.</param>
+    public static ScriptedChatClient CallingTool(string toolName, string query, string text) =>
+        CallingTool(
+            toolName,
+            new Dictionary<string, object?> { [ScopedMailKnowledgeRetrieval.QueryArgumentName] = query },
+            text);
+
+    /// <summary>Builds a client that calls one tool with the arguments given and then answers with text.</summary>
+    /// <param name="toolName">The tool to call, which the run must have offered.</param>
+    /// <param name="arguments">The arguments to call it with, named as the offered tool's schema names them.</param>
     /// <param name="text">What to answer once the tool has answered.</param>
     /// <remarks>
-    /// The argument name is discovered rather than written down, because it is the framework's reading of a delegate's
-    /// parameter and a test that hard-coded it would fail on a framework update for a reason unrelated to what it proves.
+    /// The names are checked against the offered schema rather than trusted, because a script that misspells one would
+    /// otherwise exercise the tool's defaults while reading as a test about the argument it named.
     /// </remarks>
-    public static ScriptedChatClient CallingTool(string toolName, string argument, string text)
+    public static ScriptedChatClient CallingTool(
+        string toolName,
+        IReadOnlyDictionary<string, object?> arguments,
+        string text)
     {
         var client = new ScriptedChatClient([]);
 
         client.answers.Enqueue(new ChatResponse(new ChatMessage(
             ChatRole.Assistant,
-            [new ToolCallPlaceholder(toolName, argument)])));
+            [new ToolCallPlaceholder(toolName, arguments)])));
         client.answers.Enqueue(new ChatResponse(new ChatMessage(ChatRole.Assistant, text))
         {
             FinishReason = ChatFinishReason.Stop,
@@ -113,25 +127,25 @@ internal sealed class ScriptedChatClient : IChatClient
             ?? throw new InvalidOperationException(
                 $"The run offered no tool named '{placeholder.ToolName}' for the script to call.");
 
+        RequireDeclared(tool, placeholder.Arguments.Keys);
+
         return new ChatResponse(new ChatMessage(
             ChatRole.Assistant,
-            [
-                new FunctionCallContent(
-                    "call-1",
-                    tool.Name,
-                    new Dictionary<string, object?> { [SoleParameterNameOf(tool)] = placeholder.Argument }),
-            ]));
+            [new FunctionCallContent("call-1", tool.Name, new Dictionary<string, object?>(placeholder.Arguments))]));
     }
 
-    /// <summary>Reads the name of the one argument the offered tool takes.</summary>
-    private static string SoleParameterNameOf(AIFunction tool)
+    /// <summary>Refuses a script naming an argument the offered tool does not publish.</summary>
+    private static void RequireDeclared(AIFunction tool, IEnumerable<string> argumentNames)
     {
-        var properties = tool.JsonSchema.GetProperty("properties").EnumerateObject().ToArray();
+        var declared = tool.JsonSchema.GetProperty("properties")
+            .EnumerateObject()
+            .Select(static property => property.Name)
+            .ToHashSet(StringComparer.Ordinal);
 
-        return properties.Length is 1
-            ? properties[0].Name
-            : throw new InvalidOperationException(
-                $"Tool '{tool.Name}' takes {properties.Length} arguments, and the script calls tools that take one.");
+        if (argumentNames.FirstOrDefault(name => !declared.Contains(name)) is { } undeclared)
+        {
+            throw new InvalidOperationException($"Tool '{tool.Name}' publishes no argument named '{undeclared}'.");
+        }
     }
 
     /// <summary>What one turn of a run was asked to send.</summary>
@@ -139,11 +153,12 @@ internal sealed class ScriptedChatClient : IChatClient
     /// <param name="Options">The options the agent carried, including the tools it offered.</param>
     internal sealed record ChatCall(IReadOnlyList<ChatMessage> Messages, ChatOptions? Options);
 
-    /// <summary>Stands in for a tool call until the offered tool's own argument name is known.</summary>
-    private sealed class ToolCallPlaceholder(string toolName, string argument) : AIContent
+    /// <summary>Stands in for a tool call until the offered tool has been found among the run's options.</summary>
+    private sealed class ToolCallPlaceholder(string toolName, IReadOnlyDictionary<string, object?> arguments)
+        : AIContent
     {
         public string ToolName { get; } = toolName;
 
-        public string Argument { get; } = argument;
+        public IReadOnlyDictionary<string, object?> Arguments { get; } = arguments;
     }
 }

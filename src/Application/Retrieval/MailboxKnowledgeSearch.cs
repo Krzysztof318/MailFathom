@@ -12,10 +12,16 @@ namespace MailFathom.Application.Retrieval;
 /// <summary>Answers a retrieval from the mailbox search this deployment already serves.</summary>
 /// <remarks>
 /// <para>
-/// The whole of the retrieval side, and deliberately thin: hybrid ranking, the account restriction, and the extracts
-/// themselves all belong to <see cref="MailboxSearchReader" />, which is the same retrieval a caller reaches through
-/// <c>search_emails</c>. Answering a question therefore cannot see mail that searching for it would not, and improving
-/// the ranking improves both.
+/// The whole of the retrieval side, and deliberately thin: hybrid ranking, the structured filters, the account
+/// restriction, and the extracts themselves all belong to <see cref="MailboxSearchReader" />, which is the same
+/// retrieval a caller reaches through <c>search_emails</c>. Answering a question therefore cannot see mail that
+/// searching for it would not, cannot narrow in a way searching could not, and improving the ranking improves both.
+/// </para>
+/// <para>
+/// Every filter is handed on unvalidated and unnormalized, which is the point rather than an omission: the use case
+/// below refuses an unusable address, an over-long subject fragment, and a date range that can select nothing, in the
+/// same words and under the same error code whoever wrote them. A second validation here would be a second set of rules
+/// to keep in agreement with the first.
 /// </para>
 /// <para>
 /// What this adds is the shape a model's context needs rather than a reader's: one bounded extract per message instead
@@ -52,58 +58,39 @@ public sealed class MailboxKnowledgeSearch : IEmailKnowledgeSearch
     /// <inheritdoc />
     public async Task<EmailKnowledgeLookup> FindPassagesAsync(
         MailboxScope scope,
-        string queryText,
+        EmailKnowledgeQuery query,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(scope);
-
-        if (UsableQueryText(queryText) is not { } validatedQueryText)
-        {
-            return EmailKnowledgeLookup.Unfiltered([]);
-        }
+        ArgumentNullException.ThrowIfNull(query);
 
         var request = new SearchEmailsRequest
         {
-            QueryText = validatedQueryText.Value,
+            QueryText = query.QueryText,
+
+            // The scope is the caller's and overwrites nothing the query carries, because the query carries no scope at
+            // all. That is what makes the boundary a property of these two types rather than of this assignment.
             Accounts = [.. scope.AccountIds.Select(MailAccountSelector.For)],
             FolderAliases = scope.FolderAliases,
+            SenderAddress = query.SenderAddress,
+            RecipientAddress = query.RecipientAddress,
+            SubjectFragment = query.SubjectFragment,
+            ReceivedOnOrAfter = query.ReceivedOnOrAfter,
+            ReceivedBefore = query.ReceivedBefore,
+            IsRemotelySeen = query.IsRemotelySeen,
+            HasAttachments = query.HasAttachments,
             ResultLimit = this.bounds.MaximumPassages,
         };
 
         var result = await this.searchReader.SearchEmailsAsync(request, cancellationToken);
 
         return EmailKnowledgeLookup.Unfiltered(
-        [
-            .. result.Matches
-                .Select(this.ToPassage)
-                .Where(static passage => passage.Text.Length is not 0),
-        ]);
-    }
-
-    /// <summary>Validates the one part of a retrieval a model wrote, treating text no query accepts as no result.</summary>
-    /// <remarks>
-    /// <para>
-    /// The asymmetry this method exists for: the query is free-form model output, while the scope beside it is the
-    /// caller's own authorization. So unusable text is a retrieval that found nothing — nobody can be told to correct
-    /// it, and a run whose lookup found nothing still has an answer to give — while an unusable scope stays a failure
-    /// and still travels to the caller that supplied it.
-    /// </para>
-    /// <para>
-    /// It asks the query text's own type rather than restating its rules, which is why blank text, text longer than one
-    /// query carries, and text holding a character no document could are all one answer here. A rule added there is
-    /// covered here without this method learning about it.
-    /// </para>
-    /// </remarks>
-    private static EmailSearchQueryText? UsableQueryText(string queryText)
-    {
-        try
-        {
-            return EmailSearchQueryText.Create(queryText);
-        }
-        catch (MailboxQueryFilterInvalidException)
-        {
-            return null;
-        }
+            [
+                .. result.Matches
+                    .Select(this.ToPassage)
+                    .Where(static passage => passage.Text.Length is not 0),
+            ],
+            result.RetrievalMode);
     }
 
     /// <summary>Reads one match into the passage a model receives.</summary>

@@ -10,6 +10,7 @@ using MailFathom.AI.Providers;
 using MailFathom.AI.Retrieval;
 using MailFathom.AI.UnitTests.TestDoubles;
 using MailFathom.Application.Emails.Mailboxes;
+using MailFathom.Application.Emails.Search;
 using MailFathom.Application.Retrieval.AskMail;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Folders;
@@ -104,8 +105,13 @@ public sealed class MailAnsweringAgentCompositionTests
     }
 
     /// <summary>The tool takes a query and nothing else, which is what makes the scope unreachable from the model's side.</summary>
+    /// <summary>
+    /// The tool publishes the query and the narrowing a search publishes, and no account and no folder. The scope is
+    /// the caller's authorization and the result count is the deployment's bound on how much mail one lookup draws out;
+    /// a model holding either could widen what a run reaches by writing an argument.
+    /// </summary>
     [Fact]
-    public async Task Compose_TheSearchTool_TakesTheQueryAndNothingElse()
+    public async Task Compose_TheSearchTool_TakesTheQueryAndTheNarrowingAndNoScope()
     {
         // Arrange
         var knowledgeSearch = new RecordingEmailKnowledgeSearch();
@@ -119,7 +125,68 @@ public sealed class MailAnsweringAgentCompositionTests
         var tool = Assert.Single(OfferedTools(chatClient));
 
         Assert.Equal(ScopedMailKnowledgeRetrieval.SearchToolName, tool.Name);
-        Assert.Single(tool.JsonSchema.GetProperty("properties").EnumerateObject());
+        Assert.Equal(
+            [
+                ScopedMailKnowledgeRetrieval.QueryArgumentName,
+                "senderAddress",
+                "recipientAddress",
+                "subjectFragment",
+                "receivedOnOrAfter",
+                "receivedBefore",
+                "isRemotelySeen",
+                "hasAttachments",
+            ],
+            tool.JsonSchema.GetProperty("properties").EnumerateObject().Select(property => property.Name));
+    }
+
+    /// <summary>The one argument a lookup cannot do without is the one the schema requires; every narrowing is optional.</summary>
+    [Fact]
+    public async Task Compose_TheSearchTool_RequiresTheQueryAndNothingElse()
+    {
+        // Arrange
+        var knowledgeSearch = new RecordingEmailKnowledgeSearch();
+        using var chatClient = ScriptedChatClient.Answering("nothing to look up");
+        var agent = AgentOver(chatClient, knowledgeSearch, OnePrimaryAccount, out _);
+
+        // Act
+        await agent.RunAsync("what arrived", session: null, options: null, TestContext.Current.CancellationToken);
+
+        // Assert
+        var tool = Assert.Single(OfferedTools(chatClient));
+
+        Assert.Equal(
+            [ScopedMailKnowledgeRetrieval.QueryArgumentName],
+            tool.JsonSchema.GetProperty("required").EnumerateArray().Select(name => name.GetString()));
+    }
+
+    /// <summary>
+    /// A model writes a better query partly because it was told how the query is read, which is the whole of what the
+    /// one-sentence description this replaced did not do.
+    /// </summary>
+    [Fact]
+    public async Task Compose_TheSearchTool_TellsTheModelHowALookupIsRead()
+    {
+        // Arrange
+        var knowledgeSearch = new RecordingEmailKnowledgeSearch();
+        using var chatClient = ScriptedChatClient.Answering("nothing to look up");
+        var agent = AgentOver(chatClient, knowledgeSearch, OnePrimaryAccount, out _);
+
+        // Act
+        await agent.RunAsync("what arrived", session: null, options: null, TestContext.Current.CancellationToken);
+
+        // Assert
+        var description = Assert.Single(OfferedTools(chatClient)).Description;
+
+        Assert.All(
+            new[]
+            {
+                RetrievedMailContextFormatter.RetrievalModeAttributeName,
+                RetrievedMailContextFormatter.LexicalRetrievalMode,
+                RetrievedMailContextFormatter.HybridRetrievalMode,
+                "attachment",
+                "nothing continues",
+            },
+            expected => Assert.Contains(expected, description, StringComparison.Ordinal));
     }
 
     /// <summary>
@@ -342,7 +409,7 @@ public sealed class MailAnsweringAgentCompositionTests
         Assert.All(
             carrying,
             message => Assert.Contains(
-                $"<{RetrievedMailContextFormatter.RetrievalElementName}>",
+                $"<{RetrievedMailContextFormatter.RetrievalElementName} ",
                 CarriedText(message),
                 StringComparison.Ordinal));
         Assert.All(
@@ -378,7 +445,7 @@ public sealed class MailAnsweringAgentCompositionTests
         // Assert
         var expectedEnvelope = RetrievedMailContextFormatter.Format(
             [.. retrieval.Report.Passages],
-            retrievalLimitReached: false);
+            EmailSearchRetrievalMode.Hybrid, retrievalLimitReached: false);
         var sent = chatClient.Calls[^1].Messages;
 
         Assert.Equal(

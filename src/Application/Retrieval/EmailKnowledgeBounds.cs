@@ -30,11 +30,19 @@ public sealed record EmailKnowledgeBounds
 
     /// <summary>Gets the bounds a deployment that states none receives.</summary>
     /// <remarks>
-    /// Deliberately narrower than a search window. A search returns results a person reads and discards; a retrieval
-    /// fills a model's context, is paid for by the token, and leaves the process, so the conservative number is the one
-    /// that costs least in every sense.
+    /// <para>
+    /// The count is <see cref="EmailSearchResultLimit.DefaultValue" /> rather than a smaller number of its own, because
+    /// the comparison somebody actually makes is between asking a question and searching for the answer: a run reaching
+    /// fewer messages than one <c>search_emails</c> window holds answers worse than the search it was supposed to spare
+    /// the caller, and it does so on exactly the questions a search already handles.
+    /// </para>
+    /// <para>
+    /// Matching it costs nothing this type protects. What bounds how much of a mailbox one question can reach is the
+    /// run's own ceiling on retrieved characters, applied across every lookup a model makes; these two bound one lookup,
+    /// and a per-lookup count below the search window is not what keeps a run small.
+    /// </para>
     /// </remarks>
-    public static EmailKnowledgeBounds Default { get; } = new(8, 1200);
+    public static EmailKnowledgeBounds Default { get; } = new(EmailSearchResultLimit.DefaultValue, 1200);
 
     /// <summary>Gets the greatest number of passages one retrieval may return.</summary>
     public int MaximumPassages { get; }

@@ -5,6 +5,7 @@
 using MailFathom.Application.AiProviders;
 using MailFathom.Application.Chat;
 using MailFathom.Application.Emails.Mailboxes;
+using MailFathom.Application.Emails.Search;
 using MailFathom.Application.Retrieval;
 using Microsoft.Extensions.Logging;
 
@@ -17,6 +18,12 @@ namespace MailFathom.AI.Retrieval;
 /// this deployment already serves: hybrid search fuses lexical and vector similarity, which decides what *resembles* a
 /// query. Resemblance is cheap, deterministic, and shallow — a thread that discusses a claim ranks beside the one
 /// message that settles it. This decides which of them answers.
+/// </para>
+/// <para>
+/// What a candidate is judged against is the whole lookup rather than its text, filters included. A lookup that is
+/// mostly a narrowing leaves a query text of a word or two, and judging a candidate against those words alone would
+/// drop exactly the mail the narrowing was written to find — the filters had already selected it, and the pass would be
+/// second-guessing a selection the database made precisely.
 /// </para>
 /// <para>
 /// It filters and never reorders. The fused ranking is computed across every candidate at once, while a judgement is
@@ -83,10 +90,12 @@ internal sealed class ModelJudgedKnowledgeSearch : IEmailKnowledgeSearch
     /// <inheritdoc />
     public async Task<EmailKnowledgeLookup> FindPassagesAsync(
         MailboxScope scope,
-        string queryText,
+        EmailKnowledgeQuery query,
         CancellationToken cancellationToken)
     {
-        var ranked = await this.rankedSearch.FindPassagesAsync(scope, queryText, cancellationToken);
+        ArgumentNullException.ThrowIfNull(query);
+
+        var ranked = await this.rankedSearch.FindPassagesAsync(scope, query, cancellationToken);
         var rankedPassages = ranked.Passages;
 
         if (rankedPassages.Count is 0)
@@ -113,7 +122,7 @@ internal sealed class ModelJudgedKnowledgeSearch : IEmailKnowledgeSearch
             ? rankedPassages
             : [.. rankedPassages.Take(this.plan.MaximumCandidates)];
 
-        var judged = await this.JudgeInTurnAsync(queryText, candidates, cancellationToken);
+        var judged = await this.JudgeInTurnAsync(query, ranked.RetrievalMode, candidates, cancellationToken);
 
         // The unjudged remainder keeps the position the fused ranking gave it. A candidate count below what the search
         // returned bounds what a question spends, and spending less must not silently drop mail nobody looked at.
@@ -129,9 +138,11 @@ internal sealed class ModelJudgedKnowledgeSearch : IEmailKnowledgeSearch
             rankedPassages.Count - kept.Count);
 
         // The candidate count is the ranking's own, unchanged: this pass narrows what is handed over and never what was
-        // considered, so the pair says how much of a lookup the filter dropped.
+        // considered, so the pair says how much of a lookup the filter dropped. The mode is the ranking's own for the
+        // same reason — judging decides what survives a ranking and never how the ranking was produced.
         return new EmailKnowledgeLookup(
             kept,
+            ranked.RetrievalMode,
             ranked.CandidateCount,
             judged.JudgedCount < candidates.Count);
     }
@@ -144,7 +155,8 @@ internal sealed class ModelJudgedKnowledgeSearch : IEmailKnowledgeSearch
     /// moment a failure ends the pass and only the caller records either.
     /// </remarks>
     private async Task<JudgedCandidates> JudgeInTurnAsync(
-        string queryText,
+        EmailKnowledgeQuery query,
+        EmailSearchRetrievalMode retrievalMode,
         IReadOnlyList<EmailKnowledgePassage> candidates,
         CancellationToken cancellationToken)
     {
@@ -152,7 +164,11 @@ internal sealed class ModelJudgedKnowledgeSearch : IEmailKnowledgeSearch
 
         for (var position = 0; position < candidates.Count; position++)
         {
-            var judgement = await this.JudgeAsync(queryText, candidates[position], cancellationToken);
+            var judgement = await this.JudgeAsync(
+                query,
+                candidates[position],
+                retrievalMode,
+                cancellationToken);
 
             if (judgement.ProviderFailure is { } failure)
             {
@@ -182,14 +198,17 @@ internal sealed class ModelJudgedKnowledgeSearch : IEmailKnowledgeSearch
     /// spending provider calls.
     /// </remarks>
     private async Task<PassageJudgement> JudgeAsync(
-        string queryText,
+        EmailKnowledgeQuery query,
         EmailKnowledgePassage candidate,
+        EmailSearchRetrievalMode retrievalMode,
         CancellationToken cancellationToken)
     {
         IReadOnlyList<ChatMessage> conversation =
         [
             new ChatMessage(ChatRole.System, PassageRelevanceInstructions.Text),
-            new ChatMessage(ChatRole.User, PassageRelevanceInstructions.ComposeJudgementTurn(queryText, candidate)),
+            new ChatMessage(
+                ChatRole.User,
+                PassageRelevanceInstructions.ComposeJudgementTurn(query, candidate, retrievalMode)),
         ];
 
         try

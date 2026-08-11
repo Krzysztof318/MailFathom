@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.AI;
+using MailFathom.AI.Chat;
 using MailFathom.Application.Accounts;
 using MailFathom.Application.EmailContent;
 using MailFathom.Application.EmailContent.Storage;
@@ -16,6 +17,7 @@ using MailFathom.Application.Mail.Mutations;
 using MailFathom.Application.Mail.Mutations.Audit;
 using MailFathom.Application.Mail.Mutations.Convergence;
 using MailFathom.Application.Persistence;
+using MailFathom.Application.Retrieval;
 using MailFathom.Application.Retrieval.AskMail;
 using MailFathom.Application.Retrieval.AskMail.Audit;
 using MailFathom.Application.Synchronization;
@@ -30,6 +32,7 @@ using MailFathom.Infrastructure.Persistence.Connections;
 using MailFathom.Infrastructure.Resilience;
 using MailFathom.Infrastructure.Secrets.Discovery;
 using MailFathom.Infrastructure.Secrets.Resolution;
+using Microsoft.Extensions.AI;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 
@@ -74,6 +77,27 @@ internal sealed class OrchestratedMailFathomServices : IAsyncDisposable
     /// </remarks>
     internal const int EmbeddingInputCharacterCeiling = 5_000;
 
+    /// <summary>The declaration an answering run of this suite is conducted under.</summary>
+    /// <remarks>
+    /// The address is in the reserved <c>.invalid</c> domain and nothing ever dials it: the provider is scripted, and
+    /// the plan exists because the composition maps it onto the generation parameters every turn carries. The
+    /// conversation bounds are generous enough that a run making several lookups is never stopped by the bound a single
+    /// request carries, which is a different ceiling and not what these tests are about.
+    /// </remarks>
+    private static readonly ChatGenerationPlan AnsweringChatPlan = ChatGenerationPlan.Create(
+        new ChatEndpoint(
+            "integration-answering",
+            new Uri("https://provider.invalid/v1/", UriKind.Absolute),
+            "a-scripted-chat-model",
+            ChatProviderApi.ChatCompletions),
+        maximumOutputTokens: 256,
+        temperature: null,
+        topP: null,
+        reasoningEffort: null,
+        maximumMessagesPerRequest: 32,
+        maximumRequestCharacters: 200_000,
+        requestTimeout: TimeSpan.FromSeconds(30));
+
     private readonly IHost host;
 
     private OrchestratedMailFathomServices(IHost host) => this.host = host;
@@ -96,6 +120,11 @@ internal sealed class OrchestratedMailFathomServices : IAsyncDisposable
     /// proving what the trail holds, which is the deployed default and keeps every other test from accumulating a
     /// history it never asked about.
     /// </param>
+    /// <param name="answeringChatClient">
+    /// The provider an answering run is conducted through, or <see langword="null" /> for a deployment that answers no
+    /// questions. Absent everywhere but the class that asks one, because a registered answerer is what makes the
+    /// capability report that this instance answers at all.
+    /// </param>
     /// <returns>The composed services, which the caller owns and must dispose.</returns>
     internal static async Task<OrchestratedMailFathomServices> StartAsync(
         MailFathomOrchestrationFixture orchestration,
@@ -103,7 +132,8 @@ internal sealed class OrchestratedMailFathomServices : IAsyncDisposable
         RemotelyDeletedEmailDisposition remotelyDeletedEmailDisposition =
             RemotelyDeletedEmailDisposition.RetainTombstone,
         bool auditTrailEnabled = false,
-        bool answeringAuditTrailEnabled = false)
+        bool answeringAuditTrailEnabled = false,
+        IChatClient? answeringChatClient = null)
     {
         var builder = new HostApplicationBuilder();
         var account = new SyntheticMailAccount(
@@ -191,6 +221,18 @@ internal sealed class OrchestratedMailFathomServices : IAsyncDisposable
         // the embedding generation nor the backfill, because both resolve a text embedding generator an instance that
         // declared no chain does not have. This suite declared one, so it registers both.
         builder.Services.AddEmailEmbeddingGeneration();
+
+        // The answering half, registered only for a test that asks a question. A composition root adds the answerer
+        // exactly where a chat endpoint was declared, and its absence is what makes every other test's deployment
+        // report that it answers none — which is the shipped default and what those tests are written against.
+        if (answeringChatClient is { } chatClient)
+        {
+            builder.Services.AddScoped<IMailQuestionAnswerer>(provider => new ComposedMailQuestionAnswerer(
+                provider.GetRequiredService<IEmailKnowledgeSearch>(),
+                provider.GetRequiredService<MailAnsweringRunBounds>(),
+                AnsweringChatPlan,
+                chatClient));
+        }
 
         // The ring a composition root would build from the DataEncryption section. It is supplied here for the reason
         // every other bound setting above is: the suite does not start the host resource, so nothing else binds it, and

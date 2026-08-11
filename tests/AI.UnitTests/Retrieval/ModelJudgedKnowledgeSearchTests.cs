@@ -7,6 +7,7 @@ using MailFathom.AI.UnitTests.TestDoubles;
 using MailFathom.Application.AiProviders;
 using MailFathom.Application.Chat;
 using MailFathom.Application.Emails.Mailboxes;
+using MailFathom.Application.Emails.Search;
 using MailFathom.Application.Retrieval;
 using MailFathom.Domain.Accounts;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -22,7 +23,9 @@ namespace MailFathom.AI.UnitTests.Retrieval;
 /// </remarks>
 public sealed class ModelJudgedKnowledgeSearchTests
 {
-    private const string Query = "what did the insurer agree to pay";
+    private const string QueryText = "what did the insurer agree to pay";
+
+    private static readonly EmailKnowledgeQuery Query = EmailKnowledgeQuery.ForText(QueryText);
 
     private static readonly MailboxScope Scope = MailboxScope.Create([MailAccountId.Create("primary")], []);
 
@@ -274,11 +277,11 @@ public sealed class ModelJudgedKnowledgeSearchTests
         Assert.Equal(PassageRelevanceInstructions.Text, conversation[0].Text);
         Assert.Equal(ChatRole.User, conversation[1].Role);
         Assert.Contains(
-            $"<{PassageRelevanceInstructions.QueryElementName}>{Query}</{PassageRelevanceInstructions.QueryElementName}>",
+            $"<{PassageRelevanceInstructions.QueryTextElementName}>{QueryText}</{PassageRelevanceInstructions.QueryTextElementName}>",
             conversation[1].Text,
             StringComparison.Ordinal);
         Assert.Contains(
-            RetrievedMailContextFormatter.Format([passage], retrievalLimitReached: false),
+            RetrievedMailContextFormatter.Format([passage], EmailSearchRetrievalMode.Hybrid, retrievalLimitReached: false),
             conversation[1].Text,
             StringComparison.Ordinal);
     }
@@ -344,7 +347,7 @@ public sealed class ModelJudgedKnowledgeSearchTests
     }
 
     private static RecordingEmailKnowledgeSearch Retrieving(params EmailKnowledgePassage[] passages) =>
-        new RecordingEmailKnowledgeSearch().Returning(Query, passages);
+        new RecordingEmailKnowledgeSearch().Returning(Query.QueryText, passages);
 
     private static ModelJudgedKnowledgeSearch SearchOver(
         IEmailKnowledgeSearch rankedSearch,

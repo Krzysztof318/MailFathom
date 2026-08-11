@@ -25,14 +25,29 @@ public sealed class MailAnsweringRunBoundsTests
 
     /// <summary>A run that could not send even one passage would answer from nothing while appearing to have read the mailbox.</summary>
     [Fact]
-    public void Default_TheRetrievedCharacterCeiling_LeavesRoomForSeveralWholeLookups()
+    public void Default_TheRetrievedCharacterCeiling_AdmitsAWholePassage()
+    {
+        // Assert
+        Assert.True(
+            MailAnsweringRunBounds.Default.MaximumRetrievedCharacters
+            >= EmailKnowledgeBounds.Default.MaximumCharactersPerPassage);
+    }
+
+    /// <summary>
+    /// The two ceilings bound different things, and the pair is what decides how many lookups a run fits. A lookup
+    /// whose every passage reached the per-passage ceiling would exhaust a run on its own, which is the ceiling working
+    /// rather than a contradiction: the passages are admitted in relevance order and the run is told there is no more.
+    /// The per-passage figure is a ceiling rather than a size, and a passage is a few extracts of a message.
+    /// </summary>
+    [Fact]
+    public void Default_TheRetrievedCharacterCeiling_BoundsARunRatherThanFollowingTheLookupBound()
     {
         // Act
-        var oneLookup = EmailKnowledgeBounds.Default.MaximumPassages
+        var wholeLookupAtTheCeiling = EmailKnowledgeBounds.Default.MaximumPassages
             * EmailKnowledgeBounds.Default.MaximumCharactersPerPassage;
 
         // Assert
-        Assert.True(MailAnsweringRunBounds.Default.MaximumRetrievedCharacters > oneLookup);
+        Assert.True(MailAnsweringRunBounds.Default.MaximumRetrievedCharacters < wholeLookupAtTheCeiling);
     }
 
     [Theory]

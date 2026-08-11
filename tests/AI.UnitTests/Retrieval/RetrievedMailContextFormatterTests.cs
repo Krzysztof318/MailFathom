@@ -6,6 +6,7 @@ using System.Globalization;
 using System.Xml.Linq;
 using MailFathom.AI.Retrieval;
 using MailFathom.AI.UnitTests.TestDoubles;
+using MailFathom.Application.Emails.Search;
 using MailFathom.Application.Retrieval;
 using Xunit;
 
@@ -31,7 +32,7 @@ public sealed class RetrievedMailContextFormatterTests
             subject: "Invoice 41");
 
         // Act
-        var envelope = RetrievedMailContextFormatter.Format([passage], retrievalLimitReached: false);
+        var envelope = RetrievedMailContextFormatter.Format([passage], EmailSearchRetrievalMode.Hybrid, retrievalLimitReached: false);
 
         // Assert
         var message = Assert.Single(MessagesIn(envelope));
@@ -56,7 +57,7 @@ public sealed class RetrievedMailContextFormatterTests
         ];
 
         // Act
-        var envelope = RetrievedMailContextFormatter.Format(passages, retrievalLimitReached: false);
+        var envelope = RetrievedMailContextFormatter.Format(passages, EmailSearchRetrievalMode.Hybrid, retrievalLimitReached: false);
 
         // Assert
         Assert.Equal(
@@ -82,7 +83,7 @@ public sealed class RetrievedMailContextFormatterTests
         var passage = KnowledgePassages.Create(Injection, subject: forgedSubject);
 
         // Act
-        var envelope = RetrievedMailContextFormatter.Format([passage], retrievalLimitReached: false);
+        var envelope = RetrievedMailContextFormatter.Format([passage], EmailSearchRetrievalMode.Hybrid, retrievalLimitReached: false);
 
         // Assert
         var message = Assert.Single(MessagesIn(envelope));
@@ -101,7 +102,7 @@ public sealed class RetrievedMailContextFormatterTests
         var passage = KnowledgePassages.Create("nothing of interest", accountId: ForgedAccount);
 
         // Act
-        var envelope = RetrievedMailContextFormatter.Format([passage], retrievalLimitReached: false);
+        var envelope = RetrievedMailContextFormatter.Format([passage], EmailSearchRetrievalMode.Hybrid, retrievalLimitReached: false);
 
         // Assert
         var message = Assert.Single(MessagesIn(envelope));
@@ -117,7 +118,7 @@ public sealed class RetrievedMailContextFormatterTests
         var passage = KnowledgePassages.Create("a message that arrived without one");
 
         // Act
-        var envelope = RetrievedMailContextFormatter.Format([passage], retrievalLimitReached: false);
+        var envelope = RetrievedMailContextFormatter.Format([passage], EmailSearchRetrievalMode.Hybrid, retrievalLimitReached: false);
 
         // Assert
         var message = Assert.Single(MessagesIn(envelope));
@@ -134,7 +135,7 @@ public sealed class RetrievedMailContextFormatterTests
         var passage = KnowledgePassages.Create("the invoice is attached") with { ReceivedAt = receivedAt };
 
         // Act
-        var envelope = RetrievedMailContextFormatter.Format([passage], retrievalLimitReached: false);
+        var envelope = RetrievedMailContextFormatter.Format([passage], EmailSearchRetrievalMode.Hybrid, retrievalLimitReached: false);
 
         // Assert
         var written = Attribute(Assert.Single(MessagesIn(envelope)), RetrievedMailContextFormatter.ReceivedAttributeName);
@@ -154,7 +155,7 @@ public sealed class RetrievedMailContextFormatterTests
     public void Format_NoPassages_StillWritesTheEnvelope()
     {
         // Act
-        var envelope = RetrievedMailContextFormatter.Format([], retrievalLimitReached: false);
+        var envelope = RetrievedMailContextFormatter.Format([], EmailSearchRetrievalMode.Hybrid, retrievalLimitReached: false);
 
         // Assert
         Assert.Empty(MessagesIn(envelope));
@@ -172,7 +173,7 @@ public sealed class RetrievedMailContextFormatterTests
         var passage = KnowledgePassages.Create("the last extract this run was allowed");
 
         // Act
-        var envelope = RetrievedMailContextFormatter.Format([passage], retrievalLimitReached: true);
+        var envelope = RetrievedMailContextFormatter.Format([passage], EmailSearchRetrievalMode.Hybrid, retrievalLimitReached: true);
 
         // Assert
         Assert.Single(MessagesIn(envelope));
@@ -193,10 +194,10 @@ public sealed class RetrievedMailContextFormatterTests
         ];
 
         // Act
-        var envelope = RetrievedMailContextFormatter.Format(passages, retrievalLimitReached: false);
+        var envelope = RetrievedMailContextFormatter.Format(passages, EmailSearchRetrievalMode.Hybrid, retrievalLimitReached: false);
 
         // Assert
-        Assert.Equal(envelope, RetrievedMailContextFormatter.Format(passages, retrievalLimitReached: false));
+        Assert.Equal(envelope, RetrievedMailContextFormatter.Format(passages, EmailSearchRetrievalMode.Hybrid, retrievalLimitReached: false));
     }
 
     private static IReadOnlyList<XElement> MessagesIn(string envelope) =>

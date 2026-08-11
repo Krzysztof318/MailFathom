@@ -2,23 +2,33 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using System.ComponentModel;
 using MailFathom.AI.Orchestration;
 using MailFathom.Application.Emails.Mailboxes;
 using MailFathom.Application.Retrieval;
 using MailFathom.Application.Retrieval.AskMail;
 using MailFathom.Domain.Answering.Audit;
-using Microsoft.Agents.AI;
-using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.AI;
 
 namespace MailFathom.AI.Retrieval;
 
 /// <summary>The mail one run may reach, and the record of what it reached.</summary>
 /// <remarks>
 /// <para>
-/// This is where the scope stops being negotiable. The framework is handed a search that takes a query and nothing else,
-/// because the accounts and folders were bound into this object when the run was composed: a model can write any query it
-/// likes and every one of them is answered from the same scope. Nothing in an instruction, a retrieved message, or a tool
-/// argument reaches the value, which is what makes the boundary structural rather than a rule the prompt asks for.
+/// This is where the scope stops being negotiable. The tool the framework is handed takes a query and the narrowing a
+/// search publishes, and it takes no accounts and no folders at all, because those were bound into this object when the
+/// run was composed: a model can write any lookup it likes and every one of them is answered from the same scope.
+/// Nothing in an instruction, a retrieved message, or a tool argument reaches the value, which is what makes the
+/// boundary structural rather than a rule the prompt asks for.
+/// </para>
+/// <para>
+/// The filters beside the query are the other half of that reading, and they are why this type publishes a tool of its
+/// own rather than the framework's text-search provider. That provider offers a query and nothing else, which leaves a
+/// question that is naturally a filter — mail from one person, mail of one week, mail carrying an attachment — to be
+/// answered by ranking free text across the whole scope, and that is the one shape lexical and vector similarity are
+/// both weakest at. What is exposed is exactly what <c>search_emails</c> publishes minus the two arguments a model may
+/// not hold: the scope, which is the caller's authorization, and the result count, which is the deployment's bound on
+/// how much mail one lookup draws out.
 /// </para>
 /// <para>
 /// One instance serves one run. It records the passages it handed over so the answer can carry them, and that record is
@@ -41,8 +51,36 @@ internal sealed class ScopedMailKnowledgeRetrieval
     /// </remarks>
     internal const string SearchToolName = "search_mail";
 
+    /// <summary>Names the tool's one required argument, which is the text every lookup ranks against.</summary>
+    /// <remarks>Published as a constant because the framework reads it off a parameter, and a test scripting a tool call has to name the same thing the schema does.</remarks>
+    internal const string QueryArgumentName = "queryText";
+
+    /// <summary>What the model is told the tool does, and what it needs in order to write a usable lookup.</summary>
+    /// <remarks>
+    /// <para>
+    /// Deliberately as detailed as the description <c>search_emails</c> publishes to its own callers, and for the same
+    /// reason: a client writes a better query partly because it was told how the query is read. A model given one
+    /// sentence writes prose at a ranking that matches words, discovers nothing, and reports that the mailbox does not
+    /// answer the question.
+    /// </para>
+    /// <para>
+    /// What it does not state is which ranking is in force, because that is a property of the instance at the moment of
+    /// the lookup rather than of this build — an instance whose embedding provider is refusing ranks lexically until it
+    /// is not. The envelope carries it per lookup instead, and this text says where to read it.
+    /// </para>
+    /// </remarks>
     private const string SearchToolDescription =
-        "Searches the local copy of the mailbox for messages relevant to a query and returns short extracts from them.";
+        "Searches the local copy of this mailbox for messages relevant to a query and returns bounded extracts of the "
+        + "body around the matched words. Retrieval is lexical or hybrid depending on how this server is configured, "
+        + $"and every result says which in the {RetrievedMailContextFormatter.RetrievalModeAttributeName} attribute of "
+        + $"the <{RetrievedMailContextFormatter.RetrievalElementName}> element: lexical finds the words a query "
+        + "contains rather than what they mean, while hybrid also finds mail whose meaning is close and combines the "
+        + "two rankings. Words that appear only inside an attachment are never searchable either way. Narrow with the "
+        + "filters rather than by describing the narrowing in the query: a question about one person's mail, one period, "
+        + "or mail carrying an attachment is answered far better by the matching filter than by words that have to rank. "
+        + "Which accounts and folders are searched is fixed by the caller and is not yours to set. Each call returns one "
+        + "window of the most relevant results that nothing continues, so call it again with a different query or "
+        + "narrower filters to reach other mail. Matching nothing is an ordinary empty result rather than an error.";
 
     private readonly IEmailKnowledgeSearch knowledgeSearch;
     private readonly MailboxScope scope;
@@ -106,49 +144,73 @@ internal sealed class ScopedMailKnowledgeRetrieval
     /// <summary>Gets whether a lookup found mail this run's ceiling would not let it send.</summary>
     internal bool WasTruncated => this.runLedger.RetrievalWasTruncated;
 
-    /// <summary>Builds the context provider the framework retrieves through.</summary>
-    /// <param name="loggerFactory">Creates the logger the provider records its own decisions through.</param>
-    /// <returns>The provider, which searches only when the model asks it to.</returns>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="loggerFactory" /> is <see langword="null" />.</exception>
+    /// <summary>Builds the one tool the run is composed with.</summary>
+    /// <returns>The tool, which searches only when the model calls it.</returns>
     /// <remarks>
     /// On demand rather than before every call, which is the difference between a question that needed no mail costing
     /// nothing and one that drags a mailbox through a provider to answer "what can you do". The model decides it needs
     /// context and asks; nothing is pushed at it.
     /// </remarks>
-    internal TextSearchProvider CreateContextProvider(ILoggerFactory loggerFactory)
-    {
-        ArgumentNullException.ThrowIfNull(loggerFactory);
-
-        var options = new TextSearchProviderOptions
-        {
-            SearchTime = TextSearchProviderOptions.TextSearchBehavior.OnDemandFunctionCalling,
-            FunctionToolName = SearchToolName,
-            FunctionToolDescription = SearchToolDescription,
-
-            // Replaces the framework's own formatting, which writes each result as a labelled paragraph between dashed
-            // separators and closes with an instruction of its own. Retrieved mail written that way is prose in the same
-            // voice as an instruction, and a message imitating one of those separators is indistinguishable from it.
-            ContextFormatter = this.FormatRetrieved,
-
-            // The framework's own switch for putting queries and retrieved text into its logs. It defaults to off and is
-            // set here anyway, because what it would emit is somebody's question and extracts of their mail, and a
-            // default is a thing a package update may change.
-            EnableSensitiveTelemetryData = false,
-        };
-
-        return new TextSearchProvider(this.SearchAsync, options, loggerFactory);
-    }
+    internal AIFunction CreateSearchTool() =>
+        AIFunctionFactory.Create(this.SearchAsync, SearchToolName, SearchToolDescription);
 
     /// <summary>Answers one lookup the model asked for, with as much of what it found as this run may still send.</summary>
     /// <remarks>
-    /// The result carries the passage itself as its raw representation rather than only the text, so whatever formats the
-    /// context reaches the message identity and the source coordinates without searching for them again.
+    /// <para>
+    /// The result is the envelope itself rather than a list the framework then formats. Writing it here is what keeps
+    /// retrieved mail inside a document this system controls: the framework's own formatting writes each result as a
+    /// labelled paragraph between dashed separators and closes with an instruction of its own, and mail written that way
+    /// is prose in the same voice as an instruction.
+    /// </para>
+    /// <para>
+    /// A refused filter comes back as a document saying which one, because the caller here is a tool loop and a model
+    /// that wrote an unusable value can write a usable one. Absorbing it into an empty envelope would tell the model the
+    /// mailbox holds nothing, and raising it would end a run over a value the model was free to correct. The refusal
+    /// names the filter and never the value, which is a property of the failure rather than of this method.
+    /// </para>
     /// </remarks>
-    private async Task<IEnumerable<TextSearchProvider.TextSearchResult>> SearchAsync(
-        string query,
-        CancellationToken cancellationToken)
+    private async Task<string> SearchAsync(
+        [Description("The text to rank mail against, up to 512 characters. Quoted phrases, OR, and a leading - to exclude a word are understood; every other punctuation mark is ordinary text. Write the words you expect the mail itself to contain rather than the question you were asked.")]
+        string queryText,
+        [Description("Return only mail sent from this mail address. Matched as a whole address rather than as a fragment, without regard to case. Omit to match any sender.")]
+        string? senderAddress = null,
+        [Description("Return only mail addressed to this mail address in its To or Cc header. Matched as a whole address rather than as a fragment; Reply-To is not searched. Omit to match any recipient.")]
+        string? recipientAddress = null,
+        [Description("Return only mail whose subject contains this text, without regard to case, up to 256 characters. This narrows which mail is eligible before any of it is ranked and is unrelated to queryText. Omit to match any subject.")]
+        string? subjectFragment = null,
+        [Description("Return only mail received at or after this ISO 8601 timestamp. Mail whose received date is unknown is excluded whenever either bound is named. Omit for no lower bound.")]
+        DateTimeOffset? receivedOnOrAfter = null,
+        [Description("Return only mail received strictly before this ISO 8601 timestamp. Omit for no upper bound.")]
+        DateTimeOffset? receivedBefore = null,
+        [Description("Return only mail the mail server last reported as read (true) or unread (false). Omit to match either. Searching never changes this state.")]
+        bool? isRemotelySeen = null,
+        [Description("Return only mail that carries attachments (true) or that carries none (false). Omit to match either. Inline images and cryptographic signature parts do not count as attachments.")]
+        bool? hasAttachments = null,
+        CancellationToken cancellationToken = default)
     {
-        var found = await this.knowledgeSearch.FindPassagesAsync(this.scope, query, cancellationToken);
+        var query = new EmailKnowledgeQuery
+        {
+            QueryText = queryText,
+            SenderAddress = senderAddress,
+            RecipientAddress = recipientAddress,
+            SubjectFragment = subjectFragment,
+            ReceivedOnOrAfter = receivedOnOrAfter,
+            ReceivedBefore = receivedBefore,
+            IsRemotelySeen = isRemotelySeen,
+            HasAttachments = hasAttachments,
+        };
+
+        EmailKnowledgeLookup found;
+
+        try
+        {
+            found = await this.knowledgeSearch.FindPassagesAsync(this.scope, query, cancellationToken);
+        }
+        catch (MailboxQueryFilterInvalidException refusal)
+        {
+            return RetrievedMailContextFormatter.FormatRefusal(refusal.FilterName, refusal.Message);
+        }
+
         var admitted = this.runLedger.AdmitPassages(found.Passages);
 
         lock (this.gate)
@@ -162,29 +224,8 @@ internal sealed class ScopedMailKnowledgeRetrieval
             this.relevanceFilterFellBack |= found.RelevanceFilterFellBack;
         }
 
-        return
-        [
-            .. admitted.Select(static passage => new TextSearchProvider.TextSearchResult
-            {
-                Text = passage.Text,
-                SourceName = passage.StoredEmailId.ToString(),
-                RawRepresentation = passage,
-            }),
-        ];
+        return RetrievedMailContextFormatter.Format(admitted, found.RetrievalMode, this.WasTruncated);
     }
-
-    /// <summary>Writes what one lookup found into the envelope the model reads it inside.</summary>
-    /// <remarks>
-    /// Every result of this run was built above and carries its passage, so the formatter reaches the message identity
-    /// and the source coordinates rather than the flattened strings the framework's own result type carries. The cast
-    /// asserts that rather than filtering on it: a result arriving from anywhere else would otherwise be dropped from
-    /// the envelope while <see cref="Report" /> still recorded it, leaving the answer citing a message the model was
-    /// never shown.
-    /// </remarks>
-    private string FormatRetrieved(IList<TextSearchProvider.TextSearchResult> results) =>
-        RetrievedMailContextFormatter.Format(
-            [.. results.Select(static result => result.RawRepresentation).Cast<EmailKnowledgePassage>()],
-            this.WasTruncated);
 
     /// <summary>Names the ways this run read less of the mailbox than an undegraded run of the same question would.</summary>
     private static MailAnsweringRunDegradation Degraded(bool truncated, bool filterFellBack) =>

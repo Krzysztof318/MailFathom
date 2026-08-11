@@ -23,7 +23,7 @@ public sealed class MailAnsweringOptionsTests
         var settings = new MailAnsweringOptions();
 
         // Assert
-        Assert.Equal(8, settings.MaxPassagesPerRetrieval);
+        Assert.Equal(20, settings.MaxPassagesPerRetrieval);
         Assert.Equal(1_200, settings.MaxCharactersPerPassage);
         Assert.Equal(20_000, settings.MaxRetrievedCharactersPerRun);
         Assert.Equal(8, settings.MaxProviderCallsPerRun);

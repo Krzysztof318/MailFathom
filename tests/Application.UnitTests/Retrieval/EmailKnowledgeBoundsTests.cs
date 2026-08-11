@@ -11,17 +11,19 @@ namespace MailFathom.Application.UnitTests.Retrieval;
 /// <summary>Covers the ceiling on what one retrieval may hand a model.</summary>
 public sealed class EmailKnowledgeBoundsTests
 {
+    /// <summary>
+    /// A run reaching fewer messages per lookup than one search window holds answers worse than the search it was meant
+    /// to spare the caller, and does so on exactly the questions a search already handles. Matching the window is the
+    /// whole reason the default is what it is, so it is asserted against that constant rather than against a literal.
+    /// </summary>
     [Fact]
-    public void Default_IsNarrowerThanASearchWindow()
+    public void Default_TheLookupCount_MatchesTheWindowASearchReturns()
     {
-        // Arrange
-        var bounds = EmailKnowledgeBounds.Default;
-
         // Act
-        var maximumPassages = bounds.MaximumPassages;
+        var maximumPassages = EmailKnowledgeBounds.Default.MaximumPassages;
 
         // Assert
-        Assert.True(maximumPassages < EmailSearchResultLimit.DefaultValue);
+        Assert.Equal(EmailSearchResultLimit.DefaultValue, maximumPassages);
     }
 
     [Theory]

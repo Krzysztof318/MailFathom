@@ -602,12 +602,15 @@ messages, search when the messages themselves are what is wanted.
 
 There is no structured filter beside the scope, and that is a decision rather than an omission. A sender or a date range
 supplied here would narrow every lookup the model makes without the model knowing why its searches were returning
-nothing, and it would be answering a question nobody asked while reporting it as the answer to the one they did.
+nothing, and it would be answering a question nobody asked while reporting it as the answer to the one they did. The
+model narrows its own lookups instead, with the same filters `search_emails` publishes: [Mail answering § What one
+lookup may ask for](mail-answering.md#what-one-lookup-may-ask-for) records which, and which two are withheld from it.
 
 The scope is the caller's authorization expressed as data, and it is the one part of the run the model cannot reach. It
-is resolved before the run starts and bound into it, and the tool the model is offered takes a query and nothing else, so
-a run that has been talked into asking about another account has the caller's own scope searched for those words. The
-same resolution runs again on every lookup, underneath, because the retrieval is the search `search_emails` answers from.
+is resolved before the run starts and bound into it, and the tool the model is offered takes no account and no folder
+argument at all, so a run that has been talked into asking about another account has the caller's own scope searched for
+those words. The same resolution runs again on every lookup, underneath, because the retrieval is the search
+`search_emails` answers from.
 
 The two identifier lists are converted and bounded exactly as `list_emails` converts them, by the same code and with the
 same refusals; the section above records that rule once.

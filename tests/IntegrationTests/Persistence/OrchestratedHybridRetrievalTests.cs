@@ -125,7 +125,7 @@ public sealed class OrchestratedHybridRetrievalTests(MailFathomOrchestrationFixt
         var lookup = await services.InScopeAsync(
             (scope, token) => scope.GetRequiredService<MailboxKnowledgeSearch>().FindPassagesAsync(
                 MailboxScope.Create([SyntheticMailAccount.AccountId], [MailFolderAlias.Create(FolderAlias)]),
-                QueryTerm,
+                EmailKnowledgeQuery.ForText(QueryTerm),
                 token),
             cancellationToken);
 

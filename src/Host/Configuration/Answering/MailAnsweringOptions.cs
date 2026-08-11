@@ -33,12 +33,19 @@ internal sealed class MailAnsweringOptions : IValidatableObject
 
     /// <summary>Gets or sets the greatest number of passages one lookup may hand over.</summary>
     /// <remarks>
+    /// <para>
     /// How many messages a single lookup can draw on. Capped by what one search can rank, because a retrieval is
     /// answered from a search window and asking for more passages than that window holds would state a bound no run
     /// could reach.
+    /// </para>
+    /// <para>
+    /// The default is the default window <c>search_emails</c> returns, so a run reaches as many messages per lookup as
+    /// searching for the same thing would. What bounds how much of a mailbox one question can reach is
+    /// <see cref="MaxRetrievedCharactersPerRun" /> below, applied across every lookup a model makes.
+    /// </para>
     /// </remarks>
     [Range(1, EmailSearchResultLimit.MaximumValue)]
-    public int MaxPassagesPerRetrieval { get; set; } = 8;
+    public int MaxPassagesPerRetrieval { get; set; } = EmailSearchResultLimit.DefaultValue;
 
     /// <summary>Gets or sets the greatest number of characters one passage may carry.</summary>
     /// <remarks>How much of any single message a lookup can draw out. Separate from the count above because one enormous extract and a spread across several messages say different things about a mailbox, and a single total would let them satisfy the same ceiling.</remarks>

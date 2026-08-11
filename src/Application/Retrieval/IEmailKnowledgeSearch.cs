@@ -11,8 +11,8 @@ namespace MailFathom.Application.Retrieval;
 /// <para>
 /// The retrieval side of answering, and the only route by which mail reaches a model. It exists as a port rather than as
 /// a call into the search use case because the caller is an orchestration framework: what that framework may ask for is
-/// a question in free text, and everything else about the retrieval — which accounts, which folders, how many passages,
-/// how much of any message — is decided by whoever composed the run.
+/// the query and the narrowing of <see cref="EmailKnowledgeQuery" />, and everything else about the retrieval — which
+/// accounts, which folders, how many passages, how much of any message — is decided by whoever composed the run.
 /// </para>
 /// <para>
 /// The scope is a parameter rather than part of the query for exactly that reason. It comes from the caller that has
@@ -30,15 +30,18 @@ public interface IEmailKnowledgeSearch
 {
     /// <summary>Finds the passages relevant to one query within one scope.</summary>
     /// <param name="scope">The accounts and folders the passages may be drawn from, decided by the caller.</param>
-    /// <param name="queryText">What to look for, which is free text a model may have written.</param>
+    /// <param name="query">What to look for and how to narrow it, all of which a model may have written.</param>
     /// <param name="cancellationToken">Propagates caller cancellation.</param>
     /// <returns>The passages, most relevant first, bounded in number and in the size of each, beside what the lookup considered to produce them.</returns>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="scope" /> is <see langword="null" />.</exception>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="scope" /> or <paramref name="query" /> is <see langword="null" />.</exception>
+    /// <exception cref="MailboxQueryFilterInvalidException">Thrown when the query carries no usable text, or a filter carries a value or a length the query does not accept.</exception>
     /// <remarks>
     /// <para>
-    /// A query that finds nothing, and one that carries no usable text, both produce an empty list. Neither is a failure:
-    /// the text is written by a model rather than by a caller who can be told to correct it, and a run whose retrieval
-    /// found nothing still has an answer to give.
+    /// A query that finds nothing produces an empty list, which is not a failure: a run whose retrieval found nothing
+    /// still has an answer to give. A query the search use case <em>refuses</em> is a different thing and travels out as
+    /// the refusal that use case raises, because the caller here owns a tool loop and can therefore hand the model the
+    /// reason and let it write the lookup again. Absorbing it into an empty list would tell a model that a mailbox holds
+    /// nothing when what it holds is an unusable filter.
     /// </para>
     /// <para>
     /// The counts travel with the passages rather than being logged where they arise, because what an operator and an
@@ -48,6 +51,6 @@ public interface IEmailKnowledgeSearch
     /// </remarks>
     Task<EmailKnowledgeLookup> FindPassagesAsync(
         MailboxScope scope,
-        string queryText,
+        EmailKnowledgeQuery query,
         CancellationToken cancellationToken);
 }

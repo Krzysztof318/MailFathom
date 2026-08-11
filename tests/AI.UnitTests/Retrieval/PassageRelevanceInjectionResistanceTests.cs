@@ -7,6 +7,7 @@ using MailFathom.AI.UnitTests.TestDoubles;
 using MailFathom.Application.AiProviders;
 using MailFathom.Application.Chat;
 using MailFathom.Application.Emails.Mailboxes;
+using MailFathom.Application.Emails.Search;
 using MailFathom.Application.Retrieval;
 using MailFathom.Domain.Accounts;
 using MailFathom.TestSupport;
@@ -32,7 +33,8 @@ namespace MailFathom.AI.UnitTests.Retrieval;
 /// </remarks>
 public sealed class PassageRelevanceInjectionResistanceTests
 {
-    private const string Query = "what did the insurer agree to pay";
+    private static readonly EmailKnowledgeQuery Query =
+        EmailKnowledgeQuery.ForText("what did the insurer agree to pay");
 
     private static readonly MailboxScope OnePrimaryAccount =
         MailboxScope.Create([MailAccountId.Create("primary")], []);
@@ -114,7 +116,7 @@ public sealed class PassageRelevanceInjectionResistanceTests
         Assert.DoesNotContain(message.Subject, conversation[0].Text, StringComparison.Ordinal);
         Assert.Equal(ChatRole.User, conversation[1].Role);
         Assert.Contains(
-            RetrievedMailContextFormatter.Format([candidate], retrievalLimitReached: false),
+            RetrievedMailContextFormatter.Format([candidate], EmailSearchRetrievalMode.Hybrid, retrievalLimitReached: false),
             conversation[1].Text,
             StringComparison.Ordinal);
     }
@@ -126,7 +128,7 @@ public sealed class PassageRelevanceInjectionResistanceTests
         subject: AdversarialMailCorpus.SelfPromotion.Subject);
 
     private static RecordingEmailKnowledgeSearch Retrieving(params EmailKnowledgePassage[] passages) =>
-        new RecordingEmailKnowledgeSearch().Returning(Query, passages);
+        new RecordingEmailKnowledgeSearch().Returning(Query.QueryText, passages);
 
     private static ModelJudgedKnowledgeSearch SearchOver(
         IEmailKnowledgeSearch rankedSearch,
