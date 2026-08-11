@@ -172,6 +172,23 @@ public sealed class NCalcMailRuleConditionTests
             () => condition.EvaluateAsync(CreateFacts(), cancellation.Token));
     }
 
+    /// <summary>Arithmetic that leaves its range raises, so a pass records the rule as failed rather than as an answer.</summary>
+    /// <remarks>
+    /// Wrapping is the failure worth catching here, because a wrapped value is a number the comparison above it accepts:
+    /// a condition on a size would go on matching, quietly, against a value nothing in the email produced. The evaluator
+    /// classifies the raised failure; what this proves is that there is one to classify.
+    /// </remarks>
+    [Fact]
+    public async Task EvaluateAsync_ArithmeticThatLeavesItsRange_RaisesRatherThanWrapping()
+    {
+        // Arrange
+        var condition = this.Compile("9223372036854775807 + 1 > 0");
+
+        // Act, Assert
+        await Assert.ThrowsAnyAsync<Exception>(
+            () => condition.EvaluateAsync(CreateFacts(), TestContext.Current.CancellationToken));
+    }
+
     private static MailRuleFacts CreateFacts(RecordingMailRuleBodyTextReader? bodyTextReader = null) =>
         new(
             new MailRuleEmailFacts

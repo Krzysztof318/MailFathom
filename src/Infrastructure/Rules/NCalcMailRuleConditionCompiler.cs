@@ -79,6 +79,12 @@ public sealed class NCalcMailRuleConditionCompiler : IMailRuleConditionCompiler
                 [$"{opening} is {conditionText.Length} characters long, and a condition may be at most {bounds.MaxLength}."]);
         }
 
+        if (NestsDeeperThan(conditionText, bounds.MaxNestingDepth))
+        {
+            return MailRuleConditionCompilation.Refused(
+                [$"{opening} nests more than {bounds.MaxNestingDepth} levels deep."]);
+        }
+
         var expression = new Expression(conditionText, Configuration, cultureInfo: CultureInfo.InvariantCulture);
 
         if (expression.HasErrors())
@@ -90,6 +96,69 @@ public sealed class NCalcMailRuleConditionCompiler : IMailRuleConditionCompiler
         }
 
         return CheckParsed(ruleName, expression.LogicalExpression!, bounds, opening);
+    }
+
+    /// <summary>Refuses a condition whose parentheses nest past the limit, before a parser has to recurse that deep.</summary>
+    /// <remarks>
+    /// <para>
+    /// The walk over the parsed tree bounds depth as well, and it cannot be the only place that does: the parser is
+    /// recursive-descent, so it reaches the bottom of a deeply parenthesized expression before there is a tree to walk,
+    /// and running out of stack raises a failure .NET does not let anything catch. A condition nobody could read would
+    /// therefore take the whole process down instead of being refused as one bad rule — the opposite of what every other
+    /// refusal here does.
+    /// </para>
+    /// <para>
+    /// Counting parentheses is deliberately cruder than the walk, and it is safe in the one direction that matters: each
+    /// parenthesis is a level of the tree too, so text this refuses would have been refused after parsing anyway. What
+    /// it lets through — depth an expression reaches through operators rather than brackets — is bounded by the length
+    /// limit and costs the parser no recursion, and the walk still reports it. Quoted text is skipped, because a
+    /// parenthesis inside a string literal opens nothing.
+    /// </para>
+    /// </remarks>
+    private static bool NestsDeeperThan(string conditionText, int maxNestingDepth)
+    {
+        var depth = 0;
+        var quote = '\0';
+
+        for (var position = 0; position < conditionText.Length; position++)
+        {
+            var character = conditionText[position];
+
+            if (quote != '\0')
+            {
+                // A quote the author escaped is part of the text rather than the end of it, so the next character is
+                // consumed here as well. Reading it as the end would put the rest of a string literal outside the quotes
+                // and count parentheses nothing opens.
+                if (character == '\\')
+                {
+                    position++;
+                }
+                else if (character == quote)
+                {
+                    quote = '\0';
+                }
+
+                continue;
+            }
+
+            switch (character)
+            {
+                case '\'' or '"' or '#':
+                    quote = character;
+
+                    break;
+                case '(' when ++depth > maxNestingDepth:
+                    return true;
+                case ')' when depth > 0:
+                    depth--;
+
+                    break;
+                default:
+                    break;
+            }
+        }
+
+        return false;
     }
 
     private static MailRuleConditionCompilation CheckParsed(

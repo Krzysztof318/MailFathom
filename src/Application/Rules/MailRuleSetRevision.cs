@@ -66,6 +66,19 @@ public readonly record struct MailRuleSetRevision
     public string Value => this.value
         ?? throw new InvalidOperationException("The value is the default of the struct and does not name a revision.");
 
+    /// <summary>Reports whether a value carries a character this identity separates its own fields with.</summary>
+    /// <param name="value">A rule name, a condition, or an account identifier about to become part of a rule set.</param>
+    /// <returns><see langword="true" /> when the value would blur the boundary between two fields of the digest input.</returns>
+    /// <remarks>
+    /// The remarks above say a separator cannot occur in what is hashed, and this is what lets that be true rather than
+    /// hoped for: whatever binds a rule set asks first and refuses a value that answers yes. Without the check the claim
+    /// rests on the expression language's grammar, which is somebody else's decision and can change under this one — and
+    /// a rule set that renders identically to a different rule set is exactly the collision this identity exists to make
+    /// impossible.
+    /// </remarks>
+    public static bool ContainsSeparator(string? value) =>
+        value?.AsSpan().IndexOfAny(FieldSeparator, RuleSeparator, AccountSeparator) >= 0;
+
     /// <summary>Derives the identity of a rule set from the rules it declares, in the order it declares them.</summary>
     /// <param name="declarations">Every rule of the bound set, in declared order.</param>
     /// <returns>The revision the set is known by.</returns>

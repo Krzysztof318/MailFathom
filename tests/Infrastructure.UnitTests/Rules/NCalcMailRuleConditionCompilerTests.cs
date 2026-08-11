@@ -143,6 +143,7 @@ public sealed class NCalcMailRuleConditionCompilerTests
     [InlineData("sizeInBytes ** 2 > 1")]
     [InlineData("subject like 'invoice%'")]
     [InlineData("(senderDomain ?? 'none') == 'none'")]
+    [InlineData("attachmentCount! > 1")]
     public void Compile_ConditionUsingAnOperatorOutsideTheSurface_IsRefused(string conditionText)
     {
         // Act
@@ -223,6 +224,41 @@ public sealed class NCalcMailRuleConditionCompilerTests
         Assert.False(compilation.IsCompiled);
         Assert.Single(compilation.Errors);
         Assert.Contains(compilation.Errors, error => error.Contains("3 levels", StringComparison.Ordinal));
+    }
+
+    /// <summary>A parser recurses per parenthesis, so the depth bound has to be kept before the text reaches one.</summary>
+    /// <remarks>
+    /// Running out of stack raises a failure .NET does not let anything catch, so a condition nobody could read would
+    /// take the process down instead of being refused as one bad rule. The nesting here is far past anything a walk over
+    /// a parsed tree could report, because there would be no tree.
+    /// </remarks>
+    [Fact]
+    public void Compile_ConditionNestedFarPastTheLimitWithinTheLengthAllowed_IsRefusedWithoutParsing()
+    {
+        // Arrange
+        var bounds = MailRuleConditionBounds.Create(maxLength: 10_000, maxNestingDepth: 16, TimeSpan.FromSeconds(1));
+        var nested = $"{new string('(', 4_000)}isSeen{new string(')', 4_000)}";
+
+        // Act
+        var compilation = this.compiler.Compile(RuleName, nested, bounds);
+
+        // Assert
+        Assert.False(compilation.IsCompiled);
+        Assert.Contains(compilation.Errors, error => error.Contains("16 levels", StringComparison.Ordinal));
+    }
+
+    /// <summary>A parenthesis inside a string literal opens nothing, so counting them must not read one as nesting.</summary>
+    [Fact]
+    public void Compile_ConditionWhoseTextCarriesParentheses_IsNotReadAsNesting()
+    {
+        // Arrange
+        var bounds = MailRuleConditionBounds.Create(maxLength: 1_000, maxNestingDepth: 2, TimeSpan.FromSeconds(1));
+
+        // Act
+        var compilation = this.compiler.Compile(RuleName, "subject == '((((((((((('", bounds);
+
+        // Assert
+        Assert.True(compilation.IsCompiled, string.Join(" ", compilation.Errors));
     }
 
     [Fact]

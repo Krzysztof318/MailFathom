@@ -170,12 +170,17 @@ this surface.
 | --- | --- | --- |
 | `MaxConditionLength` | 1000 characters | How long one condition may be written |
 | `MaxConditionNestingDepth` | 16 levels | How deeply the parsed condition may nest |
-| `ConditionEvaluationTimeout` | 1 second | How long one condition may take, including resolving the facts it names |
+| `ConditionEvaluationTimeout` | 1 second | How long one condition may take, including resolving the facts it names; at most 30 seconds |
 | `Rules` | 200 rules | How many rules one set may declare |
 
-The first two are checked when the configuration is read, so a condition over either is refused with the rule named.
-The third is checked while a condition runs, because nothing readable in the text says how long a read of stored content
-will take.
+The first two are checked when the configuration is read, so a condition over either is refused with the rule named. The
+depth limit is checked twice there — once over the written text before it reaches a parser, because a parser descends
+into a nesting before there is anything to inspect, and again over the parsed condition, which is what catches depth
+reached through operators rather than brackets.
+
+The timeout is checked while a condition runs, because nothing readable in the text says how long a read of stored
+content will take. It has a ceiling of its own for the reason the two written limits do: a timeout an operator meant as
+milliseconds and wrote as minutes would stop bounding anything, per email.
 
 A length limit and a depth limit are both needed: length alone would admit a short expression nested past what anyone
 can follow, and depth alone would admit a flat expression of ten thousand terms.

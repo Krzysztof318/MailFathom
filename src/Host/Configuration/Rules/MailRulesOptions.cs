@@ -44,6 +44,15 @@ internal sealed class MailRulesOptions : IValidatableObject
     [Range(1, 64)]
     public int MaxConditionNestingDepth { get; set; } = 16;
 
+    /// <summary>The longest a condition may be given, which is the ceiling the two written limits have and this one needs.</summary>
+    /// <remarks>
+    /// A timeout is the only bound on a condition that nothing about the text can supply, so an operator who meant
+    /// milliseconds and wrote minutes would otherwise let one condition hold a pass for as long as it liked, per email.
+    /// Thirty seconds is far above anything a metadata comparison or a single stored-content read needs and far below
+    /// the point at which a stuck condition stops being visible as one.
+    /// </remarks>
+    public static readonly TimeSpan LongestConditionEvaluationTimeout = TimeSpan.FromSeconds(30);
+
     /// <summary>Gets or sets how long one condition may take to evaluate, including resolving the facts it names.</summary>
     public TimeSpan ConditionEvaluationTimeout { get; set; } = TimeSpan.FromSeconds(1);
 
@@ -62,6 +71,12 @@ internal sealed class MailRulesOptions : IValidatableObject
         {
             yield return new ValidationResult(
                 $"{SectionName} declares a ConditionEvaluationTimeout that is not positive, so every condition would run out of time before it started and every rule would be recorded as failed.",
+                [nameof(this.ConditionEvaluationTimeout)]);
+        }
+        else if (this.ConditionEvaluationTimeout > LongestConditionEvaluationTimeout)
+        {
+            yield return new ValidationResult(
+                $"{SectionName} declares a ConditionEvaluationTimeout of {this.ConditionEvaluationTimeout}, and a condition may be given at most {LongestConditionEvaluationTimeout}. A timeout above that stops bounding what one rule costs per email.",
                 [nameof(this.ConditionEvaluationTimeout)]);
         }
 

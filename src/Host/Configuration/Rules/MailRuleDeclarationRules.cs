@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.ComponentModel.DataAnnotations;
+using MailFathom.Application.Rules;
 using MailFathom.Application.Rules.Conditions;
 
 namespace MailFathom.Host.Configuration.Rules;
@@ -53,29 +54,71 @@ internal static class MailRuleDeclarationRules
             return [];
         }
 
-        var errors = new List<string>(FindSectionErrors(candidate));
+        var sectionErrors = FindSectionErrors(candidate).ToArray();
+        var declarations = candidate.Rules
+            .Select((rule, position) => (Rule: rule, Errors: FindDeclaredRuleErrors(rule, position, declaredAccounts)))
+            .ToArray();
+        var ruleErrors = declarations.SelectMany(declaration => declaration.Errors).ToArray();
 
-        errors.AddRange(candidate.Rules.SelectMany((rule, position) => FindRuleErrors(rule, position)));
-        errors.AddRange(candidate.Rules.SelectMany((rule, position) => FindScopeErrors(rule, position, declaredAccounts)));
+        // The limits are what a condition is read under, so a section whose own limits are unusable has nothing to read
+        // a condition against and stops here. A single badly declared rule stops nothing: every other rule's condition
+        // is still read, because an operator fixing a rule set should see everything wrong with it in one reading.
+        if (sectionErrors.Length > 0)
+        {
+            return [.. sectionErrors, .. ruleErrors];
+        }
 
-        // The limits are what a condition is read under, so a rule set whose limits are themselves unusable has nothing
-        // to read the conditions against and the messages above are the ones worth reporting.
-        return errors.Count > 0
-            ? errors
-            : [.. FindConditionErrors(candidate, compiler)];
+        var readable = declarations
+            .Where(declaration => declaration.Errors.Count == 0)
+            .Select(declaration => declaration.Rule);
+
+        return [.. ruleErrors, .. FindConditionErrors(candidate, compiler, readable)];
     }
+
+    /// <summary>Runs everything about one rule that can be judged without reading its condition.</summary>
+    private static IReadOnlyList<string> FindDeclaredRuleErrors(
+        MailRuleOptions rule,
+        int position,
+        IReadOnlyCollection<string> declaredAccounts) =>
+    [
+        .. FindRuleErrors(rule, position),
+        .. FindScopeErrors(rule, position, declaredAccounts),
+        .. FindIdentityErrors(rule, position),
+    ];
 
     private static IEnumerable<string> FindConditionErrors(
         MailRulesOptions candidate,
-        IMailRuleConditionCompiler compiler)
+        IMailRuleConditionCompiler compiler,
+        IEnumerable<MailRuleOptions> readable)
     {
         var bounds = candidate.ToBounds();
 
-        return candidate.Rules
+        return readable
             .Where(rule => rule.Enabled)
             .Select(rule => compiler.Compile(rule.Name, rule.Condition, bounds))
             .SelectMany(compilation => compilation.Errors)
             .Select(DescribeRuleError);
+    }
+
+    /// <summary>Refuses anything a rule set's derived identity separates its own fields with.</summary>
+    /// <remarks>
+    /// The identity is a digest over the declared rules, and it can only tell two rule sets apart while no field can
+    /// contain the character that ends a field. A rule name cannot, because its own pattern admits no control
+    /// character; a condition and an account identifier are otherwise unrestricted text, so this is where the claim is
+    /// made true rather than assumed.
+    /// </remarks>
+    private static IEnumerable<string> FindIdentityErrors(MailRuleOptions rule, int position)
+    {
+        var offending = new[] { nameof(MailRuleOptions.Condition) }
+            .Where(_ => MailRuleSetRevision.ContainsSeparator(rule.Condition))
+            .Concat(rule.Accounts
+                .Where(MailRuleSetRevision.ContainsSeparator)
+                .Select(_ => nameof(MailRuleOptions.Accounts)));
+
+        return offending
+            .Distinct(StringComparer.Ordinal)
+            .Select(member =>
+                $"{MailRulesOptions.SectionName}:{nameof(MailRulesOptions.Rules)}:{position}:{member} — carries a separator character that a rule set's identity is derived with, so two different rule sets could be named the same revision.");
     }
 
     /// <summary>Judges one rule's account scope, which no attribute can reach because it is a claim about another section.</summary>
