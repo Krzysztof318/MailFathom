@@ -147,6 +147,14 @@ Build with the SDK pinned in `global.json`. The process is then an ordinary ASP.
 
   `KeyId` is stored beside every value the key seals, so it is chosen once and never edited afterwards. Leave both out
   when no account authenticates with OAuth.
+
+  **`systemd-creds encrypt` seals that `.cred` file against this machine** — by default against its TPM2 chip and its
+  `/var/lib/systemd/` together — so the file opens here and on no other host, and it is not a backup of what it holds.
+  Run the command on the machine that will read it, back the key's own base64 up with the database, and encrypt it
+  again on a replacement machine rather than copying the sealed file across.
+  [What an encrypted credential is bound to](../operations/secret-provisioning.md#what-an-encrypted-credential-is-bound-to)
+  states the whole binding, including which flag makes the chip a requirement rather than a preference and why a
+  firmware update does not invalidate the credential.
 - [Where each surface is served](../operations/configuration-reference.md#where-each-surface-is-served) is stated by
   each surface's own section. `McpEndpoint:BindAddress` and `McpEndpoint:Port` bind the protocol surface, `0.0.0.0:8080`
   by default, in clear text unless you configure otherwise. `ASPNETCORE_URLS`, `ASPNETCORE_HTTP_PORTS`, and

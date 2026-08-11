@@ -79,6 +79,14 @@ afterwards changes what is presented rather than what the server accepts — rot
 The Secret is mounted read-only at `/etc/mailfathom/secrets`, one file per key, so every credential is a `file:`
 reference — the same path and the same references the Compose deployment uses.
 
+**The encrypted systemd credentials the native installation uses do not reach a pod**, and they would work against this
+shape if they did: nothing schedules a systemd unit here, and that encryption binds material to one machine while every
+replica has to open what any other replica sealed. What protects these at rest is the cluster's own Secret encryption,
+which is configured on the API server rather than here and is absent until the cluster enables it — upstream Kubernetes
+stores a Secret's values unencrypted in etcd without an `EncryptionConfiguration`.
+[What an encrypted credential is bound to](secret-provisioning.md#what-an-encrypted-credential-is-bound-to) states the
+binding that makes it a poor fit here.
+
 The last entry is the data-encryption key, and it belongs in this Secret rather than in a chart value: the chart creates
 no Secret and generates nothing, deliberately, because a Helm-generated key would be replaced on any upgrade that did
 not guard it with `lookup` — and `lookup` returns nothing during `helm template`, during a dry run, and under Argo CD.
@@ -188,8 +196,8 @@ below stands down for it.
 A digest is preferred over a tag: it is the only reference a registry cannot repoint, so a rollback goes back to the
 same bytes. `values.schema.json` rejects `latest` and the other moving tags outright.
 
-Nothing in the ConfigMap may be a credential — it is readable by anything holding `get` on it and is neither encrypted
-at rest nor audited like a Secret. The chart puts no credential there and none in the rendered Deployment; the
+Nothing in the ConfigMap may be a credential — it is readable by anything holding `get` on it, and it is reached by
+neither the at-rest encryption a cluster can enable for Secrets nor the auditing a Secret gets. The chart puts no credential there and none in the rendered Deployment; the
 verification script asserts that on every change.
 
 ## Applying the schema
