@@ -299,7 +299,7 @@ nothing and shortens how long a stalled request can hold one of this endpoint's 
 That matters more here than on the MCP surface for the reason the shared bucket does: the permits an administrative
 caller holds are the ones you need free to reach `/api/admin` while something else is going wrong.
 
-## Three postures the endpoint warns about
+## Four postures the endpoint warns about
 
 None is refused, because each is legitimate somewhere and only you know which you have.
 
@@ -308,6 +308,7 @@ None is refused, because each is legitimate somewhere and only you know which yo
 | No authentication method turned on | Anything that can reach the address can administer the service. Right only for a loopback bind or a network you control. |
 | Served in clear text | Any credential a client presents is readable on the path. Right only behind a TLS-terminating reverse proxy, or on a loopback bind. |
 | `AdminEndpoint:RateLimiting:Enabled` set to `false` | Nothing bounds how fast a caller may present wrong credentials. Right only where something in front of the process already bounds the traffic reaching it. |
+| `AdminEndpoint:RequestTimeout:Enabled` set to `false` | Nothing bounds how long one administrative request may hold a concurrency permit. Right only where something in front of the process already abandons a stalled request. |
 
 Configure `AdminEndpoint:Https:Endpoints` to have Kestrel terminate TLS itself. It takes the same profile shape the MCP
 endpoint's does, including `HttpProtocols`, which defaults to HTTP/1.1 and HTTP/2. Naming any profile binds those

@@ -886,9 +886,10 @@ try
         builder.Services.AddAdminTransportSecurity(adminEndpointSettings);
     }
 
-    // A separate callback from the listener binding below, and unconditional, because the two decide different things:
-    // that one opens the sockets each surface asked for, and this one bounds what the server accepts on all of them at
-    // once. Several callbacks compose, so keeping them apart costs nothing and leaves each one about one decision.
+    // A separate callback from the listener binding below, and outside its condition, because the two decide different
+    // things: that one opens the sockets each surface asked for, and this one bounds what the server accepts on all of
+    // them at once. Several callbacks compose, so keeping them apart costs nothing and leaves each one about one
+    // decision. Registering it is still the operator's to turn off, which is what the condition below reads.
     if (connectionLimitSettings.Enabled)
     {
         builder.WebHost.ConfigureKestrel(kestrelOptions =>

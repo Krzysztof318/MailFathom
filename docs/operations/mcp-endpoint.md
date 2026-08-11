@@ -40,6 +40,7 @@ endpoint exposes synchronized mailboxes to whoever can reach it and satisfy what
 | `Cors.AllowedOrigins` | `["*"]` | The browser origins served: `*` for every one, a list for exactly those, an empty list for none |
 | `ClientCertificateProfiles` | empty | The client applications whose certificates are accepted, each with its own authorities and expected names |
 | `RateLimiting` | bounded — see [Rate limiting](#rate-limiting) | How much traffic the endpoint accepts, per process and per client |
+| `RequestTimeout` | bounded — see [Request timeouts](#request-timeouts) | How long one request may run before the endpoint abandons it |
 | `BindAddress`, `Port`, `Transport` | `0.0.0.0`, `8080`, `Http` | Where the endpoint is served, and under which schemes |
 | `Https.Endpoints` | empty | The domains MailFathom terminates TLS for, read under the two `Transport` modes that terminate TLS |
 
