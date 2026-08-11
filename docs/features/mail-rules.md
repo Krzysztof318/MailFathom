@@ -2,10 +2,10 @@
 
 <!-- describes: src/Application/Rules/**, src/Infrastructure/Rules/**, src/Host/Configuration/Rules/** -->
 
-A mail rule selects mail. It is a name, a condition, and whether a match ends the pass, and an owner writes it in the
-configuration their deployment already carries. This page documents the whole of what a condition may say: every fact
-it can read, every function and operator available to it, the limits it is read and run under, and the order a set of
-rules is evaluated in.
+A mail rule selects mail. It is a name, a condition, the accounts it applies to, and whether a match ends the pass, and
+an owner writes it in the configuration their deployment already carries. This page documents the whole of what a
+condition may say: every fact it can read, every function and operator available to it, the limits it is read and run
+under, and the order a set of rules is evaluated in.
 
 What a match leads to is not a property of the rule set and is not on this page. A rule states which mail it selects,
 and nothing more.
@@ -23,6 +23,7 @@ MCP, not the administrative endpoint. An owner who wants to change what their in
     "Rules": [
       {
         "Name": "supplier-invoices",
+        "Accounts": [ "work" ],
         "Condition": "senderDomain == 'supplier.test' and attachmentCount > 0",
         "StopWhenMatched": true
       },
@@ -42,6 +43,27 @@ part that can be promised to carry no such thing when it reaches a log line.
 
 `Enabled` defaults to `true`. A rule switched off is left out of the bound set entirely, so it costs nothing and
 changes the set's revision exactly as deleting it would.
+
+## Which accounts a rule applies to
+
+`Accounts` is the filter, and it is the one part of a rule that says which mail reaches it at all rather than which mail
+matches it.
+
+- **Naming no account is a rule for every account.** That is what a single-account deployment writes, and what a rule
+  about a sender rather than about a mailbox usually wants.
+- **Naming one or more accounts narrows the rule to exactly those.** Mail from any other account never reaches the
+  condition — the rule is not evaluated and records no outcome, because it is not that account's rule rather than a rule
+  that declined to match. It follows that a scoped rule cannot end another account's pass whatever `StopWhenMatched`
+  says.
+
+An account is named exactly as `MailSynchronization:Accounts:<n>:AccountId` declares it, and the comparison is
+case-sensitive, because two identifiers differing only in case are two accounts there. **An account nobody declared is
+refused when the configuration is read**, naming the rule and the identifier: a rule scoped to a mistyped account would
+otherwise reach no mail and say nothing about why.
+
+The `account` fact stays available and is a different tool. The filter decides whether a rule runs; the fact lets one
+rule that does run say something about which account it is running for — `account == 'work' ? … : …` inside a condition
+that applies to several.
 
 [Configuration reference](../operations/configuration-reference.md#mailrules) lists every key of the section with its
 type, default, and constraint.
@@ -170,6 +192,9 @@ each is refused with a message naming the rule, what was wrong, and where:
 - **The result.** The condition produces a boolean. A condition producing text or a number is refused rather than read
   as truthy, so what a rule means never depends on a coercion nobody wrote down.
 
+The rule's `Accounts` filter is checked beside those four: every identifier names a declared account, none is blank, and
+none is repeated.
+
 Every defect in every rule is reported together, so a rule set with three mistakes is fixed once rather than three
 restarts running.
 
@@ -187,8 +212,9 @@ would otherwise get an instance still acting under the rules their file no longe
 
 ## Order, and stopping
 
-Rules are evaluated in the order they are written. That order is the whole of the contract — nothing sorts, groups, or
-reorders a set — so two rules that both match one email produce the same outcome on every run and on every instance.
+Rules are evaluated in the order they are written, skipping the ones scoped to other accounts. That order is the whole
+of the contract — nothing sorts, groups, or reorders a set — so two rules that both match one email produce the same
+outcome on every run and on every instance.
 
 `StopWhenMatched` on a rule that matches ends the pass, and the rules below it are not reached. It defaults to `false`.
 A rule that does not match never stops a pass whatever it declares.
@@ -215,7 +241,7 @@ and two instances reading the same file name the same revision.
 
 What moves it and what does not:
 
-- Changing a rule's name, its condition, or its `StopWhenMatched` moves it.
+- Changing a rule's name, its condition, its `StopWhenMatched`, or the accounts it applies to moves it.
 - Adding, removing, or switching off a rule moves it.
 - Reordering the rules moves it, because declared order is part of what a rule set means.
 - Reformatting the file, reordering the keys within one rule, and changing an unrelated configuration section all leave
@@ -231,6 +257,12 @@ A single sender:
 
 ```text
 senderAddress == 'billing@supplier.test'
+```
+
+One account's mail only, which is the `Accounts` filter beside the condition rather than anything in it:
+
+```json
+{ "Name": "work-invoices", "Accounts": [ "work" ], "Condition": "contains(subject, 'invoice')" }
 ```
 
 Anything from a domain, in one of two folders:

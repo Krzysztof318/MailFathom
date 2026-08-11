@@ -161,16 +161,57 @@ public sealed class MailRuleSetMappingTests
         Assert.Equal(2, countingCompiler.CompileCount);
     }
 
+    [Fact]
+    public void Map_ScopedRule_CarriesTheAccountsItAppliesTo()
+    {
+        // Arrange
+        var settings = new MailRulesOptions
+        {
+            Rules =
+            [
+                CreateRule("scoped", "isSeen", accounts: ["primary", "work"]),
+                CreateRule("general", "isDraft"),
+            ],
+        };
+
+        // Act
+        var ruleSet = MailRuleSetMapper.Map(settings, this.compiler);
+
+        // Assert
+        Assert.True(ruleSet.Rules[0].AppliesTo("primary"));
+        Assert.True(ruleSet.Rules[0].AppliesTo("work"));
+        Assert.False(ruleSet.Rules[0].AppliesTo("archive"));
+        Assert.True(ruleSet.Rules[1].AppliesTo("archive"));
+    }
+
+    /// <summary>Narrowing a rule to one account changes which mail it reaches, so it is a different rule set.</summary>
+    [Fact]
+    public void Map_ScopingARule_MovesTheRevision()
+    {
+        // Arrange
+        var general = new MailRulesOptions { Rules = [CreateRule("running", "isDraft")] };
+        var scoped = new MailRulesOptions { Rules = [CreateRule("running", "isDraft", accounts: ["primary"])] };
+
+        // Act
+        var beforeScoping = MailRuleSetMapper.Map(general, this.compiler);
+        var afterScoping = MailRuleSetMapper.Map(scoped, this.compiler);
+
+        // Assert
+        Assert.NotEqual(beforeScoping.Revision, afterScoping.Revision);
+    }
+
     private static MailRuleOptions CreateRule(
         string name,
         string conditionText,
         bool stopWhenMatched = false,
-        bool enabled = true) =>
+        bool enabled = true,
+        string[]? accounts = null) =>
         new()
         {
             Name = name,
             Condition = conditionText,
             StopWhenMatched = stopWhenMatched,
             Enabled = enabled,
+            Accounts = accounts ?? [],
         };
 }

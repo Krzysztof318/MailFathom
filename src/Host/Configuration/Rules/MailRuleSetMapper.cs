@@ -35,14 +35,19 @@ internal static class MailRuleSetMapper
         var bounds = settings.ToBounds();
         var declarations = settings.Rules
             .Where(rule => rule.Enabled)
-            .Select(rule => new MailRuleDeclaration(rule.Name, rule.Condition, rule.StopWhenMatched))
+            .Select(rule => new MailRuleDeclaration(
+                rule.Name,
+                rule.Condition,
+                rule.StopWhenMatched,
+                [.. rule.Accounts.Select(account => account.Trim())]))
             .ToArray();
 
         var rules = declarations
             .Select(declaration => MailRule.Create(
                 declaration.Name,
                 Compile(compiler, declaration, bounds),
-                declaration.StopWhenMatched))
+                declaration.StopWhenMatched,
+                declaration.Accounts))
             .ToArray();
 
         return MailRuleSet.Create(rules, MailRuleSetRevision.Create(declarations), bounds);

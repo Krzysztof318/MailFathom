@@ -13,7 +13,7 @@ namespace MailFathom.Application.UnitTests.Rules;
 public sealed class MailRuleSetTests
 {
     private static readonly MailRuleSetRevision Revision =
-        MailRuleSetRevision.Create([new MailRuleDeclaration("rule", "isSeen", StopWhenMatched: false)]);
+        MailRuleSetRevision.Create([new MailRuleDeclaration("rule", "isSeen", StopWhenMatched: false, Accounts: [])]);
 
     [Fact]
     public void Create_Rules_KeepsThemInTheOrderTheyWereDeclared()

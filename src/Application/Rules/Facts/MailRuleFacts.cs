@@ -84,6 +84,15 @@ public sealed class MailRuleFacts
     /// <summary>Gets the facts that have actually been resolved, which is what proves an unnamed fact cost nothing.</summary>
     public IReadOnlyList<MailRuleFact> ResolvedFacts => [.. this.resolvedValues.Keys];
 
+    /// <summary>Gets the configured identifier of the account this email belongs to.</summary>
+    /// <remarks>
+    /// Published beside the fact surface rather than reached through it, because deciding whether a rule applies to this
+    /// account at all happens before the rule's condition is evaluated. Reading it that way also keeps it off
+    /// <see cref="ResolvedFacts" />: a scope check is not a condition naming a fact, and counting it as one would make
+    /// every pass look as though every rule had read the account.
+    /// </remarks>
+    public string Account => this.email.Account;
+
     /// <summary>Resolves one fact's value in the form a condition compares against.</summary>
     /// <param name="fact">The declared fact a condition named.</param>
     /// <param name="cancellationToken">Cancels a resolution that reads stored content.</param>

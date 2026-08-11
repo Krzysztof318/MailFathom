@@ -564,13 +564,16 @@ use — every fact, every function, every operator — and this section document
 | `MailRules:ConditionEvaluationTimeout` | TimeSpan | `00:00:01` | Greater than zero; bounds one condition against one email, including resolving the facts it names | reload |
 | `MailRules:Rules` | list | empty | At most 200 rules, evaluated in the order they are written | reload |
 | `MailRules:Rules:0:Name` | string | required | 1 – 64 characters of letters, digits, spaces, and `.`, `_`, `-`; unique across the section, ignoring case | reload |
+| `MailRules:Rules:0:Accounts` | list | empty | The accounts the rule applies to, each naming a declared `MailSynchronization:Accounts:<n>:AccountId` exactly; empty applies the rule to every account | reload |
 | `MailRules:Rules:0:Condition` | string | required | One expression producing a boolean, within the two limits above | reload |
 | `MailRules:Rules:0:StopWhenMatched` | bool | `false` | A match ends the pass and the rules below it are not reached | reload |
 | `MailRules:Rules:0:Enabled` | bool | `true` | A rule switched off is left out of the set entirely | reload |
 
 Every condition is read while the host composes itself, and a defect in one — an unparseable expression, a name that is
 not a fact, a call that is not an available function, a comparison between shapes that could never match, a result that
-is not a boolean — fails startup naming the rule and what was wrong. Every defect in every rule is reported together.
+is not a boolean — fails startup naming the rule and what was wrong. So does a scope naming an account the deployment
+does not declare, which would otherwise leave the rule reaching no mail in silence. Every defect in every rule is
+reported together.
 
 An edit that does not validate is **refused and logged, and the previously valid rule set stays in effect**. That is
 deliberately stronger than the framework's own reload behaviour, which would drop the candidate without saying so.

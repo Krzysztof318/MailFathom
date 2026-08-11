@@ -262,7 +262,8 @@ try
         .Get<MailRulesOptions>(binderOptions => binderOptions.ErrorOnUnknownConfiguration = true);
     var mailRuleDeclarationErrors = MailRuleDeclarationRules.FindDeclarationErrors(
         declaredMailRules,
-        mailRuleConditionCompiler);
+        mailRuleConditionCompiler,
+        DeclaredMailAccounts.ReadFrom(builder.Configuration));
 
     if (mailRuleDeclarationErrors.Count > 0)
     {
@@ -279,10 +280,16 @@ try
     // silence. That default is the wrong behavior here above everywhere else: an owner who mistypes a fact name would
     // get an instance that goes on acting on mail under the previous rules while their file says otherwise. A refused
     // candidate is logged and the last proven rule set stays in effect.
+    // The accounts a scope may name are read from the published synchronization snapshot rather than captured here, so
+    // an account added at run time is one a rule can be scoped to without restarting the process.
     builder.Services.AddSingleton(provider => new ValidatedSettingsSnapshot<MailRulesOptions>(
         provider.GetRequiredService<IOptionsMonitor<MailRulesOptions>>(),
         (candidate, _) => Task.FromResult(
-            MailRuleDeclarationRules.FindDeclarationErrors(candidate, mailRuleConditionCompiler)),
+            MailRuleDeclarationRules.FindDeclarationErrors(
+                candidate,
+                mailRuleConditionCompiler,
+                DeclaredMailAccounts.ReadFrom(
+                    provider.GetRequiredService<ISettingsSnapshot<MailSynchronizationOptions>>().Current))),
         MailRulesOptions.SectionName,
         provider.GetRequiredService<ILogger<ValidatedSettingsSnapshot<MailRulesOptions>>>()));
     builder.Services.AddSingleton<ISettingsSnapshot<MailRulesOptions>>(

@@ -11,13 +11,16 @@ namespace MailFathom.Host.UnitTests.Configuration.Rules;
 /// <summary>Covers what a declared rule set has to satisfy before it can act on mail.</summary>
 public sealed class MailRuleDeclarationRulesTests
 {
+    /// <summary>The accounts the deployment declares, which is what a rule's scope is judged against.</summary>
+    private static readonly string[] DeclaredAccounts = ["primary", "work"];
+
     private readonly NCalcMailRuleConditionCompiler compiler = new();
 
     [Fact]
     public void FindDeclarationErrors_NoSection_IsADeploymentThatAppliesNoRules()
     {
         // Act
-        var errors = MailRuleDeclarationRules.FindDeclarationErrors(candidate: null, this.compiler);
+        var errors = MailRuleDeclarationRules.FindDeclarationErrors(candidate: null, this.compiler, DeclaredAccounts);
 
         // Assert
         Assert.Empty(errors);
@@ -37,7 +40,7 @@ public sealed class MailRuleDeclarationRulesTests
         };
 
         // Act
-        var errors = MailRuleDeclarationRules.FindDeclarationErrors(candidate, this.compiler);
+        var errors = MailRuleDeclarationRules.FindDeclarationErrors(candidate, this.compiler, DeclaredAccounts);
 
         // Assert
         Assert.Empty(errors);
@@ -57,7 +60,7 @@ public sealed class MailRuleDeclarationRulesTests
         var candidate = new MailRulesOptions { Rules = [CreateRule(name, conditionText)] };
 
         // Act
-        var errors = MailRuleDeclarationRules.FindDeclarationErrors(candidate, this.compiler);
+        var errors = MailRuleDeclarationRules.FindDeclarationErrors(candidate, this.compiler, DeclaredAccounts);
 
         // Assert
         Assert.Contains(errors, error => error.Contains("MailRules:Rules:0:", StringComparison.Ordinal));
@@ -73,7 +76,7 @@ public sealed class MailRuleDeclarationRulesTests
         };
 
         // Act
-        var errors = MailRuleDeclarationRules.FindDeclarationErrors(candidate, this.compiler);
+        var errors = MailRuleDeclarationRules.FindDeclarationErrors(candidate, this.compiler, DeclaredAccounts);
 
         // Assert
         var error = Assert.Single(errors);
@@ -97,7 +100,7 @@ public sealed class MailRuleDeclarationRulesTests
         };
 
         // Act
-        var errors = MailRuleDeclarationRules.FindDeclarationErrors(candidate, this.compiler);
+        var errors = MailRuleDeclarationRules.FindDeclarationErrors(candidate, this.compiler, DeclaredAccounts);
 
         // Assert
         Assert.Equal(2, errors.Count);
@@ -116,7 +119,7 @@ public sealed class MailRuleDeclarationRulesTests
         };
 
         // Act
-        var errors = MailRuleDeclarationRules.FindDeclarationErrors(candidate, this.compiler);
+        var errors = MailRuleDeclarationRules.FindDeclarationErrors(candidate, this.compiler, DeclaredAccounts);
 
         // Assert
         Assert.Empty(errors);
@@ -134,7 +137,7 @@ public sealed class MailRuleDeclarationRulesTests
         };
 
         // Act
-        var errors = MailRuleDeclarationRules.FindDeclarationErrors(candidate, this.compiler);
+        var errors = MailRuleDeclarationRules.FindDeclarationErrors(candidate, this.compiler, DeclaredAccounts);
 
         // Assert
         Assert.Contains(errors, error => error.Contains("more than one rule named", StringComparison.Ordinal));
@@ -151,7 +154,7 @@ public sealed class MailRuleDeclarationRulesTests
         };
 
         // Act
-        var errors = MailRuleDeclarationRules.FindDeclarationErrors(candidate, this.compiler);
+        var errors = MailRuleDeclarationRules.FindDeclarationErrors(candidate, this.compiler, DeclaredAccounts);
 
         // Assert
         var error = Assert.Single(errors);
@@ -174,7 +177,7 @@ public sealed class MailRuleDeclarationRulesTests
         };
 
         // Act
-        var errors = MailRuleDeclarationRules.FindDeclarationErrors(candidate, this.compiler);
+        var errors = MailRuleDeclarationRules.FindDeclarationErrors(candidate, this.compiler, DeclaredAccounts);
 
         // Assert
         Assert.NotEmpty(errors);
@@ -192,12 +195,118 @@ public sealed class MailRuleDeclarationRulesTests
         };
 
         // Act
-        var errors = MailRuleDeclarationRules.FindDeclarationErrors(candidate, this.compiler);
+        var errors = MailRuleDeclarationRules.FindDeclarationErrors(candidate, this.compiler, DeclaredAccounts);
 
         // Assert
         Assert.Contains(errors, error => error.Contains("at most 10", StringComparison.Ordinal));
     }
 
-    private static MailRuleOptions CreateRule(string name, string conditionText, bool enabled = true) =>
-        new() { Name = name, Condition = conditionText, Enabled = enabled };
+    [Fact]
+    public void FindDeclarationErrors_RuleScopedToDeclaredAccounts_ReportsNothing()
+    {
+        // Arrange
+        var candidate = new MailRulesOptions
+        {
+            Rules = [CreateRule("file-invoices", "isSeen", accounts: ["primary", "work"])],
+        };
+
+        // Act
+        var errors = MailRuleDeclarationRules.FindDeclarationErrors(candidate, this.compiler, DeclaredAccounts);
+
+        // Assert
+        Assert.Empty(errors);
+    }
+
+    /// <summary>A scope naming an account nobody declared reaches no mail, so it is refused rather than left silent.</summary>
+    [Theory]
+    [InlineData("archive")]
+    [InlineData("Primary")]
+    public void FindDeclarationErrors_RuleScopedToAnAccountNobodyDeclared_IsRefused(string account)
+    {
+        // Arrange
+        var candidate = new MailRulesOptions { Rules = [CreateRule("file-invoices", "isSeen", accounts: [account])] };
+
+        // Act
+        var errors = MailRuleDeclarationRules.FindDeclarationErrors(candidate, this.compiler, DeclaredAccounts);
+
+        // Assert
+        var error = Assert.Single(errors);
+        Assert.Contains("MailRules:Rules:0:Accounts", error, StringComparison.Ordinal);
+        Assert.Contains(account, error, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    public void FindDeclarationErrors_ScopeNamingNothing_IsRefused(string account)
+    {
+        // Arrange
+        var candidate = new MailRulesOptions { Rules = [CreateRule("file-invoices", "isSeen", accounts: [account])] };
+
+        // Act
+        var errors = MailRuleDeclarationRules.FindDeclarationErrors(candidate, this.compiler, DeclaredAccounts);
+
+        // Assert
+        Assert.Contains(errors, error => error.Contains("named by nothing", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void FindDeclarationErrors_ScopeNamingOneAccountTwice_IsRefused()
+    {
+        // Arrange
+        var candidate = new MailRulesOptions
+        {
+            Rules = [CreateRule("file-invoices", "isSeen", accounts: ["primary", "primary"])],
+        };
+
+        // Act
+        var errors = MailRuleDeclarationRules.FindDeclarationErrors(candidate, this.compiler, DeclaredAccounts);
+
+        // Assert
+        Assert.Contains(errors, error => error.Contains("named more than once", StringComparison.Ordinal));
+    }
+
+    /// <summary>A rule naming no account is the general case rather than a rule with an empty scope to complain about.</summary>
+    [Fact]
+    public void FindDeclarationErrors_RuleThatNamesNoAccount_ReportsNothing()
+    {
+        // Arrange
+        var candidate = new MailRulesOptions { Rules = [CreateRule("file-invoices", "isSeen")] };
+
+        // Act
+        var errors = MailRuleDeclarationRules.FindDeclarationErrors(candidate, this.compiler, DeclaredAccounts);
+
+        // Assert
+        Assert.Empty(errors);
+    }
+
+    /// <summary>A deployment that declares no account has nothing a scope could name, and a general rule is still usable.</summary>
+    [Fact]
+    public void FindDeclarationErrors_ScopeWhereNoAccountIsDeclared_IsRefusedWhileAGeneralRuleIsNot()
+    {
+        // Arrange
+        var scoped = new MailRulesOptions { Rules = [CreateRule("scoped", "isSeen", accounts: ["primary"])] };
+        var general = new MailRulesOptions { Rules = [CreateRule("general", "isSeen")] };
+
+        // Act
+        var scopedErrors = MailRuleDeclarationRules.FindDeclarationErrors(scoped, this.compiler, []);
+        var generalErrors = MailRuleDeclarationRules.FindDeclarationErrors(general, this.compiler, []);
+
+        // Assert
+        Assert.NotEmpty(scopedErrors);
+        Assert.Empty(generalErrors);
+    }
+
+    private static MailRuleOptions CreateRule(
+        string name,
+        string conditionText,
+        bool enabled = true,
+        string[]? accounts = null) =>
+        new()
+        {
+            Name = name,
+            Condition = conditionText,
+            Enabled = enabled,
+            Accounts = accounts ?? [],
+        };
 }

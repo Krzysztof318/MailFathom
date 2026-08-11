@@ -19,7 +19,9 @@ namespace MailFathom.Application.Rules;
 /// <para>
 /// The digest is taken over the bound rules, so it does not move for the wrong reasons: a change to an unrelated
 /// configuration key leaves it alone, and so does reformatting the file or reordering the keys within one rule.
-/// Reordering the rules themselves does move it, because declared order is part of what a rule set means.
+/// Reordering the rules themselves does move it, because declared order is part of what a rule set means. So is the
+/// scope: narrowing a rule to one account changes which mail it reaches, which is a different rule set rather than the
+/// same one applied differently.
 /// </para>
 /// <para>
 /// It carries none of the authored text and no ordering. A record naming a revision therefore holds nothing personal
@@ -44,6 +46,13 @@ public readonly record struct MailRuleSetRevision
     /// </remarks>
     private const char FieldSeparator = '\u001F';
     private const char RuleSeparator = '\u001E';
+
+    /// <summary>Separates the accounts inside one rule's scope, which is the one field holding several values.</summary>
+    /// <remarks>
+    /// A third separator rather than a reused one, so that a scope of two accounts cannot render as the same text as a
+    /// rule whose next field begins where the second account would have.
+    /// </remarks>
+    private const char AccountSeparator = '\u001D';
 
     private readonly string? value;
 
@@ -80,6 +89,8 @@ public readonly record struct MailRuleSetRevision
                 .Append(declaration.ConditionText)
                 .Append(FieldSeparator)
                 .Append(declaration.StopWhenMatched ? "stop" : "continue")
+                .Append(FieldSeparator)
+                .AppendJoin(AccountSeparator, declaration.Accounts)
                 .Append(RuleSeparator);
         }
 

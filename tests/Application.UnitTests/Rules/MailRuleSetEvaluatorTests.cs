@@ -158,6 +158,72 @@ public sealed class MailRuleSetEvaluatorTests
             () => this.CreateEvaluator().EvaluateAsync(ruleSet, CreateFacts(), cancellation.Token));
     }
 
+    /// <summary>A rule scoped elsewhere is not this account's rule, so it is passed over rather than recorded as unmatched.</summary>
+    [Fact]
+    public async Task EvaluateAsync_RuleScopedToAnotherAccount_IsNotReachedAtAll()
+    {
+        // Arrange
+        var elsewhere = ScriptedMailRuleCondition.Answering(matches: true);
+        var ruleSet = CreateRuleSet(
+        [
+            MailRule.Create("other-account", elsewhere, stopWhenMatched: false, ["primary"]),
+            MailRule.Create("this-account", ScriptedMailRuleCondition.Answering(matches: true), stopWhenMatched: false, ["work"]),
+            MailRule.Create("every-account", ScriptedMailRuleCondition.Answering(matches: true), stopWhenMatched: false),
+        ]);
+
+        // Act
+        var evaluation = await this.CreateEvaluator().EvaluateAsync(
+            ruleSet,
+            CreateFacts(),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(
+            ["this-account", "every-account"],
+            evaluation.Evaluations.Select(result => result.RuleName));
+        Assert.Equal(0, elsewhere.EvaluationCount);
+    }
+
+    /// <summary>Scoping a stopping rule narrows what it stops, so an account it does not name runs the rules below it.</summary>
+    [Fact]
+    public async Task EvaluateAsync_StoppingRuleScopedToAnotherAccount_DoesNotEndThePass()
+    {
+        // Arrange
+        var ruleSet = CreateRuleSet(
+        [
+            MailRule.Create("stopping-elsewhere", ScriptedMailRuleCondition.Answering(matches: true), stopWhenMatched: true, ["primary"]),
+            MailRule.Create("below", ScriptedMailRuleCondition.Answering(matches: true), stopWhenMatched: false),
+        ]);
+
+        // Act
+        var evaluation = await this.CreateEvaluator().EvaluateAsync(
+            ruleSet,
+            CreateFacts(),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.False(evaluation.StoppedEarly);
+        Assert.Equal(["below"], evaluation.MatchedRuleNames);
+    }
+
+    /// <summary>Two accounts differing only in case are two accounts, which is how the synchronization section reads them.</summary>
+    [Fact]
+    public async Task EvaluateAsync_ScopeSpelledInADifferentCase_DoesNotReachThisAccount()
+    {
+        // Arrange
+        var ruleSet = CreateRuleSet(
+            [MailRule.Create("mistyped", ScriptedMailRuleCondition.Answering(matches: true), stopWhenMatched: false, ["Work"])]);
+
+        // Act
+        var evaluation = await this.CreateEvaluator().EvaluateAsync(
+            ruleSet,
+            CreateFacts(),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Empty(evaluation.Evaluations);
+    }
+
     [Fact]
     public async Task EvaluateAsync_EmptyRuleSet_ReportsThePassWithoutReachingAnything()
     {
@@ -184,7 +250,7 @@ public sealed class MailRuleSetEvaluatorTests
         return MailRuleSet.Create(
             materialized,
             MailRuleSetRevision.Create(
-                [.. materialized.Select(rule => new MailRuleDeclaration(rule.Name, "isSeen", rule.StopWhenMatched))]),
+                [.. materialized.Select(rule => new MailRuleDeclaration(rule.Name, "isSeen", rule.StopWhenMatched, [.. rule.Accounts]))]),
             MailRuleConditionBounds.Default);
     }
 

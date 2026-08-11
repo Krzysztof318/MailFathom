@@ -11,6 +11,11 @@ namespace MailFathom.Application.Rules;
 /// <summary>Runs a rule set over one email in declared order, bounding each condition and classifying every failure.</summary>
 /// <remarks>
 /// <para>
+/// A rule scoped to accounts this email does not belong to is passed over rather than evaluated, and leaves no
+/// evaluation behind: it did not decline to match, it was not one of this account's rules. That also means it cannot end
+/// the pass, whatever it declares, so narrowing a stopping rule to one account is a statement about that account alone.
+/// </para>
+/// <para>
 /// The one place totality is applied. The expression evaluator underneath raises failures rather than returning them,
 /// so every way a condition can fail to answer is caught here and recorded as a rule that failed with a reason. A rule
 /// that failed did not match, so the pass carries on to the rules below it: a single unlucky email must not stop a rule
@@ -61,6 +66,11 @@ public sealed class MailRuleSetEvaluator
 
         foreach (var rule in ruleSet.Rules)
         {
+            if (!rule.AppliesTo(facts.Account))
+            {
+                continue;
+            }
+
             var evaluation = await this.EvaluateRuleAsync(rule, facts, ruleSet.Bounds, cancellationToken);
 
             evaluations.Add(evaluation);

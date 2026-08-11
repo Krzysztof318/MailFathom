@@ -27,6 +27,16 @@ internal sealed class MailRuleOptions
     [RegularExpression("^[A-Za-z0-9][A-Za-z0-9 ._-]*$")]
     public string Name { get; set; } = string.Empty;
 
+    /// <summary>Gets or sets the identifiers of the accounts this rule applies to.</summary>
+    /// <remarks>
+    /// One rule reaches one or more accounts, named as they are in <c>MailSynchronization:Accounts</c>. Declaring none
+    /// is how a rule is written for every account, which is what a single-account deployment writes and what a rule
+    /// about a sender rather than about a mailbox usually wants. Every identifier here has to name an account the
+    /// deployment declares, because a rule scoped to a mistyped account would otherwise reach no mail at all and say
+    /// nothing about why.
+    /// </remarks>
+    public IList<string> Accounts { get; set; } = [];
+
     /// <summary>Gets or sets the expression deciding whether an email matches this rule.</summary>
     [Required]
     public string Condition { get; set; } = string.Empty;

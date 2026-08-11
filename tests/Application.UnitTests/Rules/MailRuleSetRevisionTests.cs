@@ -11,10 +11,10 @@ namespace MailFathom.Application.UnitTests.Rules;
 public sealed class MailRuleSetRevisionTests
 {
     private static readonly MailRuleDeclaration FileInvoices =
-        new("file-invoices", "senderDomain == 'supplier.test'", StopWhenMatched: true);
+        new("file-invoices", "senderDomain == 'supplier.test'", StopWhenMatched: true, Accounts: []);
 
     private static readonly MailRuleDeclaration ArchiveOld =
-        new("archive-old", "ageInDays > 365", StopWhenMatched: false);
+        new("archive-old", "ageInDays > 365", StopWhenMatched: false, Accounts: []);
 
     [Fact]
     public void Create_SameRulesInSameOrder_ProducesTheSameIdentity()
@@ -41,16 +41,18 @@ public sealed class MailRuleSetRevisionTests
     }
 
     [Theory]
-    [InlineData("file-invoices-renamed", "senderDomain == 'supplier.test'", true)]
-    [InlineData("file-invoices", "senderDomain == 'other.test'", true)]
-    [InlineData("file-invoices", "senderDomain == 'supplier.test'", false)]
+    [InlineData("file-invoices-renamed", "senderDomain == 'supplier.test'", true, new string[0])]
+    [InlineData("file-invoices", "senderDomain == 'other.test'", true, new string[0])]
+    [InlineData("file-invoices", "senderDomain == 'supplier.test'", false, new string[0])]
+    [InlineData("file-invoices", "senderDomain == 'supplier.test'", true, new[] { "primary" })]
     public void Create_AnyPartOfARuleChanging_ProducesADifferentIdentity(
         string name,
         string conditionText,
-        bool stopWhenMatched)
+        bool stopWhenMatched,
+        string[] accounts)
     {
         // Act
-        var changed = MailRuleSetRevision.Create([new MailRuleDeclaration(name, conditionText, stopWhenMatched)]);
+        var changed = MailRuleSetRevision.Create([new MailRuleDeclaration(name, conditionText, stopWhenMatched, accounts)]);
 
         // Assert
         Assert.NotEqual(MailRuleSetRevision.Create([FileInvoices]), changed);
@@ -63,17 +65,31 @@ public sealed class MailRuleSetRevisionTests
         // Act
         var first = MailRuleSetRevision.Create(
         [
-            new MailRuleDeclaration("a", "isSeen", StopWhenMatched: false),
-            new MailRuleDeclaration("b", "isDraft", StopWhenMatched: false),
+            new MailRuleDeclaration("a", "isSeen", StopWhenMatched: false, Accounts: []),
+            new MailRuleDeclaration("b", "isDraft", StopWhenMatched: false, Accounts: []),
         ]);
         var second = MailRuleSetRevision.Create(
         [
-            new MailRuleDeclaration("a", "isSeen", StopWhenMatched: false),
-            new MailRuleDeclaration("bisDraft", "continue", StopWhenMatched: false),
+            new MailRuleDeclaration("a", "isSeen", StopWhenMatched: false, Accounts: []),
+            new MailRuleDeclaration("bisDraft", "continue", StopWhenMatched: false, Accounts: []),
         ]);
 
         // Assert
         Assert.NotEqual(first, second);
+    }
+
+    /// <summary>The accounts inside one scope are separated too, so two scopes cannot render as the same text.</summary>
+    [Fact]
+    public void Create_ScopesWhoseAccountsRunTogether_StayDistinct()
+    {
+        // Act
+        var twoAccounts = MailRuleSetRevision.Create(
+            [new MailRuleDeclaration("a", "isSeen", StopWhenMatched: false, Accounts: ["primary", "work"])]);
+        var oneAccount = MailRuleSetRevision.Create(
+            [new MailRuleDeclaration("a", "isSeen", StopWhenMatched: false, Accounts: ["primarywork"])]);
+
+        // Assert
+        Assert.NotEqual(twoAccounts, oneAccount);
     }
 
     [Fact]

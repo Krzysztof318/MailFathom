@@ -33,17 +33,20 @@ internal static class MailRuleDeclarationRules
     /// <summary>Reports everything an operator must fix before a declared rule set can be used.</summary>
     /// <param name="candidate">The bound declaration, or <see langword="null" /> when the deployment wrote no section.</param>
     /// <param name="compiler">Reads each condition against the fact surface.</param>
+    /// <param name="declaredAccounts">The identifiers of the accounts the deployment declares, which a rule's scope may name.</param>
     /// <returns>One message per rule the declaration breaks, empty when it is usable.</returns>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="compiler" /> is <see langword="null" />.</exception>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="compiler" /> or <paramref name="declaredAccounts" /> is <see langword="null" />.</exception>
     /// <remarks>
     /// An absent section is a supported deployment rather than a failure: it applies no rules, which is what every
     /// deployment did before anybody wrote one.
     /// </remarks>
     public static IReadOnlyList<string> FindDeclarationErrors(
         MailRulesOptions? candidate,
-        IMailRuleConditionCompiler compiler)
+        IMailRuleConditionCompiler compiler,
+        IReadOnlyCollection<string> declaredAccounts)
     {
         ArgumentNullException.ThrowIfNull(compiler);
+        ArgumentNullException.ThrowIfNull(declaredAccounts);
 
         if (candidate is null)
         {
@@ -53,6 +56,7 @@ internal static class MailRuleDeclarationRules
         var errors = new List<string>(FindSectionErrors(candidate));
 
         errors.AddRange(candidate.Rules.SelectMany((rule, position) => FindRuleErrors(rule, position)));
+        errors.AddRange(candidate.Rules.SelectMany((rule, position) => FindScopeErrors(rule, position, declaredAccounts)));
 
         // The limits are what a condition is read under, so a rule set whose limits are themselves unusable has nothing
         // to read the conditions against and the messages above are the ones worth reporting.
@@ -72,6 +76,45 @@ internal static class MailRuleDeclarationRules
             .Select(rule => compiler.Compile(rule.Name, rule.Condition, bounds))
             .SelectMany(compilation => compilation.Errors)
             .Select(DescribeRuleError);
+    }
+
+    /// <summary>Judges one rule's account scope, which no attribute can reach because it is a claim about another section.</summary>
+    /// <remarks>
+    /// An unknown account is refused rather than ignored, for the reason the whole section is bound strictly: a rule
+    /// scoped to an account nobody declared reaches no mail, and does so in silence. Ordinal comparison, because the
+    /// synchronization section already tells two identifiers apart that way, so accepting a differently-cased spelling
+    /// here would scope a rule to an account that is not the one the operator named.
+    /// </remarks>
+    private static IEnumerable<string> FindScopeErrors(
+        MailRuleOptions rule,
+        int position,
+        IReadOnlyCollection<string> declaredAccounts)
+    {
+        var opening =
+            $"{MailRulesOptions.SectionName}:{nameof(MailRulesOptions.Rules)}:{position}:{nameof(MailRuleOptions.Accounts)}";
+        var scope = rule.Accounts.Select(account => account?.Trim() ?? string.Empty).ToArray();
+
+        if (scope.Any(string.IsNullOrEmpty))
+        {
+            yield return $"{opening} — an account this rule applies to is named by nothing.";
+
+            yield break;
+        }
+
+        var repeated = scope
+            .GroupBy(account => account, StringComparer.Ordinal)
+            .FirstOrDefault(group => group.Count() > 1);
+
+        if (repeated is not null)
+        {
+            yield return $"{opening} — the account '{repeated.Key}' is named more than once.";
+        }
+
+        foreach (var unknown in scope.Where(account => !declaredAccounts.Contains(account, StringComparer.Ordinal)))
+        {
+            yield return
+                $"{opening} — no account named '{unknown}' is declared under MailSynchronization:Accounts, so this rule would reach no mail.";
+        }
     }
 
     /// <summary>Runs the section's own attribute bounds and everything <see cref="MailRulesOptions.Validate" /> reports.</summary>
