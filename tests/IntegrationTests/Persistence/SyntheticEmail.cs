@@ -58,24 +58,49 @@ internal static class SyntheticEmail
         long sizeOctets = 2048) =>
         new(occurrenceId, $"{subject}@mailfathom.test", subject, SentAt, sizeOctets);
 
+    /// <summary>The address every extraction reports as the sender unless a test names another.</summary>
+    internal const string DefaultSenderAddress = "sender@mailfathom.test";
+
     /// <summary>Builds the metadata a MIME reader would have extracted from one message's stored bytes.</summary>
     /// <param name="occurrenceId">The occurrence the metadata was read from.</param>
     /// <param name="subject">The decoded subject.</param>
     /// <param name="bodyText">The searchable text the body yielded.</param>
-    /// <param name="recipientAddresses">The addresses the <c>To</c> header carried, beside the fixed sender.</param>
+    /// <param name="recipientAddresses">The addresses the <c>To</c> header carried, beside the sender.</param>
     /// <returns>The extracted metadata.</returns>
     internal static ExtractedEmailMetadata ExtractionOf(
         EmailOccurrenceId occurrenceId,
         string subject,
         string bodyText,
         params string[] recipientAddresses) =>
+        ExtractionFrom(occurrenceId, subject, bodyText, DefaultSenderAddress, ReceivedAt, recipientAddresses);
+
+    /// <summary>Builds the same metadata with the two values a filter selects on stated rather than fixed.</summary>
+    /// <param name="occurrenceId">The occurrence the metadata was read from.</param>
+    /// <param name="subject">The decoded subject.</param>
+    /// <param name="bodyText">The searchable text the body yielded.</param>
+    /// <param name="senderAddress">The address the <c>From</c> header carried.</param>
+    /// <param name="receivedAt">When the last receiving hop recorded the message.</param>
+    /// <param name="recipientAddresses">The addresses the <c>To</c> header carried.</param>
+    /// <returns>The extracted metadata.</returns>
+    /// <remarks>
+    /// An overload rather than optional parameters on the one above, because the sender and the received time are fixed
+    /// for every test that is not about them and a defaulted signature invites a test to vary one by accident. Both are
+    /// synthetic: the addresses are in the reserved <c>.test</c> domain and the instants are literals.
+    /// </remarks>
+    internal static ExtractedEmailMetadata ExtractionFrom(
+        EmailOccurrenceId occurrenceId,
+        string subject,
+        string bodyText,
+        string senderAddress,
+        DateTimeOffset receivedAt,
+        params string[] recipientAddresses) =>
         new(
             occurrenceId,
             subject,
             SentAt,
-            ReceivedAt,
+            receivedAt,
             [
-                Participant(EmailAddressRole.From, "sender@mailfathom.test"),
+                Participant(EmailAddressRole.From, senderAddress),
                 .. recipientAddresses.Select(address => Participant(EmailAddressRole.To, address)),
             ],
             EmailThreadReferences.Create($"{subject}@mailfathom.test", inReplyTo: null, references: null),

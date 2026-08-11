@@ -23,6 +23,9 @@ namespace MailFathom.Application.UnitTests.Retrieval;
 /// <summary>Covers the retrieval a model reaches mail through: what it bounds, what it carries, and what it refuses to send.</summary>
 public sealed class MailboxKnowledgeSearchTests
 {
+    /// <summary>Stands for a filter the selection carries no value for, so a null never reads as a failed comparison.</summary>
+    private const string Absent = "-";
+
     private static readonly DateTimeOffset FirstJuly = new(2026, 7, 1, 8, 0, 0, TimeSpan.Zero);
 
     private static readonly DateTimeOffset SearchedAt = new(2026, 8, 8, 12, 0, 0, TimeSpan.Zero);
@@ -47,7 +50,7 @@ public sealed class MailboxKnowledgeSearchTests
         // Act
         var passages = (await search.FindPassagesAsync(
             MailboxScope.Unrestricted,
-            "invoice",
+            EmailKnowledgeQuery.ForText("invoice"),
             TestContext.Current.CancellationToken)).Passages;
 
         // Assert
@@ -72,7 +75,7 @@ public sealed class MailboxKnowledgeSearchTests
         // Act
         var passages = (await search.FindPassagesAsync(
             MailboxScope.Unrestricted,
-            "invoice",
+            EmailKnowledgeQuery.ForText("invoice"),
             TestContext.Current.CancellationToken)).Passages;
 
         // Assert
@@ -102,7 +105,7 @@ public sealed class MailboxKnowledgeSearchTests
         // Act
         var passages = (await search.FindPassagesAsync(
             MailboxScope.Unrestricted,
-            "invoice",
+            EmailKnowledgeQuery.ForText("invoice"),
             TestContext.Current.CancellationToken)).Passages;
 
         // Assert
@@ -121,7 +124,7 @@ public sealed class MailboxKnowledgeSearchTests
         // Act
         var passages = (await search.FindPassagesAsync(
             MailboxScope.Unrestricted,
-            "invoice",
+            EmailKnowledgeQuery.ForText("invoice"),
             TestContext.Current.CancellationToken)).Passages;
 
         // Assert
@@ -143,7 +146,7 @@ public sealed class MailboxKnowledgeSearchTests
         // Act
         var passages = (await search.FindPassagesAsync(
             MailboxScope.Unrestricted,
-            "invoice",
+            EmailKnowledgeQuery.ForText("invoice"),
             TestContext.Current.CancellationToken)).Passages;
 
         // Assert
@@ -170,7 +173,7 @@ public sealed class MailboxKnowledgeSearchTests
         // Act
         var passages = (await search.FindPassagesAsync(
             MailboxScope.Unrestricted,
-            "invoice",
+            EmailKnowledgeQuery.ForText("invoice"),
             TestContext.Current.CancellationToken)).Passages;
 
         // Assert
@@ -178,51 +181,174 @@ public sealed class MailboxKnowledgeSearchTests
     }
 
     /// <summary>
-    /// The query is written by a model rather than by a caller who could be told to correct it, so unusable text is a
-    /// retrieval that found nothing rather than a failed run. Every shape the query text refuses is one answer here:
-    /// blank text, text longer than one query carries, and text holding a character no document could — the last two
-    /// being ordinary shapes free-form model output takes.
+    /// A query the search use case refuses travels out as that refusal rather than as an empty window, because the
+    /// caller is a tool loop and a model that wrote an unusable value can write a usable one. Every shape the query text
+    /// refuses is one answer here: blank text, and text holding a character no document could — both ordinary shapes
+    /// free-form model output takes.
     /// </summary>
     [Theory]
     [InlineData("")]
     [InlineData("   ")]
     [InlineData("an invoice\nfrom last week")]
     [InlineData("an invoice\u0000from last week")]
-    public async Task FindPassagesAsync_AQueryWithNoUsableText_FindsNothingWithoutSearching(string queryText)
+    public async Task FindPassagesAsync_AQueryWithNoUsableText_IsRefusedWithoutSearching(string queryText)
     {
         // Arrange
         var index = new InMemoryEmailSearchIndex().With(SyntheticEmailSummaries.Create(FirstJuly), snippets: "a mention");
         var search = SearchOver(index);
 
-        // Act
-        var passages = (await search.FindPassagesAsync(
+        // Act, Assert
+        await Assert.ThrowsAsync<MailboxQueryFilterInvalidException>(() => search.FindPassagesAsync(
             MailboxScope.Unrestricted,
-            queryText,
-            TestContext.Current.CancellationToken)).Passages;
+            EmailKnowledgeQuery.ForText(queryText),
+            TestContext.Current.CancellationToken));
 
-        // Assert
-        Assert.Empty(passages);
         Assert.Empty(index.RankedCandidatesCalls);
     }
 
     /// <summary>The length bound is the one an unbounded free-form query meets first, and it cannot be written inline.</summary>
     [Fact]
-    public async Task FindPassagesAsync_AQueryLongerThanOneSearchCarries_FindsNothingWithoutSearching()
+    public async Task FindPassagesAsync_AQueryLongerThanOneSearchCarries_IsRefusedWithoutSearching()
+    {
+        // Arrange
+        var index = new InMemoryEmailSearchIndex().With(SyntheticEmailSummaries.Create(FirstJuly), snippets: "a mention");
+        var search = SearchOver(index);
+
+        // Act, Assert
+        await Assert.ThrowsAsync<MailboxQueryFilterInvalidException>(() => search.FindPassagesAsync(
+            MailboxScope.Unrestricted,
+            EmailKnowledgeQuery.ForText(new string('a', EmailSearchQueryText.MaximumLength + 1)),
+            TestContext.Current.CancellationToken));
+
+        Assert.Empty(index.RankedCandidatesCalls);
+    }
+
+    /// <summary>
+    /// The reason a run may narrow at all: a question about one person's mail is answered by selecting that person's
+    /// mail, rather than by hoping their address outranks every other word in the query.
+    /// </summary>
+    [Fact]
+    public async Task FindPassagesAsync_ASenderFilter_FindsOnlyThatSendersMail()
+    {
+        // Arrange
+        var fromAnna = SyntheticEmailSummaries.Create(FirstJuly, senderAddress: "anna@example.test");
+        var index = new InMemoryEmailSearchIndex()
+            .With(fromAnna, relevanceRank: 0.2f, matchedText: "invoice", "anna's mention")
+            .With(
+                SyntheticEmailSummaries.Create(FirstJuly.AddDays(1), senderAddress: "bruno@example.test"),
+                relevanceRank: 0.9f,
+                matchedText: "invoice",
+                "bruno's mention");
+        var search = SearchOver(index);
+
+        var query = new EmailKnowledgeQuery
+        {
+            QueryText = "invoice",
+            SenderAddress = "anna@example.test",
+        };
+
+        // Act
+        var passages = (await search.FindPassagesAsync(
+            MailboxScope.Unrestricted,
+            query,
+            TestContext.Current.CancellationToken)).Passages;
+
+        // Assert
+        Assert.Equal(fromAnna.StoredEmailId, Assert.Single(passages).StoredEmailId);
+    }
+
+    /// <summary>Every filter reaches the validated selection the published search builds, so neither tool narrows differently.</summary>
+    [Fact]
+    public async Task FindPassagesAsync_EveryFilterANamedQueryCarries_ReachesTheSelectionTheSearchWasGiven()
+    {
+        // Arrange
+        var index = new InMemoryEmailSearchIndex();
+        var search = SearchOver(index);
+
+        var query = new EmailKnowledgeQuery
+        {
+            QueryText = "invoice",
+            SenderAddress = "anna@example.test",
+            RecipientAddress = "bruno@example.test",
+            SubjectFragment = "quarterly",
+            ReceivedOnOrAfter = FirstJuly,
+            ReceivedBefore = FirstJuly.AddDays(7),
+            IsRemotelySeen = false,
+            HasAttachments = true,
+        };
+
+        // Act
+        await search.FindPassagesAsync(MailboxScope.Unrestricted, query, TestContext.Current.CancellationToken);
+
+        // Assert
+        var selection = Assert.Single(index.RankedCandidatesCalls).Selection;
+
+        Assert.Equal(
+            [
+                // The comparison form the persistence layer indexes, which is what the published search normalizes to
+                // as well: a filter and a stored participant are compared in one form by construction.
+                "ANNA@EXAMPLE.TEST",
+                "BRUNO@EXAMPLE.TEST",
+                "quarterly",
+                Written(FirstJuly),
+                Written(FirstJuly.AddDays(7)),
+                "False",
+                "True",
+            ],
+            new[]
+            {
+                selection.SenderNormalizedAddress ?? Absent,
+                selection.RecipientNormalizedAddress ?? Absent,
+                selection.SubjectFragment ?? Absent,
+                Written(selection.ReceivedOnOrAfter),
+                Written(selection.ReceivedBefore),
+                selection.IsRemotelySeen?.ToString() ?? Absent,
+                selection.HasAttachments?.ToString() ?? Absent,
+            });
+    }
+
+    /// <summary>A filter the published search refuses is refused here too, named as that search names it.</summary>
+    [Fact]
+    public async Task FindPassagesAsync_AFilterTheSearchRefuses_IsRefusedRatherThanDropped()
+    {
+        // Arrange
+        var index = new InMemoryEmailSearchIndex().With(SyntheticEmailSummaries.Create(FirstJuly), snippets: "a mention");
+        var search = SearchOver(index);
+
+        var query = new EmailKnowledgeQuery { QueryText = "invoice", SenderAddress = "not an address" };
+
+        // Act
+        var refusal = await Assert.ThrowsAsync<MailboxQueryFilterInvalidException>(() => search.FindPassagesAsync(
+            MailboxScope.Unrestricted,
+            query,
+            TestContext.Current.CancellationToken));
+
+        // Assert
+        Assert.Equal("sender address", refusal.FilterName);
+        Assert.Empty(index.RankedCandidatesCalls);
+    }
+
+    /// <summary>How the mail was ranked decides how a further query is worth wording, so the lookup carries it out.</summary>
+    [Fact]
+    public async Task FindPassagesAsync_ALexicalDeployment_ReportsHowTheMailWasRanked()
     {
         // Arrange
         var index = new InMemoryEmailSearchIndex().With(SyntheticEmailSummaries.Create(FirstJuly), snippets: "a mention");
         var search = SearchOver(index);
 
         // Act
-        var passages = (await search.FindPassagesAsync(
+        var lookup = await search.FindPassagesAsync(
             MailboxScope.Unrestricted,
-            new string('a', EmailSearchQueryText.MaximumLength + 1),
-            TestContext.Current.CancellationToken)).Passages;
+            EmailKnowledgeQuery.ForText("invoice"),
+            TestContext.Current.CancellationToken);
 
         // Assert
-        Assert.Empty(passages);
-        Assert.Empty(index.RankedCandidatesCalls);
+        Assert.Equal(EmailSearchRetrievalMode.Lexical, lookup.RetrievalMode);
     }
+
+    /// <summary>Writes an instant the one way both sides of an assertion read it, so an offset never decides a comparison.</summary>
+    private static string Written(DateTimeOffset? instant) =>
+        instant?.ToUniversalTime().ToString("O") ?? Absent;
 
     /// <summary>The scope decides which mail a question can be answered from, and it comes from the caller rather than the query.</summary>
     [Fact]
@@ -235,7 +361,10 @@ public sealed class MailboxKnowledgeSearchTests
         var scope = MailboxScope.Create([MailAccountId.Create(SyntheticEmailSummaries.DefaultAccountId)], []);
 
         // Act
-        var passages = (await search.FindPassagesAsync(scope, "invoice", TestContext.Current.CancellationToken)).Passages;
+        var passages = (await search.FindPassagesAsync(
+            scope,
+            EmailKnowledgeQuery.ForText("invoice"),
+            TestContext.Current.CancellationToken)).Passages;
 
         // Assert
         Assert.Empty(passages);
@@ -253,7 +382,10 @@ public sealed class MailboxKnowledgeSearchTests
         var scope = MailboxScope.Create([], [MailFolderAlias.Create("ARCHIVE")]);
 
         // Act
-        var passages = (await search.FindPassagesAsync(scope, "invoice", TestContext.Current.CancellationToken)).Passages;
+        var passages = (await search.FindPassagesAsync(
+            scope,
+            EmailKnowledgeQuery.ForText("invoice"),
+            TestContext.Current.CancellationToken)).Passages;
 
         // Assert
         Assert.Equal(inArchive.StoredEmailId, Assert.Single(passages).StoredEmailId);

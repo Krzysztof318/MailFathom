@@ -135,7 +135,10 @@ messages; search when the messages themselves are what you want.
 
 The question is yours to write, not a query to construct: its words are not matched against the mail, and the lookups are
 the model's own. That is also why there is no sender or date filter here — one supplied would narrow every lookup without
-the model knowing why its searches came back empty.
+the model knowing why its searches came back empty. The model narrows its own lookups instead, by the same sender,
+recipient, subject, date, seen state, and attachment filters `search_emails` publishes, so a question about one person's
+mail or one week reaches that mail rather than competing for it in a ranking. What it can and cannot ask for is
+[Mail answering § What one lookup may ask for](../features/mail-answering.md#what-one-lookup-may-ask-for).
 
 ### What leaves your instance when you ask
 

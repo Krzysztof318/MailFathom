@@ -26,11 +26,42 @@ has to be reached through the other of the provider's two APIs. Both are setting
 Two APIs, and the deployment says which](chat-generation.md#two-apis-and-the-deployment-says-which) holds the choice and
 what a wrong one is reported as.
 
+## What one lookup may ask for
+
+The tool publishes the query and the narrowing `search_emails` publishes to its own callers, and nothing else:
+
+| Argument | What it does |
+| --- | --- |
+| `queryText` | The text the eligible mail is ranked against. Required |
+| `senderAddress` | Only mail sent from this address, matched whole and without regard to case |
+| `recipientAddress` | Only mail whose `To` or `Cc` header names this address |
+| `subjectFragment` | Only mail whose subject contains this text, which narrows before anything is ranked |
+| `receivedOnOrAfter`, `receivedBefore` | Only mail received in the range, the start inclusive and the end exclusive |
+| `isRemotelySeen` | Only mail the server last reported as read, or as unread |
+| `hasAttachments` | Only mail that carries attachments, or that carries none |
+
+The filters are the greater part of what makes a question reach the mail a search would. A question that is naturally a
+narrowing — one person's mail, one week, mail carrying an attachment — is the one shape lexical and vector similarity
+are both weakest at, so expressing it as words in a query means competing with every other word in that query. Expressed
+as a filter it selects the mail exactly, and the ranking is then left to do the part it is good at.
+
+Two arguments a caller of `search_emails` holds are deliberately withheld, and each for its own reason:
+
+- **The accounts and folders**, because they are the caller's authorization rather than a search preference. A model
+  writes queries and never its own boundary.
+- **The result count**, because it is the deployment's bound on how much mail one lookup draws out. The one party with
+  an incentive to ask for more mail must not be able to ask for more mail.
+
+A filter this system would refuse from a caller is refused from a model, in the same words and under the same error
+code, because both reach the same use case. What differs is what happens next: the lookup comes back as a
+`<search-refused>` element naming the argument, and the model corrects it and calls again. Nothing was searched, which
+is exactly what an empty envelope would have failed to say.
+
 ## The scope is bound before the model sees anything
 
 A question carries the accounts and folders it may be answered from. That scope is bound into the run when it is
-composed, and the tool the model is offered takes **a query and nothing else** — there is no argument, no instruction,
-and no retrieved message that can widen it.
+composed, and the tool the model is offered **takes no account and no folder argument at all** — there is no argument,
+no instruction, and no retrieved message that can widen it.
 
 This is the property worth stating plainly, because it is what makes the boundary structural rather than a request in a
 prompt: a model that writes `everything in the secondary account` as its query gets the caller's scope searched for
@@ -49,21 +80,30 @@ Two bounds, applied where the passages are built rather than where they are sent
 
 | Bound | Key | Default | What it controls |
 | --- | --- | --- | --- |
-| Passages per retrieval | `MailAnswering:MaxPassagesPerRetrieval` | 8 | How many messages one lookup can draw on |
+| Passages per retrieval | `MailAnswering:MaxPassagesPerRetrieval` | 20 | How many messages one lookup can draw on |
 | Characters per passage | `MailAnswering:MaxCharactersPerPassage` | 1200 | How much of any single message it can draw out |
 
 They are two numbers rather than one total on purpose. A single total would let one enormous extract satisfy the same
 ceiling as a spread across several messages, and the two say different things about a mailbox: the count is how far a
 question reaches, the size is how deeply.
 
-The passage count is capped by what one search can rank, so a bound beyond that is refused rather than accepted and
-never met.
+The count is the window `search_emails` itself returns, and matching it is deliberate: a run that reached fewer messages
+per lookup than one search window holds answers worse than the search it was meant to spare the caller, and it does so
+on exactly the questions a search already handles. The count is capped by what one search can rank, so a bound beyond
+that is refused rather than accepted and never met.
 
 Neither of them bounds a *run*, and that is the point of the section below: a model decides how many lookups to make, so
-two bounds on one lookup say nothing about how much of a mailbox one question can reach.
+two bounds on one lookup say nothing about how much of a mailbox one question can reach. The run's own ceiling is what
+does, and it is the pair of them together that decides how many lookups a run fits — a lookup whose every passage
+reached the per-passage ceiling would exhaust a run on its own. That is the ceiling working rather than a contradiction:
+the passages are admitted in relevance order and the run is told there is no more. The per-passage figure is a ceiling
+rather than a size, and a passage is a few bounded extracts of one message.
 
-A query with no usable text finds nothing rather than failing. The text is written by a model rather than by a caller
-who could be told to correct it, and a run whose lookup found nothing still has an answer to give.
+A query with no usable text, and a filter this deployment would refuse from any caller, both come back as a refusal
+naming the argument rather than as an empty result. The caller here is a tool loop, so a model that wrote an unusable
+value can be told which one and write another; absorbing the refusal into an empty envelope would tell it the mailbox
+holds nothing when what it holds is a bad filter. A lookup that ran and matched nothing is an ordinary empty result, and
+a run whose lookups found nothing still has an answer to give.
 
 ## What one question may spend
 
@@ -98,7 +138,7 @@ hundred characters, and skipping ahead to a shorter passage would silently prefe
 Once nothing may be sent, the envelope says so rather than arriving as a mailbox that suddenly holds nothing:
 
 ```xml
-<retrieved-mail retrieval-limit-reached="true" />
+<retrieved-mail retrieval-mode="hybrid" retrieval-limit-reached="true" />
 ```
 
 That attribute is what separates a mailbox with no answer in it from a run with no allowance left to read one — the two
@@ -163,7 +203,7 @@ telemetry](#what-a-run-publishes-as-telemetry) below; nothing there republishes 
 
 Hybrid search ranks by fusing lexical and vector similarity, which decides what *resembles* a query. Resemblance is
 cheap, deterministic, and shallow: ask "what did the insurer finally agree to pay" and a long thread about the claim
-ranks beside the one message that settles it. The fused top eight can hold one passage that answers and seven that
+ranks beside the one message that settles it. A fused window can hold one passage that answers and nineteen that
 mention.
 
 A deployment can turn on a second pass over that ranking. Each candidate is put to the declared chat endpoint on its
@@ -191,8 +231,9 @@ Setting the candidate count below what retrieval returns buys a weaker filter ra
 nobody judged was never found irrelevant, so it keeps the place the fused ranking gave it.
 
 Above that number there is nothing to buy. The count is capped at the passages-per-retrieval bound in the table above,
-because a ninth candidate never exists to be judged, and a value beyond it is refused at startup rather than accepted as
-a widening that could not happen. The default is that same number: judge everything the lookup handed over.
+because a candidate past the last passage never exists to be judged, and a value beyond it is refused at startup rather
+than accepted as a widening that could not happen. The default is that same number: judge everything the lookup handed
+over.
 
 ### It filters; it does not reorder
 
@@ -227,12 +268,18 @@ that answered something else into a score this system invented about somebody's 
 
 ### The candidate is quoted, never obeyed
 
-A judgement is two turns: the instruction, and the candidate beside the query it was retrieved for. The extract reaches
+A judgement is two turns: the instruction, and the candidate beside the lookup it was retrieved for. The extract reaches
 the model inside the same `<retrieved-mail>` envelope an answering run reads it in, written by the same formatter, and
-the query is enclosed in a `<query>` element of its own — it is free text a model wrote, and a run's earlier retrieval is
-one of the things that shaped it, so mail reaches it indirectly. The instruction states that everything inside both
-elements is data and that a request found there is described rather than obeyed, exactly as the run's own instruction
-does.
+the lookup is enclosed in a `<query>` element of its own — every part of it is free text a model wrote, and a run's
+earlier retrieval is one of the things that shaped it, so mail reaches it indirectly. The instruction states that
+everything inside both elements is data and that a request found there is described rather than obeyed, exactly as the
+run's own instruction does.
+
+The **whole** lookup travels, filters included, and that is what keeps the pass from dropping the mail a narrow lookup
+was written to find. A lookup that is mostly a narrowing leaves a query text of a word or two, and a candidate judged
+against those words alone scores like an unremarkable message however exactly the filters selected it — so the
+instruction says that the extract already satisfies every filter shown and asks how much of an answer it holds for the
+lookup as a whole.
 
 Nothing of the run travels with a judgement: not the question the person asked, not the answer being written, and not
 the other candidates. Judging one extract against one query needs none of it, and everything sent is somebody's mail
@@ -267,13 +314,18 @@ phrased, whoever it claims to be from — can be delivered where the model reads
 Inside that tool result, each extract sits in an element of its own:
 
 ```xml
-<retrieved-mail>
+<retrieved-mail retrieval-mode="hybrid">
   <message id="019fe12f-a4a1-7759-8d95-21d0bb6eec90" account="work" folder="ARCHIVE" received="2026-08-01T09:14:22.0000000+02:00">
     <subject>Invoice 41</subject>
     <extract>the invoice is attached</extract>
   </message>
 </retrieved-mail>
 ```
+
+The `retrieval-mode` attribute says which ranking answered *this* lookup — `lexical` or `hybrid` — because that is a
+fact about the instance at the moment of the call rather than about the build: an instance whose embedding provider is
+refusing ranks lexically until it is not. It is what tells the model how a further query is worth wording, and it is
+written here for the same reason `search_emails` publishes the mode in every response rather than in its description.
 
 Nothing a message contains can end an element or open one. Every value — the extract, the subject, the aliases — is
 written through an XML writer that escapes what would, so a message whose text closes the envelope and opens a forged
@@ -511,8 +563,10 @@ length of the period, and a run that reached its retrieval ceiling is recorded a
 The same rule reaches the meter: what a period consumed is published as runs and tokens, which describe the size of what
 left without describing any of it.
 
-The orchestration framework's own switch for logging queries and retrieved text is set off explicitly rather than left
-at its default, because what it would emit is somebody's question and extracts of their mail.
+None of MailFathom's own components on this path logs a lookup or an extract, which is a property of what they write
+rather than of a level somebody set. What the orchestration framework underneath would emit at `Trace` — the arguments a
+tool was called with and the result it returned — is the one place a query or an extract could reach a log, so that
+level is not one to turn on for this category on a deployment holding real mail.
 
 Retrieved mail is untrusted input, and so is what the model writes from it. [Chat generation § What never reaches a
 log](chat-generation.md#what-never-reaches-a-log) states the same rule for the transport underneath.

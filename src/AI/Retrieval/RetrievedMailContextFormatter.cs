@@ -5,6 +5,7 @@
 using System.Globalization;
 using System.Text;
 using System.Xml;
+using MailFathom.Application.Emails.Search;
 using MailFathom.Application.Retrieval;
 
 namespace MailFathom.AI.Retrieval;
@@ -48,6 +49,32 @@ internal static class RetrievedMailContextFormatter
     /// </remarks>
     internal const string RetrievalLimitReachedAttributeName = "retrieval-limit-reached";
 
+    /// <summary>Names the attribute saying how the mail in this envelope was ranked.</summary>
+    /// <remarks>
+    /// Written per lookup rather than into the tool's description, because which ranking answered is a fact about the
+    /// instance at the moment of the call: one whose embedding provider is refusing ranks lexically until it is not, and
+    /// a description fixed at build time would tell the model the opposite for the whole of that stretch. It is what
+    /// decides how a further query is worth wording, which is why the model is given it at all.
+    /// </remarks>
+    internal const string RetrievalModeAttributeName = "retrieval-mode";
+
+    /// <summary>The value <see cref="RetrievalModeAttributeName" /> carries for a ranking over the words the mail is written in.</summary>
+    internal const string LexicalRetrievalMode = "lexical";
+
+    /// <summary>The value <see cref="RetrievalModeAttributeName" /> carries for a ranking that fuses words and meaning.</summary>
+    internal const string HybridRetrievalMode = "hybrid";
+
+    /// <summary>Names the element a lookup the search use case refused is reported in.</summary>
+    /// <remarks>
+    /// A document of its own rather than an empty envelope, because the two say opposite things: an empty envelope
+    /// reports a mailbox that held no match, and this reports a lookup that never ran. A model told the first about the
+    /// second concludes the mail does not exist and stops asking.
+    /// </remarks>
+    internal const string RefusalElementName = "search-refused";
+
+    /// <summary>Names the attribute carrying which argument of the lookup was refused.</summary>
+    internal const string RefusedFilterAttributeName = "argument";
+
     /// <summary>Names the element one retrieved message occupies.</summary>
     internal const string MessageElementName = "message";
 
@@ -86,24 +113,31 @@ internal static class RetrievedMailContextFormatter
 
     /// <summary>Writes one lookup's passages into the envelope the model reads them inside.</summary>
     /// <param name="passages">The extracts the lookup found, in the order it ranked them.</param>
+    /// <param name="retrievalMode">How the lookup ranked the mail it drew them from.</param>
     /// <param name="retrievalLimitReached">Whether this run may be handed no more mail than the envelope carries.</param>
     /// <returns>The envelope, holding one element per passage.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="passages" /> is <see langword="null" />.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="retrievalMode" /> has no value this envelope publishes.</exception>
     /// <remarks>
     /// A lookup that found nothing is written as an empty envelope rather than as nothing at all, so the model reads
     /// that the mailbox was searched and held no answer instead of reading a blank result it has to guess at. An
     /// envelope emptied by the run's own ceiling says so on the element, which is the difference between a mailbox with
     /// no answer in it and a run with no allowance left to read one.
     /// </remarks>
-    internal static string Format(IReadOnlyList<EmailKnowledgePassage> passages, bool retrievalLimitReached)
+    internal static string Format(
+        IReadOnlyList<EmailKnowledgePassage> passages,
+        EmailSearchRetrievalMode retrievalMode,
+        bool retrievalLimitReached)
     {
         ArgumentNullException.ThrowIfNull(passages);
 
+        var mode = Published(retrievalMode);
         var envelope = new StringBuilder();
 
         using (var writer = XmlWriter.Create(envelope, EnvelopeSettings))
         {
             writer.WriteStartElement(RetrievalElementName);
+            writer.WriteAttributeString(RetrievalModeAttributeName, mode);
 
             if (retrievalLimitReached)
             {
@@ -122,6 +156,52 @@ internal static class RetrievedMailContextFormatter
 
         return envelope.ToString();
     }
+
+    /// <summary>Writes the document a model reads when the search use case refused the lookup it wrote.</summary>
+    /// <param name="filterName">Which argument was refused, named as the application names it.</param>
+    /// <param name="reason">Why it was refused, in the words the failure itself states.</param>
+    /// <returns>The document.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when either argument is <see langword="null" />.</exception>
+    /// <remarks>
+    /// Both values come from MailFathom's own assemblies rather than from the lookup: the failure names the filter and
+    /// states its limit, and it never repeats the value that was refused, which is what keeps a refusal from carrying an
+    /// address or a subject fragment back into the conversation. They are written through the same writer the envelope
+    /// uses regardless, because a document this system composes is escaped by the mechanism rather than by an argument
+    /// about where its text came from.
+    /// </remarks>
+    internal static string FormatRefusal(string filterName, string reason)
+    {
+        ArgumentNullException.ThrowIfNull(filterName);
+        ArgumentNullException.ThrowIfNull(reason);
+
+        var document = new StringBuilder();
+
+        using (var writer = XmlWriter.Create(document, EnvelopeSettings))
+        {
+            writer.WriteStartElement(RefusalElementName);
+            writer.WriteAttributeString(RefusedFilterAttributeName, filterName);
+            writer.WriteString(reason);
+            writer.WriteEndElement();
+        }
+
+        return document.ToString();
+    }
+
+    /// <summary>Maps the ranking the application reports onto the word this envelope publishes.</summary>
+    /// <remarks>
+    /// A closed mapping rather than a lowercased name, for the reason the MCP boundary's own mapping is closed: the word
+    /// is what the tool description tells the model to read, so a mode the application grows without one has to fail
+    /// here rather than reach a model as an identifier nobody described.
+    /// </remarks>
+    private static string Published(EmailSearchRetrievalMode retrievalMode) => retrievalMode switch
+    {
+        EmailSearchRetrievalMode.Lexical => LexicalRetrievalMode,
+        EmailSearchRetrievalMode.Hybrid => HybridRetrievalMode,
+        _ => throw new ArgumentOutOfRangeException(
+            nameof(retrievalMode),
+            retrievalMode,
+            "The retrieval mode has no value this envelope publishes."),
+    };
 
     private static void WriteMessage(XmlWriter writer, EmailKnowledgePassage passage)
     {

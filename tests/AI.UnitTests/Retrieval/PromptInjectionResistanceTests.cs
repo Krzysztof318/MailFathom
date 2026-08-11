@@ -7,6 +7,7 @@ using MailFathom.AI.Orchestration;
 using MailFathom.AI.Retrieval;
 using MailFathom.AI.UnitTests.TestDoubles;
 using MailFathom.Application.Emails.Mailboxes;
+using MailFathom.Application.Emails.Search;
 using MailFathom.Application.Retrieval.AskMail;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Folders;
@@ -61,7 +62,7 @@ public sealed class PromptInjectionResistanceTests
         var passage = KnowledgePassages.Create(message.Text, subject: message.Subject);
 
         // Act
-        var envelope = RetrievedMailContextFormatter.Format([passage], retrievalLimitReached: false);
+        var envelope = RetrievedMailContextFormatter.Format([passage], EmailSearchRetrievalMode.Hybrid, retrievalLimitReached: false);
 
         // Assert
         var written = Assert.Single(MessagesIn(envelope));
@@ -107,7 +108,7 @@ public sealed class PromptInjectionResistanceTests
         Assert.Equal([ChatRole.User, ChatRole.Assistant, ChatRole.Tool], sent.Select(static one => one.Role));
         Assert.Equal(Query, CarriedText(sent[0]));
         Assert.Equal(
-            RetrievedMailContextFormatter.Format([passage], retrievalLimitReached: false),
+            RetrievedMailContextFormatter.Format([passage], EmailSearchRetrievalMode.Hybrid, retrievalLimitReached: false),
             CarriedText(sent[2]));
         Assert.All(
             chatClient.Calls,
