@@ -108,6 +108,13 @@ configuration file does and does not expose.
 The two database credentials are Compose secrets rather than files in that directory, so the database superuser
 password is never on a path the service can read.
 
+**The encrypted systemd credentials the native installation uses do not reach this deployment**, and running it under
+Podman does not change that: Compose starts no per-service systemd unit under either engine, so a `systemd-credential:`
+reference resolves to nothing here. These files are protected by their own mode and by the host they sit on, which is
+what the directory permissions above are for.
+[What an encrypted credential is bound to](secret-provisioning.md#what-an-encrypted-credential-is-bound-to) states the
+whole of that boundary, including which container shape does reach the path.
+
 **The data-encryption key is `-base64 32`, not the `-base64 33` on every other line here.** It is the one credential
 generated to a length rather than to a strength: the material has to decode to exactly 32 bytes, and startup refuses
 anything else naming the setting instead of accepting a weaker key. It is needed only when an account authenticates

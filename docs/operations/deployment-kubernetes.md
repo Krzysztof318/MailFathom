@@ -79,6 +79,12 @@ afterwards changes what is presented rather than what the server accepts — rot
 The Secret is mounted read-only at `/etc/mailfathom/secrets`, one file per key, so every credential is a `file:`
 reference — the same path and the same references the Compose deployment uses.
 
+**The encrypted systemd credentials the native installation uses do not reach a pod**, and they would work against this
+shape if they did: nothing schedules a systemd unit here, and that encryption binds material to one machine while every
+replica has to open what any other replica sealed. What protects these at rest is the cluster's own Secret encryption,
+configured on the API server rather than here.
+[What an encrypted credential is bound to](secret-provisioning.md#what-an-encrypted-credential-is-bound-to) states why.
+
 The last entry is the data-encryption key, and it belongs in this Secret rather than in a chart value: the chart creates
 no Secret and generates nothing, deliberately, because a Helm-generated key would be replaced on any upgrade that did
 not guard it with `lookup` — and `lookup` returns nothing during `helm template`, during a dry run, and under Argo CD.

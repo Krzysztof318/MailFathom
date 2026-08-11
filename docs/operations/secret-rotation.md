@@ -62,6 +62,10 @@ sudo systemctl reload-or-restart mailfathom
 
 This is the one place where the deployment shape, not MailFathom, decides. If uninterrupted rotation matters more than systemd's credential encryption, provision that secret as a file the service user can read and reference it with `file:` instead; MailFathom reads it on the next operation with no unit action at all.
 
+**Run that command on the host that will read its output.** `systemd-creds encrypt` seals against the machine it runs on — its TPM2 chip, its `/var/lib/systemd/`, or both — so a `.cred` file is not carried between hosts and re-encrypting is what a machine change costs. [What an encrypted credential is bound to](secret-provisioning.md#what-an-encrypted-credential-is-bound-to) states the binding and which flag makes the chip a requirement rather than a preference.
+
+Moving the service to a new machine, replacing a board, and reinstalling the OS are therefore all the same operation: encrypt every credential again, on the new host, from the material rather than from the `.cred` files. That is a migration step and not a rotation, and the difference matters at the end of it — the credentials themselves never changed, so nothing is revoked at the provider afterwards, and a credential whose material you no longer hold is one to rotate rather than one to re-encrypt.
+
 ### Containers
 
 A Docker or Podman Compose secret and a Kubernetes Secret both surface as a file. Update the file — for Kubernetes, update the Secret and let the kubelet refresh the projected volume — and the next operation reads it. No restart, no rollout.
