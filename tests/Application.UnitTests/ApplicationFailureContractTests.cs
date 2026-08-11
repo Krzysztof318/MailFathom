@@ -6,6 +6,8 @@ using MailFathom.Application.Accounts;
 using MailFathom.Application.EmailContent.Storage;
 using MailFathom.Application.Emails.Mailboxes;
 using MailFathom.Application.Persistence;
+using MailFathom.Application.SensitiveContent;
+using MailFathom.Application.SensitiveContent.Detection;
 using MailFathom.Application.Synchronization;
 using MailFathom.Application.Synchronization.Sessions;
 using MailFathom.Domain.Accounts;
@@ -222,6 +224,55 @@ public sealed class ApplicationFailureContractTests
         // Assert
         Assert.Equal("received date range", failure.FilterName);
         Assert.Contains("received date range", failure.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>A scan that could not run must never be the same outcome as a scan that found nothing.</summary>
+    [Fact]
+    public void ErrorCode_SensitiveContentScannerUnavailable_IsTheCodeForEveryWayAScannerCannotAnswer()
+    {
+        // Act
+        var timedOut = SensitiveContentScannerUnavailableException.DidNotAnswerInTime(
+            SensitiveContentScannerKind.Secrets,
+            TimeSpan.FromSeconds(5));
+        var broken = SensitiveContentScannerUnavailableException.Failed(
+            SensitiveContentScannerKind.Pii,
+            new InvalidOperationException("the analyzer at 10.0.0.4 refused the request"));
+        var absent = SensitiveContentScannerUnavailableException.NotRegistered(SensitiveContentScannerKind.Pii);
+
+        // Assert
+        Assert.Equal(MailFathomErrorCode.SensitiveContentScannerUnavailable, timedOut.ErrorCode);
+        Assert.Equal(MailFathomErrorCode.SensitiveContentScannerUnavailable, broken.ErrorCode);
+        Assert.Equal(MailFathomErrorCode.SensitiveContentScannerUnavailable, absent.ErrorCode);
+        Assert.Equal(SensitiveContentScannerKind.Secrets, timedOut.Scanner);
+        Assert.Equal(SensitiveContentScannerKind.Pii, broken.Scanner);
+        Assert.Equal(SensitiveContentScannerKind.Pii, absent.Scanner);
+    }
+
+    /// <summary>The failure is about content that must not appear in a log, so nothing of the inner failure's text is repeated.</summary>
+    [Fact]
+    public void SensitiveContentScannerUnavailableException_Message_DoesNotRepeatTheInnerFailureText()
+    {
+        // Arrange
+        var rejection = new InvalidOperationException("the analyzer at 10.0.0.4 refused the request");
+
+        // Act
+        var failure = SensitiveContentScannerUnavailableException.Failed(
+            SensitiveContentScannerKind.Pii,
+            rejection);
+
+        // Assert
+        Assert.DoesNotContain(rejection.Message, failure.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("10.0.0.4", failure.Message, StringComparison.Ordinal);
+        Assert.Same(rejection, failure.InnerException);
+    }
+
+    [Fact]
+    public void SensitiveContentScannerUnavailableException_WithoutTheFailureItWrapped_IsRejected()
+    {
+        // Act, Assert
+        Assert.Throws<ArgumentNullException>(() => SensitiveContentScannerUnavailableException.Failed(
+            SensitiveContentScannerKind.Secrets,
+            null!));
     }
 
     [Fact]

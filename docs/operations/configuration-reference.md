@@ -239,6 +239,41 @@ because what is composed beneath it may be a capability — a secret in transit.
 [attachment download link](../features/email-content.md#what-a-download-link-is-and-what-bounds-it); a deployment that
 declares no address issues none, which is a supported posture rather than a misconfiguration.
 
+## `SensitiveContent`
+
+What this deployment scans mail for before that mail is copied into a derived store or handed out. A configuration root
+of its own, because it is a property of the deployment rather than of its database, its accounts, or its providers, and
+because the switches it holds reach several of those at once. [Sensitive-content
+scanning](../features/sensitive-content-scanning.md) records what a finding is, what replaces it, and why a scanner that
+cannot answer refuses the operation it guards.
+
+Both scanners are off by default, and an absent section is that default rather than a startup failure. **This release
+registers no detector**, so switching either scanner on fails startup naming it; the detectors arrive with their own
+changes.
+
+| Key | Type | Default | Constraint | Change |
+| --- | --- | --- | --- | --- |
+| `SensitiveContent:Secrets:Enabled` | bool | `false` | A scanner switched on with no detector registered fails startup | restart |
+| `SensitiveContent:Secrets:Categories:<n>` | string | unset | Must name a category the scanner detects; the list replaces the scanner's defaults, and an absent list yields them | restart |
+| `SensitiveContent:Secrets:Suppressions:<n>:Category` | string | — | Must name a category the scanner detects; naming one never switches it on | restart |
+| `SensitiveContent:Secrets:Suppressions:<n>:Rule` | string | — | Must name a rule that category holds | restart |
+| `SensitiveContent:Pii:Enabled` | bool | `false` | As above, for the personal-data scanner | restart |
+| `SensitiveContent:Pii:Categories:<n>` | string | unset | As above | restart |
+| `SensitiveContent:Pii:Suppressions:<n>:Category` | string | — | As above | restart |
+| `SensitiveContent:Pii:Suppressions:<n>:Rule` | string | — | As above | restart |
+| `SensitiveContent:MaximumAnalyzedCharacters` | int | `200000` | 1 – 10000000; text beyond it is dropped from the result rather than handed on unscanned | restart |
+| `SensitiveContent:ScanTimeout` | TimeSpan | `00:00:05` | One second to two minutes, per call to one scanner | restart |
+| `SensitiveContent:MaximumConcurrentScans` | int | `4` | 1 – 256, across the process | restart |
+
+A category name is matched against what the scanner declares, ignoring capitalization, and the declared spelling is what
+survives the match — so a placeholder in redacted text does not depend on how the name was written here. A name that
+matches nothing **fails startup and quotes both the value and the categories the scanner does detect**, rather than
+being dropped by the binder and leaving the section reading as protection that is on. So does a suppression naming a
+rule that does not exist. A suppression inside a category this deployment does not look for is accepted and inert.
+
+The analyzed ceiling defaults to the same number as `EmailContent:MaxCharactersPerRead`, so an ordinary content read is
+analyzed whole and only something pathological reaches it.
+
 ## `MailboxSearch`
 
 The deployment-wide privacy bound on what a search result may quote, whether the result was ranked lexically or

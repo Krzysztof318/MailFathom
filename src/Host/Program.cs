@@ -21,6 +21,8 @@ using MailFathom.Application.Mail.Mutations.Audit;
 using MailFathom.Application.Mail.Mutations.Convergence;
 using MailFathom.Application.Persistence;
 using MailFathom.Application.Retrieval.AskMail.Audit;
+using MailFathom.Application.SensitiveContent.Detection;
+using MailFathom.Application.SensitiveContent.Redaction;
 using MailFathom.Application.Synchronization;
 using MailFathom.Application.Synchronization.Checkpoints;
 using MailFathom.Application.Synchronization.Reconciliation;
@@ -36,6 +38,7 @@ using MailFathom.Host.Configuration.Mail;
 using MailFathom.Host.Configuration.Persistence;
 using MailFathom.Host.Configuration.Providers;
 using MailFathom.Host.Configuration.Provisioning;
+using MailFathom.Host.Configuration.SensitiveContent;
 using MailFathom.Host.Hosting;
 using MailFathom.Host.Hosting.Startup;
 using MailFathom.Host.Hosting.Warnings;
@@ -199,6 +202,41 @@ try
             binderOptions => binderOptions.ErrorOnUnknownConfiguration = true)
         .ValidateDataAnnotations()
         .ValidateOnStart();
+    // A configuration root of its own, because what a deployment scans mail for before copying it or handing it out is
+    // a property of that deployment rather than of its database, its accounts, or its providers, and the two switches
+    // it holds reach several of those at once. Both are off by default, and an absent section is that default rather
+    // than a startup failure.
+    builder.Services.AddOptions<SensitiveContentOptions>()
+        .Bind(
+            builder.Configuration.GetSection(SensitiveContentOptions.SectionName),
+            binderOptions => binderOptions.ErrorOnUnknownConfiguration = true)
+        .ValidateDataAnnotations()
+        .ValidateOnStart();
+    // The category and rule names an operator wrote are judged against what the registered scanners declare, which no
+    // attribute on the bound graph can reach. Registered whatever the switches say, because a switch turned on with no
+    // detector behind it is exactly what it refuses.
+    builder.Services.AddSingleton<IValidateOptions<SensitiveContentOptions>, SensitiveContentCatalogValidator>();
+
+    // Read while the services are being registered, for the reason the provider declarations below are: whether this
+    // deployment scans anything decides which services exist at all, and that decision is taken before a container that
+    // could resolve an options snapshot. With both switches off nothing here is registered, so an opt-in nobody took
+    // constructs no detector, holds no concurrency permit, and appears on no path.
+    var declaredSensitiveContent = builder.Configuration
+        .GetSection(SensitiveContentOptions.SectionName)
+        .Get<SensitiveContentOptions>() ?? new SensitiveContentOptions();
+
+    if (declaredSensitiveContent.IsAnyScannerEnabled)
+    {
+        builder.Services.AddSingleton(provider => SensitiveContentPlanMapper.Map(
+            provider.GetRequiredService<IOptions<SensitiveContentOptions>>().Value,
+            provider.GetServices<ISensitiveContentCatalog>())
+            ?? throw new InvalidOperationException(
+                "A sensitive-content scanner was switched on at registration and is absent from the validated configuration."));
+        // A singleton because the concurrency bound it holds is one for the process, and because a plan is composed
+        // once. Every consumer redacts through this one instance, which is what keeps the derived path and the read
+        // path from drifting into two redactions of the same message.
+        builder.Services.AddSingleton<SensitiveContentRedactor>();
+    }
     // The published snapshot, not the bound one, is what every consumer reads: a reload whose secret references do not
     // resolve is rejected and leaves the previous configuration active for new operations.
     builder.Services.AddSingleton<DatabaseConnectionSettingsMapper>();
