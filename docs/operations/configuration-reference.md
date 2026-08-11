@@ -301,6 +301,17 @@ An ordered chain. Every entry declares the same geometry and reaches the same ve
 falls through to the next without changing what any stored vector means; startup refuses a chain whose entries
 disagree, naming both aliases and the property.
 
+An entry declares any service reachable over the OpenAI wire protocol, not one of a fixed set: `Provider`, `Model`, and
+`ModelVersion` are what the profile records, while `RoutedModelName` — or `Model` where that is empty — is the string a
+request is routed on. Two rules bind the address and the credential: an address is absolute HTTPS or startup refuses it,
+because the request carries a credential, and exactly one of `ApiKey` and `EntraCredential` is declared, because
+neither is what a forgotten reference looks like and both leaves unsaid which one a request presents. [Embedding
+generation § An endpoint is any
+service that speaks the OpenAI wire
+protocol](../features/embedding-generation.md#an-endpoint-is-any-service-that-speaks-the-openai-wire-protocol) holds
+both rules with their reasons, what each setting decides, and a worked example of an endpoint that is neither OpenAI
+nor Azure.
+
 | Key | Type | Default | Constraint | Change |
 | --- | --- | --- | --- | --- |
 | `…:Alias` | string | — | required, unique within the chain; what a log line, a metric tag, a resilience circuit, and a failure message call this endpoint | restart |
@@ -345,6 +356,13 @@ One endpoint rather than an ordered chain. A fallback embedding endpoint is anot
 startup proves it; nothing proves that of two chat models, so falling through would answer a person in a different
 model's voice with nothing above able to tell. An operator who wants failover puts a gateway in front of the declared
 endpoint.
+
+The endpoint is any service reachable over the OpenAI wire protocol, under the same two rules the embedding chain
+follows: an absolute HTTPS address, and exactly one credential. [Chat generation § An endpoint is any service that
+speaks the OpenAI wire
+protocol](../features/chat-generation.md#an-endpoint-is-any-service-that-speaks-the-openai-wire-protocol) carries a
+worked example of one that is neither OpenAI nor Azure, and `Chat:Api` is the key most often decided by which of the
+two paths such a service serves.
 
 | Key | Type | Default | Constraint | Change |
 | --- | --- | --- | --- | --- |

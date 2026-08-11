@@ -77,6 +77,37 @@ Everything else about an endpoint is either an address or a credential, and neit
 identifies a tenant and a resource, so a failure message that named one would put it in every log line. `Alias` is the
 name the operator chose, and it is what a log record, a metric tag, a resilience circuit, and a failure message use.
 
+### What each setting decides
+
+The [configuration reference](../operations/configuration-reference.md#embeddings) is the inventory — every key, its
+type, its default, and its bound. What follows is the part a table cannot carry: which question each value answers.
+
+**Identity and routing are separate settings.** `Provider`, `Model`, and `ModelVersion` name the vendor and the model
+that define the space, and what they exist for is the profile: they are recorded on it, so a stored vector says what
+produced it. `RoutedModelName` is the string a request is routed on, and it is the only one of the four that exists to
+be sent. Leaving it empty means *route on `Model`*, which is right wherever an endpoint knows the model by the vendor's
+own identifier; the two diverge exactly where the endpoint knows it by a name the operator invented — a cloud
+deployment's own name — which is what lets one model reached through a vendor's API and through a deployment of it be
+one vector space instead of two. `Provider` is stored verbatim and matched against nothing: which vendors exist is not
+MailFathom's set to close, so what a vendor calls itself is what you write.
+
+**Five settings decide what a vector means.** `Dimension` is the width the stored vectors have, `DistanceMetric` is how
+two of them are compared, and `InputCharacterLimit`, `PassageInstruction`, and `NormalizeVectors` are the preparation —
+how much of a passage the model was shown, what instruction it was shown with, and whether the answer is kept at unit
+length. Those five and the three identity settings are the whole of a profile and nothing else in the declaration is
+part of one, which is why moving any of them declares a *different* space rather than editing the existing one, and why
+the edit alone starts nothing until an activation moves the deployment onto it.
+
+**`SupportsRequestedDimension` is a declaration about the endpoint, not an inference from the model.** With it on, the
+declared width is asked for in the request, and a model trained to answer at it returns a vector already normalized for
+that width; with it off, the endpoint's own width comes back and is cut down only where the deployment allows trimming.
+It is declared for the same reason the model is never a compile-time constant here: a table of which models accept the
+parameter would be a list of model names in code, and it would be wrong the week after it was written.
+
+**`Address` and the credential are where the endpoint is and what it presents.** Neither is part of a profile — moving
+either changes where a vector is bought, never what it means. Both carry a rule, stated in full in [what an address has
+to be](#what-an-address-has-to-be) and [authentication has two shapes](#authentication-has-two-shapes) below.
+
 ## Vector width is a database decision
 
 pgvector stores far more than it indexes: a `vector` column holds up to 16000 dimensions and an HNSW index covers
@@ -100,25 +131,102 @@ normalized for it. Where the adapter must shorten a wider answer, it renormalize
 leaves one shorter than unit length, and a cosine distance between vectors of differing lengths is a number rather
 than an error.
 
-## Two providers, one client
+## An endpoint is any service that speaks the OpenAI wire protocol
 
-OpenAI and Azure OpenAI are the two this release reaches, and one client construction serves both: an Azure resource's
-v1 data plane is OpenAI-compatible, so a cloud deployment is the same client pointed at the resource's own
-`/openai/v1/` address with the deployment's name as the routed model. The choice reaches beyond embeddings — a declared
-chat endpoint is served by this same wiring rather than by a second one, as [chat
-generation](chat-generation.md#two-providers-one-client) describes. A chat endpoint may state which of the provider's
-two request APIs its calls go to, which is a path under the declared address rather than a second wiring: the address,
-the credential, the transport, and the retry opt-out are the ones described here either way. An embedding endpoint has
-no such choice, because the provider offers embeddings on one API only.
+One client construction reaches all of them. The address, the credential, the transport, the retry opt-out, and every
+bound below are the same whoever serves the request, and nothing in the declaration is a compile-time constant: the
+vendor, the model, the routed name, the width, the metric, and the preparation are strings and numbers read from
+configuration. Pointing a deployment at a different service is therefore a configuration entry rather than a feature
+request, and a model published after this version is declared without a rebuild.
 
-Support beyond these two is deliberately out of scope and is tracked separately.
+**OpenAI and Azure OpenAI are what this project declares, which is a different statement from what the mechanism
+reaches.** Azure is already the second case rather than a special one: an Azure resource's v1 data plane is
+OpenAI-compatible, so a cloud deployment is that same client pointed at the resource's own `/openai/v1/` address with
+the deployment's name as the routed model. A third-party service that speaks the same protocol is declared the same way
+— an address, a routed name, and a credential, beside the geometry every entry declares — and reaches the same code.
+
+The choice reaches beyond embeddings — a declared chat endpoint is served by this same wiring rather than by a second
+one, as [chat generation](chat-generation.md#an-endpoint-is-any-service-that-speaks-the-openai-wire-protocol)
+describes. A chat endpoint may state which of the provider's two request APIs its calls go to, which is a path under the
+declared address rather than a second wiring: the address, the credential, the transport, and the retry opt-out are the
+ones described here either way. An embedding endpoint has no such choice, because embeddings are served on one API only.
+
+### A worked example: an endpoint that is neither
+
+The names below are placeholders, and deliberately so — nothing in a declaration is matched against a list of vendors,
+models, or hosts:
+
+```json
+{
+  "Embeddings": {
+    "Endpoints": [
+      {
+        "Alias": "house-embeddings",
+        "Provider": "example-ai",
+        "Model": "example-embed-2",
+        "Dimension": 1024,
+        "DistanceMetric": "Cosine",
+        "NormalizeVectors": true,
+        "SupportsRequestedDimension": false,
+        "Address": "https://embeddings.example.test/v1",
+        "ApiKey": {
+          "Name": "house-embedding-key",
+          "SecretReference": "file:/etc/mailfathom/secrets/house-embedding-key"
+        }
+      }
+    ]
+  }
+}
+```
+
+Read across it: `Provider` and `Model` are what the profile records and what a stored vector is attributed to, and
+`Provider` never leaves the deployment; `Address` is where the request goes, and it carries the whole base path the
+service documents for its OpenAI-compatible surface, including any version segment; no `RoutedModelName` is written, so
+`Model` is also what the request routes on, which is right wherever the service knows the model by the vendor's own
+identifier; `Dimension` and `DistanceMetric` are what the vectors are and how they are compared, so both must match
+what the service actually returns rather than what a similarly named model returns elsewhere; and
+`SupportsRequestedDimension` is `false` because a service that ignores a requested width would otherwise be sent one
+and answer at its own.
+
+The chat half of the same service is a separate declaration under `Chat`, with its own alias and its own credential —
+[chat generation](chat-generation.md#a-worked-example-an-endpoint-that-is-neither) carries it.
+
+### Compatible is not verified
+
+"Speaks the OpenAI wire protocol" is a claim a service makes about itself, and MailFathom does not check it: it sends
+what this page describes and reports what comes back. The set this project has actually exercised is the two named
+above, and nothing else. A service absent from that set is not refused — the mechanism will reach it — but no claim is
+made here that it works, and the differences that decide it are ordinary rather than exotic: an OpenAI-compatible chat
+surface commonly has no embeddings route at all, a service may reject the requested-width parameter, and a model whose
+name matches one elsewhere may answer at a different width or with vectors that are not of unit length. Each of those
+surfaces as a *request refused* or an *unexpected vector shape* on the first call rather than at startup, because
+nothing here can ask a service what it serves without paying for a request.
+
+## What an address has to be
+
+**Absolute, and HTTPS.** Startup refuses anything else, naming the endpoint alias and the rule. The scheme is not a
+preference: the request carries a credential, so a plain `http` address would publish that credential to everyone on
+the path between this deployment and the service, and an endpoint declared once wrongly would go on doing it on every
+call.
+
+**Empty means the provider library's own default**, which is the first-party OpenAI API. That is a convenience for the
+one case it fits and a trap for every other, so any endpoint that is not first-party OpenAI writes the address out —
+including a cloud deployment, whose resource has an address of its own ending in `/openai/v1/`.
+
+One consequence is worth stating plainly, because it is the shape an operator most often arrives with: a model server
+on a private address, serving plain HTTP with no credential at all, cannot be declared. Neither rule reads the network —
+a loopback or private address is accepted where it is HTTPS and carries a credential, and refused where it is not,
+exactly as a public one would be.
 
 ## Authentication has two shapes
 
 An endpoint carries **either** a provider key **or** a Microsoft Entra credential, never both and never neither, and
-startup refuses any other combination. The rules below govern a declared chat endpoint identically, and one credential
-source resolves both — which is why an alias names one endpoint across the whole deployment rather than within one
-section.
+startup refuses any other combination, naming the alias. Neither is the shape a forgotten reference takes — an operator
+who wrote the address and the model and expects the endpoint to work learns it here rather than from a rejected call
+they paid for — and both is a declaration that does not say which one a request should present, which is a question no
+default here should answer on an operator's behalf. The rules below govern a declared chat endpoint identically, and
+one credential source resolves both — which is why an alias names one endpoint across the whole deployment rather than
+within one section.
 
 A key is a secret reference like every other credential this deployment holds, resolved per request — so rotating it
 behind an unchanged reference takes effect on the next call, with no cache to invalidate and no restart.
