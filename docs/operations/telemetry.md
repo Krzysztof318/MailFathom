@@ -54,7 +54,9 @@ the route template `/attachments/{capability}` in place of the path the request 
 because a download is real traffic an operator has to be able to see; what is removed is the one segment that is a
 secret. Nothing else in the pipeline writes it down: no log line here mentions a download, the exported log records
 carry no request scope, and the framework's own request logging is off at the shipped `Microsoft.AspNetCore` level of
-`Warning`.
+`Warning`. Two settings put the path back — that log level, and `Logging:Console:FormatterOptions:IncludeScopes`, which
+turns scopes on for the console output rather than for the exporter — and
+[the MCP endpoint](mcp-endpoint.md#the-one-route-on-this-surface-that-admits-no-credential) states what each one costs.
 
 Every tag on the metrics above is a bounded set — a protocol method, a transport kind, a negotiated version, one of the
 three tool names, an outcome — so none of them opens a time series per message or per person. The MCP SDK does tag a

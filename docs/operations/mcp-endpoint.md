@@ -110,9 +110,11 @@ exports carries the route template `/attachments/{capability}` in place of the p
 otherwise a deployment exporting traces would be shipping short-lived bearer credentials over mail to whatever stores
 them. The exported log records carry no request scope either, which is why: the scope ASP.NET Core opens around every
 request holds the path exactly as it arrived, so a database command logged during a download would have carried the
-capability with it. The one way to undo all of that is to lower `Logging:LogLevel:Microsoft.AspNetCore` from its
-shipped `Warning`, which turns on the framework's own request logging and writes the whole URL; do that while
-diagnosing something else and the capabilities issued during the window are in the log until they expire.
+capability with it. Two operator settings undo that, and both are ordinary things to reach for while diagnosing
+something else: lowering `Logging:LogLevel:Microsoft.AspNetCore` from its shipped `Warning` turns on the framework's own
+request logging, which writes the whole URL, and setting `Logging:Console:FormatterOptions:IncludeScopes` puts the
+unredacted request path on every console record a download produces — which a container log collector ships exactly as
+an exporter would. Turn either on and the capabilities issued during the window are in the log until they expire.
 
 [Email content](../features/email-content.md#what-a-download-link-is-and-what-bounds-it) records what the capability
 carries and how it is verified.
