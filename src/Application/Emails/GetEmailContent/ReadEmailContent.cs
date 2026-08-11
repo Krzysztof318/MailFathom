@@ -17,9 +17,9 @@ namespace MailFathom.Application.Emails.GetEmailContent;
 /// classification, retention, access, and erasure constraint of the mail it was read from. Nothing in it may be logged.
 /// </para>
 /// <para>
-/// It describes every attachment a message carries and adds their octets only where a request asked for them, within
-/// the two octet bounds the deployment configured. No other read model carries content at all, and the summary beside
-/// the list still counts what the message holds without describing any of it.
+/// It describes every attachment a message carries and adds a short-lived link to fetch one only where a request asked
+/// for it. No read model anywhere carries a file's octets, and the summary beside the list still counts what the
+/// message holds without describing any of it.
 /// </para>
 /// </remarks>
 public sealed record ReadEmailContent
@@ -59,18 +59,19 @@ public sealed record ReadEmailContent
     /// </remarks>
     public StoredEmailAttachmentSummary? AttachmentSummary { get; init; }
 
-    /// <summary>Gets one entry per attachment, described always and carrying octets only where the request asked for them.</summary>
+    /// <summary>Gets one entry per attachment, described always and carrying a link only where the request asked for one.</summary>
     /// <remarks>
     /// <para>
     /// Every read describes what a message carries — the file name, the media type, and the decoded size — because a
-    /// caller deciding whether a file is worth asking for needs all three, and a read that answered with a count alone
-    /// would leave it nothing to decide on. Whether the octets travel is what
-    /// <see cref="GetEmailContentRequest.IncludeAttachmentContent" /> asks, and each entry says which of the two it is.
+    /// caller deciding whether a file is worth fetching needs all three, and a read that answered with a count alone
+    /// would leave it nothing to decide on. Whether a link is minted is what
+    /// <see cref="GetEmailContentRequest.IncludeAttachmentDownloadLinks" /> asks, and each entry says which of the
+    /// answers it got.
     /// </para>
     /// <para>
     /// The descriptions are re-derived rather than stored, because file names are mail content that the row deliberately
     /// does not keep. Deriving them during the parse that produces the body costs nothing extra and guarantees they
-    /// describe the message they were read from, and the octets come from that same parse for the same reason.
+    /// describe the message they were read from, and it is that same parse whose walk order a link names.
     /// </para>
     /// <para>
     /// It is empty when the message's raw MIME was never stored locally, which
@@ -80,7 +81,7 @@ public sealed record ReadEmailContent
     /// they are counted in the summary instead.
     /// </para>
     /// </remarks>
-    public required IReadOnlyList<RenderedEmailAttachment> Attachments { get; init; }
+    public required IReadOnlyList<ReadEmailAttachment> Attachments { get; init; }
 
     /// <summary>Gets the flags a mail server last showed for the email, and when they were read.</summary>
     /// <remarks>Reading content never changes them: the whole operation is served from local storage and speaks to no mail server.</remarks>

@@ -92,8 +92,9 @@ second page could silently skip or repeat matches; ask a narrower question inste
 
 Takes the `storedEmailId` values a listing or search returned — at most ten, each named once — and returns, for each
 one, normalized headers, the plain-text body, optionally a sanitized HTML body, and every attachment it carries by name,
-type, and size. Set `includeAttachmentContent` to also receive **the files themselves as base64** — the one place a file
-leaves the server. Expect a much larger response for a message that carries any.
+type, and size. Set `includeAttachmentDownloadLinks` to also receive, for each file, **a short-lived URL that fetches
+it** over ordinary HTTP. No response ever carries a file's bytes, so a message with a video in it costs the same as one
+with a note.
 
 Reading the top few results of a search is therefore one call rather than one per message. The entries come back in the
 order you named them, and each carries either `content` or a `failure` saying why there is none, so one message this
@@ -108,16 +109,15 @@ Six parts of the result exist so that an agent does not misreport a message:
 - **An absent body has a reason.** `availability` distinguishes a message that displayed nothing from one MailFathom
   cannot decrypt, from one whose content the size limit deliberately kept out of storage, and from one that is simply
   waiting for storage room — which is the one case where asking again later returns the body.
-- **Attachments are described always, returned on request.** Every read tells you what each file is called, what it is,
-  and how large it is, because that is what you decide against when choosing whether to ask for one; `attachments` is
+- **Attachments are described always, fetched through a link.** Every read tells you what each file is called, what it
+  is, and how large it is, because that is what you decide against when choosing whether to fetch one; `attachments` is
   `[]` only when the message carries none. `attachmentCounts` says how many either way.
-- **A file comes back whole or not at all.** `contentState` is `notRequested` when you did not set
-  `includeAttachmentContent`, `returned` when `contentBase64` holds the entire file, `exceededAttachmentByteLimit` when
-  the file is larger than the server hands over in one attachment, and `readByteBudgetExhausted` when the files
-  returned before it used up the call's shared byte budget — worth retrying in a call naming fewer messages, though it
-  will not help when this message's own earlier attachments are what used the budget up. Nothing is ever returned in
-  part, so what you decode is either the file or nothing. The server's operator sets both limits, and raising the
-  budget is the only way to get a message whose files exceed it served in full.
+- **A link is a secret with a deadline.** `downloadState` is `notRequested` when you did not set
+  `includeAttachmentDownloadLinks`, `issued` when `downloadUrl` fetches the whole file until `downloadExpiresAt`, and
+  `unavailable` when this server issues no attachment links at all — which only its operator can change. Anyone holding
+  the URL can fetch that file without a credential, so fetch it once and do not log or store it; ten minutes is the
+  usual window and half an hour the most any server may allow. When it expires, call `get_email_content` again for a
+  new one.
 - **File names are sanitized.** An attachment name is untrusted text from the message; what is published is a bare,
   normalized name, with a flag saying whether it had to be rewritten.
 - **A too-long or repetitive list is refused, not trimmed.** More than ten identifiers, none at all, or the same one

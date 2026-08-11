@@ -44,6 +44,13 @@ One filter is deliberate: requests to the health-probe paths are not traced at a
 seconds for the life of the process and says the same thing every time — tracing it would fill a trace store with
 polling instead of work.
 
+One attribute is deliberately rewritten. An [attachment download](mcp-endpoint.md#the-one-route-on-this-surface-that-admits-no-credential)
+carries a signed capability in its path, and whoever holds it can fetch that file until it expires, so the span records
+the route template `/attachments/{capability}` in place of the path the request arrived with. The span itself is kept,
+because a download is real traffic an operator has to be able to see; what is removed is the one segment that is a
+secret. Nothing else in the pipeline writes it down: no log line here mentions a download, and the framework's own
+request logging is off at the shipped `Microsoft.AspNetCore` level of `Warning`.
+
 Every tag on the metrics above is a bounded set — a protocol method, a transport kind, a negotiated version, one of the
 three tool names, an outcome — so none of them opens a time series per message or per person. The MCP SDK does tag a
 metric with a resource URI, but only for the protocol's resource methods, and MailFathom's server publishes tools

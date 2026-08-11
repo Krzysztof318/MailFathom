@@ -115,12 +115,9 @@ internal sealed class MimeKitEmailMimeReader : IEmailMimeReader
         MimeMessage message,
         CancellationToken cancellationToken)
     {
-        // Extraction fills the lexical index and never publishes a part's octets, so it asks for none: the walk then
-        // measures every attachment and retains nothing of any of them.
-        var classification = await MimeAttachmentClassifier.ClassifyAsync(
-            message,
-            attachmentContent: null,
-            cancellationToken);
+        // The walk measures every attachment and retains nothing of any of them, which is the only reading there is:
+        // nothing in this system publishes a part's octets, so extraction and a reader ask the same question here.
+        var classification = await MimeAttachmentClassifier.ClassifyAsync(message, cancellationToken);
 
         var headers = MimeMessageHeaderReader.Read(message);
 

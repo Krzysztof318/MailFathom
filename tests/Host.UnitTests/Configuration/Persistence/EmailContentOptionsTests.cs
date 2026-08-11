@@ -146,62 +146,22 @@ public sealed class EmailContentOptionsTests
 
         // Assert
         Assert.Empty(results);
-        Assert.Equal(5 * 1024 * 1024, options.MaxAttachmentBytes);
-        Assert.Equal(10 * 1024 * 1024, options.MaxAttachmentBytesPerRead);
-    }
-
-    /// <summary>An attachment cannot be larger than the message carrying it, and a negative bound is nothing at all.</summary>
-    [Theory]
-    [InlineData(-1)]
-    [InlineData((25 * 1024 * 1024) + 1)]
-    public void Validate_AttachmentBoundOutsideTheAcceptedRange_FailsStartup(int maxAttachmentBytes)
-    {
-        // Arrange
-        var options = new EmailContentOptions
-        {
-            MaxAttachmentBytes = maxAttachmentBytes,
-            MaxAttachmentBytesPerRead = 100 * 1024 * 1024,
-        };
-
-        // Act
-        var results = Validate(options);
-
-        // Assert
-        Assert.Contains(
-            results,
-            result => result.MemberNames.Contains(nameof(EmailContentOptions.MaxAttachmentBytes)));
-    }
-
-    /// <summary>Zero is how a deployment says attachments are described and never handed over, so it is a setting rather than a defect.</summary>
-    [Fact]
-    public void Validate_AttachmentBoundsOfZero_AreAccepted()
-    {
-        // Arrange
-        var options = new EmailContentOptions
-        {
-            MaxAttachmentBytes = 0,
-            MaxAttachmentBytesPerRead = 0,
-        };
-
-        // Act
-        var results = Validate(options);
-
-        // Assert
-        Assert.Empty(results);
+        Assert.Null(options.AttachmentDownloads.PublicBaseAddress);
+        Assert.Equal(TimeSpan.FromMinutes(10), options.AttachmentDownloads.LinkLifetime);
     }
 
     /// <summary>
-    /// A budget that cannot carry one permitted attachment would withhold a file the other bound was set to allow, in
-    /// every call including one naming a single email.
+    /// The nested block is judged from here, because the options framework validates the annotations of the type it was
+    /// handed and never descends into a property's own object. Without this, an unusable download block would reach a
+    /// running deployment.
     /// </summary>
     [Fact]
-    public void Validate_AttachmentBudgetBelowThePerAttachmentBound_FailsStartup()
+    public void Validate_UnusableAttachmentDownloadBlock_FailsStartupNamingThatBlock()
     {
         // Arrange
         var options = new EmailContentOptions
         {
-            MaxAttachmentBytes = 5 * 1024 * 1024,
-            MaxAttachmentBytesPerRead = (5 * 1024 * 1024) - 1,
+            AttachmentDownloads = new AttachmentDownloadOptions { LinkLifetime = TimeSpan.FromHours(4) },
         };
 
         // Act
@@ -209,26 +169,8 @@ public sealed class EmailContentOptionsTests
 
         // Assert
         var result = Assert.Single(results);
-        Assert.Equal([nameof(EmailContentOptions.MaxAttachmentBytesPerRead)], result.MemberNames);
-        Assert.Contains("5242880", result.ErrorMessage, StringComparison.Ordinal);
-    }
-
-    /// <summary>A budget of exactly one permitted attachment serves a one-email call in full, so it is accepted.</summary>
-    [Fact]
-    public void Validate_AttachmentBudgetOfExactlyThePerAttachmentBound_IsAccepted()
-    {
-        // Arrange
-        var options = new EmailContentOptions
-        {
-            MaxAttachmentBytes = 5 * 1024 * 1024,
-            MaxAttachmentBytesPerRead = 5 * 1024 * 1024,
-        };
-
-        // Act
-        var results = Validate(options);
-
-        // Assert
-        Assert.Empty(results);
+        Assert.Equal([nameof(EmailContentOptions.AttachmentDownloads)], result.MemberNames);
+        Assert.Contains("LinkLifetime", result.ErrorMessage, StringComparison.Ordinal);
     }
 
     private static ValidationResult[] Validate(EmailContentOptions options)

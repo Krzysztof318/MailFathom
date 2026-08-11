@@ -65,6 +65,51 @@ the host is being composed, because whether an endpoint exists and what guards i
 Changing any of it takes effect on restart; it does not participate in configuration reload. The *material* behind a
 configured key is a separate matter and is re-read on every request, which is what lets a key rotate without one.
 
+## The one route on this surface that admits no credential
+
+Beside the protocol route, an enabled MCP endpoint serves `GET /attachments/<capability>` on the same listeners. It is
+what a `get_email_content` link points at, and it **requires no credential**: the signed capability in the URL is the
+whole of its access control. A link exists to be handed to whatever actually fetches files — a browser, a downloader, a
+client's own HTTP stack — and none of those can attach this endpoint's key, certificate, or token, so requiring one
+would make the capability unusable by its only callers.
+
+What bounds it instead:
+
+- The capability names exactly one attachment of one email, carries an HMAC-SHA256 tag verified in constant time, and
+  expires within minutes — ten by default, thirty at the most this product permits.
+- The signing key is derived per operation from the deployment's
+  [data-encryption key ring](secret-provisioning.md#the-data-encryption-key). A deployment configuring none issues no link,
+  and neither does one that has not declared `EmailContent:AttachmentDownloads:PublicBaseAddress`.
+- The address a link points at is that declared value rather than the request's `Host` header, so nothing a caller sends
+  decides where the URL it receives resolves to.
+- Redemption reads the mailbox afresh, so a link dies with the message it points at. An expired capability, a forged
+  one, and one whose mail is gone are all `404` with the same body.
+- It rides this endpoint's listeners, its transport, and its per-caller rate limit. Because it presents no credential,
+  it spends the surface's shared anonymous bucket — which is what a rate limit is for on an unauthenticated route
+  serving mail content.
+
+**What does not cover it are the two checks written for the protocol route**, both of which are scoped to `/mcp`
+deliberately. A configured `ClientCertificateProfiles` list is not enforced here, because a client certificate is
+exactly the kind of credential a downloader cannot present, and the origin allow-list is not consulted, because a
+browser navigating to a URL sends no `Origin` header to check. A deployment that requires mutual TLS on this endpoint is
+therefore still handing out links anything on the network can redeem within their window; if that is not the posture you
+want, leave `EmailContent:AttachmentDownloads:PublicBaseAddress` unset and no link is ever issued.
+
+Two consequences for a deployment. **Serve this endpoint over HTTPS if anything but this machine reaches it**, since a
+capability in a URL is a secret in transit; the address setting refuses clear text to a non-loopback host for that
+reason. And **a reverse proxy in front of this endpoint must pass `/attachments/` through**, or every issued link
+resolves to nothing while the rest of the tool keeps working.
+
+**Nothing records the capability.** MailFathom writes no log line about a download, and the request span this host
+exports carries the route template `/attachments/{capability}` in place of the path the request actually arrived with —
+otherwise a deployment exporting traces would be shipping short-lived bearer credentials over mail to whatever stores
+them. The one way to undo that is to lower `Logging:LogLevel:Microsoft.AspNetCore` from its shipped `Warning`, which
+turns on the framework's own request logging and writes the whole URL; do that while diagnosing something else and the
+capabilities issued during the window are in the log until they expire.
+
+[Email content](../features/email-content.md#what-a-download-link-is-and-what-bounds-it) records what the capability
+carries and how it is verified.
+
 ## Authentication
 
 **`Authentication` is a list of credentials.** The three methods identify different kinds of caller — a key belongs to a

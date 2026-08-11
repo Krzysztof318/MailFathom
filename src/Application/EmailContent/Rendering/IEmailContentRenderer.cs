@@ -38,9 +38,9 @@ public interface IEmailContentRenderer
     /// before the markup, because the caller's default representation must not be the one a shared budget starves.
     /// </para>
     /// <para>
-    /// Attachment octets are materialized only where <paramref name="bounds" /> asks for them, and only for a part that
-    /// fits both octet bounds. An implementation never returns part of a file: a bound removes the content and names
-    /// itself instead.
+    /// No attachment octet is ever materialized here. An implementation describes every part a message carries — its
+    /// name, its media type, and the size it decodes to — and keeps none of what it decoded, so rendering a message
+    /// costs the same whether it carries a file or ten.
     /// </para>
     /// </remarks>
     Task<EmailContentRenderingResult> RenderAsync(

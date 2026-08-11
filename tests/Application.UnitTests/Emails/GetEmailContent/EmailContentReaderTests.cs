@@ -7,6 +7,7 @@ using System.Security.Cryptography;
 using System.Text;
 using MailFathom.Application.Accounts;
 using MailFathom.Application.EmailContent;
+using MailFathom.Application.EmailContent.Attachments;
 using MailFathom.Application.EmailContent.Rendering;
 using MailFathom.Application.EmailContent.Repair;
 using MailFathom.Application.EmailContent.Storage;
@@ -42,7 +43,7 @@ public sealed class EmailContentReaderTests
 
         // Act
         var result = await reader.ReadContentAsync(
-            RequestFor([summary.StoredEmailId], includeAttachmentContent: true),
+            RequestFor([summary.StoredEmailId], includeAttachmentDownloadLinks: true),
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -60,7 +61,7 @@ public sealed class EmailContentReaderTests
 
     /// <summary>The per-attachment list is re-derived, and what it describes must be what the stored row counted.</summary>
     [Fact]
-    public async Task ReadContentAsync_AttachmentContentRequested_ReturnsAttachmentsConsistentWithThePersistedSummary()
+    public async Task ReadContentAsync_AttachmentLinksRequested_ReturnsAttachmentsConsistentWithThePersistedSummary()
     {
         // Arrange
         var summary = SyntheticEmailSummaries.Create(attachmentCount: 2, inlineResourceCount: 1);
@@ -76,7 +77,7 @@ public sealed class EmailContentReaderTests
 
         // Act
         var result = await reader.ReadContentAsync(
-            RequestFor([summary.StoredEmailId], includeAttachmentContent: true),
+            RequestFor([summary.StoredEmailId], includeAttachmentDownloadLinks: true),
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -96,24 +97,19 @@ public sealed class EmailContentReaderTests
 
     /// <summary>
     /// A read that wanted the message rather than its files still learns what those files are, because that is what a
-    /// caller decides against when it chooses whether to ask for one. Only the octets wait for the flag.
+    /// caller decides against when it chooses whether to fetch one. Only the capability waits for the flag.
     /// </summary>
     [Fact]
-    public async Task ReadContentAsync_AttachmentContentNotRequested_DescribesTheAttachmentAndReturnsNoOctets()
+    public async Task ReadContentAsync_AttachmentLinksNotRequested_DescribesTheAttachmentAndMintsNothing()
     {
         // Arrange
         var summary = SyntheticEmailSummaries.Create(attachmentCount: 1);
+        var linkIssuer = new RecordingAttachmentDownloadLinkIssuer();
         var reader = ReaderOver(
             summary,
             RendererReturning(RenderingOf(
-                attachments:
-                [
-                    AttachmentOf(
-                        "payslip.pdf",
-                        "application/pdf",
-                        2048,
-                        EmailAttachmentContent.NotRequested),
-                ])));
+                attachments: [AttachmentOf("payslip.pdf", "application/pdf", 2048)])),
+            linkIssuer: linkIssuer);
 
         // Act
         var result = await reader.ReadContentAsync(
@@ -126,12 +122,103 @@ public sealed class EmailContentReaderTests
         Assert.Equal("payslip.pdf", attachment.Description.FileName?.Value);
         Assert.Equal("application/pdf", attachment.Description.MediaType);
         Assert.Equal(2048, attachment.Description.DecodedSizeOctets);
-        Assert.Equal(EmailAttachmentContentAvailability.NotRequested, attachment.Content.Availability);
-        Assert.True(attachment.Content.Octets.IsEmpty);
+        Assert.Equal(AttachmentDownloadAvailability.NotRequested, attachment.Download.Availability);
+        Assert.Null(attachment.Download.Link);
+        Assert.Empty(linkIssuer.Requested);
 
         Assert.NotNull(content.AttachmentSummary);
         Assert.Equal(1, content.AttachmentSummary.AttachmentCount);
         Assert.Equal(2048, content.AttachmentSummary.TotalSizeOctets);
+    }
+
+    /// <summary>A link is what a caller receives for a file, and it names the file it was minted for.</summary>
+    [Fact]
+    public async Task ReadContentAsync_AttachmentLinksRequested_IssuesOneLinkPerAttachmentInTheOrderTheyWereDescribed()
+    {
+        // Arrange
+        var summary = SyntheticEmailSummaries.Create(attachmentCount: 2);
+        var linkIssuer = new RecordingAttachmentDownloadLinkIssuer();
+        var reader = ReaderOver(
+            summary,
+            RendererReturning(RenderingOf(
+                attachments:
+                [
+                    AttachmentOf("first.pdf", "application/pdf", 1024),
+                    AttachmentOf("second.png", "image/png", 2048),
+                ])),
+            linkIssuer: linkIssuer);
+
+        // Act
+        var result = await reader.ReadContentAsync(
+            RequestFor([summary.StoredEmailId], includeAttachmentDownloadLinks: true),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        var attachments = ContentOf(Assert.Single(result.Emails)).Attachments;
+        Assert.Equal([(summary.StoredEmailId, 2)], linkIssuer.Requested);
+        Assert.Equal(
+            [AttachmentDownloadAvailability.Issued, AttachmentDownloadAvailability.Issued],
+            attachments.Select(attachment => attachment.Download.Availability));
+        Assert.Equal(
+            [
+                $"https://mailfathom.example.test/attachments/{summary.StoredEmailId.Value:N}-0",
+                $"https://mailfathom.example.test/attachments/{summary.StoredEmailId.Value:N}-1",
+            ],
+            attachments.Select(attachment => attachment.Download.Link?.Address.AbsoluteUri));
+        Assert.All(
+            attachments,
+            attachment => Assert.Equal(
+                RecordingAttachmentDownloadLinkIssuer.DefaultExpiry,
+                attachment.Download.Link?.ExpiresAt));
+    }
+
+    /// <summary>
+    /// A deployment that mints no links still answers everything else a read asks. The attachment says so rather than
+    /// arriving as one nobody asked about, because the two lead a caller to different actions: one is worth asking
+    /// again for, and only an operator can change the other.
+    /// </summary>
+    [Fact]
+    public async Task ReadContentAsync_DeploymentIssuesNoLinks_DescribesTheAttachmentAndReportsThatNoneCanBeIssued()
+    {
+        // Arrange
+        var summary = SyntheticEmailSummaries.Create(attachmentCount: 1);
+        var linkIssuer = new RecordingAttachmentDownloadLinkIssuer(canIssueLinks: false);
+        var reader = ReaderOver(
+            summary,
+            RendererReturning(RenderingOf(
+                attachments: [AttachmentOf("report.pdf", "application/pdf", 1024)])),
+            linkIssuer: linkIssuer);
+
+        // Act
+        var result = await reader.ReadContentAsync(
+            RequestFor([summary.StoredEmailId], includeAttachmentDownloadLinks: true),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        var attachment = Assert.Single(ContentOf(Assert.Single(result.Emails)).Attachments);
+        Assert.Equal(AttachmentDownloadAvailability.Unavailable, attachment.Download.Availability);
+        Assert.Null(attachment.Download.Link);
+        Assert.Equal("report.pdf", attachment.Description.FileName?.Value);
+        Assert.Empty(linkIssuer.Requested);
+    }
+
+    /// <summary>Minting resolves key material, so a message with nothing to mint for must not reach the issuer at all.</summary>
+    [Fact]
+    public async Task ReadContentAsync_EmailCarryingNoAttachments_MintsNothingEvenWhenLinksWereRequested()
+    {
+        // Arrange
+        var summary = SyntheticEmailSummaries.Create();
+        var linkIssuer = new RecordingAttachmentDownloadLinkIssuer();
+        var reader = ReaderOver(summary, RendererReturning(RenderingOf()), linkIssuer: linkIssuer);
+
+        // Act
+        var result = await reader.ReadContentAsync(
+            RequestFor([summary.StoredEmailId], includeAttachmentDownloadLinks: true),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Empty(ContentOf(Assert.Single(result.Emails)).Attachments);
+        Assert.Empty(linkIssuer.Requested);
     }
 
     /// <summary>Zero attachments is a finding a caller can act on, so it is stated under either setting.</summary>
@@ -139,7 +226,7 @@ public sealed class EmailContentReaderTests
     [InlineData(false)]
     [InlineData(true)]
     public async Task ReadContentAsync_EmailCarryingNoAttachments_ReportsZeroUnderEitherSetting(
-        bool includeAttachmentContent)
+        bool includeAttachmentDownloadLinks)
     {
         // Arrange
         var summary = SyntheticEmailSummaries.Create();
@@ -147,7 +234,7 @@ public sealed class EmailContentReaderTests
 
         // Act
         var result = await reader.ReadContentAsync(
-            RequestFor([summary.StoredEmailId], includeAttachmentContent: includeAttachmentContent),
+            RequestFor([summary.StoredEmailId], includeAttachmentDownloadLinks: includeAttachmentDownloadLinks),
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -218,20 +305,22 @@ public sealed class EmailContentReaderTests
             Arg.Any<CancellationToken>());
     }
 
-    /// <summary>The same holds for the attachment flag: a batch returns content consistently or not at all.</summary>
+    /// <summary>The same holds for the attachment flag: a batch mints links consistently or not at all.</summary>
     [Fact]
-    public async Task ReadContentAsync_AttachmentContentRequestedForSeveralEmails_ReturnsItForEveryOneOfThem()
+    public async Task ReadContentAsync_AttachmentLinksRequestedForSeveralEmails_IssuesThemForEveryOneOfThem()
     {
         // Arrange
         var summaries = SummariesOf(3);
+        var linkIssuer = new RecordingAttachmentDownloadLinkIssuer();
         var reader = ReaderOver(
             summaries,
             RendererReturning(RenderingOf(
-                attachments: [AttachmentOf("report.pdf", "application/pdf", 1024)])));
+                attachments: [AttachmentOf("report.pdf", "application/pdf", 1024)])),
+            linkIssuer: linkIssuer);
 
         // Act
         var result = await reader.ReadContentAsync(
-            RequestFor(IdentitiesOf(summaries), includeAttachmentContent: true),
+            RequestFor(IdentitiesOf(summaries), includeAttachmentDownloadLinks: true),
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -239,8 +328,14 @@ public sealed class EmailContentReaderTests
         Assert.All(
             result.Emails,
             email => Assert.Equal(
-                EmailAttachmentContentAvailability.Returned,
-                ContentOf(email).Attachments.Single().Content.Availability));
+                AttachmentDownloadAvailability.Issued,
+                ContentOf(email).Attachments.Single().Download.Availability));
+
+        // One call per email rather than one for the batch, because the position a capability names is a position
+        // within its own message.
+        Assert.Equal(
+            [.. IdentitiesOf(summaries).Select(storedEmailId => (storedEmailId, 1))],
+            linkIssuer.Requested);
     }
 
     /// <summary>A message with no HTML part returns none of it even when it was asked for.</summary>
@@ -382,136 +477,35 @@ public sealed class EmailContentReaderTests
     }
 
     /// <summary>
-    /// The attachment budget is carried between emails the way the character budget is, so the total content one call
-    /// returns is bounded however many files the emails it names carry.
+    /// A file's size decides nothing about what a read returns, because a link is the same few hundred characters
+    /// whatever it points at. The character budget is untouched by one, which is what makes the two bounds this use case
+    /// still carries about text alone.
     /// </summary>
     [Fact]
-    public async Task ReadContentAsync_SeveralEmailsCarryingAttachments_SpendsTheAttachmentBudgetAcrossThem()
+    public async Task ReadContentAsync_EmailsCarryingLargeAttachments_LeavesTheCharacterBudgetToTheBodies()
     {
         // Arrange
         var summaries = SummariesOf(3);
-        var renderer = new BoundedBodyEmailContentRenderer("Body", attachmentOctetCounts: [400]);
+        var renderer = new BoundedBodyEmailContentRenderer(
+            new string('a', 60),
+            attachmentOctetCounts: [50 * 1024 * 1024]);
         var reader = ReaderOver(
             summaries,
             renderer,
-            readOptions: new EmailContentReadOptions
-            {
-                MaxAttachmentBytes = 500,
-                MaxAttachmentBytesPerRead = 1000,
-            });
+            readOptions: new EmailContentReadOptions { MaxBodyCharacters = 100, MaxCharactersPerRead = 200 });
 
         // Act
         var result = await reader.ReadContentAsync(
-            RequestFor(IdentitiesOf(summaries), includeAttachmentContent: true),
+            RequestFor(IdentitiesOf(summaries), includeAttachmentDownloadLinks: true),
             TestContext.Current.CancellationToken);
 
         // Assert
-        Assert.Equal(
-            [1000, 600, 200],
-            renderer.ObservedAttachmentBounds.Select(bounds => bounds?.RemainingOctetsForRead));
-
-        // The third email's file is larger than the budget it was reached with, so it is described and withheld.
-        Assert.Equal(
-            [400, 400, 0],
-            result.Emails.Select(email => ContentOf(email).Attachments?.Single().Content.Octets.Length));
-    }
-
-    /// <summary>
-    /// A withheld attachment cost the caller nothing, so it must not be charged to the budget: charging it would
-    /// withhold the next file on the strength of one that was never sent.
-    /// </summary>
-    [Fact]
-    public async Task ReadContentAsync_AttachmentAboveThePerAttachmentBound_LeavesTheBudgetForTheNextEmail()
-    {
-        // Arrange
-        var summaries = SummariesOf(2);
-        var renderer = new BoundedBodyEmailContentRenderer("Body", attachmentOctetCounts: [900]);
-        var reader = ReaderOver(
-            summaries,
-            renderer,
-            readOptions: new EmailContentReadOptions
-            {
-                MaxAttachmentBytes = 100,
-                MaxAttachmentBytesPerRead = 1000,
-            });
-
-        // Act
-        var result = await reader.ReadContentAsync(
-            RequestFor(IdentitiesOf(summaries), includeAttachmentContent: true),
-            TestContext.Current.CancellationToken);
-
-        // Assert
-        Assert.Equal([1000, 1000], renderer.ObservedAttachmentBounds.Select(bounds => bounds?.RemainingOctetsForRead));
+        Assert.Equal([200, 140, 80], renderer.ObservedRemainingCharacters);
         Assert.All(
             result.Emails,
             email => Assert.Equal(
-                EmailAttachmentContentAvailability.ExceededAttachmentByteLimit,
-                ContentOf(email).Attachments?.Single().Content.Availability));
-    }
-
-    /// <summary>
-    /// The budget falls to the attachments of one message as much as to the emails of one call, so a message carrying
-    /// more than the budget in files withholds its later ones even when nothing else was named. That is what stops
-    /// <c>ReadByteBudgetExhausted</c> from being a promise that a narrower call returns the file, and it is the one
-    /// place the attachment pair is weaker than the character pair — nothing bounds how many attachments a message
-    /// carries, so no floor on the budget could cover a single email the way the one on the character budget does.
-    /// </summary>
-    [Fact]
-    public async Task ReadContentAsync_OneEmailWhoseOwnAttachmentsExceedTheBudget_WithholdsTheLaterOnes()
-    {
-        // Arrange
-        var summary = SyntheticEmailSummaries.Create(attachmentCount: 3);
-        var reader = ReaderOver(
-            summary,
-            new BoundedBodyEmailContentRenderer("Body", attachmentOctetCounts: [400, 400, 400]),
-            readOptions: new EmailContentReadOptions
-            {
-                MaxAttachmentBytes = 500,
-                MaxAttachmentBytesPerRead = 1000,
-            });
-
-        // Act
-        var result = await reader.ReadContentAsync(
-            RequestFor([summary.StoredEmailId], includeAttachmentContent: true),
-            TestContext.Current.CancellationToken);
-
-        // Assert
-        var attachments = ContentOf(Assert.Single(result.Emails)).Attachments;
-        Assert.Equal(
-            [
-                EmailAttachmentContentAvailability.Returned,
-                EmailAttachmentContentAvailability.Returned,
-                EmailAttachmentContentAvailability.ReadByteBudgetExhausted,
-            ],
-            attachments.Select(attachment => attachment.Content.Availability));
-
-        // Every one of them is under the per-attachment bound, so nothing here is a file this deployment refuses.
-        Assert.All(attachments, attachment => Assert.Equal(400, attachment.Description.DecodedSizeOctets));
-    }
-
-    /// <summary>
-    /// A read that did not ask for content must not decode any, which is a bound on the work as much as on what is
-    /// published: the bounds are absent, so the adapter is never asked to retain an octet. The description still comes
-    /// back, because measuring a part is what the same walk does anyway.
-    /// </summary>
-    [Fact]
-    public async Task ReadContentAsync_AttachmentContentNotRequested_AsksTheRendererForNoAttachmentContent()
-    {
-        // Arrange
-        var summary = SyntheticEmailSummaries.Create(attachmentCount: 1);
-        var renderer = new BoundedBodyEmailContentRenderer("Body", attachmentOctetCounts: [64]);
-        var reader = ReaderOver(summary, renderer);
-
-        // Act
-        var result = await reader.ReadContentAsync(
-            RequestFor([summary.StoredEmailId]),
-            TestContext.Current.CancellationToken);
-
-        // Assert
-        Assert.Equal([null], renderer.ObservedAttachmentBounds);
-        var attachment = Assert.Single(ContentOf(Assert.Single(result.Emails)).Attachments);
-        Assert.Equal(64, attachment.Description.DecodedSizeOctets);
-        Assert.Equal(EmailAttachmentContentAvailability.NotRequested, attachment.Content.Availability);
+                AttachmentDownloadAvailability.Issued,
+                ContentOf(email).Attachments.Single().Download.Availability));
     }
 
     /// <summary>An encrypted body is a state of its own, never an empty message.</summary>
@@ -552,7 +546,7 @@ public sealed class EmailContentReaderTests
 
         // Act
         var result = await reader.ReadContentAsync(
-            RequestFor([summary.StoredEmailId], includeAttachmentContent: true),
+            RequestFor([summary.StoredEmailId], includeAttachmentDownloadLinks: true),
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -597,7 +591,7 @@ public sealed class EmailContentReaderTests
 
         // Act
         var result = await reader.ReadContentAsync(
-            RequestFor([summary.StoredEmailId], includeAttachmentContent: true),
+            RequestFor([summary.StoredEmailId], includeAttachmentDownloadLinks: true),
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -889,8 +883,8 @@ public sealed class EmailContentReaderTests
     private static GetEmailContentRequest RequestFor(
         IReadOnlyList<StoredEmailId> storedEmailIds,
         bool includeSanitizedHtml = false,
-        bool includeAttachmentContent = false) =>
-        GetEmailContentRequest.Create(storedEmailIds, includeSanitizedHtml, includeAttachmentContent);
+        bool includeAttachmentDownloadLinks = false) =>
+        GetEmailContentRequest.Create(storedEmailIds, includeSanitizedHtml, includeAttachmentDownloadLinks);
 
     private static ReadEmailContent ContentOf(EmailContentReadOutcome outcome) =>
         outcome.Content ?? throw new InvalidOperationException(
@@ -911,12 +905,14 @@ public sealed class EmailContentReaderTests
         IEmailContentRepairRequestStore? repairRequestStore = null,
         IEmailContentStore? contentStore = null,
         IMailAccountCatalog? accountCatalog = null,
+        IAttachmentDownloadLinkIssuer? linkIssuer = null,
         EmailContentReadOptions? readOptions = null) => new(
         SummaryReaderReturning(summary),
         contentStore ?? ContentStoreReturning(IntactContent()),
         renderer,
         repairRequestStore ?? new RecordingEmailContentRepairRequestStore(),
         accountCatalog ?? CatalogServing(MailAccountId.Create(summary?.AccountId.Value ?? SyntheticEmailSummaries.DefaultAccountId)),
+        linkIssuer ?? new RecordingAttachmentDownloadLinkIssuer(),
         readOptions ?? new EmailContentReadOptions());
 
     private static EmailContentReader ReaderOver(
@@ -925,12 +921,14 @@ public sealed class EmailContentReaderTests
         IEmailContentRepairRequestStore? repairRequestStore = null,
         IEmailContentStore? contentStore = null,
         IMailAccountCatalog? accountCatalog = null,
+        IAttachmentDownloadLinkIssuer? linkIssuer = null,
         EmailContentReadOptions? readOptions = null) => new(
         SummaryReaderOver(summaries),
         contentStore ?? ContentStoreReturning(IntactContent()),
         renderer,
         repairRequestStore ?? new RecordingEmailContentRepairRequestStore(),
         accountCatalog ?? CatalogServing(MailAccountId.Create(SyntheticEmailSummaries.DefaultAccountId)),
+        linkIssuer ?? new RecordingAttachmentDownloadLinkIssuer(),
         readOptions ?? new EmailContentReadOptions());
 
     private static IStoredEmailSummaryReader SummaryReaderReturning(EmailSummary? summary)
@@ -1003,7 +1001,7 @@ public sealed class EmailContentReaderTests
         string plainText = "Body",
         EmailBodyRepresentation? sanitizedHtml = null,
         bool bodyIsEncrypted = false,
-        IReadOnlyList<RenderedEmailAttachment>? attachments = null,
+        IReadOnlyList<ExtractedEmailAttachment>? attachments = null,
         int inlineResourceCount = 0) =>
         RenderingOf(
             new EmailBodyRepresentation(plainText, plainText.Length, EmailBodyTruncation.None),
@@ -1016,7 +1014,7 @@ public sealed class EmailContentReaderTests
         EmailBodyRepresentation plainText,
         EmailBodyRepresentation? sanitizedHtml = null,
         bool bodyIsEncrypted = false,
-        IReadOnlyList<RenderedEmailAttachment>? attachments = null,
+        IReadOnlyList<ExtractedEmailAttachment>? attachments = null,
         int inlineResourceCount = 0) => new(
         new EmailContentHeaders(
             "Subject",
@@ -1028,21 +1026,19 @@ public sealed class EmailContentReaderTests
         sanitizedHtml,
         bodyIsEncrypted,
         EmailAttachmentSummary.Create(
-            attachments?.Select(attachment => attachment.Description) ?? [],
+            attachments ?? [],
             inlineResourceCount,
             isEncrypted: bodyIsEncrypted,
             carriesUnverifiedSignature: false,
             containsUnexpandedTnefPart: false),
         attachments ?? []);
 
-    /// <summary>Builds one attachment a rendering returned, with content unless a bound is being modelled.</summary>
-    private static RenderedEmailAttachment AttachmentOf(
+    /// <summary>Builds the description of one attachment a rendering returned.</summary>
+    private static ExtractedEmailAttachment AttachmentOf(
         string fileName,
         string mediaType,
-        long decodedSizeOctets,
-        EmailAttachmentContent? content = null) => new(
-        new ExtractedEmailAttachment(AttachmentFileNameOf(fileName), mediaType, decodedSizeOctets),
-        content ?? EmailAttachmentContent.Returned(new byte[decodedSizeOctets]));
+        long decodedSizeOctets) =>
+        new(AttachmentFileNameOf(fileName), mediaType, decodedSizeOctets);
 
     private static AttachmentFileName AttachmentFileNameOf(string fileName) =>
         AttachmentFileName.TryNormalize(fileName, out var normalized)

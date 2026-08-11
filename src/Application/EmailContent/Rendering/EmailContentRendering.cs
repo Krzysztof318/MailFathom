@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Application.Emails.Extraction;
 using MailFathom.Application.Emails.Summaries;
 
 namespace MailFathom.Application.EmailContent.Rendering;
@@ -12,10 +13,7 @@ namespace MailFathom.Application.EmailContent.Rendering;
 /// <param name="SanitizedHtmlBody">The sanitized HTML body, present only when it was asked for and the message actually has an HTML body part.</param>
 /// <param name="BodyIsEncrypted">Whether the message's own body arrived inside a cryptographic envelope and could not be read here.</param>
 /// <param name="AttachmentSummary">What the message carries besides its body, counted whether or not anything asked to describe it.</param>
-/// <param name="Attachments">
-/// One entry per attachment, each pairing the description the parse produced with the octets the bounds allowed, which
-/// are absent when the bounds asked for no attachment content.
-/// </param>
+/// <param name="Attachments">One entry per attachment, described and carrying nothing of what it holds.</param>
 /// <remarks>
 /// <para>
 /// One rendering answers every question this read asks, because they are all answers about the same parse. Producing
@@ -39,4 +37,4 @@ public sealed record EmailContentRendering(
     EmailBodyRepresentation? SanitizedHtmlBody,
     bool BodyIsEncrypted,
     EmailAttachmentSummary AttachmentSummary,
-    IReadOnlyList<RenderedEmailAttachment> Attachments);
+    IReadOnlyList<ExtractedEmailAttachment> Attachments);

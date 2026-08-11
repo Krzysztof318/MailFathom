@@ -46,6 +46,13 @@ internal sealed class DataEncryptionKeyRing
         this.secretReferenceResolver = secretReferenceResolver;
     }
 
+    /// <summary>Gets whether the deployment configures any key material at all.</summary>
+    /// <remarks>
+    /// An absent ring is a supported deployment — ADR 0005 makes the section required by whatever first seals a value,
+    /// not by starting — so a capability that needs key material asks this rather than failing when it finds none.
+    /// </remarks>
+    public bool IsConfigured => this.readSettings().Keys.Count > 0;
+
     /// <summary>Resolves the key new values are sealed under.</summary>
     /// <param name="cancellationToken">Cancels the resolution.</param>
     /// <returns>The active key, which the caller owns and must dispose.</returns>
@@ -68,11 +75,36 @@ internal sealed class DataEncryptionKeyRing
     {
         ArgumentNullException.ThrowIfNull(keyId);
 
-        var settings = this.readSettings();
-
-        var reference = settings.Keys.FirstOrDefault(key => string.Equals(key.KeyId, keyId, StringComparison.Ordinal))
+        return await this.FindKeyAsync(keyId, cancellationToken)
             ?? throw new InvalidOperationException(
                 $"The data-encryption key ring configures no key '{keyId}'. A stored value names it, so the key was removed while values still referenced it.");
+    }
+
+    /// <summary>Resolves a key whose identifier came from somewhere this deployment does not vouch for.</summary>
+    /// <param name="keyId">The identifier to look up, which may name nothing.</param>
+    /// <param name="cancellationToken">Cancels the resolution.</param>
+    /// <returns>The named key, which the caller owns and must dispose, or <see langword="null" /> when the ring configures no such key.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="keyId" /> is <see langword="null" />.</exception>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown when the ring does configure the key and its material no longer resolves or decodes, which is a
+    /// deployment fault rather than something a caller supplied.
+    /// </exception>
+    /// <remarks>
+    /// An unknown identifier is an ordinary answer here, unlike in <see cref="ResolveKeyAsync" />, because the caller is
+    /// verifying something presented to it: a forged capability naming a key that never existed must be refused rather
+    /// than raised, and the two are indistinguishable to whoever presented it either way.
+    /// </remarks>
+    public async Task<DataEncryptionKey?> FindKeyAsync(string keyId, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(keyId);
+
+        var settings = this.readSettings();
+
+        var reference = settings.Keys.FirstOrDefault(key => string.Equals(key.KeyId, keyId, StringComparison.Ordinal));
+        if (reference is null)
+        {
+            return null;
+        }
 
         var resolution = await this.secretReferenceResolver.ResolveAsync(reference.Material.SecretReference, cancellationToken);
 

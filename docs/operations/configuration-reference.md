@@ -232,16 +232,22 @@ hybridly. [Email search](../features/email-search.md) records how snippets are c
 
 ## `EmailContent`
 
-What one `get_email_content` call may hand back, in text and in files. The two pairs are spent independently, because a
-caller asks for bodies and for attachments separately and base64 makes a byte cost a third more of a response than a
-character does. [Email content](../features/email-content.md) records how each bound is applied and reported.
+What one `get_email_content` call may hand back, and where the files it describes are fetched from. Only text is
+bounded here: no response carries an attachment's bytes, so a file costs a response the length of a URL whatever it
+weighs. [Email content](../features/email-content.md) records how each bound is applied and reported.
 
 | Key | Type | Default | Constraint | Change |
 | --- | --- | --- | --- | --- |
 | `EmailContent:MaxBodyCharacters` | int | `100000` | 1000 – 1000000; each body representation is truncated to it, explicitly | restart |
 | `EmailContent:MaxCharactersPerRead` | int | `200000` | 2000 – 2000000, and at least twice `MaxBodyCharacters`; the body characters one call returns across every email it names | restart |
-| `EmailContent:MaxAttachmentBytes` | int | `5242880` | 0 – 26214400; the decoded size of one attachment whose content is returned, where `0` returns no attachment content at all | restart |
-| `EmailContent:MaxAttachmentBytesPerRead` | int | `10485760` | 0 – 104857600, and at least `MaxAttachmentBytes`; the attachment bytes one call returns across every email it names | restart |
+| `EmailContent:AttachmentDownloads:PublicBaseAddress` | url | — | Absolute, `https` unless the host is loopback, no path, no query, no fragment; a deployment that declares none issues no attachment link at all | restart |
+| `EmailContent:AttachmentDownloads:LinkLifetime` | duration | `00:10:00` | 1 to 30 minutes; how long a minted link stays redeemable, refused outside that range rather than clamped | restart |
+
+**`PublicBaseAddress` is the address clients reach this deployment at, and it has no default on purpose.** A link is
+composed from it rather than from the request's `Host` header, so nothing a caller sends can decide where the URL it
+receives points. Issuing links also needs a [data-encryption key ring](#dataencryption): the signing key is derived from
+it rather than provisioned separately, so a deployment that configures no ring serves every other part of a read and
+issues no link.
 
 ## `Embeddings`
 

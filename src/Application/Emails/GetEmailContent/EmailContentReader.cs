@@ -5,9 +5,11 @@
 using System.Collections.ObjectModel;
 using MailFathom.Application.Accounts;
 using MailFathom.Application.EmailContent;
+using MailFathom.Application.EmailContent.Attachments;
 using MailFathom.Application.EmailContent.Rendering;
 using MailFathom.Application.EmailContent.Repair;
 using MailFathom.Application.EmailContent.Storage;
+using MailFathom.Application.Emails.Extraction;
 using MailFathom.Application.Emails.Summaries;
 using MailFathom.Domain.Emails;
 
@@ -28,11 +30,15 @@ namespace MailFathom.Application.Emails.GetEmailContent;
 /// before anything is read.
 /// </para>
 /// <para>
-/// Four bounds stand between a caller and a mailbox, and every one of them is the deployment's rather than the
-/// request's. Each body representation is bounded on its own and the call as a whole has a character budget; each
-/// attachment's content is bounded on its own and the call as a whole has an octet budget. Both budgets are spent in
-/// the order the emails were named, and everything they cut says which bound cut it, so a caller can tell a message
-/// worth reading alone from a batch worth splitting.
+/// Two bounds stand between a caller and a mailbox, and both are the deployment's rather than the request's: each body
+/// representation is bounded on its own, and the call as a whole has a character budget spent in the order the emails
+/// were named. Everything they cut says which bound cut it, so a caller can tell a message worth reading alone from a
+/// batch worth splitting. Attachments are subject to neither, because no octet of one is ever returned here.
+/// </para>
+/// <para>
+/// What a read hands back for a file is a short-lived link to fetch it, minted only where the request asked for one and
+/// only where the deployment is configured to issue any. The link is a bearer capability, so minting it is an act rather
+/// than a projection: it is the one thing this use case produces that did not already exist in the mailbox.
 /// </para>
 /// <para>
 /// It reaches no mail server. That is the acceptance criterion this operation exists under rather than a property it
@@ -48,15 +54,17 @@ public sealed class EmailContentReader
     private readonly IEmailContentRenderer renderer;
     private readonly IEmailContentRepairRequestStore repairRequestStore;
     private readonly IMailAccountCatalog accountCatalog;
+    private readonly IAttachmentDownloadLinkIssuer linkIssuer;
     private readonly EmailContentReadOptions readOptions;
 
     /// <summary>Initializes the use case.</summary>
     /// <param name="summaryReader">Reads one stored email's summary by its identity.</param>
     /// <param name="contentStore">Reads the raw MIME stored for an email, with what was recorded about it.</param>
-    /// <param name="renderer">Turns stored raw MIME into headers, a body, and the attachments the bounds allow.</param>
+    /// <param name="renderer">Turns stored raw MIME into headers, a body, and a description of every attachment.</param>
     /// <param name="repairRequestStore">Records durably that a local copy has to be fetched or read again.</param>
     /// <param name="accountCatalog">Answers which accounts this deployment serves.</param>
-    /// <param name="readOptions">The bounds on how much body text and attachment content one call returns.</param>
+    /// <param name="linkIssuer">Mints the short-lived capability a caller fetches an attachment with.</param>
+    /// <param name="readOptions">The bounds on how much body text one call returns.</param>
     /// <exception cref="ArgumentNullException">Thrown when any argument is <see langword="null" />.</exception>
     public EmailContentReader(
         IStoredEmailSummaryReader summaryReader,
@@ -64,6 +72,7 @@ public sealed class EmailContentReader
         IEmailContentRenderer renderer,
         IEmailContentRepairRequestStore repairRequestStore,
         IMailAccountCatalog accountCatalog,
+        IAttachmentDownloadLinkIssuer linkIssuer,
         EmailContentReadOptions readOptions)
     {
         ArgumentNullException.ThrowIfNull(summaryReader);
@@ -71,6 +80,7 @@ public sealed class EmailContentReader
         ArgumentNullException.ThrowIfNull(renderer);
         ArgumentNullException.ThrowIfNull(repairRequestStore);
         ArgumentNullException.ThrowIfNull(accountCatalog);
+        ArgumentNullException.ThrowIfNull(linkIssuer);
         ArgumentNullException.ThrowIfNull(readOptions);
 
         this.summaryReader = summaryReader;
@@ -78,6 +88,7 @@ public sealed class EmailContentReader
         this.renderer = renderer;
         this.repairRequestStore = repairRequestStore;
         this.accountCatalog = accountCatalog;
+        this.linkIssuer = linkIssuer;
         this.readOptions = readOptions;
     }
 
@@ -92,9 +103,9 @@ public sealed class EmailContentReader
     /// repair request a damaged local copy produces, which is idempotent per email for exactly that reason.
     /// </para>
     /// <para>
-    /// The emails are read one after another rather than concurrently, because both budgets are carried from one to the
+    /// The emails are read one after another rather than concurrently, because the budget is carried from one to the
     /// next: what an email is allowed to return depends on what the emails before it returned, and that is what makes
-    /// the bounds on a whole call exact rather than approximate.
+    /// the bound on a whole call exact rather than approximate.
     /// </para>
     /// </remarks>
     public async Task<GetEmailContentResult> ReadContentAsync(
@@ -105,7 +116,6 @@ public sealed class EmailContentReader
 
         var outcomes = new List<EmailContentReadOutcome>(request.StoredEmailIds.Count);
         var remainingCharacters = this.readOptions.MaxCharactersPerRead;
-        var remainingAttachmentOctets = this.readOptions.MaxAttachmentBytesPerRead;
 
         foreach (var storedEmailId in request.StoredEmailIds)
         {
@@ -113,11 +123,9 @@ public sealed class EmailContentReader
                 storedEmailId,
                 request,
                 remainingCharacters,
-                remainingAttachmentOctets,
                 cancellationToken);
 
             remainingCharacters -= CharactersReturnedBy(outcome);
-            remainingAttachmentOctets -= AttachmentOctetsReturnedBy(outcome);
             outcomes.Add(outcome);
         }
 
@@ -129,7 +137,6 @@ public sealed class EmailContentReader
         StoredEmailId storedEmailId,
         GetEmailContentRequest request,
         int remainingCharacters,
-        int remainingAttachmentOctets,
         CancellationToken cancellationToken)
     {
         var summary = await this.summaryReader.FindAsync(storedEmailId, cancellationToken);
@@ -165,13 +172,57 @@ public sealed class EmailContentReader
             new EmailContentRenderingBounds(
                 request.IncludeSanitizedHtml,
                 this.readOptions.MaxBodyCharacters,
-                remainingCharacters,
-                this.AttachmentContentBoundsFor(request, remainingAttachmentOctets)),
+                remainingCharacters),
             cancellationToken);
 
-        return rendering.Rendering is { } rendered
-            ? EmailContentReadOutcome.Read(ContentFrom(summary, rendered))
-            : await this.RequestRepairAsync(summary, EmailContentDefect.Unreadable, cancellationToken);
+        if (rendering.Rendering is not { } rendered)
+        {
+            return await this.RequestRepairAsync(summary, EmailContentDefect.Unreadable, cancellationToken);
+        }
+
+        var attachments = await this.DescribeAttachmentsAsync(
+            summary.StoredEmailId,
+            rendered.Attachments,
+            request.IncludeAttachmentDownloadLinks,
+            cancellationToken);
+
+        return EmailContentReadOutcome.Read(ContentFrom(summary, rendered, attachments));
+    }
+
+    /// <summary>Pairs each described attachment with the way its content is reached, or with the reason it is not.</summary>
+    /// <remarks>
+    /// The links are minted for the whole message in one call, because the signing material behind them is resolved per
+    /// operation and erased with it. A message carrying no attachment mints nothing at all, which keeps a read of
+    /// ordinary mail from touching the key ring however the request was written.
+    /// </remarks>
+    private async Task<IReadOnlyList<ReadEmailAttachment>> DescribeAttachmentsAsync(
+        StoredEmailId storedEmailId,
+        IReadOnlyList<ExtractedEmailAttachment> attachments,
+        bool includeDownloadLinks,
+        CancellationToken cancellationToken)
+    {
+        if (!includeDownloadLinks)
+        {
+            return [.. attachments.Select(description =>
+                new ReadEmailAttachment(description, AttachmentDownload.NotRequested))];
+        }
+
+        if (!this.linkIssuer.CanIssueLinks)
+        {
+            return [.. attachments.Select(description =>
+                new ReadEmailAttachment(description, AttachmentDownload.Unavailable))];
+        }
+
+        if (attachments.Count == 0)
+        {
+            return [];
+        }
+
+        var links = await this.linkIssuer.IssueAsync(storedEmailId, attachments.Count, cancellationToken);
+
+        return [.. attachments.Zip(
+            links,
+            (description, link) => new ReadEmailAttachment(description, AttachmentDownload.Issued(link)))];
     }
 
     /// <summary>Counts what one outcome drew from the read's character budget.</summary>
@@ -183,29 +234,6 @@ public sealed class EmailContentReader
     private static int CharactersReturnedBy(EmailContentReadOutcome outcome) =>
         outcome.Content is { } content
             ? content.Body.PlainText.Text.Length + (content.Body.SanitizedHtml?.Text.Length ?? 0)
-            : 0;
-
-    /// <summary>States how much attachment content this email may return, or that it may return none.</summary>
-    /// <remarks>
-    /// The bounds are absent when the request did not ask for content, which is what keeps a read of bodies from
-    /// decoding files nobody asked for. The descriptions are produced either way and cost nothing extra: the same walk
-    /// measures every part whether or not it keeps one.
-    /// </remarks>
-    private EmailAttachmentContentBounds? AttachmentContentBoundsFor(
-        GetEmailContentRequest request,
-        int remainingAttachmentOctets) =>
-        request.IncludeAttachmentContent
-            ? new EmailAttachmentContentBounds(this.readOptions.MaxAttachmentBytes, remainingAttachmentOctets)
-            : null;
-
-    /// <summary>Counts what one outcome drew from the read's attachment budget.</summary>
-    /// <remarks>
-    /// Only content that was actually returned is counted. An attachment a bound withheld cost the caller nothing, so
-    /// charging the budget for it would withhold the next attachment on the strength of one that was never sent.
-    /// </remarks>
-    private static int AttachmentOctetsReturnedBy(EmailContentReadOutcome outcome) =>
-        outcome.Content is { } content
-            ? content.Attachments.Sum(attachment => attachment.Content.Octets.Length)
             : 0;
 
     /// <summary>Records the defect durably and produces the outcome to report for it.</summary>
@@ -233,11 +261,14 @@ public sealed class EmailContentReader
     /// wrong in the one direction a caller cannot check.
     /// <para>
     /// The counts and the descriptions are published whatever the caller asked for, because both are what a caller
-    /// decides against: how many files there are, and whether any of them is worth the octets. Only the octets are the
-    /// request's to ask for, and the rendering already carries them exactly where it did.
+    /// decides against: how many files there are, and whether any of them is worth fetching. Only the link is the
+    /// request's to ask for, which is why the attachments arrive here already paired with what was minted for them.
     /// </para>
     /// </remarks>
-    private static ReadEmailContent ContentFrom(EmailSummary summary, EmailContentRendering rendering)
+    private static ReadEmailContent ContentFrom(
+        EmailSummary summary,
+        EmailContentRendering rendering,
+        IReadOnlyList<ReadEmailAttachment> attachments)
     {
         return new ReadEmailContent
         {
@@ -250,7 +281,7 @@ public sealed class EmailContentReader
                 ? EmailContentBody.EncryptedNotReadableLocally
                 : EmailContentBody.Readable(rendering.PlainTextBody, rendering.SanitizedHtmlBody),
             AttachmentSummary = SummaryOf(rendering.AttachmentSummary),
-            Attachments = rendering.Attachments,
+            Attachments = attachments,
             RemoteFlags = summary.RemoteFlags,
         };
     }

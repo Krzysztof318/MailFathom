@@ -14,8 +14,8 @@ namespace MailFathom.Application.Emails.GetEmailContent;
 /// </para>
 /// <para>
 /// The two representation flags govern the whole call rather than one email each. A caller asking for markup or for
-/// attachment content wants it for what it is about to read, and a flag per identifier would make the argument list
-/// grow with the batch while answering a question no caller asks per email.
+/// attachment links wants it for what it is about to read, and a flag per identifier would make the argument list grow
+/// with the batch while answering a question no caller asks per email.
 /// </para>
 /// </remarks>
 public sealed record GetEmailContentRequest
@@ -38,11 +38,11 @@ public sealed record GetEmailContentRequest
     private GetEmailContentRequest(
         IReadOnlyList<StoredEmailId> storedEmailIds,
         bool includeSanitizedHtml,
-        bool includeAttachmentContent)
+        bool includeAttachmentDownloadLinks)
     {
         this.StoredEmailIds = storedEmailIds;
         this.IncludeSanitizedHtml = includeSanitizedHtml;
-        this.IncludeAttachmentContent = includeAttachmentContent;
+        this.IncludeAttachmentDownloadLinks = includeAttachmentDownloadLinks;
     }
 
     /// <summary>Gets the emails to read, in the order the caller named them.</summary>
@@ -56,25 +56,25 @@ public sealed record GetEmailContentRequest
     /// </remarks>
     public bool IncludeSanitizedHtml { get; }
 
-    /// <summary>Gets whether to also return the octets of each attachment, rather than only describe it.</summary>
+    /// <summary>Gets whether to also mint a link for fetching each attachment, rather than only describe it.</summary>
     /// <remarks>
     /// <para>
     /// What every read answers is what the message carries: how many attachments, what each is called, what it declares
-    /// itself to be, and how large it is. A caller deciding whether a file is worth asking for needs all of that, and a
+    /// itself to be, and how large it is. A caller deciding whether a file is worth fetching needs all of that, and a
     /// read that had to ask twice to learn a name would answer the first call with a number and nothing to act on.
     /// </para>
     /// <para>
-    /// The octets are opt-in because they are the message's most sensitive part and by far its largest: base64 makes an
-    /// ordinary attachment several times the size of the body beside it, so a caller reading mail pays for a file only
-    /// where it wanted one.
+    /// The links are opt-in because each one is a short-lived bearer capability over the message's most sensitive part.
+    /// They cost the response almost nothing, so what the flag buys is not size: it is that a read of bodies mints no
+    /// capability nobody intended to hand out.
     /// </para>
     /// </remarks>
-    public bool IncludeAttachmentContent { get; }
+    public bool IncludeAttachmentDownloadLinks { get; }
 
     /// <summary>Creates a request from the emails a caller named.</summary>
     /// <param name="storedEmailIds">The emails to read, in the order they were named.</param>
     /// <param name="includeSanitizedHtml">Whether to also produce the sanitized HTML representation of each body.</param>
-    /// <param name="includeAttachmentContent">Whether to return the octets of each attachment rather than only describe it.</param>
+    /// <param name="includeAttachmentDownloadLinks">Whether to mint a link for each attachment rather than only describe it.</param>
     /// <returns>The validated request.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="storedEmailIds" /> is <see langword="null" />.</exception>
     /// <exception cref="EmailContentReadCountOutOfRangeException">Thrown when no email is named, or more than <see cref="MaximumEmails" /> are.</exception>
@@ -87,7 +87,7 @@ public sealed record GetEmailContentRequest
     public static GetEmailContentRequest Create(
         IReadOnlyList<StoredEmailId> storedEmailIds,
         bool includeSanitizedHtml = false,
-        bool includeAttachmentContent = false)
+        bool includeAttachmentDownloadLinks = false)
     {
         ArgumentNullException.ThrowIfNull(storedEmailIds);
 
@@ -101,6 +101,6 @@ public sealed record GetEmailContentRequest
             throw new EmailContentReadDuplicateEmailException();
         }
 
-        return new GetEmailContentRequest([.. storedEmailIds], includeSanitizedHtml, includeAttachmentContent);
+        return new GetEmailContentRequest([.. storedEmailIds], includeSanitizedHtml, includeAttachmentDownloadLinks);
     }
 }

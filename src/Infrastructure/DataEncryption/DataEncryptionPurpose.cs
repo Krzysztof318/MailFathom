@@ -7,7 +7,7 @@ using System.Text.Json.Serialization;
 
 namespace MailFathom.Infrastructure.DataEncryption;
 
-/// <summary>Identifies what a sealed value is, so that one key ring can protect several kinds of value safely.</summary>
+/// <summary>Identifies what a key of the ring is being used for, so that one ring can protect several things safely.</summary>
 /// <remarks>
 /// <para>
 /// The type is a closed enumeration rather than a C# <see langword="enum" /> because a purpose has a published identity
@@ -20,6 +20,12 @@ namespace MailFathom.Infrastructure.DataEncryption;
 /// Sharing one key ring across several kinds of value is only safe because this identity is bound in. Two values sealed
 /// under the same key for different purposes do not open as one another, so a stored refresh token cannot be replayed
 /// into a column that means something else, and a future sealed column needs no key of its own.
+/// </para>
+/// <para>
+/// The same identity does the same job for a key that is derived rather than used directly: it is the HKDF info label,
+/// so a subkey for one purpose is unrelated to the subkey for another and to the ring key both came from. That is why a
+/// purpose is not only about sealing — <see cref="AttachmentDownloadLink" /> seals nothing and signs instead, and the
+/// separation it buys is exactly the same one.
 /// </para>
 /// <para>
 /// An identity is allocated once and never reused or respelled. Being a struct, <see langword="default" /> is reachable
@@ -39,9 +45,18 @@ public readonly record struct DataEncryptionPurpose
     /// <remarks>The subject of a value sealed under this purpose is the account identifier, which is MailFathom's own configured name for the account and carries no personal data.</remarks>
     public static DataEncryptionPurpose MailboxRefreshToken { get; } = new("mailbox-refresh-token");
 
+    /// <summary>Gets the purpose of the key that signs the short-lived capability an attachment is fetched with.</summary>
+    /// <remarks>
+    /// Nothing is sealed under this purpose. It is the label a signing key is derived under, so the material that signs
+    /// a link is never the material that seals a stored value, and a signature cannot be produced by anything that only
+    /// holds the sealing subkey. The identity is authenticated into nothing persisted, but it is fixed for the same
+    /// reason every other one is: changing the spelling would invalidate every outstanding link at once.
+    /// </remarks>
+    public static DataEncryptionPurpose AttachmentDownloadLink { get; } = new("attachment-download-link");
+
     /// <summary>Gets every supported purpose.</summary>
     /// <remarks>Declared last so the members it lists are already initialized when this initializer runs.</remarks>
-    public static IReadOnlyList<DataEncryptionPurpose> All { get; } = [MailboxRefreshToken];
+    public static IReadOnlyList<DataEncryptionPurpose> All { get; } = [MailboxRefreshToken, AttachmentDownloadLink];
 
     /// <summary>Gets whether this value names a supported purpose rather than the unusable struct default.</summary>
     public bool IsSpecified => this.identity is not null;
