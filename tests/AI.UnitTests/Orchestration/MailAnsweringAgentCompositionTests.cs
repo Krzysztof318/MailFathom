@@ -104,7 +104,6 @@ public sealed class MailAnsweringAgentCompositionTests
         Assert.Same(OnePrimaryAccount, Assert.Single(knowledgeSearch.Calls).Scope);
     }
 
-    /// <summary>The tool takes a query and nothing else, which is what makes the scope unreachable from the model's side.</summary>
     /// <summary>
     /// The tool publishes the query and the narrowing a search publishes, and no account and no folder. The scope is
     /// the caller's authorization and the result count is the deployment's bound on how much mail one lookup draws out;
