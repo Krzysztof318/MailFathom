@@ -24,6 +24,13 @@
 # project adopts it and leaves when the project stops using it. A fixture joins the second when a
 # test or a document is written around it, and it leaves with that test.
 #
+# **Non-prose literals** are the third kind, and they are the one kind that is not English at all: a
+# regular expression that recognises a credential format, an encoded sample built out of the Latin
+# alphabet, and a rule name reproduced verbatim from the corpus it was taken from. A dictionary reads
+# a two-letter run out of a base64 fragment and reports it as a word, which it never was. Rewriting
+# one would change what an expression matches or what an operator has to type to suppress a rule, so
+# the entry says the string is data rather than that the spelling was reviewed and kept.
+#
 # Neither table is a place to put a genuine typo that is inconvenient to fix. An entry here says the
 # string is correct or is deliberate, and a reader has to be able to trust that it means one of them.
 
@@ -49,6 +56,24 @@ extend-ignore-re = [
   # `mis-categorized`, in ADR 0003. A hyphen ends a word for `typos`, which leaves `mis` looking like
   # a truncated `miss`; the prefix is correct English and the hyphen is the ADR's own style.
   '\bmis-categorized\b',
+  # The argument of a `[GeneratedRegex]` attribute, which is an expression that recognises a
+  # credential format rather than anything a reader reads. The secret corpus carries a hundred and
+  # more of them, and their alternations hold provider prefixes and base64 fragments that word
+  # splitting turns into two-letter words: `fo1_` opens one vendor's token and a fragment of an
+  # encoded JWT header contains `Iy`. Ignoring the argument rather than each run keeps a refresh of
+  # the corpus from having to add an entry here every time upstream adds a rule. The run excludes a
+  # newline so a greedy match cannot leave the attribute it started in and ignore the rest of a file.
+  '\[GeneratedRegex\(@"(?:[^"\n]|"")*"',
+  # `airtable-personnal-access-token`, and the matcher named after it. The misspelling is the rule's
+  # own name in the gitleaks corpus, and the name is what an operator writes to suppress the rule, so
+  # correcting it here would mean the entry they looked up and the entry MailFathom answers to are
+  # different strings.
+  '\bairtable-personnal-access-token\b',
+  '\bAirtablePersonnalAccessToken\b',
+  # The base64 of the Latin alphabet, which the synthetic secrets are padded and built out of so that
+  # no committed line carries a string shaped like a live credential. Encoding a run of letters is
+  # what puts `Iz` in the middle of it.
+  '\bQUJDREVGR0hJSktMTU5PUFFSU1RVVldYWVo\w*',
 ]
 
 [default.extend-identifiers]
