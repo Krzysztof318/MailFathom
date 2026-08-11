@@ -8,6 +8,8 @@ using MailFathom.Application.Emails.Search;
 using MailFathom.Application.Emails.SearchEmails;
 using MailFathom.Application.Retrieval;
 using MailFathom.Application.Retrieval.AskMail;
+using MailFathom.Application.SensitiveContent;
+using MailFathom.Application.SensitiveContent.Detection;
 using MailFathom.Infrastructure.Persistence;
 using MailFathom.Infrastructure.Persistence.Connections;
 using MailFathom.Infrastructure.Secrets.Resolution;
@@ -286,6 +288,59 @@ public sealed class ServiceCollectionExtensionsTests
         // Act, Assert
         Assert.Throws<ArgumentNullException>(
             () => ServiceCollectionExtensions.AddEmailEmbeddingGeneration(null!));
+    }
+
+    /// <summary>An opt-in nobody took must cost nothing, so the detector exists only where the switch put it.</summary>
+    [Fact]
+    public void AddSecretContentScanning_NotCalled_LeavesNoDetectorAndNoDeclarationBehind()
+    {
+        // Arrange
+        var services = new ServiceCollection();
+        services.AddSingleton(TimeProvider.System);
+
+        // Act
+        using var provider = services.BuildServiceProvider();
+
+        // Assert
+        Assert.Empty(provider.GetServices<ISensitiveContentCatalog>());
+        Assert.Empty(provider.GetServices<ISensitiveContentScanner>());
+    }
+
+    /// <summary>Registering one without the other would turn the refusal a switch with nothing behind it earns into a scanner that finds nothing.</summary>
+    [Fact]
+    public void AddSecretContentScanning_Called_RegistersTheDetectorAndWhatItDeclares()
+    {
+        // Arrange
+        var services = new ServiceCollection();
+        services.AddSingleton(TimeProvider.System);
+        services.AddSingleton(SensitiveContentPlan.Create(
+            SensitiveContentScanBounds.Default,
+            [
+                SensitiveContentScannerPlan.Create(
+                    SensitiveContentScannerKind.Secrets,
+                    [SensitiveContentCategory.Create("ProviderToken")],
+                    []),
+            ]));
+
+        // Act
+        services.AddSecretContentScanning();
+
+        // Assert
+        using var provider = services.BuildServiceProvider();
+        Assert.Equal(
+            SensitiveContentScannerKind.Secrets,
+            Assert.Single(provider.GetServices<ISensitiveContentCatalog>()).Scanner);
+        Assert.Equal(
+            SensitiveContentScannerKind.Secrets,
+            Assert.Single(provider.GetServices<ISensitiveContentScanner>()).Scanner);
+    }
+
+    [Fact]
+    public void AddSecretContentScanning_WithoutAServiceCollection_IsRefused()
+    {
+        // Act, Assert
+        Assert.Throws<ArgumentNullException>(
+            () => ServiceCollectionExtensions.AddSecretContentScanning(null!));
     }
 
     private static ServiceProvider BuildConfiguredProvider()

@@ -30,7 +30,7 @@ public sealed class SensitiveContentPlaceholderTests
     {
         // Arrange
         var finding = SensitiveContentFinding.Create(
-            CloudKey,
+            SensitiveContentRule.Create(CloudKey, "cloud-access-key"),
             SensitiveContentSpan.Create(0, 10),
             1,
             SensitiveContentDetector.Create("in-process-secrets", "2026.08.01"),

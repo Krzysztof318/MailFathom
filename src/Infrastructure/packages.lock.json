@@ -147,6 +147,12 @@
           "Microsoft.Extensions.Options": "10.0.10"
         }
       },
+      "Microsoft.Security.Utilities.Core": {
+        "type": "Direct",
+        "requested": "[1.21.0, )",
+        "resolved": "1.21.0",
+        "contentHash": "mIHFRwByyMkceEQvFD4MJIYM/BI379U9bFr/N3+sc6lBjExJptgc6cNcZxhcDJY+4m22LlQvgzabzq/jUHCeAg=="
+      },
       "Microsoft.VisualStudio.Threading.Analyzers": {
         "type": "Direct",
         "requested": "[17.14.15, )",

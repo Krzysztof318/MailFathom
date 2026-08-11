@@ -7,9 +7,10 @@ namespace MailFathom.Application.SensitiveContent.Detection;
 /// <summary>One region of analyzed text a scanner reported as sensitive.</summary>
 /// <remarks>
 /// <para>
-/// <b>A finding never carries the detected value.</b> It names the kind of material, where it sits, how sure the
-/// detector was, and what produced it — everything a consumer needs in order to redact, to count, and to attribute,
-/// and nothing that would recreate the leak in a log line, an audit record, or a stored attribution.
+/// <b>A finding never carries the detected value.</b> It names the rule that matched and the kind of material that
+/// rule looks for, where it sits, how sure the detector was, and what produced it — everything a consumer needs in
+/// order to redact, to count, and to attribute, and nothing that would recreate the leak in a log line, an audit
+/// record, or a stored attribution.
 /// </para>
 /// <para>
 /// The detector and its revision travel with the finding rather than being read from the deployment, because redaction
@@ -20,21 +21,30 @@ namespace MailFathom.Application.SensitiveContent.Detection;
 public sealed record SensitiveContentFinding
 {
     private SensitiveContentFinding(
-        SensitiveContentCategory category,
+        SensitiveContentRule rule,
         SensitiveContentSpan span,
         double confidence,
         SensitiveContentDetector detector,
         DateTimeOffset detectedAt)
     {
-        this.Category = category;
+        this.Rule = rule;
         this.Span = span;
         this.Confidence = confidence;
         this.Detector = detector;
         this.DetectedAt = detectedAt;
     }
 
+    /// <summary>Gets the corpus entry that matched, which is the name a suppression would silence.</summary>
+    /// <remarks>
+    /// A rule rather than only a category, because an operator meeting a false positive has to be able to switch off the
+    /// one entry that produced it, and the finding is the only place that names it. It stays safe to record for the same
+    /// reason the detector is: a rule name is the corpus's own name for a pattern, never any part of what the pattern
+    /// matched.
+    /// </remarks>
+    public SensitiveContentRule Rule { get; }
+
     /// <summary>Gets the kind of sensitive material found, which is what the placeholder replacing it names.</summary>
-    public SensitiveContentCategory Category { get; }
+    public SensitiveContentCategory Category => this.Rule.Category;
 
     /// <summary>Gets the region of the analyzed text the finding covers.</summary>
     public SensitiveContentSpan Span { get; }
@@ -55,22 +65,22 @@ public sealed record SensitiveContentFinding
     public DateTimeOffset DetectedAt { get; }
 
     /// <summary>Creates a finding.</summary>
-    /// <param name="category">The kind of sensitive material found.</param>
+    /// <param name="rule">The corpus entry that matched, which carries the category it belongs to.</param>
     /// <param name="span">The region of the analyzed text it covers.</param>
     /// <param name="confidence">How sure the detector was, from 0 to 1 inclusive.</param>
     /// <param name="detector">What produced the finding, with its corpus or profile revision.</param>
     /// <param name="detectedAt">When the scan evaluated the text.</param>
     /// <returns>The validated finding.</returns>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="category" /> or <paramref name="detector" /> is <see langword="null" />.</exception>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="rule" /> or <paramref name="detector" /> is <see langword="null" />.</exception>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="confidence" /> is outside 0 to 1, or <paramref name="span" /> describes no region.</exception>
     public static SensitiveContentFinding Create(
-        SensitiveContentCategory category,
+        SensitiveContentRule rule,
         SensitiveContentSpan span,
         double confidence,
         SensitiveContentDetector detector,
         DateTimeOffset detectedAt)
     {
-        ArgumentNullException.ThrowIfNull(category);
+        ArgumentNullException.ThrowIfNull(rule);
         ArgumentNullException.ThrowIfNull(detector);
         ArgumentOutOfRangeException.ThrowIfLessThan(confidence, 0);
         ArgumentOutOfRangeException.ThrowIfGreaterThan(confidence, 1);
@@ -82,6 +92,6 @@ public sealed record SensitiveContentFinding
                 "A finding must cover a region of the analyzed text rather than the unspecified span.");
         }
 
-        return new SensitiveContentFinding(category, span, confidence, detector, detectedAt);
+        return new SensitiveContentFinding(rule, span, confidence, detector, detectedAt);
     }
 }

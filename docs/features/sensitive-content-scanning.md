@@ -1,6 +1,6 @@
 # Sensitive-content scanning
 
-<!-- describes: src/Application/SensitiveContent/**, src/Host/Configuration/SensitiveContent/** -->
+<!-- describes: src/Application/SensitiveContent/**, src/Host/Configuration/SensitiveContent/**, src/Infrastructure/SensitiveContent/** -->
 
 Mail carries credentials. A deployment key pasted into a thread, a connection string in a stack trace, an API token a
 colleague sent because it was quicker than a vault — all of it arrives in a mailbox and, from there, would otherwise
@@ -40,11 +40,11 @@ entirely rather than accept the second.
 All four combinations are supported configurations. With both off nothing is scanned, nothing is constructed, and no
 cost lands on any path.
 
-> This release ships the contract and nothing on either side of it. **No detector is registered**, so switching either
-> scanner on fails startup naming the scanner that has nothing behind it — the same refusal that protects a deployment
-> whose analyzer went missing. **No consumer redacts through it either**: none of the rows in the table above redacts
-> today, so each states the path the contract is written for rather than one that is covered. The detectors and the
-> consumers arrive with their own changes, and this note narrows as they do.
+> `Secrets` has a detector behind it and is described below. **`Pii` has none**, so switching that one on fails startup
+> naming the scanner that has nothing behind it — the same refusal that protects a deployment whose analyzer went
+> missing. **No consumer redacts through the contract yet either**: none of the rows in the table above redacts today,
+> so each states the path the contract is written for rather than one that is covered. The analyzer and the consumers
+> arrive with their own changes, and this note narrows as they do.
 
 ## A finding names a position, never a value
 
@@ -112,6 +112,60 @@ no switch at all, because the operator would believe it was in force.
 
 Every one of those failures reports error code `81001` and names the scanner. None of them names the text, the finding,
 or the endpoint: the content the scan was about is exactly what must not appear in a failure written to a log.
+
+## The secret scanner
+
+`Secrets` runs **in this process**. Secret detection is pattern matching over text, so a container of its own would buy
+nothing and would put a network hop and a failure mode on a read path that already has to fail closed.
+
+### Where its rules come from
+
+Three places, and the reason is a measured gap.
+
+- **The detection engine's own corpus**, `Microsoft.Security.Utilities.Core`. Roughly ninety high-confidence patterns,
+  almost all of them Microsoft credential formats, against two third-party ones. They become `ProviderToken` rules, and
+  the handful of shape-recognising entries in its unclassified list become `JsonWebToken`, `PrivateKey`, and
+  `CredentialUrl` rules instead.
+- **The gitleaks rule data**, at the release recorded in `THIRD_PARTY_LICENSES.md`. A mailbox receives forge tokens,
+  cloud access keys, payment keys, and model-provider keys, and the engine alone catches almost none of them. Only
+  entries that recognise a credential **by its own shape** are taken: gitleaks also ships rules that recognise a secret
+  by its proximity to a keyword, and a mailbox is prose, so those would turn ordinary sentences into findings.
+- **MailFathom's own**, for the two shapes both corpora miss because both are written for source control: a connection
+  string pasted into a thread so somebody can reproduce a failure, and a link whose query string is the credential.
+
+Whichever of the three matched, a finding reports **one detector identity and one corpus revision**, and that revision
+moves when any of the three does. An operator diagnosing a false positive should not have to learn which corpus a rule
+came from before they can suppress it.
+
+### What is redacted, and what is left readable
+
+A finding covers the credential rather than the line it sits on. Where the surrounding text carries no secret and is
+worth keeping, only the credential inside it is replaced: a connection string still says which database it reached, and
+a link still says what it linked to.
+
+### The entropy heuristic
+
+`HighEntropyString` is the recall layer for a credential with no format to recognise, and it is off by default. It is
+equally what turns a base64 attachment fragment, a message identifier, and a tracking parameter into findings — a trade
+an operator should be choosing rather than discovering.
+
+It is not shape alone. A candidate is measured for randomness, in bits per character, and reported only above a floor
+that separates a credential drawn from a random alphabet from an encoded run of ordinary text. Its confidence is that
+measurement rather than a fixed value, which is what makes it the one category whose findings are scored rather than
+certain.
+
+### Bounding an untrusted match
+
+Mail is untrusted input, so **no expression runs without a ceiling on how long it may take**. The scan budget an
+operator configures bounds a whole scan; a separate per-expression ceiling bounds one pattern within it, and exceeding
+either refuses the operation rather than returning text nobody finished scanning.
+
+Which matcher runs an expression was decided by measurement rather than by preference. MailFathom's own corpus is
+compiled by the `[GeneratedRegex]` source generator, because it is derived from RE2 expressions that carry no
+backreference and no nested quantifier for a backtracking matcher to degrade on, and because the generated matcher runs
+several times faster than the linear-time alternative over exactly the text a mailbox produces the worst case with — a
+base64 attachment fragment or a long run of hexadecimal. The engine's own patterns stay on the linear-time matcher it
+selects for them, because their expressions are the package's to reason about rather than this repository's.
 
 ## What a detector is not
 

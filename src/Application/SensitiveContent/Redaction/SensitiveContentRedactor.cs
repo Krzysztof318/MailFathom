@@ -168,6 +168,7 @@ public sealed class SensitiveContentRedactor : IDisposable
                 .OrderBy(finding => finding.Span.Start)
                 .ThenByDescending(finding => finding.Span.Length)
                 .ThenBy(finding => finding.Category.Name, StringComparer.Ordinal)
+                .ThenBy(finding => finding.Rule.Name, StringComparer.Ordinal)
                 .ThenBy(finding => finding.Detector.Name, StringComparer.Ordinal),
         ];
     }

@@ -12,23 +12,25 @@ namespace MailFathom.Application.UnitTests.SensitiveContent.Detection;
 public sealed class SensitiveContentFindingTests
 {
     private static readonly SensitiveContentCategory CloudKey = SensitiveContentCategory.Create("CloudKey");
+    private static readonly SensitiveContentRule AccessKeyRule = SensitiveContentRule.Create(CloudKey, "cloud-access-key");
     private static readonly SensitiveContentDetector Detector =
         SensitiveContentDetector.Create("in-process-secrets", "2026.08.01");
 
     private static readonly DateTimeOffset DetectedAt = new(2026, 8, 11, 10, 0, 0, TimeSpan.Zero);
 
     [Fact]
-    public void Create_Finding_CarriesTheCategoryPositionConfidenceDetectorAndTime()
+    public void Create_Finding_CarriesTheRuleCategoryPositionConfidenceDetectorAndTime()
     {
         // Act
         var finding = SensitiveContentFinding.Create(
-            CloudKey,
+            AccessKeyRule,
             SensitiveContentSpan.Create(12, 40),
             0.85,
             Detector,
             DetectedAt);
 
         // Assert
+        Assert.Equal(AccessKeyRule, finding.Rule);
         Assert.Equal(CloudKey, finding.Category);
         Assert.Equal(12, finding.Span.Start);
         Assert.Equal(52, finding.Span.End);
@@ -45,7 +47,7 @@ public sealed class SensitiveContentFindingTests
     {
         // Act, Assert
         Assert.Throws<ArgumentOutOfRangeException>(() => SensitiveContentFinding.Create(
-            CloudKey,
+            AccessKeyRule,
             SensitiveContentSpan.Create(0, 1),
             confidence,
             Detector,
@@ -58,7 +60,7 @@ public sealed class SensitiveContentFindingTests
     {
         // Act, Assert
         Assert.Throws<ArgumentOutOfRangeException>(() => SensitiveContentFinding.Create(
-            CloudKey,
+            AccessKeyRule,
             default,
             1,
             Detector,
@@ -66,14 +68,14 @@ public sealed class SensitiveContentFindingTests
     }
 
     [Fact]
-    public void Create_WithoutACategoryOrADetector_IsRejected()
+    public void Create_WithoutARuleOrADetector_IsRejected()
     {
         // Arrange
         var span = SensitiveContentSpan.Create(0, 1);
 
         // Act, Assert
         Assert.Throws<ArgumentNullException>(() => SensitiveContentFinding.Create(null!, span, 1, Detector, DetectedAt));
-        Assert.Throws<ArgumentNullException>(() => SensitiveContentFinding.Create(CloudKey, span, 1, null!, DetectedAt));
+        Assert.Throws<ArgumentNullException>(() => SensitiveContentFinding.Create(AccessKeyRule, span, 1, null!, DetectedAt));
     }
 
     [Theory]
