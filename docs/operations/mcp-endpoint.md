@@ -1483,7 +1483,7 @@ configured independently, exactly as the limits are.
 hold here. An `ask_mail` run is a conversation whose length the model decides — bounded by
 [`MailAnswering:MaxProviderCallsPerRun`](../features/mail-answering.md#what-one-question-may-spend) at eight calls, each one an
 `AiProviderInvocation` whose own `TotalTimeout` defaults to five minutes. A ceiling that enclosed the maximum would have
-to sit past three-quarters of an hour, which is not a request ceiling at all and would let one stalled run hold a
+to sit at forty minutes, which is not a request ceiling at all and would let one stalled run hold a
 concurrency permit for that long.
 
 So the number is chosen against what a request costs to hold rather than against what the slowest one may spend. It

@@ -26,9 +26,9 @@ namespace MailFathom.Host.Configuration.Access;
 /// It is a bound on a hang rather than a guarantee that no legitimate request is ever abandoned, and the difference is
 /// worth stating because the two cannot both hold here. An <c>ask_mail</c> run is a conversation whose length the model
 /// decides, bounded by <c>MailAnswering:MaxProviderCallsPerRun</c> at eight calls, and every one of them is an
-/// <c>AiProviderInvocation</c> whose own total timeout is five minutes. A ceiling that enclosed the maximum would have
-/// to be past half an hour, which is not a request ceiling at all and would let one stalled run hold a concurrency
-/// permit for that long. <see cref="DefaultDuration" /> states which way that is resolved.
+/// <c>AiProviderInvocation</c> whose own total timeout is five minutes. A ceiling that enclosed the maximum would
+/// therefore have to be forty minutes, which is not a request ceiling at all and would let one stalled run hold a
+/// concurrency permit for that long. <see cref="DefaultDuration" /> states which way that is resolved.
 /// </para>
 /// <para>
 /// The section is read once, while the host is being composed, because the policy is attached to a route as the
@@ -54,7 +54,7 @@ internal sealed class TransportRequestTimeoutOptions
     /// <remarks>
     /// Ten minutes, which is chosen against what a request costs to hold rather than against what the slowest one may
     /// legitimately spend. It clears an ordinary answering run by a wide margin and is deliberately below the
-    /// three-quarters of an hour a maximal one could reach, so a run that walks its whole provider budget is abandoned:
+    /// forty minutes a maximal one could reach, so a run that walks its whole provider budget is abandoned:
     /// that is the trade taken, because a ceiling sized for the maximum would leave twenty permits holdable for longer
     /// than any caller waits. An operator who raises <c>MailAnswering:MaxProviderCallsPerRun</c>, or whose questions
     /// genuinely run long, raises this with it. A deployment serving no AI-backed tool narrows it instead — every other
@@ -79,7 +79,7 @@ internal sealed class TransportRequestTimeoutOptions
         {
             return
             [
-                $"{nameof(this.Duration)} — '{this.Duration}' is outside {ShortestDuration} to {LongestDuration}; a shorter ceiling would abandon an ordinary request as often as it served one, and a longer one would leave a stalled request holding its concurrency permit for longer than any caller would wait.",
+                $"{nameof(this.Duration)} — '{this.Duration}' is outside {ShortestDuration} to {LongestDuration}; a shorter ceiling would abandon an ordinary request as often as it served one, and a longer one would leave a stalled request holding its concurrency permit for longer than any caller would wait. Write '{nameof(this.Enabled)}': false to serve requests without a ceiling.",
             ];
         }
 

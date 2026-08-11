@@ -122,6 +122,6 @@ public sealed class TransportRequestTimeoutOptionsTests
         var error = Assert.Single(settings.FindConfigurationErrors());
 
         // Assert
-        Assert.Contains("concurrency permit", error, StringComparison.Ordinal);
+        Assert.Contains(nameof(TransportRequestTimeoutOptions.Enabled), error, StringComparison.Ordinal);
     }
 }
