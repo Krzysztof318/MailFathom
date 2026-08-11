@@ -25,5 +25,7 @@
   href: chat-generation.md
 - name: Mail answering
   href: mail-answering.md
+- name: Sensitive-content scanning
+  href: sensitive-content-scanning.md
 - name: MCP tools
   href: mcp-tools.md

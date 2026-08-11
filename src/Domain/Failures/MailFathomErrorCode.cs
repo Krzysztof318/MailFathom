@@ -292,6 +292,19 @@ public readonly record struct MailFathomErrorCode
 
     #endregion
 
+    #region Category 8 — Sensitive-content scanning
+
+    /// <summary>Gets subcategory 1, availability: a scanner that guards content leaving the process could not produce findings.</summary>
+    /// <remarks>
+    /// One code covers a detector that is unreachable, one that did not answer inside the configured scan timeout, and
+    /// one that failed outright, because each says the same thing to the operation it guards: nothing established that
+    /// this text is safe to hand on, so the operation fails rather than passing the text through. An operator switched
+    /// the scanner on, and a scan that could not run must never be the same outcome as a scan that found nothing.
+    /// </remarks>
+    public static MailFathomErrorCode SensitiveContentScannerUnavailable { get; } = new(81001);
+
+    #endregion
+
     /// <summary>Gets every allocated code.</summary>
     /// <remarks>Declared last so the members it lists are already initialized when this initializer runs.</remarks>
     public static IReadOnlyList<MailFathomErrorCode> All { get; } =
@@ -336,6 +349,7 @@ public readonly record struct MailFathomErrorCode
         ChatProviderCredentialRejected,
         ChatProviderUnavailable,
         ChatAnswerEmpty,
+        SensitiveContentScannerUnavailable,
     ];
 
     /// <summary>Gets the five-digit code.</summary>

@@ -67,6 +67,7 @@ public sealed class MailFathomErrorCodeTests
     [InlineData(51002, 5, 1)]
     [InlineData(52001, 5, 2)]
     [InlineData(53001, 5, 3)]
+    [InlineData(81001, 8, 1)]
     public void CategoryAndSubcategory_AreTheFirstTwoDigits(int allocatedValue, int expectedCategory, int expectedSubcategory)
     {
         // Arrange
