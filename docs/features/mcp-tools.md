@@ -386,7 +386,7 @@ in it.
 | `attachmentCounts` | What the email carries besides its body, returned either way, or `null` when nothing has ever read its parts |
 | `remoteFlags` | The flags a server last showed, and when they were read |
 
-Five parts of it are worth reading before a caller writes against them:
+Six parts of it are worth reading before a caller writes against them:
 
 - **Truncation travels inside each representation, and names the bound.** `plainText` and `sanitizedHtml` each carry
   `text`, `originalCharacterCount`, and `truncatedBy`, because a body and the fact that it is incomplete are never useful

@@ -9,8 +9,12 @@ decides whether it leaves the process, and why the deployments deliberately ship
 
 ## What the process emits
 
-**Logs** go through the OpenTelemetry logging provider with formatted messages and scopes included, beside the console
-output that is always on. Log lines are structured with named properties, and by contract they never carry
+**Logs** go through the OpenTelemetry logging provider with formatted messages, beside the console output that is
+always on. Scopes are left out of what it exports, which is a redaction decision rather than a preference: the only
+scope anything opens here is the one ASP.NET Core puts around every request, it carries the path exactly as that
+request arrived, and one route on this host serves a path that is itself a credential. Correlation does not depend on
+it — every record carries the trace and span identifiers of the request that produced it, and the span carries the path
+with the capability already removed. Log lines are structured with named properties, and by contract they never carry
 credentials, tokens, message bodies, attachment content, or raw MIME; a tool call is recorded as a name, an outcome,
 and a duration, never as what was searched for. [What the endpoint records](mcp-endpoint.md#what-the-endpoint-records)
 states that boundary precisely.
@@ -48,8 +52,9 @@ One attribute is deliberately rewritten. An [attachment download](mcp-endpoint.m
 carries a signed capability in its path, and whoever holds it can fetch that file until it expires, so the span records
 the route template `/attachments/{capability}` in place of the path the request arrived with. The span itself is kept,
 because a download is real traffic an operator has to be able to see; what is removed is the one segment that is a
-secret. Nothing else in the pipeline writes it down: no log line here mentions a download, and the framework's own
-request logging is off at the shipped `Microsoft.AspNetCore` level of `Warning`.
+secret. Nothing else in the pipeline writes it down: no log line here mentions a download, the exported log records
+carry no request scope, and the framework's own request logging is off at the shipped `Microsoft.AspNetCore` level of
+`Warning`.
 
 Every tag on the metrics above is a bounded set — a protocol method, a transport kind, a negotiated version, one of the
 three tool names, an outcome — so none of them opens a time series per message or per person. The MCP SDK does tag a
