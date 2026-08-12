@@ -6,6 +6,8 @@ MailFathom reads its settings through the ordinary .NET configuration pipeline, 
 
 Secrets are a separate contract and stay one. A secret-bearing setting holds a reference rather than material, whichever source the setting itself arrived from; [secret provisioning](secret-provisioning.md) is that contract, and the [Kubernetes mapping](#kubernetes) below states how the two meet.
 
+**Every source below is read-only, and that is permanent.** MailFathom reads its configuration and never writes it: no file it was pointed at is edited, no value is written back, and no administrative call, command, or MCP tool changes a setting. The file you provisioned is therefore the file in force, so it can be reviewed, diffed, and restored as the whole truth about how an instance is configured, and changing a setting is always an edit followed by a restart or a reload. What the service itself has to modify is state in PostgreSQL rather than a setting, and it stays out of your configuration entirely: a mailbox refresh token sent to the deployment is stored sealed in the database, not written back into the secret reference it arrived through. [ADR 0002](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0002-configuration-reading-mapping-and-reload-boundary.md) records the decision and what it costs.
+
 ## Precedence
 
 Highest precedence first. Everything except the provisioned layer is the default .NET order.

@@ -130,6 +130,7 @@ These rules implement [ADR 0003](../docs/decisions/0003-first-party-exception-hi
 - Use typed options for related configuration. Apply `ValidateDataAnnotations`, custom validators where necessary, and `ValidateOnStart` for required settings.
 - Keep secrets out of source control and ordinary configuration files. Load them from deployment secrets, systemd credentials, or an approved secret provider.
 - Do not read environment variables throughout domain or application code. Bind configuration once at the host boundary.
+- **Configuration is read-only, and PostgreSQL is where a program writes.** Nothing writes a configuration source or a bound options instance — not a JSON file the host reads, a provider dictionary, an environment variable, or an options cache — and nothing offers a port, service, endpoint, or command that would. So a feature that appears to need a mutable setting is a feature deciding which table holds its state; reach for persistence rather than for the operator's file, and take the migration that comes with it. This says nothing against change reaching a running process: a reloadable group still adopts a validated snapshot, and material behind a secret reference is still resolved per use. [ADR 0002](../docs/decisions/0002-configuration-reading-mapping-and-reload-boundary.md) holds the reasoning and what it costs.
 
 ## Outbound HTTP clients
 

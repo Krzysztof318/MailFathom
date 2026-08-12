@@ -15,7 +15,7 @@ informed:
 
 MailFathom will need configuration for mail accounts, synchronization limits, security policy, storage adapters, AI providers, MCP endpoints, operational guardrails, and future governance controls. .NET configuration providers and the Options pattern are useful host-level mechanisms, but reading raw `IConfiguration` or injecting provider-shaped options directly into use cases would couple business behavior to transport keys, mutable provider state, binder constraints, and reload timing.
 
-The decision question is: should MailFathom read configuration directly from `IConfiguration` or `IOptions*` throughout the codebase, or should it introduce an intermediate configuration access layer that maps raw/options-shaped configuration into application-owned business settings and publishes safe automatic reload updates? This ADR is intentionally limited to the first-stage read path: source validation, options binding, mapping, validation, and reload behavior. It also records the intended future direction for programmatic configuration modification so the read model does not block a later write model, but it does not yet decide how configuration is stored, including whether future sources are files, a database-backed provider, a cloud configuration store, or another managed configuration service.
+The decision question is: should MailFathom read configuration directly from `IConfiguration` or `IOptions*` throughout the codebase, or should it introduce an intermediate configuration access layer that maps raw/options-shaped configuration into application-owned business settings and publishes safe automatic reload updates? This ADR covers the read path — source validation, options binding, mapping, validation, and reload behavior — and it settles that there is no write path: configuration is read-only to the running process, and state a program modifies is persisted in PostgreSQL instead. What it leaves open is which read-only sources a deployment composes, including whether a later one is a file, a mounted object, a cloud configuration store, or another managed configuration service.
 
 ## Decision Drivers
 
@@ -23,7 +23,7 @@ The decision question is: should MailFathom read configuration directly from `IC
 - Keep `Application` dependent on stable business contracts rather than raw string keys, nullable provider values, binder-friendly DTOs, or host-specific `IOptions*` lifetimes.
 - Preserve startup validation and fail-fast behavior for unsafe or invalid source configuration while allowing selected runtime settings to reload without process restart.
 - Separate source-configuration validation from business-settings validation so provider shape, allowed keys, precedence, and secret references are checked before use-case code sees the values.
-- Leave a clear path for future programmatic configuration modification without making the first implementation responsible for writes, persistence, approval workflows, or history.
+- Keep configuration read-only to the process, so that the file a deployment provisioned is the one in force, and give state a program modifies a home in PostgreSQL, which already carries migrations, transactions, retention, and history.
 - Make reload behavior explicit, observable, thread-safe, and privacy-safe for long-running synchronization, retrieval, SMTP delivery, AI indexing, and MCP request handling.
 - Avoid using reloadable configuration for values that require durable workflow state, audit evidence, migration, explicit approval, or per-tenant administration.
 - Keep first implementation small and compatible with the existing clean-architecture modular monolith.
@@ -33,7 +33,7 @@ The decision question is: should MailFathom read configuration directly from `IC
 - Read raw `IConfiguration` at every consumer.
 - Inject framework options such as `IOptions<T>`, `IOptionsSnapshot<T>`, or `IOptionsMonitor<T>` directly into application use cases and adapters.
 - Introduce an application-owned configuration access layer backed by host options and reload notifications.
-- Build a full configuration management subsystem with persistence, APIs, versioning, and audit workflow now.
+- Build a full configuration management subsystem with persistence, APIs, versioning, and audit workflow.
 
 ## Decision Details
 
@@ -93,17 +93,23 @@ Validation should happen in layers:
 3. Mapping validation translates raw/options values into business value objects and rejects unsafe combinations.
 4. Use-case validation enforces operation-specific invariants at execution time.
 
-### Future programmatic modification
+### Configuration is read-only, and the database is where a program writes
 
-MailFathom should eventually support controlled configuration modification by program code, but that capability is deliberately not part of the first read-focused implementation. The storage question for those writes is also deliberately postponed; a later ADR must decide whether the writable source is file-based, database-backed, a dedicated configuration store, a cloud configuration service, or another managed provider. The read layer should therefore expose business settings through contracts that can later be backed by a validated writable source without changing application use cases.
+**Configuration is read-only to the running process, and no configuration writer port is coming.** Nothing in MailFathom mutates `IConfigurationRoot`, a provider dictionary, a JSON file, an environment variable, or an options cache, and nothing acquires an application-owned port that would do it on a caller's behalf. State a program has to modify is persisted in PostgreSQL instead, which is the whole of the write channel: a design that appears to need a mutable setting is a design deciding which table holds it, never one deciding how to write the operator's file.
 
-The target write model should be command-oriented, not raw key mutation. Future APIs should accept intent-specific commands such as enabling a provider, changing synchronization limits, rotating a secret reference, or updating a tenant override. Each command should validate the proposed source configuration, map it to business settings, check authorization and policy, record audit evidence, and publish the change through the same reload path used by external provider changes.
+Read-only is not the same as static, and the distinction is the reason this is not a restriction on anything above. Everything the read path already promises stays: a validated snapshot is published on reload, a rejected candidate leaves the last known good one in force, and material behind a secret reference is resolved per use, so a rotated password or a re-provisioned certificate reaches the next operation with no restart and no reload. What is refused is one direction of travel — the process writing back to where its own settings came from — rather than change reaching a running process.
 
-Programmatic writes must not let arbitrary code mutate `IConfigurationRoot`, provider dictionaries, JSON files, environment variables, or options caches directly. They should go through an application-owned configuration writer port only after a separate ADR decides storage form, storage ownership, concurrency, rollback, versioning, approval, secret handling, tenant scoping, and audit retention. Until that ADR exists, production code should treat configuration as read-only.
+The reasoning is what the two stores are respectively good at, and neither answer improves by being given the other's job. Configuration is provisioned from a chart, a unit file, or a mounted object; it is diffable, reviewable before it takes effect, reproducible from a repository, and it makes an instance fully described by what was deployed. Every one of those properties is destroyed the moment the process edits it, because the file on disk stops being the file in force and nothing in the deployment says so. Persistence, meanwhile, already carries what mutable state needs and what a writable configuration source would have had to grow from nothing: a migration chain, transactions, concurrency, retention, erasure, encryption for anything sensitive, and a place a history can live. A configuration writer port would have had to acquire all of it, under an approval and audit model of its own, so that a value could be changed by a call instead of by an edit.
+
+One precedent already reads this way and is the worked example rather than an exception to it. A mailbox refresh token — the first credential the service itself writes — is persisted in a sealed database column under the key ring rather than written back into the secret reference it arrived through, which is the decision [ADR 0005](0005-data-encryption-key-ring-and-provisioning.md) records. The shape it shows is the one this rule produces generally: the authored text an operator provisioned stays theirs, and what the program owns lives somewhere the program may write.
+
+Runtime rule authoring is where that shape is asked for next, and this record settles only its own half of it. Issue 771 proposes rules authored while the deployment runs, in a table beside the configured ones and explicitly without rewriting the configuration section they sit next to; issue 761 is its gate and is the owner's decision, over [ADR 0010](0010-rule-authoring-in-configuration-and-ncalc-conditions.md)'s storage half rather than over this one. Whatever it decides, it decides in the database: this section is why the alternative — a program editing the rules file — is not among its options.
+
+Reversing this is a new ADR superseding this one, not a feature added under it.
 
 ### Scope exclusions
 
-This ADR does not choose how configuration is stored. File-based configuration, database tables, a custom provider, a cloud or service-backed configuration store, a secret store, admin API, UI, tenant override model, approval workflow, configuration versioning model, and a concrete configuration writer API are all deferred to later decisions.
+This ADR does not choose which read-only sources a deployment composes its configuration from. A file, a mounted object, a custom read-only provider, a cloud or service-backed configuration store, and a secret store are all open questions, and `docs/operations/configuration-sources.md` records what the sources are today. A configuration writer API is not among them: the section above settles that one rather than deferring it, and an administrative surface, a UI, a tenant override model, an approval workflow, or a configuration versioning model built over configuration is refused with it. What such a surface may administer is state in the database, which is a decision for whichever record introduces that state.
 
 Secrets remain outside ordinary source-controlled configuration. The configuration access layer may reference secret identifiers or consume already-bound secret values at the host boundary, but it must not normalize broad secret access into application code or log secret material.
 
@@ -133,7 +139,8 @@ A secret that is *not* reached through a reference — a password written into a
 - Code review verifies that `Application` use cases depend on focused configuration reader contracts or immutable settings, not raw `IConfiguration` or framework options types.
 - Unit tests cover source validation, strict binding behavior where configured, mapping from options DTOs to business settings, startup validation failures, reload success, rejected reload with last-known-good preservation, and privacy-safe diagnostics for invalid reloads.
 - Documentation for each setting group states its source shape, required keys, safe diagnostics, mutability classification, and whether it is restart-required, reloadable for new operations, or reloadable during running operations.
-- Pull-request review rejects reloadable settings without an explicit consistency, security, privacy, and operational rationale, and rejects programmatic configuration mutation until the write-side ADR is accepted.
+- Pull-request review rejects reloadable settings without an explicit consistency, security, privacy, and operational rationale.
+- Code review rejects any code that writes a configuration source or a bound options instance — a JSON file the host reads, a provider dictionary, an environment variable, an options cache — and rejects a port, service, endpoint, or command offering to do it. A feature needing mutable state is reviewed against the table that holds it.
 
 ## More Information
 
@@ -143,14 +150,14 @@ A secret that is *not* reached through a reference — a password written into a
 - Microsoft Learn, "Options pattern in ASP.NET Core," documents `IOptions<T>`, `IOptionsSnapshot<T>`, `IOptionsMonitor<T>`, named options, options validation, and that validation runs again when options are reloaded: <https://learn.microsoft.com/en-us/aspnet/core/fundamentals/configuration/options?view=aspnetcore-10.0>.
 - Microsoft Learn, "Options pattern in .NET," documents options validation, `IValidateOptions<TOptions>`, and `AddOptionsWithValidateOnStart<TOptions>` / `ValidateOnStart` startup validation: <https://learn.microsoft.com/en-us/dotnet/core/extensions/options>.
 - Microsoft Learn, "Detect changes with change tokens in ASP.NET Core," describes configuration reload change tokens and file-provider reload behavior: <https://learn.microsoft.com/en-us/aspnet/core/fundamentals/change-tokens?view=aspnetcore-10.0>.
-- Microsoft Learn, "Implement a custom configuration provider in .NET," documents custom providers backed by a database, which is relevant background for a future storage-backed read/write provider but is not adopted by this ADR: <https://learn.microsoft.com/en-us/dotnet/core/extensions/custom-configuration-provider>.
+- Microsoft Learn, "Implement a custom configuration provider in .NET," documents custom providers backed by a database, which is background for a read-only source of that shape and is not adopted by this ADR; the writable half of what that page describes is refused above: <https://learn.microsoft.com/en-us/dotnet/core/extensions/custom-configuration-provider>.
 - This ADR refines the MailFathom architecture rule that `Host` owns configuration and dependency injection, while `Application` and `Domain` remain independent of infrastructure frameworks: `specs/2026-07-22-mail-fathom-architecture-draft.md`.
 
 ## Decision Outcome
 
 Chosen option: "Introduce an application-owned configuration access layer backed by host options and reload notifications", because it keeps .NET configuration infrastructure at the host/infrastructure boundary while giving application code stable, validated, domain-meaningful configuration objects with explicit reload semantics.
 
-The decision is proposed, not accepted. The first implementation should cover only source validation, reading, mapping, and automatic reload for runtime settings that are safe to update in-process. Programmatic modification is a target capability for a later phase, but configuration storage itself remains undecided: files, a database-backed provider, a cloud configuration store, another managed configuration service, administrative editing, approval workflow, configuration history, and multi-tenant configuration lifecycle are deferred decisions.
+The decision is proposed, not accepted. It covers source validation, reading, mapping, and automatic reload for runtime settings that are safe to update in-process, and it closes the write side: configuration is read-only to the process, and administrative editing of it, an approval workflow over it, a configuration history, and a multi-tenant configuration lifecycle are refused with the writer port rather than deferred. Where a deployment's read-only sources come from stays open — a file, a mounted object, a cloud configuration store, another managed configuration service — and so does every question about state a program modifies, which each belongs to the record introducing that state and is answered in PostgreSQL.
 
 ### Pros and Cons of the Selected Option
 
@@ -165,4 +172,4 @@ Host/infrastructure code binds and validates provider-shaped options, maps them 
 - Neutral, because configuration DTOs and business settings will both exist and require explicit mapping tests.
 - Bad, because the layer adds code and design discipline before MailFathom has many configurable behaviors.
 - Bad, because incorrect classification of reloadability can still cause inconsistent runtime behavior.
-- Bad, because this layer must stay narrow; a generic settings service or premature writer API would recreate raw configuration coupling under a different name.
+- Bad, because this layer must stay narrow; a generic settings service would recreate raw configuration coupling under a different name, and a writer API would do it while also breaking the read-only rule above.
