@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Application.Rules.Actions;
 using MailFathom.Host.Configuration.Mail;
 using MailFathom.Host.Configuration.Rules;
 using Microsoft.Extensions.Configuration;
@@ -9,7 +10,7 @@ using Xunit;
 
 namespace MailFathom.Host.UnitTests.Configuration.Rules;
 
-/// <summary>Covers the two readings of one question: which accounts a rule's scope is allowed to name.</summary>
+/// <summary>Covers the two readings of one question: what a rule set is allowed to name and to ask for.</summary>
 /// <remarks>
 /// Composition reads keys and a reload reads a bound snapshot, so the two have to agree. A rule set startup accepted and
 /// the first reload refused would be the failure, and it would arrive on an edit that changed nothing about the rules.
@@ -20,19 +21,17 @@ public sealed class DeclaredMailAccountsTests
     public void ReadFrom_Configuration_NamesEveryDeclaredAccountInDeclaredOrder()
     {
         // Arrange
-        var configuration = new ConfigurationBuilder()
-            .AddInMemoryCollection(new Dictionary<string, string?>
-            {
-                ["MailSynchronization:Accounts:0:AccountId"] = "primary",
-                ["MailSynchronization:Accounts:1:AccountId"] = "work",
-            })
-            .Build();
+        var configuration = Configuration(new Dictionary<string, string?>
+        {
+            ["MailSynchronization:Accounts:0:AccountId"] = "primary",
+            ["MailSynchronization:Accounts:1:AccountId"] = "work",
+        });
 
         // Act
         var accounts = DeclaredMailAccounts.ReadFrom(configuration);
 
         // Assert
-        Assert.Equal(["primary", "work"], accounts);
+        Assert.Equal(["primary", "work"], Identifiers(accounts));
     }
 
     /// <summary>A blank identifier is the synchronization section's own defect, so it is dropped rather than reported here.</summary>
@@ -40,19 +39,17 @@ public sealed class DeclaredMailAccountsTests
     public void ReadFrom_ConfigurationWithABlankIdentifier_LeavesItOut()
     {
         // Arrange
-        var configuration = new ConfigurationBuilder()
-            .AddInMemoryCollection(new Dictionary<string, string?>
-            {
-                ["MailSynchronization:Accounts:0:AccountId"] = "  primary  ",
-                ["MailSynchronization:Accounts:1:AccountId"] = "   ",
-            })
-            .Build();
+        var configuration = Configuration(new Dictionary<string, string?>
+        {
+            ["MailSynchronization:Accounts:0:AccountId"] = "  primary  ",
+            ["MailSynchronization:Accounts:1:AccountId"] = "   ",
+        });
 
         // Act
         var accounts = DeclaredMailAccounts.ReadFrom(configuration);
 
         // Assert
-        Assert.Equal(["primary"], accounts);
+        Assert.Equal(["primary"], Identifiers(accounts));
     }
 
     [Fact]
@@ -68,23 +65,111 @@ public sealed class DeclaredMailAccountsTests
         Assert.Empty(accounts);
     }
 
+    /// <summary>An account that configures no folder is run with the inbox mapping, so that is the folder a rule may file into.</summary>
+    [Fact]
+    public void ReadFrom_AccountDeclaringNoFolder_MirrorsTheInbox()
+    {
+        // Arrange
+        var configuration = Configuration(new Dictionary<string, string?>
+        {
+            ["MailSynchronization:Accounts:0:AccountId"] = "primary",
+        });
+
+        // Act
+        var account = Assert.Single(DeclaredMailAccounts.ReadFrom(configuration));
+
+        // Assert
+        Assert.Equal(["INBOX"], account.MirroredFolderAliases.Select(alias => alias.Value));
+    }
+
+    /// <summary>Nothing binds an unmirrored folder to a remote path, so it is not a folder a rule can file into.</summary>
+    [Fact]
+    public void ReadFrom_FolderTheAccountDoesNotMirror_IsNotADestination()
+    {
+        // Arrange
+        var configuration = Configuration(new Dictionary<string, string?>
+        {
+            ["MailSynchronization:Accounts:0:AccountId"] = "primary",
+            ["MailSynchronization:Accounts:0:Folders:0:Alias"] = "inbox",
+            ["MailSynchronization:Accounts:0:Folders:0:SpecialUse"] = "Inbox",
+            ["MailSynchronization:Accounts:0:Folders:1:Alias"] = "spam",
+            ["MailSynchronization:Accounts:0:Folders:1:SpecialUse"] = "Junk",
+            ["MailSynchronization:Accounts:0:Folders:1:Synchronize"] = "false",
+        });
+
+        // Act
+        var account = Assert.Single(DeclaredMailAccounts.ReadFrom(configuration));
+
+        // Assert
+        Assert.Equal(["INBOX"], account.MirroredFolderAliases.Select(alias => alias.Value));
+    }
+
+    /// <summary>Deletion is opt-in on every account, and the three reversible actions are permitted until refused.</summary>
+    [Fact]
+    public void ReadFrom_AccountDeclaringNoRuleActions_PermitsEverythingButDeletion()
+    {
+        // Arrange
+        var configuration = Configuration(new Dictionary<string, string?>
+        {
+            ["MailSynchronization:Accounts:0:AccountId"] = "primary",
+        });
+
+        // Act
+        var account = Assert.Single(DeclaredMailAccounts.ReadFrom(configuration));
+
+        // Assert
+        Assert.Equal(MailRuleActionPermissions.Default, account.PermittedRuleActions);
+    }
+
+    [Fact]
+    public void ReadFrom_AccountNarrowingWhatRulesMayDo_ReadsEverySwitch()
+    {
+        // Arrange
+        var configuration = Configuration(new Dictionary<string, string?>
+        {
+            ["MailSynchronization:Accounts:0:AccountId"] = "primary",
+            ["MailSynchronization:Accounts:0:RuleActions:Move"] = "false",
+            ["MailSynchronization:Accounts:0:RuleActions:Copy"] = "false",
+            ["MailSynchronization:Accounts:0:RuleActions:Delete"] = "true",
+            ["MailSynchronization:Accounts:0:RuleActions:MarkAsRead"] = "false",
+        });
+
+        // Act
+        var account = Assert.Single(DeclaredMailAccounts.ReadFrom(configuration));
+
+        // Assert
+        Assert.Equal(
+            new MailRuleActionPermissions(
+                PermitsRelocate: false,
+                PermitsCopy: false,
+                PermitsDelete: true,
+                PermitsSetSeen: false),
+            account.PermittedRuleActions);
+    }
+
     /// <summary>The bound reading is the one a reload uses, and it has to answer exactly as the key reading does.</summary>
     [Fact]
     public void ReadFrom_BoundSettings_AnswersAsTheConfigurationReadingDoes()
     {
         // Arrange
-        var configuration = new ConfigurationBuilder()
-            .AddInMemoryCollection(new Dictionary<string, string?>
-            {
-                ["MailSynchronization:Accounts:0:AccountId"] = "  primary  ",
-                ["MailSynchronization:Accounts:1:AccountId"] = "work",
-            })
-            .Build();
+        var configuration = Configuration(new Dictionary<string, string?>
+        {
+            ["MailSynchronization:Accounts:0:AccountId"] = "  primary  ",
+            ["MailSynchronization:Accounts:0:Folders:0:Alias"] = "archive",
+            ["MailSynchronization:Accounts:0:Folders:0:RemotePath"] = "Archive",
+            ["MailSynchronization:Accounts:0:RuleActions:Delete"] = "true",
+            ["MailSynchronization:Accounts:1:AccountId"] = "work",
+        });
         var settings = new MailSynchronizationOptions
         {
             Accounts =
             [
-                new MailSynchronizationAccountOptions { AccountId = "  primary  " },
+                new MailSynchronizationAccountOptions
+                {
+                    AccountId = "  primary  ",
+                    Folders = [new MailFolderMappingOptions { Alias = "archive", RemotePath = "Archive" }],
+                    RuleActions = new MailRuleActionPermissionOptions { Delete = true },
+                },
                 new MailSynchronizationAccountOptions { AccountId = "work" },
             ],
         };
@@ -94,7 +179,20 @@ public sealed class DeclaredMailAccountsTests
         var fromSettings = DeclaredMailAccounts.ReadFrom(settings);
 
         // Assert
-        Assert.Equal(fromConfiguration, fromSettings);
-        Assert.Equal(["primary", "work"], fromSettings);
+        Assert.Equal(Describe(fromConfiguration), Describe(fromSettings));
+        Assert.Equal(["primary", "work"], Identifiers(fromSettings));
     }
+
+    private static IConfiguration Configuration(Dictionary<string, string?> keys) =>
+        new ConfigurationBuilder().AddInMemoryCollection(keys).Build();
+
+    private static IReadOnlyList<string> Identifiers(IEnumerable<DeclaredMailAccount> accounts) =>
+        [.. accounts.Select(account => account.AccountId)];
+
+    /// <summary>Renders each account as text, because the read model holds collections that compare by reference.</summary>
+    private static IReadOnlyList<string> Describe(IEnumerable<DeclaredMailAccount> accounts) =>
+    [
+        .. accounts.Select(account =>
+            $"{account.AccountId}|{string.Join(',', account.MirroredFolderAliases.Select(alias => alias.Value))}|{account.PermittedRuleActions}"),
+    ];
 }

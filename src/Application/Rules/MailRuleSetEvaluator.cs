@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.Diagnostics.CodeAnalysis;
+using MailFathom.Application.Rules.Actions;
 using MailFathom.Application.Rules.Conditions;
 using MailFathom.Application.Rules.Facts;
 
@@ -10,6 +11,11 @@ namespace MailFathom.Application.Rules;
 
 /// <summary>Runs a rule set over one email in declared order, bounding each condition and classifying every failure.</summary>
 /// <remarks>
+/// <para>
+/// What the matching rules ask the mailbox for is composed here as well, because composing it needs the matched rules
+/// in declared order and this is the only place that order and those rules are held together. A rule that failed asked
+/// for nothing, since it did not match.
+/// </para>
 /// <para>
 /// A rule scoped to accounts this email does not belong to is passed over rather than evaluated, and leaves no
 /// evaluation behind: it did not decline to match, it was not one of this account's rules. That also means it cannot end
@@ -62,6 +68,7 @@ public sealed class MailRuleSetEvaluator
         ArgumentNullException.ThrowIfNull(facts);
 
         var evaluations = new List<MailRuleEvaluation>(ruleSet.Rules.Count);
+        var matchedRules = new List<MailRule>();
         var stoppedEarly = false;
 
         foreach (var rule in ruleSet.Rules)
@@ -75,7 +82,14 @@ public sealed class MailRuleSetEvaluator
 
             evaluations.Add(evaluation);
 
-            if (evaluation.Outcome == MailRuleOutcome.Matched && rule.StopWhenMatched)
+            if (evaluation.Outcome != MailRuleOutcome.Matched)
+            {
+                continue;
+            }
+
+            matchedRules.Add(rule);
+
+            if (rule.StopWhenMatched)
             {
                 stoppedEarly = true;
 
@@ -83,7 +97,11 @@ public sealed class MailRuleSetEvaluator
             }
         }
 
-        return MailRuleSetEvaluation.Create(ruleSet.Revision, evaluations, stoppedEarly);
+        return MailRuleSetEvaluation.Create(
+            ruleSet.Revision,
+            evaluations,
+            stoppedEarly,
+            MailRuleActionPlan.Compose(matchedRules));
     }
 
     [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "A condition that fails for any reason must be recorded as a failed rule rather than end the pass, which is the totality this type exists to apply.")]

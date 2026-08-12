@@ -55,7 +55,7 @@ public sealed class OrchestratedMutationReconciliationReadTests(MailFathomOrches
     private static readonly DateTimeOffset ObservedAt = new(2026, 5, 4, 9, 0, 0, TimeSpan.Zero);
 
     private static readonly MailboxMutationRequester Requester =
-        MailboxMutationRequester.Rule("reconciliation-read", 1);
+        MailboxMutationRequester.Rule("reconciliation-read", "1");
 
     /// <summary>
     /// The whole convergence loop for a relocation MailFathom performed: the run meeting the new occurrence finds the

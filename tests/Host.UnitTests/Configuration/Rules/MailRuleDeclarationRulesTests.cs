@@ -3,6 +3,8 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.Globalization;
+using MailFathom.Application.Rules.Actions;
+using MailFathom.Domain.Folders;
 using MailFathom.Host.Configuration.Rules;
 using MailFathom.Infrastructure.Rules;
 using Xunit;
@@ -16,8 +18,13 @@ public sealed class MailRuleDeclarationRulesTests
     private const char FieldSeparator = '\u001F';
     private const char AccountSeparator = '\u001D';
 
-    /// <summary>The accounts the deployment declares, which is what a rule's scope is judged against.</summary>
-    private static readonly string[] DeclaredAccounts = ["primary", "work"];
+    /// <summary>The accounts the deployment declares, which is what a rule's scope, destinations, and actions are judged against.</summary>
+    /// <remarks>Both mirror an archive folder and neither permits deletion, which is what an account says by saying nothing.</remarks>
+    private static readonly DeclaredMailAccount[] DeclaredAccounts =
+    [
+        DeclaredAccount("primary"),
+        DeclaredAccount("work"),
+    ];
 
     private readonly NCalcMailRuleConditionCompiler compiler = new();
 
@@ -391,16 +398,222 @@ public sealed class MailRuleDeclarationRulesTests
         Assert.Empty(generalErrors);
     }
 
+    /// <summary>The ordinary combinations are what an owner writes most, so accepting them is worth asserting outright.</summary>
+    [Fact]
+    public void FindDeclarationErrors_ARuleFilingMailAndMarkingItRead_ReportsNothing()
+    {
+        // Arrange
+        var candidate = new MailRulesOptions
+        {
+            Rules =
+            [
+                CreateRule(
+                    "file-invoices",
+                    "isSeen",
+                    actions: new MailRuleActionOptions { MoveTo = "archive", MarkAsRead = true }),
+            ],
+        };
+
+        // Act
+        var errors = MailRuleDeclarationRules.FindDeclarationErrors(candidate, this.compiler, DeclaredAccounts);
+
+        // Assert
+        Assert.Empty(errors);
+    }
+
+    /// <summary>A combination naming two fates for one occurrence is refused where it is written, not resolved at run time.</summary>
+    [Fact]
+    public void FindDeclarationErrors_ARuleFilingAndDeletingOneEmail_IsRefusedNamingTheRule()
+    {
+        // Arrange
+        var permitting = DeclaredAccount("primary", MailRuleActionPermissions.Default with { PermitsDelete = true });
+        var candidate = new MailRulesOptions
+        {
+            Rules =
+            [
+                CreateRule(
+                    "file-invoices",
+                    "isSeen",
+                    accounts: ["primary"],
+                    actions: new MailRuleActionOptions { MoveTo = "archive", Delete = true }),
+            ],
+        };
+
+        // Act
+        var errors = MailRuleDeclarationRules.FindDeclarationErrors(candidate, this.compiler, [permitting]);
+
+        // Assert
+        var error = Assert.Single(errors);
+        Assert.Contains("MailRules:Rules:0:Actions", error, StringComparison.Ordinal);
+        Assert.Contains("file-invoices", error, StringComparison.Ordinal);
+    }
+
+    /// <summary>Deletion is opt-in, so a rule declaring it over an account that permits none is refused rather than skipped.</summary>
+    [Fact]
+    public void FindDeclarationErrors_ARuleDeletingMailOnAnAccountThatRefusesDeletion_IsRefused()
+    {
+        // Arrange
+        var candidate = new MailRulesOptions
+        {
+            Rules = [CreateRule("drop-notifications", "isSeen", actions: new MailRuleActionOptions { Delete = true })],
+        };
+
+        // Act
+        var errors = MailRuleDeclarationRules.FindDeclarationErrors(candidate, this.compiler, DeclaredAccounts);
+
+        // Assert
+        Assert.Equal(2, errors.Count);
+        Assert.All(errors, error => Assert.Contains("does not permit", error, StringComparison.Ordinal));
+    }
+
+    /// <summary>An account that permits the action accepts the same rule, which is what makes the refusal a decision rather than a ban.</summary>
+    [Fact]
+    public void FindDeclarationErrors_ARuleDeletingMailOnAnAccountThatPermitsIt_ReportsNothing()
+    {
+        // Arrange
+        var permitting = DeclaredAccount(
+            "primary",
+            MailRuleActionPermissions.Default with { PermitsDelete = true });
+        var candidate = new MailRulesOptions
+        {
+            Rules =
+            [
+                CreateRule(
+                    "drop-notifications",
+                    "isSeen",
+                    accounts: ["primary"],
+                    actions: new MailRuleActionOptions { Delete = true }),
+            ],
+        };
+
+        // Act
+        var errors = MailRuleDeclarationRules.FindDeclarationErrors(candidate, this.compiler, [permitting]);
+
+        // Assert
+        Assert.Empty(errors);
+    }
+
+    /// <summary>Nothing binds an unmirrored folder to a remote path, so a rule filing into one could never resolve a destination.</summary>
+    [Fact]
+    public void FindDeclarationErrors_ARuleFilingIntoAFolderTheAccountDoesNotMirror_IsRefused()
+    {
+        // Arrange
+        var candidate = new MailRulesOptions
+        {
+            Rules =
+            [
+                CreateRule(
+                    "file-invoices",
+                    "isSeen",
+                    accounts: ["primary"],
+                    actions: new MailRuleActionOptions { MoveTo = "nowhere" }),
+            ],
+        };
+
+        // Act
+        var errors = MailRuleDeclarationRules.FindDeclarationErrors(candidate, this.compiler, DeclaredAccounts);
+
+        // Assert
+        var error = Assert.Single(errors);
+        Assert.Contains("NOWHERE", error, StringComparison.Ordinal);
+        Assert.Contains("primary", error, StringComparison.Ordinal);
+    }
+
+    /// <summary>An unscoped rule reaches every account, so a destination one of them does not mirror is refused for that one.</summary>
+    [Fact]
+    public void FindDeclarationErrors_AnUnscopedRuleFilingIntoAFolderOneAccountLacks_IsRefusedForThatAccount()
+    {
+        // Arrange
+        var accounts = new[] { DeclaredAccount("primary"), NoFolderAccount("work") };
+        var candidate = new MailRulesOptions
+        {
+            Rules = [CreateRule("file-invoices", "isSeen", actions: new MailRuleActionOptions { MoveTo = "archive" })],
+        };
+
+        // Act
+        var errors = MailRuleDeclarationRules.FindDeclarationErrors(candidate, this.compiler, accounts);
+
+        // Assert
+        var error = Assert.Single(errors);
+        Assert.Contains("work", error, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    public void FindDeclarationErrors_ADestinationNamedByNothing_IsRefused(string destination)
+    {
+        // Arrange
+        var candidate = new MailRulesOptions
+        {
+            Rules =
+            [
+                CreateRule("file-invoices", "isSeen", actions: new MailRuleActionOptions { MoveTo = destination }),
+            ],
+        };
+
+        // Act
+        var errors = MailRuleDeclarationRules.FindDeclarationErrors(candidate, this.compiler, DeclaredAccounts);
+
+        // Assert
+        Assert.Contains(
+            errors,
+            error => error.Contains("MailRules:Rules:0:Actions", StringComparison.Ordinal));
+    }
+
+    /// <summary>The identity is a digest over the declarations, so a destination carrying a separator could blur two rule sets into one.</summary>
+    [Fact]
+    public void FindDeclarationErrors_ADestinationCarryingADigestSeparator_IsRefused()
+    {
+        // Arrange
+        var candidate = new MailRulesOptions
+        {
+            Rules =
+            [
+                CreateRule(
+                    "file-invoices",
+                    "isSeen",
+                    actions: new MailRuleActionOptions
+                    {
+                        MoveTo = string.Create(CultureInfo.InvariantCulture, $"arch{FieldSeparator}ive"),
+                    }),
+            ],
+        };
+
+        // Act
+        var errors = MailRuleDeclarationRules.FindDeclarationErrors(candidate, this.compiler, DeclaredAccounts);
+
+        // Assert
+        Assert.Contains(
+            errors,
+            error => error.Contains("MailRules:Rules:0:Actions", StringComparison.Ordinal));
+    }
+
     private static MailRuleOptions CreateRule(
         string name,
         string conditionText,
         bool enabled = true,
-        string[]? accounts = null) =>
+        string[]? accounts = null,
+        MailRuleActionOptions? actions = null) =>
         new()
         {
             Name = name,
             Condition = conditionText,
             Enabled = enabled,
             Accounts = accounts ?? [],
+            Actions = actions ?? new MailRuleActionOptions(),
         };
+
+    /// <summary>One declared account, mirroring an archive folder and permitting whatever the caller says it does.</summary>
+    private static DeclaredMailAccount DeclaredAccount(
+        string accountId,
+        MailRuleActionPermissions? permissions = null) =>
+        new(
+            accountId,
+            [MailFolderAlias.Create("archive")],
+            permissions ?? MailRuleActionPermissions.Default);
+
+    /// <summary>One declared account mirroring nothing a rule could file into.</summary>
+    private static DeclaredMailAccount NoFolderAccount(string accountId) =>
+        new(accountId, [], MailRuleActionPermissions.Default);
 }

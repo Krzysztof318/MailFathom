@@ -25,7 +25,7 @@ public sealed class MailboxMutationAuditEntryTests
 
     private static readonly StoredEmailId LocalEmail = StoredEmailId.Create(Guid.CreateVersion7(RecordedAt));
 
-    private static readonly MailboxMutationRequester Requester = MailboxMutationRequester.Rule("file-newsletters", 3);
+    private static readonly MailboxMutationRequester Requester = MailboxMutationRequester.Rule("file-newsletters", "3");
 
     private static readonly MailFolderResolution SourceFolder = MailFolderResolution.FirstBindingOf(
         MailFolderAlias.Create("inbox"),

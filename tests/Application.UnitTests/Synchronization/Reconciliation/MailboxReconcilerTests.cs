@@ -1145,7 +1145,7 @@ public sealed class MailboxReconcilerTests
         AuthoredDeleteEmailDisposition? relocationDisposition = null)
     {
         var occurrence = EmailOccurrenceId.Create(Account, InboxFolder.Id, SelectedUidValidity, ImapUid.Create(uid));
-        var requester = MailboxMutationRequester.Rule("file-newsletters", 1);
+        var requester = MailboxMutationRequester.Rule("file-newsletters", "1");
         var opened = recordedAt ?? RunInstant;
 
         return new MailboxMutationRecord
@@ -1193,7 +1193,7 @@ public sealed class MailboxReconcilerTests
             Request = MailboxMutationRequest.SetSeen(
                 storedEmailId,
                 occurrence,
-                MailboxMutationRequester.Rule("mark-newsletters-read", 1),
+                MailboxMutationRequester.Rule("mark-newsletters-read", "1"),
                 isSeen),
             Stage = stage,
             IsAudited = false,

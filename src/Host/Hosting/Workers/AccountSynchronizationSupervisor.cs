@@ -493,6 +493,7 @@ internal sealed partial class AccountSynchronizationSupervisor
         }
 
         this.ReportFailedRules(report.Arrivals);
+        this.ReportRuleActions(report.Arrivals);
 
         if (report.RequestedRun is { } requestedRun)
         {
@@ -510,6 +511,7 @@ internal sealed partial class AccountSynchronizationSupervisor
             }
 
             this.ReportFailedRules(requestedRun);
+            this.ReportRuleActions(requestedRun);
         }
 
         switch (report.RequestedRunEnding)
@@ -541,6 +543,31 @@ internal sealed partial class AccountSynchronizationSupervisor
             walk.FailedRuleCount,
             walk.TimedOutRuleCount,
             failedRuleNames);
+    }
+
+    /// <summary>States what the walk asked the mailbox to change, and separately what it declined to ask for.</summary>
+    /// <remarks>
+    /// A change is a request written down rather than an IMAP operation, so this line says what the account's next
+    /// convergence pass has to carry. What was not asked for is a second line at warning level, because an action a
+    /// rule declared and the mailbox never received is the case an operator has to act on.
+    /// </remarks>
+    private void ReportRuleActions(MailRuleEvaluationWalk walk)
+    {
+        if (walk.RequestedActionCount > 0)
+        {
+            this.LogRuleActionsRequested(this.accountId.Value, walk.RequestedActionCount);
+        }
+
+        if (walk.WithheldActionCount == 0 && walk.FailedActionCount == 0)
+        {
+            return;
+        }
+
+        this.LogRuleActionsUnapplied(
+            this.accountId.Value,
+            walk.WithheldActionCount,
+            walk.FailedActionCount,
+            NameList(walk.UnappliedActionRuleNames));
     }
 
     /// <summary>Renders a set of rule names for one log line, which is safe because a rule name carries nothing personal.</summary>
@@ -938,6 +965,22 @@ internal sealed partial class AccountSynchronizationSupervisor
         int failedRuleCount,
         int timedOutRuleCount,
         string failedRuleNames);
+
+    /// <summary>States what the rules asked the mailbox for, which the account's convergence pass carries rather than this one.</summary>
+    [LoggerMessage(
+        Level = LogLevel.Information,
+        Message = "The rules of account {AccountId} asked for {RequestedActionCount} changes to its mailbox; the account's next convergence pass carries them to the mail server.")]
+    private partial void LogRuleActionsRequested(string accountId, int requestedActionCount);
+
+    /// <summary>Separates an action another rule had already settled from one the account or its folders no longer admit.</summary>
+    [LoggerMessage(
+        Level = LogLevel.Warning,
+        Message = "{WithheldActionCount} actions declared for account {AccountId} were withheld because an earlier rule had already settled the same message, and {FailedActionCount} named something the account no longer resolves or no longer permits; rules: [{UnappliedActionRuleNames}].")]
+    private partial void LogRuleActionsUnapplied(
+        string accountId,
+        int withheldActionCount,
+        int failedActionCount,
+        string unappliedActionRuleNames);
 
     [LoggerMessage(
         Level = LogLevel.Warning,

@@ -55,7 +55,7 @@ public sealed class OrchestratedMailboxMutationRecordTests(MailFathomOrchestrati
         RemoteFolderPath.Create(ArchiveFolderName, hierarchyDelimiter: '.');
 
     private static readonly MailboxMutationRequester Requester =
-        MailboxMutationRequester.Rule("file-to-archive", 1);
+        MailboxMutationRequester.Rule("file-to-archive", "1");
 
     /// <summary>
     /// A relocation whose process stopped after the copy landed and before the source was removed. The message is in

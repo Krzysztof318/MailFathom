@@ -48,7 +48,7 @@ public sealed class OrchestratedSeenStateProvenanceTests(MailFathomOrchestration
         RemoteFolderPath.Create(FolderName, hierarchyDelimiter: '.'));
 
     private static readonly MailboxMutationRequester MarkingRule =
-        MailboxMutationRequester.Rule("mark-newsletters-read", 1);
+        MailboxMutationRequester.Rule("mark-newsletters-read", "1");
 
     /// <summary>
     /// A second rule, because the idempotency identity is the occurrence, the mutation, and who asked, and a
@@ -58,7 +58,7 @@ public sealed class OrchestratedSeenStateProvenanceTests(MailFathomOrchestration
     /// answer rather than the clearing this class is about.
     /// </summary>
     private static readonly MailboxMutationRequester SurfacingRule =
-        MailboxMutationRequester.Rule("surface-unpaid-invoices", 1);
+        MailboxMutationRequester.Rule("surface-unpaid-invoices", "1");
 
     /// <summary>Each flag MailFathom moved is withheld from rule evaluation, the owner's is not, and the stored value follows only an observation.</summary>
     [Fact]

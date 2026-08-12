@@ -23,6 +23,7 @@ using MailFathom.Application.Mail.Mutations.Convergence;
 using MailFathom.Application.Persistence;
 using MailFathom.Application.Retrieval.AskMail.Audit;
 using MailFathom.Application.Rules;
+using MailFathom.Application.Rules.Actions;
 using MailFathom.Application.Rules.Conditions;
 using MailFathom.Application.Rules.Evaluation;
 using MailFathom.Application.SensitiveContent.Detection;
@@ -306,6 +307,9 @@ try
     // built rather than captured once at startup.
     builder.Services.AddScoped(provider =>
         provider.GetRequiredService<ISettingsSnapshot<MailRulesOptions>>().Current.ToEvaluationOptions());
+    // Scoped beside the pass rather than transient, because it remembers the folder a destination alias resolved to for
+    // the length of the pass; a batch of mail matching one filing rule would otherwise re-read one binding per message.
+    builder.Services.AddScoped<MailRuleActionRecorder>();
     builder.Services.AddScoped<MailRuleEvaluationPass>();
     builder.Services.AddScoped<MailRuleEvaluationRunRequests>();
     builder.Services.AddHostedService(
@@ -348,6 +352,7 @@ try
     builder.Services.AddScoped<IMailSynchronizationWindowReader>(provider => provider.GetRequiredService<MailSynchronizationOptions>());
     builder.Services.AddScoped<IRemotelyDeletedEmailDispositionReader>(provider => provider.GetRequiredService<MailSynchronizationOptions>());
     builder.Services.AddScoped<IAuthoredDeleteEmailDispositionReader>(provider => provider.GetRequiredService<MailSynchronizationOptions>());
+    builder.Services.AddScoped<IMailRuleActionPermissionReader>(provider => provider.GetRequiredService<MailSynchronizationOptions>());
     builder.Services.AddScoped<IMailboxMutationAuditSettingsReader>(provider => provider.GetRequiredService<MailSynchronizationOptions>());
     builder.Services.AddScoped<IMailAnsweringAuditSettingsReader>(provider => provider.GetRequiredService<MailSynchronizationOptions>());
     builder.Services.AddScoped<IMailAccountCatalog>(provider => provider.GetRequiredService<MailSynchronizationOptions>());

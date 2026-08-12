@@ -3,9 +3,12 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.Rules;
+using MailFathom.Application.Rules.Actions;
 using MailFathom.Application.Rules.Conditions;
 using MailFathom.Application.Rules.Facts;
 using MailFathom.Application.UnitTests.TestDoubles;
+using MailFathom.Domain.Folders;
+using MailFathom.Domain.Mutations;
 using MailFathom.TestSupport;
 using Microsoft.Extensions.Time.Testing;
 using Xunit;
@@ -166,8 +169,8 @@ public sealed class MailRuleSetEvaluatorTests
         var elsewhere = ScriptedMailRuleCondition.Answering(matches: true);
         var ruleSet = CreateRuleSet(
         [
-            MailRule.Create("other-account", elsewhere, stopWhenMatched: false, ["primary"]),
-            MailRule.Create("this-account", ScriptedMailRuleCondition.Answering(matches: true), stopWhenMatched: false, ["work"]),
+            MailRule.Create("other-account", elsewhere, stopWhenMatched: false, accounts: ["primary"]),
+            MailRule.Create("this-account", ScriptedMailRuleCondition.Answering(matches: true), stopWhenMatched: false, accounts: ["work"]),
             MailRule.Create("every-account", ScriptedMailRuleCondition.Answering(matches: true), stopWhenMatched: false),
         ]);
 
@@ -191,7 +194,7 @@ public sealed class MailRuleSetEvaluatorTests
         // Arrange
         var ruleSet = CreateRuleSet(
         [
-            MailRule.Create("stopping-elsewhere", ScriptedMailRuleCondition.Answering(matches: true), stopWhenMatched: true, ["primary"]),
+            MailRule.Create("stopping-elsewhere", ScriptedMailRuleCondition.Answering(matches: true), stopWhenMatched: true, accounts: ["primary"]),
             MailRule.Create("below", ScriptedMailRuleCondition.Answering(matches: true), stopWhenMatched: false),
         ]);
 
@@ -212,7 +215,7 @@ public sealed class MailRuleSetEvaluatorTests
     {
         // Arrange
         var ruleSet = CreateRuleSet(
-            [MailRule.Create("mistyped", ScriptedMailRuleCondition.Answering(matches: true), stopWhenMatched: false, ["Work"])]);
+            [MailRule.Create("mistyped", ScriptedMailRuleCondition.Answering(matches: true), stopWhenMatched: false, accounts: ["Work"])]);
 
         // Act
         var evaluation = await this.CreateEvaluator().EvaluateAsync(
@@ -222,6 +225,34 @@ public sealed class MailRuleSetEvaluatorTests
 
         // Assert
         Assert.Empty(evaluation.Evaluations);
+    }
+
+    /// <summary>A rule that could not answer did not match, so what it declared is not something the mailbox is asked for.</summary>
+    [Fact]
+    public async Task EvaluateAsync_RuleThatFailedBesideOneThatMatched_PlansOnlyTheMatchingRulesActions()
+    {
+        // Arrange
+        var filing = MailRuleActionSet.Create([MailRuleAction.Relocate(MailFolderAlias.Create("archive"))]);
+        var ruleSet = CreateRuleSet(
+        [
+            MailRule.Create(
+                "raising",
+                ScriptedMailRuleCondition.Raising(new InvalidOperationException("unusable operand")),
+                MailRuleActionSet.Create([MailRuleAction.Delete()])),
+            MailRule.Create("below", ScriptedMailRuleCondition.Answering(matches: true), filing),
+        ]);
+
+        // Act
+        var evaluation = await this.CreateEvaluator().EvaluateAsync(
+            ruleSet,
+            CreateFacts(),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        var planned = Assert.Single(evaluation.ActionPlan.Actions);
+        Assert.Equal("below", planned.RuleName);
+        Assert.Equal(MailboxMutation.Relocate, planned.Action.Mutation);
+        Assert.Empty(evaluation.ActionPlan.WithheldRuleNames);
     }
 
     [Fact]
@@ -250,7 +281,7 @@ public sealed class MailRuleSetEvaluatorTests
         return MailRuleSet.Create(
             materialized,
             MailRuleSetRevision.Create(
-                [.. materialized.Select(rule => new MailRuleDeclaration(rule.Name, "isSeen", rule.StopWhenMatched, [.. rule.Accounts]))]),
+                [.. materialized.Select(rule => new MailRuleDeclaration(rule.Name, "isSeen", [.. rule.Actions.Actions], rule.StopWhenMatched, [.. rule.Accounts]))]),
             MailRuleConditionBounds.Default);
     }
 

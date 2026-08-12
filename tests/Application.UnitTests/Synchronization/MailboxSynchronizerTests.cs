@@ -2023,7 +2023,7 @@ public sealed class MailboxSynchronizerTests
             Request = MailboxMutationRequest.Relocate(
                 relocatedEmailId,
                 EmailOccurrenceId.Create(accountId, sourceBinding, ImapUidValidity.Create(3), ImapUid.Create(41)),
-                MailboxMutationRequester.Rule("file-newsletters", 1),
+                MailboxMutationRequester.Rule("file-newsletters", "1"),
                 InboxFolder.RemotePath),
             Stage = MailboxMutationStage.Completed,
             IsAudited = false,

@@ -21,7 +21,9 @@ namespace MailFathom.Application.Rules;
 /// configuration key leaves it alone, and so does reformatting the file or reordering the keys within one rule.
 /// Reordering the rules themselves does move it, because declared order is part of what a rule set means. So is the
 /// scope: narrowing a rule to one account changes which mail it reaches, which is a different rule set rather than the
-/// same one applied differently.
+/// same one applied differently. So are the actions, for the reason the revision is part of a request's identity at all
+/// — a rule now filing into a different folder must ask afresh rather than be answered by the record of the filing it
+/// asked for before the edit.
 /// </para>
 /// <para>
 /// It carries none of the authored text and no ordering. A record naming a revision therefore holds nothing personal
@@ -47,12 +49,13 @@ public readonly record struct MailRuleSetRevision
     private const char FieldSeparator = '\u001F';
     private const char RuleSeparator = '\u001E';
 
-    /// <summary>Separates the accounts inside one rule's scope, which is the one field holding several values.</summary>
+    /// <summary>Separates the values inside a field holding several of them: the scope, and the declared actions.</summary>
     /// <remarks>
     /// A third separator rather than a reused one, so that a scope of two accounts cannot render as the same text as a
-    /// rule whose next field begins where the second account would have.
+    /// rule whose next field begins where the second account would have. Both multi-valued fields use this one, which
+    /// stays unambiguous because a field separator ends each of them.
     /// </remarks>
-    private const char AccountSeparator = '\u001D';
+    private const char ListSeparator = '\u001D';
 
     private readonly string? value;
 
@@ -77,7 +80,7 @@ public readonly record struct MailRuleSetRevision
     /// impossible.
     /// </remarks>
     public static bool ContainsSeparator(string? value) =>
-        value?.AsSpan().IndexOfAny(FieldSeparator, RuleSeparator, AccountSeparator) >= 0;
+        value?.AsSpan().IndexOfAny(FieldSeparator, RuleSeparator, ListSeparator) >= 0;
 
     /// <summary>Derives the identity of a rule set from the rules it declares, in the order it declares them.</summary>
     /// <param name="declarations">Every rule of the bound set, in declared order.</param>
@@ -101,9 +104,11 @@ public readonly record struct MailRuleSetRevision
                 .Append(FieldSeparator)
                 .Append(declaration.ConditionText)
                 .Append(FieldSeparator)
+                .AppendJoin(ListSeparator, declaration.Actions.Select(action => action.CanonicalForm))
+                .Append(FieldSeparator)
                 .Append(declaration.StopWhenMatched ? "stop" : "continue")
                 .Append(FieldSeparator)
-                .AppendJoin(AccountSeparator, declaration.Accounts)
+                .AppendJoin(ListSeparator, declaration.Accounts)
                 .Append(RuleSeparator);
         }
 

@@ -17,7 +17,7 @@ public sealed class MailboxMutationRequestTests
     private static readonly StoredEmailId LocalEmail = StoredEmailId.Create(Guid.CreateVersion7());
 
     private static readonly MailboxMutationRequester Requester =
-        MailboxMutationRequester.Rule("file-newsletters", 3);
+        MailboxMutationRequester.Rule("file-newsletters", "3");
 
     /// <summary>The parameter names a wrongly shaped request can be refused against, whichever is checked first.</summary>
     private static readonly string[] RejectedParameterNames =

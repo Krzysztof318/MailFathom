@@ -113,11 +113,25 @@ shape the coordinator loop itself, which are read once at start and marked *rest
 | `…:EarliestEmailReceivedDate` | date | unset (everything) | Not in the future (compared in UTC) | reload |
 | `…:RemotelyDeletedEmailDisposition` | enum | `RetainTombstone` | `RetainTombstone`, `EraseLocalCopy` | reload; governs disappearances observed from then on |
 | `…:AuthoredDeleteEmailDisposition` | enum | `RetainLocalCopy` | `RetainLocalCopy`, `RetainTombstone`, `EraseLocalCopy`; what becomes of the local copy of mail MailFathom itself deleted, and it takes precedence over the key above for those | reload; governs deletes authored from then on |
+| `…:RuleActions:Move` | bool | `true` | Whether a rule may file this account's mail into another of its folders | reload; the next rule pass writes down no change this refuses |
+| `…:RuleActions:Copy` | bool | `true` | Whether a rule may place a copy of this account's mail in another of its folders | reload; the same |
+| `…:RuleActions:Delete` | bool | `false` | Whether a rule may remove this account's mail; the one action that is opt-in | reload; the same |
+| `…:RuleActions:MarkAsRead` | bool | `true` | Whether a rule may set or clear this account's remote `\Seen` flag | reload; the same |
 | `…:AuditTrail:Enabled` | bool | `false` | Whether a finished change to this account's mailbox leaves a durable audit entry | reload; governs changes authored from then on |
 | `…:AuditTrail:Retention` | TimeSpan | `90.00:00:00` | 1 day – 3650 days; how long this account's audit entries are kept | reload; the next account run erases against the new window |
 | `…:AnsweringAuditTrail:Enabled` | bool | `false` | Whether a finished `ask_mail` run leaves a durable entry naming the mail it read from this account | reload; governs runs from then on |
 | `…:AnsweringAuditTrail:Retention` | TimeSpan | `30.00:00:00` | 1 day – 3650 days; how long this account's answering entries are kept | reload; the next account run erases against the new window |
 | `…:Folders` | list | inbox by role | Aliases unique; each entry below | reload |
+
+`RuleActions` is what a rule is judged against rather than what it is filtered by: a rule declaring an action this
+account does not permit **fails startup** naming the rule, the action, and the account, rather than running with that
+action quietly dropped. An unscoped rule reaches every declared account, so permitting an action on one account and not
+on another means either permitting it on both or narrowing the rule's own `Accounts` filter. Narrowing this block while
+a rule set that declares the action is in force is the one case the two do not resolve together, since the sections
+reload apart: the permission is read again as each change is written down, so the withdrawal takes effect at the next
+pass and the rule is refused the next time the rule section is read.
+[What an account permits a rule to do](../features/mail-rules.md#what-an-account-permits-a-rule-to-do) states why
+deletion is the one opt-in of the four.
 
 `AuditTrail` is off by default because the record it keeps is derived personal data: it says where a person's mail has
 been, when, and at whose instruction. Turning it on commits the deployment to holding that history, describing it, and
@@ -611,6 +625,17 @@ use — every fact, every function, every operator — and this section document
 | `MailRules:Rules:0:Condition` | string | required | One expression producing a boolean, within the two limits above | reload |
 | `MailRules:Rules:0:StopWhenMatched` | bool | `false` | A match ends the pass and the rules below it are not reached | reload |
 | `MailRules:Rules:0:Enabled` | bool | `true` | A rule switched off is left out of the set entirely | reload |
+| `MailRules:Rules:0:Actions:MoveTo` | string | unset | The alias of the folder a match is filed into; the account must mirror it | reload |
+| `MailRules:Rules:0:Actions:CopyTo` | string | unset | The alias of the folder a copy of a match is placed in; the account must mirror it | reload |
+| `MailRules:Rules:0:Actions:Delete` | bool | unset | `true` removes a match from the folder it matched in; the account must permit deletion | reload |
+| `MailRules:Rules:0:Actions:MarkAsRead` | bool | unset | `true` sets the remote `\Seen` flag and `false` clears it; leaving the key out leaves the flag alone | reload |
+
+An absent action key is a change the rule does not ask for, which is why `MarkAsRead` carries a value rather than being
+a switch. At most one of `MoveTo`, `CopyTo`, and `Delete` may be declared by one rule, `Delete` admits nothing beside
+it, and every permitted combination is applied in MailFathom's own order — the flag first and the relocation or the
+deletion last. A rule declaring nothing here selects mail and changes nothing.
+[What a matching rule does](../features/mail-rules.md#what-a-matching-rule-does) states the whole table, the order, and
+how a change reaches the mail server.
 
 Every condition is read while the host composes itself, and a defect in one — an unparseable expression, a name that is
 not a fact, a call that is not an available function, a comparison between shapes that could never match, a result that

@@ -21,7 +21,7 @@ public sealed class MailboxMutationRecordTests
 
     private static readonly StoredEmailId LocalEmail = StoredEmailId.Create(Guid.CreateVersion7(RecordedAt));
 
-    private static readonly MailboxMutationRequester Requester = MailboxMutationRequester.Rule("file-newsletters", 3);
+    private static readonly MailboxMutationRequester Requester = MailboxMutationRequester.Rule("file-newsletters", "3");
 
     private static readonly ImapUidValidity DestinationUidValidity = ImapUidValidity.Create(9001);
 

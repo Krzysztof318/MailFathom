@@ -28,6 +28,14 @@ internal sealed class InMemoryMailboxMutationRecordStore : IMailboxMutationRecor
     /// <summary>Gets how many requests were written down, which is one per idempotency identity however often it was asked.</summary>
     internal int OpenedRecordCount => this.recordsById.Count;
 
+    /// <summary>Gets the requests written down, in the order they were opened.</summary>
+    /// <remarks>
+    /// The order matters to a caller that asks for several changes to one email, because the order they are asked for
+    /// in is the order MailFathom applies them.
+    /// </remarks>
+    internal IReadOnlyList<MailboxMutationRequest> OpenedRequests =>
+        [.. this.recordsById.Values.OrderBy(record => record.RecordedAt).Select(record => record.Request)];
+
     /// <summary>Gets or sets what the account's audit trail setting resolves to when a record is opened.</summary>
     /// <remarks>
     /// It is a property of the store because that is where the real one resolves it: the answer is written onto the row

@@ -40,21 +40,21 @@ public sealed record MailboxMutationRequester
 
     /// <summary>Names a rule together with the revision of it that asked.</summary>
     /// <param name="ruleName">The operator's own name for the rule.</param>
-    /// <param name="revision">The revision of the rule the request was produced from.</param>
+    /// <param name="revision">The identity of the rule set revision the request was produced from.</param>
     /// <returns>A requester naming that revision of that rule.</returns>
-    /// <exception cref="ArgumentException">Thrown when <paramref name="ruleName" /> is blank, carries a control character, or is long enough that the composed identity exceeds <see cref="MaximumIdentityLength" />.</exception>
-    /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="revision" /> is negative.</exception>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="ruleName" /> or <paramref name="revision" /> is blank, carries a control character, or is long enough that the composed identity exceeds <see cref="MaximumIdentityLength" />.</exception>
     /// <remarks>
     /// The revision is part of the identity rather than a column beside it, because the comparison that matters is
     /// equality of the whole thing: an edited rule is a different requester and asks again, while an unchanged one
-    /// re-evaluated on every pass asks once.
+    /// re-evaluated on every pass asks once. It is text rather than a counter because the revision a rule set is known
+    /// by is a digest over its own declarations, which is what makes two instances reading one file agree on it.
     /// </remarks>
-    public static MailboxMutationRequester Rule(string ruleName, int revision)
+    public static MailboxMutationRequester Rule(string ruleName, string revision)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(ruleName);
-        ArgumentOutOfRangeException.ThrowIfNegative(revision);
+        ArgumentException.ThrowIfNullOrWhiteSpace(revision);
 
-        var identity = string.Create(CultureInfo.InvariantCulture, $"{ruleName.Trim()}@{revision}");
+        var identity = string.Create(CultureInfo.InvariantCulture, $"{ruleName.Trim()}@{revision.Trim()}");
 
         // Reported against the rule name rather than against the composed identity, because that is the part the caller
         // supplied and the only part they can shorten.
