@@ -259,16 +259,29 @@ mirror, delete lets the nightly channel prune it, and the repository-overview sy
 refuses to start when the secret is missing, before it logs in or builds anything, so the failure names the missing
 configuration rather than arriving as a rejected credential half-way through a push. `GHCR_RETENTION_TOKEN` is optional
 and only affects nightly pruning on GHCR; without it that step warns and deletes nothing. `WINGET_PKGS_TOKEN` is the
-third, described below; its job refuses to start without it, and its absence costs a release the winget channel and
-nothing else.
+third, described below; its job is paused, so a release currently needs it for nothing.
 
-### The Windows Package Manager
+### The Windows Package Manager, which is paused
 
-A release also offers the command through winget, and that is a submission rather than a publication. `Submit the
-winget manifest` opens a pull request against [microsoft/winget-pkgs](https://github.com/microsoft/winget-pkgs)
-carrying the three manifest files `scripts/build-winget-manifests.sh` renders, and somebody else's review and
-automated validation decide when `MailFathom.mfctl` starts answering. Nothing here can shorten that, which is why the
-release notes say a version reaches winget a little after it reaches the releases page.
+**A release submits no winget manifest today.** `Submit the winget manifest` carries `if: false` in
+`.github/workflows/release.yml` and appears in the run graph as skipped, and deleting that one condition is the whole
+of what resumes it. Everything else below describes a step that is configured and not running, which is what it is
+there for: the reader of this section is whoever ends the pause.
+
+The pause is a wait rather than a decision. Acceptance belongs to the community repository's review, MailFathom has
+submissions open that it has not reached, and winget-pkgs allows exactly one pull request per package version — so a
+release cannot shorten that wait by submitting again, only queue a version behind the ones already waiting. What ends
+it is those being accepted.
+
+While it is paused, `winget install MailFathom.mfctl` finds nothing, and no page here offers winget as a way to get the
+command. Restoring the job restores that too: it is a paragraph in
+[administering a deployment](admin-endpoint.md#getting-the-command) and a row in the repository-root `README.md`.
+
+A submission is a submission rather than a publication, which is the shape of the step the rest of this section
+describes. `Submit the winget manifest` opens a pull request against
+[microsoft/winget-pkgs](https://github.com/microsoft/winget-pkgs) carrying the three manifest files
+`scripts/build-winget-manifests.sh` renders, and somebody else's review and automated validation decide when
+`MailFathom.mfctl` starts answering.
 
 It runs last, after `Publish the GitHub release`, and that ordering is a requirement rather than a preference: winget
 downloads the installer from the URL the manifest names, and that URL is a release asset which does not resolve until
@@ -296,11 +309,10 @@ microsoft/winget-pkgs also asks a contributor to have signed Microsoft's open-so
 That is a one-time act by the account the token belongs to, and it says nothing about this repository's own position:
 MailFathom asks for no contributor agreement, and this is somebody else's repository under somebody else's rules.
 
-Until a submission is accepted, `winget install MailFathom.mfctl` finds nothing.
-[Administering a deployment](admin-endpoint.md#on-windows-through-winget) states that as a condition rather than as a
-claim about what winget carries today, and sends a reader to `winget search MailFathom.mfctl` for the current answer.
-So no release owes that page an edit when a manifest first merges, and none owes it one when the review falls behind a
-release either.
+Whenever the job runs again, the page it obliges is the one named above, and `winget search MailFathom.mfctl` is what
+answers which versions the community repository actually carries — a release newer than what the review has reached is
+the ordinary state rather than a fault, so the page states the channel as a condition rather than as a claim about
+today.
 
 ### When one registry published and the other did not
 

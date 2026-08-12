@@ -68,8 +68,10 @@ Five things about that block are worth understanding before you copy it:
 ## Getting the command
 
 Every release attaches a self-contained binary per platform, with nothing to install beside it — the .NET runtime is
-inside the file. The asset names, the checksum that tells a genuine download from a tampered one, and the Windows
-Package Manager path are all on [getting the command](../operations/admin-endpoint.md#getting-the-command).
+inside the file. The asset names and the checksum that tells a genuine download from a tampered one are on
+[getting the command](../operations/admin-endpoint.md#getting-the-command), and on Linux
+[the install script](../operations/admin-endpoint.md#on-linux-with-the-install-script) does the whole of it in one
+line.
 
 Download the one for the machine you administer *from*. The command talks to a deployment over HTTP, so it does not
 have to run where the service runs — that is the whole point of it being a client.
