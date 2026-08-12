@@ -22,6 +22,7 @@ using MailFathom.Application.Persistence;
 using MailFathom.Application.Retrieval;
 using MailFathom.Application.Retrieval.AskMail;
 using MailFathom.Application.Retrieval.AskMail.Audit;
+using MailFathom.Application.Spam;
 using MailFathom.Application.Synchronization;
 using MailFathom.Application.Synchronization.Checkpoints;
 using MailFathom.Application.Synchronization.Reconciliation;
@@ -35,6 +36,7 @@ using MailFathom.Infrastructure.Persistence.Connections;
 using MailFathom.Infrastructure.Resilience;
 using MailFathom.Infrastructure.Secrets.Discovery;
 using MailFathom.Infrastructure.Secrets.Resolution;
+using MailFathom.Infrastructure.Spam;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -136,6 +138,16 @@ internal sealed class OrchestratedMailFathomServices : IAsyncDisposable
     /// The folders this account withholds from every tool, empty everywhere but the class proving that the narrowing
     /// this produces is one PostgreSQL evaluates.
     /// </param>
+    /// <param name="spamClassification">
+    /// What this deployment decided about classifying mail, or <see langword="null" /> for the shipped default of
+    /// classifying nothing. Stated only by the class that classifies, because the switch decides whether the use case
+    /// does anything at all.
+    /// </param>
+    /// <param name="spamScanner">
+    /// The daemon a scanned classification is scored against, or <see langword="null" /> for a deployment that deployed
+    /// no scanner. Absent everywhere but the class that scores, exactly as a deployment which never switched the scanner
+    /// on registers no implementation of the port.
+    /// </param>
     /// <returns>The composed services, which the caller owns and must dispose.</returns>
     internal static async Task<OrchestratedMailFathomServices> StartAsync(
         MailFathomOrchestrationFixture orchestration,
@@ -146,7 +158,9 @@ internal sealed class OrchestratedMailFathomServices : IAsyncDisposable
         bool answeringAuditTrailEnabled = false,
         IChatClient? answeringChatClient = null,
         IReadOnlyList<MailFolderIdentity>? foldersWithoutEmbeddings = null,
-        IReadOnlyList<MailFolderIdentity>? foldersHiddenFromTools = null)
+        IReadOnlyList<MailFolderIdentity>? foldersHiddenFromTools = null,
+        SpamClassificationSettings? spamClassification = null,
+        SpamAssassinScannerProfile? spamScanner = null)
     {
         var builder = new HostApplicationBuilder();
         var account = new SyntheticMailAccount(
@@ -277,6 +291,21 @@ internal sealed class OrchestratedMailFathomServices : IAsyncDisposable
                         SecretReference = $"plaintext:{DataEncryptionKeyMaterial}",
                     }),
             ]));
+
+        // The port a composition root registers from the SpamClassification section, and the one place a harness has to
+        // supply it: infrastructure registers the classifier, the classifier asks this what the operator decided, and a
+        // composition without it would fail to resolve rather than behave like a deployment that classifies nothing.
+        builder.Services.AddSingleton<ISpamClassificationSettingsReader>(
+            new FixedSpamClassificationSettingsReader(spamClassification ?? SpamClassificationSettings.Disabled));
+
+        // Registered exactly as the composition root registers it, and only where a scanner was named — so a test that
+        // states none composes the deployment that deployed no sidecar, where the classifier resolves no scanner and the
+        // deterministic stage is the whole feature.
+        if (spamScanner is not null)
+        {
+            builder.Services.AddSingleton(spamScanner);
+            builder.Services.AddSpamAssassinScanning();
+        }
 
         var host = builder.Build();
         await host.StartAsync(cancellationToken);

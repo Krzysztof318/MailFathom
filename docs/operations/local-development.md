@@ -586,6 +586,7 @@ The app host is started with the argument `IntegrationTesting=true`, which selec
   baseline migration has to apply to for a run to prove it applies cleanly at all;
 - a `mailserver` container named `mailfathom-integrationtests-<run>-mailserver` is added, which a developer's orchestration never gets — it exists so the suite has a real IMAP server to synchronize against, and starting one beside a developer's own accounts would advertise a mailbox nothing points at;
 - a `presidio-analyzer` container named `mailfathom-integrationtests-<run>-presidio-analyzer` is added, on the same terms and for the same reason: the personal-data scanner's whole claim is about what a real analyzer answers, and a developer's orchestration never gets one because personal-data scanning is off by default and the image is the largest thing this repository pulls;
+- a `spamassassin` container named `mailfathom-integrationtests-<run>-spamassassin` is added, on the same terms again: the spam scanner's whole claim is about what a real rule corpus concludes, and a developer's orchestration never gets one because spam scanning is off by default;
 - the `mailfathom-host` project resource is added to the model but never started, because the suite exercises classes against real infrastructure and a running MailFathom would synchronize mail underneath the data a test is asserting on. What a collection eventually starts is a host serving both of its network surfaces under the posture worth proving end to end: the MCP endpoint behind an API key and a narrowed origin list, and the administrative endpoint enabled on a listener of its own behind an API key that is none of the MCP ones — which is what lets the suite establish from outside the process that neither surface's credential authenticates the other's routes. The probes are served on the MCP endpoint's own socket rather than on one of theirs, which is the arrangement a single-node deployment publishes and the only place anything proves it works: a shared socket serves the union of what its surfaces answer, so a probe is answered there without a credential while the MCP route on it still requires one. Both sections therefore state the same bind address, because they describe one socket and an address written in one place and defaulted in the other would be two sockets the host refuses to open. The administrative endpoint keeps a socket of its own, so the suite carries both arrangements at once and can establish that a path belonging to a surface a listener does not serve is refused on it rather than served by whichever route matches. Every port on that resource is allocated rather than defaulted, because two MailFathom processes run at once under this topology, and every endpoint is published as a TCP one for the same reason: an HTTP one joins `ASPNETCORE_URLS`, which the host refuses outright. It is configured with the one account identifier the suite stores its mail under, and with nothing else about that account: configuration is what defines the accounts a deployment serves and it is read whether or not synchronization runs, so a host naming none would answer every mailbox read with an empty window over a database that is not empty — and with synchronization off, a server, a login, or a credential beside the identifier would be configuration nothing acts on;
 - a second project resource, `mailfathom-mtls-host`, is added on the same terms and started by a collection of its own, `MutualTlsHostCollectionDefinition`, which the assembly's orderer places after the collection that starts the host above — starting a second project process must not be what a rate limit is measured against. It serves the endpoint over an HTTPS profile behind a `Required` client-certificate profile, which is what lets the suite prove the mTLS rules against a real handshake; a certificate requirement is one answer for a whole process, so it cannot be a posture applied to the host above. Its server certificate, private key, and trust anchor are issued in memory per run by the test suite and injected into the environment variables the app model's `env:` secret references name, so nothing of the kind is committed and a developer's orchestration never gets this resource at all.
 
@@ -638,6 +639,21 @@ image registers, and that the offsets it answers with land on the region of the 
 Two costs are worth knowing before a first run. The image is roughly two gigabytes, so the first `scripts/run-integration-tests.sh`
 on a machine spends several minutes pulling it, and the container wants about a gigabyte of memory while it holds the model.
 Neither reaches a developer's ordinary orchestration, which starts no analyzer at all.
+
+### The spam scanner
+
+The `spamassassin` resource is `docker.io/axllent/spamassassin`, pinned to the digest all three deployment shapes carry,
+and it is an ordinary app-model resource rather than a fixture of the suite's own — there is one topology here and a
+dependency a test needs joins it like any other. It runs with `DNS_CHECKS=0`, which is the posture every deployment
+asset ships, so a run reaches no blocklist and a machine with no route out scores exactly what a machine with one does.
+
+The daemon compiles its rule corpus before it listens, so the fixture waits for a daemon that answers the protocol's own
+`PING` rather than for a container that is running — the same distinction the analyzer's health check draws, reached
+through the protocol because there is no HTTP endpoint to poll.
+
+What the suite establishes against it is what only a real corpus can settle: that the GTUBE test string is scored spam,
+that ordinary synthetic correspondence is not, and that the rule names and the corpus revision reach the stored
+classification record. Every message it is sent is written by the test, and none of it is real mail.
 
 ### The provider-contract tests
 

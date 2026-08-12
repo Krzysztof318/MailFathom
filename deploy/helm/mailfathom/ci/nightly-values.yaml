@@ -32,3 +32,9 @@ secrets:
 # default, which renders none of it, is what `helm template` over the chart's own values shows.
 personalDataScanning:
   enabled: true
+
+# The spam scanner the chart runs itself, which is the branch that renders the scanner Deployment, its Service, and the
+# derived address the application is pointed at. The release values render the other branch, so between the two files
+# every shape of this block is produced by the repository's verification.
+spamScanning:
+  enabled: true

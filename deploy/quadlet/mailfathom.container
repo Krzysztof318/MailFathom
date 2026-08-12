@@ -30,6 +30,14 @@ After=mailfathom-postgres.service
 #Requires=mailfathom-presidio.service
 #After=mailfathom-presidio.service
 
+# Only when spam classification is on with a scanner, and uncommented together with the Environment= lines further down
+# and mailfathom-spamassassin.container being installed at all. That unit declares `Notify=healthy` as well, so this
+# ordering waits for a daemon that answers rather than for a container that exists — which matters here for the reason
+# it does for the analyzer: the daemon fetches its rule updates and compiles its corpus before it listens, and
+# MailFathom refuses to start while it cannot reach one.
+#Requires=mailfathom-spamassassin.service
+#After=mailfathom-spamassassin.service
+
 # At least one file MailFathom will actually read, which is a narrower thing than the directory existing. Podman
 # creates a missing bind source as an empty directory rather than refusing, the setup creates that directory in a step
 # of its own, and MailFathom layers in `*.json` and nothing else — so a directory that is absent, empty, or holds only
@@ -109,6 +117,24 @@ Environment=Persistence__Password__SecretReference=systemd-credential:mailfathom
 #Environment=SensitiveContent__PersonalDataAnalyzer__Endpoint=http://mailfathom-presidio:3000
 #Environment=SensitiveContent__PersonalDataAnalyzer__Language=en
 #Environment=SensitiveContent__PersonalDataAnalyzer__MinimumConfidence=0.4
+
+# Spam classification with a scanner, off because these lines are commented out. Uncomment them together with the two
+# ordering lines at the top of this file, and install mailfathom-spamassassin.container beside it; enabling the switch
+# with no daemon to reach fails startup and names the Host setting below as the one to correct, which is the intended
+# behaviour rather than a misconfiguration to avoid. Both switches are here because MailFathom refuses to start with a
+# scanner switched on and classification off. The address is the scanner unit's container name on the internal network —
+# replace it with your own daemon's if you operate one, keeping it inside your own network, and then install no scanner
+# unit at all.
+#
+# Classification **without** a scanner is the other half of the feature: set SpamClassification__Enabled=true alone, and
+# mail is classified from the headers it already carries with nothing else deployed. Which folders are covered and what
+# threshold a score is judged by belong in the configuration directory beside this unit, not here.
+# docs/features/spam-classification.md states what each stage decides and what pointing the scanner outside the
+# deployment gives up.
+#Environment=SpamClassification__Enabled=true
+#Environment=SpamClassification__UseScanner=true
+#Environment=SpamClassification__Scanner__Host=mailfathom-spamassassin
+#Environment=SpamClassification__Scanner__Port=783
 
 # The same posture the image and the other two deployment shapes carry: nothing writable but one bounded tmpfs, no
 # capabilities, and no way to gain a privilege. /tmp is the one path the runtime needs to write.

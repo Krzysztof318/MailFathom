@@ -335,6 +335,16 @@ public readonly record struct MailFathomErrorCode
     /// </remarks>
     public static MailFathomErrorCode PersonalDataAnalyzerUnavailable { get; } = new(81002);
 
+    /// <summary>Gets subcategory 1, availability: the spam scanner this deployment configured could not be reached while the host was starting.</summary>
+    /// <remarks>
+    /// A third code inside the same subcategory, and the one whose absence is quietest. A spam scanner does not fail
+    /// closed — a classification reached without it is weaker rather than refused — so a deployment whose sidecar is
+    /// absent would keep classifying from headers alone and report nothing an operator would notice, while their own
+    /// configuration said a scanner was consulted. Startup refuses instead, and the message names the configuration key
+    /// rather than the address, for the reason the code above gives.
+    /// </remarks>
+    public static MailFathomErrorCode SpamScannerUnavailable { get; } = new(81003);
+
     #endregion
 
     /// <summary>Gets every allocated code.</summary>
@@ -385,6 +395,7 @@ public readonly record struct MailFathomErrorCode
         ChatAnswerEmpty,
         SensitiveContentScannerUnavailable,
         PersonalDataAnalyzerUnavailable,
+        SpamScannerUnavailable,
     ];
 
     /// <summary>Gets the five-digit code.</summary>

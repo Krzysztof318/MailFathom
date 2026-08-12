@@ -393,15 +393,50 @@ outside gives up.
 The analyzer is attached to the `backend` network alone and publishes no port. It receives mail content in the clear and
 answers where the identifiers in it are, so nothing outside the host can reach it and MailFathom asks it over plain HTTP.
 
+## Spam scanning
+
+The stack has a fourth service, `spamassassin`, and it is not started either. It sits behind its own Compose profile, so
+`docker compose up` pulls no image for it and holds none of its memory. [Spam
+classification](../features/spam-classification.md) records what a classification holds and what the scanner adds.
+
+Switching it on is two settings, for exactly the reason the analyzer's are two — the profile decides whether the
+container exists, the switch decides whether MailFathom asks it, and either one alone is a deployment that does not
+work:
+
+```dotenv
+COMPOSE_PROFILES=spam-scanning
+MAILFATHOM_SPAM_SCANNING=true
+```
+
+Both profiles at once are `COMPOSE_PROFILES=personal-data-scanning,spam-scanning`.
+
+The first start is slow here too: the daemon compiles its rule corpus before it listens, and MailFathom refuses to serve
+while no daemon answers, so `restart: unless-stopped` carries that refusal into a retry exactly as it does for the
+analyzer. `docker compose ps` shows the daemon's own health check while that is happening.
+
+To use a daemon you already operate, set `MAILFATHOM_SPAM_SCANNER_HOST` to its address and leave `COMPOSE_PROFILES`
+alone — nothing is then started for it. Keep that address **inside your own network**: the daemon is sent whole messages
+unredacted, and the feature page states what pointing it outside gives up.
+
+The daemon publishes no port and it accepts a connection from any address it can be reached from, so what limits who may
+ask it is the network it is on. It is attached to `frontend` as well as `backend`, and that is the one deliberate
+difference from the analyzer: the daemon fetches its rule updates on start and daily afterwards, and a corpus frozen at
+the image's build scores today's mail worse than a fresh one. Nothing derived from the owner's mail goes out that route
+— `MAILFATHOM_SPAM_SCANNER_DNS_CHECKS` is `0`, which keeps the blocklist rules that would send sending addresses and URI
+host names to third parties switched off, and the image bundles no plugin that reports anything anywhere. Remove
+`frontend` from the service to take the egress away and keep the corpus the image shipped with.
+
 ## Bounds
 
-`.env.example` documents every knob: log rotation, CPU and memory limits for all three services, the published bind
-address and port, the database and role names, the volume name, and the four personal-data settings. Each is the value the
-Compose file already applies, so an unset variable and the documented value mean the same thing.
+`.env.example` documents every knob: log rotation, CPU and memory limits for all four services, the published bind
+address and port, the database and role names, the volume name, the four personal-data settings, and the seven spam
+settings. Each is the value the Compose file already applies, so an unset variable and the documented value mean the same
+thing.
 
 The analyzer's memory limit is the one worth reading before it is lowered: it defaults to two gigabytes because the model
 is held for the life of the container, and below roughly one it is killed while loading — which reaches MailFathom as an
-analyzer that never became ready.
+analyzer that never became ready. The spam daemon's is modest by comparison and defaults to 512 megabytes, which holds
+the compiled corpus and a child per scan.
 
 ## Related
 

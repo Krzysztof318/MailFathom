@@ -195,6 +195,15 @@ is the layer rather than something MailFathom re-implements:
   registration and asserts the outcome both calls exist for: the analyzer client is reached one handler's worth of
   attempts rather than their square, which is what deleting the removal costs. [Sensitive-content
   scanning](../features/sensitive-content-scanning.md#failing-closed) states what each failure refuses.
+- **The spam scanner.** A fifth outbound dependency is reached over no HTTP client at all, so none of the layering above
+  applies to it: it speaks a line protocol over a socket the adapter opens per exchange, under no `OutboundDependency`
+  pipeline and with no handler in front of it. What bounds it is its own, stated in one place and enforced around the
+  whole exchange — a concurrency permit taken before a socket is opened, a timeout covering connect, write, and read
+  together, and a size limit applied before the message is sent at all. Nothing retries a scan, and that is the
+  difference from the analyzer above rather than an omission: this path **fails open**, so a scan that did not happen
+  leaves the message with the verdict its headers reached and a second attempt would buy a better record at the cost of
+  holding a classification run. [Spam classification](../features/spam-classification.md#the-apache-spamassassin-scanner)
+  states what each failure leaves behind.
 - **EF Core.** `EnableRetryOnFailure` is deliberately not configured. The obstacle is not the unit of work: with a
   retrying execution strategy each query and each `SaveChangesAsync` is already replayed as its own retriable unit. It
   is the *user-initiated* transaction. `PersistenceSessionFactory` opens one with `BeginTransactionAsync` for every

@@ -1,6 +1,6 @@
 # Spam classification
 
-<!-- describes: src/Domain/Spam/**, src/Application/Spam/**, src/Application/Folders/IJunkMailFolderCatalog.cs, src/Infrastructure/Persistence/Spam/**, src/Infrastructure/Mail/Mime/MimeKitEmailSpamHeaderReader.cs, src/Host/Configuration/Spam/** -->
+<!-- describes: src/Domain/Spam/**, src/Application/Spam/**, src/Application/Folders/IJunkMailFolderCatalog.cs, src/Infrastructure/Persistence/Spam/**, src/Infrastructure/Spam/**, src/Infrastructure/Mail/Mime/MimeKitEmailSpamHeaderReader.cs, src/Host/Configuration/Spam/** -->
 
 A mailbox that an assistant reads is a mailbox somebody else can write to. Mail written to deceive a reader is
 indistinguishable from correspondence once it is a row in a timeline, and the receiving mail server has usually already
@@ -80,9 +80,9 @@ An `Application`-owned port takes the stored RFC 822 bytes and answers with a sc
 rules that fired, and the identity of the corpus it ran under — or with the reason it could not answer. No protocol
 type, socket type, or scanner vocabulary crosses it.
 
-**No implementation ships here.** A deployment that switches the scanner on without one registered still classifies,
-through the deterministic stage alone, because the switch is an operator's intent and the registration is whether an
-implementation exists — two separate facts.
+One implementation ships: an Apache SpamAssassin daemon deployed beside this service, described in the section below.
+The port is the boundary — nothing above it knows which scanner answered — so a deployment that switches the scanner on
+without one registered still classifies, through the deterministic stage alone.
 
 Where a scanner does answer with a score, it decides the verdict. Where the deterministic stage already reached spam,
 that verdict stands whatever the scanner says: it rests on the provider's own decision or on where the mailbox filed
@@ -92,6 +92,66 @@ leaves the deterministic verdict exactly as it was, including undetermined.
 An operator who does not administer the scanner can re-judge its score with a threshold of their own. It replaces the
 scanner's rather than being compared beside it, so the record states one pair of numbers in one scale. It reaches no
 other stage: a provider header carries a threshold in a scale this one knows nothing about.
+
+## The Apache SpamAssassin scanner
+
+The scanner is a **sidecar**: a container running Apache SpamAssassin's own daemon beside this service, reached over a
+TCP line protocol on its port. It is deployed only where the switch is on — the Helm chart renders no scanner objects
+without `spamScanning.enabled`, the Compose deployment starts nothing outside the `spam-scanning` profile, and the
+Quadlet deployment has no unit to start because an operator who wants none of it never installs the file. Nothing
+constructs a conversation with a daemon that was not asked for.
+
+Where it *was* asked for and no daemon answers, **the host refuses to start**. That is the opposite of what one message
+gets: a scan that fails leaves that message with the verdict its headers reached and the run carries on, which is right
+for one message and wrong for a deployment. An instance whose sidecar never came up would classify everything from
+headers alone, look entirely healthy doing it, and leave an operator reading a switched-on scanner as a second opinion
+that was being taken. The startup check asks the daemon to score a synthetic message of MailFathom's own, so what it
+proves is that something scans rather than that a port accepts connections; a daemon that answers but is not a spam
+daemon fails startup the same way nothing at all does. It is one attempt rather than a wait loop: a sidecar still
+fetching its rules is reached by the orchestrator restarting this process.
+
+**The whole message is sent, unredacted.** A corpus scores what it reads, so a scanner shown a redacted message scores
+the redactions — the markers become the text, the rules that read addresses and URIs find placeholders, and the number
+that comes back describes a message nobody was sent. That is why the daemon belongs inside the deployment's own trust
+boundary. Nothing refuses an address elsewhere, because a deployment may legitimately run one daemon for several
+services on its own network and no rule about addresses tells the two apart; what an address outside that boundary
+gives up is the owner's mail, in full, to somebody else.
+
+Three bounds are the adapter's own, because each is a property of the daemon rather than of classification, and each is
+configurable with the default stated in the
+[configuration reference](../operations/configuration-reference.md#spamclassification):
+
+| Bound | Default | Why that number |
+| --- | --- | --- |
+| The largest message sent at all | 512 000 bytes | The size SpamAssassin's own client truncates at, which is the scale its corpus was tuned against. A message past it keeps the verdict its headers reached, which is a fact about the message rather than about the deployment: retrying produces the same answer |
+| How long one scan may take | 30 seconds | Long enough for a cold daemon to run a full corpus over a large message, short enough that a wedged one is noticed within one message rather than one run |
+| How many scans run at once | 5 | The number of children the daemon spawns by default. Sending more does not scan more — it queues them inside the daemon, where this deployment's own timeout cannot see the wait — so the two numbers are one decision |
+
+**A verdict is whole or absent.** Every failure — an unreachable daemon, a scan past its budget, an answer this adapter
+could not read, a message past the size limit — leaves the classification with the deterministic stage's verdict and no
+scanner stage and no scanner signals in the record. An answer that parsed but stated no score is treated the same way
+rather than as a score of zero, because a zero would be recorded as a message a corpus read and found clean, which is a
+stronger claim than *nothing scored it* and the one a reader would act on.
+
+**Every scan records the corpus it ran under.** The protocol carries no rule-corpus identity, so the adapter reads the
+release the daemon states about itself in the header it writes onto a scored message, and records it as
+`spamassassin.<release>+<build>` beside every signal. A daemon whose own configuration removed that header is recorded
+by the protocol version it spoke instead, which is deliberately weaker and deliberately differently shaped: a reader
+comparing two classifications can see at a glance that one of them was reached against a daemon that would not name its
+release.
+
+**Rule updates and the DNS posture are the deployment's decision, and both defaults are stated.** The daemon fetches its
+rule corpus on start and daily afterwards, which needs egress; the Compose deployment gives it that egress and the
+Quadlet deployment does not, each saying so in the file. A frozen corpus scores today's mail worse than a fresh one, and
+that is the trade an operator makes rather than one made for them. Separately, the daemon's blocklist rules would send
+the sending addresses and the URI host names out of the owner's mail to third-party lists — **that is off in every
+deployment asset here**, because sending what is being scanned to somebody else is what scanning inside the trust
+boundary exists to avoid. Off, the daemon runs local rules only, and a deployment that wants those checks turns them on
+knowing what leaves.
+
+The image is pinned to an exact digest in all four places that name it, and moving it changes what a scan concludes —
+which is what the recorded corpus revision exists to make visible. `THIRD_PARTY_LICENSES.md` records the image, its
+licences, that whole messages are sent to it, and that it bundles no plugin reporting anything outside the deployment.
 
 ## Classifying is idempotent, and reclassifying is explicit
 
@@ -122,14 +182,18 @@ The `SpamClassification` section, in full, is in the
 - which folder aliases are classified, defaulting to whichever alias each account maps to its inbox;
 - the threshold a scanner's score is judged against, defaulting to the scanner's own.
 
+The scanner's own address and bounds are a block below it, `SpamClassification:Scanner`, read only where the scanner is
+switched on.
+
 An operator who switched the scanner on and left classification off is told at startup rather than given the quiet
-answer, and an unusable folder alias or an out-of-range threshold fails startup naming itself.
+answer, and so is one who switched it on and named no address for it. An unusable folder alias, an out-of-range
+threshold, and a bound outside its range each fail startup naming themselves.
 
 ## What is not here
 
-No scanner implementation, no mutation of the remote mailbox, and no on-demand run over a mailbox that is already
-stored. The classification is recorded and read back; nothing yet schedules it as mail arrives, because the durable
-job model it is to run as an execution in is not built.
+No mutation of the remote mailbox, and no on-demand run over a mailbox that is already stored. The classification is
+recorded and read back; nothing yet schedules it as mail arrives, because the durable job model it is to run as an
+execution in is not built.
 
 ## Privacy
 
@@ -139,4 +203,11 @@ message reach the record too.
 
 Nothing about a message's content reaches a log line or a telemetry attribute from any path here — not a header value,
 not an authentication detail, not a subject. What is safe to report is the occurrence identifier, the folder alias, the
-outcome, and the verdict.
+outcome, and the verdict. A fired rule name is safe as well: it is the corpus's own identifier and carries nothing from
+the message that fired it.
+
+The scanner path holds to the same rule from inside a failure. What the adapter reports when a scan does not produce a
+verdict is the reason and, for an oversized message, the two sizes — never the message, never any part of it, and never
+the daemon's address. The one startup failure this feature raises is `81003`, when the scanner is switched on and the
+configured daemon cannot be reached, does not answer inside its bound, or answers as something that is not a spam
+daemon; its message names the configuration key to repair rather than the address it tried.

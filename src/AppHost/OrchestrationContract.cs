@@ -306,6 +306,28 @@ public static class OrchestrationContract
     /// <summary>The endpoint the analyzer answers analysis and supported-entity requests on.</summary>
     public const string PersonalDataAnalyzerEndpointName = "http";
 
+    /// <summary>The spam daemon the integration-test topology scores against.</summary>
+    /// <remarks>
+    /// <para>
+    /// Present only under <see cref="IntegrationTestingArgument" />, for the reason the analyzer is: a developer's
+    /// orchestration deploys one only where the deployment they are running switched the scanner on, and starting one
+    /// beside every local run would cost a container and its rule corpus for a feature that is off by default.
+    /// </para>
+    /// <para>
+    /// The suite starts it because it is the one part of the spam scanner no substitute settles: a scripted daemon
+    /// proves the parser handles the payload somebody hand-wrote, not that the image an operator pulls answers the
+    /// request MailFathom builds in the shape MailFathom parses.
+    /// </para>
+    /// </remarks>
+    public const string SpamScannerResourceName = "spamassassin";
+
+    /// <summary>The daemon's own port, which its image publishes and its entrypoint binds.</summary>
+    public const int SpamScannerContainerPort = 783;
+
+    /// <summary>The endpoint the daemon answers its line protocol on.</summary>
+    /// <remarks>Declared with the <c>tcp</c> scheme because that is what it is: the daemon speaks neither HTTP nor anything Aspire can probe with a route.</remarks>
+    public const string SpamScannerEndpointName = "spamd";
+
     /// <summary>The MailFathom account identifier every occurrence the integration-test topology stores belongs to.</summary>
     /// <remarks>
     /// Declared here because two sides have to agree on it: the suite writes its mail under this identifier, and the

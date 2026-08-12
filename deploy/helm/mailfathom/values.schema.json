@@ -435,6 +435,143 @@
       },
       "additionalProperties": false
     },
+    "spamScanning": {
+      "type": "object",
+      "required": [
+        "enabled",
+        "scanner"
+      ],
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "Whether MailFathom classifies mail with a scanner. Off renders no scanner workload, no Service for one, and sets no configuration key. On switches classification on as well, because the two are one decision when made here. Classification without a scanner is set in config.files instead."
+        },
+        "scanner": {
+          "type": "object",
+          "required": [
+            "deploy",
+            "port",
+            "scanTimeoutSeconds",
+            "maximumMessageBytes",
+            "maximumConcurrentScans",
+            "dnsChecks",
+            "image",
+            "resources",
+            "service"
+          ],
+          "properties": {
+            "deploy": {
+              "type": "boolean",
+              "description": "Whether the chart runs the spam daemon itself. Turn it off to use one you already operate, and name it in host. The chart's own validation refuses both together and neither."
+            },
+            "host": {
+              "type": "string",
+              "description": "The daemon's host name or address, with no scheme and no path, required when deploy is off. Keep it inside your own network: a scan sends the whole message unredacted to whatever answers there."
+            },
+            "port": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 65535,
+              "description": "The port that daemon listens on, read only when deploy is off."
+            },
+            "scanTimeoutSeconds": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 120,
+              "description": "How long one scan may take before the message keeps the verdict its headers reached."
+            },
+            "maximumMessageBytes": {
+              "type": "integer",
+              "minimum": 32000,
+              "maximum": 33554432,
+              "description": "The largest message that is sent to the daemon at all. The default is the size SpamAssassin's own client truncates at, which is the size its corpus was tuned against."
+            },
+            "maximumConcurrentScans": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 64,
+              "description": "How many scans MailFathom runs at once. The default matches the number of children the daemon spawns by default; sending more at once queues them inside the daemon, where MailFathom's own timeout cannot see the wait."
+            },
+            "dnsChecks": {
+              "type": "boolean",
+              "description": "Whether the daemon resolves DNS blocklists. Off by default: those rules send sending addresses and URI host names out of the owner's mail to third-party lists, which is what scanning inside the trust boundary exists to avoid."
+            },
+            "image": {
+              "type": "object",
+              "required": [
+                "repository",
+                "digest"
+              ],
+              "properties": {
+                "registry": {
+                  "type": "string"
+                },
+                "repository": {
+                  "type": "string",
+                  "minLength": 1,
+                  "description": "Apache SpamAssassin on Alpine, in an MIT-licensed image that bundles no Razor2, no Pyzor, and no DCC. THIRD_PARTY_LICENSES.md records what is in it."
+                },
+                "digest": {
+                  "type": "string",
+                  "pattern": "^sha256:[0-9a-f]{64}$",
+                  "description": "A digest rather than a tag, because the upstream publishes no immutable version tag: the digest is the only pin that names one artifact, on a pod that reads mail content in the clear."
+                },
+                "pullPolicy": {
+                  "type": "string",
+                  "enum": [
+                    "Always",
+                    "IfNotPresent",
+                    "Never"
+                  ]
+                },
+                "pullSecrets": {
+                  "type": "array",
+                  "items": {
+                    "type": "object"
+                  }
+                }
+              },
+              "additionalProperties": false
+            },
+            "resources": {
+              "type": "object"
+            },
+            "service": {
+              "type": "object",
+              "required": [
+                "port"
+              ],
+              "properties": {
+                "port": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 65535,
+                  "description": "The port the daemon's ClusterIP Service answers on, which is also the port MailFathom's derived address names."
+                }
+              },
+              "additionalProperties": false
+            },
+            "podSecurityContext": {
+              "type": "object"
+            },
+            "containerSecurityContext": {
+              "type": "object"
+            },
+            "nodeSelector": {
+              "type": "object"
+            },
+            "tolerations": {
+              "type": "array"
+            },
+            "affinity": {
+              "type": "object"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
     "service": {
       "type": "object",
       "required": [
@@ -771,7 +908,7 @@
       "properties": {
         "path": {
           "const": "/started",
-          "description": "Startup reports whether the host's own startup gates have completed \u2014 every secret reference resolved, the database schema verified, and, only with personalDataScanning.enabled, the analyzer answering for every configured category. Every other path is refused: /alive answers before those gates have run and would end the startup grace period while the pod is still coming up, and /health consults the database."
+          "description": "Startup reports whether the host's own startup gates have completed \u2014 every secret reference resolved, the database schema verified, only with personalDataScanning.enabled the analyzer answering for every configured category, and only with spamScanning.enabled the spam daemon answering. Every other path is refused: /alive answers before those gates have run and would end the startup grace period while the pod is still coming up, and /health consults the database."
         },
         "initialDelaySeconds": {
           "$ref": "#/definitions/probeTiming/initialDelaySeconds"

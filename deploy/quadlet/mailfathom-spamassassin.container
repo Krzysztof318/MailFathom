@@ -1,0 +1,92 @@
+# Copyright © 2026 Krzysztof Kasprowicz
+# Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
+# Project repository: https://github.com/Krzysztof318/MailFathom
+
+# The spam scanner, for a deployment that has switched spam classification on with a scanner. Like the analyzer beside
+# it, it is optional and how it is switched off is that it is not installed: Quadlet has no equivalent of Compose's
+# profiles, so an operator who wants none of it copies the other files and never this one — and then no image is pulled,
+# no container exists, and none of the memory below is held. Installing it is half of enabling the feature; the other
+# half is the Environment= lines commented out in mailfathom.container, and either one alone is a deployment that does
+# not work. docs/operations/deployment-quadlet.md states the order.
+#
+# Rootless, like the units beside it, and installed under ~/.config/containers/systemd/.
+
+[Unit]
+Description=Spam scanner for MailFathom
+Wants=network-online.target
+After=network-online.target
+
+[Container]
+# A digest rather than a tag, because the upstream publishes no immutable version tag — the digest is the only pin that
+# names one artifact, and it is the same pin the Compose deployment, the Helm chart, and the integration suite use. It
+# runs Apache SpamAssassin 4.0.2 on Alpine under an MIT-licensed build and bundles no Razor2, no Pyzor, and no DCC, so
+# nothing in it sends anything derived from the owner's mail anywhere. THIRD_PARTY_LICENSES.md records all of it.
+Image=docker.io/axllent/spamassassin@sha256:9bea393891c92a3531cb7081e9b2c478a654a048c9a6fa6f9d1df4300bf3ab8b
+ContainerName=mailfathom-spamassassin
+
+# Only the internal network, and no PublishPort= at all. The daemon receives whole messages in the clear and answers a
+# score, so the deployment shape this file supports is one where nothing outside the host can reach it — and it accepts
+# a connection from any address it can be reached from, so this is the whole of what limits who may ask it.
+#
+# It is also what stops the daemon fetching its rule updates, which it tries on start and daily afterwards: a corpus
+# frozen at whatever the image was built with scores today's mail worse than a fresh one. Add the frontend network to
+# this unit if you want those updates. Nothing derived from the owner's mail goes out that route — the blocklist rules
+# that would are off below, and the image carries no plugin that reports checksums anywhere.
+Network=mailfathom-backend.network
+
+# **The DNS posture, and it is off.** The daemon's blocklist rules would send the sending addresses and the URI host
+# names out of the owner's mail to third-party lists, which is what scanning inside the trust boundary exists to avoid.
+# Off, it runs local rules only. docs/features/spam-classification.md says what each choice costs.
+Environment=DNS_CHECKS=0
+
+# No credentials, no volumes, and no configuration. The daemon holds nothing this deployment gave it and reads only the
+# messages MailFathom sends it, so the default rootless mapping is enough — nothing in this container has to read a file
+# the invoking user owns, which is what the MailFathom and database units need `UserNS=keep-id` for.
+
+# The one command the protocol answers without scanning anything, which is what this unit has a health check for: the
+# container fetches its rule updates and compiles the corpus before it listens, so a merely running daemon answers
+# nothing. `nc` is present in the image, so unlike MailFathom's own chiseled image there is something for the check to
+# run in.
+HealthCmd=sh -c "printf 'PING SPAMC/1.5\\r\\n\\r\\n' | nc -w 3 127.0.0.1 783 | grep -q PONG"
+HealthInterval=10s
+HealthTimeout=5s
+HealthRetries=12
+HealthStartPeriod=90s
+
+# What makes the dependency in mailfathom.container real rather than an approximation of one, exactly as the database
+# and analyzer units do it: this unit is not considered started until the health check passes, so an `After=` there
+# waits for a daemon that answers instead of for a container that exists.
+Notify=healthy
+
+# **The one container here that is granted a capability back**, and only the two the daemon needs to give up privilege:
+# it binds its port as root and then runs every scan as an unprivileged account, which is what parses the mail. Without
+# them it refuses to start. Nothing else is granted and no privilege can be regained.
+DropCapability=all
+AddCapability=setuid
+AddCapability=setgid
+NoNewPrivileges=true
+
+LogDriver=journald
+
+# Core dumps off, like every other container here. This one holds whole messages in memory while it scores them, which
+# is the same reason docs/operations/secret-provisioning.md gives for the units that hold credentials.
+Ulimit=core=0
+
+# No AutoUpdate=. The image is pinned to an exact digest, and moving it changes what a scan concludes — every
+# classification records the corpus revision it was reached under for exactly that reason.
+
+[Service]
+LimitCORE=0
+
+# The unit-level bounds. Modest: the daemon holds its compiled rule corpus in memory and forks a child per scan. Below
+# roughly 256M it is killed while compiling rules, which reaches MailFathom as a scanner that never answered.
+MemoryMax=512M
+CPUQuota=100%
+
+Restart=always
+# Long enough for the health check to pass on a first start, which fetches rule updates before the daemon listens:
+# HealthStartPeriod plus HealthRetries times HealthInterval, with room to spare.
+TimeoutStartSec=300
+
+[Install]
+WantedBy=default.target

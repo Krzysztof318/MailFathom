@@ -1,0 +1,28 @@
+{{- /*
+Copyright © 2026 Krzysztof Kasprowicz
+Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
+Project repository: https://github.com/Krzysztof318/MailFathom
+*/ -}}
+{{- if and .Values.spamScanning.enabled .Values.spamScanning.scanner.deploy }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "mailfathom.spamScannerFullname" . }}
+  labels:
+    {{- include "mailfathom.spamScannerLabels" . | nindent 4 }}
+spec:
+  {{- /*
+    ClusterIP, and there is no value to make it anything else. The daemon receives whole messages in the clear and
+    answers a score, so the one deployment shape this chart supports is one where nothing outside the cluster can reach
+    it — which is also why no ingress rule is rendered for it. The daemon itself accepts a connection from any address,
+    so this Service is the whole of what limits who can ask it.
+  */}}
+  type: ClusterIP
+  selector:
+    {{- include "mailfathom.spamScannerSelectorLabels" . | nindent 4 }}
+  ports:
+    - name: spamd
+      port: {{ .Values.spamScanning.scanner.service.port }}
+      targetPort: spamd
+      protocol: TCP
+{{- end }}

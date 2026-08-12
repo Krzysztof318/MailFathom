@@ -169,6 +169,28 @@ while the chart was also deploying one would scan through a service the release 
     {{- fail (printf "personalDataScanning.analyzer.endpoint is %q while personalDataScanning.enabled is false. Nothing would read it, so this deployment scans no personal data while its values file reads as though it did. Switch the scanner on, or remove the address." .Values.personalDataScanning.analyzer.endpoint) -}}
   {{- end -}}
 {{- end -}}
+
+{{/*
+The spam scanner follows the analyzer's shape exactly, and for the same reason: the address is either derived from the
+release or stated, never both, so a deployment cannot scan through a daemon the release did not install. The one thing
+it does not check is the address itself — a host name is any string, and refusing one here would refuse the short names
+that are the point of naming a Service.
+*/}}
+{{- if .Values.spamScanning.enabled -}}
+  {{- if .Values.spamScanning.scanner.deploy -}}
+    {{- if .Values.spamScanning.scanner.host -}}
+      {{- fail (printf "spamScanning.scanner.host is %q while spamScanning.scanner.deploy is true. The chart is deploying the daemon and derives its address from the release name, so a second address here would score mail through a service the release did not install. Clear it, or turn deploy off to use a daemon you already operate." .Values.spamScanning.scanner.host) -}}
+    {{- end -}}
+  {{- else -}}
+    {{- if not .Values.spamScanning.scanner.host -}}
+      {{- fail "spamScanning.scanner.host is not set and spamScanning.scanner.deploy is false. MailFathom refuses to start with a scanner switched on and nowhere to ask, because every message would otherwise be classified from its headers alone while the configuration said a scanner was consulted: name the daemon you operate — inside your own network — or turn deploy on and let the chart run one." -}}
+    {{- end -}}
+  {{- end -}}
+{{- else -}}
+  {{- if .Values.spamScanning.scanner.host -}}
+    {{- fail (printf "spamScanning.scanner.host is %q while spamScanning.enabled is false. Nothing would read it, so this deployment scores no mail while its values file reads as though it did. Switch spam scanning on, or remove the address." .Values.spamScanning.scanner.host) -}}
+  {{- end -}}
+{{- end -}}
 {{- end -}}
 
 {{/*
@@ -299,6 +321,67 @@ whatever was named. `mailfathom.validate` has already refused the combinations w
 {{- printf "http://%s:%d" (include "mailfathom.analyzerFullname" .) (int .Values.personalDataScanning.analyzer.service.port) -}}
 {{- else -}}
 {{- .Values.personalDataScanning.analyzer.endpoint -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
+The spam daemon's objects, named after the release with `-spamassassin` appended. The suffix names the scanner rather
+than the feature, for the reason the analyzer's does: what a listing has to distinguish is which image is in the pod.
+*/}}
+{{- define "mailfathom.spamScannerFullname" -}}
+{{- printf "%s-spamassassin" (include "mailfathom.fullname" .) | trunc 63 | trimSuffix "-" -}}
+{{- end -}}
+
+{{- define "mailfathom.spamScannerSelectorLabels" -}}
+app.kubernetes.io/name: {{ printf "%s-spamassassin" (include "mailfathom.name" .) | trunc 63 | trimSuffix "-" }}
+app.kubernetes.io/instance: {{ .Release.Name }}
+{{- end -}}
+
+{{/*
+The version label carries the digest rather than a release number, because the digest is what this chart pins and a
+number written beside it would be a second value to keep in step. The `sha256:` prefix is dropped: a label value may not
+contain a colon.
+*/}}
+{{- define "mailfathom.spamScannerLabels" -}}
+helm.sh/chart: {{ include "mailfathom.chart" . }}
+{{ include "mailfathom.spamScannerSelectorLabels" . }}
+app.kubernetes.io/version: {{ .Values.spamScanning.scanner.image.digest | trimPrefix "sha256:" | trunc 63 | trimSuffix "-" | quote }}
+app.kubernetes.io/component: spam-scanner
+app.kubernetes.io/managed-by: {{ .Release.Service }}
+app.kubernetes.io/part-of: mailfathom
+{{- end -}}
+
+{{/*
+The scanner image, pinned by digest because the upstream publishes no immutable version tag. A digest reference carries
+no tag at all, which is what makes it the whole of the pin rather than a hint beside one.
+*/}}
+{{- define "mailfathom.spamScannerImage" -}}
+{{- $image := .Values.spamScanning.scanner.image -}}
+{{- if $image.registry -}}
+{{- printf "%s/%s@%s" $image.registry $image.repository $image.digest -}}
+{{- else -}}
+{{- printf "%s@%s" $image.repository $image.digest -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
+Where MailFathom scores. A deployed daemon is reached by the name of its own Service, an external one by whatever was
+named; `mailfathom.validate` has already refused the combinations where both or neither exist. The host and the port are
+two derivations because the daemon speaks a line protocol on a TCP port — there is no scheme and no path to compose.
+*/}}
+{{- define "mailfathom.spamScannerHost" -}}
+{{- if .Values.spamScanning.scanner.deploy -}}
+{{- include "mailfathom.spamScannerFullname" . -}}
+{{- else -}}
+{{- .Values.spamScanning.scanner.host -}}
+{{- end -}}
+{{- end -}}
+
+{{- define "mailfathom.spamScannerPort" -}}
+{{- if .Values.spamScanning.scanner.deploy -}}
+{{- .Values.spamScanning.scanner.service.port -}}
+{{- else -}}
+{{- .Values.spamScanning.scanner.port -}}
 {{- end -}}
 {{- end -}}
 

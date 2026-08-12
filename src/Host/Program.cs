@@ -272,6 +272,29 @@ try
         .ValidateDataAnnotations()
         .ValidateOnStart();
 
+    // Read while the services are being registered, for the reason the scanner declarations above are: whether a
+    // scanner exists at all decides which services this process has, and that is decided before a container that could
+    // resolve an options snapshot. With the switch off no daemon conversation is constructed, no socket is opened, and
+    // the classifier resolves no scanner — which is the shape that keeps the deterministic stage the whole working
+    // feature for a deployment that deployed no sidecar.
+    var declaredSpamClassification = builder.Configuration
+        .GetSection(SpamClassificationOptions.SectionName)
+        .Get<SpamClassificationOptions>() ?? new SpamClassificationOptions();
+    var spamScannerIsConfigured = declaredSpamClassification is { Enabled: true, UseScanner: true };
+
+    if (spamScannerIsConfigured)
+    {
+        // Composed here rather than inside the registration, because where the daemon is comes from this section and
+        // Infrastructure binds no configuration. Options validation proves the address present and every bound in range
+        // before anything resolves this.
+        builder.Services.AddSingleton(provider => provider
+            .GetRequiredService<IOptions<SpamClassificationOptions>>()
+            .Value
+            .Scanner
+            .ToProfile());
+        builder.Services.AddSpamAssassinScanning();
+    }
+
     // Rules are authored in configuration rather than in a table, which ADR 0010 records: what an instance will do to a
     // mailbox is then reviewable in a diff before it runs and reproducible from a repository afterwards. Bound strictly
     // for the reason mail transport is — a misspelled key would otherwise be ignored, and the rule it belonged to would
@@ -504,6 +527,9 @@ try
         .. declaredSensitiveContent.Pii.Enabled
             ? (HostStartupGate[])[HostStartupGate.PersonalDataAnalyzer]
             : [],
+        .. spamScannerIsConfigured
+            ? (HostStartupGate[])[HostStartupGate.SpamScanner]
+            : [],
     ]));
     builder.Services.AddHealthChecks()
         .AddCheck<HostStartupGatesHealthCheck>(HostStartupGatesHealthCheck.Name, tags: [HealthProbe.Startup.Tag]);
@@ -726,6 +752,15 @@ try
     if (declaredSensitiveContent.Pii.Enabled)
     {
         builder.Services.AddHostedService<PersonalDataAnalyzerStartupGate>();
+    }
+
+    // Ahead of the workers for a different reason from the two gates above, because the spam scanner does not fail
+    // closed: a deployment whose daemon is absent would classify every message from its headers alone and look
+    // perfectly healthy doing it. Proving it here is what keeps a switched-on scanner from being a line in a
+    // configuration file that describes nothing. Registered only where that switch is on.
+    if (spamScannerIsConfigured)
+    {
+        builder.Services.AddHostedService<SpamScannerStartupGate>();
     }
 
     builder.Services.AddHostedService<MailSynchronizationCoordinator>();

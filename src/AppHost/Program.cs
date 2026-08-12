@@ -154,6 +154,31 @@ if (runsIntegrationTests)
             targetPort: OrchestrationContract.PersonalDataAnalyzerContainerPort,
             name: OrchestrationContract.PersonalDataAnalyzerEndpointName)
         .WithHttpHealthCheck("/health", endpointName: OrchestrationContract.PersonalDataAnalyzerEndpointName);
+
+    // A real Apache SpamAssassin daemon, for the reason the analyzer above is real: what the suite exists to prove
+    // about the spam scanner is that the image an operator pulls answers the request MailFathom builds in the shape
+    // MailFathom parses, and a scripted daemon proves the parser handles the payload somebody hand-wrote. An ordinary
+    // container resource under the ephemeral prefix rather than a fixture of its own.
+    //
+    // The image is the one the deployment assets name, at the same digest, so what the suite exercises is what an
+    // operator gets — including the switch that keeps it from resolving blocklists, which is the deployment's posture
+    // rather than the image's default in every shape but this one's.
+    //
+    // No health check is declared, unlike every other resource here, and it is the protocol that decides that: the
+    // daemon speaks its own line protocol on a TCP port, so there is no route to probe and no command Aspire could
+    // compose. The suite waits for the daemon's own readiness command instead, which it can issue because it speaks
+    // that protocol.
+    builder
+        .AddContainer(
+            OrchestrationContract.SpamScannerResourceName,
+            "docker.io/axllent/spamassassin")
+        .WithImageSHA256("9bea393891c92a3531cb7081e9b2c478a654a048c9a6fa6f9d1df4300bf3ab8b")
+        .WithContainerName($"{ephemeralResourceNamePrefix}-spamassassin")
+        .WithEnvironment("DNS_CHECKS", "0")
+        .WithEndpoint(
+            targetPort: OrchestrationContract.SpamScannerContainerPort,
+            scheme: "tcp",
+            name: OrchestrationContract.SpamScannerEndpointName);
 }
 
 var database = postgres.AddDatabase(OrchestrationContract.DatabaseResourceName);
