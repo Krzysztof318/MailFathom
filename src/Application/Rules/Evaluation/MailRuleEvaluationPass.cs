@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.Folders;
+using MailFathom.Application.Mail.Mutations.Destinations;
 using MailFathom.Application.Persistence;
 using MailFathom.Application.Rules.Actions;
 using MailFathom.Application.Rules.Conditions;
@@ -10,6 +11,7 @@ using MailFathom.Application.Rules.Facts;
 using MailFathom.Application.Rules.History;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
+using MailFathom.Domain.Folders;
 
 namespace MailFathom.Application.Rules.Evaluation;
 
@@ -41,10 +43,16 @@ namespace MailFathom.Application.Rules.Evaluation;
 /// </para>
 /// <para>
 /// What a match asks the mailbox for is written down in the batch's own transaction, as the durable mutation record
-/// every requester uses, and never issued from here: a pass reaches no mail server, and the account's convergence pass
-/// is what carries each record to a completed or a dead-lettered ending. Committing the requests with the evaluations
-/// is what makes the pair atomic — an email is never recorded as evaluated while the change its rules asked for was
-/// lost, and a rolled-back batch asks again under the same identity.
+/// every requester uses, and never issued from here: no IMAP command a rule asks for leaves this pass, and the account's
+/// convergence pass is what carries each record to a completed or a dead-lettered ending. Committing the requests with
+/// the evaluations is what makes the pair atomic — an email is never recorded as evaluated while the change its rules
+/// asked for was lost, and a rolled-back batch asks again under the same identity.
+/// </para>
+/// <para>
+/// The one thing a pass does reach a mail server for is finding a destination folder the account maps and does not
+/// mirror, which no run of its own ever binds. That happens between evaluating a batch and committing it, deliberately:
+/// a listing is a round trip, and holding the batch's transaction open across one would keep local rows locked for the
+/// length of somebody else's network. Everything the pass reads about the mail itself was already stored.
 /// </para>
 /// <para>
 /// The history of what each rule concluded is written in that same transaction and for the same reason. An explanation
@@ -59,6 +67,7 @@ public sealed class MailRuleEvaluationPass
     private readonly IMailRuleEvaluationStore store;
     private readonly IMailRuleEvaluationRunStore runStore;
     private readonly MailRuleActionRecorder actionRecorder;
+    private readonly MailboxDestinationResolver destinationResolver;
     private readonly IMailRuleExecutionStore executionStore;
     private readonly IMailFolderMappingReader folderMappings;
     private readonly OptimisticConcurrencyRetryPolicy commitPolicy;
@@ -71,6 +80,7 @@ public sealed class MailRuleEvaluationPass
     /// <param name="store">Reads the candidates and records which emails have been evaluated.</param>
     /// <param name="runStore">Reads the requested whole-mailbox run and records how far it has been carried.</param>
     /// <param name="actionRecorder">Writes down the changes a matching rule asks the mailbox for.</param>
+    /// <param name="destinationResolver">Finds the folders those changes file into, before the batch's transaction opens.</param>
     /// <param name="executionStore">Keeps the record of what each rule concluded and what became of what it asked for.</param>
     /// <param name="folderMappings">Answers what the folder an email is in is configured for, which a condition naming the role reads.</param>
     /// <param name="commitPolicy">Commits a batch's evaluations together with the position they account for.</param>
@@ -84,6 +94,7 @@ public sealed class MailRuleEvaluationPass
         IMailRuleEvaluationStore store,
         IMailRuleEvaluationRunStore runStore,
         MailRuleActionRecorder actionRecorder,
+        MailboxDestinationResolver destinationResolver,
         IMailRuleExecutionStore executionStore,
         IMailFolderMappingReader folderMappings,
         OptimisticConcurrencyRetryPolicy commitPolicy,
@@ -95,6 +106,7 @@ public sealed class MailRuleEvaluationPass
         ArgumentNullException.ThrowIfNull(store);
         ArgumentNullException.ThrowIfNull(runStore);
         ArgumentNullException.ThrowIfNull(actionRecorder);
+        ArgumentNullException.ThrowIfNull(destinationResolver);
         ArgumentNullException.ThrowIfNull(executionStore);
         ArgumentNullException.ThrowIfNull(folderMappings);
         ArgumentNullException.ThrowIfNull(commitPolicy);
@@ -108,6 +120,7 @@ public sealed class MailRuleEvaluationPass
         this.store = store;
         this.runStore = runStore;
         this.actionRecorder = actionRecorder;
+        this.destinationResolver = destinationResolver;
         this.executionStore = executionStore;
         this.folderMappings = folderMappings;
         this.commitPolicy = commitPolicy;
@@ -180,6 +193,7 @@ public sealed class MailRuleEvaluationPass
             if (outcome.EvaluatedEmailIds.Count > 0)
             {
                 var evaluatedAt = this.timeProvider.GetUtcNow();
+                var destinations = await this.ResolveDestinationsAsync(accountId, outcome, cancellationToken);
 
                 await this.commitPolicy.CommitAsync(
                     async (session, attemptCancellationToken) =>
@@ -195,6 +209,7 @@ public sealed class MailRuleEvaluationPass
                             boundRuleSet.RuleSet.Revision,
                             outcome,
                             boundRuleSet.Trigger,
+                            destinations,
                             attemptCancellationToken);
                     },
                     cancellationToken);
@@ -286,6 +301,7 @@ public sealed class MailRuleEvaluationPass
         }
 
         var outcome = await this.EvaluateBatchAsync(boundRuleSet, batch, cancellationToken);
+        var destinations = await this.ResolveDestinationsAsync(run.AccountId, outcome, cancellationToken);
         var reachedTheEnd = batch.Count < this.options.BatchSize;
         var recordedAt = this.timeProvider.GetUtcNow();
 
@@ -313,6 +329,7 @@ public sealed class MailRuleEvaluationPass
                     boundRuleSet.RuleSet.Revision,
                     outcome,
                     boundRuleSet.Trigger,
+                    destinations,
                     attemptCancellationToken);
 
                 await this.runStore.SaveAsync(session, carried, attemptCancellationToken);
@@ -340,6 +357,7 @@ public sealed class MailRuleEvaluationPass
         MailRuleSetRevision revision,
         MailRuleEvaluationBatch outcome,
         MailRuleExecutionTrigger trigger,
+        MailboxDestinations destinations,
         CancellationToken cancellationToken)
     {
         outcome.ForgetRecordedActions();
@@ -357,6 +375,7 @@ public sealed class MailRuleEvaluationPass
                     evaluated.Candidate.Occurrence,
                     plan,
                     revision,
+                    destinations,
                     cancellationToken);
 
             outcome.ActionsRecorded(recording);
@@ -371,6 +390,30 @@ public sealed class MailRuleEvaluationPass
         }
 
         await this.executionStore.AppendAsync(session, executions, cancellationToken);
+    }
+
+    /// <summary>Finds every folder this batch's matching rules file into, before the transaction that records them opens.</summary>
+    /// <remarks>
+    /// A batch naming no destination asks nothing, which is what keeps an account whose rules only flag or delete mail
+    /// from ever reaching its mail server here. What one batch resolved the next reuses, so a pass over a mailbox costs
+    /// one answer per destination rather than one per batch.
+    /// </remarks>
+    private async Task<MailboxDestinations> ResolveDestinationsAsync(
+        MailAccountId accountId,
+        MailRuleEvaluationBatch outcome,
+        CancellationToken cancellationToken)
+    {
+        MailFolderReference[] named =
+        [
+            .. outcome.EvaluatedEmails
+                .SelectMany(evaluated => evaluated.Evaluation.ActionPlan.Actions)
+                .Select(planned => planned.Action.Destination)
+                .OfType<MailFolderReference>(),
+        ];
+
+        return named.Length == 0
+            ? MailboxDestinations.None
+            : await this.destinationResolver.ResolveAsync(accountId, named, cancellationToken);
     }
 
     private Task CommitRunAsync(MailRuleEvaluationRun run, CancellationToken cancellationToken) =>

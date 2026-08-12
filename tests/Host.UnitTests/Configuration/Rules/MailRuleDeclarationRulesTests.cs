@@ -531,9 +531,9 @@ public sealed class MailRuleDeclarationRulesTests
         Assert.Empty(errors);
     }
 
-    /// <summary>Nothing binds an unmirrored folder to a remote path, so a rule filing into one could never resolve a destination.</summary>
+    /// <summary>A folder no mapping names is one MailFathom knows nothing about, so a rule filing into it has nowhere to file.</summary>
     [Fact]
-    public void FindDeclarationErrors_ARuleFilingIntoAFolderTheAccountDoesNotMirror_IsRefused()
+    public void FindDeclarationErrors_ARuleFilingIntoAFolderTheAccountDoesNotMap_IsRefusedNamingWhatToDoAboutIt()
     {
         // Arrange
         var candidate = new MailRulesOptions
@@ -555,9 +555,10 @@ public sealed class MailRuleDeclarationRulesTests
         var error = Assert.Single(errors);
         Assert.Contains("NOWHERE", error, StringComparison.Ordinal);
         Assert.Contains("primary", error, StringComparison.Ordinal);
+        Assert.Contains("'Synchronize': false", error, StringComparison.Ordinal);
     }
 
-    /// <summary>An unscoped rule reaches every account, so a destination one of them does not mirror is refused for that one.</summary>
+    /// <summary>An unscoped rule reaches every account, so a destination one of them does not map is refused for that one.</summary>
     [Fact]
     public void FindDeclarationErrors_AnUnscopedRuleFilingIntoAFolderOneAccountLacks_IsRefusedForThatAccount()
     {

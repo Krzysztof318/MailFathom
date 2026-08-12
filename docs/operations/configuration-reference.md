@@ -195,17 +195,17 @@ to nothing, instead of turning the mistake into a folder named after it. Startup
 `RemotePath`, naming the alias, because a folder that does not exist advertises no role and only an explicit path says
 what to create. A mapping naming both a path and a role may ask for the creation: the path is what is created, and the
 role is what the created folder plays. It is issued where the alias is
-resolved, and a run resolves the folders it mirrors and no others, so the switch creates nothing on a mapping that also
-carries `Synchronize: false`. Renaming, deleting, and unsubscribing from a folder stay refused outright, and no folder
-MailFathom did not create is ever subscribed to.
+resolved — before the run of a folder the account mirrors, and at the moment a change first files into one it does not,
+so the switch reaches a `Synchronize: false` mapping the first time something files mail into it. Renaming, deleting, and
+unsubscribing from a folder stay refused outright, and no folder MailFathom did not create is ever subscribed to.
 [A folder the mapping asked for is created](../features/imap-synchronization.md#a-folder-the-mapping-asked-for-is-created)
 states when the creation happens, what it does with a folder that already exists and with a hierarchical path, and what
 a server's refusal reports.
 
 Switching `Synchronize` off for a folder that was mirrored **erases what is stored for it**, in bounded passes on the
 account's own runs and through the deletion path an erasing disposition already uses. The mapping stays, so the alias
-goes on resolving and any role the mapping names goes on being answered — but the folder stops being a destination a
-rule may file mail into, and startup refuses a rule that still names it.
+goes on resolving, any role the mapping names goes on being answered, and the folder stays a destination a rule may file
+mail into — resolved the first time a change names it, since no run schedules it.
 [What a mapping decides beyond where the folder is](../features/imap-synchronization.md#what-a-mapping-decides-beyond-where-the-folder-is)
 states all three switches together, what an unmapped folder is instead, and what becomes of the local copy of a message
 relocated into a folder nothing mirrors.

@@ -67,7 +67,7 @@ public sealed class DeclaredMailAccountsTests
 
     /// <summary>An account that configures no folder is run with the inbox mapping, so that is the folder a rule may file into.</summary>
     [Fact]
-    public void ReadFrom_AccountDeclaringNoFolder_MirrorsTheInbox()
+    public void ReadFrom_AccountDeclaringNoFolder_MapsTheInbox()
     {
         // Arrange
         var configuration = Configuration(new Dictionary<string, string?>
@@ -79,12 +79,12 @@ public sealed class DeclaredMailAccountsTests
         var account = Assert.Single(DeclaredMailAccounts.ReadFrom(configuration));
 
         // Assert
-        Assert.Equal(["INBOX"], account.MirroredFolders.Select(folder => folder.Alias.Value));
+        Assert.Equal(["INBOX"], account.MappedFolders.Select(folder => folder.Alias.Value));
     }
 
-    /// <summary>Nothing binds an unmirrored folder to a remote path, so it is not a folder a rule can file into.</summary>
+    /// <summary>A folder is resolved when a change first files into it, so mapping one is all a destination needs.</summary>
     [Fact]
-    public void ReadFrom_FolderTheAccountDoesNotMirror_IsNotADestination()
+    public void ReadFrom_FolderTheAccountDoesNotMirror_IsStillADestination()
     {
         // Arrange
         var configuration = Configuration(new Dictionary<string, string?>
@@ -101,7 +101,7 @@ public sealed class DeclaredMailAccountsTests
         var account = Assert.Single(DeclaredMailAccounts.ReadFrom(configuration));
 
         // Assert
-        Assert.Equal(["INBOX"], account.MirroredFolders.Select(folder => folder.Alias.Value));
+        Assert.Equal(["INBOX", "SPAM"], account.MappedFolders.Select(folder => folder.Alias.Value));
     }
 
     /// <summary>Deletion is opt-in on every account, and the three reversible actions are permitted until refused.</summary>
@@ -193,6 +193,6 @@ public sealed class DeclaredMailAccountsTests
     private static IReadOnlyList<string> Describe(IEnumerable<DeclaredMailAccount> accounts) =>
     [
         .. accounts.Select(account =>
-            $"{account.AccountId}|{string.Join(',', account.MirroredFolders.Select(folder => folder.Alias.Value))}|{account.PermittedRuleActions}"),
+            $"{account.AccountId}|{string.Join(',', account.MappedFolders.Select(folder => folder.Alias.Value))}|{account.PermittedRuleActions}"),
     ];
 }

@@ -447,13 +447,18 @@ internal sealed partial class AccountSynchronizationSupervisor
     /// offering them to a rule on the way out.
     /// </para>
     /// <para>
-    /// A failure never fails the run. Evaluation reaches no mail server — everything it reads was already stored — so
-    /// backing the account off, which is to say fetching its mail less often, would answer a local problem by slowing
-    /// the remote work that had nothing to do with it. What a pass did not finish, the next run resumes from the
-    /// batches this one committed.
+    /// A failure never fails the run. Everything a pass reads about the mail itself was already stored, and the one
+    /// thing it does ask a mail server — where a folder the account maps and does not mirror currently is — it asks
+    /// only where a rule files into such a folder. Wherever this run has already converged a change or synchronized a
+    /// folder, that server has been reached, so an unreachable one put the account into backoff before this step
+    /// began, and backing it off again here would slow the remote work over a local problem or over the same remote
+    /// one twice. An account that mirrors nothing and had nothing to converge reaches it here first instead, and a
+    /// lookup that fails there leaves the account on its ordinary interval: that lookup is the whole of such a run's
+    /// remote work, so backoff would slow nothing else, and the interval already spaces what is left to retry. What a
+    /// pass did not finish, the next run resumes from the batches this one committed.
     /// </para>
     /// </remarks>
-    [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "Rule evaluation is a local pass rather than a mail operation; one that failed is logged and resumed by the next run rather than putting the account into backoff.")]
+    [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "A pass that failed is logged and resumed by the next run rather than putting the account into backoff; the remarks hold why that stays right for the one remote step it takes.")]
     private async Task EvaluateMailRulesAsync(
         MailSynchronizationOptions runSettings,
         CancellationToken cancellationToken)

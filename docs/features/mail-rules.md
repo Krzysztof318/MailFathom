@@ -149,15 +149,17 @@ pass with `StopWhenMatched` does to keep the mail it names away from the rules b
 
 A destination is a **folder alias** — one an account declares under `MailSynchronization:Accounts:<n>:Folders` — and
 never a path on the server. What that alias is bound to is resolved when the change is written down, so a rule goes on
-working across a server that renames the folder underneath it, and a rule may only name a folder the account actually
-mirrors. [Folder aliases and discovery](imap-synchronization.md#folder-aliases-and-discovery) states what a binding is
+working across a server that renames the folder underneath it, and a rule may name any folder the account maps —
+including one it deliberately does not mirror, which is how mail is filed somewhere MailFathom keeps no copy of.
+[Folder aliases and discovery](imap-synchronization.md#folder-aliases-and-discovery) states what a binding is
 and when it moves.
 
 A destination may instead name the **role** the folder plays, written `role:<role>` — `role:Junk`, `role:Archive`, and
 the rest. That is what lets one rule file mail correctly across accounts whose folders you named differently, since the
 role is asked of the account the mail belongs to. Anything without the `role:` prefix is an alias, so an alias spelled
 `Junk` still means that alias. Startup refuses a role no folder of a reached account carries, exactly as it refuses an
-alias nothing mirrors, and refuses text that reads as neither an alias nor a role, naming the roles that exist.
+alias the account maps nothing for, and refuses text that reads as neither an alias nor a role, naming the roles that
+exist.
 [What a role says, beside how a folder is found](imap-synchronization.md#what-a-role-says-beside-how-a-folder-is-found)
 states what a role is and why an account has at most one folder per role.
 
@@ -200,13 +202,16 @@ its own.
 
 ### How a change reaches the mail server
 
-**A rule pass opens no connection.** Each action a match asks for is written down as a
+**A rule pass issues no IMAP command a rule asked for.** Each action a match asks for is written down as a
 [durable mutation record](imap-synchronization.md#every-change-is-written-down-before-it-is-issued) inside the same
 transaction that records the evaluation, and the account's own convergence pass — the first thing every account run does
-— is what issues the IMAP commands. Three things follow, and each is the point of the arrangement:
+— is what issues the IMAP commands. The one server call a pass makes for itself is
+[finding a folder the account maps and does not mirror](imap-synchronization.md#what-a-mapping-decides-beyond-where-the-folder-is),
+made before the batch's transaction is opened and only where a rule files into such a folder. Three things follow, and
+each is the point of the arrangement:
 
-- **A pass that fails costs no mail server work.** Evaluation reaches nothing remote, so a local failure never defers the
-  account's fetching.
+- **A pass that fails costs no mail server work.** Nothing the evaluation itself decided is carried remotely, so a local
+  failure never defers the account's fetching.
 - **A change survives a restart.** A record written and not yet carried is picked up by the next run, and
   [a change nobody finished finishes by itself](imap-synchronization.md#a-change-nobody-finished-finishes-by-itself)
   states every way one can be left and what becomes of it.
@@ -259,11 +264,14 @@ Each is recorded against the rule that asked, and the actions beside it are stil
 
 | Reason | What happened |
 | --- | --- |
-| `DestinationFolderUnresolved` | The destination is bound to no folder on the server — nothing has discovered the alias yet, the folder it named has gone, or the account maps no folder to the role it named |
+| `DestinationFolderUnresolved` | The destination names a folder the account mirrors and no run of that folder has bound it yet |
+| `DestinationFolderUnmapped` | No mapping of the account answers to the name — one was withdrawn between the rule set being read and the change being written |
+| `DestinationFolderNotAdvertised` | The mapping is there and the server holds no folder for it: the folder was deleted or renamed, the path was never right, or one the mapping asked to have created could not be |
+| `DestinationFolderAmbiguous` | The mapping names a role that two advertised folders carry, so which one was meant is yours to state |
 | `AccountNoLongerConfigured` | The account was withdrawn from the configuration between the rule set being read and the change being written |
 | `ActionNoLongerPermitted` | The account has stopped permitting this action since the rule set that declares it was read |
 
-Nothing is written down in any of the three cases: filing into whichever folder looked closest to the name is precisely
+Nothing is written down in any of these cases: filing into whichever folder looked closest to the name is precisely
 what a stale destination must not do. The account run reports how many changes it asked for, how many it withheld because
 another matching rule had already settled the same message, and how many named something that no longer resolves,
 together with the rules involved. Counts and rule names only — nothing derived from a message reaches a log line, a
@@ -407,7 +415,8 @@ and none is repeated.
 So is its `Actions` block, against the rule itself and against every account the rule reaches:
 
 - **The destinations.** Each names something readable as a folder alias or as `role:<role>`, and each names a folder the
-  account actually mirrors — a rule filing into a folder nothing mirrors could never resolve a destination.
+  account maps — a rule filing into a folder no mapping declares has nowhere to file. Mirroring is not asked about: a
+  mapped folder the account does not mirror is resolved when the first change files into it.
 - **The combination.** The actions are ones MailFathom applies together, per [the table above](#which-combinations-a-rule-may-declare).
 - **The permissions.** Every action is one the account permits a rule to take.
 
@@ -487,9 +496,9 @@ queue behind it.
 
 **A rule that cannot answer for one message costs that message's rule and nothing else.** It is recorded as a failed
 rule with a reason, the rules below it still run, the remaining messages of the batch are still evaluated, and the
-message is recorded as evaluated. The account is not put into backoff for it either: a rule pass reaches no mail server,
-so fetching the account's mail less often would answer a local problem by slowing remote work that had nothing to do
-with it. The next section lists the two reasons.
+message is recorded as evaluated. The account is not put into backoff for it either: nothing a rule decided is carried
+remotely, so fetching the account's mail less often would answer a local problem by slowing remote work that had nothing
+to do with it. The next section lists the two reasons.
 
 **Nothing scans on a timer.** The account run recurs already, so anything a scan would find on arrival is found by the
 `Arrival` trigger; a rule whose condition only becomes true with the passage of time — mail older than some age — fires
