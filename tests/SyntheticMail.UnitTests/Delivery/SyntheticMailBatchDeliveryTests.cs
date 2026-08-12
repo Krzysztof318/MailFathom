@@ -169,7 +169,8 @@ public sealed class SyntheticMailBatchDeliveryTests
             count,
             new DateTimeOffset(2026, 8, 8, 23, 59, 59, TimeSpan.Zero),
             SpanDays: 30,
-            MaximumAttachmentBytes: 256));
+            MaximumAttachmentBytes: 256,
+            SensitivePercentage: 25));
 
     private static SendingAccount Account() => new(
         "smtp.example.test",

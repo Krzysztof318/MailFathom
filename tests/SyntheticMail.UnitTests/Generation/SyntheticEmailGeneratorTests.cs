@@ -2,7 +2,10 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using System.Text.Encodings.Web;
+using System.Text.Unicode;
 using MailFathom.SyntheticMail.Generation;
+using MailFathom.SyntheticMail.Generation.SensitiveDecoys;
 
 using Xunit;
 
@@ -12,6 +15,9 @@ namespace MailFathom.SyntheticMail.UnitTests.Generation;
 public sealed class SyntheticEmailGeneratorTests
 {
     private static readonly DateTimeOffset LatestSentAt = new(2026, 8, 8, 23, 59, 59, TimeSpan.Zero);
+
+    /// <summary>The encoder the generator writes an HTML block through, restated so a body can be compared against it.</summary>
+    private static readonly HtmlEncoder BodyEncoder = HtmlEncoder.Create(new TextEncoderSettings(UnicodeRanges.All));
 
     [Fact]
     public void Generate_TheSamePlan_ProducesTheSameCorpus()
@@ -322,12 +328,102 @@ public sealed class SyntheticEmailGeneratorTests
     }
 
     [Fact]
+    public void Generate_ACorpusAskedForNoSensitiveMaterial_PlantsNone()
+    {
+        // Arrange
+        var plan = Plan(seed: 21, count: 200);
+
+        // Act
+        var corpus = SyntheticEmailGenerator.Generate(plan);
+
+        // Assert
+        Assert.All(corpus, email => Assert.Null(email.Body.Decoy));
+    }
+
+    [Fact]
+    public void Generate_ACorpusAskedForSensitiveMaterialThroughout_PlantsOneInEveryMessage()
+    {
+        // Arrange
+        var plan = Plan(seed: 21, count: 40, sensitivePercentage: 100);
+
+        // Act
+        var corpus = SyntheticEmailGenerator.Generate(plan);
+
+        // Assert
+        Assert.All(corpus, email => Assert.NotNull(email.Body.Decoy));
+    }
+
+    [Fact]
+    public void Generate_ACorpusCarryingSensitiveMaterial_PlantsEveryKindTheSameNumberOfTimes()
+    {
+        // Arrange
+        // One message per kind, twice over, so an uneven distribution is a failure rather than a rounding remainder.
+        var kinds = SensitiveDecoyCatalog.Kinds.Count;
+        var plan = Plan(seed: 21, count: 2 * kinds, sensitivePercentage: 100);
+
+        // Act
+        var corpus = SyntheticEmailGenerator.Generate(plan);
+
+        // Assert
+        var plantings = corpus
+            .Select(email => email.Body.Decoy!.Kind.Rule)
+            .GroupBy(rule => rule)
+            .Select(group => group.Count())
+            .ToArray();
+
+        Assert.Equal(kinds, plantings.Length);
+        Assert.All(plantings, count => Assert.Equal(2, count));
+    }
+
+    [Fact]
+    public void Generate_APlantedDecoy_PutsItsSentenceIntoBothAlternatives()
+    {
+        // Arrange
+        var plan = Plan(seed: 5, count: 24, sensitivePercentage: 100);
+
+        // Act
+        var corpus = SyntheticEmailGenerator.Generate(plan);
+
+        // Assert
+        // Both, because which alternative a message emits is a separate draw: a decoy reaching only the text part
+        // would leave every HTML-only message carrying nothing while the listing said it did. The HTML is compared
+        // against the sentence put through the same encoder the generator writes a block with, since a body escapes
+        // whatever markup would otherwise claim.
+        Assert.All(corpus, email =>
+        {
+            Assert.Contains(email.Body.Decoy!.Sentence, email.Body.PlainText, StringComparison.Ordinal);
+            Assert.Contains(BodyEncoder.Encode(email.Body.Decoy.Sentence), email.Body.Html, StringComparison.Ordinal);
+        });
+    }
+
+    [Fact]
+    public void Generate_APlantedDecoy_LeavesTheMessageSayingNothingAboutIt()
+    {
+        // Arrange
+        var plan = Plan(seed: 9, count: 24, sensitivePercentage: 100);
+
+        // Act
+        var corpus = SyntheticEmailGenerator.Generate(plan);
+
+        // Assert
+        // Nothing in a message announces the decoy, because a scanner read against text that labels its own
+        // credentials proves nothing about the mail this corpus stands in for.
+        Assert.All(corpus, email =>
+        {
+            Assert.DoesNotContain(email.Body.Decoy!.Kind.Rule, email.Body.PlainText, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("decoy", email.Body.PlainText, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("decoy", email.Subject, StringComparison.OrdinalIgnoreCase);
+        });
+    }
+
+    [Fact]
     public void Generate_ANullPlan_IsRefused()
     {
         // Arrange, Act, Assert
         Assert.Throws<ArgumentNullException>(() => SyntheticEmailGenerator.Generate(null!));
     }
 
-    private static SyntheticCorpusPlan Plan(int seed, int count) =>
-        new(seed, count, LatestSentAt, SpanDays: 90, MaximumAttachmentBytes: 64 * 1024);
+
+    private static SyntheticCorpusPlan Plan(int seed, int count, int sensitivePercentage = 0) =>
+        new(seed, count, LatestSentAt, SpanDays: 90, MaximumAttachmentBytes: 64 * 1024, sensitivePercentage);
 }

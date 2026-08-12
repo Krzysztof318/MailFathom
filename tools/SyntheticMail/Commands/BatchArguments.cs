@@ -17,6 +17,7 @@ namespace MailFathom.SyntheticMail.Commands;
 /// <param name="LatestDate">The newest day a generated message is dated.</param>
 /// <param name="SpanDays">How far back from <paramref name="LatestDate" /> the dates reach.</param>
 /// <param name="MaximumAttachmentBytes">The ceiling on one attachment, and zero for a batch that carries none.</param>
+/// <param name="SensitivePercentage">How often a message carries fabricated sensitive material, in messages per hundred.</param>
 /// <param name="Interval">How long the run waits between two submissions.</param>
 /// <param name="ConfigurationPath">Where the sending account is read from.</param>
 /// <param name="DryRun">Whether to generate and report without submitting anything.</param>
@@ -32,6 +33,7 @@ internal sealed record BatchArguments(
     DateOnly LatestDate,
     int SpanDays,
     int MaximumAttachmentBytes,
+    int SensitivePercentage,
     TimeSpan Interval,
     string ConfigurationPath,
     bool DryRun)
@@ -50,6 +52,13 @@ internal sealed record BatchArguments(
     /// <summary>The longest range the dates may be spread over, in days.</summary>
     internal const int MaximumSpanDays = 3650;
 
+    /// <summary>The largest share of a batch that may carry fabricated sensitive material, in messages per hundred.</summary>
+    /// <remarks>
+    /// A hundred is a supported answer rather than a mistyped one: a corpus in which every message carries something
+    /// to find is what a scanner is compared against a corpus in which none does, and both are one invocation.
+    /// </remarks>
+    internal const int MaximumSensitivePercentage = 100;
+
     /// <summary>The longest pause the run will take between two submissions, in milliseconds.</summary>
     internal const int MaximumIntervalMilliseconds = 60_000;
 
@@ -67,7 +76,7 @@ internal sealed record BatchArguments(
     /// <summary>The invocation that reproduces this run exactly.</summary>
     internal string RepeatCommandLine => string.Create(
         CultureInfo.InvariantCulture,
-        $"{this.Recipient.Address} --seed {this.Seed} --count {this.Count} --days {this.SpanDays} --until {this.LatestDate.ToString(DateFormat, CultureInfo.InvariantCulture)} --attachment-bytes {this.MaximumAttachmentBytes}");
+        $"{this.Recipient.Address} --seed {this.Seed} --count {this.Count} --days {this.SpanDays} --until {this.LatestDate.ToString(DateFormat, CultureInfo.InvariantCulture)} --attachment-bytes {this.MaximumAttachmentBytes} --sensitive-percentage {this.SensitivePercentage}");
 
     /// <summary>Checks one invocation and resolves what it left unsaid.</summary>
     /// <param name="recipient">The address given as the argument.</param>
@@ -76,6 +85,7 @@ internal sealed record BatchArguments(
     /// <param name="until">The newest date, or <see langword="null" /> for today.</param>
     /// <param name="days">How far back the dates reach.</param>
     /// <param name="attachmentBytes">The ceiling on one attachment.</param>
+    /// <param name="sensitivePercentage">How often a message carries fabricated sensitive material.</param>
     /// <param name="intervalMilliseconds">How long to wait between two submissions.</param>
     /// <param name="configurationPath">Where to read the sending account, or <see langword="null" /> for the default.</param>
     /// <param name="dryRun">Whether to submit anything at all.</param>
@@ -94,6 +104,7 @@ internal sealed record BatchArguments(
         string? until,
         int days,
         int attachmentBytes,
+        int sensitivePercentage,
         int intervalMilliseconds,
         string? configurationPath,
         bool dryRun,
@@ -122,6 +133,7 @@ internal sealed record BatchArguments(
             latestDate,
             spanDays,
             Bounded(attachmentBytes, 0, MaximumAttachmentCeiling, "--attachment-bytes"),
+            Bounded(sensitivePercentage, 0, MaximumSensitivePercentage, "--sensitive-percentage"),
             TimeSpan.FromMilliseconds(Bounded(intervalMilliseconds, 0, MaximumIntervalMilliseconds, "--interval")),
             string.IsNullOrWhiteSpace(configurationPath) ? SendingAccountFile.DefaultPath() : configurationPath,
             dryRun);
@@ -130,7 +142,13 @@ internal sealed record BatchArguments(
     /// <summary>Builds the plan this invocation describes.</summary>
     /// <returns>The plan, which is everything the generator reads.</returns>
     internal SyntheticCorpusPlan ToPlan() =>
-        new(this.Seed, this.Count, this.LatestSentAt, this.SpanDays, this.MaximumAttachmentBytes);
+        new(
+            this.Seed,
+            this.Count,
+            this.LatestSentAt,
+            this.SpanDays,
+            this.MaximumAttachmentBytes,
+            this.SensitivePercentage);
 
     private static MailboxAddress ParseRecipient(string recipient) =>
         MailboxAddress.TryParse(recipient, out var parsed)

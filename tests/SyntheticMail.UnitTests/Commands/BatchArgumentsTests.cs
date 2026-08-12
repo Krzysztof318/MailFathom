@@ -134,6 +134,44 @@ public sealed class BatchArgumentsTests
 
     [Theory]
     [InlineData(-1)]
+    [InlineData(BatchArguments.MaximumSensitivePercentage + 1)]
+    public void Parse_ASensitiveShareOutsideItsBounds_IsRefusedNamingTheOption(int sensitivePercentage)
+    {
+        // Arrange, Act
+        var failure = Assert.Throws<SyntheticMailFailure>(
+            () => Parse(sensitivePercentage: sensitivePercentage));
+
+        // Assert
+        Assert.Contains("--sensitive-percentage", failure.Message, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(BatchArguments.MaximumSensitivePercentage)]
+    public void Parse_ASensitiveShareAtEitherEndOfItsBounds_IsAccepted(int sensitivePercentage)
+    {
+        // Arrange, Act
+        var arguments = Parse(sensitivePercentage: sensitivePercentage);
+
+        // Assert
+        // Both ends are answers rather than mistakes: a corpus with nothing to find and one where every message
+        // carries something are the two runs a scanner is compared between.
+        Assert.Equal(sensitivePercentage, arguments.SensitivePercentage);
+        Assert.Equal(sensitivePercentage, arguments.ToPlan().SensitivePercentage);
+    }
+
+    [Fact]
+    public void RepeatCommandLine_Always_CarriesTheSensitiveShareTheRunUsed()
+    {
+        // Arrange, Act
+        var arguments = Parse(sensitivePercentage: 35);
+
+        // Assert
+        Assert.Contains("--sensitive-percentage 35", arguments.RepeatCommandLine, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData(-1)]
     [InlineData(BatchArguments.MaximumIntervalMilliseconds + 1)]
     public void Parse_AnIntervalOutsideItsBounds_IsRefusedNamingTheOption(int intervalMilliseconds)
     {
@@ -179,6 +217,7 @@ public sealed class BatchArgumentsTests
         string? until = null,
         int days = 90,
         int attachmentBytes = 4096,
+        int sensitivePercentage = 20,
         int intervalMilliseconds = 0) => BatchArguments.Parse(
             recipient,
             seed,
@@ -186,6 +225,7 @@ public sealed class BatchArgumentsTests
             until,
             days,
             attachmentBytes,
+            sensitivePercentage,
             intervalMilliseconds,
             configurationPath: null,
             dryRun: false,

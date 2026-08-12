@@ -10,6 +10,7 @@ namespace MailFathom.SyntheticMail.Generation;
 /// <param name="LatestSentAt">The newest date a generated message carries.</param>
 /// <param name="SpanDays">How far back from <paramref name="LatestSentAt" /> the dates reach.</param>
 /// <param name="MaximumAttachmentBytes">The ceiling on one attachment, and zero for a corpus that carries none.</param>
+/// <param name="SensitivePercentage">How often a message carries fabricated sensitive material, in messages per hundred, and zero for a corpus that carries none.</param>
 /// <remarks>
 /// <para>
 /// The date range is stated rather than derived from the clock, which is the difference between a corpus that can be
@@ -26,4 +27,5 @@ internal sealed record SyntheticCorpusPlan(
     int Count,
     DateTimeOffset LatestSentAt,
     int SpanDays,
-    int MaximumAttachmentBytes);
+    int MaximumAttachmentBytes,
+    int SensitivePercentage);

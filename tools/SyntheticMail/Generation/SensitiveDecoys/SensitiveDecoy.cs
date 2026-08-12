@@ -1,0 +1,10 @@
+// Copyright © 2026 Krzysztof Kasprowicz
+// Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
+// Project repository: https://github.com/Krzysztof318/MailFathom
+
+namespace MailFathom.SyntheticMail.Generation.SensitiveDecoys;
+
+/// <summary>One fabricated secret or identifier, planted in the message that carries it.</summary>
+/// <param name="Kind">What was planted, and what is expected to find it.</param>
+/// <param name="Sentence">The paragraph the message carries, value included.</param>
+internal sealed record SensitiveDecoy(SensitiveDecoyKind Kind, string Sentence);
