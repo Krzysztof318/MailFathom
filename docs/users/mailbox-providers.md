@@ -2,6 +2,11 @@
 
 <!-- describes: src/Host/Configuration/Mail/**, src/Infrastructure/Mail/** -->
 
+> [!WARNING]
+> Some of the steps on this page are performed in a product this project does not control. Any screen, menu, or field
+> named here can be renamed or moved there at any time. Where this page and that product's own documentation disagree,
+> the product's documentation is right.
+
 [Getting started § configure the mailbox](getting-started.md#2-configure-the-mailbox) shows the account block and what
 each of its keys is for. This page answers the question that comes next and that no reference page can answer, because
 the answer belongs to somebody else: **what goes in `Host`, `Port`, `Secrets`, and `TransportSecurity` for the mail

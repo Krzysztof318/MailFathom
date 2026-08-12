@@ -2499,6 +2499,105 @@ every_describes_pattern_matches_something_that_exists() {
   (( failures == 0 ))
 }
 
+# A page whose steps happen inside somebody else's console opens with a fixed alert saying so, because
+# nothing here can notice the day that console is redrawn. `docs/AGENTS.md` decides which pages take one
+# — a judgement about a page's subject, which no pattern can read — and the two contracts below cover
+# the half that is checkable: a page carries the notice once rather than twice, and it sits where a
+# reader meets it before the first instruction rather than partway down.
+#
+# The wording is read out of `docs/AGENTS.md` rather than repeated here, the same arrangement the
+# licensing header has with `.editorconfig`, so the sentence is one decision recorded in one place.
+# That is also what makes wording drift visible: a page carrying its own variant fails rather than
+# passing quietly.
+third_party_notice() {
+  sed -n '/^<!-- third-party-notice -->$/,/^```$/p' "$source_repository_root/docs/AGENTS.md" |
+    sed -e '1,2d' -e '$d'
+}
+
+# The notice opens on `> [!WARNING]`, which any page may use for anything else, so the line a search
+# keys on is the sentence below it.
+third_party_notice_anchor() {
+  third_party_notice | sed -n '2p'
+}
+
+third_party_notice_occurrences() {
+  local anchor="$1" page="$2"
+
+  grep --count --line-regexp --fixed-strings "$anchor" "$source_repository_root/$page" || true
+}
+
+no_documentation_page_carries_the_third_party_notice_twice() {
+  local page anchor occurrences failures=0
+
+  anchor="$(third_party_notice_anchor)"
+  if [[ -z "$anchor" ]]; then
+    printf 'docs/AGENTS.md carries no notice under its <!-- third-party-notice --> marker\n' >&2
+    return 1
+  fi
+
+  while IFS= read -r page; do
+    documentation_page_requires_a_marker "$page" || continue
+
+    occurrences="$(third_party_notice_occurrences "$anchor" "$page")"
+
+    if (( occurrences > 1 )); then
+      printf '%s carries the third-party notice %s times; a page carries it once\n' \
+        "$page" "$occurrences" >&2
+      failures=$(( failures + 1 ))
+    fi
+  done < <(git -C "$source_repository_root" ls-files -- ':(glob)docs/**/*.md')
+
+  (( failures == 0 ))
+}
+
+every_third_party_notice_sits_directly_under_its_marker() {
+  local page anchor notice notice_length carried marker_line notice_line first_content_line failures=0
+
+  notice="$(third_party_notice)"
+  anchor="$(third_party_notice_anchor)"
+  if [[ -z "$anchor" ]]; then
+    printf 'docs/AGENTS.md carries no notice under its <!-- third-party-notice --> marker\n' >&2
+    return 1
+  fi
+  notice_length="$(wc -l <<< "$notice")"
+
+  while IFS= read -r page; do
+    documentation_page_requires_a_marker "$page" || continue
+
+    notice_line="$(grep --line-number --line-regexp --fixed-strings "$anchor" \
+      "$source_repository_root/$page" | head -n 1 | cut -d: -f1 || true)"
+    [[ -n "$notice_line" ]] || continue
+
+    # The anchor is the notice's second line, so the alert opens on the line above it.
+    notice_line=$(( notice_line - 1 ))
+
+    marker_line="$(grep --line-number --max-count=1 -E '<!--[[:space:]]*describes:' \
+      "$source_repository_root/$page" | cut -d: -f1 || true)"
+    # A page with no marker at all is the other contract's failure rather than this one's.
+    [[ -n "$marker_line" ]] || continue
+
+    first_content_line="$(awk -v marker="$marker_line" \
+      'NR > marker && NF { print NR; exit }' "$source_repository_root/$page")"
+
+    if [[ "$notice_line" != "$first_content_line" ]]; then
+      printf '%s opens its third-party notice on line %s; it belongs on line %s, directly under the describes marker\n' \
+        "$page" "$notice_line" "$first_content_line" >&2
+      failures=$(( failures + 1 ))
+      continue
+    fi
+
+    carried="$(sed -n "${notice_line},$(( notice_line + notice_length - 1 ))p" \
+      "$source_repository_root/$page")"
+
+    if [[ "$carried" != "$notice" ]]; then
+      printf '%s words its third-party notice differently from the one in docs/AGENTS.md\n' "$page" >&2
+      failures=$(( failures + 1 ))
+    fi
+  done < <(git -C "$source_repository_root" ls-files -- ':(glob)docs/**/*.md')
+
+  (( failures == 0 ))
+}
+
 # The pages under `docs/` are published as a site, and the site's navigation is written rather than
 # derived: `docs/toc.yml` is the header and a `toc.yml` in each section directory is its sidebar. That
 # leaves two ways for the two halves to come apart, and a reader meets each of them as an absence
@@ -4304,6 +4403,8 @@ run_test fathom_review_announces_over_every_other_status
 run_test fathom_review_writes_no_status_without_the_board_token
 run_test every_documentation_page_declares_what_it_describes
 run_test every_describes_pattern_matches_something_that_exists
+run_test no_documentation_page_carries_the_third_party_notice_twice
+run_test every_third_party_notice_sits_directly_under_its_marker
 run_test every_published_documentation_page_is_in_a_table_of_contents
 run_test every_table_of_contents_entry_names_a_page_that_exists
 run_test every_readme_site_link_names_a_page_that_exists
