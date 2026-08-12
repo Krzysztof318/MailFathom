@@ -76,7 +76,7 @@ public sealed class MailRuleActionRecorder
     /// <param name="plan">What the matching rules together ask for.</param>
     /// <param name="revision">The rule set revision the pass ran under, which is part of every request's identity.</param>
     /// <param name="cancellationToken">Cancels the staging.</param>
-    /// <returns>How many records were opened, and every action nothing was opened for.</returns>
+    /// <returns>Every action a record was opened for, with the record that carries it, and every action nothing was opened for.</returns>
     /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
     /// <exception cref="ArgumentException">Thrown when <paramref name="revision" /> names no rule set.</exception>
     public async Task<MailRuleActionRecording> RecordAsync(
@@ -103,11 +103,11 @@ public sealed class MailRuleActionRecorder
 
         if (this.TryReadPermissions(occurrence.AccountId) is not { } permitted)
         {
-            return new MailRuleActionRecording(0, WithdrawnAccountFailures(plan));
+            return new MailRuleActionRecording([], WithdrawnAccountFailures(plan));
         }
 
         var failures = new List<MailRuleActionFailure>();
-        var recordedCount = 0;
+        var recorded = new List<RecordedMailRuleAction>();
 
         foreach (var planned in plan.Actions)
         {
@@ -118,6 +118,7 @@ public sealed class MailRuleActionRecorder
             {
                 failures.Add(new MailRuleActionFailure(
                     planned.RuleName,
+                    planned.Position,
                     planned.Action.Mutation,
                     MailRuleActionFailureReason.ActionNoLongerPermitted,
                     planned.Action.DestinationAlias));
@@ -138,11 +139,17 @@ public sealed class MailRuleActionRecorder
                 continue;
             }
 
-            await this.records.OpenAsync(session, request, cancellationToken);
-            recordedCount++;
+            var record = await this.records.OpenAsync(session, request, cancellationToken);
+
+            recorded.Add(new RecordedMailRuleAction(
+                planned.RuleName,
+                planned.Position,
+                planned.Action.Mutation,
+                record.Id,
+                planned.Action.DestinationAlias));
         }
 
-        return new MailRuleActionRecording(recordedCount, failures);
+        return new MailRuleActionRecording(recorded, failures);
     }
 
     /// <summary>Reads what the account permits, or nothing when the configuration no longer declares it.</summary>
@@ -163,6 +170,7 @@ public sealed class MailRuleActionRecorder
     [
         .. plan.Actions.Select(planned => new MailRuleActionFailure(
             planned.RuleName,
+            planned.Position,
             planned.Action.Mutation,
             MailRuleActionFailureReason.AccountNoLongerConfigured,
             planned.Action.DestinationAlias)),
@@ -196,6 +204,7 @@ public sealed class MailRuleActionRecorder
             {
                 failures.Add(new MailRuleActionFailure(
                     planned.RuleName,
+                    planned.Position,
                     action.Mutation,
                     MailRuleActionFailureReason.DestinationFolderUnresolved,
                     destinationAlias));
@@ -237,6 +246,7 @@ public sealed class MailRuleActionRecorder
         {
             failures.Add(new MailRuleActionFailure(
                 planned.RuleName,
+                planned.Position,
                 planned.Action.Mutation,
                 MailRuleActionFailureReason.AccountNoLongerConfigured));
 

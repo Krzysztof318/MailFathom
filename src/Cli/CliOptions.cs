@@ -31,6 +31,19 @@ internal static class CliOptions
         Description = $"The deployment to act on for this invocation: a profile name, or an address such as https://mail.example.test:8443. Defaults to the profile last switched to, or ${EndpointVariable}.",
     };
 
+    /// <summary>Builds the option naming which of a deployment's mail accounts a command acts on.</summary>
+    /// <returns>The option.</returns>
+    /// <remarks>
+    /// Required wherever it appears, and deliberately without a default. A deployment may serve several mailboxes, and
+    /// every command taking this either walks one of them or reads what was done to one — so guessing which would be
+    /// guessing whose mail an operator meant.
+    /// </remarks>
+    internal static Option<string> MailAccount() => new("--account")
+    {
+        Description = "The mail account to act on, as the deployment's configuration names it.",
+        Required = true,
+    };
+
     /// <summary>Builds the option naming the profile a sign-in is remembered under.</summary>
     /// <returns>The option.</returns>
     internal static Option<string?> ProfileName() => new("--name")

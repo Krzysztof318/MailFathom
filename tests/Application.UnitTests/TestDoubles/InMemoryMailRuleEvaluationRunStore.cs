@@ -36,6 +36,12 @@ internal sealed class InMemoryMailRuleEvaluationRunStore : IMailRuleEvaluationRu
             : null);
 
     /// <inheritdoc />
+    public Task<MailRuleEvaluationRun?> FindLatestAsync(
+        MailAccountId accountId,
+        CancellationToken cancellationToken) =>
+        Task.FromResult(this.runs.GetValueOrDefault(accountId.Value));
+
+    /// <inheritdoc />
     public Task SaveAsync(IPersistenceSession session, MailRuleEvaluationRun run, CancellationToken cancellationToken)
     {
         this.runs[run.AccountId.Value] = run;

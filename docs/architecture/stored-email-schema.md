@@ -335,6 +335,31 @@ The row survives the run it describes, holding the last ending until a new reque
 
 Nothing in it is personal data. An account alias, a derived rule set identity, a message identifier, three counts, and three instants are MailFathom's own names for things, which is what lets a run be explained without any of the mail it walked being copied.
 
+## What each rule concluded, and what the conclusion asked for
+
+`mail_rule_executions` holds one row per rule a pass reached per message it evaluated, and `mail_rule_executed_actions` holds the changes each of those rules declared and what became of each. The unit is the pair of a rule and a message because those are the two ways the record is arrived at — "what is this rule doing" and "why is this message here" — and a rule the pass never reached leaves no row at all, which is what keeps "did not match" and "was never asked" apart.
+
+| Column | What it records |
+|---|---|
+| `Id` | What addresses the execution, and the primary key. A version-7 identifier, so the tie-breaker that orders two executions recorded in one instant rises with the recording instant and one batch's inserts land together in the index rather than scattering across it |
+| `MailboxAccountId`, `StoredEmailId` | Whose mail was evaluated, and which message. The message is a foreign key onto `stored_emails` that cascades, which is the whole erasure story here: what a rule concluded about a message goes when the message does, without a rule anybody has to remember |
+| `RuleName`, `Revision` | The rule, and the rule set it ran under. Together they are what the condition is retrievable from — the revision identifies the configuration the expression was read from, so the reasoning is reconstructible without the expression being copied here |
+| `Trigger` | Which of the pass's two walks reached the message, `Arrival` or `RequestedRun`. Text for the reason every other outcome here is: it stays readable in an ad-hoc query and survives a reordering of the enum |
+| `Outcome`, `ConditionFailure` | What the condition concluded, and why it concluded nothing. The failure is present exactly when the outcome is `Failed`, which is what makes an expression that could not be evaluated distinguishable from one that evaluated to false |
+| `ReadFacts` | The names of the facts the condition read, as `text[]`. **Names and never values** — the array holds `senderDomain`, never a domain — and read rather than referenced, so a fact a short-circuited clause named does not appear |
+| `EvaluatedAt`, `Duration` | When the message was evaluated, and how long the condition took to answer including resolving the facts it read. The duration is what the evaluation timeout is spent against, so a rule creeping toward its bound is visible before it starts being recorded as timed out |
+
+| Column of `mail_rule_executed_actions` | What it records |
+|---|---|
+| `MailRuleExecutionId`, `Position` | The execution the change belongs to and where the change sits in the order its own rule declares them, together the primary key. The position is the rule's own rather than the plan's, because a plan reorders across rules and the position is what names which of a rule's declared changes this was |
+| `Mutation`, `DestinationAlias` | The change asked for, and the folder it named. Both are MailFathom's own configured names, which is what lets what a rule did to a mailbox be recorded without the record describing the mailbox |
+| `Outcome`, `FailureReason` | `Requested` where a mutation record was opened, `Refused` with a classification where one could not be, and `Withheld` where another rule had already settled the message's fate. The three are kept apart because a change that was refused and a change nobody asked for read identically without it |
+| `MutationRecordId` | The record carrying the request, present exactly for a `Requested` change. **Deliberately not a foreign key**: it is a pointer into the mutation's own trail, which has its own retention, and a constraint would tie this record's lifetime to one it does not own |
+
+The row is never amended. An execution states a reading that has already happened, so the record only grows and shrinks — by the retention window `MailRules:HistoryRetention` declares, which the account's synchronization run erases against in bounded passes, and by the cascade from the message it names. That inheritance is the point rather than a convenience: the history is derived from mail content and carries the erasure obligations of the mail it describes whatever the window says.
+
+Nothing in either table is personal data. Rule names, folder aliases, mutation names, fact names, a derived revision, two identifiers, an instant, and a duration are the whole of it, and none is derived from what a message said.
+
 ## Indexes
 
 | Index | Columns | Purpose |
@@ -358,6 +383,9 @@ Nothing in it is personal data. An account alias, a derived rule set identity, a
 | `ix_mailbox_mutations_outstanding` | `(MailboxAccountId, RecordedAt)` where the stage is not `Completed` | The changes an operator asks about: those in flight and those given up on |
 | `ix_mailbox_mutations_placement` | `(MailboxAccountId, DestinationFolderPath, PlacementUidValidity, PlacementUid)` where `PlacementObservedAt` is null | The question the forward pass asks of every batch it discovers: is one of these UIDs where a relocation or a copy put an email |
 | `ix_mailbox_mutation_audit_entries_mutation` | `(MutationRecordId)`, unique | One audit entry per mutation ending, whatever a repeated append attempts |
+| `ix_mail_rule_executions_account_evaluated` | `(MailboxAccountId, EvaluatedAt, Id)` | An account's rule history newest first, and the retention pass that erases what has outlived its window. The identifier is in the key because two executions of one batch share an instant and a keyset page needs a total order to continue from |
+| `ix_mail_rule_executions_account_rule_evaluated` | `(MailboxAccountId, RuleName, EvaluatedAt, Id)` | What one rule has been concluding, which is the question a rule that never seems to fire is investigated with |
+| `ix_mail_rule_executions_email_evaluated` | `(StoredEmailId, EvaluatedAt, Id)` | Why one message is where it is, and the rows the cascade removes when that message is erased |
 | `ix_mailbox_mutation_audit_entries_account_completed` | `(MailboxAccountId, CompletedAt, Id)` | The two ways the trail is worked: a keyset-paginated page of an account's history, and the retention pass that erases what ended before a cutoff |
 | `ix_mail_answering_audit_entries_run_account` | `(RunId, MailboxAccountId)`, unique | One entry per run per account, whatever a repeated append attempts |
 | `ix_mail_answering_audit_entries_account_completed` | `(MailboxAccountId, CompletedAt, Id)` | The same two readers the trail above has: a keyset-paginated page of an account's runs, and the retention pass beside it |

@@ -89,6 +89,63 @@ public sealed class ValidatedSettingsSnapshotTests
         Assert.DoesNotContain("/run/secrets", rejection, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// A refusal is otherwise reported to the log alone, so a file that was edited and a deployment that is unchanged
+    /// look identical from outside. This is what an administrative reader answers that question from.
+    /// </summary>
+    [Fact]
+    public async Task LatestReloadRefused_AfterACandidateNothingCouldResolve_ReportsTheRefusalAndHowManySettingsNamedIt()
+    {
+        // Arrange
+        await using var harness = CreateHarness(ConfiguredAccounts.WithPasswordReferences(("primary", "plaintext:dev-password")));
+        var brokenCandidate = ConfiguredAccounts.WithPasswordReferences(("primary", "file:/run/secrets/absent"));
+
+        // Act
+        await harness.Settings.PublishWhenUsableAsync(
+            new ValidatedSettingsSnapshot<MailSynchronizationOptions>.ReloadCandidate(1, brokenCandidate),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.True(harness.Settings.LatestReloadRefused);
+        Assert.Equal(1, harness.Settings.RefusedSettingCount);
+    }
+
+    /// <summary>A deployment nobody has edited reports nothing outstanding, which is the control for the reading above.</summary>
+    [Fact]
+    public async Task LatestReloadRefused_BeforeAnyReload_ReportsNothingRefused()
+    {
+        // Arrange
+        await using var harness = CreateHarness(ConfiguredAccounts.WithPasswordReferences(("primary", "plaintext:dev-password")));
+
+        // Act, Assert
+        Assert.False(harness.Settings.LatestReloadRefused);
+        Assert.Equal(0, harness.Settings.RefusedSettingCount);
+    }
+
+    /// <summary>The reading names the newest verdict rather than the worst one, so a repaired file stops reporting a refusal.</summary>
+    [Fact]
+    public async Task LatestReloadRefused_ACandidateThatPublishesAfterOneThatDidNot_ReportsNothingRefused()
+    {
+        // Arrange
+        await using var harness = CreateHarness(ConfiguredAccounts.WithPasswordReferences(("primary", "plaintext:dev-password")));
+        await harness.Settings.PublishWhenUsableAsync(
+            new ValidatedSettingsSnapshot<MailSynchronizationOptions>.ReloadCandidate(
+                1,
+                ConfiguredAccounts.WithPasswordReferences(("primary", "file:/run/secrets/absent"))),
+            TestContext.Current.CancellationToken);
+
+        // Act
+        await harness.Settings.PublishWhenUsableAsync(
+            new ValidatedSettingsSnapshot<MailSynchronizationOptions>.ReloadCandidate(
+                2,
+                ConfiguredAccounts.WithPasswordReferences(("primary", "plaintext:repaired-password"))),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.False(harness.Settings.LatestReloadRefused);
+        Assert.Equal(0, harness.Settings.RefusedSettingCount);
+    }
+
     [Fact]
     public async Task PublishWhenUsableAsync_TrustAnchorThatNoLongerLoads_KeepsThePreviousSnapshotActive()
     {

@@ -10,6 +10,7 @@ using MailFathom.Application.Mail.Mutations.Convergence;
 using MailFathom.Application.Persistence;
 using MailFathom.Application.Retrieval.AskMail.Audit;
 using MailFathom.Application.Rules.Evaluation;
+using MailFathom.Application.Rules.History;
 using MailFathom.Application.Synchronization;
 using MailFathom.Application.Synchronization.Reconciliation;
 using MailFathom.Application.Synchronization.Sessions;
@@ -368,13 +369,13 @@ internal sealed partial class AccountSynchronizationSupervisor
         }
     }
 
-    /// <summary>Erases whatever in this account's two audit records has outlived the window the account configured.</summary>
+    /// <summary>Erases whatever in this account's three records has outlived the window it was configured for.</summary>
     /// <remarks>
     /// <para>
-    /// Both records age out here — the trail of the changes MailFathom made to the mailbox, and the record of the
-    /// questions answered from it. They are separate operator decisions with separate windows, and one pass because the
-    /// pass is what the account's own loop already provides: a second schedule would be another thing to configure and
-    /// watch for work that is two bounded deletes.
+    /// All three age out here — the trail of the changes MailFathom made to the mailbox, the record of the questions
+    /// answered from it, and the history of what the rules concluded about its mail. They are separate operator
+    /// decisions with separate windows, and one pass because the pass is what the account's own loop already provides: a
+    /// second schedule would be another thing to configure and watch for work that is three bounded deletes.
     /// </para>
     /// <para>
     /// It rides the account's own run for the reason convergence does, and runs after the folders rather than before
@@ -415,6 +416,15 @@ internal sealed partial class AccountSynchronizationSupervisor
             if (erasedAnsweringCount > 0)
             {
                 this.LogAnsweringAuditEntriesErased(this.accountId.Value, erasedAnsweringCount);
+            }
+
+            var erasedExecutionCount = await scope.ServiceProvider
+                .GetRequiredService<MailRuleHistoryRetention>()
+                .EraseExpiredAsync(this.accountId, cancellationToken);
+
+            if (erasedExecutionCount > 0)
+            {
+                this.LogRuleExecutionsErased(this.accountId.Value, erasedExecutionCount);
             }
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -898,6 +908,11 @@ internal sealed partial class AccountSynchronizationSupervisor
         Level = LogLevel.Information,
         Message = "Account {AccountId} erased {ErasedCount} answering audit entries that had outlived its configured retention.")]
     private partial void LogAnsweringAuditEntriesErased(string accountId, int erasedCount);
+
+    [LoggerMessage(
+        Level = LogLevel.Information,
+        Message = "Account {AccountId} erased {ErasedCount} recorded rule executions that had outlived the configured history retention.")]
+    private partial void LogRuleExecutionsErased(string accountId, int erasedCount);
 
     /// <summary>Separates a retention pass that did not run from the ordinary case of it having nothing to erase.</summary>
     [LoggerMessage(

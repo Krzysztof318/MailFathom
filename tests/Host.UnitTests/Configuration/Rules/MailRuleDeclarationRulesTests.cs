@@ -268,6 +268,44 @@ public sealed class MailRuleDeclarationRulesTests
         Assert.Contains(errors, error => error.Contains("ConditionEvaluationTimeout", StringComparison.Ordinal));
     }
 
+    /// <summary>A retention nobody could justify holding is what a storage-limitation setting exists to prevent.</summary>
+    [Fact]
+    public void FindDeclarationErrors_HistoryRetentionAboveTheCeiling_IsRefused()
+    {
+        // Arrange
+        var candidate = new MailRulesOptions
+        {
+            HistoryRetention = MailRulesOptions.LongestHistoryRetention + TimeSpan.FromDays(1),
+            Rules = [CreateRule("file-invoices", "isSeen")],
+        };
+
+        // Act
+        var errors = MailRuleDeclarationRules.FindDeclarationErrors(candidate, this.compiler, DeclaredAccounts);
+
+        // Assert
+        Assert.Contains(errors, error => error.Contains("HistoryRetention", StringComparison.Ordinal));
+    }
+
+    /// <summary>Zero names no window rather than an unreadable one, so it is the deployment declaring what it keeps.</summary>
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-1)]
+    public void FindDeclarationErrors_HistoryRetentionOfZeroOrLess_IsAccepted(int days)
+    {
+        // Arrange
+        var candidate = new MailRulesOptions
+        {
+            HistoryRetention = TimeSpan.FromDays(days),
+            Rules = [CreateRule("file-invoices", "isSeen")],
+        };
+
+        // Act
+        var errors = MailRuleDeclarationRules.FindDeclarationErrors(candidate, this.compiler, DeclaredAccounts);
+
+        // Assert
+        Assert.DoesNotContain(errors, error => error.Contains("HistoryRetention", StringComparison.Ordinal));
+    }
+
     /// <summary>The identity is a digest over declared text, so no declared text may carry what separates its fields.</summary>
     [Fact]
     public void FindDeclarationErrors_ConditionCarryingADigestSeparator_IsRefused()

@@ -9,6 +9,7 @@ using MailFathom.Application.Rules.Actions;
 using MailFathom.Application.Rules.Conditions;
 using MailFathom.Application.Rules.Evaluation;
 using MailFathom.Application.Rules.Facts;
+using MailFathom.Application.Rules.History;
 using MailFathom.Application.UnitTests.TestDoubles;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Folders;
@@ -30,6 +31,7 @@ public sealed class MailRuleEvaluationPassTests
 
     private readonly InMemoryMailRuleEvaluationStore store = new();
     private readonly InMemoryMailRuleEvaluationRunStore runStore = new();
+    private readonly InMemoryMailRuleExecutionStore history = new();
     private readonly InMemoryMailboxMutationRecordStore mutations = new();
     private readonly InMemoryMailFolderResolutionStore folders = new();
     private readonly IAuthoredDeleteEmailDispositionReader deleteDispositions =
@@ -422,6 +424,129 @@ public sealed class MailRuleEvaluationPassTests
         Assert.False(this.store.IsEvaluated(second));
     }
 
+    /// <summary>What every reached rule concluded is written down beside the mail, which is what a later question reads.</summary>
+    [Fact]
+    public async Task RunAsync_TheArrivalWalk_RecordsWhatEachRuleItReachedConcluded()
+    {
+        // Arrange
+        var arrived = this.store.Add(FactsFor(Account));
+        var ruleSet = RuleSetOf(
+            MailRule.Create("file-invoices", ScriptedMailRuleCondition.Answering(matches: false)),
+            MailRule.Create(
+                "mark-newsletters",
+                ScriptedMailRuleCondition.Answering(matches: true, MailRuleFact.SenderDomain)));
+
+        // Act
+        await this.CreatePass(ruleSet).RunAsync(Account, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(
+            [("file-invoices", MailRuleOutcome.NotMatched), ("mark-newsletters", MailRuleOutcome.Matched)],
+            this.history.Executions.Select(execution => (execution.RuleName, execution.Outcome)));
+        Assert.All(this.history.Executions, execution => Assert.Equal(arrived, execution.StoredEmailId));
+        Assert.All(this.history.Executions, execution => Assert.Equal(ruleSet.Revision, execution.Revision));
+        Assert.All(
+            this.history.Executions,
+            execution => Assert.Equal(MailRuleExecutionTrigger.Arrival, execution.Trigger));
+        Assert.Equal(
+            ["senderDomain"],
+            this.history.ExecutionsOf("mark-newsletters")[0].ReadFacts.Select(fact => fact.Name));
+    }
+
+    /// <summary>The two walks are told apart in the record, so an operator can see what their own run concluded.</summary>
+    [Fact]
+    public async Task RunAsync_ARequestedRun_RecordsItsExecutionsUnderThatTrigger()
+    {
+        // Arrange
+        this.store.Add(FactsFor(Account), evaluatedAt: EvaluatedAt.AddDays(-1));
+        this.runStore.Arrange(RequestedRun());
+        var pass = this.CreatePass(RuleSetOf(
+            MailRule.Create("re-run", ScriptedMailRuleCondition.Answering(matches: true))));
+
+        // Act
+        await pass.RunAsync(Account, TestContext.Current.CancellationToken);
+
+        // Assert
+        var execution = Assert.Single(this.history.Executions);
+        Assert.Equal(MailRuleExecutionTrigger.RequestedRun, execution.Trigger);
+        Assert.Equal("re-run", execution.RuleName);
+    }
+
+    /// <summary>A rule nobody asked leaves nothing, which is what keeps it apart from a rule that answered no.</summary>
+    [Fact]
+    public async Task RunAsync_ARuleThatEndedThePass_LeavesNoRecordForTheRulesBelowIt()
+    {
+        // Arrange
+        this.store.Add(FactsFor(Account));
+        var pass = this.CreatePass(RuleSetOf(
+            MailRule.Create("ends-it", ScriptedMailRuleCondition.Answering(matches: true), stopWhenMatched: true),
+            MailRule.Create("never-reached", ScriptedMailRuleCondition.Answering(matches: true))));
+
+        // Act
+        await pass.RunAsync(Account, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal("ends-it", Assert.Single(this.history.Executions).RuleName);
+        Assert.Empty(this.history.ExecutionsOf("never-reached"));
+    }
+
+    /// <summary>An expression that could not be evaluated is recorded as that, with the reason, rather than as a no.</summary>
+    [Fact]
+    public async Task RunAsync_AConditionThatCouldNotAnswer_RecordsTheFailureRatherThanANonMatch()
+    {
+        // Arrange
+        this.store.Add(FactsFor(Account));
+        var pass = this.CreatePass(RuleSetOf(MailRule.Create(
+            "raises",
+            ScriptedMailRuleCondition.Raising(new InvalidOperationException("no answer")))));
+
+        // Act
+        await pass.RunAsync(Account, TestContext.Current.CancellationToken);
+
+        // Assert
+        var execution = Assert.Single(this.history.Executions);
+        Assert.Equal(MailRuleOutcome.Failed, execution.Outcome);
+        Assert.Equal(MailRuleConditionFailure.EvaluationFaulted, execution.ConditionFailure);
+    }
+
+    /// <summary>The record points at the mutation it asked for instead of restating what became of it.</summary>
+    [Fact]
+    public async Task RunAsync_ARuleWithAnAction_PointsTheRecordAtTheMutationItOpened()
+    {
+        // Arrange
+        this.folders.Bind(Account, Archive);
+        this.store.Add(FactsFor(Account));
+        var pass = this.CreatePass(RuleSetOf(FilingRule("file-it")));
+
+        // Act
+        await pass.RunAsync(Account, TestContext.Current.CancellationToken);
+
+        // Assert
+        var action = Assert.Single(Assert.Single(this.history.Executions).Actions);
+        Assert.Equal(MailRuleExecutedActionOutcome.Requested, action.Outcome);
+        Assert.Equal(Archive, action.DestinationAlias);
+        Assert.Equal(this.mutations.OpenedRequests[0].Mutation, action.Mutation);
+        Assert.NotNull(action.MutationRecordId);
+    }
+
+    /// <summary>An action a destination stopped resolving for is visible as refused, with the classification.</summary>
+    [Fact]
+    public async Task RunAsync_AnActionNothingCouldBeRecordedFor_RecordsItAsRefusedWithTheReason()
+    {
+        // Arrange
+        this.store.Add(FactsFor(Account));
+        var pass = this.CreatePass(RuleSetOf(FilingRule("file-it")));
+
+        // Act
+        await pass.RunAsync(Account, TestContext.Current.CancellationToken);
+
+        // Assert
+        var action = Assert.Single(Assert.Single(this.history.Executions).Actions);
+        Assert.Equal(MailRuleExecutedActionOutcome.Refused, action.Outcome);
+        Assert.Equal(MailRuleActionFailureReason.DestinationFolderUnresolved, action.FailureReason);
+        Assert.Null(action.MutationRecordId);
+    }
+
     private static MailRuleEmailFacts FactsFor(MailAccountId accountId) =>
         new() { Account = accountId.Value, Folder = "inbox" };
 
@@ -460,6 +585,7 @@ public sealed class MailRuleEvaluationPassTests
             this.store,
             this.runStore,
             new MailRuleActionRecorder(this.mutations, this.folders, this.deleteDispositions, this.permissions),
+            this.history,
             new OptimisticConcurrencyRetryPolicy(
                 sessionFactory,
                 new PersistenceConcurrencyOptions(),

@@ -34,6 +34,20 @@ internal sealed class MailRuleEvaluationRunStore(MailFathomDbContext dbContext) 
     }
 
     /// <inheritdoc />
+    /// <remarks>One row per account, so the account's key is the whole of the lookup and no ordering is needed.</remarks>
+    public async Task<MailRuleEvaluationRun?> FindLatestAsync(
+        MailAccountId accountId,
+        CancellationToken cancellationToken)
+    {
+        var mailboxAccountId = accountId.Value;
+        var latest = await dbContext.MailRuleEvaluationRuns
+            .AsNoTracking()
+            .SingleOrDefaultAsync(run => run.MailboxAccountId == mailboxAccountId, cancellationToken);
+
+        return latest is null ? null : Read(latest, accountId);
+    }
+
+    /// <inheritdoc />
     /// <remarks>
     /// One row per account, so a request that follows a completed run overwrites it rather than appending. The lookup
     /// resolves a row this session already staged from the change tracker, which is what lets a pass commit several

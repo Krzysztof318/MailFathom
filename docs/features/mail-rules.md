@@ -440,8 +440,41 @@ now in force.
 - **It is resumable and cancellable.** Its position is committed with each batch, so a restart or a shutdown costs at
   most the batch that was in flight, and the run finishes over as many account runs as it needs.
 
-**Nothing submits such a request yet.** The run and every guarantee above are in place and an account carries at most
-one, but no command, tool, or endpoint asks for one, so an owner cannot start one from outside the process today.
+**`mfctl rules run --account <id>` is what asks for one**, and `mfctl rules run-status --account <id>` is where it is
+watched from. Both are documented under [reading the rules, running them, and finding out what they
+did](../operations/admin-endpoint.md#reading-the-rules-running-them-and-finding-out-what-they-did). Neither waits for
+the walk, because the run is carried by the account's synchronization runs rather than by whoever asked.
+
+## Finding out what a rule did
+
+A rule that concluded something about a message leaves a record of it: the rule, the revision it ran under, whether the
+condition matched, the facts it read, and each change it asked for with what became of that change. `mfctl rules
+history --account <id>` reads it, narrowed to a rule with `--rule` or to a message with `--email`. That is the answer
+to both "what is this rule doing" and "why is this message here", and it is the only place either is answered — a rule
+publishes nothing about itself through MCP, and a run reports counts rather than which message went where.
+
+Three distinctions the record exists to keep:
+
+- **Reached and answered no** is recorded; **never reached** leaves nothing at all. A rule below one that ends the pass
+  is the second case, and reading it as the first is what makes a misspelled scope look like a condition that is never
+  true.
+- **Could not answer** is neither of those. It is recorded as failed with its [reason](#when-a-condition-cannot-answer)
+  rather than folded into a non-match.
+- **A change that was refused** is distinguishable from one **another rule had already settled**, and from a rule that
+  simply asked for nothing. The refusal carries its classification, and the change that gave way names the rule that
+  declared it.
+
+**The facts are recorded by name and never by value.** That a condition read `senderDomain` is kept; what the domain
+was is not, and neither is a subject, a matched span, or any other value the message supplied. The revision recorded
+beside them is what the expression is retrievable from, so the reasoning is reconstructible without the record becoming
+a second copy of the mailbox. What a change did to the mail server is likewise not restated here: the record points at
+the mutation it opened, and [what happened to that
+mutation](imap-synchronization.md#an-account-can-keep-a-record-of-what-was-done-to-it-and-none-does-by-default) is the
+mutation's own trail to answer.
+
+The record inherits the obligations of the mail it names. Erasing a message erases what every rule concluded about it,
+and `MailRules:HistoryRetention` bounds how long the rest is kept — thirty days by default, and a window of zero keeps
+it until the mail itself goes.
 
 ## When a condition cannot answer
 

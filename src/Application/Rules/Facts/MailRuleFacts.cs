@@ -65,6 +65,7 @@ public sealed class MailRuleFacts
     private readonly IMailRuleBodyTextReader bodyTextReader;
     private readonly DateTimeOffset evaluatedAt;
     private readonly Dictionary<MailRuleFact, object?> resolvedValues = [];
+    private readonly List<MailRuleFact> factsReadSinceLastTaken = [];
 
     /// <summary>Initializes the fact surface for one email at one instant.</summary>
     /// <param name="email">The metadata every fact but the body text is read from.</param>
@@ -93,6 +94,32 @@ public sealed class MailRuleFacts
     /// </remarks>
     public string Account => this.email.Account;
 
+    /// <summary>Takes the facts read since this was last called, and begins recording afresh.</summary>
+    /// <returns>The facts read, in the order they were first read.</returns>
+    /// <remarks>
+    /// Read rather than resolved, so a cache hit counts: what this answers is which facts a condition needed, and a
+    /// condition that compares the sender's domain needed it whether or not the rule above it had already computed it.
+    /// <see cref="ResolvedFacts" /> answers the other question — what this email cost — and the two must not be conflated.
+    /// <para>
+    /// Taking clears the record, because the caller is a rule set walking its rules one at a time and each rule's reads
+    /// belong to that rule. It is called between rules rather than around one, which is what keeps this type free of any
+    /// notion of which rule is running.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<MailRuleFact> TakeFactsRead()
+    {
+        if (this.factsReadSinceLastTaken.Count == 0)
+        {
+            return [];
+        }
+
+        var read = this.factsReadSinceLastTaken.ToArray();
+
+        this.factsReadSinceLastTaken.Clear();
+
+        return read;
+    }
+
     /// <summary>Resolves one fact's value in the form a condition compares against.</summary>
     /// <param name="fact">The declared fact a condition named.</param>
     /// <param name="cancellationToken">Cancels a resolution that reads stored content.</param>
@@ -104,6 +131,8 @@ public sealed class MailRuleFacts
         {
             throw new ArgumentException("The unspecified default of the struct does not name a fact.", nameof(fact));
         }
+
+        this.Read(fact);
 
         if (this.resolvedValues.TryGetValue(fact, out var alreadyResolved))
         {
@@ -117,6 +146,15 @@ public sealed class MailRuleFacts
         this.resolvedValues[fact] = value;
 
         return value;
+    }
+
+    /// <summary>Notes that the condition currently being evaluated reached this fact, once however often it reaches it.</summary>
+    private void Read(MailRuleFact fact)
+    {
+        if (!this.factsReadSinceLastTaken.Contains(fact))
+        {
+            this.factsReadSinceLastTaken.Add(fact);
+        }
     }
 
     private static Func<MailRuleFacts, object?> ReadMetadata(MailRuleFact fact) =>

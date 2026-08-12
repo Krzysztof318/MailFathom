@@ -72,4 +72,20 @@ public sealed class CliOptionsTests
         // Act, Assert
         Assert.False(CliOptions.TryReadAddress(candidate, out _));
     }
+
+    /// <summary>
+    /// A deployment may serve several mailboxes, and every command taking this either walks one of them or reads what
+    /// was done to one. A default would be a guess at whose mail the operator meant, so there is none and the option is
+    /// required wherever it appears.
+    /// </summary>
+    [Fact]
+    public void MailAccount_Always_IsRequiredAndDefaultsToNothing()
+    {
+        // Act
+        var option = CliOptions.MailAccount();
+
+        // Assert
+        Assert.True(option.Required);
+        Assert.False(option.HasDefaultValue);
+    }
 }

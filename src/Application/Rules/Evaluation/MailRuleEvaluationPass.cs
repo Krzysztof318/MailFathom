@@ -6,6 +6,7 @@ using MailFathom.Application.Persistence;
 using MailFathom.Application.Rules.Actions;
 using MailFathom.Application.Rules.Conditions;
 using MailFathom.Application.Rules.Facts;
+using MailFathom.Application.Rules.History;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 
@@ -42,6 +43,11 @@ namespace MailFathom.Application.Rules.Evaluation;
 /// is what makes the pair atomic — an email is never recorded as evaluated while the change its rules asked for was
 /// lost, and a rolled-back batch asks again under the same identity.
 /// </para>
+/// <para>
+/// The history of what each rule concluded is written in that same transaction and for the same reason. An explanation
+/// committed apart from the decision it explains is one that can outlive a rolled-back batch or go missing from a
+/// committed one, and either way an operator reading it would be told something that did not happen.
+/// </para>
 /// </remarks>
 public sealed class MailRuleEvaluationPass
 {
@@ -50,6 +56,7 @@ public sealed class MailRuleEvaluationPass
     private readonly IMailRuleEvaluationStore store;
     private readonly IMailRuleEvaluationRunStore runStore;
     private readonly MailRuleActionRecorder actionRecorder;
+    private readonly IMailRuleExecutionStore executionStore;
     private readonly OptimisticConcurrencyRetryPolicy commitPolicy;
     private readonly MailRuleEvaluationOptions options;
     private readonly TimeProvider timeProvider;
@@ -60,6 +67,7 @@ public sealed class MailRuleEvaluationPass
     /// <param name="store">Reads the candidates and records which emails have been evaluated.</param>
     /// <param name="runStore">Reads the requested whole-mailbox run and records how far it has been carried.</param>
     /// <param name="actionRecorder">Writes down the changes a matching rule asks the mailbox for.</param>
+    /// <param name="executionStore">Keeps the record of what each rule concluded and what became of what it asked for.</param>
     /// <param name="commitPolicy">Commits a batch's evaluations together with the position they account for.</param>
     /// <param name="options">Bounds one walk.</param>
     /// <param name="timeProvider">Supplies the instant each email is evaluated at and each record is stamped with.</param>
@@ -71,6 +79,7 @@ public sealed class MailRuleEvaluationPass
         IMailRuleEvaluationStore store,
         IMailRuleEvaluationRunStore runStore,
         MailRuleActionRecorder actionRecorder,
+        IMailRuleExecutionStore executionStore,
         OptimisticConcurrencyRetryPolicy commitPolicy,
         MailRuleEvaluationOptions options,
         TimeProvider timeProvider)
@@ -80,6 +89,7 @@ public sealed class MailRuleEvaluationPass
         ArgumentNullException.ThrowIfNull(store);
         ArgumentNullException.ThrowIfNull(runStore);
         ArgumentNullException.ThrowIfNull(actionRecorder);
+        ArgumentNullException.ThrowIfNull(executionStore);
         ArgumentNullException.ThrowIfNull(commitPolicy);
         ArgumentNullException.ThrowIfNull(options);
         ArgumentNullException.ThrowIfNull(timeProvider);
@@ -91,6 +101,7 @@ public sealed class MailRuleEvaluationPass
         this.store = store;
         this.runStore = runStore;
         this.actionRecorder = actionRecorder;
+        this.executionStore = executionStore;
         this.commitPolicy = commitPolicy;
         this.options = options;
         this.timeProvider = timeProvider;
@@ -184,10 +195,11 @@ public sealed class MailRuleEvaluationPass
                             evaluatedAt,
                             attemptCancellationToken);
 
-                        await this.RecordActionsAsync(
+                        await this.RecordDecisionsAsync(
                             session,
                             ruleSet.Revision,
                             outcome,
+                            MailRuleExecutionTrigger.Arrival,
                             attemptCancellationToken);
                     },
                     cancellationToken);
@@ -303,7 +315,12 @@ public sealed class MailRuleEvaluationPass
                     recordedAt,
                     attemptCancellationToken);
 
-                await this.RecordActionsAsync(session, ruleSet.Revision, outcome, attemptCancellationToken);
+                await this.RecordDecisionsAsync(
+                    session,
+                    ruleSet.Revision,
+                    outcome,
+                    MailRuleExecutionTrigger.RequestedRun,
+                    attemptCancellationToken);
 
                 await this.runStore.SaveAsync(session, carried, attemptCancellationToken);
             },
@@ -314,32 +331,53 @@ public sealed class MailRuleEvaluationPass
         return carried;
     }
 
-    /// <summary>Writes down every change the batch's matching rules asked for, inside the batch's own transaction.</summary>
+    /// <summary>Writes down what the batch decided and every change it asked for, inside the batch's own transaction.</summary>
     /// <remarks>
+    /// The two are one step because the history has to name the mutation record each requested action opened, and that
+    /// identity exists only once the request has been written. Composing the explanation from the recording rather than
+    /// from the plan is what keeps the record a pointer at the mutation trail instead of a second copy of it.
+    /// <para>
     /// The counts are reset at the start rather than added to, because the commit policy re-runs this whole delegate
     /// when it loses an optimistic race. Adding to them would count the losing attempt's records as well as the winning
     /// one's, and the losing attempt wrote nothing.
+    /// </para>
     /// </remarks>
-    private async Task RecordActionsAsync(
+    private async Task RecordDecisionsAsync(
         IPersistenceSession session,
         MailRuleSetRevision revision,
         MailRuleEvaluationBatch outcome,
+        MailRuleExecutionTrigger trigger,
         CancellationToken cancellationToken)
     {
         outcome.ForgetRecordedActions();
 
-        foreach (var pending in outcome.PendingActions)
+        var executions = new List<MailRuleExecution>();
+
+        foreach (var evaluated in outcome.EvaluatedEmails)
         {
-            var recording = await this.actionRecorder.RecordAsync(
-                session,
-                pending.StoredEmailId,
-                pending.Occurrence,
-                pending.Plan,
-                revision,
-                cancellationToken);
+            var plan = evaluated.Evaluation.ActionPlan;
+            var recording = plan.IsEmpty
+                ? MailRuleActionRecording.Nothing
+                : await this.actionRecorder.RecordAsync(
+                    session,
+                    evaluated.Candidate.StoredEmailId,
+                    evaluated.Candidate.Occurrence,
+                    plan,
+                    revision,
+                    cancellationToken);
 
             outcome.ActionsRecorded(recording);
+
+            executions.AddRange(MailRuleExecutionComposer.Compose(
+                evaluated.Candidate.Occurrence.AccountId,
+                evaluated.Candidate.StoredEmailId,
+                evaluated.Evaluation,
+                trigger,
+                recording,
+                evaluated.EvaluatedAt));
         }
+
+        await this.executionStore.AppendAsync(session, executions, cancellationToken);
     }
 
     private Task CommitRunAsync(MailRuleEvaluationRun run, CancellationToken cancellationToken) =>
@@ -377,14 +415,15 @@ public sealed class MailRuleEvaluationPass
                 continue;
             }
 
+            var evaluatedAt = this.timeProvider.GetUtcNow();
             var facts = new MailRuleFacts(
                 candidate.Facts,
                 new StoredEmailBodyTextReader(this.store, candidate.StoredEmailId),
-                this.timeProvider.GetUtcNow());
+                evaluatedAt);
 
             var evaluation = await this.evaluator.EvaluateAsync(ruleSet, facts, cancellationToken);
 
-            outcome.Evaluated(candidate, evaluation);
+            outcome.Evaluated(candidate, evaluation, evaluatedAt);
         }
 
         return outcome;
@@ -417,13 +456,17 @@ public sealed class MailRuleEvaluationPass
 
         internal SortedSet<string> UnappliedActionRuleNames { get; } = new(StringComparer.Ordinal);
 
-        internal List<PendingMailRuleActions> PendingActions { get; } = [];
+        internal List<EvaluatedEmail> EvaluatedEmails { get; } = [];
 
         internal void Skipped() => this.SkippedEmailCount++;
 
-        internal void Evaluated(StoredEmailAwaitingRuleEvaluation candidate, MailRuleSetEvaluation evaluation)
+        internal void Evaluated(
+            StoredEmailAwaitingRuleEvaluation candidate,
+            MailRuleSetEvaluation evaluation,
+            DateTimeOffset evaluatedAt)
         {
             this.EvaluatedEmailIds.Add(candidate.StoredEmailId);
+            this.EvaluatedEmails.Add(new EvaluatedEmail(candidate, evaluation, evaluatedAt));
 
             if (evaluation.MatchedRuleNames.Count > 0)
             {
@@ -443,17 +486,11 @@ public sealed class MailRuleEvaluationPass
             }
 
             // The withheld actions are counted where the plan is composed rather than where it is recorded, because
-            // nothing about them reaches the database and a retried commit would otherwise count them twice.
-            this.WithheldActionCount += evaluation.ActionPlan.WithheldRuleNames.Count;
+            // nothing about them reaches the mutation trail and a retried commit would otherwise count them twice. The
+            // count is of actions rather than of the rules that declared them, which is what the walk reports it as: one
+            // rule declaring two changes can have one honored and one withheld.
+            this.WithheldActionCount += evaluation.ActionPlan.WithheldActions.Count;
             this.UnappliedActionRuleNames.UnionWith(evaluation.ActionPlan.WithheldRuleNames);
-
-            if (!evaluation.ActionPlan.IsEmpty)
-            {
-                this.PendingActions.Add(new PendingMailRuleActions(
-                    candidate.StoredEmailId,
-                    candidate.Occurrence,
-                    evaluation.ActionPlan));
-            }
         }
 
         /// <summary>Drops what a commit attempt recorded, so a retry of it counts its own writes and not the lost ones.</summary>
@@ -471,11 +508,15 @@ public sealed class MailRuleEvaluationPass
         }
     }
 
-    /// <summary>One evaluated email whose matching rules asked for a change, held until the batch commits.</summary>
-    private sealed record PendingMailRuleActions(
-        StoredEmailId StoredEmailId,
-        EmailOccurrenceId Occurrence,
-        MailRuleActionPlan Plan);
+    /// <summary>One email the batch evaluated, held with its conclusion until the batch commits.</summary>
+    /// <remarks>
+    /// The whole evaluation rather than only the plan it produced, because the history records what every rule the pass
+    /// reached concluded — including the rules that asked for nothing, which are most of them.
+    /// </remarks>
+    private sealed record EvaluatedEmail(
+        StoredEmailAwaitingRuleEvaluation Candidate,
+        MailRuleSetEvaluation Evaluation,
+        DateTimeOffset EvaluatedAt);
 
     /// <summary>Adds up the batches of one walk into the counts an operator reads.</summary>
     private sealed class EvaluationTally

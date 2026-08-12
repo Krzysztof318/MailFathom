@@ -15,9 +15,9 @@ using MailFathom.Host.Api;
 using MailFathom.Host.Configuration.Embeddings;
 using MailFathom.Host.Configuration.Endpoints;
 using MailFathom.Host.Security.Transport;
+using MailFathom.Host.UnitTests.TestDoubles;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Builder;
-using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Time.Testing;
@@ -58,7 +58,7 @@ public sealed class AdminApiEndpointsTests
         endpoints.MapAdminApi().RequireAuthorization(TransportSurface.Admin.AccessPolicyName);
 
         // Assert
-        var mapped = MaterializeEndpoints(endpoints);
+        var mapped = endpoints.Materialize();
         Assert.NotEmpty(mapped);
         Assert.All(
             mapped,
@@ -82,7 +82,7 @@ public sealed class AdminApiEndpointsTests
         endpoints.MapAdminApi();
 
         // Assert
-        var mapped = MaterializeEndpoints(endpoints);
+        var mapped = endpoints.Materialize();
         Assert.NotEmpty(mapped);
         Assert.All(mapped, endpoint => Assert.Empty(endpoint.Metadata.GetOrderedMetadata<IAuthorizeData>()));
     }
@@ -98,13 +98,13 @@ public sealed class AdminApiEndpointsTests
         endpoints.MapAdminApi();
 
         // Assert
-        var routes = MaterializeEndpoints(endpoints)
+        var routes = endpoints.Materialize()
             .OfType<RouteEndpoint>()
             .Select(endpoint => $"/{endpoint.RoutePattern.RawText?.TrimStart('/')}")
             .Order(StringComparer.Ordinal);
 
-        // The activation path appears twice because it is one resource read with a get and performed with a post, and
-        // both verbs are mapped separately.
+        // The activation path and the rule-run path each appear twice, because each is one resource read with a get and
+        // performed with a post, and both verbs are mapped separately.
         Assert.Equal(
             [
                 $"{AdminEndpointOptions.RoutePrefix}{MailAnsweringAuditEndpoint.Route}",
@@ -114,6 +114,10 @@ public sealed class AdminApiEndpointsTests
                 $"{AdminEndpointOptions.RoutePrefix}{EmbeddingProfileEndpoints.ReindexCancellationRoute}",
                 $"{AdminEndpointOptions.RoutePrefix}{MailboxMutationAuditEndpoint.Route}",
                 $"{AdminEndpointOptions.RoutePrefix}{MailboxRefreshTokenEndpoint.Route}",
+                $"{AdminEndpointOptions.RoutePrefix}{MailRuleEndpoints.RulesRoute}",
+                $"{AdminEndpointOptions.RoutePrefix}{MailRuleEndpoints.HistoryRoute}",
+                $"{AdminEndpointOptions.RoutePrefix}{MailRuleEndpoints.RunsRoute}",
+                $"{AdminEndpointOptions.RoutePrefix}{MailRuleEndpoints.RunsRoute}",
                 $"{AdminEndpointOptions.RoutePrefix}/session",
             ],
             routes);
@@ -130,7 +134,7 @@ public sealed class AdminApiEndpointsTests
         endpoints.MapAdminApi();
 
         // Assert
-        var writeRoute = MaterializeEndpoints(endpoints)
+        var writeRoute = endpoints.Materialize()
             .OfType<RouteEndpoint>()
             .Single(endpoint => endpoint.RoutePattern.RawText?.EndsWith(MailboxRefreshTokenEndpoint.Route, StringComparison.Ordinal) == true);
 
@@ -150,7 +154,7 @@ public sealed class AdminApiEndpointsTests
         endpoints.MapAdminApi();
 
         // Assert
-        var writeRoute = MaterializeEndpoints(endpoints)
+        var writeRoute = endpoints.Materialize()
             .OfType<RouteEndpoint>()
             .Single(endpoint => endpoint.RoutePattern.RawText?.EndsWith(MailboxRefreshTokenEndpoint.Route, StringComparison.Ordinal) == true);
 
@@ -220,19 +224,5 @@ public sealed class AdminApiEndpointsTests
             vectorIndex,
             retryPolicy,
             backfillSchedule));
-    }
-
-    private static IReadOnlyList<Endpoint> MaterializeEndpoints(IEndpointRouteBuilder endpoints) =>
-        [.. endpoints.DataSources.SelectMany(source => source.Endpoints)];
-
-    /// <summary>The smallest thing the routing builder API accepts, so a mapping can be exercised without a web host.</summary>
-    private sealed class TestEndpointRouteBuilder(IServiceProvider serviceProvider) : IEndpointRouteBuilder
-    {
-        public IServiceProvider ServiceProvider { get; } = serviceProvider;
-
-        public ICollection<EndpointDataSource> DataSources { get; } = [];
-
-        public IApplicationBuilder CreateApplicationBuilder() =>
-            new ApplicationBuilder(this.ServiceProvider);
     }
 }

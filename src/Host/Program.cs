@@ -26,6 +26,7 @@ using MailFathom.Application.Rules;
 using MailFathom.Application.Rules.Actions;
 using MailFathom.Application.Rules.Conditions;
 using MailFathom.Application.Rules.Evaluation;
+using MailFathom.Application.Rules.History;
 using MailFathom.Application.SensitiveContent.Detection;
 using MailFathom.Application.SensitiveContent.Redaction;
 using MailFathom.Application.Synchronization;
@@ -312,6 +313,9 @@ try
     builder.Services.AddScoped<MailRuleActionRecorder>();
     builder.Services.AddScoped<MailRuleEvaluationPass>();
     builder.Services.AddScoped<MailRuleEvaluationRunRequests>();
+    // The history's retention reads the same published snapshot the pass's bounds do, so shortening the window reaches
+    // the next account run rather than the next restart.
+    builder.Services.AddScoped<MailRuleHistoryRetention>();
     builder.Services.AddHostedService(
         provider => provider.GetRequiredService<ValidatedSettingsSnapshot<MailRulesOptions>>());
     // The published snapshot, not the bound one, is what every consumer reads: a reload whose secret references do not

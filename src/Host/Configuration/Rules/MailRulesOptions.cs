@@ -82,12 +82,32 @@ internal sealed class MailRulesOptions : IValidatableObject
         this.MaxConditionNestingDepth,
         this.ConditionEvaluationTimeout);
 
+    /// <summary>Gets or sets how long a recorded rule execution is kept before the account's next run erases it.</summary>
+    /// <remarks>
+    /// The history's one bound of its own. A pass records what every rule it reached concluded about every message it
+    /// evaluated, which is what makes "this rule has never matched" and "this rule was never asked" different answers —
+    /// and also why a deployment left alone accumulates a row per rule per message. Everything else about the record's
+    /// lifetime it inherits from the mail it describes: an erased message takes the executions naming it with it,
+    /// whatever this says. Zero or less declares no window at all, which keeps every execution until its message goes.
+    /// </remarks>
+    public TimeSpan HistoryRetention { get; set; } = TimeSpan.FromDays(30);
+
+    /// <summary>The longest history retention accepted, beyond which the window stops being one anybody could justify holding.</summary>
+    /// <remarks>
+    /// Ten years, which is the ceiling both audit trails are bound by and for the same reason: a retention nobody can
+    /// justify is what a storage-limitation setting exists to prevent. There is no floor to match theirs, because zero
+    /// here means something rather than naming a window too short to read — it declares that an execution is kept for
+    /// exactly as long as the message it names.
+    /// </remarks>
+    public static readonly TimeSpan LongestHistoryRetention = TimeSpan.FromDays(3650);
+
     /// <summary>Turns the declared limits into the bounds one evaluation pass runs under.</summary>
     /// <returns>The bounds.</returns>
     public MailRuleEvaluationOptions ToEvaluationOptions() => new()
     {
         BatchSize = this.EvaluationBatchSize,
         MaxBatchesPerPass = this.MaxEvaluationBatchesPerPass,
+        HistoryRetention = this.HistoryRetention,
     };
 
     /// <inheritdoc />
@@ -104,6 +124,13 @@ internal sealed class MailRulesOptions : IValidatableObject
             yield return new ValidationResult(
                 $"{SectionName} declares a ConditionEvaluationTimeout of {this.ConditionEvaluationTimeout}, and a condition may be given at most {LongestConditionEvaluationTimeout}. A timeout above that stops bounding what one rule costs per email.",
                 [nameof(this.ConditionEvaluationTimeout)]);
+        }
+
+        if (this.HistoryRetention > LongestHistoryRetention)
+        {
+            yield return new ValidationResult(
+                $"{SectionName} declares a HistoryRetention of {this.HistoryRetention}, and a rule execution may be kept for at most {LongestHistoryRetention}. Set it to zero to keep the history for exactly as long as the mail it describes.",
+                [nameof(this.HistoryRetention)]);
         }
 
         var duplicateName = this.Rules

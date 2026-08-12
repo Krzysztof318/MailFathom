@@ -116,11 +116,22 @@ public sealed class MailRuleSetEvaluator
             cancellationToken,
             evaluationTimeout.Token);
 
+        // Whatever the rule above this one read is taken and discarded first, so what this rule is credited with is what
+        // this rule reached. The fact surface is shared across the set for its cache, which is the whole reason the reads
+        // have to be divided here rather than counted from it afterwards.
+        _ = facts.TakeFactsRead();
+
+        var startedAt = this.timeProvider.GetTimestamp();
+
         try
         {
-            return await rule.Condition.EvaluateAsync(facts, boundedEvaluation.Token)
-                ? MailRuleEvaluation.Matched(rule.Name)
-                : MailRuleEvaluation.NotMatched(rule.Name);
+            var matched = await rule.Condition.EvaluateAsync(facts, boundedEvaluation.Token);
+            var elapsed = this.timeProvider.GetElapsedTime(startedAt);
+            var readFacts = facts.TakeFactsRead();
+
+            return matched
+                ? MailRuleEvaluation.Matched(rule.Name, readFacts, elapsed)
+                : MailRuleEvaluation.NotMatched(rule.Name, readFacts, elapsed);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -129,14 +140,23 @@ public sealed class MailRuleSetEvaluator
         }
         catch (OperationCanceledException)
         {
-            return MailRuleEvaluation.Failed(rule.Name, MailRuleConditionFailure.EvaluationTimedOut);
+            return MailRuleEvaluation.Failed(
+                rule.Name,
+                MailRuleConditionFailure.EvaluationTimedOut,
+                facts.TakeFactsRead(),
+                this.timeProvider.GetElapsedTime(startedAt));
         }
         catch (Exception)
         {
             // The failure itself is deliberately not carried out of here. An expression evaluator's message quotes the
             // operands it could not work with, and an operand is mail content; the reason an operator needs is which
-            // rule stopped answering, which the classification already states.
-            return MailRuleEvaluation.Failed(rule.Name, MailRuleConditionFailure.EvaluationFaulted);
+            // rule stopped answering, which the classification already states. The facts it reached before it stopped
+            // are recorded, because a condition that fails on one of them is exactly the case an operator debugs.
+            return MailRuleEvaluation.Failed(
+                rule.Name,
+                MailRuleConditionFailure.EvaluationFaulted,
+                facts.TakeFactsRead(),
+                this.timeProvider.GetElapsedTime(startedAt));
         }
     }
 }

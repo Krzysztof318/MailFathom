@@ -36,6 +36,19 @@ internal static class AdminEndpointRoutes
     /// <summary>Where a deployment is asked to stop the reindex it has under way.</summary>
     internal const string EmbeddingReindexCancellationPath = $"{Prefix}/embeddings/reindex/cancellation";
 
+    /// <summary>Where a deployment reports the mail rules it has loaded, and whether its rule file was accepted.</summary>
+    internal const string RulesPath = $"{Prefix}/rules";
+
+    /// <summary>Where a whole-mailbox rule run is asked for, and where the one an account has is read.</summary>
+    /// <remarks>
+    /// One path read with <c>GET</c> and asked for with <c>POST</c>, which is what keeps the run an operator started and
+    /// the run they come back to watch the same run rather than two answers that happen to agree.
+    /// </remarks>
+    internal const string RuleRunsPath = $"{Prefix}/rules/runs";
+
+    /// <summary>Where a deployment reports what its rules concluded about the mail they were run over.</summary>
+    internal const string RuleHistoryPath = $"{Prefix}/rules/history";
+
     /// <summary>Where a deployment publishes the document naming its authorization servers, resource, and required scopes.</summary>
     /// <remarks>
     /// Composed rather than discovered from a challenge, because a client that knows which routes it is about to call

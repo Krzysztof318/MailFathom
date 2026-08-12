@@ -57,6 +57,7 @@ internal sealed partial class ValidatedSettingsSnapshot<TSettings> :
     private TSettings publishedSettings;
     private long publishedSequence;
     private long observedChangeCount;
+    private int refusedSettingCount;
     private IDisposable? changeSubscription;
     private Task? validationLoop;
     private bool disposed;
@@ -87,6 +88,23 @@ internal sealed partial class ValidatedSettingsSnapshot<TSettings> :
 
     /// <inheritdoc />
     public TSettings Current => Volatile.Read(ref this.publishedSettings);
+
+    /// <summary>Gets whether the configuration as it now stands was refused, leaving an older snapshot in force.</summary>
+    /// <remarks>
+    /// The one thing a rejected reload cannot say for itself. A refusal is logged and the previous snapshot stays
+    /// active, which is the right behavior and also a silent one: an operator who edited a file and saw nothing change
+    /// has no way to tell a reload that was refused from one that was adopted and simply meant less than they thought.
+    /// A surface that reports what is in force reports this beside it, so the two readings are one answer.
+    /// </remarks>
+    public bool LatestReloadRefused => Volatile.Read(ref this.refusedSettingCount) > 0;
+
+    /// <summary>Gets how many settings the refusal named, which is zero whenever the configuration in force is current.</summary>
+    /// <remarks>
+    /// A count rather than the messages. The messages quote what an operator wrote — a rule's condition among it, which
+    /// may carry an address they typed — and the log is where they already are; what a reader of an administrative
+    /// answer needs is that there are some and how many to look for.
+    /// </remarks>
+    public int RefusedSettingCount => Volatile.Read(ref this.refusedSettingCount);
 
     /// <inheritdoc />
     /// <inheritdoc />
@@ -203,6 +221,8 @@ internal sealed partial class ValidatedSettingsSnapshot<TSettings> :
             var errors = await this.findConfigurationErrorsAsync(candidate.Settings, cancellationToken);
             if (errors.Count > 0)
             {
+                Volatile.Write(ref this.refusedSettingCount, errors.Count);
+
                 this.LogReloadRejected(this.settingsName, string.Join(" ", errors));
 
                 return;
@@ -219,6 +239,8 @@ internal sealed partial class ValidatedSettingsSnapshot<TSettings> :
 
             Volatile.Write(ref this.publishedSequence, candidate.Sequence);
             Volatile.Write(ref this.publishedSettings, candidate.Settings);
+
+            Volatile.Write(ref this.refusedSettingCount, 0);
 
             this.LogReloadPublished(this.settingsName);
         }
