@@ -13,14 +13,14 @@ namespace MailFathom.Infrastructure.SensitiveContent;
 /// <para>
 /// The corpus is assembled from two places, and this type is what makes that invisible above it. An entry
 /// <see cref="Compile" /> produced carries an expression MailFathom compiled into this assembly; one
-/// <see cref="Adopt" /> produced carries a pattern the detection engine already ships. Both arrive at the engine as a
-/// registered pattern, and both report a finding under one detector identity and one corpus revision, so an operator
-/// diagnosing a false positive never has to know which of the two supplied the rule.
+/// <see cref="Adopt" /> produced carries a pattern the detection engine already ships. Both run the same way, and both
+/// report a finding under one detector identity and one corpus revision, so an operator diagnosing a false positive
+/// never has to know which of the two supplied the rule.
 /// </para>
 /// <para>
-/// The compiled expression is kept beside the pattern because the engine seam takes patterns as strings.
+/// The compiled expression is kept beside the pattern because a pattern declares itself as a string.
 /// <see cref="SecretRegexEngine" /> maps the string back to the matcher this entry was built from, which is what lets a
-/// source-generated matcher run behind an API that never sees one.
+/// source-generated matcher be reached from a declaration that never names one.
 /// </para>
 /// </remarks>
 internal sealed record SecretRuleDefinition

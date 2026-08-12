@@ -3,9 +3,9 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.Collections.Frozen;
+using System.Text.RegularExpressions;
 using MailFathom.Application.SensitiveContent;
 using MailFathom.Application.SensitiveContent.Detection;
-using Microsoft.Security.Utilities;
 
 namespace MailFathom.Infrastructure.SensitiveContent;
 
@@ -140,7 +140,7 @@ internal sealed class SecretContentScanner : ISensitiveContentScanner
     private SensitiveContentFinding? Finding(
         string text,
         SecretRuleDefinition definition,
-        UniversalMatch match,
+        Group match,
         DateTimeOffset detectedAt)
     {
         if (!match.Success || match.Length <= 0)
