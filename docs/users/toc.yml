@@ -11,6 +11,8 @@
   href: getting-started.md
 - name: Configuring a mailbox at your provider
   href: mailbox-providers.md
+- name: Connecting the chat client you already use
+  href: mcp-clients.md
 - name: Using the tools
   href: usage.md
 - name: Administering your deployment

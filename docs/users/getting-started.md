@@ -210,6 +210,12 @@ bearer credential. Any client that supports Streamable HTTP connects with two fa
 | Server URL | `http://127.0.0.1:8080/mcp` under the Compose defaults; your proxy's HTTPS address otherwise |
 | Header | `Authorization: Bearer <the key material>` |
 
+**Where a client asks for those two values, and whether it will accept the second at all, differs per client.** Two of
+the popular chat clients offer no field for a static header, which decides the deployment's authentication rather than
+only the setup steps;
+[connecting the chat client you already use](mcp-clients.md) has the steps, the address kind, and the authentication
+shapes for each one by name.
+
 A connected client's tool listing should show at least four tools — `list_accounts`, `list_emails`,
 `get_email_content`, `search_emails` — each advertising itself as read-only, non-destructive, and idempotent. A fifth,
 `ask_mail`, appears only once you have configured a chat model and an embedding model and both are working; until then
