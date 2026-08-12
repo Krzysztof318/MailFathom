@@ -170,13 +170,10 @@ internal sealed class StoredEmailExtractionBackfillStore(
         storedPosition.LastProcessedStoredEmailId = position.Value;
         storedPosition.UpdatedAt = recordedAt;
 
-        // Written only by a walk that is judging staleness. A walk that is not left the column as it found it, so a
-        // configuration change made while the rebuild was switched off is still a difference the next rebuild sees
-        // rather than one this walk quietly recorded as already handled.
-        if (this.RebuiltTowards is { } current)
-        {
-            storedPosition.SensitiveContentStamp = current.Value;
-        }
+        // The cursor and the configuration it was reached under move together. A walk that is not rebuilding still
+        // advances the position past rows a rebuild has to revisit, so it clears the stamp rather than leaving one a
+        // later rebuild would read as everything behind here being done under that configuration.
+        storedPosition.SensitiveContentStamp = this.RebuiltTowards?.Value;
     }
 
     /// <inheritdoc />

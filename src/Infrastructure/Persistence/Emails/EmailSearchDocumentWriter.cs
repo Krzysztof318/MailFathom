@@ -213,9 +213,10 @@ internal static class EmailSearchDocumentWriter
 
     /// <summary>The values one search document holds, whichever path derived them.</summary>
     /// <remarks>
-    /// The stamp is one of them rather than a value only the text-bearing path writes. A message whose body could not be
-    /// read carries no text to redact and is still a row this configuration produced, so stamping it is what keeps the
-    /// staleness question answerable by one predicate instead of one predicate and a list of exceptions to it.
+    /// The stamp is one of them rather than a value only the text-bearing path writes: it records the configuration in
+    /// force when the row was produced, which is as true of a message whose body could not be read as of one whose could.
+    /// What it does not do on such a row is decide staleness — a row holding no derived body text has nothing written
+    /// under an older configuration to correct, so the walk and the count both leave it out by its text source.
     /// </remarks>
     private sealed record DerivedDocument(
         string? SubjectText,

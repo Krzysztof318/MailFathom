@@ -60,6 +60,14 @@ internal sealed class MarkerSensitiveContentScanner : ISensitiveContentScanner
     /// <remarks>Set to make the scanner the one thing a fail-closed test needs: a detector that cannot say what a text carries.</remarks>
     public Exception? Failure { get; set; }
 
+    /// <summary>Gets or sets what happens while one scan is running, or <see langword="null" /> to answer immediately.</summary>
+    /// <remarks>
+    /// Set it to advance a fake clock, which is the only way a test can state what a scan cost: everything a caller
+    /// measures around this scanner is measured across this call, so a scan that takes no time at all makes every such
+    /// assertion hold whatever the caller timed.
+    /// </remarks>
+    public Action? WhileScanning { get; set; }
+
     /// <summary>Gets the texts this scanner was handed, in order.</summary>
     public IReadOnlyList<string> ScannedTexts => this.Scanned;
 
@@ -72,6 +80,7 @@ internal sealed class MarkerSensitiveContentScanner : ISensitiveContentScanner
         cancellationToken.ThrowIfCancellationRequested();
 
         this.Scanned.Add(text);
+        this.WhileScanning?.Invoke();
 
         if (this.Failure is { } failure)
         {

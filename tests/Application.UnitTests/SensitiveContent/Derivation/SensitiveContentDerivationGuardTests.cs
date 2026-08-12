@@ -104,6 +104,7 @@ public sealed class SensitiveContentDerivationGuardTests
     {
         // Arrange
         using var derivation = ScanningSensitiveContentDerivation.Finding(Marker, this.timeProvider);
+        derivation.Scanner.WhileScanning = () => this.timeProvider.Advance(TimeSpan.FromMilliseconds(250));
 
         // Act
         await derivation.Guard.GuardAsync($"{Marker} and {Marker}", TestContext.Current.CancellationToken);
@@ -114,7 +115,11 @@ public sealed class SensitiveContentDerivationGuardTests
         Assert.All(
             derived.Redacted.Findings,
             finding => Assert.Equal(MarkerSensitiveContentScanner.Category, finding.Category));
-        Assert.True(derived.Elapsed >= TimeSpan.Zero);
+
+        // The scan is the whole of what the guard adds to a derivation, so the figure it reports is that interval and
+        // nothing around it. Asserting the value rather than that it is non-negative is the difference between this
+        // covering the instrument and covering nothing: a guard that stopped timing would report zero and still pass.
+        Assert.Equal(TimeSpan.FromMilliseconds(250), derived.Elapsed);
     }
 
     /// <summary>A stamp on a row promises the text beside it went through a redaction, so neither travels alone.</summary>
