@@ -149,15 +149,17 @@ pass with `StopWhenMatched` does to keep the mail it names away from the rules b
 
 A destination is a **folder alias** — one an account declares under `MailSynchronization:Accounts:<n>:Folders` — and
 never a path on the server. What that alias is bound to is resolved when the change is written down, so a rule goes on
-working across a server that renames the folder underneath it, and a rule may only name a folder the account actually
-mirrors. [Folder aliases and discovery](imap-synchronization.md#folder-aliases-and-discovery) states what a binding is
+working across a server that renames the folder underneath it, and a rule may name any folder the account maps —
+including one it deliberately does not mirror, which is how mail is filed somewhere MailFathom keeps no copy of.
+[Folder aliases and discovery](imap-synchronization.md#folder-aliases-and-discovery) states what a binding is
 and when it moves.
 
 A destination may instead name the **role** the folder plays, written `role:<role>` — `role:Junk`, `role:Archive`, and
 the rest. That is what lets one rule file mail correctly across accounts whose folders you named differently, since the
 role is asked of the account the mail belongs to. Anything without the `role:` prefix is an alias, so an alias spelled
 `Junk` still means that alias. Startup refuses a role no folder of a reached account carries, exactly as it refuses an
-alias nothing mirrors, and refuses text that reads as neither an alias nor a role, naming the roles that exist.
+alias the account maps nothing for, and refuses text that reads as neither an alias nor a role, naming the roles that
+exist.
 [What a role says, beside how a folder is found](imap-synchronization.md#what-a-role-says-beside-how-a-folder-is-found)
 states what a role is and why an account has at most one folder per role.
 
@@ -259,11 +261,14 @@ Each is recorded against the rule that asked, and the actions beside it are stil
 
 | Reason | What happened |
 | --- | --- |
-| `DestinationFolderUnresolved` | The destination is bound to no folder on the server — nothing has discovered the alias yet, the folder it named has gone, or the account maps no folder to the role it named |
+| `DestinationFolderUnresolved` | The destination names a folder the account mirrors and no run of that folder has bound it yet |
+| `DestinationFolderUnmapped` | No mapping of the account answers to the name — one was withdrawn between the rule set being read and the change being written |
+| `DestinationFolderNotAdvertised` | The mapping is there and the server holds no folder for it: the folder was deleted or renamed, the path was never right, or one the mapping asked to have created could not be |
+| `DestinationFolderAmbiguous` | The mapping names a role that two advertised folders carry, so which one was meant is yours to state |
 | `AccountNoLongerConfigured` | The account was withdrawn from the configuration between the rule set being read and the change being written |
 | `ActionNoLongerPermitted` | The account has stopped permitting this action since the rule set that declares it was read |
 
-Nothing is written down in any of the three cases: filing into whichever folder looked closest to the name is precisely
+Nothing is written down in any of these cases: filing into whichever folder looked closest to the name is precisely
 what a stale destination must not do. The account run reports how many changes it asked for, how many it withheld because
 another matching rule had already settled the same message, and how many named something that no longer resolves,
 together with the rules involved. Counts and rule names only — nothing derived from a message reaches a log line, a
@@ -407,7 +412,8 @@ and none is repeated.
 So is its `Actions` block, against the rule itself and against every account the rule reaches:
 
 - **The destinations.** Each names something readable as a folder alias or as `role:<role>`, and each names a folder the
-  account actually mirrors — a rule filing into a folder nothing mirrors could never resolve a destination.
+  account maps — a rule filing into a folder no mapping declares has nowhere to file. Mirroring is not asked about: a
+  mapped folder the account does not mirror is resolved when the first change files into it.
 - **The combination.** The actions are ones MailFathom applies together, per [the table above](#which-combinations-a-rule-may-declare).
 - **The permissions.** Every action is one the account permits a rule to take.
 

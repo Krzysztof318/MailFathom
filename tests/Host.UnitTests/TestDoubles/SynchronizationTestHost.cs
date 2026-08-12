@@ -11,6 +11,7 @@ using MailFathom.Application.Mail;
 using MailFathom.Application.Mail.Mutations;
 using MailFathom.Application.Mail.Mutations.Audit;
 using MailFathom.Application.Mail.Mutations.Convergence;
+using MailFathom.Application.Mail.Mutations.Destinations;
 using MailFathom.Application.Persistence;
 using MailFathom.Application.Rules;
 using MailFathom.Application.Rules.Actions;
@@ -177,6 +178,9 @@ internal static class SynchronizationTestHost
             provider => provider.GetRequiredService<MailSynchronizationOptions>());
         services.AddScoped<MailFolderReferenceResolver>();
         services.AddScoped<MailRuleActionRecorder>();
+        // A rule may file into a folder the account maps and does not mirror, which nothing binds until a change needs
+        // it, so the pass resolves its destinations through the same service the host registers.
+        services.AddScoped<MailboxDestinationResolver>();
         // One instance across every scope a run opens, so what several scopes appended is readable as one history.
         var ruleHistory = new MailRuleExecutionRecordingStore();
         services.AddSingleton(ruleHistory);

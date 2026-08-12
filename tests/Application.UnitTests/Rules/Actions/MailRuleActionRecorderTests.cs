@@ -2,7 +2,10 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Application.Folders;
+using MailFathom.Application.Mail;
 using MailFathom.Application.Mail.Mutations;
+using MailFathom.Application.Mail.Mutations.Destinations;
 using MailFathom.Application.Persistence;
 using MailFathom.Application.Rules;
 using MailFathom.Application.Rules.Actions;
@@ -11,7 +14,9 @@ using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Folders;
 using MailFathom.Domain.Mutations;
+using MailFathom.Domain.Transport;
 using MailFathom.TestSupport;
+using Microsoft.Extensions.Time.Testing;
 using NSubstitute;
 using Xunit;
 
@@ -23,17 +28,30 @@ public sealed class MailRuleActionRecorderTests
     private static readonly MailAccountId Account = MailAccountId.Create("work");
     private static readonly MailFolderAlias Inbox = MailFolderAlias.Create("inbox");
     private static readonly MailFolderAlias Archive = MailFolderAlias.Create("archive");
+    private static readonly MailFolderAlias Junk = MailFolderAlias.Create("junk");
     private static readonly StoredEmailId LocalEmail = StoredEmailId.Create(Guid.CreateVersion7());
     private static readonly MailRuleSetRevision Revision = MailRuleSetRevision.Restore("a1b2c3d4e5f6");
+
+    private static readonly MailTransportSecurityPolicy RequiredTlsPolicy = MailTransportSecurityPolicy.Create(
+        MailConnectionSecurity.TlsOnConnect,
+        MailAuthenticationPolicy.Create(
+            [MailAuthenticationMechanism.Plain],
+            allowInsecureConnection: false,
+            allowClearTextAuthenticationOverUnencryptedConnection: false),
+        MailServerCertificateTrust.SystemTrustStore,
+        trustedCertificateAuthorityReference: null);
 
     private readonly InMemoryMailboxMutationRecordStore records = new();
     private readonly InMemoryMailFolderResolutionStore folders = new();
     private readonly StubMailFolderMappings folderMappings = StubMailFolderMappings.Nothing;
+    private readonly List<RemoteFolder> advertisedFolders = [];
     private readonly IAuthoredDeleteEmailDispositionReader dispositions =
         Substitute.For<IAuthoredDeleteEmailDispositionReader>();
 
     private readonly IMailRuleActionPermissionReader permissions =
         Substitute.For<IMailRuleActionPermissionReader>();
+
+    private readonly MailboxDestinationResolver destinations;
 
     public MailRuleActionRecorderTests()
     {
@@ -44,12 +62,15 @@ public sealed class MailRuleActionRecorderTests
         this.permissions
             .GetRuleActionPermissions(Arg.Any<MailAccountId>())
             .Returns(MailRuleActionPermissions.Default with { PermitsDelete = true });
+
+        this.destinations = this.CreateDestinationResolver();
     }
 
     [Fact]
     public async Task RecordAsync_ARuleFilingMail_WritesARelocationNamingTheBoundFolder()
     {
         // Arrange
+        this.MapMirrored(Archive, "INBOX/Archive");
         var binding = this.folders.Bind(Account, Archive, "INBOX/Archive");
 
         // Act
@@ -68,6 +89,7 @@ public sealed class MailRuleActionRecorderTests
     public async Task RecordAsync_ARuleFilingMail_LeavesTheLocalCopyWhereTheDestinationWillCarryIt()
     {
         // Arrange
+        this.MapMirrored(Archive, "INBOX/Archive");
         this.folders.Bind(Account, Archive);
 
         // Act
@@ -75,6 +97,63 @@ public sealed class MailRuleActionRecorderTests
 
         // Assert
         Assert.Null(Assert.Single(this.records.OpenedRequests).LocalDisposition);
+    }
+
+    /// <summary>A message moved somewhere MailFathom keeps no copy of has left the mirrored mailbox exactly as a delete does.</summary>
+    [Fact]
+    public async Task RecordAsync_ARuleFilingIntoAFolderNothingMirrors_CarriesTheAccountsLocalDisposition()
+    {
+        // Arrange
+        this.MapUnmirrored(Junk, "INBOX.Spam");
+
+        // Act
+        var recording = await this.RecordAsync(Planned("file-spam", MailRuleAction.Relocate(MailFolderReference.ToAlias(Junk))));
+
+        // Assert
+        Assert.Empty(recording.Failures);
+        var request = Assert.Single(this.records.OpenedRequests);
+        Assert.Equal(MailboxMutation.Relocate, request.Mutation);
+        Assert.Equal("INBOX.Spam", request.DestinationPath!.Value.Value);
+        Assert.Equal(AuthoredDeleteEmailDisposition.RetainTombstone, request.LocalDisposition);
+    }
+
+    /// <summary>A copy leaves the source where it is, so nothing local is disposed of whatever the destination is.</summary>
+    [Fact]
+    public async Task RecordAsync_ARuleCopyingIntoAFolderNothingMirrors_LeavesTheLocalStoreAlone()
+    {
+        // Arrange
+        this.MapUnmirrored(Junk, "INBOX.Spam");
+
+        // Act
+        var recording = await this.RecordAsync(Planned("keep-a-copy", MailRuleAction.Copy(MailFolderReference.ToAlias(Junk))));
+
+        // Assert
+        Assert.Empty(recording.Failures);
+        var request = Assert.Single(this.records.OpenedRequests);
+        Assert.Equal(MailboxMutation.Copy, request.Mutation);
+        Assert.Null(request.LocalDisposition);
+    }
+
+    /// <summary>A mapping whose folder the server does not have is a refusal of its own, not a path to fall back to.</summary>
+    [Fact]
+    public async Task RecordAsync_AnUnmirroredDestinationTheServerDoesNotAdvertise_WritesNothingAndSaysWhy()
+    {
+        // Arrange
+        this.folderMappings.With(
+            Account,
+            MailFolderMapping.ToRemotePath(
+                Junk,
+                RemoteFolderPath.Create("INBOX.Spam"),
+                MailFolderParticipation.MappedOnly));
+
+        // Act
+        var recording = await this.RecordAsync(Planned("file-spam", MailRuleAction.Relocate(MailFolderReference.ToAlias(Junk))));
+
+        // Assert
+        Assert.Equal(0, this.records.OpenedRecordCount);
+        Assert.Equal(
+            MailRuleActionFailureReason.DestinationFolderNotAdvertised,
+            Assert.Single(recording.Failures).Reason);
     }
 
     [Fact]
@@ -137,6 +216,9 @@ public sealed class MailRuleActionRecorderTests
     [Fact]
     public async Task RecordAsync_ADestinationNothingHasBound_WritesNothingAndSaysWhy()
     {
+        // Arrange
+        this.MapMirrored(Archive, "INBOX/Archive");
+
         // Act
         var recording = await this.RecordAsync(Planned("file-invoices", MailRuleAction.Relocate(MailFolderReference.ToAlias(Archive))));
 
@@ -183,7 +265,7 @@ public sealed class MailRuleActionRecorderTests
         // Assert
         Assert.Equal(0, this.records.OpenedRecordCount);
         var failure = Assert.Single(recording.Failures);
-        Assert.Equal(MailRuleActionFailureReason.DestinationFolderUnresolved, failure.Reason);
+        Assert.Equal(MailRuleActionFailureReason.DestinationFolderUnmapped, failure.Reason);
         Assert.Equal(MailFolderReference.ToRole(MailFolderSpecialUse.Junk), failure.Destination);
     }
 
@@ -229,6 +311,7 @@ public sealed class MailRuleActionRecorderTests
     public async Task RecordAsync_AFlagBesideARevokedRelocation_StillWritesTheFlag()
     {
         // Arrange
+        this.MapMirrored(Archive, "INBOX/Archive");
         this.folders.Bind(Account, Archive);
         this.permissions
             .GetRuleActionPermissions(Arg.Any<MailAccountId>())
@@ -296,6 +379,7 @@ public sealed class MailRuleActionRecorderTests
     public async Task RecordAsync_TheSameDestinationOverSeveralEmails_ResolvesTheBindingOnce()
     {
         // Arrange
+        this.MapMirrored(Archive, "INBOX/Archive");
         this.folders.Bind(Account, Archive);
         var recorder = this.CreateRecorder();
         var plan = MailRuleActionPlan.Compose([RuleNamed("file-invoices", MailRuleAction.Relocate(MailFolderReference.ToAlias(Archive)))]);
@@ -303,13 +387,12 @@ public sealed class MailRuleActionRecorderTests
         // Act
         foreach (var uid in Enumerable.Range(1, 3))
         {
-            await recorder.RecordAsync(
-                Substitute.For<IPersistenceSession>(),
+            await this.RecordAsync(
+                recorder,
                 StoredEmailId.Create(Guid.CreateVersion7()),
                 OccurrenceAt((uint)uid),
                 plan,
-                Revision,
-                TestContext.Current.CancellationToken);
+                Revision);
         }
 
         // Assert
@@ -343,14 +426,75 @@ public sealed class MailRuleActionRecorderTests
         ImapUid.Create(uid));
 
     private Task<MailRuleActionRecording> RecordAsync(MailRuleActionPlan plan, MailRuleSetRevision? revision = null) =>
-        this.CreateRecorder().RecordAsync(
-            Substitute.For<IPersistenceSession>(),
-            LocalEmail,
-            OccurrenceAt(7),
-            plan,
-            revision ?? Revision,
+        this.RecordAsync(this.CreateRecorder(), LocalEmail, OccurrenceAt(7), plan, revision ?? Revision);
+
+    /// <summary>Records one email's plan the way a pass does: the destinations resolved first, the records written after.</summary>
+    private async Task<MailRuleActionRecording> RecordAsync(
+        MailRuleActionRecorder recorder,
+        StoredEmailId storedEmailId,
+        EmailOccurrenceId occurrence,
+        MailRuleActionPlan plan,
+        MailRuleSetRevision revision)
+    {
+        var resolved = await this.destinations.ResolveAsync(
+            Account,
+            [.. plan.Actions.Select(planned => planned.Action.Destination).OfType<MailFolderReference>()],
             TestContext.Current.CancellationToken);
 
-    private MailRuleActionRecorder CreateRecorder() =>
-        new(this.records, this.folders, this.folderMappings.Resolver, this.dispositions, this.permissions);
+        return await recorder.RecordAsync(
+            Substitute.For<IPersistenceSession>(),
+            storedEmailId,
+            occurrence,
+            plan,
+            revision,
+            resolved,
+            TestContext.Current.CancellationToken);
+    }
+
+    /// <summary>Maps a folder the account mirrors, which is what every destination but the unmirrored one here is.</summary>
+    private void MapMirrored(MailFolderAlias alias, string remotePath) =>
+        this.folderMappings.With(Account, MailFolderMapping.ToRemotePath(alias, RemoteFolderPath.Create(remotePath)));
+
+    /// <summary>Maps a folder MailFathom knows by name and mirrors nothing of, and advertises it on the server.</summary>
+    private void MapUnmirrored(MailFolderAlias alias, string remotePath)
+    {
+        this.folderMappings.With(
+            Account,
+            MailFolderMapping.ToRemotePath(
+                alias,
+                RemoteFolderPath.Create(remotePath),
+                MailFolderParticipation.MappedOnly));
+
+        this.advertisedFolders.Add(new RemoteFolder(RemoteFolderPath.Create(remotePath, '.'), []));
+    }
+
+    private MailboxDestinationResolver CreateDestinationResolver()
+    {
+        var remoteFolderCatalog = Substitute.For<IRemoteFolderCatalog>();
+        remoteFolderCatalog
+            .ListFoldersAsync(Arg.Any<MailAccountId>(), Arg.Any<MailTransportSecurityPolicy>(), Arg.Any<CancellationToken>())
+            .Returns(_ => Task.FromResult<IReadOnlyList<RemoteFolder>>([.. this.advertisedFolders]));
+
+        var persistenceSession = Substitute.For<IPersistenceSession>();
+        persistenceSession.CommitAsync(Arg.Any<CancellationToken>()).Returns(PersistenceCommitResult.Committed);
+        var persistenceSessionFactory = Substitute.For<IPersistenceSessionFactory>();
+        persistenceSessionFactory.BeginSessionAsync(Arg.Any<CancellationToken>()).Returns(persistenceSession);
+
+        var transportSecurityPolicies = Substitute.For<IMailTransportSecurityPolicyReader>();
+        transportSecurityPolicies.GetPolicy(Arg.Any<MailAccountId>()).Returns(RequiredTlsPolicy);
+
+        return new MailboxDestinationResolver(
+            this.folderMappings.Resolver,
+            this.folders,
+            new MailFolderResolver(
+                remoteFolderCatalog,
+                Substitute.For<IRemoteFolderCreator>(),
+                this.folders,
+                Substitute.For<IMailFolderMappingChangeAuditor>(),
+                persistenceSessionFactory,
+                new FakeTimeProvider(new DateTimeOffset(2026, 8, 12, 9, 0, 0, TimeSpan.Zero))),
+            transportSecurityPolicies);
+    }
+
+    private MailRuleActionRecorder CreateRecorder() => new(this.records, this.dispositions, this.permissions);
 }

@@ -99,8 +99,8 @@ Points worth knowing before you adapt it:
   states what each one costs, including what happens to mail already stored when you turn mirroring off.
 - **A folder you name is created only if you ask for it.** Add `CreateIfMissing: true` beside a `RemotePath` and
   MailFathom creates that folder on its first run, when your server has none at it — which is what a rule filing mail
-  into an archive folder you decided on needs, without a detour through a mail client. A run reaches the folders it
-  mirrors, so a mapping that also carries `Synchronize: false` has nothing created for it. The switch defaults to
+  into an archive folder you decided on needs, without a detour through a mail client. A mapping that also carries
+  `Synchronize: false` gets its folder the first time something files mail into it. The switch defaults to
   `false`, so leaving it out keeps a mistyped path reporting itself as an alias that resolves to nothing rather than
   becoming a folder named after the typo. Nothing else about your folders is ever changed: MailFathom never renames, deletes, or unsubscribes from one.
   [A folder the mapping asked for is created](../features/imap-synchronization.md#a-folder-the-mapping-asked-for-is-created)

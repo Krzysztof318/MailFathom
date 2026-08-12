@@ -27,6 +27,7 @@ using MailFathom.Application.Folders;
 using MailFathom.Application.Mail.Mutations;
 using MailFathom.Application.Mail.Mutations.Audit;
 using MailFathom.Application.Mail.Mutations.Convergence;
+using MailFathom.Application.Mail.Mutations.Destinations;
 using MailFathom.Application.Persistence;
 using MailFathom.Application.Resilience;
 using MailFathom.Application.Retrieval;
@@ -515,6 +516,7 @@ public static class ServiceCollectionExtensions
         // than to any run, and the counters beside it accumulate across every account.
         services.AddSingleton<MailboxContentVolumeTelemetry>();
         services.AddScoped<MailboxMutationConverger>();
+        services.AddScoped<MailboxDestinationResolver>();
         services.AddScoped<IRemoteFolderCatalog>(provider => new MailKitRemoteFolderCatalog(
             static () => new ImapClient(),
             provider.GetRequiredService<IImapAccountSettingsProvider>(),

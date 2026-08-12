@@ -215,10 +215,11 @@ internal static class MailRuleDeclarationRules
     /// <remarks>
     /// <para>
     /// Three separate claims are checked here. Whether the declared actions can be honored together is a property of
-    /// the rule alone. Whether a destination names a folder the account mirrors — by its alias or by the role it plays
-    /// — and whether the account permits the action at all, are claims about the synchronization section, and both are
+    /// the rule alone. Whether a destination names a folder the account maps — by its alias or by the role it plays —
+    /// and whether the account permits the action at all, are claims about the synchronization section, and both are
     /// refused rather than deferred, because a rule that would be skipped when the mail reached it is indistinguishable
-    /// from a rule nothing matched.
+    /// from a rule nothing matched. Mirroring is deliberately not among the claims: a folder the account only maps is
+    /// resolved when a change first files into it, so it is as reachable a destination as any other.
     /// </para>
     /// <para>
     /// A rule that is switched off is judged like any other, exactly as its scope already is. Only the condition is
@@ -276,10 +277,10 @@ internal static class MailRuleDeclarationRules
         }
 
         foreach (var action in actions.Where(action =>
-            action.Destination is { } destination && !account.Mirrors(destination)))
+            action.Destination is { } destination && !account.Maps(destination)))
         {
             yield return
-                $"Rule '{ruleName}' files into '{action.Destination}', which account '{account.AccountId}' does not declare as a mirrored folder, so nothing would bind it to a folder on the server.";
+                $"Rule '{ruleName}' files into '{action.Destination}', which account '{account.AccountId}' maps no folder for. Map it under MailSynchronization:Accounts:<n>:Folders; mapping the folder is what makes it reachable, and 'Synchronize': false on that mapping still leaves it a destination.";
         }
     }
 

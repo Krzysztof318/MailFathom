@@ -23,8 +23,9 @@ namespace MailFathom.Host.Configuration.Rules;
 /// again here would name the wrong section.
 /// </para>
 /// <para>
-/// A folder alias that is not a value this system issues is dropped for the same reason, and so is an unmirrored
-/// folder — the second deliberately, because a rule may only file into a folder whose mail this account mirrors.
+/// A folder alias that is not a value this system issues is dropped for the same reason. Every mapped folder is read,
+/// including one the account does not mirror, because a mapping is the whole of what a destination needs: such a folder
+/// is resolved when a change first files into it rather than by a run of its own.
 /// </para>
 /// <para>
 /// Each folder is read with the role it plays beside its alias, because a rule may name its destination either way and
@@ -70,26 +71,24 @@ internal static class DeclaredMailAccounts
                 .Where(account => !string.IsNullOrWhiteSpace(account.AccountId))
                 .Select(account => new DeclaredMailAccount(
                     account.AccountId.Trim(),
-                    ReadMirroredFolders(account),
+                    ReadMappedFolders(account),
                     (account.RuleActions ?? new MailRuleActionPermissionOptions()).ToPermissions())),
         ];
     }
 
-    /// <summary>Reads one account's mirrored folders from the bound folders it is actually run with.</summary>
-    private static IReadOnlyCollection<DeclaredMailFolder> ReadMirroredFolders(MailSynchronizationAccountOptions account) =>
+    /// <summary>Reads one account's mapped folders from the bound folders it is actually run with.</summary>
+    private static IReadOnlyCollection<DeclaredMailFolder> ReadMappedFolders(MailSynchronizationAccountOptions account) =>
     [
         .. account.EffectiveFolders
-            .Where(folder => folder.Participation.IsSynchronized)
             .Select(folder => TryReadFolder(folder.Alias, folder.DeclaredRole))
             .OfType<DeclaredMailFolder>(),
     ];
 
     /// <summary>Reads one account's keys, which is the shape available before anything has been bound.</summary>
     /// <remarks>
-    /// The folder participation is read as <c>Synchronize</c> alone rather than through
-    /// <see cref="MailFolderParticipation" />, because that type derives the other two answers from this one and the
-    /// other two decide nothing about a destination. An account declaring no folder is read as mirroring the inbox,
-    /// which is the mapping it is actually run with.
+    /// No participation switch is read at all: none of the three decides anything about a destination, and reading one
+    /// here would refuse a rule for filing into a folder that is perfectly reachable. An account declaring no folder is
+    /// read as mapping the inbox, which is the mapping it is actually run with.
     /// </remarks>
     private static DeclaredMailAccount? ReadAccount(IConfigurationSection account)
     {
@@ -105,10 +104,9 @@ internal static class DeclaredMailAccounts
             .GetChildren()
             .ToArray();
 
-        var mirroredFolders = folders.Length == 0
+        var mappedFolders = folders.Length == 0
             ? [TryReadFolder(nameof(MailFolderSpecialUse.Inbox), MailFolderSpecialUse.Inbox)]
             : folders
-                .Where(folder => !IsDeclaredFalse(folder[nameof(MailFolderMappingOptions.Synchronize)]))
                 .Select(folder => TryReadFolder(
                     folder[nameof(MailFolderMappingOptions.Alias)],
                     MailFolderMappingOptions.TryParseSpecialUse(folder[nameof(MailFolderMappingOptions.SpecialUse)], out var role)
@@ -118,7 +116,7 @@ internal static class DeclaredMailAccounts
 
         return new DeclaredMailAccount(
             accountId,
-            [.. mirroredFolders.OfType<DeclaredMailFolder>()],
+            [.. mappedFolders.OfType<DeclaredMailFolder>()],
             ReadPermissions(account.GetSection(nameof(MailSynchronizationAccountOptions.RuleActions))));
     }
 

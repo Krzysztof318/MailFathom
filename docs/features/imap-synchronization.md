@@ -694,9 +694,14 @@ a run having happened. It is answered the same way for a folder nothing mirrors:
 from what MailFathom stores, not from what it is for, so the role still names it and a rule condition still reads
 `folderRole` for it.
 
-What such a folder cannot be is a rule's **destination**. A rule may only file into a folder the account mirrors, and
-startup refuses a rule that names one it does not — by its alias or by its role alike — because nothing would bind the
-name to a folder on the server. Give the destination `Synchronize: true` if a rule is to file into it.
+Such a folder is a **destination** like any other. Mapping the folder is the whole of what makes it reachable, so a rule
+may file into one whether or not the account mirrors it, and startup refuses a destination only when no mapping of that
+account answers to the name — by its alias or by its role alike. What the refusal asks for is a mapping, not
+`Synchronize: true`.
+
+The direction is what differs: **the source of a change has to be mirrored and its destination only has to be mapped.**
+A folder nothing mirrors puts no mail in the local store, so no rule condition ever sees a message in it, no query lists
+one, and nothing authors a change against one. Filing *into* it is the whole of what it takes part in.
 
 Wherever something names a folder — a rule's destination, a rule condition's `folderRole` fact, an MCP tool's `folders`
 argument — the role is written `role:<role>`, for example `role:Junk`. Anything without that prefix is an alias, so a
@@ -716,14 +721,14 @@ folder that already exists from something MailFathom does locally; this one auth
 So a mapping that says nothing behaves exactly as it did before creation existed, and a mistyped `RemotePath` stays the
 unresolved alias above rather than becoming a folder on your server named after the mistake.
 
-Creation happens **where the alias is resolved**, which is before the run of a folder MailFathom mirrors. Nothing is
-created by reading configuration, and nothing is created for a mapping nothing ever resolves. After the first creation
-the server advertises the folder, so resolution finds it and no further `CREATE` is issued.
+Creation happens **where the alias is resolved**, which is before the run of a folder MailFathom mirrors and at the
+moment a change first files into a folder it does not. Nothing is created by reading configuration, and nothing is
+created for a mapping nothing ever resolves. After the first creation the server advertises the folder, so resolution
+finds it and no further `CREATE` is issued.
 
-A run resolves the folders it mirrors and no others, so `CreateIfMissing` on a `Synchronize: false` mapping creates
-nothing: such a folder is a destination for what is already bound to it rather than something a run reaches. A folder to
-be created is therefore one the account mirrors, and a mapping that only files mail into a folder needs that folder to
-be there.
+`CreateIfMissing` therefore reaches a `Synchronize: false` mapping as well, on the same terms: nothing happens until
+something files mail into that folder, and then the folder the mapping named comes into existence exactly as a mirrored
+folder's would. A mapping nothing ever files into stays a mapping and creates nothing.
 
 What the creation does with the awkward parts of IMAP is fixed rather than left to the server that was tested against:
 
@@ -824,6 +829,19 @@ into it over the account's existing write session, through the same commands and
 no capability is added, and what
 [ADR 0007](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0007-remote-mailbox-mutation-boundary-and-write-session.md)
 refuses is untouched — the destination is still never searched for the message afterwards.
+
+**A mapped folder resolves when it is needed rather than when a run reaches it.** No run schedules a folder nothing
+mirrors, so nothing would ever bind its alias; instead the alias is resolved the first time a change names it as a
+destination, against the folders the server advertises, and the binding and the mapping-change audit record that a
+mirrored folder produces are the same ones produced here. What is resolved is then reused rather than looked up per
+message, and a server that has since renamed the folder is followed exactly as it is for a mirrored folder — the binding
+is replaced by its next generation, with no checkpoint to invalidate, because a folder nothing mirrors has none.
+
+Four things can go wrong, and each is reported against the one change rather than ending the pass. A name **no mapping
+of the account declares** is refused, naming what was asked for. A mapping the server advertises **no folder for**, and a
+role **two advertised folders carry**, are each refused with a classification of their own: nothing falls back to the
+configured path and nothing picks one of two folders. A mirrored destination **nothing has bound yet** waits for that
+folder's own next run. All four appear in the [rule run history](mail-rules.md) beside the folder the rule wrote.
 
 What differs is what becomes of the local copy. A relocation into a mirrored folder carries the row into that folder and
 decides nothing; a relocation into a folder nothing mirrors has taken the message out of the mirrored mailbox, so its

@@ -2,8 +2,8 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-using MailFathom.Application.Folders;
 using MailFathom.Application.Mail.Mutations;
+using MailFathom.Application.Mail.Mutations.Destinations;
 using MailFathom.Application.Persistence;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
@@ -33,45 +33,32 @@ namespace MailFathom.Application.Rules.Actions;
 /// same identity.
 /// </para>
 /// <para>
-/// A destination is resolved to a remote folder once per pass and remembered, because a batch of two hundred emails
-/// matching one filing rule would otherwise re-read one binding two hundred times. The binding a pass began with is the
-/// one it finishes with, which is the same contract the rule set itself is read under. A destination named by role is
-/// turned into a folder through the resolution every caller naming a folder shares, so a role the account has stopped
-/// mapping fails here exactly as an alias whose binding went missing does.
+/// Where a destination is is not resolved here. The answers are handed in, already resolved, because resolving one can
+/// reach the mail server and nothing may do that while the batch's transaction is open. A rule is one author of a
+/// filing mutation among others, and the folder it files into is found the same way for all of them.
 /// </para>
 /// </remarks>
 public sealed class MailRuleActionRecorder
 {
     private readonly IMailboxMutationRecordStore records;
-    private readonly IMailFolderResolutionStore folderResolutions;
-    private readonly MailFolderReferenceResolver folderReferences;
     private readonly IAuthoredDeleteEmailDispositionReader deleteDispositions;
     private readonly IMailRuleActionPermissionReader permissions;
-    private readonly Dictionary<(MailAccountId Account, MailFolderReference Destination), ResolvedDestination?> destinations = [];
 
     /// <summary>Initializes the recorder from the record it writes and the decisions it has to read.</summary>
     /// <param name="records">Opens the durable record one action is carried by.</param>
-    /// <param name="folderResolutions">Resolves a destination alias to the remote folder it currently names.</param>
-    /// <param name="folderReferences">Turns the alias or the role a rule named into the folder of the account it means.</param>
-    /// <param name="deleteDispositions">Answers what the account keeps locally of an email a rule deletes.</param>
+    /// <param name="deleteDispositions">Answers what the account keeps locally of an email a rule deletes or files away.</param>
     /// <param name="permissions">Answers which changes the account currently permits a rule to make.</param>
     /// <exception cref="ArgumentNullException">Thrown when a collaborator is <see langword="null" />.</exception>
     public MailRuleActionRecorder(
         IMailboxMutationRecordStore records,
-        IMailFolderResolutionStore folderResolutions,
-        MailFolderReferenceResolver folderReferences,
         IAuthoredDeleteEmailDispositionReader deleteDispositions,
         IMailRuleActionPermissionReader permissions)
     {
         ArgumentNullException.ThrowIfNull(records);
-        ArgumentNullException.ThrowIfNull(folderResolutions);
-        ArgumentNullException.ThrowIfNull(folderReferences);
         ArgumentNullException.ThrowIfNull(deleteDispositions);
         ArgumentNullException.ThrowIfNull(permissions);
 
         this.records = records;
-        this.folderResolutions = folderResolutions;
-        this.folderReferences = folderReferences;
         this.deleteDispositions = deleteDispositions;
         this.permissions = permissions;
     }
@@ -82,6 +69,7 @@ public sealed class MailRuleActionRecorder
     /// <param name="occurrence">Where that email is, which is what an IMAP command will be issued against.</param>
     /// <param name="plan">What the matching rules together ask for.</param>
     /// <param name="revision">The rule set revision the pass ran under, which is part of every request's identity.</param>
+    /// <param name="destinations">Where the folders this batch's actions name currently are, resolved before the transaction opened.</param>
     /// <param name="cancellationToken">Cancels the staging.</param>
     /// <returns>Every action a record was opened for, with the record that carries it, and every action nothing was opened for.</returns>
     /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
@@ -92,11 +80,13 @@ public sealed class MailRuleActionRecorder
         EmailOccurrenceId occurrence,
         MailRuleActionPlan plan,
         MailRuleSetRevision revision,
+        MailboxDestinations destinations,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(session);
         ArgumentNullException.ThrowIfNull(occurrence);
         ArgumentNullException.ThrowIfNull(plan);
+        ArgumentNullException.ThrowIfNull(destinations);
 
         if (!revision.IsSpecified)
         {
@@ -133,13 +123,7 @@ public sealed class MailRuleActionRecorder
                 continue;
             }
 
-            var request = await this.BuildRequestAsync(
-                storedEmailId,
-                occurrence,
-                planned,
-                revision,
-                failures,
-                cancellationToken);
+            var request = this.BuildRequest(storedEmailId, occurrence, planned, revision, destinations, failures);
 
             if (request is null)
             {
@@ -153,7 +137,7 @@ public sealed class MailRuleActionRecorder
                 planned.Position,
                 planned.Action.Mutation,
                 record.Id,
-                this.RecordedDestinationAlias(occurrence.AccountId, planned.Action.Destination)));
+                RecordedDestinationAlias(destinations, planned.Action.Destination)));
         }
 
         return new MailRuleActionRecording(recorded, failures);
@@ -184,13 +168,13 @@ public sealed class MailRuleActionRecorder
     ];
 
     /// <summary>Turns one planned action into the request that carries it, or records why it has none.</summary>
-    private async Task<MailboxMutationRequest?> BuildRequestAsync(
+    private MailboxMutationRequest? BuildRequest(
         StoredEmailId storedEmailId,
         EmailOccurrenceId occurrence,
         PlannedMailRuleAction planned,
         MailRuleSetRevision revision,
-        List<MailRuleActionFailure> failures,
-        CancellationToken cancellationToken)
+        MailboxDestinations destinations,
+        List<MailRuleActionFailure> failures)
     {
         var action = planned.Action;
         var requester = MailboxMutationRequester.Rule(planned.RuleName, revision.Value);
@@ -202,33 +186,69 @@ public sealed class MailRuleActionRecorder
 
         if (action.Destination is { } destination)
         {
-            var resolved = await this.ResolveDestinationAsync(
-                occurrence.AccountId,
-                destination,
-                cancellationToken);
-
-            if (resolved is not { Path: var path })
-            {
-                failures.Add(new MailRuleActionFailure(
-                    planned.RuleName,
-                    planned.Position,
-                    action.Mutation,
-                    MailRuleActionFailureReason.DestinationFolderUnresolved,
-                    destination));
-
-                return null;
-            }
-
-            // No local disposition travels with a relocation here. One is supplied exactly when the destination is a
-            // folder MailFathom does not mirror, and a rule may not name such a folder at all: the rule set is refused
-            // when it is read if it does, so a destination that reaches this point is one whose mail stays mirrored.
-            return action.Mutation == MailboxMutation.Relocate
-                ? MailboxMutationRequest.Relocate(storedEmailId, occurrence, requester, path)
-                : MailboxMutationRequest.Copy(storedEmailId, occurrence, requester, path);
+            return this.BuildFilingRequest(
+                storedEmailId,
+                occurrence,
+                planned,
+                requester,
+                destinations.Find(destination),
+                failures);
         }
 
         return this.BuildDeleteRequest(storedEmailId, occurrence, planned, requester, failures);
     }
+
+    /// <summary>Builds the relocation or the copy one action asked for, against the folder its destination resolved to.</summary>
+    /// <remarks>
+    /// A relocation into a folder the account mirrors carries the local row into that folder and decides nothing about
+    /// it. One into a folder the account only maps has taken the message out of the mirrored mailbox for good, so the
+    /// request carries what the account says becomes of a local copy — the same answer a delete carries, resolved when
+    /// the change is authored rather than when the source occurrence is later seen to be gone. A copy carries none
+    /// either way, because the message it duplicates stays where it is.
+    /// </remarks>
+    private MailboxMutationRequest? BuildFilingRequest(
+        StoredEmailId storedEmailId,
+        EmailOccurrenceId occurrence,
+        PlannedMailRuleAction planned,
+        MailboxMutationRequester requester,
+        MailboxDestinationResolution resolution,
+        List<MailRuleActionFailure> failures)
+    {
+        if (resolution.Destination is not { } destination)
+        {
+            failures.Add(new MailRuleActionFailure(
+                planned.RuleName,
+                planned.Position,
+                planned.Action.Mutation,
+                FailureReasonOf(resolution.Outcome),
+                planned.Action.Destination));
+
+            return null;
+        }
+
+        if (planned.Action.Mutation == MailboxMutation.Copy)
+        {
+            return MailboxMutationRequest.Copy(storedEmailId, occurrence, requester, destination.Path);
+        }
+
+        if (destination.IsMirrored)
+        {
+            return MailboxMutationRequest.Relocate(storedEmailId, occurrence, requester, destination.Path);
+        }
+
+        return this.TryReadDeleteDisposition(occurrence.AccountId, planned, failures) is { } disposition
+            ? MailboxMutationRequest.Relocate(storedEmailId, occurrence, requester, destination.Path, disposition)
+            : null;
+    }
+
+    /// <summary>Names the refusal one unresolved destination is reported to the operator as.</summary>
+    private static MailRuleActionFailureReason FailureReasonOf(MailboxDestinationOutcome outcome) => outcome switch
+    {
+        MailboxDestinationOutcome.Unmapped => MailRuleActionFailureReason.DestinationFolderUnmapped,
+        MailboxDestinationOutcome.NotAdvertised => MailRuleActionFailureReason.DestinationFolderNotAdvertised,
+        MailboxDestinationOutcome.Ambiguous => MailRuleActionFailureReason.DestinationFolderAmbiguous,
+        _ => MailRuleActionFailureReason.DestinationFolderUnresolved,
+    };
 
     /// <summary>Builds a delete, whose local disposition is the account's answer at the moment the request is written.</summary>
     /// <remarks>
@@ -241,13 +261,20 @@ public sealed class MailRuleActionRecorder
         EmailOccurrenceId occurrence,
         PlannedMailRuleAction planned,
         MailboxMutationRequester requester,
+        List<MailRuleActionFailure> failures) =>
+        this.TryReadDeleteDisposition(occurrence.AccountId, planned, failures) is { } disposition
+            ? MailboxMutationRequest.Delete(storedEmailId, occurrence, requester, disposition)
+            : null;
+
+    /// <summary>Reads what becomes of the local copy, or records that the account deciding it is no longer declared.</summary>
+    private AuthoredDeleteEmailDisposition? TryReadDeleteDisposition(
+        MailAccountId accountId,
+        PlannedMailRuleAction planned,
         List<MailRuleActionFailure> failures)
     {
-        AuthoredDeleteEmailDisposition disposition;
-
         try
         {
-            disposition = this.deleteDispositions.GetAuthoredDeleteDisposition(occurrence.AccountId);
+            return this.deleteDispositions.GetAuthoredDeleteDisposition(accountId);
         }
         catch (InvalidOperationException)
         {
@@ -255,83 +282,21 @@ public sealed class MailRuleActionRecorder
                 planned.RuleName,
                 planned.Position,
                 planned.Action.Mutation,
-                MailRuleActionFailureReason.AccountNoLongerConfigured));
+                MailRuleActionFailureReason.AccountNoLongerConfigured,
+                planned.Action.Destination));
 
             return null;
         }
-
-        return MailboxMutationRequest.Delete(storedEmailId, occurrence, requester, disposition);
     }
 
-    /// <summary>Finds the folder a destination currently names, remembering the answer for the rest of the pass.</summary>
-    /// <returns>The folder, or <see langword="null" /> when the account maps no such folder or nothing has bound one yet.</returns>
-    private async Task<ResolvedDestination?> ResolveDestinationAsync(
-        MailAccountId accountId,
-        MailFolderReference destination,
-        CancellationToken cancellationToken)
-    {
-        // Keyed by the account as well as the destination, because one name means a different folder on each account
-        // and nothing in this type's contract says a scope holds one account's pass.
-        if (this.destinations.TryGetValue((accountId, destination), out var remembered))
-        {
-            return remembered;
-        }
-
-        var resolved = await this.ReadCurrentDestinationAsync(accountId, destination, cancellationToken);
-
-        this.destinations[(accountId, destination)] = resolved;
-
-        return resolved;
-    }
-
-    /// <summary>Reads the alias a recorded action names its folder by, which is what this pass resolved the destination to.</summary>
+    /// <summary>Reads the alias a recorded action names its folder by, which is the folder mail was actually filed into.</summary>
     /// <remarks>
-    /// It reads the answer this pass already has rather than resolving again, and it is asked only after the request was
-    /// built — so an action that reaches the history names the folder mail was actually filed into, whether the rule
-    /// wrote that folder's alias or the role it plays.
+    /// It reads the answers the batch was handed rather than resolving again, and it is asked only after the request was
+    /// built — so an action that reaches the history names the folder mail went to, whether the rule wrote that folder's
+    /// alias or the role it plays.
     /// </remarks>
-    private MailFolderAlias? RecordedDestinationAlias(MailAccountId accountId, MailFolderReference? destination) =>
-        destination is { } named && this.destinations.TryGetValue((accountId, named), out var resolved)
-            ? resolved?.Alias
-            : null;
-
-    /// <summary>Turns a destination into the folder it currently names, in the two steps a name goes through.</summary>
-    /// <remarks>
-    /// A role the account no longer maps is caught rather than propagated, because it says the same thing to this pass
-    /// as an alias whose binding is missing: the rule has nowhere to file, the action is reported as failed, and the
-    /// rest of the batch keeps moving. Letting it out would stop every other rule over one rule's destination.
-    /// </remarks>
-    private async Task<ResolvedDestination?> ReadCurrentDestinationAsync(
-        MailAccountId accountId,
-        MailFolderReference destination,
-        CancellationToken cancellationToken)
-    {
-        MailFolderAlias destinationAlias;
-
-        try
-        {
-            destinationAlias = this.folderReferences.ResolveAlias(accountId, destination);
-        }
-        catch (MailFolderRoleUnmappedException)
-        {
-            return null;
-        }
-
-        var resolution = await this.folderResolutions.GetCurrentResolutionAsync(
-            accountId,
-            destinationAlias,
-            cancellationToken);
-
-        return resolution is { RemotePath: var remotePath }
-            ? new ResolvedDestination(destinationAlias, remotePath)
-            : null;
-    }
-
-    /// <summary>One destination as this pass resolved it: the alias it names the folder by, and where that folder is.</summary>
-    /// <remarks>
-    /// Both halves are kept because two different things need them. The request carries the path, which is what a
-    /// mailbox command is issued against; the history names the alias, which is MailFathom's own name for the folder and
-    /// the one a rule written against a role never spelled out.
-    /// </remarks>
-    private sealed record ResolvedDestination(MailFolderAlias Alias, RemoteFolderPath Path);
+    private static MailFolderAlias? RecordedDestinationAlias(
+        MailboxDestinations destinations,
+        MailFolderReference? destination) =>
+        destination is { } named ? destinations.Find(named).Destination?.Alias : null;
 }

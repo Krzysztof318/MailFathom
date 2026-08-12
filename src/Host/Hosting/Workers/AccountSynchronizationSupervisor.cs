@@ -447,10 +447,11 @@ internal sealed partial class AccountSynchronizationSupervisor
     /// offering them to a rule on the way out.
     /// </para>
     /// <para>
-    /// A failure never fails the run. Evaluation reaches no mail server — everything it reads was already stored — so
-    /// backing the account off, which is to say fetching its mail less often, would answer a local problem by slowing
-    /// the remote work that had nothing to do with it. What a pass did not finish, the next run resumes from the
-    /// batches this one committed.
+    /// A failure never fails the run. Everything a pass reads about the mail itself was already stored, and the one
+    /// thing it does ask a mail server — where a folder the account maps and does not mirror currently is — is asked of
+    /// a server the folders above have already reached, so an unreachable one has put the account into backoff before
+    /// this step began. Backing it off again here would slow the remote work over a local problem, or over the same
+    /// remote one twice. What a pass did not finish, the next run resumes from the batches this one committed.
     /// </para>
     /// </remarks>
     [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "Rule evaluation is a local pass rather than a mail operation; one that failed is logged and resumed by the next run rather than putting the account into backoff.")]

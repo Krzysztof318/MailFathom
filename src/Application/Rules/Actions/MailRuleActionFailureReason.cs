@@ -12,11 +12,11 @@ namespace MailFathom.Application.Rules.Actions;
 /// </remarks>
 public enum MailRuleActionFailureReason
 {
-    /// <summary>The destination alias names no folder this account currently has bound.</summary>
+    /// <summary>The destination names a folder this account mirrors and nothing has bound yet.</summary>
     /// <remarks>
-    /// The alias was declared as a mapped folder when the rule set was read, and discovery has not bound it since — the
-    /// server no longer advertises the folder, or has never been asked for it. Filing into the nearest folder whose name
-    /// looks right is precisely what this refuses.
+    /// The alias was declared as a mapped folder when the rule set was read, and no run of the folder has recorded a
+    /// binding for it since. The next run of that folder is what supplies one. Filing into the nearest folder whose
+    /// name looks right is precisely what this refuses.
     /// </remarks>
     DestinationFolderUnresolved = 0,
 
@@ -35,4 +35,28 @@ public enum MailRuleActionFailureReason
     /// has just withdrawn permission to delete is not asking for one more deletion first.
     /// </remarks>
     ActionNoLongerPermitted = 2,
+
+    /// <summary>No mapping of the account answers to the name the rule filed into.</summary>
+    /// <remarks>
+    /// The rule set is refused when it is read if it names a folder the account does not map, so this is the reload
+    /// case: a mapping was withdrawn while a pass over that account's mail was running. Mapping the folder is what makes
+    /// it reachable again, and mirroring it is not part of that.
+    /// </remarks>
+    DestinationFolderUnmapped = 3,
+
+    /// <summary>The account's server advertises no folder the destination's mapping names.</summary>
+    /// <remarks>
+    /// The mapping is there and the folder is not: somebody deleted or renamed it, the configured path was never right,
+    /// or a folder the mapping asked to have created could not be created. Nothing falls back to the configured path and
+    /// nothing searches for a folder whose name looks close, because either would file somebody's mail somewhere they
+    /// did not name.
+    /// </remarks>
+    DestinationFolderNotAdvertised = 4,
+
+    /// <summary>Several advertised folders carry the role the destination's mapping names.</summary>
+    /// <remarks>
+    /// Which of them was meant is the operator's to state, by mapping the role to one folder or by naming the folder's
+    /// path outright. Picking the first of several would let a reordered server response change where mail is filed.
+    /// </remarks>
+    DestinationFolderAmbiguous = 5,
 }

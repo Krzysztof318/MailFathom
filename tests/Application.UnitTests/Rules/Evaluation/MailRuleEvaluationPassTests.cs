@@ -2,7 +2,10 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Application.Folders;
+using MailFathom.Application.Mail;
 using MailFathom.Application.Mail.Mutations;
+using MailFathom.Application.Mail.Mutations.Destinations;
 using MailFathom.Application.Persistence;
 using MailFathom.Application.Rules;
 using MailFathom.Application.Rules.Actions;
@@ -14,6 +17,7 @@ using MailFathom.Application.UnitTests.TestDoubles;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Folders;
 using MailFathom.Domain.Mutations;
+using MailFathom.Domain.Transport;
 using MailFathom.TestSupport;
 using Microsoft.Extensions.Time.Testing;
 using NSubstitute;
@@ -41,12 +45,28 @@ public sealed class MailRuleEvaluationPassTests
     private readonly IMailRuleActionPermissionReader permissions =
         Substitute.For<IMailRuleActionPermissionReader>();
 
+    private readonly StubMailFolderMappings folderMappings = StubMailFolderMappings.Nothing;
+
     private readonly FakeTimeProvider timeProvider = new(EvaluatedAt);
 
-    public MailRuleEvaluationPassTests() =>
+    public MailRuleEvaluationPassTests()
+    {
         this.permissions
             .GetRuleActionPermissions(Arg.Any<MailAccountId>())
             .Returns(MailRuleActionPermissions.Default with { PermitsDelete = true });
+
+        // Both destinations are folders their accounts mirror, so a pass reaching one reads the binding its own run
+        // recorded rather than asking the server, which is what every assertion here is about.
+        foreach (var accountId in new[] { Account, OtherAccount })
+        {
+            foreach (var alias in new[] { Archive, Backup })
+            {
+                this.folderMappings.With(
+                    accountId,
+                    MailFolderMapping.ToRemotePath(alias, RemoteFolderPath.Create($"INBOX/{alias.Value}")));
+            }
+        }
+    }
 
     [Fact]
     public async Task RunAsync_MailNoPassHasEvaluated_EvaluatesItAndRecordsIt()
@@ -626,6 +646,27 @@ public sealed class MailRuleEvaluationPassTests
             [.. rules.Select(rule => new MailRuleDeclaration(rule.Name, "isSeen", [.. rule.Actions.Actions], rule.StopWhenMatched, [.. rule.Accounts], [.. rule.Triggers]))]),
         MailRuleConditionBounds.Default);
 
+    /// <summary>Resolves destinations over a server advertising nothing, so only a recorded binding ever answers.</summary>
+    private MailboxDestinationResolver CreateDestinationResolver()
+    {
+        var remoteFolderCatalog = Substitute.For<IRemoteFolderCatalog>();
+        remoteFolderCatalog
+            .ListFoldersAsync(Arg.Any<MailAccountId>(), Arg.Any<MailTransportSecurityPolicy>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IReadOnlyList<RemoteFolder>>([]));
+
+        return new MailboxDestinationResolver(
+            this.folderMappings.Resolver,
+            this.folders,
+            new MailFolderResolver(
+                remoteFolderCatalog,
+                Substitute.For<IRemoteFolderCreator>(),
+                this.folders,
+                Substitute.For<IMailFolderMappingChangeAuditor>(),
+                Substitute.For<IPersistenceSessionFactory>(),
+                this.timeProvider),
+            Substitute.For<IMailTransportSecurityPolicyReader>());
+    }
+
     private MailRuleEvaluationPass CreatePass(
         MailRuleSet ruleSet,
         int batchSize = 100,
@@ -642,14 +683,10 @@ public sealed class MailRuleEvaluationPassTests
             new MailRuleSetEvaluator(this.timeProvider),
             this.store,
             this.runStore,
-            new MailRuleActionRecorder(
-                this.mutations,
-                this.folders,
-                StubMailFolderMappings.ResolvingNothing,
-                this.deleteDispositions,
-                this.permissions),
+            new MailRuleActionRecorder(this.mutations, this.deleteDispositions, this.permissions),
+            this.CreateDestinationResolver(),
             this.history,
-            StubMailFolderMappings.Nothing,
+            this.folderMappings,
             new OptimisticConcurrencyRetryPolicy(
                 sessionFactory,
                 new PersistenceConcurrencyOptions(),
