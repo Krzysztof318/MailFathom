@@ -99,6 +99,25 @@ public sealed class MailRuleSetMappingTests
         Assert.Equal(TimeSpan.FromMilliseconds(250), ruleSet.Bounds.EvaluationTimeout);
     }
 
+    /// <summary>The pass bounds are a separate contract from the condition bounds, and neither may pick up the other's value.</summary>
+    [Fact]
+    public void ToEvaluationOptions_DeclaredPassBounds_ReachTheEvaluationContract()
+    {
+        // Arrange
+        var settings = new MailRulesOptions
+        {
+            EvaluationBatchSize = 25,
+            MaxEvaluationBatchesPerPass = 3,
+        };
+
+        // Act
+        var evaluation = settings.ToEvaluationOptions();
+
+        // Assert
+        Assert.Equal(25, evaluation.BatchSize);
+        Assert.Equal(3, evaluation.MaxBatchesPerPass);
+    }
+
     [Fact]
     public void Map_NoRules_IsAnEmptySetUnderAnIdentityOfItsOwn()
     {

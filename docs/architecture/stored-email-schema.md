@@ -26,6 +26,8 @@ The five columns are an observation and never an instruction. Reading mail canno
 
 **The local copy kept without a remote occurrence.** `is_retained_after_authored_delete` is what separates a row the server no longer holds from a row a reader may no longer see, and only a change MailFathom itself performed under `RetainLocalCopy` sets it — a delete, or a relocation into a folder nothing mirrors, which is the same loss of the occurrence and is answered by the same setting. Such a row carries the tombstone timestamp as well, because the server genuinely no longer holds the message and the reconciliation queue has to stop selecting it; the flag is what keeps it inside the mailbox queries the timestamp would otherwise take it out of. So a row is excluded from every mailbox query when `remote_expunge_observed_at` is set **and** this flag is false, while `ix_stored_emails_reconciliation_queue` filters on the timestamp alone. Nothing else sets it: a relocation between mirrored folders carries the row into the destination instead, a disappearance somebody else caused is answered by `RemotelyDeletedEmailDisposition`, which has no value that keeps the mail readable, and carrying the row onto a new occurrence clears the flag along with the timestamp. [What becomes of a message MailFathom deleted](../features/imap-synchronization.md#what-becomes-of-a-message-mailfathom-deleted-itself) states which disposition produces which of the three outcomes.
 
+**What the rules have seen.** `rules_evaluated_at` records when a rule pass last evaluated this message, and is null while none has. It is not only a record: its absence is the queue a pass reads, so writing it is what takes a message out of the mail rules apply to on arrival, and `ix_stored_emails_awaiting_rule_evaluation` is what makes reading that queue proportionate to it rather than to the mailbox. The migration that adds the column stamps every row already stored, which is the same statement made about mail that existed before rules ran at all — an upgrade must not hand a deployment's first rule set an entire mailbox's history as though it had just arrived. Re-evaluating mail that already carries a value is the whole-mailbox run below, and never something an edit sets off; [mail rules](../features/mail-rules.md#when-rules-run) states both halves as behaviour.
+
 **Concurrency.** `ConcurrencyVersion` maps onto the PostgreSQL `xmin` system column rather than a column of its own, so PostgreSQL maintains the token and no writer has to.
 
 ### Sender and recipients
@@ -315,6 +317,24 @@ and no query. A record that stored the retrieved passages would be a second copy
 access, export, and erasure obligations — for the sake of a debugging convenience. What the identifier buys instead is
 that the message can be fetched and read whole through the reads that already serve it.
 
+## The whole-mailbox rule run an account has outstanding
+
+`mail_rule_evaluation_runs` holds the one re-evaluation of an account's whole mailbox that somebody has asked for, and how far the account's synchronization runs have carried it. It is keyed by the account, which is what makes "one outstanding run per account" a property of the schema rather than a check somebody has to remember: two requests arriving together collide on the key, and the loser is recognized as the second caller learning the first got there instead of as a failure.
+
+| Column | What it records |
+|---|---|
+| `mailbox_account_id` | The account whose mail the run walks, and the primary key |
+| `requested_at` | When the run was asked for |
+| `revision` | The rule set the run is bound to, null until the first pass picks it up. Bound when the run starts rather than when it is requested, because the set may reload between the two and what matters is the one in force when the first message is actually evaluated |
+| `position` | The identity of the last message a batch committed, null while the run has committed none. Committed with the evaluations it accounts for, which is what makes the run resumable rather than merely restartable |
+| `evaluated_email_count`, `matched_email_count`, `skipped_email_count` | What the run has done so far, across every account run that has carried it |
+| `ended_at`, `ending` | When and how the run stopped being outstanding. `Completed` is the end of the account's mail; `Superseded` is the rule set having changed while the run was outstanding, which ends it rather than letting one walk apply two rule sets to one mailbox. The ending is text for the reason every other outcome here is: it stays readable in an ad-hoc query and survives a reordering of the enum |
+| `ConcurrencyVersion` | The `xmin` token again, because a pass committing a position and a request arriving can both reach this row |
+
+The row survives the run it describes, holding the last ending until a new request replaces it, and there is no history behind it: one account has one row. Nothing cascades into it and it carries no foreign key onto `mailbox_accounts`, for the reason `mailbox_refresh_tokens` carries none — a run may be asked for before any folder of the account has been bound.
+
+Nothing in it is personal data. An account alias, a derived rule set identity, a message identifier, three counts, and three instants are MailFathom's own names for things, which is what lets a run be explained without any of the mail it walked being copied.
+
 ## Indexes
 
 | Index | Columns | Purpose |
@@ -323,6 +343,8 @@ that the message can be fetched and read whole through the reads that already se
 | `ix_stored_emails_account_timeline` | `(mailbox_account_id, received_at DESC NULLS LAST, id DESC)` | The account-wide timeline |
 | `ix_stored_emails_folder_timeline` | `(mail_folder_id, received_at DESC NULLS LAST, id DESC)` | The per-folder timeline |
 | `ix_stored_emails_awaiting_content` | `(mail_folder_id, uid_validity, uid)` over the rows whose `content_availability` is `AwaitingStorageHeadroom` | The queue of occurrences stored without their payload, which every folder run reads once. The filter is what keeps the index proportionate to that queue rather than to the mailbox: on a deployment that has never reached its storage ceiling the index is empty, and the read costs nothing instead of walking a folder's whole occurrence index to discover that no row qualifies |
+| `ix_stored_emails_account_identity` | `(mailbox_account_id, id)` | The order a whole-mailbox rule run walks an account's mail in. The identity rather than the timeline, because a walk that has to resume needs a total order no later write disturbs and a position that is one column rather than a nullable timestamp paired with a tie-breaker |
+| `ix_stored_emails_awaiting_rule_evaluation` | `(mailbox_account_id, id)` over the rows whose `rules_evaluated_at` is null | The queue of mail no rule pass has evaluated, read once per account run. The filter is the point: in steady state almost every row of an account has been evaluated, so without it the read would walk the account's whole index to find the handful that qualify, on every run of every account |
 | `ix_stored_emails_sender` | `(sender_normalized_address)` | Filtering by who sent a message |
 | `ix_stored_emails_to_addresses` | `(to_addresses)`, GIN | Containment tests over the `To` recipients |
 | `ix_stored_emails_cc_addresses` | `(cc_addresses)`, GIN | Containment tests over the `Cc` recipients |

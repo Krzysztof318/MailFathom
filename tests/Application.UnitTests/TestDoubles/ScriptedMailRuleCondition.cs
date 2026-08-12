@@ -34,10 +34,16 @@ internal sealed class ScriptedMailRuleCondition : IMailRuleCondition
     public Task Started => this.started.Task;
 
     /// <inheritdoc />
-    public IReadOnlyList<MailRuleFact> ReferencedFacts { get; } = [];
+    public IReadOnlyList<MailRuleFact> ReferencedFacts { get; private init; } = [];
 
-    /// <summary>Creates a condition that answers the same way about every email.</summary>
-    public static ScriptedMailRuleCondition Answering(bool matches) => new(matches, failure: null, neverAnswers: false);
+    /// <summary>Creates a condition that answers the same way about every email, naming the facts it reads.</summary>
+    /// <remarks>
+    /// The named facts are resolved before the answer, because naming a fact and reading it are the same thing for a
+    /// real condition: a test about what a rule set costs would prove nothing against a double that declared a fact and
+    /// never asked for it.
+    /// </remarks>
+    public static ScriptedMailRuleCondition Answering(bool matches, params MailRuleFact[] referencedFacts) =>
+        new(matches, failure: null, neverAnswers: false) { ReferencedFacts = referencedFacts };
 
     /// <summary>Creates a condition that raises instead of answering.</summary>
     public static ScriptedMailRuleCondition Raising(Exception failure) => new(matches: false, failure, neverAnswers: false);
@@ -50,6 +56,11 @@ internal sealed class ScriptedMailRuleCondition : IMailRuleCondition
     {
         this.EvaluationCount++;
         this.started.TrySetResult();
+
+        foreach (var fact in this.ReferencedFacts)
+        {
+            await facts.ResolveAsync(fact, cancellationToken);
+        }
 
         if (this.failure is { } raised)
         {

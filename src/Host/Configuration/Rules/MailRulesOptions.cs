@@ -5,6 +5,7 @@
 using System.ComponentModel.DataAnnotations;
 using System.Diagnostics.CodeAnalysis;
 using MailFathom.Application.Rules.Conditions;
+using MailFathom.Application.Rules.Evaluation;
 
 namespace MailFathom.Host.Configuration.Rules;
 
@@ -56,6 +57,23 @@ internal sealed class MailRulesOptions : IValidatableObject
     /// <summary>Gets or sets how long one condition may take to evaluate, including resolving the facts it names.</summary>
     public TimeSpan ConditionEvaluationTimeout { get; set; } = TimeSpan.FromSeconds(1);
 
+    /// <summary>Gets or sets how many stored emails one evaluation batch reads, evaluates, and commits together.</summary>
+    /// <remarks>
+    /// A batch is the unit of progress an interrupted pass gives back, and the unit of work one transaction covers.
+    /// Nothing about it is a schedule: when a pass happens is the account's synchronization interval.
+    /// </remarks>
+    [Range(1, 10_000)]
+    public int EvaluationBatchSize { get; set; } = 200;
+
+    /// <summary>Gets or sets how many batches one walk of one pass may commit before leaving the rest to the next run.</summary>
+    /// <remarks>
+    /// What bounds a run rather than what bounds the work: an account whose mail has never been evaluated drains over
+    /// as many runs as its size needs, instead of turning one run into a walk of its whole history while the folders
+    /// that run exists to fetch wait behind it.
+    /// </remarks>
+    [Range(1, 1_000)]
+    public int MaxEvaluationBatchesPerPass { get; set; } = 5;
+
     /// <summary>Turns the declared limits into the bounds a condition is read and run under.</summary>
     /// <returns>The bounds.</returns>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when a limit is not positive, which validation refuses first.</exception>
@@ -63,6 +81,14 @@ internal sealed class MailRulesOptions : IValidatableObject
         this.MaxConditionLength,
         this.MaxConditionNestingDepth,
         this.ConditionEvaluationTimeout);
+
+    /// <summary>Turns the declared limits into the bounds one evaluation pass runs under.</summary>
+    /// <returns>The bounds.</returns>
+    public MailRuleEvaluationOptions ToEvaluationOptions() => new()
+    {
+        BatchSize = this.EvaluationBatchSize,
+        MaxBatchesPerPass = this.MaxEvaluationBatchesPerPass,
+    };
 
     /// <inheritdoc />
     public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)

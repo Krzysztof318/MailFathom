@@ -1,6 +1,6 @@
 # Mail rules
 
-<!-- describes: src/Application/Rules/**, src/Infrastructure/Rules/**, src/Host/Configuration/Rules/** -->
+<!-- describes: src/Application/Rules/**, src/Infrastructure/Rules/**, src/Infrastructure/Persistence/Rules/**, src/Host/Configuration/Rules/** -->
 
 A mail rule selects mail. It is a name, a condition, the accounts it applies to, and whether a match ends the pass, and
 an owner writes it in the configuration their deployment already carries. This page documents the whole of what a
@@ -95,7 +95,7 @@ comparison, operator, and function checks below are made against.
 | `isFlagged` | boolean | Whether the server reports the email as flagged |
 | `isDraft` | boolean | Whether the server reports the email as a draft |
 | `hasExtractedContent` | boolean | Whether text has been extracted from the email's body |
-| `bodyText` | text | The text extracted from the email's body; absent while no extraction has run for it |
+| `bodyText` | text | The text extracted from the email's body, after quoted history and signatures were removed; absent while no extraction has run for it |
 
 Names are case-sensitive. `senderDomain` is a fact and `SenderDomain` is not, so the surface documented here and the
 surface accepted are the same one.
@@ -223,6 +223,73 @@ outcome on every run and on every instance.
 
 `StopWhenMatched` on a rule that matches ends the pass, and the rules below it are not reached. It defaults to `false`.
 A rule that does not match never stops a pass whatever it declares.
+
+## When rules run
+
+**Rules are evaluated as a step of the account's synchronization run, and there is no schedule of their own.** That run
+already has everything a rule pass needs — one account at a time, a slot count that stops one account starving another,
+a jittered backoff when something is wrong, and a shutdown that lets work in flight finish — so evaluation joins it
+instead of adding a second thing to configure and watch.
+
+The step is the last of the run's local work: it comes after every folder has synchronized and committed, after mail
+belonging to folders the account no longer mirrors has been erased, and outside the synchronization transaction
+entirely. Two consequences follow that are worth stating rather than inferring. A rule can only ever see mail the run
+before it has already stored, so a provider redelivering a message or a synchronization retry cannot produce a different
+processing boundary than a clean run. And nothing an MCP tool does waits on a rule: reads are served from what is
+already stored, and a pass neither blocks one nor is blocked by one.
+
+**A rule applies to mail that arrives after the rule exists.** Each message is evaluated once, and the record of that
+evaluation is what takes it out of the queue the next pass reads — so editing a rule changes what happens to the mail
+that arrives from then on and does nothing to the mail already in the mailbox. Mail an instance stored before it had
+rule evaluation at all is recorded as evaluated when the schema is applied, for the same reason: an upgrade must not
+hand a first rule set an entire mailbox's history as though all of it had just arrived. Re-running the rules over mail
+already stored is the whole-mailbox run below, and it is always something somebody asks for.
+
+**A pass is bounded, and what it leaves behind is the next run's.** It reads, evaluates, and commits `EvaluationBatchSize`
+messages at a time and takes at most `MaxEvaluationBatchesPerPass` batches, so an account whose mail has never been
+evaluated drains over as many runs as its size needs instead of holding up the run that fetches its mail. Each batch
+commits its evaluations together with the position they account for, so a restart resumes at the message nobody read
+rather than replaying a batch or stepping over one.
+
+**A message whose body text has not been extracted yet is skipped and stays eligible.** It applies only where the
+account's rules actually name `bodyText`: such a message is left in the queue and evaluated once its text has been
+derived, rather than evaluated against a fact that would answer absent and then never reconsidered. Mail whose payload
+local storage has not had headroom for is waited on the same way, because a later run fetches it as soon as the ceiling
+permits. A message whose content will never yield text — one above the size limit, which every later run refuses for
+the same reason — is evaluated now with the fact absent, because waiting for text that is not coming would stall the
+queue behind it.
+
+**A rule that cannot answer for one message costs that message's rule and nothing else.** It is recorded as a failed
+rule with a reason, the rules below it still run, the remaining messages of the batch are still evaluated, and the
+message is recorded as evaluated. The account is not put into backoff for it either: a rule pass reaches no mail server,
+so fetching the account's mail less often would answer a local problem by slowing remote work that had nothing to do
+with it. The next section lists the two reasons.
+
+**Nothing scans on a timer.** The account run recurs already, so anything a scan would find on arrival is found by the
+first trigger; a rule whose condition only becomes true with the passage of time — mail older than some age — fires when
+the owner asks for a whole-mailbox run.
+
+## Running the rules over mail you already have
+
+Editing a rule is only useful if the rules can be applied to mail that arrived before the edit, and that is what a
+**whole-mailbox run** is: a walk over everything stored for one account, evaluating each message again under the rules
+now in force.
+
+- **One per account, and asking twice is asking once.** A request that finds a run already outstanding is answered with
+  that run rather than starting a second walk of the same mailbox.
+- **It runs where every other pass runs.** The request records that the run is wanted and nothing more; the work happens
+  as a step of the account's synchronization run, bounded by the same two settings. Whoever asked is not what keeps it
+  alive, so closing a terminal does not cancel a walk of a mailbox.
+- **It is bound to one rule set.** The revision in force when the run starts is recorded with it, so a reload cannot
+  change what the run is doing halfway through. If the rules do change while a run is outstanding, the run ends as
+  **superseded** and says so, because MailFathom keeps only the rule set its configuration currently declares and
+  finishing under a different one would apply two rule sets to one mailbox. Asking again re-runs under the rules now in
+  force.
+- **It is resumable and cancellable.** Its position is committed with each batch, so a restart or a shutdown costs at
+  most the batch that was in flight, and the run finishes over as many account runs as it needs.
+
+**Nothing submits such a request yet.** The run and every guarantee above are in place and an account carries at most
+one, but no command, tool, or endpoint asks for one, so an owner cannot start one from outside the process today.
 
 ## When a condition cannot answer
 

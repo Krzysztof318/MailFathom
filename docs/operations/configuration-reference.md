@@ -603,6 +603,8 @@ use — every fact, every function, every operator — and this section document
 | `MailRules:MaxConditionLength` | int | `1000` | 1 – 10000 characters; a condition over it is refused naming the rule | reload |
 | `MailRules:MaxConditionNestingDepth` | int | `16` | 1 – 64 levels of the parsed condition. A length limit alone would admit a short expression nested past reading | reload |
 | `MailRules:ConditionEvaluationTimeout` | TimeSpan | `00:00:01` | Greater than zero and at most `00:00:30`; bounds one condition against one email, including resolving the facts it names | reload |
+| `MailRules:EvaluationBatchSize` | int | `200` | 1 – 10000 messages read, evaluated, and committed together; the unit of progress an interrupted pass gives back | reload |
+| `MailRules:MaxEvaluationBatchesPerPass` | int | `5` | 1 – 1000 batches per walk per account run; what a pass leaves behind is the next run's, so a long queue drains over several runs instead of holding one up | reload |
 | `MailRules:Rules` | list | empty | At most 200 rules, evaluated in the order they are written | reload |
 | `MailRules:Rules:0:Name` | string | required | 1 – 64 characters of letters, digits, spaces, and `.`, `_`, `-`; unique across the section, ignoring case | reload |
 | `MailRules:Rules:0:Accounts` | list | empty | The accounts the rule applies to, each naming a declared `MailSynchronization:Accounts:<n>:AccountId` exactly; empty applies the rule to every account | reload |

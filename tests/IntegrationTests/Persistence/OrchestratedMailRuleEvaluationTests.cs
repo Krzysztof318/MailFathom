@@ -1,0 +1,430 @@
+// Copyright © 2026 Krzysztof Kasprowicz
+// Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
+// Project repository: https://github.com/Krzysztof318/MailFathom
+
+using MailFathom.Application.Persistence;
+using MailFathom.Application.Rules;
+using MailFathom.Application.Rules.Evaluation;
+using MailFathom.Application.Synchronization;
+using MailFathom.Domain.Emails;
+using MailFathom.IntegrationTests.Orchestration;
+using Microsoft.Extensions.DependencyInjection;
+using Xunit;
+
+namespace MailFathom.IntegrationTests.Persistence;
+
+/// <summary>
+/// Proves the two state stores a rule pass runs on against a real schema: the arrival queue that shrinks as evaluations
+/// are recorded, the keyset walk over a whole mailbox that resumes past a committed position, and the one run row an
+/// account may have outstanding.
+/// </summary>
+/// <remarks>
+/// None of it is reachable without a real server. The queue is a partial index over a nullable timestamp, the two walks
+/// order and compare <c>uuid</c> values under PostgreSQL's collation rather than the CLR's, the evaluations are written
+/// as one <c>UPDATE</c> over a batch instead of through tracked entities, and the run's revision lives in a fixed-length
+/// character column that would pad a shorter value. A substitute for the database would report whatever the test told it
+/// to, whatever the translation actually produced.
+/// </remarks>
+[Collection(OrchestratedInfrastructureCollectionDefinition.Name)]
+public sealed class OrchestratedMailRuleEvaluationTests(MailFathomOrchestrationFixture orchestration)
+{
+    private const string FolderAlias = "rule-evaluation";
+
+    private const string RecipientAddress = "recipient@mailfathom.test";
+
+    /// <summary>How much of a walk one read takes, small enough that paging is what the test observes.</summary>
+    private const int BatchSize = 2;
+
+    /// <summary>How much of the queue one drain reads, large enough that arrangement costs a query or two.</summary>
+    private const int DrainBatchSize = 200;
+
+    /// <summary>Bounds every paging loop. A walk that has not ended by then is a defect rather than a slow database.</summary>
+    private const int MaximumBatches = 200;
+
+    private static readonly DateTimeOffset EvaluatedAt = new(2026, 6, 1, 9, 0, 0, TimeSpan.Zero);
+
+    private static readonly DateTimeOffset RequestedAt = new(2026, 6, 1, 10, 0, 0, TimeSpan.Zero);
+
+    private static readonly DateTimeOffset EndedAt = new(2026, 6, 1, 11, 0, 0, TimeSpan.Zero);
+
+    /// <summary>An identity of the shape the compiler derives, restored rather than computed so the column is what is under test.</summary>
+    private static readonly MailRuleSetRevision Revision = MailRuleSetRevision.Restore("0a1b2c3d4e5f");
+
+    /// <summary>
+    /// The whole arrival path over a real schema: mail nobody has evaluated is what the queue holds, the fact surface
+    /// comes back projected from the row rather than loaded from it, and recording an evaluation is what takes an email
+    /// out — which is what makes a rule apply to mail arriving from now on rather than to a mailbox's history.
+    /// </summary>
+    [Fact]
+    public async Task TheArrivalQueue_MailNoPassHasEvaluated_HoldsItUntilTheEvaluationsAreRecorded()
+    {
+        // Arrange
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var services = await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken);
+        await DrainArrivalQueueAsync(services, cancellationToken);
+        var evaluated = await StoreOneMessageAsync(services, uid: 9401, cancellationToken);
+        var awaiting = await StoreOneMessageAsync(services, uid: 9402, cancellationToken);
+
+        // Act
+        var queued = await ReadArrivalQueueAsync(services, resumeAfter: null, DrainBatchSize, cancellationToken);
+        var bodyText = await ReadExtractedBodyTextAsync(services, evaluated, cancellationToken);
+        var recorded = await RecordEvaluatedAsync(services, [evaluated], cancellationToken);
+        var afterRecording = await ReadArrivalQueueAsync(services, resumeAfter: null, DrainBatchSize, cancellationToken);
+
+        // Assert
+        Assert.Equal(
+            new HashSet<StoredEmailId>([evaluated, awaiting]),
+            queued.Select(candidate => candidate.StoredEmailId).ToHashSet());
+
+        var arrival = Assert.Single(queued, candidate => candidate.StoredEmailId == evaluated);
+        Assert.Equal(SyntheticMailAccount.AccountId.Value, arrival.Facts.Account);
+        Assert.Equal(FolderAlias, arrival.Facts.Folder);
+        Assert.Equal(SyntheticEmail.DefaultSenderAddress, arrival.Facts.SenderAddress);
+        Assert.Contains(RecipientAddress, arrival.Facts.RecipientAddresses);
+        Assert.Equal(SyntheticEmail.ReceivedAt, arrival.Facts.ReceivedAt);
+        Assert.True(arrival.Facts.HasExtractedContent);
+
+        // Text was extracted, so nothing about this message is still expected and a body-text condition reads it now.
+        Assert.False(arrival.AwaitsExtraction);
+        Assert.NotNull(bodyText);
+        Assert.Contains(SubjectOf(9401), bodyText, StringComparison.Ordinal);
+
+        Assert.Equal(PersistenceCommitResult.Committed, recorded);
+        Assert.Equal(awaiting, Assert.Single(afterRecording).StoredEmailId);
+    }
+
+    /// <summary>
+    /// The two ways an email can be sitting in the queue without extracted text, which the projection has to tell apart:
+    /// content the ceiling has not had headroom for is still coming, and content above the size limit never is.
+    /// </summary>
+    /// <remarks>
+    /// The distinction decides whether a message is waited for or evaluated with the body-text fact absent, and getting
+    /// it wrong is silent — the email is stamped as evaluated, leaves the queue for good, and a rule naming its text
+    /// never sees it. It is a <c>CASE</c> PostgreSQL evaluates over a string-converted enum column beside a correlated
+    /// existence check, so only a real database settles what it produces.
+    /// </remarks>
+    [Fact]
+    public async Task TheArrivalQueue_MailWhoseTextWasNeverExtracted_WaitsOnlyForContentThatIsStillComing()
+    {
+        // Arrange
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var services = await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken);
+        await DrainArrivalQueueAsync(services, cancellationToken);
+        var headroomPending = await StoreOneUnextractedMessageAsync(
+            services,
+            uid: 9431,
+            StoredEmailContentAvailability.AwaitingStorageHeadroom,
+            cancellationToken);
+        var oversized = await StoreOneUnextractedMessageAsync(
+            services,
+            uid: 9432,
+            StoredEmailContentAvailability.ExceededSizeLimit,
+            cancellationToken);
+
+        // Act
+        var queued = await ReadArrivalQueueAsync(services, resumeAfter: null, DrainBatchSize, cancellationToken);
+
+        // Assert
+        var waited = Assert.Single(queued, candidate => candidate.StoredEmailId == headroomPending);
+        var evaluatedWithoutText = Assert.Single(queued, candidate => candidate.StoredEmailId == oversized);
+
+        Assert.False(waited.Facts.HasExtractedContent);
+        Assert.False(evaluatedWithoutText.Facts.HasExtractedContent);
+
+        // The control the assertion below needs: both rows look identical to a reader of the search document, so an
+        // observation that reported nothing would pass the first assertion and fail the second.
+        Assert.True(waited.AwaitsExtraction);
+        Assert.False(evaluatedWithoutText.AwaitsExtraction);
+    }
+
+    /// <summary>
+    /// The whole-mailbox walk against a real schema: it selects mail a pass has already evaluated, it never hands the
+    /// same email to two batches, and the position one batch commits is exactly what the next resumes past.
+    /// </summary>
+    /// <remarks>
+    /// The order is PostgreSQL's over <c>uuid</c>, which is not the order the CLR compares two <see cref="Guid" /> values
+    /// in, so the assertions compare the walk against itself rather than against an order stated here.
+    /// </remarks>
+    [Fact]
+    public async Task TheWholeMailboxWalk_APositionABatchCommitted_ResumesPastItOverMailAlreadyEvaluated()
+    {
+        // Arrange
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var services = await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken);
+        var seeded = new List<StoredEmailId>();
+        foreach (var uid in (uint[])[9411, 9412, 9413])
+        {
+            seeded.Add(await StoreOneMessageAsync(services, uid, cancellationToken));
+        }
+
+        // Nothing is left in the arrival queue, so what the walk finds cannot be the queue under another name.
+        await DrainArrivalQueueAsync(services, cancellationToken);
+        var emptyQueue = await ReadArrivalQueueAsync(services, resumeAfter: null, DrainBatchSize, cancellationToken);
+
+        // Act
+        var walked = await WalkWholeMailboxAsync(services, cancellationToken);
+        var resumed = await ReadWholeMailboxAsync(services, walked[0], walked.Count, cancellationToken);
+
+        // Assert
+        Assert.Empty(emptyQueue);
+        Assert.Equal(walked.Count, walked.Distinct().Count());
+        Assert.All(seeded, storedEmailId => Assert.Contains(storedEmailId, walked));
+        Assert.Equal(walked.Skip(1), resumed.Select(candidate => candidate.StoredEmailId));
+    }
+
+    /// <summary>
+    /// The one run row an account may have outstanding, through the store that owns it: a request is found afterwards,
+    /// the progress a batch commits replaces it rather than appending a second row, and an ended run is outstanding no
+    /// longer.
+    /// </summary>
+    /// <remarks>
+    /// The revision is the part only a real column settles. It is stored in a fixed-length character type, which pads a
+    /// shorter value with spaces on the way out, so a round trip that compares equal is the evidence that a run reads
+    /// back bound to the rule set it was bound to rather than to a value nothing matches.
+    /// </remarks>
+    [Fact]
+    public async Task TheOutstandingRun_ARequestCarriedAndThenEnded_ReadsBackAsOneRowPerAccount()
+    {
+        // Arrange
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var services = await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken);
+        var position = await StoreOneMessageAsync(services, uid: 9421, cancellationToken);
+        await EndAnyOutstandingRunAsync(services, cancellationToken);
+        var request = new MailRuleEvaluationRun
+        {
+            AccountId = SyntheticMailAccount.AccountId,
+            RequestedAt = RequestedAt,
+        };
+
+        // Act
+        var requested = await SaveRunAsync(services, request, cancellationToken);
+        var afterRequest = await FindOutstandingRunAsync(services, cancellationToken);
+        var carried = await SaveRunAsync(
+            services,
+            afterRequest! with
+            {
+                Revision = Revision,
+                Position = position,
+                EvaluatedEmailCount = 2,
+                MatchedEmailCount = 1,
+                SkippedEmailCount = 1,
+            },
+            cancellationToken);
+        var afterProgress = await FindOutstandingRunAsync(services, cancellationToken);
+        var ended = await SaveRunAsync(
+            services,
+            afterProgress! with { EndedAt = EndedAt, Ending = MailRuleEvaluationRunEnding.Completed },
+            cancellationToken);
+        var afterEnding = await FindOutstandingRunAsync(services, cancellationToken);
+
+        // Assert
+        Assert.Equal(PersistenceCommitResult.Committed, requested);
+        Assert.Equal(PersistenceCommitResult.Committed, carried);
+        Assert.Equal(PersistenceCommitResult.Committed, ended);
+
+        Assert.NotNull(afterRequest);
+        Assert.Equal(RequestedAt, afterRequest.RequestedAt);
+        Assert.False(afterRequest.Revision.IsSpecified);
+        Assert.Null(afterRequest.Position);
+        Assert.True(afterRequest.IsOutstanding);
+
+        Assert.NotNull(afterProgress);
+        Assert.Equal(Revision, afterProgress.Revision);
+        Assert.Equal(position, afterProgress.Position);
+        Assert.Equal(2, afterProgress.EvaluatedEmailCount);
+        Assert.Equal(1, afterProgress.MatchedEmailCount);
+        Assert.Equal(1, afterProgress.SkippedEmailCount);
+        Assert.True(afterProgress.IsOutstanding);
+
+        Assert.Null(afterEnding);
+    }
+
+    private static string SubjectOf(uint uid) => $"{FolderAlias}-{uid}";
+
+    /// <summary>Stores one synthetic message, whose extraction the same session derives its search document from.</summary>
+    private static async Task<StoredEmailId> StoreOneMessageAsync(
+        OrchestratedMailFathomServices services,
+        uint uid,
+        CancellationToken cancellationToken)
+    {
+        var binding = await OrchestratedFolderBinding.CommitAsync(services, FolderAlias, cancellationToken);
+        var occurrenceId = SyntheticEmail.OccurrenceIn(binding, uid);
+        var subject = SubjectOf(uid);
+        var storedEmailId = default(StoredEmailId);
+
+        var commitResult = await services.CommitAsync(
+            async (scope, session, token) => storedEmailId = await scope
+                .GetRequiredService<IEmailMetadataRepository>()
+                .UpsertMetadataAsync(
+                    session,
+                    SyntheticEmail.RemoteMetadataOf(occurrenceId, subject),
+                    SyntheticEmail.ExtractionOf(
+                        occurrenceId,
+                        subject,
+                        SyntheticEmail.BodyTextContaining(subject, wordCount: 40),
+                        RecipientAddress),
+                    StoredEmailContentAvailability.Available,
+                    token),
+            cancellationToken);
+
+        Assert.Equal(PersistenceCommitResult.Committed, commitResult);
+
+        return storedEmailId;
+    }
+
+    /// <summary>Stores one synthetic message whose MIME nothing read, under the content state a test names.</summary>
+    private static async Task<StoredEmailId> StoreOneUnextractedMessageAsync(
+        OrchestratedMailFathomServices services,
+        uint uid,
+        StoredEmailContentAvailability contentAvailability,
+        CancellationToken cancellationToken)
+    {
+        var binding = await OrchestratedFolderBinding.CommitAsync(services, FolderAlias, cancellationToken);
+        var occurrenceId = SyntheticEmail.OccurrenceIn(binding, uid);
+        var storedEmailId = default(StoredEmailId);
+
+        var commitResult = await services.CommitAsync(
+            async (scope, session, token) => storedEmailId = await scope
+                .GetRequiredService<IEmailMetadataRepository>()
+                .UpsertMetadataAsync(
+                    session,
+                    SyntheticEmail.RemoteMetadataOf(occurrenceId, SubjectOf(uid)),
+                    extractedMetadata: null,
+                    contentAvailability,
+                    token),
+            cancellationToken);
+
+        Assert.Equal(PersistenceCommitResult.Committed, commitResult);
+
+        return storedEmailId;
+    }
+
+    /// <summary>
+    /// Records an evaluation for everything the arrival queue holds, so a test observes its own mail rather than
+    /// whatever an earlier class in this collection left behind.
+    /// </summary>
+    private static async Task DrainArrivalQueueAsync(
+        OrchestratedMailFathomServices services,
+        CancellationToken cancellationToken)
+    {
+        IReadOnlyList<StoredEmailAwaitingRuleEvaluation> queued;
+        var batch = 0;
+
+        do
+        {
+            queued = await ReadArrivalQueueAsync(services, resumeAfter: null, DrainBatchSize, cancellationToken);
+
+            if (queued.Count > 0)
+            {
+                var commitResult = await RecordEvaluatedAsync(
+                    services,
+                    [.. queued.Select(candidate => candidate.StoredEmailId)],
+                    cancellationToken);
+
+                Assert.Equal(PersistenceCommitResult.Committed, commitResult);
+            }
+
+            batch++;
+        }
+        while (queued.Count > 0 && batch < MaximumBatches);
+
+        Assert.Empty(queued);
+    }
+
+    /// <summary>Pages the whole-mailbox walk to its end, the way a requested run does across account runs.</summary>
+    private static async Task<IReadOnlyList<StoredEmailId>> WalkWholeMailboxAsync(
+        OrchestratedMailFathomServices services,
+        CancellationToken cancellationToken)
+    {
+        var walked = new List<StoredEmailId>();
+        StoredEmailId? position = null;
+        IReadOnlyList<StoredEmailAwaitingRuleEvaluation> candidates;
+        var batch = 0;
+
+        do
+        {
+            candidates = await ReadWholeMailboxAsync(services, position, BatchSize, cancellationToken);
+            walked.AddRange(candidates.Select(candidate => candidate.StoredEmailId));
+            position = candidates.Count == 0 ? position : candidates[^1].StoredEmailId;
+            batch++;
+        }
+        while (candidates.Count > 0 && batch < MaximumBatches);
+
+        Assert.Empty(candidates);
+
+        return walked;
+    }
+
+    private static Task<IReadOnlyList<StoredEmailAwaitingRuleEvaluation>> ReadArrivalQueueAsync(
+        OrchestratedMailFathomServices services,
+        StoredEmailId? resumeAfter,
+        int batchSize,
+        CancellationToken cancellationToken) => services.InScopeAsync(
+            (scope, token) => scope.GetRequiredService<IMailRuleEvaluationStore>()
+                .GetEmailsAwaitingFirstEvaluationAsync(
+                    SyntheticMailAccount.AccountId,
+                    resumeAfter,
+                    batchSize,
+                    token),
+            cancellationToken);
+
+    private static Task<IReadOnlyList<StoredEmailAwaitingRuleEvaluation>> ReadWholeMailboxAsync(
+        OrchestratedMailFathomServices services,
+        StoredEmailId? resumeAfter,
+        int batchSize,
+        CancellationToken cancellationToken) => services.InScopeAsync(
+            (scope, token) => scope.GetRequiredService<IMailRuleEvaluationStore>()
+                .GetStoredEmailsAsync(SyntheticMailAccount.AccountId, resumeAfter, batchSize, token),
+            cancellationToken);
+
+    private static Task<string?> ReadExtractedBodyTextAsync(
+        OrchestratedMailFathomServices services,
+        StoredEmailId storedEmailId,
+        CancellationToken cancellationToken) => services.InScopeAsync(
+            (scope, token) => scope.GetRequiredService<IMailRuleEvaluationStore>()
+                .ReadExtractedBodyTextAsync(storedEmailId, token),
+            cancellationToken);
+
+    private static Task<PersistenceCommitResult> RecordEvaluatedAsync(
+        OrchestratedMailFathomServices services,
+        IReadOnlyList<StoredEmailId> storedEmailIds,
+        CancellationToken cancellationToken) => services.CommitAsync(
+            (scope, session, token) => scope.GetRequiredService<IMailRuleEvaluationStore>()
+                .RecordEvaluatedAsync(session, storedEmailIds, EvaluatedAt, token),
+            cancellationToken);
+
+    private static Task<MailRuleEvaluationRun?> FindOutstandingRunAsync(
+        OrchestratedMailFathomServices services,
+        CancellationToken cancellationToken) => services.InScopeAsync(
+            (scope, token) => scope.GetRequiredService<IMailRuleEvaluationRunStore>()
+                .FindOutstandingAsync(SyntheticMailAccount.AccountId, token),
+            cancellationToken);
+
+    private static Task<PersistenceCommitResult> SaveRunAsync(
+        OrchestratedMailFathomServices services,
+        MailRuleEvaluationRun run,
+        CancellationToken cancellationToken) => services.CommitAsync(
+            (scope, session, token) => scope.GetRequiredService<IMailRuleEvaluationRunStore>()
+                .SaveAsync(session, run, token),
+            cancellationToken);
+
+    /// <summary>Ends whatever run the account carries, so a test arranges the request it is about to make.</summary>
+    private static async Task EndAnyOutstandingRunAsync(
+        OrchestratedMailFathomServices services,
+        CancellationToken cancellationToken)
+    {
+        var outstanding = await FindOutstandingRunAsync(services, cancellationToken);
+
+        if (outstanding is null)
+        {
+            return;
+        }
+
+        var commitResult = await SaveRunAsync(
+            services,
+            outstanding with { EndedAt = EndedAt, Ending = MailRuleEvaluationRunEnding.Completed },
+            cancellationToken);
+
+        Assert.Equal(PersistenceCommitResult.Committed, commitResult);
+    }
+}
