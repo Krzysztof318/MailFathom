@@ -17,8 +17,10 @@ namespace MailFathom.Domain.Mutations;
 /// </para>
 /// <para>
 /// The set is closed because it is the answer to a decision rather than a list that grows with call sites. Sending,
-/// every flag other than <c>\Seen</c>, and folder management are refused, and permitting one of them is a decision to
-/// reopen rather than a member to append.
+/// every flag other than <c>\Seen</c>, and renaming, deleting, or unsubscribing a folder are refused, and permitting
+/// one of them is a decision to reopen rather than a member to append. Creating a folder the operator configured was
+/// reopened and permitted, and is still not a member here: it changes the shape of a mailbox rather than a message in
+/// one, so it is a capability of its own.
 /// </para>
 /// <para>
 /// A mutation names what was asked for, never how the server was made to do it. A relocation carried by

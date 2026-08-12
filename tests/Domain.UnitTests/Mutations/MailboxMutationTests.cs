@@ -12,8 +12,10 @@ public sealed class MailboxMutationTests
 {
     /// <summary>
     /// The set is the answer to a decision rather than a list that grows with call sites: sending, every flag other
-    /// than <c>\Seen</c>, and folder management are refused, and permitting one is a decision to reopen rather than a
-    /// member to append. This test is what makes appending one a deliberate act.
+    /// than <c>\Seen</c>, and renaming, deleting, or unsubscribing a folder are refused, and permitting one is a
+    /// decision to reopen rather than a member to append. Creating a folder the operator configured was reopened and
+    /// permitted, and is a capability of its own rather than a member here. This test is what makes appending one a
+    /// deliberate act.
     /// </summary>
     [Fact]
     public void All_HoldsExactlyTheFourPermittedMutations()
