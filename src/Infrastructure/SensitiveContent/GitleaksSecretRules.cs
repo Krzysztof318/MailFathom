@@ -24,15 +24,30 @@ namespace MailFathom.Infrastructure.SensitiveContent;
 /// Three mechanical differences separate a Go RE2 expression from the .NET one beside it, and every one of them is
 /// applied here rather than left to a reader: a POSIX class such as <c>[[:alnum:]]</c> becomes its explicit range,
 /// because .NET reads the former as a character set holding a bracket and a colon; a <c>(?P&lt;name&gt;)</c> group
-/// becomes <c>(?&lt;name&gt;)</c>; and the group gitleaks reports as the secret is renamed <c>refine</c>, which is the
-/// group the engine reports in place of the whole match, so a finding covers the credential rather than the quotation
+/// becomes <c>(?&lt;name&gt;)</c>; and the part of the match that is the credential is named
+/// <see cref="SecretRuleDefinition.SecretCaptureGroup" />, so a finding covers the credential rather than the quotation
 /// mark or the space the expression needed in order to find its end.
 /// </para>
 /// <para>
+/// <b>That third one is a judgement rather than a rewrite, and getting it wrong is silent.</b> A finding covers the
+/// named group when there is one and the whole match when there is not, so a group placed around anything less than
+/// the credential leaves the rest of it in the redacted text with nothing to report that it is still there. Name the
+/// group only where the match is deliberately wider than the credential — an expression that consumes a delimiter to
+/// find the credential's end, or a URL whose host is worth keeping readable — and leave it off wherever the whole
+/// match is the credential, which includes every expression whose parentheses are there to repeat a block rather than
+/// to capture one. Where gitleaks declares a <c>secretGroup</c>, that is the group; where it declares none, its own
+/// finding is the whole match and so is this one.
+/// </para>
+/// <para>
+/// One expression here deliberately says more than the corpus does, and it is marked at its own declaration:
+/// <c>aws-amazon-bedrock-api-key-short-lived</c> runs past the constant opening that gitleaks matches, because
+/// reporting where a key is and replacing one are different jobs and the corpus is written for the first.
+/// </para>
+/// <para>
 /// Refreshing to a later gitleaks release is a reviewable diff of this file: take its <c>config/gitleaks.toml</c>,
-/// apply those three transformations to the entries named below, and move <see cref="CorpusRevision" /> with them.
-/// Adding an entry means adding the rule to <see cref="Rules" /> as well, since the catalog is composed from that
-/// list and a pattern nothing lists is a pattern nothing runs.
+/// apply those three transformations to the entries named below, carry across the divergence marked above, and move
+/// <see cref="CorpusRevision" /> with them. Adding an entry means adding the rule to <see cref="Rules" /> as well,
+/// since the catalog is composed from that list and a pattern nothing lists is a pattern nothing runs.
 /// </para>
 /// </remarks>
 internal static partial class GitleaksSecretRules
@@ -167,7 +182,11 @@ internal static partial class GitleaksSecretRules
     [GeneratedRegex(@"\b(?<refine>ABSK[A-Za-z0-9+/]{109,269}={0,2})(?:[\x60'""\s;]|\\[nr]|$)", SecretRegexEngine.MatchOptions, SecretRegexEngine.MatchTimeoutMilliseconds)]
     private static partial Regex AwsAmazonBedrockApiKeyLongLived();
 
-    [GeneratedRegex(@"bedrock-api-key-YmVkcm9jay5hbWF6b25hd3MuY29t", SecretRegexEngine.MatchOptions, SecretRegexEngine.MatchTimeoutMilliseconds)]
+    // Extended past what the corpus carries. Upstream matches the constant opening alone — `bedrock-api-key-` and the
+    // base64 of the service host — which is enough to report where a key is and not enough to replace one: the encoded
+    // credential follows that constant and would survive redaction. The run after it is unbounded above on purpose,
+    // since a ceiling that a longer key outgrew would leave its tail in the text for the same reason.
+    [GeneratedRegex(@"\b(?<refine>bedrock-api-key-YmVkcm9jay5hbWF6b25hd3MuY29t[A-Za-z0-9+/]{20,}={0,2})(?:[\x60'""\s;]|\\[nr]|$)", SecretRegexEngine.MatchOptions, SecretRegexEngine.MatchTimeoutMilliseconds)]
     private static partial Regex AwsAmazonBedrockApiKeyShortLived();
 
     [GeneratedRegex(@"(?:^|[\\'""\x60\s>=:(,)])(?<refine>[a-zA-Z0-9_~.]{3}\dQ~[a-zA-Z0-9_~.-]{31,34})(?:$|[\\'""\x60\s<),])", SecretRegexEngine.MatchOptions, SecretRegexEngine.MatchTimeoutMilliseconds)]
@@ -188,7 +207,9 @@ internal static partial class GitleaksSecretRules
     [GeneratedRegex(@"\bZXlK(?:(?<alg>aGJHY2lPaU)|(?<apu>aGNIVWlPaU)|(?<apv>aGNIWWlPaU)|(?<aud>aGRXUWlPaU)|(?<b64>aU5qUWlP)|(?<crit>amNtbDBJanBi)|(?<cty>amRIa2lPaU)|(?<epk>bGNHc2lPbn)|(?<enc>bGJtTWlPaU)|(?<jku>cWEzVWlPaU)|(?<jwk>cWQyc2lPb)|(?<iss>cGMzTWlPaU)|(?<iv>cGRpSTZJ)|(?<kid>cmFXUWlP)|(?<key_ops>clpYbGZiM0J6SWpwY)|(?<kty>cmRIa2lPaUp)|(?<nonce>dWIyNWpaU0k2)|(?<p2c>d01tTWlP)|(?<p2s>d01uTWlPaU)|(?<ppt>d2NIUWlPaU)|(?<sub>emRXSWlPaU)|(?<svt>emRuUWlP)|(?<tag>MFlXY2lPaU)|(?<typ>MGVYQWlPaUp)|(?<url>MWNtd2l)|(?<use>MWMyVWlPaUp)|(?<ver>MlpYSWlPaU)|(?<version>MlpYSnphVzl1SWpv)|(?<x>NElqb2)|(?<x5c>NE5XTWlP)|(?<x5t>NE5YUWlPaU)|(?<x5ts256>NE5YUWpVekkxTmlJNkl)|(?<x5u>NE5YVWlPaU)|(?<zip>NmFYQWlPaU))[a-zA-Z0-9\/\\_+\-\r\n]{40,}={0,2}", SecretRegexEngine.MatchOptions, SecretRegexEngine.MatchTimeoutMilliseconds)]
     private static partial Regex JwtBase64();
 
-    [GeneratedRegex(@"https://[a-z0-9]+\.webhook\.office\.com/webhookb2/[a-z0-9]{8}-(?<refine>[a-z0-9]{4}-){3}[a-z0-9]{12}@[a-z0-9]{8}-([a-z0-9]{4}-){3}[a-z0-9]{12}/IncomingWebhook/[a-z0-9]{32}/[a-z0-9]{8}-([a-z0-9]{4}-){3}[a-z0-9]{12}", SecretRegexEngine.MatchOptions, SecretRegexEngine.MatchTimeoutMilliseconds)]
+    // No `refine` group: the whole URL is the credential, since anyone holding it can post into the channel. The
+    // parentheses that remain repeat a GUID block and name nothing, which `ExplicitCapture` already makes non-capturing.
+    [GeneratedRegex(@"https://[a-z0-9]+\.webhook\.office\.com/webhookb2/[a-z0-9]{8}-([a-z0-9]{4}-){3}[a-z0-9]{12}@[a-z0-9]{8}-([a-z0-9]{4}-){3}[a-z0-9]{12}/IncomingWebhook/[a-z0-9]{32}/[a-z0-9]{8}-([a-z0-9]{4}-){3}[a-z0-9]{12}", SecretRegexEngine.MatchOptions, SecretRegexEngine.MatchTimeoutMilliseconds)]
     private static partial Regex MicrosoftTeamsWebhook();
 
     [GeneratedRegex(@"(?i)\bhttps?://(?<refine>[a-f0-9]{8}:[a-f0-9]{8})@(?:gems.contribsys.com|enterprise.contribsys.com)(?:[\/|\#|\?|:]|$)", SecretRegexEngine.MatchOptions, SecretRegexEngine.MatchTimeoutMilliseconds)]

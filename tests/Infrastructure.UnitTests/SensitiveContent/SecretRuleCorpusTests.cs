@@ -82,6 +82,69 @@ public sealed class SecretRuleCorpusTests
         Assert.Empty(unbounded);
     }
 
+    /// <summary>A repeated group's last capture is what a finding would cover, which is never the whole credential.</summary>
+    /// <remarks>
+    /// This is the shape of the one defect a true-positive test cannot see: the rule fires, the category is right, the
+    /// name is right, and the span covers one repetition of a block inside the credential. Naming a group that a
+    /// quantifier then repeats is the only way to write it, so rejecting that shape rejects the defect.
+    /// </remarks>
+    [Fact]
+    public void Rules_CompiledHere_NeverNarrowAFindingToARepeatedGroup()
+    {
+        // Act
+        var repeated = SecretRuleCorpus.Rules
+            .Where(definition => definition.Expression is not null)
+            .Where(definition => SecretGroupIsRepeated(definition.Expression!.ToString()))
+            .Select(definition => definition.Rule.ToString());
+
+        // Assert
+        Assert.Empty(repeated);
+    }
+
+    /// <summary>Reports whether a quantifier follows the secret group, which makes its last capture the reported one.</summary>
+    private static bool SecretGroupIsRepeated(string pattern)
+    {
+        var opener = "(?<" + SecretRuleDefinition.SecretCaptureGroup + ">";
+        var start = pattern.IndexOf(opener, StringComparison.Ordinal);
+
+        if (start < 0)
+        {
+            return false;
+        }
+
+        var depth = 1;
+        var index = start + opener.Length;
+
+        while (index < pattern.Length && depth > 0)
+        {
+            switch (pattern[index])
+            {
+                case '\\':
+                    index++;
+                    break;
+                case '[':
+                    while (index < pattern.Length && pattern[index] != ']')
+                    {
+                        index += pattern[index] == '\\' ? 2 : 1;
+                    }
+
+                    break;
+                case '(':
+                    depth++;
+                    break;
+                case ')':
+                    depth--;
+                    break;
+                default:
+                    break;
+            }
+
+            index++;
+        }
+
+        return index < pattern.Length && "*+?{".Contains(pattern[index], StringComparison.Ordinal);
+    }
+
     /// <summary>The engine finds an expression again by the text it was built from, so the two must agree.</summary>
     [Fact]
     public void Rules_CompiledHere_RegisterThePatternTheirMatcherWasBuiltFrom()

@@ -21,16 +21,19 @@ namespace MailFathom.Infrastructure.SensitiveContent;
 /// operator switched off costs nothing to run.
 /// </para>
 /// <para>
-/// The work is processor-bound and completes on the calling thread. Bounding it is the caller's, which holds the
-/// analyzed ceiling, the per-scan budget, and the concurrency permit; what this type owns is the per-expression
-/// timeout, which <see cref="SecretRegexEngine" /> carries.
+/// The work is processor-bound and completes on the calling thread, so the pass over the corpus is written here rather
+/// than delegated to the engine's own masker: that one materializes every detection before it returns a single one, and
+/// a caller's token observed afterwards would bound nothing. Running the patterns in this type puts the check between
+/// them, so a cancelled caller or an overrun scan budget ends the pass within one expression instead of after all of
+/// them. Three bounds then sit inside each other — the caller's analyzed ceiling and per-scan budget, the check between
+/// patterns here, and the per-expression timeout <see cref="SecretRegexEngine" /> carries.
 /// </para>
 /// <para>
-/// One instance serves the whole process and several scans at once. The engine guards a detection with a reader lock
-/// and builds the result list per call, so concurrent scans share the compiled corpus and share nothing else.
+/// One instance serves the whole process and several scans at once. The corpus is fixed at construction and a compiled
+/// matcher is thread-safe, so concurrent scans share the matchers and share no state at all.
 /// </para>
 /// </remarks>
-internal sealed class SecretContentScanner : ISensitiveContentScanner, IDisposable
+internal sealed class SecretContentScanner : ISensitiveContentScanner
 {
     /// <summary>How random a run must be, per character, before the entropy heuristic reports it.</summary>
     /// <remarks>
@@ -43,7 +46,8 @@ internal sealed class SecretContentScanner : ISensitiveContentScanner, IDisposab
     /// <summary>The widest alphabet the corpus's entropy rules match over, which normalizes a measurement to a confidence.</summary>
     private const double EntropyCeilingBitsPerCharacter = 6;
 
-    private readonly SecretMasker masker;
+    private readonly SecretRuleDefinition[] registered;
+    private readonly SecretRegexEngine engine;
     private readonly FrozenDictionary<string, SecretRuleDefinition> active;
     private readonly SensitiveContentRule? unnamed;
     private readonly TimeProvider timeProvider;
@@ -65,12 +69,11 @@ internal sealed class SecretContentScanner : ISensitiveContentScanner, IDisposab
                 nameof(plan));
         }
 
-        var registered = SecretRuleCorpus.Rules
+        this.registered = [.. SecretRuleCorpus.Rules
             .Where(definition => secrets.Categories.Contains(definition.Rule.Category))
-            .Where(definition => !secrets.Suppresses(definition.Rule))
-            .ToArray();
+            .Where(definition => !secrets.Suppresses(definition.Rule))];
 
-        this.active = registered.ToFrozenDictionary(
+        this.active = this.registered.ToFrozenDictionary(
             definition => definition.Rule.Name,
             StringComparer.OrdinalIgnoreCase);
 
@@ -79,10 +82,7 @@ internal sealed class SecretContentScanner : ISensitiveContentScanner, IDisposab
                 ? SecretRuleCorpus.UnnamedProviderCredential
                 : null;
 
-        this.masker = new SecretMasker(
-            registered.Select(definition => definition.Pattern),
-            regexEngine: new SecretRegexEngine(registered));
-
+        this.engine = new SecretRegexEngine(this.registered);
         this.timeProvider = timeProvider;
     }
 
@@ -98,7 +98,7 @@ internal sealed class SecretContentScanner : ISensitiveContentScanner, IDisposab
 
         try
         {
-            return Task.FromResult(this.Detect(text));
+            return Task.FromResult<IReadOnlyList<SensitiveContentFinding>>(this.Detect(text, cancellationToken));
         }
         catch (Exception failure) when (failure is not OperationCanceledException)
         {
@@ -108,30 +108,57 @@ internal sealed class SecretContentScanner : ISensitiveContentScanner, IDisposab
         }
     }
 
-    /// <inheritdoc />
-    public void Dispose() => this.masker.Dispose();
-
-    private IReadOnlyList<SensitiveContentFinding> Detect(string text)
+    private List<SensitiveContentFinding> Detect(string text, CancellationToken cancellationToken)
     {
         var detectedAt = this.timeProvider.GetUtcNow();
+        var findings = new List<SensitiveContentFinding>();
 
-        return
-        [
-            .. this.masker
-                .DetectSecrets(text)
-                .Select(detection => this.Finding(text, detection, detectedAt))
-                .OfType<SensitiveContentFinding>(),
-        ];
+        // A loop rather than a pipeline: the token has to be observed between one expression and the next, which is
+        // the only place a running scan can be ended at all.
+        foreach (var definition in this.registered)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            foreach (var match in this.engine.Matches(
+                text,
+                definition.Pattern.Pattern,
+                definition.Pattern.RegexOptions,
+                captureGroup: SecretRuleDefinition.SecretCaptureGroup))
+            {
+                var finding = this.Finding(text, definition, match, detectedAt);
+
+                if (finding is not null)
+                {
+                    findings.Add(finding);
+                }
+            }
+        }
+
+        return findings;
     }
 
-    private SensitiveContentFinding? Finding(string text, Detection detection, DateTimeOffset detectedAt)
+    private SensitiveContentFinding? Finding(
+        string text,
+        SecretRuleDefinition definition,
+        UniversalMatch match,
+        DateTimeOffset detectedAt)
     {
-        if (detection.Length <= 0)
+        if (!match.Success || match.Length <= 0)
         {
             return null;
         }
 
-        var (rule, confidence) = this.Resolve(detection.Name);
+        // A pattern reads the match back to say what it found: one expression recognises a family of keys and the
+        // provider signature inside the match names the product that issued it. A pattern that recognises nothing in
+        // its own match rejects it, which is a match that was never a credential.
+        var moniker = definition.Pattern.GetMatchIdAndName(match.Value);
+
+        if (moniker is null)
+        {
+            return null;
+        }
+
+        var (rule, confidence) = this.Resolve(moniker.Item2);
 
         if (rule is null)
         {
@@ -140,7 +167,7 @@ internal sealed class SecretContentScanner : ISensitiveContentScanner, IDisposab
 
         if (rule.Category == SecretCategories.HighEntropyString)
         {
-            var bits = ShannonEntropy.BitsPerCharacter(text.AsSpan(detection.Start, detection.Length));
+            var bits = ShannonEntropy.BitsPerCharacter(text.AsSpan(match.Index, match.Length));
 
             if (bits < EntropyFloorBitsPerCharacter)
             {
@@ -152,7 +179,7 @@ internal sealed class SecretContentScanner : ISensitiveContentScanner, IDisposab
 
         return SensitiveContentFinding.Create(
             rule,
-            SensitiveContentSpan.Create(detection.Start, detection.Length),
+            SensitiveContentSpan.Create(match.Index, match.Length),
             confidence,
             SecretRuleCorpus.Detector,
             detectedAt);

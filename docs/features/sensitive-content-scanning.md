@@ -160,6 +160,11 @@ Mail is untrusted input, so **no expression runs without a ceiling on how long i
 operator configures bounds a whole scan; a separate per-expression ceiling bounds one pattern within it, and exceeding
 either refuses the operation rather than returning text nobody finished scanning.
 
+The budget bounds a scan already running, not only one about to start, which is why the scanner walks its own corpus
+instead of handing the text to the engine's masker: that one runs every expression before it returns anything, so a
+budget expiring midway would be read only once the work it was meant to stop had finished. Ending the pass between one
+expression and the next is what makes the budget and a shutting-down host mean the same thing here as everywhere else.
+
 Which matcher runs an expression was decided by measurement rather than by preference. MailFathom's own corpus is
 compiled by the `[GeneratedRegex]` source generator, because it is derived from RE2 expressions that carry no
 backreference and no nested quantifier for a backtracking matcher to degrade on, and because the generated matcher runs

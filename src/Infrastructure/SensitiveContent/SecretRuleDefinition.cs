@@ -25,6 +25,14 @@ namespace MailFathom.Infrastructure.SensitiveContent;
 /// </remarks>
 internal sealed record SecretRuleDefinition
 {
+    /// <summary>The group an expression narrows its finding to, where the whole match is more than the credential.</summary>
+    /// <remarks>
+    /// The name is the detection engine's own convention, which is why an expression written here uses it too. An
+    /// expression that declares no such group reports its whole match, which is what a rule whose match <em>is</em> the
+    /// credential wants.
+    /// </remarks>
+    public const string SecretCaptureGroup = "refine";
+
     private const double CertainConfidence = 1;
 
     private SecretRuleDefinition(SensitiveContentRule rule, RegexPattern pattern, Regex? expression, double confidence)

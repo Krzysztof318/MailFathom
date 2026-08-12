@@ -19,6 +19,8 @@ namespace MailFathom.Infrastructure.UnitTests.SensitiveContent;
 /// </remarks>
 internal static class SyntheticSecrets
 {
+    private const string WebhookIdentifier = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee";
+
     /// <summary>A personal access token of the shape one hosted forge issues.</summary>
     public static string ProviderToken { get; } = "gh" + "p_" + new string('a', 36);
 
@@ -50,6 +52,19 @@ internal static class SyntheticSecrets
     /// <summary>A link whose query string is the credential.</summary>
     public static string CredentialUrl { get; } =
         "https://example.invalid/export?format=csv&access_token=" + CredentialUrlToken;
+
+    /// <summary>The incoming-webhook URL of a chat platform, the whole of which is the posting credential.</summary>
+    /// <remarks>
+    /// Nothing here can be kept readable. Anyone holding the URL can post into the channel, so unlike a database link
+    /// or a tracked link there is no part of it worth leaving behind for a reader to orient by.
+    /// </remarks>
+    public static string ChannelWebhookUrl { get; } =
+        "https://outlook" + ".webhook.office.com/webhookb2/" + WebhookIdentifier + "@" + WebhookIdentifier
+        + "/IncomingWebhook/" + new string('f', 32) + "/" + WebhookIdentifier;
+
+    /// <summary>A short-lived cloud model-service key, whose constant opening is followed by the credential itself.</summary>
+    public static string ShortLivedModelServiceKey { get; } =
+        "bedrock-api-key-" + "YmVkcm9jay5hbWF6b25hd3MuY29t" + new string('Z', 64) + "==";
 
     /// <summary>Thirty-two bytes of base64, dense enough for the entropy heuristic to report it.</summary>
     public static string HighEntropyString { get; } = "Zq7ZkR3vXp8L" + "mT2wYc5NbJ6hQ4sD9fG1a" + "E0uIoPrWxV=";
