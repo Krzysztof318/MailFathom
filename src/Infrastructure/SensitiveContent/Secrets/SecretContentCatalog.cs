@@ -5,7 +5,7 @@
 using MailFathom.Application.SensitiveContent;
 using MailFathom.Application.SensitiveContent.Detection;
 
-namespace MailFathom.Infrastructure.SensitiveContent;
+namespace MailFathom.Infrastructure.SensitiveContent.Secrets;
 
 /// <summary>Declares what the secret scanner can look for, so a deployment naming one of them can be judged.</summary>
 /// <remarks>

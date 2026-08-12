@@ -25,3 +25,10 @@ database:
 
 secrets:
   existingSecret: mailfathom-secrets
+
+# Personal-data scanning with the analyzer the chart runs itself, which is the branch that renders the analyzer
+# Deployment, its Service, and the derived address the application is pointed at. The release values render the other
+# branch, so between the two files every shape of this block is produced by the repository's verification — and the
+# default, which renders none of it, is what `helm template` over the chart's own values shows.
+personalDataScanning:
+  enabled: true

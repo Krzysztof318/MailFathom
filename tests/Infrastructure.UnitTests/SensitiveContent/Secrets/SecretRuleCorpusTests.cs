@@ -3,10 +3,10 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.Text.RegularExpressions;
-using MailFathom.Infrastructure.SensitiveContent;
+using MailFathom.Infrastructure.SensitiveContent.Secrets;
 using Xunit;
 
-namespace MailFathom.Infrastructure.UnitTests.SensitiveContent;
+namespace MailFathom.Infrastructure.UnitTests.SensitiveContent.Secrets;
 
 /// <summary>Covers the invariants the assembled corpus has to hold whichever of its three sources supplied a rule.</summary>
 public sealed class SecretRuleCorpusTests

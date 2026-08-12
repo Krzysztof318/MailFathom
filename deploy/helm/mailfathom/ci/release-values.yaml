@@ -43,6 +43,16 @@ config:
         }
       }
 
+# The external-analyzer shape, matching the external-database choice above: nothing of the analyzer Deployment or its
+# Service is rendered, and the application is pointed at the address given here. An address inside the cluster, because
+# that is the only arrangement the documentation supports — the whole point of scanning is that content is inspected
+# before it leaves the trust boundary.
+personalDataScanning:
+  enabled: true
+  analyzer:
+    deploy: false
+    endpoint: http://presidio-analyzer.mailfathom.svc.cluster.local:3000
+
 ingress:
   enabled: true
   className: nginx

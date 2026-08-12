@@ -145,6 +145,30 @@ run supplies one — see Chart.yaml.
 {{- if not .Values.secrets.existingSecret -}}
   {{- fail "secrets.existingSecret is not set. The chart creates no Secret and templates no credential; create one first and name it here." -}}
 {{- end -}}
+
+{{/*
+The analyzer follows the database's shape, and for the same reason: one value decides whether the chart runs the
+dependency, and the address is either derived from the release or stated, never both. A deployment that named an address
+while the chart was also deploying one would scan through a service the release did not install.
+*/}}
+{{- if .Values.personalDataScanning.enabled -}}
+  {{- if .Values.personalDataScanning.analyzer.deploy -}}
+    {{- if .Values.personalDataScanning.analyzer.endpoint -}}
+      {{- fail (printf "personalDataScanning.analyzer.endpoint is %q while personalDataScanning.analyzer.deploy is true. The chart is deploying the analyzer and derives its address from the release name, so a second address here would scan through a service the release did not install. Clear it, or turn deploy off to use an analyzer you already operate." .Values.personalDataScanning.analyzer.endpoint) -}}
+    {{- end -}}
+  {{- else -}}
+    {{- if not .Values.personalDataScanning.analyzer.endpoint -}}
+      {{- fail "personalDataScanning.analyzer.endpoint is not set and personalDataScanning.analyzer.deploy is false. Personal-data scanning fails closed, so a deployment with nowhere to ask refuses every read, derived write, and egress it guards: name the analyzer you operate — inside your own network — or turn deploy on and let the chart run one." -}}
+    {{- end -}}
+    {{- if not (or (hasPrefix "http://" .Values.personalDataScanning.analyzer.endpoint) (hasPrefix "https://" .Values.personalDataScanning.analyzer.endpoint)) -}}
+      {{- fail (printf "personalDataScanning.analyzer.endpoint is %q, which is not an absolute http or https address, so MailFathom could compose no request from it." .Values.personalDataScanning.analyzer.endpoint) -}}
+    {{- end -}}
+  {{- end -}}
+{{- else -}}
+  {{- if .Values.personalDataScanning.analyzer.endpoint -}}
+    {{- fail (printf "personalDataScanning.analyzer.endpoint is %q while personalDataScanning.enabled is false. Nothing would read it, so this deployment scans no personal data while its values file reads as though it did. Switch the scanner on, or remove the address." .Values.personalDataScanning.analyzer.endpoint) -}}
+  {{- end -}}
+{{- end -}}
 {{- end -}}
 
 {{/*
@@ -222,6 +246,59 @@ chart's own choice rather than a deployment's and is written the same way wherev
 {{- printf "%s/%s:%s" $image.registry $image.repository $image.tag -}}
 {{- else -}}
 {{- printf "%s:%s" $image.repository $image.tag -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
+The analyzer objects the chart deploys, named after the release with `-presidio` appended. The suffix names the analyzer
+rather than the feature, because what a listing has to distinguish is which image is in the pod.
+*/}}
+{{- define "mailfathom.analyzerFullname" -}}
+{{- printf "%s-presidio" (include "mailfathom.fullname" .) | trunc 63 | trimSuffix "-" -}}
+{{- end -}}
+
+{{/*
+The analyzer pod's identity, and a name of its own for the same reason the database's is: the application's Service and
+Deployment select on name and instance alone, so a pod answering to both would be routed MCP requests and counted as a
+replica of MailFathom.
+*/}}
+{{- define "mailfathom.analyzerSelectorLabels" -}}
+app.kubernetes.io/name: {{ printf "%s-presidio" (include "mailfathom.name" .) | trunc 63 | trimSuffix "-" }}
+app.kubernetes.io/instance: {{ .Release.Name }}
+{{- end -}}
+
+{{- define "mailfathom.analyzerLabels" -}}
+helm.sh/chart: {{ include "mailfathom.chart" . }}
+{{ include "mailfathom.analyzerSelectorLabels" . }}
+app.kubernetes.io/version: {{ .Values.personalDataScanning.analyzer.image.tag | trunc 63 | trimSuffix "-" | quote }}
+app.kubernetes.io/component: personal-data-analyzer
+app.kubernetes.io/managed-by: {{ .Release.Service }}
+app.kubernetes.io/part-of: mailfathom
+{{- end -}}
+
+{{/*
+The analyzer image, written like the database's: the registry is part of the reference because this pin is the chart's
+own choice rather than a deployment's.
+*/}}
+{{- define "mailfathom.analyzerImage" -}}
+{{- $image := .Values.personalDataScanning.analyzer.image -}}
+{{- if $image.registry -}}
+{{- printf "%s/%s:%s" $image.registry $image.repository $image.tag -}}
+{{- else -}}
+{{- printf "%s:%s" $image.repository $image.tag -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
+Where MailFathom asks. A deployed analyzer is reached by the name of its own Service on the port the chart gave it, so
+the address stays one derivation rather than a value an operator keeps in step with the release name; an external one is
+whatever was named. `mailfathom.validate` has already refused the combinations where both or neither exist.
+*/}}
+{{- define "mailfathom.analyzerEndpoint" -}}
+{{- if .Values.personalDataScanning.analyzer.deploy -}}
+{{- printf "http://%s:%d" (include "mailfathom.analyzerFullname" .) (int .Values.personalDataScanning.analyzer.service.port) -}}
+{{- else -}}
+{{- .Values.personalDataScanning.analyzer.endpoint -}}
 {{- end -}}
 {{- end -}}
 

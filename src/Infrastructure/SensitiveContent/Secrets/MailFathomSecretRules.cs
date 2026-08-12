@@ -4,7 +4,7 @@
 
 using System.Text.RegularExpressions;
 
-namespace MailFathom.Infrastructure.SensitiveContent;
+namespace MailFathom.Infrastructure.SensitiveContent.Secrets;
 
 /// <summary>The rules MailFathom writes itself, where neither of the two corpora covers a shape mail carries.</summary>
 /// <remarks>

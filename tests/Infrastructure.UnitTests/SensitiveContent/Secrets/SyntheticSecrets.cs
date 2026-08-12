@@ -2,7 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-namespace MailFathom.Infrastructure.UnitTests.SensitiveContent;
+namespace MailFathom.Infrastructure.UnitTests.SensitiveContent.Secrets;
 
 /// <summary>Builds credentials that match the corpus without any of them appearing in this repository.</summary>
 /// <remarks>

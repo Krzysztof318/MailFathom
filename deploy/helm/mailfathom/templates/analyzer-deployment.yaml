@@ -1,0 +1,92 @@
+{{- /*
+Copyright © 2026 Krzysztof Kasprowicz
+Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
+Project repository: https://github.com/Krzysztof318/MailFathom
+*/ -}}
+{{- if and .Values.personalDataScanning.enabled .Values.personalDataScanning.analyzer.deploy }}
+{{- include "mailfathom.validate" . -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "mailfathom.analyzerFullname" . }}
+  labels:
+    {{- include "mailfathom.analyzerLabels" . | nindent 4 }}
+spec:
+  {{- /*
+    One replica, and no value to change it. The analyzer holds no state and would scale horizontally without any trouble,
+    but nothing here would use a second one: MailFathom's own bound on concurrent scans is what limits the load, and a
+    deployment that has raised that bound past what one analyzer serves is sizing a dependency rather than choosing a
+    replica count. Turning `deploy` off and operating the analyzer yourself is the supported answer.
+  */}}
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "mailfathom.analyzerSelectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "mailfathom.analyzerSelectorLabels" . | nindent 8 }}
+    spec:
+      {{- with .Values.personalDataScanning.analyzer.image.pullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        {{- toYaml .Values.personalDataScanning.analyzer.podSecurityContext | nindent 8 }}
+      {{- /*
+        The analyzer reads request bodies and answers offsets. It talks to nothing, so it has no business holding a token
+        that can talk to the API server — and it is the pod in this release that receives mail content in the clear.
+      */}}
+      automountServiceAccountToken: false
+      {{- with .Values.personalDataScanning.analyzer.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.personalDataScanning.analyzer.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.personalDataScanning.analyzer.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: presidio-analyzer
+          image: {{ include "mailfathom.analyzerImage" . | quote }}
+          imagePullPolicy: {{ .Values.personalDataScanning.analyzer.image.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.personalDataScanning.analyzer.containerSecurityContext | nindent 12 }}
+          ports:
+            - name: http
+              containerPort: 3000
+              protocol: TCP
+          {{- /*
+            A startup budget rather than a short liveness probe, because the container loads a spaCy language model
+            before it serves anything and how long that takes depends on the node. The readiness probe is what keeps
+            MailFathom's own startup gate from reaching a pod that is still loading: without it the gate would probe an
+            analyzer that answers nothing yet and refuse to start over a dependency that was seconds away.
+          */}}
+          startupProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 60
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 3
+          resources:
+            {{- toYaml .Values.personalDataScanning.analyzer.resources | nindent 12 }}
+{{- end }}

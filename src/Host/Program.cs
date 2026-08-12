@@ -238,6 +238,16 @@ try
         builder.Services.AddSecretContentScanning();
     }
 
+    if (declaredSensitiveContent.Pii.Enabled)
+    {
+        // The profile is composed here rather than inside the registration, because where the analyzer is comes from this
+        // section and Infrastructure binds no configuration. Its address is proven absolute by options validation before
+        // anything resolves this, and the mapper refuses the combination validation already refuses rather than assuming it.
+        builder.Services.AddSingleton(provider => SensitiveContentPlanMapper.MapAnalyzerProfile(
+            provider.GetRequiredService<IOptions<SensitiveContentOptions>>().Value));
+        builder.Services.AddPersonalDataContentScanning();
+    }
+
     if (declaredSensitiveContent.IsAnyScannerEnabled)
     {
         builder.Services.AddSingleton(provider => SensitiveContentPlanMapper.Map(
@@ -467,13 +477,20 @@ try
         var searchSettings = provider.GetRequiredService<IOptions<MailboxSearchOptions>>().Value;
         return EmailSearchSnippetBounds.Create(searchSettings.SnippetsPerEmail, searchSettings.WordsPerSnippet);
     });
-    // What the startup probe reports. Both gates reach a remote dependency, so both take as long as that dependency
+    // What the startup probe reports. Every gate reaches a remote dependency, so each takes as long as that dependency
     // does, and an orchestrator's startup probe is what turns that interval into an extended grace period rather than
     // into a failing instance. The probe answers from this tracker rather than from the order the framework happens to
-    // start its hosted services in.
+    // start its hosted services in. The analyzer gate is expected only where the personal-data scanner is switched on,
+    // because nothing else in this process asks an analyzer anything, and a gate expected but never reported would leave
+    // the probe unhealthy for the life of the instance.
     builder.Services.AddSingleton(new HostStartupGates(
+    [
         HostStartupGate.SecretConfiguration,
-        HostStartupGate.DatabaseSchema));
+        HostStartupGate.DatabaseSchema,
+        .. declaredSensitiveContent.Pii.Enabled
+            ? (HostStartupGate[])[HostStartupGate.PersonalDataAnalyzer]
+            : [],
+    ]));
     builder.Services.AddHealthChecks()
         .AddCheck<HostStartupGatesHealthCheck>(HostStartupGatesHealthCheck.Name, tags: [HealthProbe.Startup.Tag]);
     // The validator is registered ahead of the worker so hosted-service ordering reinforces the StartingAsync ordering
@@ -687,6 +704,16 @@ try
     // Ahead of the workers so no unit of work reads or writes mail before the schema this build expects is proven, and
     // after the infrastructure that registers the inspector it resolves.
     builder.Services.AddHostedService<DatabaseSchemaStartupGate>();
+
+    // Ahead of the workers for the reason the schema gate is: with the personal-data scanner switched on, every derived
+    // write and every read the scanner guards fails closed, so a worker that started first would spend a synchronization
+    // run discovering one refusal at a time. Registered only where that switch is on, which is the only state in which
+    // anything here has an analyzer to ask.
+    if (declaredSensitiveContent.Pii.Enabled)
+    {
+        builder.Services.AddHostedService<PersonalDataAnalyzerStartupGate>();
+    }
+
     builder.Services.AddHostedService<MailSynchronizationCoordinator>();
     builder.Services.AddHostedService<MailExtractionBackfillWorker>();
 

@@ -2,7 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-namespace MailFathom.Infrastructure.SensitiveContent;
+namespace MailFathom.Infrastructure.SensitiveContent.Secrets;
 
 /// <summary>Measures how much a run of characters looks like something random rather than something written.</summary>
 /// <remarks>

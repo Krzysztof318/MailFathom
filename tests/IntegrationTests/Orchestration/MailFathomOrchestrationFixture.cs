@@ -30,7 +30,13 @@ namespace MailFathom.IntegrationTests.Orchestration;
 public sealed class MailFathomOrchestrationFixture : IAsyncLifetime
 {
     /// <summary>Bounds the whole start-up, which on a cold machine includes pulling the images and building the migration project.</summary>
-    private static readonly TimeSpan StartupTimeout = TimeSpan.FromMinutes(10);
+    /// <remarks>
+    /// The analyzer is the largest of those images by an order of magnitude and loads a language model before it reports
+    /// healthy, so a cold first run spends most of this budget before the first test runs. Raising it is the answer if that
+    /// ever stops being enough; shortening the wait is not, because a run that started asserting against a half-ready
+    /// analyzer would report the feature broken rather than the machine slow.
+    /// </remarks>
+    private static readonly TimeSpan StartupTimeout = TimeSpan.FromMinutes(15);
 
     /// <summary>Bounds the composed host's own start, which builds and runs a project against an already-migrated database.</summary>
     private static readonly TimeSpan HostStartupTimeout = TimeSpan.FromMinutes(5);
@@ -53,6 +59,9 @@ public sealed class MailFathomOrchestrationFixture : IAsyncLifetime
     /// <summary>Gets or sets the mail server endpoints once the orchestration published them.</summary>
     private OrchestratedMailServerEndpoints? PublishedMailServerEndpoints { get; set; }
 
+    /// <summary>Gets or sets the analyzer address once the orchestration published it.</summary>
+    private Uri? PublishedPersonalDataAnalyzerAddress { get; set; }
+
     /// <summary>Gets the connection string the orchestration issued for the migrated MailFathom database.</summary>
     /// <exception cref="InvalidOperationException">Thrown when the orchestration has not started yet.</exception>
     public string DatabaseConnectionString => this.IssuedDatabaseConnectionString
@@ -64,6 +73,12 @@ public sealed class MailFathomOrchestrationFixture : IAsyncLifetime
     public OrchestratedMailServerEndpoints MailServer => this.PublishedMailServerEndpoints
         ?? throw new InvalidOperationException(
             "The orchestrated mail server endpoints are requested before the suite started the application.");
+
+    /// <summary>Gets the base address the orchestrated personal-data analyzer answers on.</summary>
+    /// <exception cref="InvalidOperationException">Thrown when the orchestration has not started yet.</exception>
+    public Uri PersonalDataAnalyzer => this.PublishedPersonalDataAnalyzerAddress
+        ?? throw new InvalidOperationException(
+            "The orchestrated personal-data analyzer address is requested before the suite started the application.");
 
     /// <inheritdoc />
     public async ValueTask InitializeAsync()
@@ -100,6 +115,13 @@ public sealed class MailFathomOrchestrationFixture : IAsyncLifetime
             OrchestrationContract.MailServerResourceName,
             cancellationToken);
 
+        // Healthy rather than running, and for a sharper reason than the mail server's: the analyzer loads a language
+        // model before it serves anything, so a test that waited only for the container would ask an analyzer that is not
+        // ready yet and read the refusal as an analyzer that recognises nothing.
+        await this.application.ResourceNotifications.WaitForResourceHealthyAsync(
+            OrchestrationContract.PersonalDataAnalyzerResourceName,
+            cancellationToken);
+
         // The migration resource runs dotnet-ef once and finishes, so it reaches a terminal state rather than a healthy
         // one. Waiting for it here is what lets every test assume the baseline schema is already applied.
         await this.application.ResourceNotifications.WaitForResourceAsync(
@@ -122,6 +144,10 @@ public sealed class MailFathomOrchestrationFixture : IAsyncLifetime
             this.application.GetEndpoint(
                 OrchestrationContract.MailServerResourceName,
                 OrchestrationContract.MailServerSmtpEndpointName));
+
+        this.PublishedPersonalDataAnalyzerAddress = this.application.GetEndpoint(
+            OrchestrationContract.PersonalDataAnalyzerResourceName,
+            OrchestrationContract.PersonalDataAnalyzerEndpointName);
     }
 
     /// <summary>Starts the composed MailFathom host and reports the address it serves on.</summary>

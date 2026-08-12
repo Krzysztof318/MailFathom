@@ -172,6 +172,20 @@ is the layer rather than something MailFathom re-implements:
   bulkhead and read the refusals as facts about the remote server. [Mail answering § An optional second
   pass](../features/mail-answering.md#an-optional-second-pass-the-model-decides-what-answers) states what a refused
   judgement costs there, which is filtering and never the lookup.
+
+  A fourth outbound client **keeps** the handler, and it is worth naming because it is the one on a path that fails
+  closed. The personal-data analyzer is reached under no `OutboundDependency` pipeline at all — there is no dependency
+  class for it and no `IOutboundOperationRunner` in the adapter — so the standard handler is the only layer and the
+  single-layer rule is satisfied by there being one. What that buys is exactly what a scanner on a fail-closed path
+  wants: a lost packet to a container on the same network is retried inside the scan's own budget rather than refusing a
+  read, while a handler-level timeout still surfaces as a scanner that could not establish what the text carries. It also
+  covers the startup probe for free — within the handler's own window, which is what makes a first probe that arrives a
+  second early into a retry rather than a refusal to start; an analyzer that takes longer than that window to load its
+  model is covered by the orchestrator restarting the process, exactly as the database schema gate is. The client's own
+  `Timeout` is set above the configured `SensitiveContent:ScanTimeout` for the same
+  reason a mailbox token request's is set below its enclosing budget: the bound an operator configured is the one that has
+  to be reported, so the transport's is a backstop rather than a competitor. [Sensitive-content
+  scanning](../features/sensitive-content-scanning.md#failing-closed) states what each failure refuses.
 - **EF Core.** `EnableRetryOnFailure` is deliberately not configured. The obstacle is not the unit of work: with a
   retrying execution strategy each query and each `SaveChangesAsync` is already replayed as its own retriable unit. It
   is the *user-initiated* transaction. `PersistenceSessionFactory` opens one with `BeginTransactionAsync` for every

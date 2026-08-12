@@ -190,4 +190,56 @@ public sealed class SensitiveContentPlanMapperTests
         Assert.Throws<ArgumentNullException>(() => SensitiveContentPlanMapper.Map(null!, [SecretsCatalog]));
         Assert.Throws<ArgumentNullException>(() => SensitiveContentPlanMapper.Map(new SensitiveContentOptions(), null!));
     }
+
+    /// <summary>The scanner and its startup probe read one profile, so every configured value reaches both or neither.</summary>
+    [Fact]
+    public void MapAnalyzerProfile_AConfiguredAnalyzer_CarriesItsAddressLanguageAndConfidenceFloor()
+    {
+        // Arrange
+        var settings = new SensitiveContentOptions();
+        settings.Pii.Enabled = true;
+        settings.PersonalDataAnalyzer.Endpoint = "http://presidio-analyzer:3000";
+        settings.PersonalDataAnalyzer.Language = "de";
+        settings.PersonalDataAnalyzer.MinimumConfidence = 0.7;
+
+        // Act
+        var profile = SensitiveContentPlanMapper.MapAnalyzerProfile(settings);
+
+        // Assert
+        Assert.Equal("http://presidio-analyzer:3000/", profile.Endpoint.ToString());
+        Assert.Equal("de", profile.Language);
+        Assert.Equal(0.7, profile.MinimumConfidence);
+    }
+
+    /// <summary>An analyzer nobody tuned has to arrive with the floor that keeps its sub-0.1 guesses out of the text.</summary>
+    [Fact]
+    public void MapAnalyzerProfile_AnAnalyzerNoConfidenceWasStatedFor_CarriesTheDefaultFloor()
+    {
+        // Arrange
+        var settings = new SensitiveContentOptions();
+        settings.Pii.Enabled = true;
+        settings.PersonalDataAnalyzer.Endpoint = "http://presidio-analyzer:3000";
+
+        // Act
+        var profile = SensitiveContentPlanMapper.MapAnalyzerProfile(settings);
+
+        // Assert
+        Assert.Equal(0.3, profile.MinimumConfidence);
+    }
+
+    /// <summary>Startup validation refuses both of these first, so reaching either means the two passes disagree.</summary>
+    [Fact]
+    public void MapAnalyzerProfile_ConfigurationStartupValidationRefuses_IsRefusedHereToo()
+    {
+        // Arrange
+        var scannerOff = new SensitiveContentOptions();
+        scannerOff.PersonalDataAnalyzer.Endpoint = "http://presidio-analyzer:3000";
+        var noAddress = new SensitiveContentOptions();
+        noAddress.Pii.Enabled = true;
+
+        // Act, Assert
+        Assert.Throws<InvalidOperationException>(() => SensitiveContentPlanMapper.MapAnalyzerProfile(scannerOff));
+        Assert.Throws<InvalidOperationException>(() => SensitiveContentPlanMapper.MapAnalyzerProfile(noAddress));
+        Assert.Throws<ArgumentNullException>(() => SensitiveContentPlanMapper.MapAnalyzerProfile(null!));
+    }
 }

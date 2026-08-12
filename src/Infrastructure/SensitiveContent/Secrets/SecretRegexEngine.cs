@@ -7,7 +7,7 @@ using System.Collections.Frozen;
 using System.Text.RegularExpressions;
 using Microsoft.Security.Utilities;
 
-namespace MailFathom.Infrastructure.SensitiveContent;
+namespace MailFathom.Infrastructure.SensitiveContent.Secrets;
 
 /// <summary>Runs the corpus's expressions for <see cref="SecretContentScanner" />, and bounds every match it makes.</summary>
 /// <remarks>

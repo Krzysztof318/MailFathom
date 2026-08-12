@@ -13,6 +13,7 @@ using MailFathom.Application.SensitiveContent.Detection;
 using MailFathom.Infrastructure.Persistence;
 using MailFathom.Infrastructure.Persistence.Connections;
 using MailFathom.Infrastructure.Secrets.Resolution;
+using MailFathom.Infrastructure.SensitiveContent.PersonalData;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.EntityFrameworkCore.Infrastructure;
@@ -341,6 +342,76 @@ public sealed class ServiceCollectionExtensionsTests
         // Act, Assert
         Assert.Throws<ArgumentNullException>(
             () => ServiceCollectionExtensions.AddSecretContentScanning(null!));
+    }
+
+    /// <summary>
+    /// With the switch off no client is registered either, which is what makes the opt-in cost nothing: an analyzer address
+    /// is never read and no handler chain is built for one.
+    /// </summary>
+    [Fact]
+    public void AddPersonalDataContentScanning_NotCalled_LeavesNoDetectorNoProbeAndNoClientBehind()
+    {
+        // Arrange
+        var services = new ServiceCollection();
+        services.AddSingleton(TimeProvider.System);
+
+        // Act
+        using var provider = services.BuildServiceProvider();
+
+        // Assert
+        Assert.Empty(provider.GetServices<ISensitiveContentScanner>());
+        Assert.Empty(provider.GetServices<IPersonalDataAnalyzerProbe>());
+        Assert.Null(provider.GetService<IHttpClientFactory>());
+    }
+
+    [Fact]
+    public void AddPersonalDataContentScanning_Called_RegistersTheDetectorItsProbeAndItsBoundedClient()
+    {
+        // Arrange
+        var services = new ServiceCollection();
+        services.AddSingleton(TimeProvider.System);
+        services.AddSingleton(PersonalDataAnalyzerProfile.Create(
+            new Uri("http://presidio-analyzer:3000"),
+            "en",
+            0.3));
+        services.AddSingleton(SensitiveContentPlan.Create(
+            SensitiveContentScanBounds.Default,
+            [
+                SensitiveContentScannerPlan.Create(
+                    SensitiveContentScannerKind.Pii,
+                    [SensitiveContentCategory.Create("PaymentCard")],
+                    []),
+            ]));
+
+        // Act
+        services.AddPersonalDataContentScanning();
+
+        // Assert
+        using var provider = services.BuildServiceProvider();
+        Assert.Equal(
+            SensitiveContentScannerKind.Pii,
+            Assert.Single(provider.GetServices<ISensitiveContentScanner>()).Scanner);
+        Assert.Equal(
+            SensitiveContentScannerKind.Pii,
+            Assert.Single(provider.GetServices<ISensitiveContentCatalog>()).Scanner);
+        Assert.NotNull(provider.GetService<IPersonalDataAnalyzerProbe>());
+
+        using var client = provider
+            .GetRequiredService<IHttpClientFactory>()
+            .CreateClient(PersonalDataAnalyzerProfile.TransportName);
+        Assert.Equal("http://presidio-analyzer:3000/", client.BaseAddress?.ToString());
+        Assert.Equal(
+            SensitiveContentScanBounds.Default.ScanTimeout + TimeSpan.FromSeconds(30),
+            client.Timeout);
+        Assert.True(client.MaxResponseContentBufferSize > SensitiveContentScanBounds.Default.MaximumAnalyzedCharacters);
+    }
+
+    [Fact]
+    public void AddPersonalDataContentScanning_WithoutAServiceCollection_IsRefused()
+    {
+        // Act, Assert
+        Assert.Throws<ArgumentNullException>(
+            () => ServiceCollectionExtensions.AddPersonalDataContentScanning(null!));
     }
 
     private static ServiceProvider BuildConfiguredProvider()

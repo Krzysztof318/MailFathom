@@ -22,6 +22,14 @@ After=network-online.target
 Requires=mailfathom-postgres.service
 After=mailfathom-postgres.service
 
+# Only when personal-data scanning is on, and uncommented together with the four Environment= lines further down and
+# mailfathom-presidio.container being installed at all. The analyzer unit declares `Notify=healthy` as well, so this
+# ordering waits for an analyzer that answers rather than for a container that exists — which matters more here than for
+# the database, because the analyzer loads a language model before it serves anything and MailFathom refuses to start
+# while it cannot reach one.
+#Requires=mailfathom-presidio.service
+#After=mailfathom-presidio.service
+
 # At least one file MailFathom will actually read, which is a narrower thing than the directory existing. Podman
 # creates a missing bind source as an empty directory rather than refusing, the setup creates that directory in a step
 # of its own, and MailFathom layers in `*.json` and nothing else — so a directory that is absent, empty, or holds only
@@ -88,6 +96,18 @@ Environment=ConfigurationSources__Directory=/etc/mailfathom/config
 Environment=ConnectionStrings__mailfathom=Host=mailfathom-postgres;Port=5432;Database=mailfathom;Username=mailfathom
 Environment=Persistence__Password__Name=mailfathom-database-password
 Environment=Persistence__Password__SecretReference=systemd-credential:mailfathom-database-password
+
+# Personal-data scanning, off because these four lines are commented out — which is the product's default and what makes
+# it cost nothing. Uncomment them together with the two ordering lines at the top of this file, and install
+# mailfathom-presidio.container beside it; enabling the switch with no analyzer to reach fails startup and names the
+# address, which is the intended behaviour rather than a misconfiguration to avoid. The address is the analyzer unit's
+# container name on the internal network — replace it with your own analyzer's if you operate one, keeping it inside your
+# own network, and then install no analyzer unit at all. docs/features/sensitive-content-scanning.md states what each
+# category hides and what pointing the endpoint outside the deployment gives up.
+#Environment=SensitiveContent__Pii__Enabled=true
+#Environment=SensitiveContent__PersonalDataAnalyzer__Endpoint=http://mailfathom-presidio:3000
+#Environment=SensitiveContent__PersonalDataAnalyzer__Language=en
+#Environment=SensitiveContent__PersonalDataAnalyzer__MinimumConfidence=0.3
 
 # The same posture the image and the other two deployment shapes carry: nothing writable but one bounded tmpfs, no
 # capabilities, and no way to gain a privilege. /tmp is the one path the runtime needs to write.

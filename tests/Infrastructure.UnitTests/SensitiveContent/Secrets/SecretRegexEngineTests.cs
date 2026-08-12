@@ -3,10 +3,10 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.Text.RegularExpressions;
-using MailFathom.Infrastructure.SensitiveContent;
+using MailFathom.Infrastructure.SensitiveContent.Secrets;
 using Xunit;
 
-namespace MailFathom.Infrastructure.UnitTests.SensitiveContent;
+namespace MailFathom.Infrastructure.UnitTests.SensitiveContent.Secrets;
 
 /// <summary>Covers how an expression is found again from the pattern text, and what bounds it once it is.</summary>
 public sealed class SecretRegexEngineTests

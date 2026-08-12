@@ -114,6 +114,22 @@ spec:
               value: {{ .Values.database.passwordSecretKey | quote }}
             - name: Persistence__Password__SecretReference
               value: {{ printf "file:%s/%s" (trimSuffix "/" .Values.secrets.mountPath) .Values.database.passwordSecretKey | quote }}
+            {{- if .Values.personalDataScanning.enabled }}
+            {{- /*
+              The switch and the analyzer's address are written together, from the one value that decided whether the
+              analyzer is deployed at all. Splitting them across this file and a mounted configuration file is what would
+              let a deployment switch the scanner on and point it nowhere — which MailFathom refuses to start with, as it
+              should, but the refusal would be about a file an operator did not think they were editing.
+            */}}
+            - name: SensitiveContent__Pii__Enabled
+              value: "true"
+            - name: SensitiveContent__PersonalDataAnalyzer__Endpoint
+              value: {{ include "mailfathom.analyzerEndpoint" . | quote }}
+            - name: SensitiveContent__PersonalDataAnalyzer__Language
+              value: {{ .Values.personalDataScanning.analyzer.language | quote }}
+            - name: SensitiveContent__PersonalDataAnalyzer__MinimumConfidence
+              value: {{ .Values.personalDataScanning.analyzer.minimumConfidence | quote }}
+            {{- end }}
             {{- range $name, $value := .Values.config.extraEnvironment }}
             - name: {{ $name }}
               value: {{ $value | quote }}

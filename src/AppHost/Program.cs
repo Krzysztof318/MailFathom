@@ -133,6 +133,27 @@ if (runsIntegrationTests)
         .WithEndpoint(targetPort: 3025, scheme: "tcp", name: OrchestrationContract.MailServerSmtpEndpointName)
         .WithHttpEndpoint(targetPort: 8080, name: OrchestrationContract.MailServerApiEndpointName)
         .WithHttpHealthCheck("/api/service/readiness", endpointName: OrchestrationContract.MailServerApiEndpointName);
+
+    // A real Presidio analyzer, because the claim the suite exists to prove about the personal-data scanner is that the
+    // image an operator pulls answers the request MailFathom builds with the entities MailFathom expects, at the offsets
+    // it expects them: a scripted handler proves the mapping works on the payload somebody hand-wrote. An ordinary
+    // container resource under the ephemeral prefix, like PostgreSQL and the mail server, rather than a fixture of its
+    // own — the suite starts the orchestration a developer runs and defines no container topology beside it.
+    //
+    // The image is the one the deployment assets name, at the same pin, so what the suite exercises is what an operator
+    // gets. Its health route is what makes the resource reach Healthy instead of merely Running, which matters more here
+    // than anywhere else in this topology: the container loads a language model before it serves anything, so a test that
+    // waited only for the container would race that load and read it as an analyzer that answered nothing.
+    builder
+        .AddContainer(
+            OrchestrationContract.PersonalDataAnalyzerResourceName,
+            "ghcr.io/data-privacy-stack/presidio-analyzer",
+            "2.2.364")
+        .WithContainerName($"{ephemeralResourceNamePrefix}-presidio-analyzer")
+        .WithHttpEndpoint(
+            targetPort: OrchestrationContract.PersonalDataAnalyzerContainerPort,
+            name: OrchestrationContract.PersonalDataAnalyzerEndpointName)
+        .WithHttpHealthCheck("/health", endpointName: OrchestrationContract.PersonalDataAnalyzerEndpointName);
 }
 
 var database = postgres.AddDatabase(OrchestrationContract.DatabaseResourceName);

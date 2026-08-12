@@ -5,12 +5,12 @@
 using System.Globalization;
 using MailFathom.Application.SensitiveContent;
 using MailFathom.Application.SensitiveContent.Detection;
-using MailFathom.Infrastructure.SensitiveContent;
+using MailFathom.Infrastructure.SensitiveContent.Secrets;
 using Microsoft.Extensions.Time.Testing;
 using NSubstitute;
 using Xunit;
 
-namespace MailFathom.Infrastructure.UnitTests.SensitiveContent;
+namespace MailFathom.Infrastructure.UnitTests.SensitiveContent.Secrets;
 
 /// <summary>Covers what the in-process secret detector finds, what it refuses to find, and what it reports about it.</summary>
 public sealed class SecretContentScannerTests

@@ -34,6 +34,7 @@ using MailFathom.Application.Retrieval.AskMail;
 using MailFathom.Application.Retrieval.AskMail.Audit;
 using MailFathom.Application.Rules.Evaluation;
 using MailFathom.Application.Rules.History;
+using MailFathom.Application.SensitiveContent;
 using MailFathom.Application.SensitiveContent.Detection;
 using MailFathom.Application.Synchronization;
 using MailFathom.Application.Synchronization.Checkpoints;
@@ -66,7 +67,8 @@ using MailFathom.Infrastructure.Secrets.References;
 using MailFathom.Infrastructure.Secrets.Resolution;
 using MailFathom.Infrastructure.Secrets.Sources;
 using MailFathom.Infrastructure.Security.OAuth;
-using MailFathom.Infrastructure.SensitiveContent;
+using MailFathom.Infrastructure.SensitiveContent.PersonalData;
+using MailFathom.Infrastructure.SensitiveContent.Secrets;
 using MailKit.Net.Imap;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
@@ -83,6 +85,27 @@ public static class ServiceCollectionExtensions
     /// <summary>The largest token endpoint response read, beyond which the request fails.</summary>
     /// <remarks>An RFC 6749 token response is a few hundred bytes; even a JWT access token stays well inside this. The limit exists so a replaced or compromised authorization server cannot make a synchronization run buffer an unbounded body.</remarks>
     private const int MailOAuthTokenResponseSizeLimitInBytes = 64 * 1024;
+
+    /// <summary>How many response bytes one analyzed character of text may produce, which bounds an analyzer answer.</summary>
+    /// <remarks>
+    /// An entity is reported as an object of about ninety bytes naming its type, its offsets, and its score, and the
+    /// shortest thing any recognizer matches is a handful of characters. Four characters per entity is therefore already
+    /// pessimistic, and the ceiling exists for the case that is not a scan at all: an address that answers with something
+    /// other than an analyzer must not be able to make a guarded read buffer an unbounded body. Exceeding it fails the
+    /// scan, which fails the operation closed like any other analyzer that could not answer.
+    /// </remarks>
+    private const int AnalyzerResponseBytesPerAnalyzedCharacter = 24;
+
+    /// <summary>What an analyzer answer costs beyond its entities, which is the JSON array around them.</summary>
+    private const int AnalyzerResponseEnvelopeBytes = 4 * 1024;
+
+    /// <summary>How much longer than one scan's own budget the analyzer transport waits before it gives up.</summary>
+    /// <remarks>
+    /// Deliberately looser than the configured per-scan budget, so a slow analyzer surfaces as this deployment's own
+    /// timeout — which the redactor reports as the scanner not answering in time and names the budget it spent — rather
+    /// than as a transport exception from underneath it that says nothing about a budget at all.
+    /// </remarks>
+    private static readonly TimeSpan AnalyzerTransportTimeoutMargin = TimeSpan.FromSeconds(30);
 
     /// <summary>Registers the secret reference grammar, the shipped scheme adapters, and the composite dispatch.</summary>
     /// <param name="services">The service collection.</param>
@@ -529,6 +552,35 @@ public static class ServiceCollectionExtensions
         return services;
     }
 
+    /// <summary>Registers the detector of personal data in mail text, which reaches an analyzer deployed beside this service.</summary>
+    /// <param name="services">The service collection.</param>
+    /// <returns>The service collection, for chaining.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="services" /> is <see langword="null" />.</exception>
+    /// <remarks>
+    /// <para>
+    /// Called only where the <c>Pii</c> switch is on, which is what makes an opt-in nobody took cost nothing: with it off
+    /// no client is registered, no analyzer address is read, and none of the three descriptors below exists. The composed
+    /// <see cref="PersonalDataAnalyzerProfile" /> is the host's to register, because where the analyzer is comes from
+    /// configuration this project does not bind.
+    /// </para>
+    /// <para>
+    /// The probe is registered beside the scanner rather than always, for the reason the catalog is: startup refuses a
+    /// switch that is on with nothing behind it, and either one present without the other would turn that refusal into a
+    /// scanner that runs and finds nothing.
+    /// </para>
+    /// </remarks>
+    public static IServiceCollection AddPersonalDataContentScanning(this IServiceCollection services)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+
+        services.AddSingleton<ISensitiveContentCatalog, PersonalDataContentCatalog>();
+        services.AddSingleton<ISensitiveContentScanner, PresidioContentScanner>();
+        services.AddSingleton<IPersonalDataAnalyzerProbe, PresidioAnalyzerProbe>();
+        AddPersonalDataAnalyzerClient(services);
+
+        return services;
+    }
+
     /// <summary>Registers the transport a mailbox token request is sent over.</summary>
     /// <remarks>
     /// <para>
@@ -573,4 +625,38 @@ public static class ServiceCollectionExtensions
         client.RemoveAllResilienceHandlers();
 #pragma warning restore EXTEXP0001
     }
+
+    /// <summary>Registers the transport the personal-data analyzer is reached over.</summary>
+    /// <remarks>
+    /// <para>
+    /// The analyzer's address is a base address here, unlike the provider clients, because a deployment reaches one
+    /// analyzer rather than an endpoint chosen per call. Redirects are refused because a redirect would carry the mail
+    /// content in the body to whatever host the answer named, which is the boundary this feature exists to keep the
+    /// content inside.
+    /// </para>
+    /// <para>
+    /// It keeps the standard resilience handler the host's service defaults add, which is the whole of this call's retry
+    /// story: an analyze request establishes what a text carries and changes nothing, so repeating one is safe, and the
+    /// call runs under no <c>OutboundDependency</c> pipeline for the handler to nest inside. The enclosing per-scan budget
+    /// bounds the attempts as a group, so an analyzer that is refusing costs the operation its budget once rather than the
+    /// handler's whole window.
+    /// </para>
+    /// <para>
+    /// Both bounds are read from the plan rather than from a snapshot, because this runs on the root provider whenever the
+    /// factory builds a client, and both take a restart to change.
+    /// </para>
+    /// </remarks>
+    private static void AddPersonalDataAnalyzerClient(IServiceCollection services) =>
+        services.AddHttpClient(PersonalDataAnalyzerProfile.TransportName)
+            .ConfigurePrimaryHttpMessageHandler(static () => new SocketsHttpHandler { AllowAutoRedirect = false })
+            .ConfigureHttpClient(static (provider, client) =>
+            {
+                var bounds = provider.GetRequiredService<SensitiveContentPlan>().Bounds;
+
+                client.BaseAddress = provider.GetRequiredService<PersonalDataAnalyzerProfile>().Endpoint;
+                client.Timeout = bounds.ScanTimeout + AnalyzerTransportTimeoutMargin;
+                client.MaxResponseContentBufferSize =
+                    ((long)bounds.MaximumAnalyzedCharacters * AnalyzerResponseBytesPerAnalyzedCharacter)
+                    + AnalyzerResponseEnvelopeBytes;
+            });
 }
