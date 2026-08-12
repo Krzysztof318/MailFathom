@@ -54,6 +54,11 @@ deploy/compose/secrets/mailfathom/*
 deploy/compose/config/*.json
 deploy/compose/compose.override.yaml
 
+# The Quadlet deployment reads nothing from this directory at run time — its files are copied into the operator's own
+# ~/.config — so the only thing to keep out is a configuration edited in place beside the example rather than after the
+# copy. It names the mailboxes a person reads, exactly as the Compose one does.
+deploy/quadlet/config/*.json
+
 # Agent sandboxes mask developer and editor configuration by bind-mounting an empty file over each
 # path, so these appear in the worktree as zero-byte files that `git add -A` will happily stage.
 # Listed without a trailing slash because the masked form is a file even where the real one is a

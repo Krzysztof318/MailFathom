@@ -143,23 +143,26 @@ writes `FETCH_HEAD`, so a repository with a missing or remapped
 base check against it. An unreachable remote is a failure and never degrades
 into verifying against the stale ref.
 
-Three cases in the contract suite that gate runs assert the licensing header
+Five cases in the contract suite that gate runs assert the licensing header
 rather than a script's behaviour. IDE0073 applies `.editorconfig`'s
 `file_header_template` to C# and reaches nothing else, so the workflows, the
-shell scripts, the chart, and the skills would each carry the mark only for as
-long as somebody remembered to type it, and nothing would say when one stopped.
-The cases read `git ls-files` against the real repository, which is what keeps
-the fixture checkouts the suite builds from either failing or satisfying them.
-Each surface states the same three lines in the form its own readers parse: a
-`.yml` or `.yaml` file opens with them as `#` comments, a `.sh` file carries them
+shell scripts, the chart, the documentation site's own assets, the Quadlet unit
+sources, and the skills would each carry the mark only for as long as somebody
+remembered to type it, and nothing would say when one stopped. The cases read
+`git ls-files` against the real repository, which is what keeps the fixture
+checkouts the suite builds from either failing or satisfying them. Each surface
+states the same three lines in the form its own readers parse: a `.yml` or
+`.yaml` file opens with them as `#` comments and so does a `.container`,
+`.network`, or `.volume` file under `deploy/quadlet/`, a `.sh` file carries them
 under the shebang that has to stay first, a file under
 `deploy/helm/mailfathom/templates/` carries them as a `{{- /* ... */ -}}` comment
-so the rendered manifest is unchanged, and a `SKILL.md` declares `license` and a
-`metadata` block instead, which is where the Agent Skills format puts them. All
-four are compared against the text parsed out of `.editorconfig`, so the header
-stays one decision written in one place: an edit to the template that leaves the
-other files behind fails as a disagreement rather than quietly splitting the mark
-in two.
+so the rendered manifest is unchanged, a `.js` module opens with them as `//`
+comments and a `.css` file as the one `/* ... */` block it has instead, and a
+`SKILL.md` declares `license` and a `metadata` block, which is where the Agent
+Skills format puts them. All of them are compared against the text parsed out of
+`.editorconfig`, so the header stays one decision written in one place: an edit
+to the template that leaves the other files behind fails as a disagreement rather
+than quietly splitting the mark in two.
 
 The suite runs in two places and the second one is not a convenience. `CI`'s
 `Workflow contracts` job runs it on every pull request, including a draft, and on

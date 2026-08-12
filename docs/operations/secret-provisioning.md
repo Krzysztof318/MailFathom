@@ -205,7 +205,24 @@ secrets:
     file: ./secrets/imap-primary-password
 ```
 
-**`LoadCredentialEncrypted=` does not reach this shape under either engine**, and what decides that is whether a systemd service manager starts the container rather than whether a container is involved at all. Compose starts no per-service unit under dockerd or under `podman compose` alike, so `$CREDENTIALS_DIRECTORY` never exists for the container and a `systemd-credential:` reference resolves to nothing. A Podman Quadlet sits on the other side of that line, because a `.container` file *is* a systemd unit source: a container started from one takes credentials exactly as the native service does, with the caveat that reaching the decrypted material there needs `SecurityLabelDisable=true` and so trades SELinux label separation for it. MailFathom ships no Quadlet. Here a secret is a file, protected by the host it sits on and by the permissions on the directory holding it rather than by anything the format carries.
+**`LoadCredentialEncrypted=` does not reach this shape under either engine**, and what decides that is whether a systemd service manager starts the container rather than whether a container is involved at all. Compose starts no per-service unit under dockerd or under `podman compose` alike, so `$CREDENTIALS_DIRECTORY` never exists for the container and a `systemd-credential:` reference resolves to nothing. Here a secret is a file, protected by the host it sits on and by the permissions on the directory holding it rather than by anything the format carries.
+
+### Podman Quadlet
+
+A Quadlet sits on the other side of that line, because a `.container` file *is* a systemd unit source: a container started from one takes credentials exactly as the native service does, and the deployment mounts the directory systemd created so that `systemd-credential:` references resolve inside the container.
+
+```ini
+[Container]
+Volume=%d:/etc/mailfathom/credentials:ro,Z
+Environment=CREDENTIALS_DIRECTORY=/etc/mailfathom/credentials
+
+[Service]
+LoadCredentialEncrypted=imap-primary-password:%h/.config/credstore.encrypted/imap-primary-password
+```
+
+The variable is restated for the container because systemd exports it to the process it starts, which is Podman rather than MailFathom, and Podman forwards nothing of its own environment.
+
+Two constraints come with the path and neither is MailFathom's. A per-user service manager can decrypt a user-scoped credential only since **systemd 258**, and on a host where SELinux is enforcing the credential files carry systemd's own label rather than the `container_file_t` a container may read — which is what the `Z` asks Podman to correct, and what `SecurityLabelDisable=true` would answer by turning off label separation for the whole container. [Deploying with Podman Quadlet](deployment-quadlet.md) states both in full, including why the units are rootless and what to do on a host that refuses the relabel.
 
 ### Kubernetes
 

@@ -2,8 +2,10 @@
 
 <!-- describes: deploy/docker/** -->
 
-`deploy/docker/Dockerfile` is the only image definition MailFathom has. Both deployment shapes in `deploy/` build from it,
-and nothing else produces an image, so what this page describes is what runs wherever MailFathom runs in a container.
+`deploy/docker/Dockerfile` is the only image definition MailFathom has. Every deployment shape in `deploy/` runs what it
+produces — the Compose file builds from it, and the Helm chart and the Podman Quadlet units name a published image built
+from it — and nothing else produces an image, so what this page describes is what runs wherever MailFathom runs in a
+container.
 
 The build context is the repository root, so the definition is named rather than found:
 
@@ -378,5 +380,6 @@ where it is worth running, by starting the Compose deployment by hand as
 ## Where the deployments are
 
 - [Docker Compose](deployment-compose.md)
+- [Podman Quadlet](deployment-quadlet.md)
 - [Kubernetes and Helm](deployment-kubernetes.md)
 - [Applying the database schema](database-schema.md)

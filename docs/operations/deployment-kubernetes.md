@@ -444,6 +444,7 @@ applied — is still not done anywhere. The repository runs no cluster of its ow
   startup failures it answers
 - [The container image](container-image.md) — what is inside it, how it runs, and why it carries no schema tool
 - [Docker Compose](deployment-compose.md) — the same contract in the other shape
+- [Podman Quadlet](deployment-quadlet.md) — the single-machine shape that provisions secrets as systemd credentials
 - [The platform TLS policy](platform-tls-policy.md) — for a mail server whose handshake the pod's own OpenSSL refuses;
   `config.extraEnvironment` names the file, and the chart currently has no hook for mounting it
 - [Configuration sources](configuration-sources.md), [secret provisioning](secret-provisioning.md),

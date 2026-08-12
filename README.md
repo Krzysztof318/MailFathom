@@ -21,7 +21,7 @@ git clone https://github.com/Krzysztof318/MailFathom.git
 cd MailFathom
 ```
 
-From there, [installing MailFathom](https://krzysztof318.github.io/MailFathom/users/installation.html) covers what every shape needs — Linux, PostgreSQL with the `vector` extension, an IMAP account, an explicit schema step — and routes you to the guide for Compose, Kubernetes, or a native systemd process. [Getting started](https://krzysztof318.github.io/MailFathom/users/getting-started.html) then walks from an installed instance to a first successful tool call: provisioning the secrets, configuring a mailbox, applying the schema, verifying health, enabling the MCP endpoint, and connecting a client.
+From there, [installing MailFathom](https://krzysztof318.github.io/MailFathom/users/installation.html) covers what every shape needs — Linux, PostgreSQL with the `vector` extension, an IMAP account, an explicit schema step — and routes you to the guide for Compose, [Podman Quadlet](https://krzysztof318.github.io/MailFathom/operations/deployment-quadlet.html), Kubernetes, or a native systemd process. [Getting started](https://krzysztof318.github.io/MailFathom/users/getting-started.html) then walks from an installed instance to a first successful tool call: provisioning the secrets, configuring a mailbox, applying the schema, verifying health, enabling the MCP endpoint, and connecting a client.
 
 To evaluate MailFathom from the checkout instead of deploying it, the local Aspire orchestration provisions PostgreSQL and applies the schema on its own. [Local development](https://krzysztof318.github.io/MailFathom/operations/local-development.html#running-locally-with-aspire) has that path.
 
@@ -131,9 +131,10 @@ MailFathom is built as an enterprise-grade system from the first line, even whil
 ### The deployment assets are hardened, not illustrative
 
 - The image is chiseled — no shell, no package manager, no HTTP client — runs as an unprivileged user on a read-only root filesystem with every Linux capability dropped, creates no diagnostic socket, and carries no tool that could apply a migration.
-- Docker Compose and the Helm chart both ship that posture by default, and the chart meets the Restricted Pod Security Standard.
+- Docker Compose, the Podman Quadlet units, and the Helm chart all ship that posture by default, and the chart meets the Restricted Pod Security Standard.
+- The Quadlet shape goes one step further on secrets: because a `.container` file is a systemd unit source, the deployment's credentials are encrypted at rest and bound to the machine, decrypted only as the unit starts.
 
-→ [The container image](https://krzysztof318.github.io/MailFathom/operations/container-image.html), [Compose](https://krzysztof318.github.io/MailFathom/operations/deployment-compose.html), [Kubernetes](https://krzysztof318.github.io/MailFathom/operations/deployment-kubernetes.html)
+→ [The container image](https://krzysztof318.github.io/MailFathom/operations/container-image.html), [Compose](https://krzysztof318.github.io/MailFathom/operations/deployment-compose.html), [Podman Quadlet](https://krzysztof318.github.io/MailFathom/operations/deployment-quadlet.html), [Kubernetes](https://krzysztof318.github.io/MailFathom/operations/deployment-kubernetes.html)
 
 ### The supply chain is verifiable
 

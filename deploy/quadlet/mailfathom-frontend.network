@@ -1,0 +1,16 @@
+# Copyright © 2026 Krzysztof Kasprowicz
+# Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
+# Project repository: https://github.com/Krzysztof318/MailFathom
+
+# What MailFathom reaches the outside world on: the mail servers it synchronizes and the model provider it is
+# configured against. The published ports attach here as well, so a reverse proxy terminating TLS in front of
+# MailFathom is put on this network rather than on the internal one below the database.
+#
+# Nothing here publishes a port by itself. Publishing is stated per container, in mailfathom.container, so the address
+# a socket is bound to lives beside the surface it serves.
+
+[Unit]
+Description=The MailFathom outbound network
+
+[Network]
+NetworkName=mailfathom-frontend

@@ -1,0 +1,142 @@
+# Copyright © 2026 Krzysztof Kasprowicz
+# Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
+# Project repository: https://github.com/Krzysztof318/MailFathom
+
+# MailFathom itself, started from a systemd unit source so that the credentials the native installation uses are
+# reachable from a container. docs/operations/deployment-quadlet.md is the guide: what to copy where, how the
+# credentials are produced, what SELinux costs, and when to choose this shape over deploy/compose/compose.yaml.
+#
+# This file applies no database schema and contains nothing that can. MailFathom never applies a schema change while
+# starting — it verifies the schema and refuses to serve against one it does not recognize — so starting the unit after
+# a version change tells you whether a migration is outstanding rather than silently applying one.
+
+[Unit]
+Description=MailFathom
+Wants=network-online.target
+After=network-online.target
+
+# A real dependency rather than Compose's approximation of one. mailfathom-postgres.container declares `Notify=healthy`,
+# so this unit is ordered after a database that answers rather than after a container that has been created, and
+# `Requires=` propagates a stop: a database that is taken down takes MailFathom with it instead of leaving it retrying
+# against nothing.
+Requires=mailfathom-postgres.service
+After=mailfathom-postgres.service
+
+# Podman creates a missing bind source as an empty directory rather than refusing, which would start MailFathom against
+# no configuration at all: synchronization off, no account, no MCP endpoint, and nothing saying why. The assertion
+# fails the unit with the path instead.
+AssertPathIsDirectory=%h/.config/mailfathom/config
+
+[Container]
+# There is no default version here, deliberately, and the placeholder is invalid on purpose: an unedited unit fails
+# with an unparseable image reference rather than pulling whatever a moving tag points at today. Replace <version> with
+# the release you are installing — `ghcr.io/krzysztof318/mailfathom` and `docker.io/krzysztof318/mailfathom` are the
+# same digest, so the registry is a question about your environment. Never a moving tag, and never a nightly
+# identifier; ADR 0004 defines the channels.
+Image=ghcr.io/krzysztof318/mailfathom:<version>
+ContainerName=mailfathom
+
+# Both networks. The internal one is how the database is reached; the other is how the mail servers and the configured
+# model provider are, and it is where a reverse proxy terminating TLS in front of MailFathom is attached.
+Network=mailfathom-backend.network
+Network=mailfathom-frontend.network
+
+# Bound to loopback by default. MailFathom speaks plain HTTP and terminates no TLS of its own, so publishing the
+# application port on another interface exposes synchronized mail without transport protection. Change the address only
+# once a reverse proxy is what listens publicly. Rootless Podman publishes no port below 1024 until
+# net.ipv4.ip_unprivileged_port_start allows it, which is a limit met by that proxy rather than by MailFathom.
+PublishPort=127.0.0.1:8080:8080
+# The probes, on a listener of their own. They answer without a credential, so which address their port is published on
+# is what controls who can ask them. A probe path asked on 8080 is answered with 404, and so is /mcp asked on 8081.
+PublishPort=127.0.0.1:8081:8081
+
+# The invoking user is uid 1654 — the image's own unprivileged account — inside this container. That is what makes the
+# credentials directory below readable: systemd restricts it to the unit's user, and under the default rootless mapping
+# uid 1654 would be a subordinate uid belonging to nobody. It also removes the file-mode arrangement the Compose
+# deployment needs, where the mounted directories and files have to be traversable and readable by an account that is
+# nobody's host user; here they are simply yours.
+UserNS=keep-id:uid=1654,gid=1654
+
+# Ordinary configuration, layered under the environment block below. See docs/operations/configuration-sources.md for
+# the precedence and for what a directory contributes; deploy/quadlet/config/10-mailfathom.json.example in the
+# repository is what the operator copies here.
+Volume=%h/.config/mailfathom/config:/etc/mailfathom/config:ro,Z
+
+# The credentials systemd decrypted for this unit. `%d` is $CREDENTIALS_DIRECTORY on the host, which exists only
+# because the [Service] section below asked for credentials, and the `Z` is what gives those files an SELinux label a
+# container may read — docs/operations/deployment-quadlet.md states what happens on a host where that relabel is
+# refused, and what the alternative costs.
+Volume=%d:/etc/mailfathom/credentials:ro,Z
+
+Environment=ASPNETCORE_ENVIRONMENT=Production
+
+# systemd exports $CREDENTIALS_DIRECTORY to the process it starts, which here is podman rather than MailFathom, and
+# podman forwards nothing of its own environment. So the variable is restated for the container, pointing at the mount
+# above: `systemd-credential:` references then resolve inside the container exactly as they do for the native service.
+Environment=CREDENTIALS_DIRECTORY=/etc/mailfathom/credentials
+
+# The MCP endpoint's own port. MailFathom refuses ASPNETCORE_HTTP_PORTS: each surface states where it is served in its
+# own configuration section.
+Environment=McpEndpoint__Port=8080
+Environment=ConfigurationSources__Directory=/etc/mailfathom/config
+
+# Composed here from parts that are not secret, so the password stays a credential: only it arrives through
+# Persistence__Password, as a reference systemd resolved.
+Environment=ConnectionStrings__mailfathom=Host=mailfathom-postgres;Port=5432;Database=mailfathom;Username=mailfathom
+Environment=Persistence__Password__Name=mailfathom-database-password
+Environment=Persistence__Password__SecretReference=systemd-credential:mailfathom-database-password
+
+# The same posture the image and the other two deployment shapes carry: nothing writable but one bounded tmpfs, no
+# capabilities, and no way to gain a privilege. /tmp is the one path the runtime needs to write.
+ReadOnly=true
+Tmpfs=/tmp:mode=1777,size=64m
+DropCapability=all
+NoNewPrivileges=true
+
+# No health check. The image declares none — it carries no shell and no HTTP client for one to run in — and one written
+# here would need the same thing inside the container. The probes are asked from outside instead, on the port published
+# above; docs/operations/health-endpoints.md states what each one answers.
+
+LogDriver=journald
+
+# Core dumps off inside the container as well as around it, which is the operational control
+# docs/operations/secret-provisioning.md names for secret material a process holds in memory.
+Ulimit=core=0
+
+# Longer than the host's own shutdown budget, which is derived from MailSynchronization:ShutdownDrainTimeout, so the
+# process finishes draining and exits rather than being killed mid-run.
+StopTimeout=60
+
+# No AutoUpdate=. An upgrade here is a decision with a schema step in front of it, so nothing moves the image on its
+# own; docs/operations/deployment-quadlet.md states the order.
+
+[Service]
+# One line per credential the configuration names, which is the grant: this unit reaches exactly these and nothing else
+# under ~/.config/credstore.encrypted/. Add a line when you add an account, and remove one when the account goes.
+#
+# Each names an absolute path rather than a bare credential name. A bare name is looked up in the credential store and
+# a miss is *not* fatal, so a typo would start the service with the credential silently absent; an absolute path that
+# does not exist fails the unit with the path in the message.
+#
+# The files are produced by `systemd-creds --user encrypt`, and a per-user service manager can decrypt one only since
+# systemd 258. docs/operations/deployment-quadlet.md states what an older systemd leaves available and what it gives up.
+LoadCredentialEncrypted=mailfathom-database-password:%h/.config/credstore.encrypted/mailfathom-database-password
+LoadCredentialEncrypted=imap-primary-password:%h/.config/credstore.encrypted/imap-primary-password
+LoadCredentialEncrypted=mcp-workstation-key:%h/.config/credstore.encrypted/mcp-workstation-key
+# Only when a mailbox authenticates with OAuth. See config/10-mailfathom.json.example.
+#LoadCredentialEncrypted=mailfathom-data-key:%h/.config/credstore.encrypted/mailfathom-data-key
+
+# Bound the in-memory exposure that no code-level measure addresses, for the process that decrypts every credential
+# above before handing it on.
+LimitCORE=0
+
+# The unit-level bounds this shape has and the Compose deployment approximates with `deploy.resources`.
+MemoryMax=1G
+CPUQuota=200%
+
+Restart=always
+# Above StopTimeout, so podman is the one that stops the container rather than systemd killing podman while it tries.
+TimeoutStopSec=90
+
+[Install]
+WantedBy=default.target

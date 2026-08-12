@@ -1,0 +1,14 @@
+# Copyright © 2026 Krzysztof Kasprowicz
+# Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
+# Project repository: https://github.com/Krzysztof318/MailFathom
+
+# Named rather than anonymous, and named the same thing the Compose deployment names it, so what holds the synchronized
+# mail is identifiable with `podman volume ls` and survives `systemctl --user stop mailfathom-postgres.service` and
+# every restart after it. Nothing in this directory removes it: destroying it is `podman volume rm`, an explicit act,
+# because rebuilding it costs a full IMAP resynchronization.
+
+[Unit]
+Description=The MailFathom database volume
+
+[Volume]
+VolumeName=mailfathom-postgres-data

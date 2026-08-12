@@ -164,6 +164,13 @@ __EFMigrationsHistory` — the schema is there and unreadable to the only role t
 
 [Deploying with Docker Compose](deployment-compose.md#starting) is where that step sits in the sequence.
 
+### Podman Quadlet
+
+The same command against the same container arrangement, reached through Podman rather than through Compose:
+`podman exec --interactive mailfathom-postgres sh -c '…'`, with the identical `sh -c` body and redirection. Everything
+above holds unchanged, including the role the script must be applied as.
+[Deploying with Podman Quadlet](deployment-quadlet.md#starting) is where that step sits in the sequence.
+
 ### Kubernetes
 
 Run it from wherever the database is already reachable — a bastion, a maintenance pod, or a port-forward from your own
@@ -312,8 +319,8 @@ and running it is a decision.
 
 ## Related
 
-- [Deploying with Docker Compose](deployment-compose.md) and [Deploying to Kubernetes](deployment-kubernetes.md) —
-  where the schema step sits in each deployment
+- [Deploying with Docker Compose](deployment-compose.md), [Deploying with Podman Quadlet](deployment-quadlet.md), and
+  [Deploying to Kubernetes](deployment-kubernetes.md) — where the schema step sits in each deployment
 - [The container image](container-image.md#the-schema) — why the image carries no schema tool
 - [The release procedure](release-procedure.md) — where the version in the artifact's name comes from
 - [Local development](local-development.md#ef-core-design-time-commands) — the `mailfathom-migrations` resource, which

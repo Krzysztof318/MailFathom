@@ -36,8 +36,9 @@ openssl rand -base64 33 | tr -d '\n' > mcp-workstation-key
 Where the files go is the deployment's convention: `secrets/mailfathom/` for
 [Compose](../operations/deployment-compose.md#credentials), a Kubernetes `Secret` mounted at
 `/etc/mailfathom/secrets` for [the chart](../operations/deployment-kubernetes.md#what-you-supply), `LoadCredential=`
-for [systemd](../operations/secret-provisioning.md#native-systemd-service). The references below assume the mounted
-directory the Compose and Helm shapes share.
+for [systemd](../operations/secret-provisioning.md#native-systemd-service), and an encrypted credential under
+`~/.config/credstore.encrypted/` for [the Quadlet](../operations/deployment-quadlet.md#the-credentials). The references
+below assume the mounted directory the Compose and Helm shapes share.
 
 ## 2. Configure the mailbox
 

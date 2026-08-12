@@ -78,7 +78,7 @@ docker compose up -d postgres    # creates the role, the database, and the vecto
 docker compose up -d
 ```
 
-[Deploying with Docker Compose](https://krzysztof318.github.io/MailFathom/operations/deployment-compose.html) is the full guide, including the schema command, the network boundary, upgrading, and backup. [Deploying on Kubernetes](https://krzysztof318.github.io/MailFathom/operations/deployment-kubernetes.html) covers the Helm chart at `oci://ghcr.io/krzysztof318/charts/mailfathom`, which meets the Restricted Pod Security Standard.
+[Deploying with Docker Compose](https://krzysztof318.github.io/MailFathom/operations/deployment-compose.html) is the full guide, including the schema command, the network boundary, upgrading, and backup. [Deploying on Kubernetes](https://krzysztof318.github.io/MailFathom/operations/deployment-kubernetes.html) covers the Helm chart at `oci://ghcr.io/krzysztof318/charts/mailfathom`, which meets the Restricted Pod Security Standard. [Deploying with Podman Quadlet](https://krzysztof318.github.io/MailFathom/operations/deployment-quadlet.html) runs the same single-machine stack as rootless systemd units, which is what lets this image take its secrets as encrypted systemd credentials instead of as plaintext files.
 
 ## How the image runs
 

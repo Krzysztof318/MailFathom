@@ -4068,9 +4068,9 @@ workflow_scripts_use_flat_manual_layout() {
 
 # The per-file licensing mark, everywhere the analyzer that applies it cannot reach. IDE0073 reads
 # C# and rewrites a `.cs` header to match `file_header_template`, so the source files stay consistent
-# without anyone typing one; the workflows, the scripts, the chart, and the skills get no such
-# repair, and a file added to any of them would travel out of this repository stating neither who
-# owns it nor what terms it arrives under. These three cases are that missing analyzer.
+# without anyone typing one; the workflows, the scripts, the chart, the unit sources, and the skills
+# get no such repair, and a file added to any of them would travel out of this repository stating
+# neither who owns it nor what terms it arrives under. These four cases are that missing analyzer.
 #
 # The expected text is read from `.editorconfig` rather than restated here, which is what keeps the
 # three forms one header: an edit to the template that leaves these files behind fails as a
@@ -4143,6 +4143,27 @@ every_browser_asset_carries_the_license_header() {
       failures=$(( failures + 1 ))
     fi
   done < <(git -C "$source_repository_root" ls-files -- '*.js' '*.mjs' '*.css')
+
+  (( failures == 0 ))
+}
+
+# The Podman Quadlet sources under deploy/quadlet/. A systemd unit file is an INI document whose
+# comment character is `#`, so it carries the same three lines a workflow does rather than a form of
+# its own — but no glob above reaches it, and Quadlet reads the extension rather than the content, so
+# a `.container`, `.network`, or `.volume` file would otherwise be the one deployment asset that
+# states neither who owns it nor what terms it arrives under.
+every_container_unit_carries_the_license_header() {
+  local file expected actual failures=0
+  expected="$(comment_license_header)"
+
+  while IFS= read -r file; do
+    actual="$(head -n 3 "$source_repository_root/$file")"
+
+    if [[ "$actual" != "$expected" ]]; then
+      printf '%s does not open with the license header\n' "$file" >&2
+      failures=$(( failures + 1 ))
+    fi
+  done < <(git -C "$source_repository_root" ls-files -- '*.container' '*.network' '*.volume' '*.pod')
 
   (( failures == 0 ))
 }
@@ -4342,6 +4363,7 @@ run_test the_development_tooling_never_reaches_a_published_artifact
 run_test workflow_scripts_use_flat_manual_layout
 run_test every_yaml_file_carries_the_license_header
 run_test every_browser_asset_carries_the_license_header
+run_test every_container_unit_carries_the_license_header
 run_test every_shell_script_carries_the_license_header
 run_test every_skill_declares_its_license
 
