@@ -105,11 +105,18 @@ public sealed class MailboxSynchronizer
     /// Thrown when a recovered connection reselected the folder with a different UIDVALIDITY, so the identities this
     /// run was working with no longer name the same emails. The next run starts the folder over.
     /// </exception>
+    /// <exception cref="RemoteFolderCreationRefusedException">
+    /// Thrown when the mapping asked for its folder to be created and the mail server refused to hold one at that path.
+    /// It fails this folder's run and no other, and it is deliberately not the unresolved alias below: a quota, a
+    /// namespace that forbids the name, or a name the server will not accept asks the operator for something different
+    /// from a path they mistyped.
+    /// </exception>
     /// <remarks>
     /// <para>
     /// The alias is resolved against the server's advertised folders before anything is read, so a run always works
     /// under the binding that is durable at the moment it starts. An alias the server advertises no folder for ends
-    /// this run and no other.
+    /// this run and no other, unless its mapping asked for the folder to be created, in which case the run creates it
+    /// and binds it exactly as it binds a folder it discovered.
     /// </para>
     /// <para>
     /// The account's synchronization window is read at the same moment as its transport security policy and bounds

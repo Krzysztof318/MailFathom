@@ -240,6 +240,70 @@ public sealed class MailFolderParticipationOptionsTests
         Assert.Empty(results);
     }
 
+    /// <summary>
+    /// A folder that does not exist advertises no role, so creating one from a role would mean either an extension
+    /// whose support is uneven or MailFathom inventing a name in somebody's own mailbox. Writing the path the folder is
+    /// to be created at is one line of configuration, so the contradiction is refused where it binds.
+    /// </summary>
+    [Fact]
+    public void ValidateForSynchronization_ARoleMappingAskingToBeCreated_IsRefusedNamingTheFolder()
+    {
+        // Arrange
+        var options = OptionsFor(CreateAccount(new MailFolderMappingOptions
+        {
+            Alias = "junk",
+            SpecialUse = "Junk",
+            CreateIfMissing = true,
+        }));
+
+        // Act
+        var messages = options.ValidateForSynchronization().Select(result => result.ErrorMessage!).ToArray();
+
+        // Assert
+        Assert.Contains(
+            messages,
+            message => message.Contains("'junk'", StringComparison.Ordinal)
+                && message.Contains("RemotePath", StringComparison.Ordinal));
+    }
+
+    /// <summary>The switch belongs to a configured path, which is the only mapping that names where a folder would be created.</summary>
+    [Fact]
+    public void ValidateForSynchronization_APathMappingAskingToBeCreated_ReportsNoError()
+    {
+        // Arrange
+        var options = OptionsFor(CreateAccount(new MailFolderMappingOptions
+        {
+            Alias = "archive",
+            RemotePath = "Archief/2026",
+            CreateIfMissing = true,
+        }));
+
+        // Act
+        var results = options.ValidateForSynchronization().ToArray();
+
+        // Assert
+        Assert.Empty(results);
+    }
+
+    /// <summary>Explicitly declining a creation beside a role says nothing a role mapping cannot do, so it is not the contradiction above.</summary>
+    [Fact]
+    public void ValidateForSynchronization_ARoleMappingDecliningCreation_ReportsNoError()
+    {
+        // Arrange
+        var options = OptionsFor(CreateAccount(new MailFolderMappingOptions
+        {
+            Alias = "junk",
+            SpecialUse = "Junk",
+            CreateIfMissing = false,
+        }));
+
+        // Act
+        var results = options.ValidateForSynchronization().ToArray();
+
+        // Assert
+        Assert.Empty(results);
+    }
+
     private static MailSynchronizationOptions OptionsFor(MailSynchronizationAccountOptions account) =>
         new() { Accounts = [account] };
 

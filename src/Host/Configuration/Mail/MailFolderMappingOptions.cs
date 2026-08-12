@@ -41,6 +41,14 @@ internal sealed class MailFolderMappingOptions : IValidatableObject
     /// <summary>Gets or sets whether MCP tools may list, search, read, or answer from the folder.</summary>
     public bool? VisibleToTools { get; set; }
 
+    /// <summary>Gets or sets whether MailFathom may create the folder when the server advertises none at <see cref="RemotePath" />.</summary>
+    /// <remarks>
+    /// It defaults to <see langword="false" />, unlike the three switches above, because it authorizes an act against
+    /// the operator's mail server rather than withdrawing an existing folder from something MailFathom does locally.
+    /// Leaving it out therefore keeps a mistyped path reporting itself as an alias that resolves to nothing.
+    /// </remarks>
+    public bool? CreateIfMissing { get; set; }
+
     /// <summary>Gets what this configured folder takes part in, with every unset switch reading as its default.</summary>
     internal MailFolderParticipation Participation => MailFolderParticipation.Create(
         this.Synchronize ?? true,
@@ -56,7 +64,11 @@ internal sealed class MailFolderMappingOptions : IValidatableObject
 
         if (!string.IsNullOrWhiteSpace(this.RemotePath))
         {
-            return MailFolderMapping.ToRemotePath(alias, RemoteFolderPath.Create(this.RemotePath), this.Participation);
+            return MailFolderMapping.ToRemotePath(
+                alias,
+                RemoteFolderPath.Create(this.RemotePath),
+                this.Participation,
+                this.CreateIfMissing ?? false);
         }
 
         if (TryParseSpecialUse(this.SpecialUse, out var specialUse))
@@ -92,6 +104,13 @@ internal sealed class MailFolderMappingOptions : IValidatableObject
             yield return new ValidationResult(
                 $"Folder alias '{this.Alias}' names special-use role '{this.SpecialUse}', which is not supported. Supported roles are {string.Join(", ", Enum.GetNames<MailFolderSpecialUse>())}.",
                 [nameof(this.SpecialUse)]);
+        }
+
+        if (namesSpecialUse && this.CreateIfMissing is true)
+        {
+            yield return new ValidationResult(
+                $"Folder alias '{this.Alias}' asks for its folder to be created while naming a special-use role, and a folder that does not exist advertises no role. Name the path the folder is to be created at in 'RemotePath'.",
+                [nameof(this.CreateIfMissing)]);
         }
 
         foreach (var result in this.ValidateConfiguredValues(namesRemotePath))

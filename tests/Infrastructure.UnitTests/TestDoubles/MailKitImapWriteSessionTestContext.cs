@@ -199,7 +199,7 @@ internal static class MailKitImapWriteSessionTestContext
     /// Written out rather than reached through <see cref="LoggerFactory" />, because the framework's
     /// <see cref="Logger{T}" /> takes ownership of a factory that nothing here would ever release.
     /// </remarks>
-    private sealed class RecordingCategoryLogger<TCategory> : ILogger<TCategory>
+    internal sealed class RecordingCategoryLogger<TCategory> : ILogger<TCategory>
     {
         private readonly ILogger inner;
 

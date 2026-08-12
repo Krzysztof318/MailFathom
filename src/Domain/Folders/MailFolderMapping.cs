@@ -16,13 +16,15 @@ public sealed record MailFolderMapping
         MailFolderMappingTarget target,
         RemoteFolderPath? remotePath,
         MailFolderSpecialUse? specialUse,
-        MailFolderParticipation participation)
+        MailFolderParticipation participation,
+        bool mayCreateMissingFolder)
     {
         this.Alias = alias;
         this.Target = target;
         this.RemotePath = remotePath;
         this.SpecialUse = specialUse;
         this.Participation = participation;
+        this.MayCreateMissingFolder = mayCreateMissingFolder;
     }
 
     /// <summary>Gets the operator-facing folder name.</summary>
@@ -45,20 +47,40 @@ public sealed record MailFolderMapping
     /// </remarks>
     public MailFolderParticipation Participation { get; }
 
+    /// <summary>Gets whether MailFathom may create the folder on the mail server when the account's server advertises none at the configured path.</summary>
+    /// <remarks>
+    /// <para>
+    /// It defaults to <see langword="false" /> and is the one switch on a mapping that authorizes an act against
+    /// somebody else's mail server rather than withdrawing a folder from something MailFathom does locally, which is
+    /// why it does not follow the participation switches in defaulting to <see langword="true" />. A mapping that says
+    /// nothing therefore behaves as it did before creation existed, and a mistyped path stays an alias that resolves to
+    /// nothing rather than becoming a folder named after the mistake.
+    /// </para>
+    /// <para>
+    /// It is expressible only alongside a configured path, because a folder that does not exist advertises no role and
+    /// nothing here may invent a name for one. That is a property of the factories rather than a rule stated elsewhere:
+    /// <see cref="ToSpecialUse" /> takes no such argument, so a role mapping can never carry it.
+    /// </para>
+    /// </remarks>
+    public bool MayCreateMissingFolder { get; }
+
     /// <summary>Maps an alias onto the server-advertised path an operator wrote.</summary>
     /// <param name="alias">The operator-facing folder name.</param>
     /// <param name="remotePath">The remote path the alias names.</param>
     /// <param name="participation">How far the folder is admitted, or <see langword="null" /> for a folder that takes part in everything.</param>
+    /// <param name="mayCreateMissingFolder">Whether the folder may be created when the server advertises none at that path.</param>
     /// <returns>A mapping resolved by matching the advertised path.</returns>
     public static MailFolderMapping ToRemotePath(
         MailFolderAlias alias,
         RemoteFolderPath remotePath,
-        MailFolderParticipation? participation = null) => new(
+        MailFolderParticipation? participation = null,
+        bool mayCreateMissingFolder = false) => new(
             alias,
             MailFolderMappingTarget.RemotePath,
             remotePath,
             specialUse: null,
-            participation ?? MailFolderParticipation.Full);
+            participation ?? MailFolderParticipation.Full,
+            mayCreateMissingFolder);
 
     /// <summary>Maps an alias onto a special-use role, so the server's own naming stays out of configuration.</summary>
     /// <param name="alias">The operator-facing folder name.</param>
@@ -84,6 +106,7 @@ public sealed record MailFolderMapping
             MailFolderMappingTarget.SpecialUse,
             remotePath: null,
             specialUse,
-            participation ?? MailFolderParticipation.Full);
+            participation ?? MailFolderParticipation.Full,
+            mayCreateMissingFolder: false);
     }
 }

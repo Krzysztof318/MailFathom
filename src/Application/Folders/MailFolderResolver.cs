@@ -11,9 +11,17 @@ namespace MailFathom.Application.Folders;
 
 /// <summary>Turns a configured alias into the durable binding synchronization reads under.</summary>
 /// <remarks>
+/// <para>
 /// Resolution runs before every synchronization run rather than once, because the folder an alias names is the
 /// server's answer and the server is free to change it. The run that observes a different remote folder is also the
 /// run that starts its new generation, so no work is ever committed under a binding that has not been recorded.
+/// </para>
+/// <para>
+/// It is also where a folder a mapping asked to have created comes into existence, which is one rule covering both the
+/// folder that is mirrored and the folder that is only a destination rather than two triggers to keep in step. Nothing
+/// is created by reading configuration and nothing is created for a mapping nothing ever resolves; after the first
+/// creation the server advertises the folder, so a later run matches it and issues no second creation.
+/// </para>
 /// </remarks>
 public sealed class MailFolderResolver
 {
@@ -21,6 +29,7 @@ public sealed class MailFolderResolver
     private const string MandatoryInboxPath = "INBOX";
 
     private readonly IRemoteFolderCatalog remoteFolderCatalog;
+    private readonly IRemoteFolderCreator remoteFolderCreator;
     private readonly IMailFolderResolutionStore resolutionStore;
     private readonly IMailFolderMappingChangeAuditor mappingChangeAuditor;
     private readonly IPersistenceSessionFactory persistenceSessionFactory;
@@ -29,12 +38,14 @@ public sealed class MailFolderResolver
     /// <summary>Initializes a new folder resolver.</summary>
     public MailFolderResolver(
         IRemoteFolderCatalog remoteFolderCatalog,
+        IRemoteFolderCreator remoteFolderCreator,
         IMailFolderResolutionStore resolutionStore,
         IMailFolderMappingChangeAuditor mappingChangeAuditor,
         IPersistenceSessionFactory persistenceSessionFactory,
         TimeProvider timeProvider)
     {
         this.remoteFolderCatalog = remoteFolderCatalog;
+        this.remoteFolderCreator = remoteFolderCreator;
         this.resolutionStore = resolutionStore;
         this.mappingChangeAuditor = mappingChangeAuditor;
         this.persistenceSessionFactory = persistenceSessionFactory;
@@ -49,6 +60,7 @@ public sealed class MailFolderResolver
     /// <returns>The durable binding, or the reason the alias resolved to no single advertised folder.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="mapping" /> is <see langword="null" />.</exception>
     /// <exception cref="PersistenceConcurrencyConflictException">Thrown when a competing writer recorded a binding for the same alias first.</exception>
+    /// <exception cref="RemoteFolderCreationRefusedException">Thrown when a mapping asked for its folder to be created and the mail server refused to hold one at that path.</exception>
     /// <remarks>
     /// A binding that already matches the advertised folder is returned without a write and without an audit record.
     /// A binding that names a different remote folder is replaced by the next generation, which starts with no
@@ -68,17 +80,20 @@ public sealed class MailFolderResolver
             cancellationToken);
 
         var matchedFolders = FindAdvertisedMatches(mapping, advertisedFolders);
-        if (matchedFolders.Count == 0)
-        {
-            return MailFolderResolutionResult.NoAdvertisedFolderMatched();
-        }
 
         if (matchedFolders.Count > 1)
         {
             return MailFolderResolutionResult.AdvertisedFoldersAreAmbiguous();
         }
 
-        var advertisedPath = matchedFolders[0].Path;
+        RemoteFolderPath? matchedPath = matchedFolders.Count == 1
+            ? matchedFolders[0].Path
+            : await this.CreateConfiguredFolderAsync(accountId, mapping, transportSecurityPolicy, cancellationToken);
+
+        if (matchedPath is not { } advertisedPath)
+        {
+            return MailFolderResolutionResult.NoAdvertisedFolderMatched();
+        }
 
         var currentResolution =
             await this.resolutionStore.GetCurrentResolutionAsync(accountId, mapping.Alias, cancellationToken);
@@ -95,6 +110,39 @@ public sealed class MailFolderResolver
         await this.RecordNewBindingAsync(accountId, currentResolution, newResolution, cancellationToken);
 
         return MailFolderResolutionResult.Resolved(newResolution);
+    }
+
+    /// <summary>Creates the folder a mapping asked to have created, and reports nothing for a mapping that asked for none.</summary>
+    /// <returns>The created folder as the server advertises it, or <see langword="null" /> when the alias simply resolved to nothing.</returns>
+    /// <remarks>
+    /// <para>
+    /// Only a mapping naming an explicit path reaches a creation, and only one whose <c>CreateIfMissing</c> switch is
+    /// on. Everything else keeps the unresolved alias, which is the only report a mistyped path ever produces: creating
+    /// the folder would make the mistake succeed and leave a folder named after it on somebody's mail server.
+    /// </para>
+    /// <para>
+    /// The path comes back as the server advertises it rather than as it was configured, because the two differ in the
+    /// hierarchy delimiter the binding is compared against on every later run. Binding the configured text instead would
+    /// repoint the alias and start a generation on the run after the one that created the folder.
+    /// </para>
+    /// </remarks>
+    private async Task<RemoteFolderPath?> CreateConfiguredFolderAsync(
+        MailAccountId accountId,
+        MailFolderMapping mapping,
+        MailTransportSecurityPolicy transportSecurityPolicy,
+        CancellationToken cancellationToken)
+    {
+        if (mapping is not { MayCreateMissingFolder: true, RemotePath: { } configuredPath })
+        {
+            return null;
+        }
+
+        return await this.remoteFolderCreator.CreateFolderAsync(
+            accountId,
+            mapping.Alias,
+            configuredPath,
+            transportSecurityPolicy,
+            cancellationToken);
     }
 
     /// <summary>Finds every advertised folder a mapping names, so an alias that names more than one is answerable.</summary>

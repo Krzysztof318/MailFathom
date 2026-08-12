@@ -161,19 +161,31 @@ A folder entry names `Alias` (required — your stable name for the folder) and 
 server's own path) or `SpecialUse` (a role discovery resolves: `Inbox`, `Archive`, `Drafts`, `Sent`, `Junk`, `Trash`,
 `All`, `Flagged`, `Important`). Configuring no folder synchronizes the inbox by role.
 
-The same entry decides what MailFathom does with the folder, through three switches that each default to `true`:
+The same entry decides what MailFathom does with the folder, through three switches that each default to `true`, and
+whether the folder may be created at all, through a fourth that defaults to `false`:
 
 | Key | Type | Default | Constraint | Change |
 | --- | --- | --- | --- | --- |
 | `…:Folders:<n>:Synchronize` | bool | `true` | With `false`, no run schedules the folder: no connection is opened for it and nothing of it is stored | reload; the next run stops scheduling it and begins erasing what is stored for it |
 | `…:Folders:<n>:GenerateEmbeddings` | bool | `true` | With `false`, stored mail of the folder is never cut into passages and never reaches an embedding provider; refused alongside `Synchronize: false` | reload; governs what is stored from then on, and passages already produced stay |
 | `…:Folders:<n>:VisibleToTools` | bool | `true` | With `false`, no MCP tool lists, searches, reads, or answers from the folder; refused alongside `Synchronize: false` | reload; the next request reads the new value |
+| `…:Folders:<n>:CreateIfMissing` | bool | `false` | With `true`, the folder is created on the mail server when the server advertises none at `RemotePath`; refused alongside `SpecialUse` | reload; the next resolution of the alias creates it |
 
 Startup refuses a folder that asks for embedding or tool visibility while `Synchronize` is `false`, naming the alias,
 because a folder that stores nothing has nothing to embed and nothing a tool could read. Leaving a switch out is not
 asking for it, so `Synchronize: false` on its own binds. Mirrored, embedded, and withheld from tools binds as well and
 costs what it says: the vectors are produced and paid for while no reader reaches them, since the tools are the only
 readers there are.
+
+`CreateIfMissing` is the one switch here that authorizes an act against your mail server rather than withdrawing an
+existing folder from something MailFathom does locally, which is why it defaults to `false` while the other three
+default to `true`: a mapping that says nothing keeps a mistyped `RemotePath` reporting itself as an alias that resolves
+to nothing, instead of turning the mistake into a folder named after it. Startup refuses it beside a `SpecialUse`
+mapping, naming the alias, because a folder that does not exist advertises no role. Renaming, deleting, and
+unsubscribing from a folder stay refused outright, and no folder MailFathom did not create is ever subscribed to.
+[A folder the mapping asked for is created](../features/imap-synchronization.md#a-folder-the-mapping-asked-for-is-created)
+states when the creation happens, what it does with a folder that already exists and with a hierarchical path, and what
+a server's refusal reports.
 
 Switching `Synchronize` off for a folder that was mirrored **erases what is stored for it**, in bounded passes on the
 account's own runs and through the deletion path an erasing disposition already uses. The mapping stays, so the alias

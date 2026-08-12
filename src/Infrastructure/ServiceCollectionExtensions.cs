@@ -427,6 +427,12 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IMailboxWriteSessionFactory>(provider => new MailKitImapWriteSessionFactory(
             provider.GetRequiredService<MailboxWriteConnectionPool>(),
             provider.GetRequiredService<MailboxMutationTelemetry>()));
+        // Registered beside the write session and against the same pool, because a creation is issued over the account's
+        // one write connection. It is a separate port rather than a method on the session above, so a component holding
+        // one of the two can never reach the other.
+        services.AddScoped<IRemoteFolderCreator>(provider => new MailKitRemoteFolderCreator(
+            provider.GetRequiredService<MailboxWriteConnectionPool>(),
+            provider.GetRequiredService<ILogger<MailKitRemoteFolderCreator>>()));
         // The record is written before the session that acts on it is opened, so the store is registered beside the
         // other repositories that take a persistence session rather than with the mail adapters above.
         services.AddScoped<IMailboxMutationRecordStore, MailboxMutationRecordStore>();

@@ -1738,6 +1738,7 @@ public sealed class MailboxSynchronizerTests
 
         return new MailFolderResolver(
             remoteFolderCatalog,
+            Substitute.For<IRemoteFolderCreator>(),
             Substitute.For<IMailFolderResolutionStore>(),
             Substitute.For<IMailFolderMappingChangeAuditor>(),
             persistenceSessionFactory,
@@ -1767,6 +1768,7 @@ public sealed class MailboxSynchronizerTests
 
         return new MailFolderResolver(
             remoteFolderCatalog,
+            Substitute.For<IRemoteFolderCreator>(),
             resolutionStore,
             Substitute.For<IMailFolderMappingChangeAuditor>(),
             persistenceSessionFactory,

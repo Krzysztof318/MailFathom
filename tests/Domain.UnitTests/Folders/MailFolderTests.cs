@@ -175,6 +175,56 @@ public sealed class MailFolderTests
         Assert.Null(mapping.RemotePath);
     }
 
+    /// <summary>
+    /// A mapping that says nothing about creation authorizes none. The asymmetry with the participation switches is the
+    /// decision rather than an oversight: those withdraw a folder that already exists from something MailFathom does
+    /// locally, while this one would have it act against somebody's mail server.
+    /// </summary>
+    [Fact]
+    public void ToRemotePath_NoCreationNamed_MayNotCreateTheFolder()
+    {
+        // Arrange
+        var alias = MailFolderAlias.Create("archive");
+
+        // Act
+        var mapping = MailFolderMapping.ToRemotePath(alias, RemoteFolderPath.Create("Archief"));
+
+        // Assert
+        Assert.False(mapping.MayCreateMissingFolder);
+    }
+
+    /// <summary>A folder that does not exist advertises no role, so a role mapping is structurally unable to carry the authorization.</summary>
+    [Fact]
+    public void ToSpecialUse_AnyRole_MayNotCreateTheFolder()
+    {
+        // Arrange
+        var alias = MailFolderAlias.Create("junk");
+
+        // Act
+        var mapping = MailFolderMapping.ToSpecialUse(alias, MailFolderSpecialUse.Junk);
+
+        // Assert
+        Assert.False(mapping.MayCreateMissingFolder);
+    }
+
+    [Fact]
+    public void ToRemotePath_CreationAsked_CarriesTheAuthorizationBesideTheConfiguredPath()
+    {
+        // Arrange
+        var alias = MailFolderAlias.Create("archive");
+
+        // Act
+        var mapping = MailFolderMapping.ToRemotePath(
+            alias,
+            RemoteFolderPath.Create("Archief"),
+            participation: null,
+            mayCreateMissingFolder: true);
+
+        // Assert
+        Assert.True(mapping.MayCreateMissingFolder);
+        Assert.Equal("Archief", mapping.RemotePath!.Value.Value);
+    }
+
     /// <summary>A mapping written before the switches existed still means the same thing, which is what keeps an existing configuration unchanged.</summary>
     [Fact]
     public void ToRemotePath_NoParticipationNamed_TakesPartInEverything()

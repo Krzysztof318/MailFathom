@@ -669,6 +669,53 @@ An alias that resolves to no single folder ends that one folder's run and no oth
 folders continue — a mistyped alias is a configuration mistake, not a mail-server failure, and the three are logged as
 different things because each asks the operator for something different.
 
+### A folder the mapping asked for is created
+
+A mapping naming a `RemotePath` may also ask for that folder to be **created** when the server advertises none at it.
+`CreateIfMissing` is the switch, it defaults to `false`, and it is the only thing that ever makes MailFathom change the
+shape of a mailbox. Everything else about folder management stays refused: nothing here renames a folder, deletes one,
+or unsubscribes from one, and no folder MailFathom did not create is ever subscribed to.
+
+The default is the opposite way round from the three participation switches, and deliberately so. Those withdraw a
+folder that already exists from something MailFathom does locally; this one authorizes an act against your mail server.
+So a mapping that says nothing behaves exactly as it did before creation existed, and a mistyped `RemotePath` stays the
+unresolved alias above rather than becoming a folder on your server named after the mistake.
+
+Creation happens **where the alias is resolved** — before the run of a mirrored folder, and on demand for a folder that
+is only a destination — which is one rule covering both rather than two triggers to keep in step. Nothing is created by
+reading configuration, and nothing is created for a mapping nothing ever resolves. After the first creation the server
+advertises the folder, so resolution finds it and no further `CREATE` is issued.
+
+What the creation does with the awkward parts of IMAP is fixed rather than left to the server that was tested against:
+
+- **A folder already at the path is success**, not a failure. A `CREATE` the server refuses is followed by one lookup of
+  the path; a folder now advertised there means another client — or another MailFathom process — created it between the
+  listing and the attempt.
+- **The path is split with the delimiter the server reports** through `NAMESPACE`, never an assumed `/`. The configured
+  text is the server's own path and is never rewritten; the delimiter only says where its levels are.
+- **The ancestors the configured path names are created first**, in order, each skipped where it is already there. Every
+  one of them is a name you wrote, so none of them is a folder nobody named.
+- **A name the server already holds as a hierarchy container, or as a node holding no mail, is refused.** Discovery
+  leaves both out of the catalog, so the alias resolves to nothing while the name is taken, and what that needs is a
+  different path rather than an act MailFathom can take for you.
+- **The created folder is subscribed to**, so it appears in a mail client that lists subscriptions and you can find mail
+  a rule filed there. A server that refuses the subscription does not fail the creation — the folder exists, which is
+  what was asked for — and the refusal is logged as a warning naming the alias.
+
+A creation the server refuses fails as itself, under error code `26001` and with a message naming the alias alone. It is
+deliberately distinguishable from the alias that resolves to nothing: a quota, a namespace that forbids the name, or a
+name the server will not accept each ask you for something different from a path you mistyped.
+
+`CreateIfMissing: true` beside a `SpecialUse` mapping **fails startup**, naming the alias. A folder that does not exist
+advertises no role, so creating one from a role would mean either an extension whose support is uneven or MailFathom
+inventing a name in your own mailbox — and writing the path you wanted is one line of configuration.
+
+The creation is issued over the account's **single write connection**, the same one the mutations run over, so it costs
+no second login. It reaches that connection through a port of its own, `IRemoteFolderCreator`, rather than through the
+write session: a component that can file a message into a folder cannot create one, and a component that can create one
+cannot relocate, delete, flag, or copy a message. A created folder then binds, resolves, and appears in the
+mapping-change audit exactly as a discovered one does.
+
 ### Why a binding carries a generation
 
 The repository treats `(account, folder, UIDVALIDITY, UID)` as the stable remote occurrence identity, and that tuple
@@ -1375,7 +1422,7 @@ The extraction backfill has a section of its own rather than a block inside the 
 
 Every configured account carries a `DisplayName`, whether or not synchronization is enabled, because the stored copy stays readable after the switch is turned off and the name is what a caller reads the account back as. There is no fallback to `AccountId`: a name MailFathom invented would be published to callers as though an operator had chosen it. The two share one naming space — a request may name an account by either — so startup refuses a display name another account's identifier or display name already carries, compared without regard to case; one equal to the account's own identifier is accepted, since both spellings then reach the same mailbox.
 
-When enabled, at least one account with a non-blank `AccountId`, host, and user name must be configured. The account password is not a configuration value at all: `Secrets.Password` carries a reference, and startup fails when it cannot be resolved. Each entry of `Folders` names an alias and exactly one of `RemotePath` and `SpecialUse`; naming both, naming neither, or naming a role that does not exist fails startup with a message identifying the alias. Supported roles are `Inbox`, `Archive`, `Drafts`, `Sent`, `Junk`, `Trash`, `All`, `Flagged`, and `Important`. If an account omits `Folders`, its supervisor applies the post-binding default of one alias `inbox` mapped to the inbox role; explicit folder lists replace that default.
+When enabled, at least one account with a non-blank `AccountId`, host, and user name must be configured. The account password is not a configuration value at all: `Secrets.Password` carries a reference, and startup fails when it cannot be resolved. Each entry of `Folders` names an alias and exactly one of `RemotePath` and `SpecialUse`; naming both, naming neither, or naming a role that does not exist fails startup with a message identifying the alias. Supported roles are `Inbox`, `Archive`, `Drafts`, `Sent`, `Junk`, `Trash`, `All`, `Flagged`, and `Important`. An entry naming a `RemotePath` may additionally set `CreateIfMissing`, which defaults to `false` and is what [creates the folder](#a-folder-the-mapping-asked-for-is-created) when the server advertises none at that path; setting it beside a `SpecialUse` fails startup naming the alias. If an account omits `Folders`, its supervisor applies the post-binding default of one alias `inbox` mapped to the inbox role; explicit folder lists replace that default.
 
 ### Bounding how far back a run reaches
 
