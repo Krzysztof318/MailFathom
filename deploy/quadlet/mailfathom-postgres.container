@@ -15,11 +15,17 @@ Description=PostgreSQL for MailFathom
 Wants=network-online.target
 After=network-online.target
 
-# Podman creates a missing bind source as an empty directory rather than refusing, so an uncopied initialization script
-# would initialize a database with no `mailfathom` role, no `mailfathom` database, and no `vector` extension — a
-# PostgreSQL that starts and reports healthy while nothing MailFathom needs exists in it. The assertion fails the unit
-# with the path instead, before the data directory is written and while it is still empty enough to fix.
-AssertPathIsDirectory=%h/.config/mailfathom/postgres-init
+# The initialization script itself, named rather than the directory holding it, because the directory is created by a
+# separate step of the setup and passes an existence check while still holding nothing. Without the script this
+# container initializes a database with no `mailfathom` role, no `mailfathom` database, and no `vector` extension, and
+# then reports healthy — the health check below verifies the server rather than its contents — so the failure surfaces
+# as `mailfathom.service` unable to connect as a role that was never created. The assertion fails this unit instead,
+# before the data directory is written and while it is still empty enough to fix.
+#
+# `IsExecutable` rather than `Exists`, because the mode is load-bearing: the image's entrypoint executes a script in
+# docker-entrypoint-initdb.d that carries the bit and *sources* one that does not, and this script sets `errexit` and
+# `pipefail`, which sourcing would impose on the entrypoint's own shell.
+AssertFileIsExecutable=%h/.config/mailfathom/postgres-init/10-create-mailfathom-database.sh
 
 [Container]
 # pgvector rather than plain postgres: the schema declares the `vector` extension and the stock image cannot create it.

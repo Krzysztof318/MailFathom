@@ -22,10 +22,13 @@ After=network-online.target
 Requires=mailfathom-postgres.service
 After=mailfathom-postgres.service
 
-# Podman creates a missing bind source as an empty directory rather than refusing, which would start MailFathom against
-# no configuration at all: synchronization off, no account, no MCP endpoint, and nothing saying why. The assertion
-# fails the unit with the path instead.
-AssertPathIsDirectory=%h/.config/mailfathom/config
+# At least one file MailFathom will actually read, which is a narrower thing than the directory existing. Podman
+# creates a missing bind source as an empty directory rather than refusing, the setup creates that directory in a step
+# of its own, and MailFathom layers in `*.json` and nothing else — so a directory that is absent, empty, or holds only
+# the tracked `.json.example` all produce the same start: synchronization off, no account, no MCP endpoint, and nothing
+# saying why. The glob covers all three and couples to no particular file name, so a deployment that splits its
+# configuration across `10-` and `20-` files satisfies it unchanged.
+AssertPathExistsGlob=%h/.config/mailfathom/config/*.json
 
 [Container]
 # There is no default version here, deliberately, and the placeholder is invalid on purpose: an unedited unit fails

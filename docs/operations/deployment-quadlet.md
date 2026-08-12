@@ -109,7 +109,17 @@ cp deploy/compose/postgres/10-create-mailfathom-database.sh ~/.config/mailfathom
 The last line is not a mistake. The database initialization script is the Compose deployment's, reused rather than
 forked, which is why the database container mounts its credentials at `/run/secrets`: that is the path the script
 already reads. One file describes how the role, the database, and the `vector` extension are created, and both shapes
-meet it.
+meet it. Keep its executable bit — `cp` preserves it under an ordinary `umask` — because the image's entrypoint
+*executes* a script in that directory that carries the bit and *sources* one that does not.
+
+**Both units assert those two files rather than the directories holding them**, and it is worth knowing why before a
+start fails naming one. Podman creates a missing bind source as an empty directory instead of refusing, and the `mkdir`
+above creates both directories a step earlier, so a skipped or mistyped `cp` leaves something that exists and is empty.
+An empty `postgres-init` initializes a database with no `mailfathom` role and then reports healthy, and an empty
+`config` starts MailFathom with synchronization off and no account. Neither says why, which is what the assertions are
+for: `AssertFileIsExecutable=` on the initialization script, and `AssertPathExistsGlob=` on `*.json` in the
+configuration directory — the latter also catching the directory that holds only the tracked `.json.example`, which
+MailFathom does not read.
 
 Then edit `~/.config/containers/systemd/mailfathom.container` and replace `<version>` in `Image=` with the release you
 are installing. The placeholder is invalid on purpose, so an unedited unit fails with an unparseable image reference
