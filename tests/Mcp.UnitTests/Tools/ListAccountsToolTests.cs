@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.Accounts;
+using MailFathom.Application.Emails.Mailboxes;
 using MailFathom.Application.Synchronization.Checkpoints;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Folders;
@@ -10,6 +11,7 @@ using MailFathom.Domain.Synchronization;
 using MailFathom.Mcp.Tools;
 using MailFathom.Mcp.Tools.Results;
 using MailFathom.Mcp.UnitTests.TestDoubles;
+using MailFathom.TestSupport;
 using Xunit;
 
 namespace MailFathom.Mcp.UnitTests.Tools;
@@ -168,6 +170,13 @@ public sealed class ListAccountsToolTests
         StubMailAccountCatalog catalog,
         params MailboxFolderFreshness[] folderFreshness) =>
         new(
-            new MailAccountDirectoryReader(catalog, new StubSynchronizationFreshnessReader(folderFreshness)),
+            new MailAccountDirectoryReader(
+                catalog,
+                new StubSynchronizationFreshnessReader(folderFreshness),
+                new MailboxScopeResolver(
+                    catalog,
+                    StubMailFolderParticipation.Nothing,
+                    StubJunkMailFolderCatalog.None,
+                    StubMailFolderMappings.ResolvingNothing)),
             catalog);
 }

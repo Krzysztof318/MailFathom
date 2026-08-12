@@ -669,7 +669,7 @@ public sealed class MailboxQuestionReaderTests
                 answerer),
             new MailboxScopeResolver(
                 CatalogServing(MailAccountId.Create(ServedAccountId)),
-                StubMailFolderParticipation.Everything,
+                StubMailFolderParticipation.Nothing,
                 StubJunkMailFolderCatalog.None,
                 StubMailFolderMappings.ResolvingNothing),
             spendLedger ?? LedgerAdmitting(),

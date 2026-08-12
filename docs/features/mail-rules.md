@@ -475,6 +475,15 @@ are whatever they were on the day the switch was flipped and nothing will ever c
 would act on a mailbox MailFathom stopped observing. The exclusion is applied where the candidates are read rather than
 after they come back, which is what keeps such a message from sitting at the head of the arrival queue forever.
 
+**Both passes reach only the folders the account's configuration mirrors.** A rule is evaluated against mail in a folder
+a mapping names and leaves synchronized, and against no other mail. Two kinds of stored mail are outside that, and both
+are mail this deployment keeps: a folder whose `Synchronize` was switched off keeps what it had already stored, and a
+folder whose mapping was removed keeps it as well. Neither is evaluated again, by an arrival pass or by a whole-mailbox
+run, because nothing refreshes either — a rule acting on such a message would flag, file, or delete mail against a
+mailbox state nobody here is still reading.
+[What a mapping decides beyond where the folder is](imap-synchronization.md#what-a-mapping-decides-beyond-where-the-folder-is)
+states what each of the two is and what makes both unreachable everywhere else too.
+
 **A rule declaring `Arrival` applies to mail that arrives after the rule exists.** Each message is evaluated once, and
 the record of that
 evaluation is what takes it out of the queue the next pass reads — so editing a rule changes what happens to the mail
@@ -513,8 +522,8 @@ declaring no automatic trigger keeps it out of every arrival pass without taking
 ## Running the rules over mail you already have
 
 Editing a rule is only useful if the rules can be applied to mail that arrived before the edit, and that is what a
-**whole-mailbox run** is: a walk over everything stored for one account, evaluating each message again under the rules
-now in force.
+**whole-mailbox run** is: a walk over everything stored for the folders one account mirrors, evaluating each message
+again under the rules now in force.
 
 - **One per account, and asking twice is asking once.** A request that finds a run already outstanding is answered with
   that run rather than starting a second walk of the same mailbox.

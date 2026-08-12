@@ -77,7 +77,10 @@ internal sealed class SynchronizationFreshnessReader(MailFathomDbContext dbConte
 
         // A folder this read returns nothing from is withheld from how fresh it is as well. The timestamp says a folder
         // exists and when it was last read, which is exactly what a caller must not learn about a folder they may not
-        // read — and what would name the junk folder to a caller who did not ask for it.
-        return AccountScopedMailFolders.Excluding(folders, scope.WithheldFolders);
+        // read — and what would name the junk folder to a caller who did not ask for it, or a folder no mapping names
+        // to a caller whose deployment no longer has it.
+        folders = AccountScopedMailFolders.Admitting(folders, scope.ReadableFolders);
+
+        return AccountScopedMailFolders.Excluding(folders, scope.WithheldJunkFolders);
     }
 }

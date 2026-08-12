@@ -589,7 +589,7 @@ public sealed class ListEmailsToolTests
 
         // Assert
         Assert.NotNull(timeline.LastFilter);
-        Assert.Equal([junkFolder], timeline.LastFilter.Selection.Scope.WithheldFolders);
+        Assert.Equal([junkFolder], timeline.LastFilter.Selection.Scope.WithheldJunkFolders);
         Assert.False(result.IncludedJunkMail);
     }
 
@@ -609,7 +609,7 @@ public sealed class ListEmailsToolTests
 
         // Assert
         Assert.NotNull(timeline.LastFilter);
-        Assert.Empty(timeline.LastFilter.Selection.Scope.WithheldFolders);
+        Assert.Empty(timeline.LastFilter.Selection.Scope.WithheldJunkFolders);
         Assert.True(result.IncludedJunkMail);
     }
 
@@ -645,7 +645,7 @@ public sealed class ListEmailsToolTests
             freshness ?? new StubSynchronizationFreshnessReader(),
             new MailboxScopeResolver(
                 new StubMailAccountCatalog(ServedAccountId),
-                StubMailFolderParticipation.Everything,
+                StubMailFolderParticipation.Nothing,
                 junkFolders ?? StubJunkMailFolderCatalog.None,
                 folderMappings.Resolver),
             egressGuard ?? SensitiveContentEgressGuards.Inactive()),

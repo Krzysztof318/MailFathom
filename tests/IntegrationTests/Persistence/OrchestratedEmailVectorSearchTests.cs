@@ -62,7 +62,7 @@ public sealed class OrchestratedEmailVectorSearchTests(MailFathomOrchestrationFi
         // Act
         var candidates = await services.InScopeAsync(
             (scope, token) => scope.GetRequiredService<IEmailVectorSearchIndexReader>().ReadNearestCandidatesAsync(
-                SelectionOf(binding),
+                SelectionOf(scope, binding),
                 profile,
                 QueryVector(),
                 limit: 50,
@@ -93,10 +93,9 @@ public sealed class OrchestratedEmailVectorSearchTests(MailFathomOrchestrationFi
         return EmbeddingVector.Create(components);
     }
 
-    private static MailboxEmailSelection SelectionOf(MailFolderResolution binding) => MailboxEmailSelection.Create(
-        MailboxScope.Create(
-            [SyntheticMailAccount.AccountId],
-            [new MailFolderIdentity(SyntheticMailAccount.AccountId, binding.Alias)]),
+    private static MailboxEmailSelection SelectionOf(IServiceProvider scope, MailFolderResolution binding) =>
+        MailboxEmailSelection.Create(
+        OrchestratedMailboxScope.Readable(scope, [binding.Alias.Value]),
         senderAddress: null,
         recipientAddress: null,
         subjectFragment: null,

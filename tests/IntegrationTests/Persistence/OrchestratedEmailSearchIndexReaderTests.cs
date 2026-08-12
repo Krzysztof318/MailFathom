@@ -182,7 +182,7 @@ public sealed class OrchestratedEmailSearchIndexReaderTests(MailFathomOrchestrat
         EmailSearchSnippetBounds? snippetBounds = null) => services.InScopeAsync(
             (scope, token) => RankedWindowAsync(
                 scope.GetRequiredService<IEmailSearchIndexReader>(),
-                selection ?? SeededSelection(),
+                selection ?? SeededSelection(scope),
                 queryText,
                 snippetBounds ?? EmailSearchSnippetBounds.Default,
                 token),
@@ -212,10 +212,8 @@ public sealed class OrchestratedEmailSearchIndexReaderTests(MailFathomOrchestrat
             cancellationToken);
     }
 
-    private static MailboxEmailSelection SeededSelection() => MailboxEmailSelection.Create(
-        MailboxScope.Create(
-            [SyntheticMailAccount.AccountId],
-            [new MailFolderIdentity(SyntheticMailAccount.AccountId, MailFolderAlias.Create(FolderAlias))]),
+    private static MailboxEmailSelection SeededSelection(IServiceProvider scope) => MailboxEmailSelection.Create(
+        OrchestratedMailboxScope.Readable(scope, [FolderAlias]),
         senderAddress: null,
         recipientAddress: null,
         subjectFragment: null,
@@ -233,7 +231,9 @@ public sealed class OrchestratedEmailSearchIndexReaderTests(MailFathomOrchestrat
 
         await EnsureSeededAsync(services, binding, cancellationToken);
 
-        return SeededSelection();
+        return await services.InScopeAsync(
+            (scope, _) => Task.FromResult(SeededSelection(scope)),
+            cancellationToken);
     }
 
     /// <summary>Writes the seeded volume once, through the production write path that derives the search documents.</summary>

@@ -24,7 +24,7 @@ public sealed class MailboxScopeResolver
 
     /// <summary>Initializes the resolver.</summary>
     /// <param name="accountCatalog">Answers which accounts this deployment serves.</param>
-    /// <param name="folderParticipation">Answers which folders no tool may read from.</param>
+    /// <param name="folderParticipation">Answers which folders a tool may read from.</param>
     /// <param name="junkFolders">Answers which folder each account advertises as its junk folder.</param>
     /// <param name="folderReferences">Turns the alias or the role a request named into the folder of an account it means.</param>
     /// <exception cref="ArgumentNullException">Thrown when any argument is <see langword="null" />.</exception>
@@ -74,10 +74,13 @@ public sealed class MailboxScopeResolver
     /// requested ones, take part in a continuation cursor's fingerprint.
     /// </para>
     /// <para>
-    /// A folder an operator withheld from tools is withheld here, once, rather than by each read model — which is what
-    /// makes "no tool lists, searches, reads, or answers from it" a property of the system instead of a list of places
-    /// somebody has to keep complete. A tool that read the mailbox some other way would bypass it, which is why the two
-    /// reads that reach an email by its identifier ask the same configuration directly rather than building a scope.
+    /// The folders a tool may read are named here, once, rather than by each read model — which is what makes "no tool
+    /// lists, searches, reads, or answers from it" a property of the system instead of a list of places somebody has to
+    /// keep complete. It is stated as what is admitted rather than as what is withheld, because the store holds rows of
+    /// folders configuration no longer names and no list of withheld names reaches those: a folder nobody mapped is a
+    /// folder MailFathom does not have, and it stays out by not being admitted. A tool that read the mailbox some other
+    /// way would bypass this, which is why the two reads that reach an email by its identifier ask the same
+    /// configuration directly rather than building a scope.
     /// </para>
     /// <para>
     /// The junk folder is withheld here too, and it is a different kind of decision from the one above: an operator did
@@ -138,20 +141,22 @@ public sealed class MailboxScopeResolver
             this.ResolvedFolders(accountsInScope, folders));
 
         return resolvedScope
-            .Hiding(this.folderParticipation.FoldersHiddenFromTools)
+            .RestrictedTo(this.folderParticipation.FoldersVisibleToTools)
             .WithJunkMail(junkMail, this.junkFolders.JunkFolders);
     }
 
     /// <summary>Reports whether a tool may read one email, given the mailbox it was stored from.</summary>
     /// <param name="accountId">The account the email was read from.</param>
     /// <param name="folderAlias">The folder the email was read from.</param>
-    /// <returns><see langword="true" /> when the deployment serves that account and no configuration withholds that folder.</returns>
+    /// <returns><see langword="true" /> when the deployment serves that account and a mapping admits that folder to tools.</returns>
     /// <remarks>
     /// This is <see cref="ReadableScope" /> asked about one email instead of about a query, and it exists because two
     /// reads reach an email by its identifier and build no scope at all. Both questions are answered from the same two
     /// pieces of configuration here, so a folder an operator withheld cannot be readable through one entry point and
-    /// withheld through another. A caller that may not read the email is told it was not found rather than refused, for
-    /// the reason an account this deployment no longer serves is: a refusal would confirm the identifier exists.
+    /// withheld through another. It is a mapping being asked to admit the folder rather than a list being asked whether
+    /// it names it, so an email stored under an alias no mapping names is unreadable by the same answer that withholds a
+    /// mapped folder. A caller that may not read the email is told it was not found rather than refused, for the reason
+    /// an account this deployment no longer serves is: a refusal would confirm the identifier exists.
     /// </remarks>
     public bool IsReadableByTools(MailAccountId accountId, MailFolderAlias folderAlias) =>
         this.accountCatalog.ServedAccounts.Any(account => account.Id == accountId)

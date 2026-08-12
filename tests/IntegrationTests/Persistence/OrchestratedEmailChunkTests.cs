@@ -141,6 +141,39 @@ public sealed class OrchestratedEmailChunkTests(MailFathomOrchestrationFixture o
     }
 
     /// <summary>
+    /// A folder no mapping names is cut into no passages either, which is the case an exclusion could never have
+    /// covered: no list of configured folders carries a folder nobody configured.
+    /// </summary>
+    /// <remarks>
+    /// It is a separate test from the one above rather than a second case of it, because the two arrangements differ in
+    /// what configuration says: there the folder is mapped and its embedding switch is off, here nothing names it at
+    /// all. The mapped folder beside it is the control the absence needs.
+    /// </remarks>
+    [Fact]
+    public async Task UpsertMetadataAsync_AFolderNoMappingNames_CutsNoPassagesAndLeavesTheRestCut()
+    {
+        // Arrange
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var services = await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken);
+        var unmappedBinding = await OrchestratedFolderBinding.CommitAsync(
+            services,
+            SyntheticMailAccount.UnmappedFolderAlias,
+            cancellationToken);
+        var mappedBinding = await OrchestratedFolderBinding.CommitAsync(services, FolderAlias, cancellationToken);
+        var uncutOccurrenceId = SyntheticEmail.OccurrenceIn(unmappedBinding, uid: 9005);
+        var cutOccurrenceId = SyntheticEmail.OccurrenceIn(mappedBinding, uid: 9005);
+        var body = BodyOfSeveralPassages("unmapped");
+
+        // Act
+        await StoreAsync(services, uncutOccurrenceId, "chunks-unmapped", body, cancellationToken);
+        await StoreAsync(services, cutOccurrenceId, "chunks-mapped", body, cancellationToken);
+
+        // Assert
+        Assert.Empty(await ReadPassagesAsync(services, uncutOccurrenceId, cancellationToken));
+        Assert.NotEmpty(await ReadPassagesAsync(services, cutOccurrenceId, cancellationToken));
+    }
+
+    /// <summary>
     /// An oversized message is bounded rather than refused, and what the ceiling left out is written on the message in
     /// the same transaction as the passages it did cut.
     /// </summary>

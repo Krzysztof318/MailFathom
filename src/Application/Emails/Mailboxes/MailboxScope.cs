@@ -18,8 +18,9 @@ namespace MailFathom.Application.Emails.Mailboxes;
 /// </para>
 /// <para>
 /// A request that names no folder is restricted to none: an empty folder list means every folder of the accounts in
-/// scope. An account in scope that appears in no pair while others do is the opposite case — it maps no folder the
-/// request named, and contributes nothing.
+/// scope, which is every folder configuration admits rather than every folder the store holds rows for. An account in
+/// scope that appears in no pair while others do is the opposite case — it maps no folder the request named, and
+/// contributes nothing.
 /// </para>
 /// <para>
 /// Both lists are deduplicated and ordered when the scope is created, so two requests that name the same accounts in a
@@ -54,13 +55,13 @@ public sealed record MailboxScope
         this.SelectedFolders = selectedFolders;
     }
 
-    /// <summary>Gets the scope that restricts nothing, which is what a deployment serving no account resolves to.</summary>
+    /// <summary>Gets the scope that names no account, no folder, and nothing readable, which is what a deployment serving no account resolves to.</summary>
     /// <remarks>
     /// A read never runs against it in a deployment that serves accounts, because resolution replaces an unnamed account
-    /// list with the served ones before the scope is built. A use case handed it therefore answers with nothing rather
-    /// than reading the store unrestricted.
+    /// list with the served ones and names every readable folder before the scope is built. A use case handed it
+    /// answers with nothing, which is what a deployment holding no mapping has to mean: there is no folder to read.
     /// </remarks>
-    public static MailboxScope Unrestricted { get; } = new([], []);
+    public static MailboxScope NothingReadable { get; } = new([], []);
 
     /// <summary>Gets the accounts the query is restricted to, deduplicated and ordered, or empty when the request named none.</summary>
     public IReadOnlyList<MailAccountId> AccountIds { get; }
@@ -73,7 +74,7 @@ public sealed record MailboxScope
     /// because a role means a different folder on each account: <c>role:Junk</c> across two accounts is two pairs
     /// rather than two names either account might carry. Reading the aliases alone would admit a folder of the second
     /// account that happens to share the first account's junk alias and plays no role at all — the same mistake
-    /// <c>AccountScopedMailFolders</c> exists to prevent on the withholding side.
+    /// <c>AccountScopedMailFolders</c> exists to prevent on the admitting side.
     /// </para>
     /// <para>
     /// An account of <see cref="AccountIds" /> that appears in no pair while the list is non-empty contributes nothing,
@@ -83,45 +84,42 @@ public sealed record MailboxScope
     /// </remarks>
     public IReadOnlyList<MailFolderIdentity> SelectedFolders { get; }
 
-    /// <summary>Gets the folders no query built from this scope may return anything from, ordered, or empty when none is withheld.</summary>
+    /// <summary>Gets the only folders a query built from this scope may return anything from, ordered, or empty when none may.</summary>
     /// <remarks>
-    /// It is the opposite kind of value from the two above: those are what a caller asked for, this is what configuration
-    /// withholds whatever the caller asked for. A request that names a hidden folder explicitly is therefore answered
-    /// with nothing from it rather than refused, which is the same answer a folder that holds no matching mail gives — a
-    /// refusal would tell the caller the folder is there.
+    /// <para>
+    /// It is the opposite kind of value from the two above: those are what a caller asked for, this is what
+    /// configuration admits whatever the caller asked for. A request that names a folder outside it is therefore
+    /// answered with nothing from that folder rather than refused, which is the same answer a folder that holds no
+    /// matching mail gives — a refusal would tell the caller the folder is there.
+    /// </para>
+    /// <para>
+    /// Empty means no folder is readable, never that every folder is. A mapping is what makes MailFathom have a folder
+    /// at all, so a scope nothing narrowed is a scope over a deployment that maps nothing, and reading it as an open
+    /// mailbox would publish the rows of every folder an operator ever removed. <see cref="MailboxScopeResolver" />
+    /// is what fills it, and a scope built any other way reads nothing by construction rather than by convention.
+    /// </para>
     /// </remarks>
-    public IReadOnlyList<MailFolderIdentity> HiddenFolders { get; private init; } = [];
+    public IReadOnlyList<MailFolderIdentity> ReadableFolders { get; private init; } = [];
 
     /// <summary>Gets the junk folders this read returns nothing from, ordered, or empty when the caller asked for junk or no account maps one.</summary>
     /// <remarks>
-    /// Kept apart from <see cref="HiddenFolders" /> although both narrow the same query, because the two answer different
-    /// questions and only one of them can be overridden. A hidden folder is withheld from every tool by an operator's
-    /// decision and no caller may reach it; the junk folder is withheld by default and reached by a caller that asks.
-    /// Merging them would make the override able to reveal a folder the operator withheld.
+    /// Kept apart from <see cref="ReadableFolders" /> although both narrow the same query, because the two answer
+    /// different questions and only one of them can be overridden. A folder outside the readable set is withheld by an
+    /// operator's decision, or absent from configuration altogether, and no caller may reach it; the junk folder is
+    /// mapped, readable, and withheld by default, and a caller that asks reaches it. Merging them would make the
+    /// override able to reveal a folder the operator withheld.
     /// </remarks>
     public IReadOnlyList<MailFolderIdentity> WithheldJunkFolders { get; private init; } = [];
 
     /// <summary>Gets whether the caller asked for the junk folder's mail.</summary>
     /// <remarks>
-    /// Unlike the two withheld lists, this is the caller's own decision, so it takes part in a continuation cursor's
-    /// fingerprint: including junk adds rows in the middle of an ordering, which a walk resumed under the other answer
-    /// would either skip or repeat. The lists themselves stay out of the fingerprint for the reason
-    /// <see cref="Hiding" /> gives — they are configuration, and a reload must not invalidate an outstanding cursor.
+    /// Unlike the readable and the withheld lists, this is the caller's own decision, so it takes part in a continuation
+    /// cursor's fingerprint: including junk adds rows in the middle of an ordering, which a walk resumed under the other
+    /// answer would either skip or repeat. The lists themselves stay out of the fingerprint for the reason
+    /// <see cref="RestrictedTo" /> gives — they are configuration, and a reload must not invalidate an outstanding
+    /// cursor.
     /// </remarks>
     public bool IncludesJunkMail { get; private init; }
-
-    /// <summary>Gets every folder this read returns nothing from, whichever decision withheld it.</summary>
-    /// <remarks>
-    /// What a query needs is the union, because a predicate does not care why a folder is out. Both callers of it — the
-    /// stored-email predicate and the folder freshness read — take this rather than either list, so a folder cannot be
-    /// withheld from the mail and still named in the freshness beside it.
-    /// </remarks>
-    public IReadOnlyList<MailFolderIdentity> WithheldFolders =>
-    [
-        .. this.HiddenFolders
-            .Concat(this.WithheldJunkFolders)
-            .DistinctBy(static folder => (folder.AccountId.Value, folder.Alias.Value)),
-    ];
 
     /// <summary>Creates the scope a query runs with, from identities already resolved against configuration.</summary>
     /// <param name="accountIds">The accounts the query runs against, which are the served ones when a request named none.</param>
@@ -152,28 +150,28 @@ public sealed record MailboxScope
         ];
 
         return accounts.Length is 0 && folders.Length is 0
-            ? Unrestricted
+            ? NothingReadable
             : new MailboxScope(accounts, folders);
     }
 
-    /// <summary>Withholds the folders configuration says no tool may read from.</summary>
-    /// <param name="hiddenFolders">The folders to withhold, empty when none is.</param>
-    /// <returns>The same scope with the folders withheld, or this scope unchanged when none is.</returns>
+    /// <summary>Admits the folders configuration says a tool may read from, and nothing else.</summary>
+    /// <param name="readableFolders">The folders a tool may read, empty when none may.</param>
+    /// <returns>The same scope restricted to those folders, or this scope unchanged when none is readable.</returns>
     /// <remarks>
     /// Ordered and deduplicated so one configuration produces one predicate, whichever order the folders were read in.
     /// It deliberately does not take part in a continuation cursor's fingerprint, unlike the two requested lists: those
     /// are the caller's filters, and a walk resumed under different ones would return a page that does not follow the
-    /// previous one. Hiding a folder only removes rows from an unchanged ordering, so an outstanding cursor stays
-    /// consistent, and unhiding one adds rows the walk may already have passed — which is what a keyset walk over a
+    /// previous one. Withdrawing a folder only removes rows from an unchanged ordering, so an outstanding cursor stays
+    /// consistent, and admitting one adds rows the walk may already have passed — which is what a keyset walk over a
     /// live mailbox does about newly arrived mail anyway.
     /// </remarks>
-    internal MailboxScope Hiding(IReadOnlyList<MailFolderIdentity> hiddenFolders) => hiddenFolders.Count == 0
+    internal MailboxScope RestrictedTo(IReadOnlyList<MailFolderIdentity> readableFolders) => readableFolders.Count == 0
         ? this
         : this with
         {
-            HiddenFolders =
+            ReadableFolders =
             [
-                .. hiddenFolders
+                .. readableFolders
                     .DistinctBy(static folder => (folder.AccountId.Value, folder.Alias.Value))
                     .OrderBy(static folder => folder.AccountId.Value, StringComparer.Ordinal)
                     .ThenBy(static folder => folder.Alias.Value, StringComparer.Ordinal),

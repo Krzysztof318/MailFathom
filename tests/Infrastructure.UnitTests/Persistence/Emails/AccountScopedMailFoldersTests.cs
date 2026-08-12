@@ -10,7 +10,7 @@ using Xunit;
 
 namespace MailFathom.Infrastructure.UnitTests.Persistence.Emails;
 
-/// <summary>Covers the narrowing every read applies to the folders a configuration decision took out of it.</summary>
+/// <summary>Covers the narrowing every read applies to the folders a configuration decision admitted or took out of it.</summary>
 /// <remarks>
 /// The predicate is composed here and evaluated by PostgreSQL, so what these tests establish is which rows it selects
 /// rather than what SQL it becomes. That distinction is the whole point of the account-and-alias pair: a predicate
@@ -189,6 +189,76 @@ public sealed class AccountScopedMailFoldersTests
         Assert.Equal(
             [("work", "SPAM"), ("home", "JUNK")],
             selectedFolders.AsEnumerable().Select(folder => (folder.MailboxAccountId, folder.Alias)));
+    }
+
+    /// <summary>An admission is the folders configuration maps, so a folder it stopped naming is no longer read.</summary>
+    [Fact]
+    public void Admitting_AFolderConfigurationNoLongerMaps_LeavesItsStoredMailUnreadable()
+    {
+        // Arrange
+        var emails = Emails(("work", "INBOX"), ("work", "REMOVED"), ("home", "INBOX"));
+        var admitted = new[]
+        {
+            new MailFolderIdentity(MailAccountId.Create("work"), MailFolderAlias.Create("INBOX")),
+            new MailFolderIdentity(MailAccountId.Create("home"), MailFolderAlias.Create("INBOX")),
+        };
+
+        // Act
+        var readable = AccountScopedMailFolders.Admitting(emails, admitted);
+
+        // Assert
+        Assert.Equal(
+            [("work", "INBOX"), ("home", "INBOX")],
+            readable.AsEnumerable().Select(email => (email.MailboxAccountId, email.MailFolder.Alias)));
+    }
+
+    /// <summary>The empty admission is the one that separates this from a caller's filter: it admits nothing.</summary>
+    [Fact]
+    public void Admitting_NoFolderAdmitted_LeavesNothingReadable()
+    {
+        // Arrange
+        var emails = Emails(("work", "INBOX"), ("home", "INBOX"));
+
+        // Act
+        var readable = AccountScopedMailFolders.Admitting(emails, []);
+
+        // Assert
+        Assert.Empty(readable);
+    }
+
+    /// <summary>An admission belongs to one account, so the same alias elsewhere is admitted by that account or not at all.</summary>
+    [Fact]
+    public void Admitting_AFolderOfOneAccount_LeavesOutTheSameAliasOfAnotherAccount()
+    {
+        // Arrange
+        var emails = Emails(("work", "PRIVATE"), ("home", "PRIVATE"));
+
+        // Act
+        var readable = AccountScopedMailFolders.Admitting(emails, [WorkPrivate]);
+
+        // Assert
+        Assert.Equal(["work"], readable.AsEnumerable().Select(email => email.MailboxAccountId));
+    }
+
+    /// <summary>The freshness a tool reports is read from the bindings, so an unmapped folder may not be named there either.</summary>
+    [Fact]
+    public void Admitting_FolderBindings_KeepsTheAdmittedPairsOnly()
+    {
+        // Arrange
+        var folders = new[]
+        {
+            Folder("work", "PRIVATE"),
+            Folder("work", "REMOVED"),
+            Folder("home", "PRIVATE"),
+        }.AsQueryable();
+
+        // Act
+        var readable = AccountScopedMailFolders.Admitting(folders, [WorkPrivate]);
+
+        // Assert
+        Assert.Equal(
+            [("work", "PRIVATE")],
+            readable.AsEnumerable().Select(folder => (folder.MailboxAccountId, folder.Alias)));
     }
 
     /// <summary>A read that has already found one email asks about that pair, and an alias alone would answer for two accounts.</summary>

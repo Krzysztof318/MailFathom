@@ -162,12 +162,14 @@ internal sealed class StoredEmailEmbeddingBackfillStore(
     /// bill with no reader.
     /// </remarks>
     /// <remarks>
-    /// A folder configured not to embed is left out here as well as where its passages would have been cut, and the two
-    /// answer different halves of one decision. The cut is what stops the passages existing; this is what stops the walk
-    /// finding those messages outstanding on every sweep for the rest of the deployment's life, since a message with a
-    /// body and no passages is exactly what the second group selects.
+    /// The walk is scoped to the folders a mapping admits to embedding, which is the same decision that stops their
+    /// passages being cut and the same shape that decision takes everywhere: a folder configuration does not name at
+    /// all is outside the walk rather than left in it by an exclusion that could not mention it. Both halves are needed.
+    /// The cut is what stops the passages existing; this is what stops the walk finding those messages outstanding on
+    /// every sweep for the rest of the deployment's life, since a message with a body and no passages is exactly what
+    /// the second group selects.
     /// </remarks>
-    private IQueryable<StoredEmailEntity> EmailsAwaitingEmbedding(Guid profileId) => AccountScopedMailFolders.Excluding(
+    private IQueryable<StoredEmailEntity> EmailsAwaitingEmbedding(Guid profileId) => AccountScopedMailFolders.Admitting(
         dbContext.StoredEmails
             .AsNoTracking()
             .Where(StoredEmailTombstone.IsNotTombstoned)
@@ -176,7 +178,7 @@ internal sealed class StoredEmailEmbeddingBackfillStore(
                 || (!email.Chunks.Any()
                     && email.SearchDocument != null
                     && email.SearchDocument.BodyText != null)),
-        folderParticipation.FoldersWithoutEmbeddings);
+        folderParticipation.FoldersGeneratingEmbeddings);
 
     /// <summary>Rebuilds the extraction the chunker reads from the two readings the search document stored.</summary>
     /// <remarks>

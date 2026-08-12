@@ -821,9 +821,22 @@ read from the configured role rather than from what a server advertised for the 
 what an operator decided, and a folder is withheld by their decision rather than by a `LIST` response. An account
 mapping no junk folder withholds nothing, and every mailbox read behaves as it did before this existed.
 
-None of them changes what an **unmapped** folder is. A folder no mapping names is not discovered into a binding, stores
-nothing, and has no alias anything can name it by — which is a different thing from `Synchronize: false`, where the
-mapping goes on naming the folder and the alias goes on resolving.
+None of them changes what an **unmapped** folder is, because an unmapped folder is not a folder with its switches turned
+down. A folder no mapping names is not discovered into a binding, stores nothing, and has no alias anything can name it
+by: it does not exist for this deployment. Every reader is expressed over the folders configuration maps — the tools and
+the two reads that name an email by its identifier over the ones a mapping also leaves visible, chunking and the
+embedding backfill over the ones a mapping also leaves embedded, and both rule passes over the ones a mapping mirrors —
+so a folder outside that list is outside the answer, and an account mapping nothing has nothing any of them can read.
+That is a different thing from `Synchronize: false`, where the mapping goes on naming the folder and the alias goes on
+resolving.
+
+**Rows already stored under an alias whose mapping was removed stay in the table, and nothing reaches them.** That is the
+same answer removing the `Synchronize` switch gets, for the same reason: nothing here takes local mail away because a
+configuration value changed, so the rows are kept and read by nothing — nothing lists, searches, reads, or answers from
+them, nothing cuts them into passages or embeds them, no rule pass walks them, and no alias of theirs resolves as a
+destination. Mapping the folder again is what makes them readable again, and a folder that was mirrored once keeps its
+checkpoint, so mapping it back is the resumption the section below describes rather than a remirror. What it costs
+meanwhile is storage.
 
 That distinction is the reason to switch synchronization off rather than delete the mapping. The alias still resolves,
 by remote path or by special-use role, so the folder stays a **destination**: a relocation or a copy files a message
@@ -879,8 +892,10 @@ reconciliation resolves what the invalidation leaves behind. There is no branch 
 from a newly mapped one.
 
 The tool switch is applied in exactly one place. `MailboxScopeResolver` resolves the scope every read model is expressed
-in, attaches the withheld folders to it, and answers the same question for the two reads that name an email by its
-identifier, so a tool added later inherits the exclusion instead of having to remember it.
+in, attaches to it the folders a mapping both names and leaves visible, and answers the same question for the two reads
+that name an email by its identifier, so a tool added later inherits the whole rule — the withheld folder and the
+unmapped one alike — instead of having to remember either. What it attaches is the list of what may be read rather than
+a list of what may not, which is what makes an account with no mapped folder read as nothing rather than as everything.
 [Mailbox queries](mailbox-queries.md#folders-withheld-from-tools) states what a caller sees.
 
 ## Session resilience

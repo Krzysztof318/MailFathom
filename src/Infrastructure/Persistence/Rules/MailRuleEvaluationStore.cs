@@ -27,10 +27,11 @@ namespace MailFathom.Infrastructure.Persistence.Rules;
 /// of a content read.
 /// </para>
 /// <para>
-/// Both walks also leave out the folders no run mirrors, and it is the walk rather than the pass that leaves them out.
-/// Such a folder keeps the mail it stored before its synchronization was switched off, so the rows are there to be
-/// read; dropping them after the batch came back would leave every one of them at the head of the arrival queue
-/// forever, since what takes an email out of that queue is a pass having evaluated it.
+/// Both walks also admit the folders a mapping mirrors and no others, and it is the walk rather than the pass that
+/// narrows. A folder whose synchronization was switched off keeps the mail it had stored, and a folder whose mapping
+/// was removed keeps it too, so the rows are there to be read; dropping them after the batch came back would leave
+/// every one of them at the head of the arrival queue forever, since what takes an email out of that queue is a pass
+/// having evaluated it.
 /// </para>
 /// </remarks>
 [RequiresIntegrationCoverage]
@@ -137,8 +138,14 @@ internal sealed class MailRuleEvaluationStore(
         var mailboxAccountId = accountId.Value;
         var resumeAfterId = resumeAfter?.Value;
 
+        // Scoped to the folders a mapping mirrors, which withdraws two kinds of row at once from a pass that walks
+        // stored mail rather than a request's scope: mail of a folder whose synchronization was switched off, which is
+        // retained and refreshed by nothing, and mail of a folder configuration no longer names at all. Only an
+        // admission reaches the second — no list of withheld names carries a folder nobody named — and a rule acting on
+        // either would move or flag mail nothing here is still reading.
         var candidates = await AccountScopedMailFolders
-            .Excluding(emails.AsNoTracking(), folderParticipation.FoldersNotMirrored)
+            .Admitting(emails, folderParticipation.FoldersSynchronized)
+            .AsNoTracking()
             .Where(StoredEmailTombstone.IsNotTombstoned)
             .Where(email => email.MailboxAccountId == mailboxAccountId
                 && (resumeAfterId == null || email.Id > resumeAfterId))

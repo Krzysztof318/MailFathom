@@ -124,9 +124,7 @@ public sealed class OrchestratedHybridRetrievalTests(MailFathomOrchestrationFixt
         // Act
         var lookup = await services.InScopeAsync(
             (scope, token) => scope.GetRequiredService<MailboxKnowledgeSearch>().FindPassagesAsync(
-                MailboxScope.Create(
-            [SyntheticMailAccount.AccountId],
-            [new MailFolderIdentity(SyntheticMailAccount.AccountId, MailFolderAlias.Create(FolderAlias))]),
+                OrchestratedMailboxScope.Readable(scope, [FolderAlias]),
                 EmailKnowledgeQuery.ForText(QueryTerm),
                 token),
             cancellationToken);
@@ -159,7 +157,7 @@ public sealed class OrchestratedHybridRetrievalTests(MailFathomOrchestrationFixt
             async (scope, token) =>
             {
                 var candidates = await scope.GetRequiredService<IEmailSearchIndexReader>().ReadRankedCandidatesAsync(
-                    SeededSelection(),
+                    SeededSelection(scope),
                     EmailSearchQueryText.Create(QueryTerm),
                     limit: 50,
                     token);
@@ -176,10 +174,8 @@ public sealed class OrchestratedHybridRetrievalTests(MailFathomOrchestrationFixt
         ResultLimit = 10,
     };
 
-    private static MailboxEmailSelection SeededSelection() => MailboxEmailSelection.Create(
-        MailboxScope.Create(
-            [SyntheticMailAccount.AccountId],
-            [new MailFolderIdentity(SyntheticMailAccount.AccountId, MailFolderAlias.Create(FolderAlias))]),
+    private static MailboxEmailSelection SeededSelection(IServiceProvider scope) => MailboxEmailSelection.Create(
+        OrchestratedMailboxScope.Readable(scope, [FolderAlias]),
         senderAddress: null,
         recipientAddress: null,
         subjectFragment: null,

@@ -482,16 +482,16 @@ internal sealed class MailSynchronizationOptions
     ];
 
     /// <inheritdoc />
-    public IReadOnlyList<MailFolderIdentity> FoldersHiddenFromTools =>
-        [.. this.ConfiguredFolders().Where(static folder => !folder.Participation.IsVisibleToTools).Select(static folder => folder.Identity)];
+    public IReadOnlyList<MailFolderIdentity> FoldersSynchronized =>
+        [.. this.ConfiguredFolders().Where(static folder => folder.Participation.IsSynchronized).Select(static folder => folder.Identity)];
 
     /// <inheritdoc />
-    public IReadOnlyList<MailFolderIdentity> FoldersWithoutEmbeddings =>
-        [.. this.ConfiguredFolders().Where(static folder => !folder.Participation.GeneratesEmbeddings).Select(static folder => folder.Identity)];
+    public IReadOnlyList<MailFolderIdentity> FoldersVisibleToTools =>
+        [.. this.ConfiguredFolders().Where(static folder => folder.Participation.IsVisibleToTools).Select(static folder => folder.Identity)];
 
     /// <inheritdoc />
-    public IReadOnlyList<MailFolderIdentity> FoldersNotMirrored =>
-        [.. this.ConfiguredFolders().Where(static folder => !folder.Participation.IsSynchronized).Select(static folder => folder.Identity)];
+    public IReadOnlyList<MailFolderIdentity> FoldersGeneratingEmbeddings =>
+        [.. this.ConfiguredFolders().Where(static folder => folder.Participation.GeneratesEmbeddings).Select(static folder => folder.Identity)];
 
     /// <inheritdoc />
     /// <remarks>
@@ -525,7 +525,7 @@ internal sealed class MailSynchronizationOptions
         this.ConfiguredFolders()
             .FirstOrDefault(folder => folder.Identity.AccountId == accountId && folder.Identity.Alias == folderAlias)
             ?.Participation
-        ?? MailFolderParticipation.Full;
+        ?? MailFolderParticipation.Unmapped;
 
     /// <inheritdoc />
     public MailFolderMapping? FindFolderPlayingRole(MailAccountId accountId, MailFolderSpecialUse role) =>

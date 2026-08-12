@@ -24,7 +24,7 @@ public sealed class MailboxScopeTests
         // Assert
         Assert.Empty(scope.AccountIds);
         Assert.Empty(scope.SelectedFolders);
-        Assert.Same(MailboxScope.Unrestricted, scope);
+        Assert.Same(MailboxScope.NothingReadable, scope);
     }
 
     [Fact]
@@ -34,7 +34,7 @@ public sealed class MailboxScopeTests
         var scope = MailboxScope.Create([], []);
 
         // Assert
-        Assert.Same(MailboxScope.Unrestricted, scope);
+        Assert.Same(MailboxScope.NothingReadable, scope);
     }
 
     /// <summary>Deduplicated and ordered, so two spellings of one scope are one query with one cursor.</summary>
@@ -73,7 +73,7 @@ public sealed class MailboxScopeTests
         var scope = MailboxScope.Create(accountIds: null, [Folder(Primary, "INBOX")]);
 
         // Assert
-        Assert.NotSame(MailboxScope.Unrestricted, scope);
+        Assert.NotSame(MailboxScope.NothingReadable, scope);
         Assert.Empty(scope.AccountIds);
     }
 
