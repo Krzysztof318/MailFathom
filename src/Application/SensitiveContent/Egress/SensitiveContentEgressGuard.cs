@@ -20,8 +20,14 @@ namespace MailFathom.Application.SensitiveContent.Egress;
 /// <b>Guard a value, never a composed document.</b> A detected region is replaced wherever it was found, so a scan of a
 /// document this system assembled — an XML envelope, a JSON payload, a formatted listing — can report a region that
 /// covers a delimiter as well as the text beside it, and replacing that region would destroy the structure while
-/// leaving the value's neighbours in it. Every consumer therefore guards the field it is about to write and composes
-/// afterwards.
+/// leaving the value's neighbours in it. Every consumer that owns the values therefore guards the field it is about to
+/// write and composes afterwards.
+/// </para>
+/// <para>
+/// One consumer cannot: a port handed a conversation somebody else built has no way to tell which turn a mailbox
+/// reached, so it guards each turn whole and accepts the structural cost above on a turn that happens to be a document.
+/// That is the exception rather than a second rule, and it is bounded by the guarantee that makes it necessary — every
+/// text leaves that port scanned, whatever its caller composed.
 /// </para>
 /// <para>
 /// <b>With both switches off this guard is inert.</b> It is registered whatever a deployment configured, so no consumer

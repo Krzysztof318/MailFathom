@@ -107,9 +107,11 @@ produced them, and `SearchEmailsResult` adds the retrieval mode the whole window
 - **Whether junk mail took part** says which of the two searches the caller got, so an absent result is never
   ambiguous between missing and withheld.
 
-The subject and the snippets are the two things a result carries that a message's author wrote, so where a
-sensitive-content scanner is switched on both are redacted before the window is served, each value scanned on its own
-rather than as one composed result. A scanner that cannot answer refuses the search. Both switches are off by default,
+The subject, the snippets, and the sender's display name are what a result carries that a message's author wrote, so
+where a sensitive-content scanner is switched on all three are redacted before the window is served, each value scanned
+on its own rather than as one composed result. The display name is scanned rather than treated as part of the address it
+accompanies, because an address is a routing identity a server issued while the name in front of it is free text the
+sending side wrote. A scanner that cannot answer refuses the search. Both switches are off by default,
 and nothing on this path is scanned then. [Sensitive-content scanning § the guarded egress
 points](sensitive-content-scanning.md#the-guarded-egress-points) holds the contract; the ranking is unaffected, because
 it ran over the stored index before anything was redacted.

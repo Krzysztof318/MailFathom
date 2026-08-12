@@ -103,7 +103,7 @@ public sealed class MailboxSearchReader
         this.egressGuard = egressGuard;
     }
 
-    /// <summary>Searches for one window of ranked emails.</summary>
+    /// <summary>Searches for one window of ranked emails and publishes it to a caller outside this process.</summary>
     /// <param name="request">What the caller asked for.</param>
     /// <param name="cancellationToken">Propagates caller cancellation.</param>
     /// <returns>The ranked window, how it was ranked, and the scope's synchronization freshness.</returns>
@@ -113,12 +113,43 @@ public sealed class MailboxSearchReader
     /// <exception cref="EmailSearchResultLimitOutOfRangeException">Thrown when the request names a result count outside the accepted range.</exception>
     /// <exception cref="SensitiveContentScannerUnavailableException">Thrown when a switched-on scanner could not establish what the window carries, which refuses the search rather than serving it unscanned.</exception>
     /// <remarks>
+    /// The guard belongs to publishing rather than to searching, which is why it is here and not in
+    /// <see cref="SearchWindowAsync" />: this window becomes an MCP tool's answer, while the one that method returns is
+    /// read inside the process by something that guards it at its own egress point.
+    /// </remarks>
+    public async Task<SearchEmailsResult> SearchEmailsAsync(
+        SearchEmailsRequest request,
+        CancellationToken cancellationToken)
+    {
+        var window = await this.SearchWindowAsync(request, cancellationToken);
+
+        return window with { Matches = await this.GuardedAsync(window.Matches, cancellationToken) };
+    }
+
+    /// <summary>Searches for one window of ranked emails, for a reader inside this process.</summary>
+    /// <param name="request">What the caller asked for.</param>
+    /// <param name="cancellationToken">Propagates caller cancellation.</param>
+    /// <returns>The ranked window, how it was ranked, and the scope's synchronization freshness.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="request" /> is <see langword="null" />.</exception>
+    /// <exception cref="MailboxQueryFilterInvalidException">Thrown when the query text is blank or unusable, or a structured filter carries a value, a count, or a length the query does not accept.</exception>
+    /// <exception cref="MailAccountNotAccessibleException">Thrown when the request names an account this deployment does not serve.</exception>
+    /// <exception cref="EmailSearchResultLimitOutOfRangeException">Thrown when the request names a result count outside the accepted range.</exception>
+    /// <remarks>
+    /// <para>
+    /// The window comes back as it was found, with no sensitive-content guard on it, because nothing has left this
+    /// deployment yet. Its one caller is the retrieval an answering run makes, which sends the extracts to a model and
+    /// guards them there under the egress point they actually cross. Guarding here as well would scan every extract
+    /// twice — a remote round trip apiece under the personal-data scanner — and would count text against an MCP series
+    /// no MCP caller ever sees.
+    /// </para>
+    /// <para>
     /// Nothing here writes, and the operation is therefore safe to repeat. It also never sets the remote <c>\Seen</c>
     /// flag or any other remote state, because it speaks to no mail server at all. A query that matches nothing returns
     /// an empty window rather than a failure, so a search cannot be used to establish that a folder or an account holds
     /// mail the caller was not already entitled to see.
+    /// </para>
     /// </remarks>
-    public async Task<SearchEmailsResult> SearchEmailsAsync(
+    internal async Task<SearchEmailsResult> SearchWindowAsync(
         SearchEmailsRequest request,
         CancellationToken cancellationToken)
     {
@@ -160,7 +191,7 @@ public sealed class MailboxSearchReader
         var folderFreshness = await this.freshnessReader.ReadAsync(selection.Scope, cancellationToken);
 
         return new SearchEmailsResult(
-            await this.GuardedAsync(matches, cancellationToken),
+            matches,
             retrievalMode,
             semanticSearchCapability,
             folderFreshness,
@@ -170,8 +201,10 @@ public sealed class MailboxSearchReader
     /// <summary>Scans the mail content of a window before the window becomes somebody else's.</summary>
     /// <remarks>
     /// <para>
-    /// A snippet and a subject are the two things a result carries that a message's author wrote, so they are what is
-    /// scanned. The identifiers beside them — the account, the folder alias, the addresses, the stored identity — are
+    /// A snippet, a subject, and the sender's display name are what a result carries that a message's author wrote, so
+    /// they are what is scanned. The display name is scanned rather than treated as part of the address it accompanies:
+    /// an address is a routing identity a server issued, while the name in front of it is free text the sending side
+    /// wrote. The identifiers beside them — the account, the folder alias, the addresses, the stored identity — are
     /// what a caller acts on rather than text to read, and redacting the address a reply has to go to would remove the
     /// result's whole use while protecting nothing the message body did not already carry.
     /// </para>
@@ -198,6 +231,10 @@ public sealed class MailboxSearchReader
                 SensitiveContentEgressPoint.McpSnippet,
                 match.Summary.Subject,
                 cancellationToken);
+            var senderDisplayName = await this.egressGuard.GuardOptionalAsync(
+                SensitiveContentEgressPoint.McpSnippet,
+                match.Summary.SenderDisplayName,
+                cancellationToken);
             var snippets = await this.egressGuard.GuardAllAsync(
                 SensitiveContentEgressPoint.McpSnippet,
                 match.Snippets,
@@ -205,7 +242,7 @@ public sealed class MailboxSearchReader
 
             guarded.Add(match with
             {
-                Summary = match.Summary with { Subject = subject },
+                Summary = match.Summary with { Subject = subject, SenderDisplayName = senderDisplayName },
                 Snippets = snippets,
             });
         }

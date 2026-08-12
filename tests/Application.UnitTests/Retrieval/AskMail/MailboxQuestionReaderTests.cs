@@ -561,6 +561,27 @@ public sealed class MailboxQuestionReaderTests
         Assert.Equal("re: [redacted:CloudKey]", Assert.Single(result.Citations).Subject);
     }
 
+    /// <summary>A subject no response will publish is a scan nobody needs, and under the analyzer it is a round trip too.</summary>
+    [Fact]
+    public async Task AnswerQuestionAsync_MoreCitationsThanOneResponseNames_ScansOnlyTheOnesItPublishes()
+    {
+        // Arrange
+        using var egress = ScanningSensitiveContentEgress.Finding(Marker, TimeProvider.System);
+        var answerer = new RecordingMailQuestionAnswerer().Answering(
+            "an answer",
+            [.. Enumerable.Range(1, 4).Select(position =>
+                PassageOf(position, "an extract") with { Subject = $"re: {position}" })]);
+        var reader = ReaderOver(answerer, bounds: MailAnswerBounds.Create(20_000, 2), egressGuard: egress.Guard);
+
+        // Act
+        var result = await AnswerAsync(reader, new AskMailRequest { QuestionText = "what was agreed" });
+
+        // Assert
+        Assert.Equal(2, result.Citations.Count);
+        Assert.True(result.CitationsWereTruncated);
+        Assert.Equal(["an answer", "re: 1", "re: 2"], egress.Scanner.ScannedTexts);
+    }
+
     /// <summary>Serving an answer a scanner could not read would be the leak the switch was turned on to prevent.</summary>
     [Fact]
     public async Task AnswerQuestionAsync_ADetectorThatCannotAnswer_RefusesTheResponseRatherThanServingItUnscanned()

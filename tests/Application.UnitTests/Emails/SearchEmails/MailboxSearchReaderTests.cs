@@ -538,6 +538,35 @@ public sealed class MailboxSearchReaderTests
         Assert.Equal(["use [redacted:CloudKey] to sign in"], match.Snippets);
     }
 
+    /// <summary>
+    /// The name in front of an address is free text whoever sent the message chose, so it is scanned like the subject.
+    /// The address beside it is a routing identity a server issued and is left alone, because a reply has to reach it.
+    /// </summary>
+    [Fact]
+    public async Task SearchEmailsAsync_ASwitchedOnScanner_RedactsTheSenderDisplayNameAndLeavesTheAddress()
+    {
+        // Arrange
+        using var egress = ScanningSensitiveContentEgress.Finding(Marker, TimeProvider.System);
+        var matched = SyntheticEmailSummaries.Create(
+            FirstJuly,
+            subject: "an ordinary subject",
+            senderAddress: "sender@example.test") with
+        {
+            SenderDisplayName = $"deploy bot {Marker}",
+        };
+        var index = new InMemoryEmailSearchIndex().With(matched, 0.9f, "invoice", "an ordinary extract");
+        var reader = ReaderOver(index, egressGuard: egress.Guard);
+
+        // Act
+        var result = await reader.SearchEmailsAsync(RequestFor("invoice"), TestContext.Current.CancellationToken);
+
+        // Assert
+        var published = Assert.Single(result.Matches).Summary;
+
+        Assert.Equal("deploy bot [redacted:CloudKey]", published.SenderDisplayName);
+        Assert.Equal("sender@example.test", published.SenderAddress);
+    }
+
     /// <summary>Serving a window a scanner could not read would be the leak the switch was turned on to prevent.</summary>
     [Fact]
     public async Task SearchEmailsAsync_ADetectorThatCannotAnswer_RefusesTheSearchRatherThanServingItUnscanned()

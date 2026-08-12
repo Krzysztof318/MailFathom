@@ -264,38 +264,41 @@ public sealed class MailboxQuestionReader
             SensitiveContentEgressPoint.McpSnippet,
             answer.Text,
             cancellationToken);
-        var citations = await this.CitedAsync(retrieval.Passages, cancellationToken);
+
+        // Collapsed and counted before anything is scanned, because the count decides the truncation flag while only
+        // the citations that survive the bound are published — and a subject nobody will read is a scan nobody needs.
+        EmailKnowledgePassage[] citable = [.. retrieval.Passages.DistinctBy(static passage => passage.StoredEmailId)];
+        var citations = await this.CitedAsync(citable.Take(maximumCitations), cancellationToken);
 
         return new AskMailResult(
             Bounded(answerText, maximumAnswerCharacters),
-            [.. citations.Take(maximumCitations)],
+            citations,
             answerText.Length > maximumAnswerCharacters,
-            citations.Count > maximumCitations,
+            citable.Length > maximumCitations,
             retrieval.Degradation.HasFlag(MailAnsweringRunDegradation.RetrievalCeilingReached));
     }
 
-    /// <summary>Reads the passages a run retrieved into one citation per email, with the one text a citation carries scanned.</summary>
+    /// <summary>Reads the passages one answer cites into citations, with the one text a citation carries scanned.</summary>
     /// <remarks>
     /// <para>
-    /// A run makes several lookups and one message can answer more than one of them, so the passages are collapsed by
-    /// the identity they are traced through. The first occurrence is kept, which leaves the citations in the order the
-    /// run first reached each message rather than in an order nothing produced.
+    /// The passages arrive collapsed by the identity they are traced through and cut to what one response carries, so
+    /// this scans exactly what is published: a message reached by three lookups costs one scan, and a message the bound
+    /// dropped costs none. The order is the one the run first reached each message in, rather than one nothing produced.
     /// </para>
     /// <para>
     /// The subject is the whole of a citation's mail content: the identity, the account, the folder alias, and the
-    /// received instant are what a reader opens the message by. Collapsing happens before the scan so one message
-    /// reached by three lookups costs one, and the scan is here rather than left to the retrieval because a citation is
-    /// published to the caller while an extract is sent to a model, which are two egress points that happen to share a
-    /// value.
+    /// received instant are what a reader opens the message by. The scan is here rather than left to the retrieval
+    /// because a citation is published to the caller while an extract is sent to a model, which are two egress points
+    /// that happen to share a value.
     /// </para>
     /// </remarks>
     private async Task<IReadOnlyList<MailAnswerCitation>> CitedAsync(
-        IReadOnlyList<EmailKnowledgePassage> passages,
+        IEnumerable<EmailKnowledgePassage> passages,
         CancellationToken cancellationToken)
     {
         var cited = new List<MailAnswerCitation>();
 
-        foreach (var passage in passages.DistinctBy(static passage => passage.StoredEmailId))
+        foreach (var passage in passages)
         {
             cited.Add(new MailAnswerCitation(
                 passage.StoredEmailId,

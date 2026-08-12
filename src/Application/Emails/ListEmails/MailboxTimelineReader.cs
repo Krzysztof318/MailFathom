@@ -117,12 +117,20 @@ public sealed class MailboxTimelineReader
             filter.Selection.Scope.IncludesJunkMail);
     }
 
-    /// <summary>Scans the one thing a summary carries that a message's author wrote.</summary>
+    /// <summary>Scans the two things a summary carries that a message's author wrote.</summary>
     /// <remarks>
-    /// A listing publishes no body, so the subject is the whole of its mail content and the whole of what is scanned.
+    /// <para>
+    /// A listing publishes no body, so the subject and the sender's display name are the whole of its mail content and
+    /// the whole of what is scanned. The display name is beside the subject rather than beside the address it
+    /// accompanies: an address is a routing identity a server issued, while the name in front of it is free text the
+    /// sending side wrote, and a header reading <c>"&lt;a credential&gt; &lt;someone@example.test&gt;"</c> would
+    /// otherwise be served whole while the subject beside it was redacted.
+    /// </para>
+    /// <para>
     /// Everything else on a summary is what a caller acts on — the identity a later request names, the folder alias,
-    /// the participants a reply goes to, the sizes and the flags — and those are protected by who may reach this
+    /// the addresses a reply goes to, the sizes and the flags — and those are protected by who may reach this
     /// deployment rather than by redaction, which would leave a listing nobody could act on.
+    /// </para>
     /// </remarks>
     private async Task<IReadOnlyList<EmailSummary>> GuardedAsync(
         IReadOnlyList<EmailSummary> page,
@@ -142,6 +150,10 @@ public sealed class MailboxTimelineReader
                 Subject = await this.egressGuard.GuardOptionalAsync(
                     SensitiveContentEgressPoint.McpSnippet,
                     summary.Subject,
+                    cancellationToken),
+                SenderDisplayName = await this.egressGuard.GuardOptionalAsync(
+                    SensitiveContentEgressPoint.McpSnippet,
+                    summary.SenderDisplayName,
                     cancellationToken),
             });
         }

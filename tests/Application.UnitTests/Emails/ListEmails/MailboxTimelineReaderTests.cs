@@ -735,6 +735,37 @@ public sealed class MailboxTimelineReaderTests
             result.Emails.Select(summary => summary.Subject));
     }
 
+    /// <summary>
+    /// The name in front of an address is free text whoever sent the message chose, so it is scanned like the subject.
+    /// The address beside it is a routing identity a server issued and is left alone, because a reply has to reach it.
+    /// </summary>
+    [Fact]
+    public async Task ListEmailsAsync_ASwitchedOnScanner_RedactsTheSenderDisplayNameAndLeavesTheAddress()
+    {
+        // Arrange
+        using var egress = ScanningSensitiveContentEgress.Finding(Marker, TimeProvider.System);
+        var timeline = new InMemoryStoredEmailTimeline().WithAll(
+        [
+            SyntheticEmailSummaries.Create(
+                FirstJuly,
+                subject: "an ordinary subject",
+                senderAddress: "sender@example.test") with
+            {
+                SenderDisplayName = $"deploy bot {Marker}",
+            },
+        ]);
+        var reader = ReaderOver(timeline, egressGuard: egress.Guard);
+
+        // Act
+        var result = await reader.ListEmailsAsync(new ListEmailsRequest(), TestContext.Current.CancellationToken);
+
+        // Assert
+        var published = Assert.Single(result.Emails);
+
+        Assert.Equal("deploy bot [redacted:CloudKey]", published.SenderDisplayName);
+        Assert.Equal("sender@example.test", published.SenderAddress);
+    }
+
     /// <summary>Serving a page a scanner could not read would be the leak the switch was turned on to prevent.</summary>
     [Fact]
     public async Task ListEmailsAsync_ADetectorThatCannotAnswer_RefusesTheListingRatherThanServingItUnscanned()
