@@ -392,8 +392,9 @@ public sealed class OrchestratedStoredEmailTimelineReaderTests(MailFathomOrchest
             (scope, _) => Task.FromResult(
                 new MailboxScopeResolver(
                     scope.GetRequiredService<IMailAccountCatalog>(),
-                    scope.GetRequiredService<IMailFolderParticipationReader>())
-                    .ReadableScope([], [MailFolderAlias.Create(FolderAlias)])),
+                    scope.GetRequiredService<IMailFolderParticipationReader>(),
+                    scope.GetRequiredService<IJunkMailFolderCatalog>())
+                    .ReadableScope([], [MailFolderAlias.Create(FolderAlias)], JunkMailInclusion.Excluded)),
             cancellationToken);
 
     /// <summary>Ensures the seeded folder exists and returns the filter every test in this class reads it through.</summary>

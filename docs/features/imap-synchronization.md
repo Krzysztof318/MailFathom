@@ -769,6 +769,13 @@ readable by tools:
 | `GenerateEmbeddings` | What is stored is never cut into passages and never reaches an embedding provider. |
 | `VisibleToTools` | No MCP tool lists, searches, reads, or answers from the folder. |
 
+One role decides something beyond where the folder is too. A mapping of `SpecialUse: Junk` names the folder that
+`list_emails` and `search_emails` leave out unless a caller asks for it, and that `ask_mail` leaves out with no way to
+ask — [spam classification](spam-classification.md#the-junk-folder-is-left-out-of-listing-and-search) records why. It is
+read from the configured role rather than from what a server advertised for the same reason the alias is: the role is
+what an operator decided, and a folder is withheld by their decision rather than by a `LIST` response. An account
+mapping no junk folder withholds nothing, and every mailbox read behaves as it did before this existed.
+
 None of them changes what an **unmapped** folder is. A folder no mapping names is not discovered into a binding, stores
 nothing, and has no alias anything can name it by — which is a different thing from `Synchronize: false`, where the
 mapping goes on naming the folder and the alias goes on resolving.

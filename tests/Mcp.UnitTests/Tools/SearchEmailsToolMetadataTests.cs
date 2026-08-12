@@ -74,6 +74,7 @@ public sealed class SearchEmailsToolMetadataTests
             "receivedBefore",
             "isRemotelySeen",
             "hasAttachments",
+            "includeJunkMail",
             "resultLimit",
         ];
 

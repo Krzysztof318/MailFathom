@@ -121,7 +121,13 @@ public sealed class MailboxQuestionReader
         ArgumentNullException.ThrowIfNull(request);
 
         var questionText = MailQuestionText.Create(request.QuestionText);
-        var scope = this.scopeResolver.ReadableScope(request.Accounts, request.FolderAliases);
+        // Junk is left out with no override, unlike a listing and a search. Answering a question is exactly the path the
+        // exclusion exists for: content written to manipulate whoever reads it now has a model reading it, and a caller
+        // hunting a wrongly filed message uses the listing or the search that can ask for it.
+        var scope = this.scopeResolver.ReadableScope(
+            request.Accounts,
+            request.FolderAliases,
+            JunkMailInclusion.Excluded);
 
         var gate = await this.capability.ResolveAsync(cancellationToken);
         if (gate.Answerer is not { } answerer)

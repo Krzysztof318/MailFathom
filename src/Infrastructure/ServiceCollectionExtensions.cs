@@ -36,6 +36,9 @@ using MailFathom.Application.Rules.Evaluation;
 using MailFathom.Application.Rules.History;
 using MailFathom.Application.SensitiveContent;
 using MailFathom.Application.SensitiveContent.Detection;
+using MailFathom.Application.Spam;
+using MailFathom.Application.Spam.Scanning;
+using MailFathom.Application.Spam.Signals;
 using MailFathom.Application.Synchronization;
 using MailFathom.Application.Synchronization.Checkpoints;
 using MailFathom.Application.Synchronization.Reconciliation;
@@ -61,6 +64,7 @@ using MailFathom.Infrastructure.Persistence.Embeddings;
 using MailFathom.Infrastructure.Persistence.Mutations;
 using MailFathom.Infrastructure.Persistence.Rules;
 using MailFathom.Infrastructure.Persistence.Sessions;
+using MailFathom.Infrastructure.Persistence.Spam;
 using MailFathom.Infrastructure.Persistence.Synchronization;
 using MailFathom.Infrastructure.Resilience;
 using MailFathom.Infrastructure.Secrets.References;
@@ -307,6 +311,13 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IMailRuleEvaluationRunStore, MailRuleEvaluationRunStore>();
         services.AddSingleton<MailRuleHistoryTelemetry>();
         services.AddScoped<IMailRuleExecutionStore, MailRuleExecutionStore>();
+
+        // Registered whether or not classification is switched on, for the reason every other store here is: what a
+        // deployment decides is whether anything calls it, and a port resolvable only under one configuration is a
+        // composition that fails at the moment somebody changes their mind rather than at startup.
+        services.AddScoped<IEmailSpamClassificationStore, EmailSpamClassificationStore>();
+        services.AddScoped<IClassifiableEmailReader, ClassifiableEmailReader>();
+
         // The read side takes no persistence session and joins no transaction, so its ports are registered beside the
         // write repositories rather than through one of them.
         services.AddScoped<IStoredEmailTimelineReader, StoredEmailTimelineReader>();
@@ -339,6 +350,9 @@ public static class ServiceCollectionExtensions
         // out of Application the same way the IMAP adapter keeps MailKit's out.
         services.AddScoped<IEmailMimeReader>(provider => new MimeKitEmailMimeReader(
             provider.GetRequiredService<EmailMimeExtractionOptions>()));
+        // Beside the metadata reader and separate from it, because it parses only the header block and needs none of the
+        // structural limits a body walk is bounded by: the parser stops at the blank line that ends the headers.
+        services.AddScoped<IEmailSpamHeaderReader, MimeKitEmailSpamHeaderReader>();
         // The HTML sanitizer the renderer owns is built per instance rather than shared, so no configuration of it can
         // be changed by one request and observed by another.
         services.AddScoped<IEmailContentRenderer>(provider => new MimeKitEmailContentRenderer(
@@ -373,6 +387,22 @@ public static class ServiceCollectionExtensions
         services.AddScoped<EmailContentReader>();
         services.AddScoped<EmailAttachmentDownloadReader>();
         services.AddScoped<MailboxSearchReader>();
+        // Both halves of classification, registered for every deployment rather than only where it is switched on: what
+        // the switch decides is whether the classifier does anything, and the classifier asks the settings reader that.
+        // The scanner is the one dependency a supported deployment may not have — this change ships no implementation of
+        // the port at all — so it is asked for rather than injected, exactly as the embedding generator is.
+        services.AddScoped<DeterministicSpamClassifier>();
+        services.AddScoped(provider => new EmailSpamClassifier(
+            provider.GetRequiredService<IClassifiableEmailReader>(),
+            provider.GetRequiredService<IEmailContentStore>(),
+            provider.GetRequiredService<IEmailSpamHeaderReader>(),
+            provider.GetRequiredService<IJunkMailFolderCatalog>(),
+            provider.GetRequiredService<DeterministicSpamClassifier>(),
+            provider.GetRequiredService<ISpamClassificationSettingsReader>(),
+            provider.GetRequiredService<IEmailSpamClassificationStore>(),
+            provider.GetRequiredService<OptimisticConcurrencyRetryPolicy>(),
+            provider.GetRequiredService<TimeProvider>(),
+            provider.GetService<ISpamScanner>()));
         // Registered for every deployment rather than only where a chat endpoint was declared, because what it is is a
         // reading of the search above: an instance that answers no questions simply resolves it and never calls it, and
         // the bounds it hands passages over under are the same wherever the retrieval is reached from.

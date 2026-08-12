@@ -74,7 +74,7 @@ public sealed class MailboxTimelineReader
         // refusals a deployment that serves several does, and only then reports that it holds nothing to read.
         if (filter.Selection.Scope.AccountIds.Count is 0)
         {
-            return new ListEmailsResult([], NextCursor: null, []);
+            return new ListEmailsResult([], NextCursor: null, [], filter.Selection.Scope.IncludesJunkMail);
         }
 
         // One row beyond the page is what establishes whether another page exists. A count over the same filter would
@@ -94,12 +94,15 @@ public sealed class MailboxTimelineReader
         // operation at a time, so starting them together would fault instead of overlapping.
         var folderFreshness = await this.freshnessReader.ReadAsync(filter.Selection.Scope, cancellationToken);
 
-        return new ListEmailsResult(page, nextCursor, folderFreshness);
+        return new ListEmailsResult(page, nextCursor, folderFreshness, filter.Selection.Scope.IncludesJunkMail);
     }
 
     /// <summary>Validates the request's filters and restricts the query to the accounts this deployment serves.</summary>
     private EmailTimelineFilter ReadableFilter(ListEmailsRequest request) => EmailTimelineFilter.Create(
-        this.scopeResolver.ReadableScope(request.Accounts, request.FolderAliases),
+        this.scopeResolver.ReadableScope(
+            request.Accounts,
+            request.FolderAliases,
+            request.IncludeJunkMail ? JunkMailInclusion.Included : JunkMailInclusion.Excluded),
         request.SenderAddress,
         request.RecipientAddress,
         request.SubjectFragment,

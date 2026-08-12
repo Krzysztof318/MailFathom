@@ -304,6 +304,66 @@ public sealed class MailFolderParticipationOptionsTests
         Assert.Empty(results);
     }
 
+    /// <summary>The junk role is read from what an operator configured, so a folder mapped to it is the one withheld.</summary>
+    [Fact]
+    public void JunkFolders_AFolderMappedToTheJunkRole_NamesThatFolder()
+    {
+        // Arrange
+        var options = OptionsFor(CreateAccount(new MailFolderMappingOptions
+        {
+            Alias = "junk",
+            SpecialUse = "Junk",
+        }));
+
+        // Act, Assert
+        Assert.Equal([new MailFolderIdentity(Primary, MailFolderAlias.Create("JUNK"))], options.JunkFolders);
+        Assert.True(options.IsJunkFolder(Primary, MailFolderAlias.Create("JUNK")));
+        Assert.False(options.IsJunkFolder(Primary, MailFolderAlias.Create("INBOX")));
+    }
+
+    /// <summary>A deployment that maps no junk folder answers with nothing, and every mailbox read behaves as it did before.</summary>
+    [Fact]
+    public void JunkFolders_NoFolderMappedToTheJunkRole_NamesNothing()
+    {
+        // Arrange
+        var options = OptionsFor(CreateAccount(new MailFolderMappingOptions
+        {
+            Alias = "archive",
+            SpecialUse = "Archive",
+        }));
+
+        // Act, Assert
+        Assert.Empty(options.JunkFolders);
+        Assert.False(options.IsJunkFolder(Primary, MailFolderAlias.Create("ARCHIVE")));
+    }
+
+    /// <summary>An account that configures no folder still runs with an inbox mapping, which is what classification defaults to.</summary>
+    [Fact]
+    public void InboxFolderAliases_AnAccountConfiguringNoFolder_NamesTheInboxMappingItRunsWith()
+    {
+        // Arrange
+        var options = OptionsFor(CreateAccount());
+
+        // Act, Assert
+        Assert.Equal([MailFolderAlias.Create("INBOX")], options.InboxFolderAliases);
+    }
+
+    /// <summary>A server presenting the inbox under another name is configured by role, and the default scope follows the role.</summary>
+    [Fact]
+    public void InboxFolderAliases_AnInboxMappedUnderAnotherAlias_NamesTheConfiguredAlias()
+    {
+        // Arrange
+        var options = OptionsFor(CreateAccount(new MailFolderMappingOptions
+        {
+            Alias = "primary-mail",
+            RemotePath = "Skrzynka odbiorcza",
+            SpecialUse = "Inbox",
+        }));
+
+        // Act, Assert
+        Assert.Equal([MailFolderAlias.Create("PRIMARY-MAIL")], options.InboxFolderAliases);
+    }
+
     private static MailSynchronizationOptions OptionsFor(MailSynchronizationAccountOptions account) =>
         new() { Accounts = [account] };
 

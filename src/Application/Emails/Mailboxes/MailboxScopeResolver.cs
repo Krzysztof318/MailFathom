@@ -19,28 +19,35 @@ public sealed class MailboxScopeResolver
 {
     private readonly IMailAccountCatalog accountCatalog;
     private readonly IMailFolderParticipationReader folderParticipation;
+    private readonly IJunkMailFolderCatalog junkFolders;
 
     /// <summary>Initializes the resolver.</summary>
     /// <param name="accountCatalog">Answers which accounts this deployment serves.</param>
     /// <param name="folderParticipation">Answers which folders no tool may read from.</param>
-    /// <exception cref="ArgumentNullException">Thrown when either argument is <see langword="null" />.</exception>
+    /// <param name="junkFolders">Answers which folder each account advertises as its junk folder.</param>
+    /// <exception cref="ArgumentNullException">Thrown when any argument is <see langword="null" />.</exception>
     public MailboxScopeResolver(
         IMailAccountCatalog accountCatalog,
-        IMailFolderParticipationReader folderParticipation)
+        IMailFolderParticipationReader folderParticipation,
+        IJunkMailFolderCatalog junkFolders)
     {
         ArgumentNullException.ThrowIfNull(accountCatalog);
         ArgumentNullException.ThrowIfNull(folderParticipation);
+        ArgumentNullException.ThrowIfNull(junkFolders);
 
         this.accountCatalog = accountCatalog;
         this.folderParticipation = folderParticipation;
+        this.junkFolders = junkFolders;
     }
 
     /// <summary>Resolves what a request named into the scope a query runs with.</summary>
     /// <param name="accountSelectors">The text a request named accounts with, or empty for every served account.</param>
     /// <param name="folderAliases">The folder aliases a request named, or empty for every folder.</param>
+    /// <param name="junkMail">Whether the caller asked for the account's junk folder, which defaults to it being left out.</param>
     /// <returns>The scope a query runs with.</returns>
     /// <exception cref="MailboxQueryFilterInvalidException">Thrown when either list names more values than its limit permits.</exception>
     /// <exception cref="MailAccountNotAccessibleException">Thrown when the request names an account this deployment does not serve.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="junkMail" /> is not a defined member.</exception>
     /// <remarks>
     /// <para>
     /// An account may be named by its configured identifier or by the display name it is published under, and this is
@@ -66,12 +73,27 @@ public sealed class MailboxScopeResolver
     /// somebody has to keep complete. A tool that read the mailbox some other way would bypass it, which is why the two
     /// reads that reach an email by its identifier ask the same configuration directly rather than building a scope.
     /// </para>
+    /// <para>
+    /// The junk folder is withheld here too, and it is a different kind of decision from the one above: an operator did
+    /// not withhold it, the default did, and a caller may ask for it back. Resolving both in one place is what keeps the
+    /// override from being able to reveal a folder the operator withheld — a folder that is hidden *and* junk stays out
+    /// under either answer, because the two lists narrow the query independently.
+    /// </para>
     /// </remarks>
     public MailboxScope ReadableScope(
         IReadOnlyList<MailAccountSelector> accountSelectors,
-        IReadOnlyList<MailFolderAlias> folderAliases)
+        IReadOnlyList<MailFolderAlias> folderAliases,
+        JunkMailInclusion junkMail)
     {
         ArgumentNullException.ThrowIfNull(accountSelectors);
+
+        if (!Enum.IsDefined(junkMail))
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(junkMail),
+                junkMail,
+                "A read either reaches into the junk folder or leaves it out, and no other value names an answer.");
+        }
 
         var servedAccounts = this.accountCatalog.ServedAccounts;
 
@@ -93,7 +115,9 @@ public sealed class MailboxScopeResolver
                 requestedScope.FolderAliases)
             : requestedScope;
 
-        return resolvedScope.Hiding(this.folderParticipation.FoldersHiddenFromTools);
+        return resolvedScope
+            .Hiding(this.folderParticipation.FoldersHiddenFromTools)
+            .WithJunkMail(junkMail, this.junkFolders.JunkFolders);
     }
 
     /// <summary>Reports whether a tool may read one email, given the mailbox it was stored from.</summary>

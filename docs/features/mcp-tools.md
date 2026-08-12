@@ -243,6 +243,7 @@ Every argument is optional.
 | `receivedBefore` | `date-time` | Exclusive end, so consecutive ranges built from one instant neither overlap nor leave a gap |
 | `isRemotelySeen` | `boolean` | The remote seen state to require. Listing never changes it |
 | `hasAttachments` | `boolean` | Whether to match only emails with attachments or only those without |
+| `includeJunkMail` | `boolean` | Whether the account's junk folder takes part. Omitted leaves it out, and the result says which of the two answers it gave |
 | `direction` | `newestFirst` \| `oldestFirst` | Which end of the timeline to read from |
 | `pageSize` | `integer` | 1 to 100. Omitted takes the default of 25; a value outside the range is refused rather than clamped |
 | `cursor` | `string` | The `nextCursor` of a previous call, reused with the same filters and direction |
@@ -258,6 +259,14 @@ Both lists are converted to domain values at this boundary, and their counts are
 already run over a million-element array is not a ceiling. Text that could name nothing this system issues is then
 refused with `51002`, and the refusal never repeats the value.
 
+**The junk folder is left out unless it is asked for.** Mail a filter already set aside is mail written to be read by
+somebody who did not ask for it, and a model reasoning over a page of summaries cannot tell it from correspondence, so
+the default is the safe one and `includeJunkMail` is how a caller looking for a message a filter took reaches it. The
+answer is reported back in `includedJunkMail`, and it takes part in the continuation cursor, so a page and its follower
+are always one walk. Which folder that is comes from the account's `Junk` mapping;
+[spam classification](spam-classification.md#the-junk-folder-is-left-out-of-listing-and-search) records why the override
+can never reveal a folder an operator withheld.
+
 **Which account a name refers to is not settled here.** An account may be named by its identifier or by its display
 name, and the two are matched against the served accounts inside the use case, so text naming nothing meets exactly the
 refusal an account the deployment stopped serving meets. The identifier is matched exactly and the display name without
@@ -271,8 +280,9 @@ would otherwise be a way to write arbitrary text into that contract and into the
 
 ### Result
 
-`emails` carries the page, `nextCursor` reads the following one and is absent on the last page, and `folderFreshness`
-states how current the local copy of each covered folder is.
+`emails` carries the page, `nextCursor` reads the following one and is absent on the last page, `includedJunkMail`
+states whether the account's junk folder took part, and `folderFreshness` states how current the local copy of each
+covered folder is.
 
 Each summary carries the stable local identifier a content read is performed by, the account identifier and the display
 name it is published under, the folder alias, the message identifier, the subject, the sender address and display name, the `To` addresses, the sent and received timestamps, the
@@ -471,6 +481,7 @@ how the extracts are cut, and why there is no cursor — where those are enforce
 | `receivedBefore` | `date-time` | Exclusive end of the received range |
 | `isRemotelySeen` | `boolean` | The remote seen state to require. Searching never changes it |
 | `hasAttachments` | `boolean` | Whether to match only emails with attachments or only those without |
+| `includeJunkMail` | `boolean` | Whether the account's junk folder takes part. Omitted leaves it out, and the result says which of the two answers it gave |
 | `resultLimit` | `integer` | 1 to 50. Omitted takes the default of 20; a value outside the range is refused with `51003` rather than clamped |
 
 The structured filters are `list_emails`' own and mean exactly the same things, because both read models apply one
@@ -490,6 +501,7 @@ because an argument added later would be the one thing that quietly changes what
 | `matches` | The matched emails, most relevant first, ties broken by the newest received. Empty when nothing matched |
 | `retrievalMode` | How this call's results were ranked — `lexical` or `hybrid` |
 | `semanticSearch` | What this server can do with embeddings — `inactive`, `available`, or `degraded` |
+| `includedJunkMail` | Whether the account's junk folder took part in this search |
 | `folderFreshness` | How current the local copy of each covered folder is, exactly as a listing reports it |
 
 Each match carries `summary`, which is the same shape `list_emails` publishes and is documented above, together with

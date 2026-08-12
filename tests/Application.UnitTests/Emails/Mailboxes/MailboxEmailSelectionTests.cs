@@ -2,7 +2,14 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Application.Accounts;
 using MailFathom.Application.Emails.Mailboxes;
+using MailFathom.Application.Folders;
+using MailFathom.Domain.Accounts;
+using MailFathom.Domain.Folders;
+using MailFathom.Domain.Synchronization;
+using MailFathom.TestSupport;
+using NSubstitute;
 using Xunit;
 
 namespace MailFathom.Application.UnitTests.Emails.Mailboxes;
@@ -11,6 +18,8 @@ namespace MailFathom.Application.UnitTests.Emails.Mailboxes;
 public sealed class MailboxEmailSelectionTests
 {
     private static readonly DateTimeOffset FirstJuly = new(2026, 7, 1, 8, 0, 0, TimeSpan.Zero);
+
+    private static readonly MailAccountId Account = MailAccountId.Create("acct-1");
 
     [Fact]
     public void Create_AddressFilters_KeepTheComparisonFormPersistenceIndexes()
@@ -180,6 +189,37 @@ public sealed class MailboxEmailSelectionTests
             receivedBefore: FirstJuly.AddHours(-1).ToOffset(TimeSpan.FromHours(-8))));
     }
 
+    /// <summary>Including junk adds rows in the middle of an ordering, so a walk cannot be resumed under the other answer.</summary>
+    [Fact]
+    public void Create_TheCallersAnswerAboutJunk_IsPartOfWhatACursorIsAuthenticatedAgainst()
+    {
+        // Arrange
+        var resolver = ResolverWithJunkFolder();
+
+        // Act
+        var excludingJunk = SelectionWith(resolver.ReadableScope([], [], JunkMailInclusion.Excluded));
+        var includingJunk = SelectionWith(resolver.ReadableScope([], [], JunkMailInclusion.Included));
+
+        // Assert
+        Assert.NotEqual(excludingJunk.CanonicalText, includingJunk.CanonicalText);
+    }
+
+    /// <summary>A configured folder is not a filter the caller chose, so mapping one must not invalidate an outstanding cursor.</summary>
+    [Fact]
+    public void Create_TheFoldersConfigurationWithholds_StayOutOfTheCursorFingerprint()
+    {
+        // Arrange
+        var beforeTheMapping = ResolverWithJunkFolder(StubJunkMailFolderCatalog.None);
+        var afterTheMapping = ResolverWithJunkFolder();
+
+        // Act
+        var before = SelectionWith(beforeTheMapping.ReadableScope([], [], JunkMailInclusion.Excluded));
+        var after = SelectionWith(afterTheMapping.ReadableScope([], [], JunkMailInclusion.Excluded));
+
+        // Assert
+        Assert.Equal(before.CanonicalText, after.CanonicalText);
+    }
+
     [Fact]
     public void Create_NoScope_IsRejected()
     {
@@ -193,6 +233,25 @@ public sealed class MailboxEmailSelectionTests
             receivedBefore: null,
             isRemotelySeen: null,
             hasAttachments: null));
+    }
+
+    /// <summary>Builds the resolver a mailbox read gets its scope from, since the scope's own narrowing is not public.</summary>
+    private static MailboxScopeResolver ResolverWithJunkFolder(IJunkMailFolderCatalog? junkFolders = null)
+    {
+        var catalog = Substitute.For<IMailAccountCatalog>();
+        catalog.ServedAccounts.Returns(
+        [
+            new ServedMailAccount(
+                Account,
+                MailAccountDisplayName.Create("Work mail"),
+                MailSynchronizationMode.Polling),
+        ]);
+
+        return new MailboxScopeResolver(
+            catalog,
+            StubMailFolderParticipation.Everything,
+            junkFolders ?? StubJunkMailFolderCatalog.Naming(
+                new MailFolderIdentity(Account, MailFolderAlias.Create("JUNK"))));
     }
 
     private static MailboxEmailSelection SelectionWith(

@@ -40,6 +40,10 @@ internal sealed record SearchEmailsToolResult
     [Description("How current the local copy of each folder in the request's scope is, one entry per folder. Read this before concluding that a mailbox holds no matching mail.")]
     public required IReadOnlyList<FolderCopyFreshness> FolderFreshness { get; init; }
 
+    /// <summary>Gets whether the account's junk folder took part in the search.</summary>
+    [Description("Whether the account's junk folder took part in this search. False means its mail was left out and is reachable by calling again with includeJunkMail set.")]
+    public required bool IncludedJunkMail { get; init; }
+
     /// <summary>Publishes a window the use case answered.</summary>
     /// <param name="result">The window to publish.</param>
     /// <param name="snippetBounds">How much of a message's body this deployment lets one result show.</param>
@@ -73,6 +77,7 @@ internal sealed record SearchEmailsToolResult
             RetrievalMode = Published(result.RetrievalMode),
             SemanticSearch = Published(result.SemanticSearch),
             FolderFreshness = [.. result.FolderFreshness.Select(freshness => FolderCopyFreshness.From(freshness, accountNames))],
+            IncludedJunkMail = result.IncludedJunkMail,
         };
     }
 

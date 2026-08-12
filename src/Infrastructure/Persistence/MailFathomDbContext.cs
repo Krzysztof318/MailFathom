@@ -96,6 +96,26 @@ internal sealed class MailFathomDbContext : DbContext
 
     internal const string MailboxRefreshTokenKeyIndexName = "ix_mailbox_refresh_tokens_data_encryption_key";
 
+    /// <summary>The key that keeps one classification per occurrence, and which a second concurrent run is recognized by.</summary>
+    /// <remarks>
+    /// Named because losing this race is the mechanism rather than a fault: an arrival classifies an occurrence while a
+    /// reclassification replaces it, one of them violates this key, and the retry reads back the row the winner wrote —
+    /// which is how classifying twice produces one record.
+    /// </remarks>
+    internal const string EmailSpamClassificationPrimaryKeyConstraintName = "pk_email_spam_classifications";
+
+    /// <summary>The order one classification's signals are read back in, and what stops an ordinal being written twice.</summary>
+    internal const string EmailSpamClassificationSignalOrdinalUniqueIndexName =
+        "ix_email_spam_classification_signals_classification_ordinal";
+
+    /// <summary>The foreign key that removes a classification's signals with the classification.</summary>
+    /// <remarks>
+    /// Named because EF's convention composes one from both table names and PostgreSQL truncates an identifier at 63
+    /// characters, which would leave a permanent constraint whose name ends in a tilde.
+    /// </remarks>
+    internal const string EmailSpamClassificationSignalForeignKeyName =
+        "fk_email_spam_classification_signals_classifications";
+
     /// <summary>The key that keeps one whole-mailbox rule run per account, and which a second request is recognized by.</summary>
     /// <remarks>
     /// Named because losing this race is the mechanism rather than a fault: two requests for one account's first run
@@ -182,6 +202,11 @@ internal sealed class MailFathomDbContext : DbContext
     internal DbSet<EmbeddingSpendPeriodEntity> EmbeddingSpendPeriods => this.Set<EmbeddingSpendPeriodEntity>();
 
     internal DbSet<EmailContentRepairRequestEntity> EmailContentRepairRequests => this.Set<EmailContentRepairRequestEntity>();
+
+    internal DbSet<EmailSpamClassificationEntity> EmailSpamClassifications => this.Set<EmailSpamClassificationEntity>();
+
+    internal DbSet<EmailSpamClassificationSignalEntity> EmailSpamClassificationSignals =>
+        this.Set<EmailSpamClassificationSignalEntity>();
 
     internal DbSet<BackfillPositionEntity> BackfillPositions => this.Set<BackfillPositionEntity>();
 
@@ -364,6 +389,8 @@ internal sealed class MailFathomDbContext : DbContext
                 .HasForeignKey<EmailContentRepairRequestEntity>(repairRequest => repairRequest.StoredEmailId)
                 .OnDelete(DeleteBehavior.Cascade);
         });
+
+        ConfigureEmailSpamClassification(modelBuilder);
 
         // One row per account, which is what makes "one outstanding whole-mailbox rule run" a property of the key rather
         // than of a check. The ending is stored as text for the reason every other outcome here is: it stays readable
@@ -817,6 +844,72 @@ internal sealed class MailFathomDbContext : DbContext
                 .HasDatabaseName(EmailSearchDocumentVectorIndexName)
                 .HasMethod("GIN");
         });
+
+    /// <summary>Declares what classification concluded about an occurrence, and the facts it concluded it from.</summary>
+    /// <remarks>
+    /// <para>
+    /// Both tables cascade from the email, which is what keeps derived data inside whatever erasure and retention reach
+    /// the mail it describes: nothing has to remember to delete a classification, and nothing can leave one behind
+    /// describing a message that is gone.
+    /// </para>
+    /// <para>
+    /// The signals cascade from the classification rather than from the email, so replacing a verdict replaces the facts
+    /// it rested on in one statement. Keeping a superseded verdict's signals beside the new ones would leave a record
+    /// nobody could read.
+    /// </para>
+    /// <para>
+    /// Every enumeration is stored as text for the reason each other outcome here is: it stays readable in an ad-hoc
+    /// query and survives a later reordering of the enum.
+    /// </para>
+    /// </remarks>
+    private static void ConfigureEmailSpamClassification(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<EmailSpamClassificationEntity>(entity =>
+        {
+            entity.ToTable("email_spam_classifications");
+            entity.HasKey(classification => classification.StoredEmailId)
+                .HasName(EmailSpamClassificationPrimaryKeyConstraintName);
+            entity.Property(classification => classification.StoredEmailId).ValueGeneratedNever();
+            entity.Property(classification => classification.Verdict).HasConversion<string>().HasMaxLength(64).IsRequired();
+            entity.Property(classification => classification.DecidedBy).HasConversion<string>().HasMaxLength(64).IsRequired();
+            entity.Property(classification => classification.CorpusRevision)
+                .HasMaxLength(EmailSpamClassificationEntity.MaximumCorpusRevisionLength);
+
+            // See the stored-email mapping: this is the PostgreSQL `xmin` system column, not a user-defined column.
+            entity.Property(classification => classification.ConcurrencyVersion).IsRowVersion();
+
+            entity.HasOne(classification => classification.StoredEmail)
+                .WithOne(email => email.SpamClassification)
+                .HasForeignKey<EmailSpamClassificationEntity>(classification => classification.StoredEmailId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<EmailSpamClassificationSignalEntity>(entity =>
+        {
+            entity.ToTable("email_spam_classification_signals");
+            entity.HasKey(signal => signal.Id);
+            entity.Property(signal => signal.Kind).HasConversion<string>().HasMaxLength(64).IsRequired();
+            entity.Property(signal => signal.Source).HasConversion<string>().HasMaxLength(64).IsRequired();
+            entity.Property(signal => signal.Name)
+                .HasMaxLength(EmailSpamClassificationSignalEntity.MaximumNameLength)
+                .IsRequired();
+            entity.Property(signal => signal.Observation)
+                .HasMaxLength(EmailSpamClassificationSignalEntity.MaximumObservationLength);
+            entity.Property(signal => signal.Origin)
+                .HasMaxLength(EmailSpamClassificationSignalEntity.MaximumOriginLength)
+                .IsRequired();
+
+            entity.HasIndex(signal => new { signal.StoredEmailId, signal.Ordinal })
+                .IsUnique()
+                .HasDatabaseName(EmailSpamClassificationSignalOrdinalUniqueIndexName);
+
+            entity.HasOne(signal => signal.Classification)
+                .WithMany(classification => classification.Signals)
+                .HasForeignKey(signal => signal.StoredEmailId)
+                .HasConstraintName(EmailSpamClassificationSignalForeignKeyName)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+    }
 
     /// <summary>Declares the vector spaces this deployment has embedded into.</summary>
     /// <remarks>

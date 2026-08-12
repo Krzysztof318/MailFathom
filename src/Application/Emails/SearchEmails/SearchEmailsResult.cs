@@ -12,6 +12,7 @@ namespace MailFathom.Application.Emails.SearchEmails;
 /// <param name="RetrievalMode">How the window was ranked, which can differ between two searches of one instance.</param>
 /// <param name="SemanticSearch">What semantic retrieval can do on this instance, which is what says why a lexical answer was lexical.</param>
 /// <param name="FolderFreshness">How current the local copy of each folder in the request's scope is.</param>
+/// <param name="IncludedJunkMail">Whether the account's junk folder took part in the search.</param>
 /// <remarks>
 /// <para>
 /// The window is the whole result: nothing continues it, and a caller that needs different mail narrows the structured
@@ -35,9 +36,14 @@ namespace MailFathom.Application.Emails.SearchEmails;
 /// copy whether or not a mail server is reachable, and a folder whose synchronization has been failing for a week
 /// otherwise looks exactly like a folder holding nothing that matched.
 /// </para>
+/// <para>
+/// Whether junk took part is reported whichever answer it is, for the reason a listing reports it: a window that left a
+/// whole folder out looks exactly like one whose query matched nothing in it.
+/// </para>
 /// </remarks>
 public sealed record SearchEmailsResult(
     IReadOnlyList<EmailSearchMatch> Matches,
     EmailSearchRetrievalMode RetrievalMode,
     SemanticSearchCapability SemanticSearch,
-    IReadOnlyList<MailboxFolderFreshness> FolderFreshness);
+    IReadOnlyList<MailboxFolderFreshness> FolderFreshness,
+    bool IncludedJunkMail);

@@ -79,8 +79,9 @@ internal sealed class SynchronizationFreshnessReader(MailFathomDbContext dbConte
             folders = folders.Where(folder => folderAliases.Contains(folder.Alias));
         }
 
-        // A folder withheld from tools is withheld from how fresh it is as well. The timestamp says a folder exists and
-        // when it was last read, which is exactly what a caller must not learn about a folder they may not read.
-        return ExcludedMailFolders.Excluding(folders, scope.HiddenFolders);
+        // A folder this read returns nothing from is withheld from how fresh it is as well. The timestamp says a folder
+        // exists and when it was last read, which is exactly what a caller must not learn about a folder they may not
+        // read — and what would name the junk folder to a caller who did not ask for it.
+        return ExcludedMailFolders.Excluding(folders, scope.WithheldFolders);
     }
 }

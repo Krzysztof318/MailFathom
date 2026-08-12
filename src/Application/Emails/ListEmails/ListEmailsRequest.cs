@@ -31,6 +31,14 @@ public sealed record ListEmailsRequest
     /// <summary>Gets the folder aliases to list from, or empty for every folder of the named accounts.</summary>
     public IReadOnlyList<MailFolderAlias> FolderAliases { get; init; } = [];
 
+    /// <summary>Gets whether the account's junk folder is listed too, which it is not unless the caller asks.</summary>
+    /// <remarks>
+    /// Naming the junk folder in <see cref="FolderAliases" /> is not asking: a scope filter says which of the readable
+    /// folders to read, and this says which folders are readable at all. A request that names the junk alias without
+    /// setting this therefore lists nothing, the same answer a folder holding no matching mail gives.
+    /// </remarks>
+    public bool IncludeJunkMail { get; init; }
+
     /// <summary>Gets the address the sender must carry, in any case, or <see langword="null" /> for any sender.</summary>
     public string? SenderAddress { get; init; }
 

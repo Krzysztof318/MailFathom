@@ -911,7 +911,8 @@ public sealed class GetEmailContentToolTests
             repairRequestStore ?? Substitute.For<IEmailContentRepairRequestStore>(),
             new MailboxScopeResolver(
                 new StubMailAccountCatalog(ServedAccountId),
-                StubMailFolderParticipation.Everything),
+                StubMailFolderParticipation.Everything,
+                StubJunkMailFolderCatalog.None),
             linkIssuer ?? new StubAttachmentDownloadLinkIssuer(),
             new EmailContentReadOptions()));
 

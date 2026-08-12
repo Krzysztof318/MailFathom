@@ -49,6 +49,16 @@ internal sealed class MailFolderMappingOptions : IValidatableObject
     /// </remarks>
     public bool? CreateIfMissing { get; set; }
 
+    /// <summary>Gets the special-use role this folder names, or <see langword="null" /> when it names a remote path instead.</summary>
+    /// <remarks>
+    /// Read from what the operator wrote rather than from what the server advertises, which is the only source available
+    /// before a folder has ever been resolved. An account whose junk folder is configured by path therefore has no junk
+    /// role here, and mail in it is listed like any other folder's — which is the honest answer, since nothing told
+    /// MailFathom that the path is where junk goes.
+    /// </remarks>
+    internal MailFolderSpecialUse? ConfiguredSpecialUse =>
+        TryParseSpecialUse(this.SpecialUse, out var specialUse) ? specialUse : null;
+
     /// <summary>Gets what this configured folder takes part in, with every unset switch reading as its default.</summary>
     internal MailFolderParticipation Participation => MailFolderParticipation.Create(
         this.Synchronize ?? true,

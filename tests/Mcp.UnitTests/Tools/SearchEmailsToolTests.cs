@@ -524,10 +524,50 @@ public sealed class SearchEmailsToolTests
         new FakeTimeProvider(),
         textEmbeddingGenerator: null);
 
+    /// <summary>Junk is mail a filter already set aside, so a search that says nothing about it leaves it out.</summary>
+    [Fact]
+    public async Task SearchEmailsAsync_NoAnswerAboutJunk_LeavesTheJunkFolderOutAndSaysSo()
+    {
+        // Arrange
+        var index = new StubEmailSearchIndexReader();
+        var junkFolder = new MailFolderIdentity(MailAccountId.Create(ServedAccountId), MailFolderAlias.Create("JUNK"));
+        var tool = ToolOver(index, junkFolders: StubJunkMailFolderCatalog.Naming(junkFolder));
+
+        // Act
+        var result = await tool.SearchEmailsAsync(Query, cancellationToken: TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.NotNull(index.LastSelection);
+        Assert.Equal([junkFolder], index.LastSelection.Scope.WithheldFolders);
+        Assert.False(result.IncludedJunkMail);
+    }
+
+    /// <summary>Somebody looking for a message a filter took asks for it, and the answer says which search they got.</summary>
+    [Fact]
+    public async Task SearchEmailsAsync_JunkAskedFor_SearchesItAndSaysSo()
+    {
+        // Arrange
+        var index = new StubEmailSearchIndexReader();
+        var junkFolder = new MailFolderIdentity(MailAccountId.Create(ServedAccountId), MailFolderAlias.Create("JUNK"));
+        var tool = ToolOver(index, junkFolders: StubJunkMailFolderCatalog.Naming(junkFolder));
+
+        // Act
+        var result = await tool.SearchEmailsAsync(
+            Query,
+            includeJunkMail: true,
+            cancellationToken: TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.NotNull(index.LastSelection);
+        Assert.Empty(index.LastSelection.Scope.WithheldFolders);
+        Assert.True(result.IncludedJunkMail);
+    }
+
     private static SearchEmailsTool ToolOver(
         StubEmailSearchIndexReader index,
         StubSynchronizationFreshnessReader? freshness = null,
-        EmailSearchSnippetBounds? snippetBounds = null)
+        EmailSearchSnippetBounds? snippetBounds = null,
+        StubJunkMailFolderCatalog? junkFolders = null)
     {
         // One instance for both, as the host composes them: the use case asks the index to cut extracts by these bounds
         // and the boundary publishes what came back under the same ones.
@@ -540,7 +580,8 @@ public sealed class SearchEmailsToolTests
                 freshness ?? new StubSynchronizationFreshnessReader(),
                 new MailboxScopeResolver(
                     new StubMailAccountCatalog(ServedAccountId),
-                    StubMailFolderParticipation.Everything),
+                    StubMailFolderParticipation.Everything,
+                    junkFolders ?? StubJunkMailFolderCatalog.None),
                 bounds),
             bounds,
             new StubMailAccountCatalog(ServedAccountId));

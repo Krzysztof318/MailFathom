@@ -376,6 +376,42 @@ not two lowercase letters, or a floor outside 0 to 1 — fails startup naming th
 The analyzed ceiling defaults to the same number as `EmailContent:MaxCharactersPerRead`, so an ordinary content read is
 analyzed whole and only something pathological reaches it.
 
+## `SpamClassification`
+
+Whether mail is classified as spam, and where. A root of its own for the same reason `SensitiveContent` is one: it is a
+property of the deployment rather than of one account, and what it switches on reaches the mailbox reads as well as the
+classification. [Spam classification](../features/spam-classification.md) records what a classification holds, which
+facts the deterministic stage reads, and why a scanner never overturns a provider's own verdict.
+
+Every switch is off by default, and an absent section is that default rather than a startup failure. The deterministic
+stage is the whole of the working feature: **no scanner implementation ships**, so `UseScanner` states an intent that a
+deployment with none registered simply has nothing to consult.
+
+| Key | Type | Default | Constraint | Change |
+| --- | --- | --- | --- | --- |
+| `SpamClassification:Enabled` | bool | `false` | | reload |
+| `SpamClassification:UseScanner` | bool | `false` | Asking for a scanner while `Enabled` is false fails startup, because a scanner is only consulted where classification runs | reload |
+| `SpamClassification:ScannedFolders:<n>` | string | unset | A usable folder alias; an absent list is every account's inbox mapping, and an explicitly empty list is no folder at all | reload |
+| `SpamClassification:ScannerThreshold` | double | unset | 0.1 – 1000; unset keeps the threshold the scanner itself answered with | reload |
+
+The default scope follows the folder **role** rather than the text `INBOX`: it is whichever alias each account maps to
+`Inbox` in [`MailSynchronization`](#one-account--mailsynchronizationaccountsn), so a server presenting the inbox under
+another name is classified without the scope being restated here. The two shapes of an unset list are deliberately
+distinguishable — writing no key asks for that default, and writing an empty list asks for no folder, which switches the
+work off without switching the section off.
+
+A folder alias that this system could never have issued **fails startup and names itself**, rather than being dropped by
+the binder and leaving the section reading as a scope that is covered. So does a threshold outside the range above: one
+at or below zero files every message whatever a scanner answered, and one beyond the ceiling can never be reached, so
+both are a typed digit rather than an intent.
+
+The section is read per classification rather than captured, so a reload takes effect on the next one. What a reload
+never does is revisit a message already classified: replacing a verdict is an explicit operation.
+
+Which folder is left out of `list_emails` and `search_emails` is not configured here. It is the folder mapped to the
+`Junk` special use in [`MailSynchronization`](#one-account--mailsynchronizationaccountsn), and it is withheld whether or
+not this section switches anything on.
+
 ## `MailboxSearch`
 
 The deployment-wide privacy bound on what a search result may quote, whether the result was ranked lexically or

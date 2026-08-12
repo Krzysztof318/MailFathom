@@ -398,7 +398,7 @@ public sealed class MailboxKnowledgeSearchTests
             index,
             LexicalOnlySemanticSearch(),
             FreshnessReaderReturningNothing(),
-            new MailboxScopeResolver(CatalogServing(EveryServedAccount), StubMailFolderParticipation.Everything),
+            new MailboxScopeResolver(CatalogServing(EveryServedAccount), StubMailFolderParticipation.Everything, StubJunkMailFolderCatalog.None),
             EmailSearchSnippetBounds.Default),
         bounds ?? EmailKnowledgeBounds.Default);
 
