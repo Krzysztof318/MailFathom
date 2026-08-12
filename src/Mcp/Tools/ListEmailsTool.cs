@@ -56,6 +56,7 @@ internal sealed class ListEmailsTool(
     /// <param name="direction">Which end of the timeline to read from.</param>
     /// <param name="pageSize">How many summaries to return, or none to take the default.</param>
     /// <param name="cursor">The cursor a previous page returned.</param>
+    /// <param name="includeJunkMail">Whether the account's junk folder takes part in the listing.</param>
     /// <param name="cancellationToken">Cancels the read when the caller disconnects or the host shuts down.</param>
     /// <returns>The page, with the cursor of the next one and how current each covered folder is.</returns>
     /// <exception cref="MailboxQueryFilterInvalidException">Thrown when text naming an account or a folder alias is not a value this system could have issued.</exception>
@@ -75,7 +76,8 @@ internal sealed class ListEmailsTool(
         "Lists summaries of emails already synchronized into MailFathom's local mailbox copy, newest received first by "
         + "default. Filters by account, folder, sender address, recipient address, subject text, received date range, "
         + "remote seen state, and attachment presence. Reads the local copy only: it never contacts a mail server, never "
-        + "marks mail as read, and never returns body text, raw MIME, or attachment content. Returns at most 100 "
+        + "marks mail as read, and never returns body text, raw MIME, or attachment content. Mail in the account's junk "
+        + "folder is left out unless includeJunkMail is set. Returns at most 100 "
         + "summaries per call, with an opaque cursor for the next page and a per-folder statement of how current the "
         + "local copy is.")]
     public async Task<ListEmailsToolResult> ListEmailsAsync(
@@ -103,6 +105,8 @@ internal sealed class ListEmailsTool(
         int? pageSize = null,
         [Description("The nextCursor value from a previous call, to read the following page. Reuse it only with the same filters and direction; presenting it with different ones is refused. Changing only the page size is allowed.")]
         string? cursor = null,
+        [Description("Include mail in the account's junk folder, which is left out by default. Naming the junk folder in folderAliases does not include it; only this does. A cursor issued with one answer cannot be presented with the other. The result reports which answer produced it.")]
+        bool includeJunkMail = false,
         CancellationToken cancellationToken = default)
     {
         var request = new ListEmailsRequest
@@ -119,6 +123,7 @@ internal sealed class ListEmailsTool(
             Direction = DomainDirection(direction),
             PageSize = pageSize,
             Cursor = cursor,
+            IncludeJunkMail = includeJunkMail,
         };
 
         var result = await mailboxTimelineReader.ListEmailsAsync(request, cancellationToken);

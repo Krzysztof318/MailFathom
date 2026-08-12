@@ -980,7 +980,8 @@ public sealed class EmailContentReaderTests
         repairRequestStore ?? new RecordingEmailContentRepairRequestStore(),
         new MailboxScopeResolver(
             accountCatalog ?? CatalogServing(MailAccountId.Create(summary?.AccountId.Value ?? SyntheticEmailSummaries.DefaultAccountId)),
-            folderParticipation ?? StubMailFolderParticipation.Everything),
+            folderParticipation ?? StubMailFolderParticipation.Everything,
+            StubJunkMailFolderCatalog.None),
         linkIssuer ?? new RecordingAttachmentDownloadLinkIssuer(),
         readOptions ?? new EmailContentReadOptions());
 
@@ -998,7 +999,8 @@ public sealed class EmailContentReaderTests
         repairRequestStore ?? new RecordingEmailContentRepairRequestStore(),
         new MailboxScopeResolver(
             accountCatalog ?? CatalogServing(MailAccountId.Create(SyntheticEmailSummaries.DefaultAccountId)),
-            StubMailFolderParticipation.Everything),
+            StubMailFolderParticipation.Everything,
+            StubJunkMailFolderCatalog.None),
         linkIssuer ?? new RecordingAttachmentDownloadLinkIssuer(),
         readOptions ?? new EmailContentReadOptions());
 

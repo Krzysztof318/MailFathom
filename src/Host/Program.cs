@@ -29,6 +29,7 @@ using MailFathom.Application.Rules.Evaluation;
 using MailFathom.Application.Rules.History;
 using MailFathom.Application.SensitiveContent.Detection;
 using MailFathom.Application.SensitiveContent.Redaction;
+using MailFathom.Application.Spam;
 using MailFathom.Application.Synchronization;
 using MailFathom.Application.Synchronization.Checkpoints;
 using MailFathom.Application.Synchronization.Reconciliation;
@@ -46,6 +47,7 @@ using MailFathom.Host.Configuration.Providers;
 using MailFathom.Host.Configuration.Provisioning;
 using MailFathom.Host.Configuration.Rules;
 using MailFathom.Host.Configuration.SensitiveContent;
+using MailFathom.Host.Configuration.Spam;
 using MailFathom.Host.Hosting;
 using MailFathom.Host.Hosting.Startup;
 using MailFathom.Host.Hosting.Warnings;
@@ -251,6 +253,15 @@ try
         builder.Services.AddSingleton<SensitiveContentRedactor>();
     }
 
+    // Bound strictly for the reason the rule section is: a misspelled key here would leave classification looking
+    // configured while it was off, and an operator reading their own file as proof of it.
+    builder.Services.AddOptions<SpamClassificationOptions>()
+        .Bind(
+            builder.Configuration.GetSection(SpamClassificationOptions.SectionName),
+            binderOptions => binderOptions.ErrorOnUnknownConfiguration = true)
+        .ValidateDataAnnotations()
+        .ValidateOnStart();
+
     // Rules are authored in configuration rather than in a table, which ADR 0010 records: what an instance will do to a
     // mailbox is then reviewable in a diff before it runs and reproducible from a repository afterwards. Bound strictly
     // for the reason mail transport is — a misspelled key would otherwise be ignored, and the rule it belonged to would
@@ -361,6 +372,8 @@ try
     builder.Services.AddScoped<IMailAnsweringAuditSettingsReader>(provider => provider.GetRequiredService<MailSynchronizationOptions>());
     builder.Services.AddScoped<IMailAccountCatalog>(provider => provider.GetRequiredService<MailSynchronizationOptions>());
     builder.Services.AddScoped<IMailFolderParticipationReader>(provider => provider.GetRequiredService<MailSynchronizationOptions>());
+    builder.Services.AddScoped<IJunkMailFolderCatalog>(provider => provider.GetRequiredService<MailSynchronizationOptions>());
+    builder.Services.AddScoped<ISpamClassificationSettingsReader, ConfiguredSpamClassificationSettingsReader>();
     builder.Services.AddScoped<IImapAccountSettingsProvider, ConfiguredImapAccountSettingsProvider>();
     builder.Services.AddScoped<IMailOAuthSettingsProvider, ConfiguredMailOAuthSettingsProvider>();
     // A singleton, unlike the settings around it, because the pool that reads it is one: the write connection is

@@ -140,6 +140,40 @@ rather than a retry's: two readers meeting the same damaged message concurrently
 Nothing drains the table yet — performing the repair belongs to the synchronizer — and the cascade from `stored_emails`
 removes a request with the email it is about.
 
+## What classification concluded about a message
+
+`email_spam_classifications` is one-to-one with `stored_emails` and holds what spam classification concluded: the
+`Verdict`, the stage that `DecidedBy`, the `Score` and the `Threshold` it was judged against, the `CorpusRevision` the
+deciding stage ran under, and when it was `EvaluatedAt`. [Spam
+classification](../features/spam-classification.md#what-a-classification-records) describes what produces each value.
+
+Keyed by the email rather than carrying an identity of its own, which is what makes one classification per message a
+property of the schema instead of a rule somebody has to remember: classifying the same message twice reaches the same
+row, so two runs asking together resolve to one record rather than to a history nobody asked for. The row carries `xmin`
+as its concurrency token, because those two runs do exist — an arrival classifies a message while an operator's
+reclassification replaces it — and the conflict is retried from a fresh read rather than resolved by whichever writer
+was last.
+
+The score and the threshold are two columns that are present or absent together: the same number is spam under one
+configuration and ordinary mail under another, so a score whose threshold is missing cannot be read at all. Nothing in
+the schema enforces the pairing; the domain value that builds them refuses to carry one without the other, and a row
+holding half of one is read back as carrying no assessment.
+
+It is a table rather than columns on `stored_emails` for the reason the repair request is: the rows are sparse — a
+deployment with classification off has none — and a second table hangs off them.
+
+`email_spam_classification_signals` is that table, one row per fact the verdict rests on: its `Kind`, its `Name`, what
+was `Observation`-ed, and the `Source` and `Origin` it came from, numbered by `Ordinal`. A row per signal rather than one
+opaque column, because the whole point of the record is that the facts stay separable — an operator diagnosing a wrong
+verdict asks which authentication method failed and what the provider header said, and a serialized blob answers neither
+without being parsed by hand. The ordinal is unique per classification and carries meaning: the deterministic stage's
+facts are numbered first, so a record truncated at its bound kept the ones the verdict rests on rather than an arbitrary
+subset.
+
+Both cascades point one way. A classification is deleted with the email it describes, and its signals with the
+classification, so whatever erasure and retention already reach a message reach everything derived from it — there is no
+pass of its own to remember.
+
 ## Recorded mailbox mutations
 
 `mailbox_mutations` holds one row per change MailFathom has been asked to make to a remote mailbox, written **before**
@@ -390,6 +424,7 @@ Nothing in either table is personal data. Rule names, folder aliases, mutation n
 | `ix_mail_answering_audit_entries_run_account` | `(RunId, MailboxAccountId)`, unique | One entry per run per account, whatever a repeated append attempts |
 | `ix_mail_answering_audit_entries_account_completed` | `(MailboxAccountId, CompletedAt, Id)` | The same two readers the trail above has: a keyset-paginated page of an account's runs, and the retention pass beside it |
 | `IX_mail_answering_audited_emails_StoredEmailId` | `(StoredEmailId)` | The foreign key back to the message, which is what makes erasing one reach the runs that read it without scanning the table |
+| `ix_email_spam_classification_signals_classification_ordinal` | `(StoredEmailId, Ordinal)`, unique | One classification's signals in the order the stages produced them, and the constraint a replaced record cannot write an ordinal twice past |
 
 The recipient and search-vector indexes are GIN rather than B-tree because both serve containment tests. A B-tree over an array column serves only equality against a whole array, and over a `tsvector` it serves nothing search asks for; a GIN index is what turns either into an index scan.
 
@@ -444,6 +479,13 @@ The same holds for `email_chunks`, and one thing about it is deliberate: a chunk
 `email_embeddings` is the same again, one step further out. A vector is derived from mail content and inherits the source message's classification, retention, access, export, and erasure obligations whole; nothing about being a list of numbers makes it a lesser copy of the words it stands for, and it is not anonymous because it cannot be read back by eye. It carries no text and no coordinates of its own — the chunk it hangs on answers both — and the cascade from that chunk is what makes erasure structural rather than a rule somebody has to remember. No vector, no chunk text, and no digest reaches a log, a metric, a trace, or an error message.
 
 `embedding_spend_periods` holds no personal data either, and its shape is what makes that true rather than a claim about it: a character count and an instant say how much a deployment spent and when, and neither names a message, a passage, or a vector. That is also why it outlives what it recorded — nothing cascades into it, and erasing the mail a period paid to embed leaves the record that the period was paid for.
+
+`email_spam_classifications` and `email_spam_classification_signals` are derived personal data of the same kind as a
+chunk or a vector: what was concluded about somebody's mail, and from which of its headers. They inherit the source
+message's classification, retention, access, export, and erasure obligations whole, and the cascade from `stored_emails`
+is what makes that structural rather than a pass somebody has to remember. A signal names a header field, an
+authentication outcome, or a rule — never the value of a header — and nothing in either table reaches a log, a metric, a
+trace, or an error message.
 
 `embedding_profiles` is the exception on this page: it holds no personal data at all. It describes a model, and the credential that reaches that model is configuration rather than a column here, so nothing in this table is a secret or is derived from anybody's mail.
 

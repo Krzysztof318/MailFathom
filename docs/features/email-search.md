@@ -48,6 +48,7 @@ the same reason. It stays distinguishable from a message whose body was genuinel
 | `ReceivedBefore` | Exclusive end of the received range | no end |
 | `IsRemotelySeen` | The remote `\Seen` state to require | either state |
 | `HasAttachments` | Whether attachments are required | either |
+| `IncludeJunkMail` | Whether the account's junk folder takes part | it does not |
 | `ResultLimit` | How many ranked results to return | the default of 20 |
 
 The structured filters are the ones `ListEmails` takes and they mean exactly the same things, because both read models
@@ -56,6 +57,8 @@ apply one validated `MailboxEmailSelection` and one SQL predicate.
 and refuses, including the attachment-presence rule and the account-scope resolution; nothing about them changes here.
 A folder mapped with `VisibleToTools: false` is outside a search for the same reason it is outside a listing, and by the
 same single decision — [folders withheld from tools](mailbox-queries.md#folders-withheld-from-tools).
+The account's junk folder is left out by the same one decision and lifted by the same caller override, which the
+result reports back — [the junk folder, withheld by default](mailbox-queries.md#the-junk-folder-withheld-by-default-and-reachable-on-request).
 
 `SubjectFragment` and `QueryText` are unrelated. The fragment is a structured filter over the stored subject column that
 narrows which emails are eligible; the query text is what the eligible ones are matched and ranked against.
@@ -101,6 +104,8 @@ produced them, and `SearchEmailsResult` adds the retrieval mode the whole window
 - **The semantic capability** is `Inactive`, `Available`, or `Degraded`, and it describes the instance. It is what
   separates a lexical answer that is exactly what the deployment intends from one that is narrower than intended; the
   section below states what each value means.
+- **Whether junk mail took part** says which of the two searches the caller got, so an absent result is never
+  ambiguous between missing and withheld.
 
 The search vector carries no lexeme weights, so the lexical rank reflects how often and how densely a message's document
 mentions the query's words rather than where in the message they appear. A subject match and a body match count the

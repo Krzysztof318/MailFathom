@@ -72,6 +72,7 @@ public sealed class ListEmailsToolMetadataTests
             "receivedBefore",
             "isRemotelySeen",
             "hasAttachments",
+            "includeJunkMail",
             "direction",
             "pageSize",
             "cursor",

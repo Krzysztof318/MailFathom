@@ -577,7 +577,8 @@ public sealed class MailboxQuestionReaderTests
                 answerer),
             new MailboxScopeResolver(
                 CatalogServing(MailAccountId.Create(ServedAccountId)),
-                StubMailFolderParticipation.Everything),
+                StubMailFolderParticipation.Everything,
+                StubJunkMailFolderCatalog.None),
             spendLedger ?? LedgerAdmitting(),
             bounds ?? MailAnswerBounds.Default,
             runTelemetry ?? new RecordingMailAnsweringRunTelemetry(),

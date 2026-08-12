@@ -29,6 +29,10 @@ internal sealed record ListEmailsToolResult
     [Description("How current the local copy of each folder in the request's scope is, one entry per folder. Read this before concluding that a mailbox holds no matching mail.")]
     public required IReadOnlyList<FolderCopyFreshness> FolderFreshness { get; init; }
 
+    /// <summary>Gets whether the account's junk folder took part in the listing.</summary>
+    [Description("Whether the account's junk folder took part in this listing. False means its mail was left out and is reachable by calling again with includeJunkMail set.")]
+    public required bool IncludedJunkMail { get; init; }
+
     /// <summary>Publishes a page the use case answered.</summary>
     /// <param name="result">The page to publish.</param>
     /// <param name="accountNames">Reads the name each named account is published under.</param>
@@ -44,6 +48,7 @@ internal sealed record ListEmailsToolResult
             Emails = [.. result.Emails.Select(summary => ListedEmailSummary.From(summary, accountNames))],
             NextCursor = result.NextCursor,
             FolderFreshness = [.. result.FolderFreshness.Select(freshness => FolderCopyFreshness.From(freshness, accountNames))],
+            IncludedJunkMail = result.IncludedJunkMail,
         };
     }
 }

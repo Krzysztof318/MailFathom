@@ -33,7 +33,7 @@ public sealed class MailboxScopeResolverTests
         var resolver = ResolverServing(Work, Private);
 
         // Act
-        var scope = resolver.ReadableScope([MailAccountSelector.Create("acct-1")], []);
+        var scope = resolver.ReadableScope([MailAccountSelector.Create("acct-1")], [], JunkMailInclusion.Excluded);
 
         // Assert
         Assert.Equal([Work.Id], scope.AccountIds);
@@ -51,7 +51,7 @@ public sealed class MailboxScopeResolverTests
         var resolver = ResolverServing(Work, Private);
 
         // Act
-        var scope = resolver.ReadableScope([MailAccountSelector.Create(named)], []);
+        var scope = resolver.ReadableScope([MailAccountSelector.Create(named)], [], JunkMailInclusion.Excluded);
 
         // Assert
         Assert.Equal([Work.Id], scope.AccountIds);
@@ -67,7 +67,8 @@ public sealed class MailboxScopeResolverTests
         // Act
         var scope = resolver.ReadableScope(
             [MailAccountSelector.Create("acct-1"), MailAccountSelector.Create("Work mail")],
-            []);
+            [],
+            JunkMailInclusion.Excluded);
 
         // Assert
         Assert.Equal([Work.Id], scope.AccountIds);
@@ -82,7 +83,7 @@ public sealed class MailboxScopeResolverTests
 
         // Act, Assert
         Assert.Throws<MailAccountNotAccessibleException>(
-            () => resolver.ReadableScope([MailAccountSelector.Create("ACCT-1")], []));
+            () => resolver.ReadableScope([MailAccountSelector.Create("ACCT-1")], [], JunkMailInclusion.Excluded));
     }
 
     /// <summary>Text naming nothing meets the refusal an unserved identifier meets, so a caller learns neither which spelling was wrong nor that the other exists.</summary>
@@ -96,7 +97,7 @@ public sealed class MailboxScopeResolverTests
 
         // Act
         var failure = Assert.Throws<MailAccountNotAccessibleException>(
-            () => resolver.ReadableScope([MailAccountSelector.Create(named)], []));
+            () => resolver.ReadableScope([MailAccountSelector.Create(named)], [], JunkMailInclusion.Excluded));
 
         // Assert
         Assert.Equal(MailAccountSelector.Create(named), failure.RequestedAccount);
@@ -111,7 +112,7 @@ public sealed class MailboxScopeResolverTests
         var resolver = ResolverServing(Private, Work);
 
         // Act
-        var scope = resolver.ReadableScope([], [MailFolderAlias.Create("INBOX")]);
+        var scope = resolver.ReadableScope([], [MailFolderAlias.Create("INBOX")], JunkMailInclusion.Excluded);
 
         // Assert
         Assert.Equal([Work.Id, Private.Id], scope.AccountIds);
@@ -126,7 +127,7 @@ public sealed class MailboxScopeResolverTests
         var resolver = ResolverServing();
 
         // Act
-        var scope = resolver.ReadableScope([], []);
+        var scope = resolver.ReadableScope([], [], JunkMailInclusion.Excluded);
 
         // Assert
         Assert.Empty(scope.AccountIds);
@@ -144,7 +145,7 @@ public sealed class MailboxScopeResolverTests
             .ToArray();
 
         // Act, Assert
-        Assert.Throws<MailboxQueryFilterInvalidException>(() => resolver.ReadableScope(tooMany, []));
+        Assert.Throws<MailboxQueryFilterInvalidException>(() => resolver.ReadableScope(tooMany, [], JunkMailInclusion.Excluded));
     }
 
     /// <summary>A withheld folder reaches every read model through the scope, which is what makes one decision cover four tools.</summary>
@@ -156,7 +157,7 @@ public sealed class MailboxScopeResolverTests
         var resolver = ResolverServing(StubMailFolderParticipation.Hiding(privateFolder), Work, Private);
 
         // Act
-        var scope = resolver.ReadableScope([], [MailFolderAlias.Create("PRIVATE")]);
+        var scope = resolver.ReadableScope([], [MailFolderAlias.Create("PRIVATE")], JunkMailInclusion.Excluded);
 
         // Assert
         Assert.Equal([privateFolder], scope.HiddenFolders);
@@ -171,7 +172,7 @@ public sealed class MailboxScopeResolverTests
         var resolver = ResolverServing(Work);
 
         // Act
-        var scope = resolver.ReadableScope([], []);
+        var scope = resolver.ReadableScope([], [], JunkMailInclusion.Excluded);
 
         // Assert
         Assert.Empty(scope.HiddenFolders);
@@ -191,7 +192,7 @@ public sealed class MailboxScopeResolverTests
             Private);
 
         // Act
-        var scope = resolver.ReadableScope([], []);
+        var scope = resolver.ReadableScope([], [], JunkMailInclusion.Excluded);
 
         // Assert
         Assert.Equal(
@@ -228,11 +229,169 @@ public sealed class MailboxScopeResolverTests
         Assert.False(resolver.IsReadableByTools(Private.Id, MailFolderAlias.Create("INBOX")));
     }
 
+    /// <summary>Junk is what a reader means by mail they never asked to see, so a read that says nothing about it gets none.</summary>
+    [Fact]
+    public void ReadableScope_ARequestSayingNothingAboutJunk_WithholdsEveryMappedJunkFolder()
+    {
+        // Arrange
+        var junkFolder = new MailFolderIdentity(Work.Id, MailFolderAlias.Create("JUNK"));
+        var resolver = ResolverServing(StubJunkMailFolderCatalog.Naming(junkFolder), Work, Private);
+
+        // Act
+        var scope = resolver.ReadableScope([], [], JunkMailInclusion.Excluded);
+
+        // Assert
+        Assert.Equal([junkFolder], scope.WithheldJunkFolders);
+        Assert.Equal([junkFolder], scope.WithheldFolders);
+        Assert.False(scope.IncludesJunkMail);
+    }
+
+    /// <summary>Somebody looking for a message a filter took is the whole reason the override exists.</summary>
+    [Fact]
+    public void ReadableScope_ARequestAskingForJunk_WithholdsNoneOfItAndRecordsTheAnswer()
+    {
+        // Arrange
+        var resolver = ResolverServing(
+            StubJunkMailFolderCatalog.Naming(new MailFolderIdentity(Work.Id, MailFolderAlias.Create("JUNK"))),
+            Work);
+
+        // Act
+        var scope = resolver.ReadableScope([], [], JunkMailInclusion.Included);
+
+        // Assert
+        Assert.Empty(scope.WithheldJunkFolders);
+        Assert.Empty(scope.WithheldFolders);
+        Assert.True(scope.IncludesJunkMail);
+    }
+
+    /// <summary>The caller's answer may add mail back, never a folder the operator withheld from every tool.</summary>
+    [Fact]
+    public void ReadableScope_AJunkFolderAlsoWithheldFromTools_StaysWithheldWhenTheCallerAsksForJunk()
+    {
+        // Arrange
+        var junkFolder = new MailFolderIdentity(Work.Id, MailFolderAlias.Create("JUNK"));
+        var resolver = ResolverServing(
+            StubMailFolderParticipation.Hiding(junkFolder),
+            StubJunkMailFolderCatalog.Naming(junkFolder),
+            Work);
+
+        // Act
+        var scope = resolver.ReadableScope([], [], JunkMailInclusion.Included);
+
+        // Assert
+        Assert.Equal([junkFolder], scope.WithheldFolders);
+        Assert.True(scope.IncludesJunkMail);
+    }
+
+    /// <summary>A predicate does not care why a folder is out, so what a read consumes is the union of both decisions.</summary>
+    [Fact]
+    public void ReadableScope_AHiddenFolderBesideAJunkFolder_WithholdsBothAsOneList()
+    {
+        // Arrange
+        var privateFolder = new MailFolderIdentity(Work.Id, MailFolderAlias.Create("PRIVATE"));
+        var junkFolder = new MailFolderIdentity(Work.Id, MailFolderAlias.Create("JUNK"));
+        var resolver = ResolverServing(
+            StubMailFolderParticipation.Hiding(privateFolder),
+            StubJunkMailFolderCatalog.Naming(junkFolder),
+            Work);
+
+        // Act
+        var scope = resolver.ReadableScope([], [], JunkMailInclusion.Excluded);
+
+        // Assert
+        Assert.Equal([privateFolder], scope.HiddenFolders);
+        Assert.Equal([junkFolder], scope.WithheldJunkFolders);
+        Assert.Equal(
+            [junkFolder, privateFolder],
+            scope.WithheldFolders.OrderBy(folder => folder.Alias.Value, StringComparer.Ordinal));
+    }
+
+    /// <summary>One folder both decisions withhold is one folder, so a query is not handed the same exclusion twice.</summary>
+    [Fact]
+    public void ReadableScope_AFolderBothDecisionsWithhold_NamesItOnce()
+    {
+        // Arrange
+        var junkFolder = new MailFolderIdentity(Work.Id, MailFolderAlias.Create("JUNK"));
+        var resolver = ResolverServing(
+            StubMailFolderParticipation.Hiding(junkFolder),
+            StubJunkMailFolderCatalog.Naming(junkFolder),
+            Work);
+
+        // Act
+        var scope = resolver.ReadableScope([], [], JunkMailInclusion.Excluded);
+
+        // Assert
+        Assert.Equal([junkFolder], scope.WithheldFolders);
+    }
+
+    /// <summary>Two readings of one configuration have to produce one predicate, whichever order the folders were read in.</summary>
+    [Fact]
+    public void ReadableScope_SeveralJunkFoldersWithheld_OrdersThemByAccountAndAlias()
+    {
+        // Arrange
+        var resolver = ResolverServing(
+            StubJunkMailFolderCatalog.Naming(
+                new MailFolderIdentity(Private.Id, MailFolderAlias.Create("JUNK")),
+                new MailFolderIdentity(Work.Id, MailFolderAlias.Create("SPAM")),
+                new MailFolderIdentity(Work.Id, MailFolderAlias.Create("JUNK"))),
+            Work,
+            Private);
+
+        // Act
+        var scope = resolver.ReadableScope([], [], JunkMailInclusion.Excluded);
+
+        // Assert
+        Assert.Equal(
+            [
+                new MailFolderIdentity(Work.Id, MailFolderAlias.Create("JUNK")),
+                new MailFolderIdentity(Work.Id, MailFolderAlias.Create("SPAM")),
+                new MailFolderIdentity(Private.Id, MailFolderAlias.Create("JUNK")),
+            ],
+            scope.WithheldJunkFolders);
+    }
+
+    /// <summary>A deployment that maps no junk folder pays for nothing, and the caller's answer is still recorded.</summary>
+    [Fact]
+    public void ReadableScope_NoAccountMappingAJunkFolder_WithholdsNothingAndStillRecordsTheAnswer()
+    {
+        // Arrange
+        var resolver = ResolverServing(Work);
+
+        // Act
+        var scope = resolver.ReadableScope([], [], JunkMailInclusion.Excluded);
+
+        // Assert
+        Assert.Empty(scope.WithheldJunkFolders);
+        Assert.False(scope.IncludesJunkMail);
+    }
+
+    [Fact]
+    public void ReadableScope_AnInclusionOutsideTheDeclaredSet_IsRefused()
+    {
+        // Arrange
+        var resolver = ResolverServing(Work);
+
+        // Act, Assert
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            resolver.ReadableScope([], [], (JunkMailInclusion)7));
+    }
+
     private static MailboxScopeResolver ResolverServing(params ServedMailAccount[] servedAccounts) =>
-        ResolverServing(StubMailFolderParticipation.Everything, servedAccounts);
+        ResolverServing(StubMailFolderParticipation.Everything, StubJunkMailFolderCatalog.None, servedAccounts);
 
     private static MailboxScopeResolver ResolverServing(
         IMailFolderParticipationReader folderParticipation,
+        params ServedMailAccount[] servedAccounts) =>
+        ResolverServing(folderParticipation, StubJunkMailFolderCatalog.None, servedAccounts);
+
+    private static MailboxScopeResolver ResolverServing(
+        IJunkMailFolderCatalog junkFolders,
+        params ServedMailAccount[] servedAccounts) =>
+        ResolverServing(StubMailFolderParticipation.Everything, junkFolders, servedAccounts);
+
+    private static MailboxScopeResolver ResolverServing(
+        IMailFolderParticipationReader folderParticipation,
+        IJunkMailFolderCatalog junkFolders,
         params ServedMailAccount[] servedAccounts)
     {
         var catalog = Substitute.For<IMailAccountCatalog>();
@@ -241,6 +400,6 @@ public sealed class MailboxScopeResolverTests
             .. servedAccounts.OrderBy(account => account.Id.Value, StringComparer.Ordinal),
         ]);
 
-        return new MailboxScopeResolver(catalog, folderParticipation);
+        return new MailboxScopeResolver(catalog, folderParticipation, junkFolders);
     }
 }

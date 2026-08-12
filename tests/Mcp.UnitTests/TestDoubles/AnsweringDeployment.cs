@@ -75,7 +75,7 @@ internal static class AnsweringDeployment
     {
         return new MailboxQuestionReader(
             Capability(answerer),
-            new MailboxScopeResolver(AccountCatalog(), StubMailFolderParticipation.Everything),
+            new MailboxScopeResolver(AccountCatalog(), StubMailFolderParticipation.Everything, StubJunkMailFolderCatalog.None),
             spendLedger ?? LedgerAdmitting(),
             bounds ?? MailAnswerBounds.Default,
 

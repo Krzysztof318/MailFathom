@@ -73,6 +73,11 @@ Two further narrowings apply underneath, and neither can widen anything:
   the accounts the deployment actually serves. Answering a question therefore cannot see mail that searching for it
   would not. [Email search](email-search.md) describes that ranking and its filters.
 - An account or folder named in the scope that the deployment does not serve simply matches nothing.
+- The account's junk folder is outside retrieval, and unlike `list_emails` and `search_emails` there is **no override**.
+  An answer here is composed by a model from the mail it retrieved, so content written to deceive a reader would arrive
+  as ordinary correspondence with nothing left to notice it. [Spam
+  classification](spam-classification.md#the-junk-folder-is-left-out-of-listing-and-search) records where that folder
+  comes from.
 
 ## What one retrieval may hand over
 

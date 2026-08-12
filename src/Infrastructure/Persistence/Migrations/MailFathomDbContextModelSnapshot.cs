@@ -205,6 +205,93 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                     b.ToTable("email_search_documents", (string)null);
                 });
 
+            modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.EmailSpamClassificationEntity", b =>
+                {
+                    b.Property<Guid>("StoredEmailId")
+                        .HasColumnType("uuid");
+
+                    b.Property<uint>("ConcurrencyVersion")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.Property<string>("CorpusRevision")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<string>("DecidedBy")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateTimeOffset>("EvaluatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<double?>("Score")
+                        .HasColumnType("double precision");
+
+                    b.Property<double?>("Threshold")
+                        .HasColumnType("double precision");
+
+                    b.Property<string>("Verdict")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.HasKey("StoredEmailId")
+                        .HasName("pk_email_spam_classifications");
+
+                    b.ToTable("email_spam_classifications", (string)null);
+                });
+
+            modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.EmailSpamClassificationSignalEntity", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<string>("Observation")
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)");
+
+                    b.Property<int>("Ordinal")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Origin")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<string>("Source")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<Guid>("StoredEmailId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("StoredEmailId", "Ordinal")
+                        .IsUnique()
+                        .HasDatabaseName("ix_email_spam_classification_signals_classification_ordinal");
+
+                    b.ToTable("email_spam_classification_signals", (string)null);
+                });
+
             modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.EmbeddingProfileEntity", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1058,6 +1145,29 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                     b.Navigation("StoredEmail");
                 });
 
+            modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.EmailSpamClassificationEntity", b =>
+                {
+                    b.HasOne("MailFathom.Infrastructure.Persistence.Entities.StoredEmailEntity", "StoredEmail")
+                        .WithOne("SpamClassification")
+                        .HasForeignKey("MailFathom.Infrastructure.Persistence.Entities.EmailSpamClassificationEntity", "StoredEmailId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("StoredEmail");
+                });
+
+            modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.EmailSpamClassificationSignalEntity", b =>
+                {
+                    b.HasOne("MailFathom.Infrastructure.Persistence.Entities.EmailSpamClassificationEntity", "Classification")
+                        .WithMany("Signals")
+                        .HasForeignKey("StoredEmailId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_email_spam_classification_signals_classifications");
+
+                    b.Navigation("Classification");
+                });
+
             modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.MailAnsweringAuditedEmailEntity", b =>
                 {
                     b.HasOne("MailFathom.Infrastructure.Persistence.Entities.MailAnsweringAuditEntryEntity", null)
@@ -1148,6 +1258,11 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                     b.Navigation("Embeddings");
                 });
 
+            modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.EmailSpamClassificationEntity", b =>
+                {
+                    b.Navigation("Signals");
+                });
+
             modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.EmbeddingProfileEntity", b =>
                 {
                     b.Navigation("Embeddings");
@@ -1186,6 +1301,8 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                     b.Navigation("Mutations");
 
                     b.Navigation("SearchDocument");
+
+                    b.Navigation("SpamClassification");
                 });
 #pragma warning restore 612, 618
         }

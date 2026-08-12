@@ -192,6 +192,16 @@ internal sealed class StoredEmailEntity
     public EmailContentRepairRequestEntity? ContentRepairRequest { get; set; }
 
     /// <summary>
+    /// Gets or sets what classification concluded about this email, which is absent until a classification has run for
+    /// it and stays absent on a deployment that never switches classification on.
+    /// </summary>
+    /// <remarks>
+    /// Derived data hanging off the occurrence rather than columns on it, which is what makes it removed with the mail
+    /// it describes and absent — rather than null-valued on every row — where the feature is off.
+    /// </remarks>
+    public EmailSpamClassificationEntity? SpamClassification { get; set; }
+
+    /// <summary>
     /// Gets or sets the length this email's extracted text had when the per-message embedding ceiling stopped the cut
     /// short of its end, or <see langword="null" /> when no ceiling reached it.
     /// </summary>

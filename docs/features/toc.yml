@@ -27,6 +27,8 @@
   href: mail-answering.md
 - name: Sensitive-content scanning
   href: sensitive-content-scanning.md
+- name: Spam classification
+  href: spam-classification.md
 - name: Mail rules
   href: mail-rules.md
 - name: MCP tools

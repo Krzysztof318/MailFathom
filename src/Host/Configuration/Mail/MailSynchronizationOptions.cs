@@ -39,7 +39,8 @@ internal sealed class MailSynchronizationOptions
         IMailboxMutationAuditSettingsReader,
         IMailAnsweringAuditSettingsReader,
         IMailAccountCatalog,
-        IMailFolderParticipationReader
+        IMailFolderParticipationReader,
+        IJunkMailFolderCatalog
 {
     /// <summary>The shutdown budget the .NET Generic Host applies when nothing configures one.</summary>
     private static readonly TimeSpan DefaultHostShutdownTimeout = TimeSpan.FromSeconds(30);
@@ -476,6 +477,33 @@ internal sealed class MailSynchronizationOptions
         [.. this.ConfiguredFolders().Where(static folder => !folder.Participation.GeneratesEmbeddings).Select(static folder => folder.Identity)];
 
     /// <inheritdoc />
+    /// <remarks>
+    /// Read from the configured role rather than from what a server advertised, for the reason
+    /// <see cref="MailFolderMappingOptions.ConfiguredSpecialUse" /> gives. A deployment that maps no junk folder answers
+    /// with nothing here, and every mailbox read then behaves as it did before this existed.
+    /// </remarks>
+    public IReadOnlyList<MailFolderIdentity> JunkFolders =>
+        [.. this.ConfiguredFolders().Where(static folder => folder.SpecialUse is MailFolderSpecialUse.Junk).Select(static folder => folder.Identity)];
+
+    /// <inheritdoc />
+    public bool IsJunkFolder(MailAccountId accountId, MailFolderAlias folderAlias) =>
+        this.ConfiguredFolders().Any(folder =>
+            folder.SpecialUse is MailFolderSpecialUse.Junk
+            && folder.Identity.AccountId == accountId
+            && folder.Identity.Alias == folderAlias);
+
+    /// <summary>Gets the aliases every account maps to its inbox, which is the scope classification defaults to.</summary>
+    /// <remarks>
+    /// Read here rather than in the classification section because this is where the folder mappings are, and because
+    /// the default has to follow the mappings: an operator whose server presents the inbox under another name configures
+    /// the role, and the default scope has to be the alias that role resolved to rather than the literal text INBOX.
+    /// </remarks>
+    internal IEnumerable<MailFolderAlias> InboxFolderAliases =>
+        this.ConfiguredFolders()
+            .Where(static folder => folder.SpecialUse is MailFolderSpecialUse.Inbox)
+            .Select(static folder => folder.Identity.Alias);
+
+    /// <inheritdoc />
     public MailFolderParticipation GetParticipation(MailAccountId accountId, MailFolderAlias folderAlias) =>
         this.ConfiguredFolders()
             .FirstOrDefault(folder => folder.Identity.AccountId == accountId && folder.Identity.Alias == folderAlias)
@@ -489,11 +517,11 @@ internal sealed class MailSynchronizationOptions
     /// account identifier is unusable is skipped: startup validation refuses that configuration, and inventing an
     /// identity for it here would attach one folder's decision to a name no operator wrote.
     /// </remarks>
-    private IEnumerable<ConfiguredFolderParticipation> ConfiguredFolders() =>
+    private IEnumerable<ConfiguredFolder> ConfiguredFolders() =>
         (this.Accounts ?? [])
             .SelectMany(account => account.EffectiveFolders.Select(folder => new { account.AccountId, Folder = folder }))
-            .Select(static configured => ConfiguredFolderParticipation.TryRead(configured.AccountId, configured.Folder))
-            .OfType<ConfiguredFolderParticipation>();
+            .Select(static configured => ConfiguredFolder.TryRead(configured.AccountId, configured.Folder))
+            .OfType<ConfiguredFolder>();
 
     /// <summary>Finds every configured earliest received date that could not mean anything on the supplied date.</summary>
     /// <param name="today">The current date the configured bounds are read against.</param>
@@ -630,13 +658,14 @@ internal sealed class MailSynchronizationOptions
         this.FindConfiguredAccount(MailAccountId.Create(normalizedAccountId))
         ?? throw new InvalidOperationException($"Account '{normalizedAccountId}' is not configured.");
 
-    /// <summary>One configured folder read as the identity and the participation the folder port answers with.</summary>
-    private sealed record ConfiguredFolderParticipation(
+    /// <summary>One configured folder read as the identity, the participation, and the role the folder ports answer with.</summary>
+    private sealed record ConfiguredFolder(
         MailFolderIdentity Identity,
-        MailFolderParticipation Participation)
+        MailFolderParticipation Participation,
+        MailFolderSpecialUse? SpecialUse)
     {
         /// <summary>Reads one account's folder entry, or nothing when its names are not values this system issues.</summary>
-        internal static ConfiguredFolderParticipation? TryRead(
+        internal static ConfiguredFolder? TryRead(
             string configuredAccountId,
             MailFolderMappingOptions folder)
         {
@@ -645,11 +674,12 @@ internal sealed class MailSynchronizationOptions
                 return null;
             }
 
-            return new ConfiguredFolderParticipation(
+            return new ConfiguredFolder(
                 new MailFolderIdentity(
                     MailAccountId.Create(configuredAccountId),
                     MailFolderAlias.Create(folder.Alias)),
-                folder.Participation);
+                folder.Participation,
+                folder.ConfiguredSpecialUse);
         }
     }
 }

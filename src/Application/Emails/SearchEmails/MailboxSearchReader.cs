@@ -123,7 +123,12 @@ public sealed class MailboxSearchReader
             // the one request least able to tell.
             var capability = await this.semanticSearch.ReadCapabilityAsync(cancellationToken);
 
-            return new SearchEmailsResult([], EmailSearchRetrievalMode.Lexical, capability, []);
+            return new SearchEmailsResult(
+                [],
+                EmailSearchRetrievalMode.Lexical,
+                capability,
+                [],
+                selection.Scope.IncludesJunkMail);
         }
 
         var (rankedCandidates, retrievalMode, semanticSearchCapability) =
@@ -140,7 +145,12 @@ public sealed class MailboxSearchReader
         // one operation at a time, so starting them together would fault instead of overlapping.
         var folderFreshness = await this.freshnessReader.ReadAsync(selection.Scope, cancellationToken);
 
-        return new SearchEmailsResult(matches, retrievalMode, semanticSearchCapability, folderFreshness);
+        return new SearchEmailsResult(
+            matches,
+            retrievalMode,
+            semanticSearchCapability,
+            folderFreshness,
+            selection.Scope.IncludesJunkMail);
     }
 
     /// <summary>Ranks the eligible mail by whichever method this instance can apply to this query.</summary>
@@ -192,7 +202,10 @@ public sealed class MailboxSearchReader
 
     /// <summary>Validates the request's structured filters and restricts the search to the accounts this deployment serves.</summary>
     private MailboxEmailSelection ReadableSelection(SearchEmailsRequest request) => MailboxEmailSelection.Create(
-        this.scopeResolver.ReadableScope(request.Accounts, request.FolderAliases),
+        this.scopeResolver.ReadableScope(
+            request.Accounts,
+            request.FolderAliases,
+            request.IncludeJunkMail ? JunkMailInclusion.Included : JunkMailInclusion.Excluded),
         request.SenderAddress,
         request.RecipientAddress,
         request.SubjectFragment,

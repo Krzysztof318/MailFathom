@@ -65,6 +65,37 @@ public sealed record MailboxScope
     /// </remarks>
     public IReadOnlyList<MailFolderIdentity> HiddenFolders { get; private init; } = [];
 
+    /// <summary>Gets the junk folders this read returns nothing from, ordered, or empty when the caller asked for junk or no account maps one.</summary>
+    /// <remarks>
+    /// Kept apart from <see cref="HiddenFolders" /> although both narrow the same query, because the two answer different
+    /// questions and only one of them can be overridden. A hidden folder is withheld from every tool by an operator's
+    /// decision and no caller may reach it; the junk folder is withheld by default and reached by a caller that asks.
+    /// Merging them would make the override able to reveal a folder the operator withheld.
+    /// </remarks>
+    public IReadOnlyList<MailFolderIdentity> WithheldJunkFolders { get; private init; } = [];
+
+    /// <summary>Gets whether the caller asked for the junk folder's mail.</summary>
+    /// <remarks>
+    /// Unlike the two withheld lists, this is the caller's own decision, so it takes part in a continuation cursor's
+    /// fingerprint: including junk adds rows in the middle of an ordering, which a walk resumed under the other answer
+    /// would either skip or repeat. The lists themselves stay out of the fingerprint for the reason
+    /// <see cref="Hiding" /> gives — they are configuration, and a reload must not invalidate an outstanding cursor.
+    /// </remarks>
+    public bool IncludesJunkMail { get; private init; }
+
+    /// <summary>Gets every folder this read returns nothing from, whichever decision withheld it.</summary>
+    /// <remarks>
+    /// What a query needs is the union, because a predicate does not care why a folder is out. Both callers of it — the
+    /// stored-email predicate and the folder freshness read — take this rather than either list, so a folder cannot be
+    /// withheld from the mail and still named in the freshness beside it.
+    /// </remarks>
+    public IReadOnlyList<MailFolderIdentity> WithheldFolders =>
+    [
+        .. this.HiddenFolders
+            .Concat(this.WithheldJunkFolders)
+            .DistinctBy(static folder => (folder.AccountId.Value, folder.Alias.Value)),
+    ];
+
     /// <summary>Creates a normalized scope from what a request named.</summary>
     /// <param name="accountIds">The accounts to restrict to, or <see langword="null" /> to name none.</param>
     /// <param name="folderAliases">The folder aliases to restrict to, or <see langword="null" /> to name none.</param>
@@ -131,6 +162,31 @@ public sealed record MailboxScope
                     .OrderBy(static folder => folder.AccountId.Value, StringComparer.Ordinal)
                     .ThenBy(static folder => folder.Alias.Value, StringComparer.Ordinal),
             ],
+        };
+
+    /// <summary>Applies the caller's answer about junk mail to the junk folders configuration maps.</summary>
+    /// <param name="inclusion">What the caller asked for.</param>
+    /// <param name="junkFolders">Every account's junk folder, empty when none is mapped.</param>
+    /// <returns>The same scope with the junk folders withheld, or with the caller's inclusion recorded and nothing withheld.</returns>
+    /// <remarks>
+    /// The inclusion is recorded either way, including when no account maps a junk folder, because it is part of what a
+    /// continuation cursor was issued for. Recording it only when something was withheld would let a cursor issued
+    /// before a junk mapping existed be presented after one was added.
+    /// </remarks>
+    internal MailboxScope WithJunkMail(
+        JunkMailInclusion inclusion,
+        IReadOnlyList<MailFolderIdentity> junkFolders) => this with
+        {
+            IncludesJunkMail = inclusion is JunkMailInclusion.Included,
+            WithheldJunkFolders = inclusion is JunkMailInclusion.Included
+                ? []
+                :
+                [
+                    .. junkFolders
+                        .DistinctBy(static folder => (folder.AccountId.Value, folder.Alias.Value))
+                        .OrderBy(static folder => folder.AccountId.Value, StringComparer.Ordinal)
+                        .ThenBy(static folder => folder.Alias.Value, StringComparer.Ordinal),
+                ],
         };
 
     /// <summary>Deduplicates and orders one requested list, refusing it as soon as it names more values than the limit.</summary>

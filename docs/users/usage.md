@@ -61,6 +61,11 @@ Paging is a cursor: pass `nextCursor` back unchanged, with the same filters and 
 filters that issued it, so changing a filter mid-walk is refused (`52002`) rather than answered with a page from a
 different question.
 
+**Junk is left out unless you ask for it.** Mail your provider or your own filter already set aside is not what a
+timeline is for, and an agent reading it cannot tell mail written to deceive it from correspondence. Set
+`includeJunkMail: true` when you are looking for a message a filter took; the result says which of the two listings you
+got, in `includedJunkMail`. The same argument and the same field are on `search_emails`.
+
 ## `search_emails` — ranked text search
 
 Takes `queryText` — the words to find — plus the same structured filters a listing has, and returns one window of
@@ -139,6 +144,10 @@ the model knowing why its searches came back empty. The model narrows its own lo
 recipient, subject, date, seen state, and attachment filters `search_emails` publishes, so a question about one person's
 mail or one week reaches that mail rather than competing for it in a ranking. What it can and cannot ask for is
 [Mail answering § What one lookup may ask for](../features/mail-answering.md#what-one-lookup-may-ask-for).
+
+Junk is outside every lookup a run makes, and here there is **no** way to ask for it. The answer is written by a model
+from the mail it retrieved, so a message written to deceive a reader would arrive as ordinary correspondence with
+nothing left to notice it. Use `search_emails` with `includeJunkMail` when junk is what you are looking for.
 
 ### What leaves your instance when you ask
 

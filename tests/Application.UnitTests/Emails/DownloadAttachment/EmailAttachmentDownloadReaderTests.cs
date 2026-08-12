@@ -243,7 +243,8 @@ public sealed class EmailAttachmentDownloadReaderTests
         repairRequestStore ?? new RecordingEmailContentRepairRequestStore(),
         new MailboxScopeResolver(
             accountCatalog ?? CatalogServing(MailAccountId.Create(summary?.AccountId.Value ?? ServedAccountId)),
-            folderParticipation ?? StubMailFolderParticipation.Everything));
+            folderParticipation ?? StubMailFolderParticipation.Everything,
+            StubJunkMailFolderCatalog.None));
 
     private static IStoredEmailSummaryReader SummaryReaderReturning(EmailSummary? summary)
     {

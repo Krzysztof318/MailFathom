@@ -34,6 +34,7 @@ divergence neither copy would look wrong for on its own.
 | `ReceivedBefore` | Exclusive end of the received range | no end |
 | `IsRemotelySeen` | The remote `\Seen` state to require | either state |
 | `HasAttachments` | Whether attachments are required | either |
+| `IncludeJunkMail` | Whether the account's junk folder takes part | it does not |
 | `Direction` | Which end of the timeline to read from | `NewestFirst` |
 | `PageSize` | How many emails the page returns | the default of 25 |
 | `Cursor` | The cursor a previous page returned | the first page |
@@ -134,6 +135,28 @@ Freshness follows the same exclusion, so a withheld folder is absent from the en
 present with a timestamp nothing may read behind it.
 [What a mapping decides beyond where the folder is](imap-synchronization.md#what-a-mapping-decides-beyond-where-the-folder-is)
 states the switch beside the other two and what an unmapped folder is instead.
+
+### The junk folder, withheld by default and reachable on request
+
+A folder mapped to the `Junk` special use is outside a listing and a search unless the request asks for it. The default
+is the one that matters: mail a filter already set aside is mail written to be read by somebody who did not ask for it,
+and an agent reasoning over a timeline has no way to tell it from correspondence. `IncludeJunkMail` is the caller's
+override, and the result reports which of the two answers it gave, so a reader is never left guessing whether an absent
+message was missing or withheld.
+
+This is not the switch above, and the difference is the point. `VisibleToTools: false` is an operator's decision that no
+tool may read a folder; the junk exclusion is a default a caller may lift. The two are held apart and a query is handed
+their union, so asking for junk can never reveal a folder the operator withheld — a folder that is both is still outside
+every read.
+
+The override is the caller's own filter rather than configuration, so it **does** take part in the cursor's fingerprint:
+including junk adds rows in the middle of an ordering, and a walk resumed under the other answer would skip or repeat.
+The junk folders themselves stay out of the fingerprint, exactly as the withheld folders above do, so mapping one does
+not invalidate an outstanding cursor.
+
+`get_email_content` is unaffected: a message reached by its identifier is a message somebody already has in hand.
+`ask_mail` excludes junk and offers no override, for the reason
+[spam classification](spam-classification.md#the-junk-folder-is-left-out-of-listing-and-search) gives.
 
 ### Attachment presence
 
