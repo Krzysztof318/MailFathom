@@ -25,7 +25,12 @@ security key, and to an account under Advanced Protection.
 
 **A Google Workspace mailbox does need this**, because an app password cannot be issued for one.
 
-**An Exchange Online mailbox needs this**, because Microsoft accepts no basic authentication for IMAP at all.
+**An Exchange Online mailbox needs this**, because Microsoft accepts no basic authentication for IMAP at all. So does
+an Outlook.com mailbox, for the same reason and since a later date.
+
+[Configuring a mailbox at your provider](../users/mailbox-providers.md) answers the same question for the other popular
+mail services — which of them still accept a password, which want an app password, and which accept nothing but a token
+— beside the address and port each one publishes.
 
 Weigh the Gmail obligation before you start: IMAP access needs the `https://mail.google.com/` scope, Google classifies
 it as restricted, and production use requires a CASA Tier 2 assessment by an approved lab in addition to Google's own
@@ -324,6 +329,8 @@ the account eventually answers `invalid_grant`, and the repair is to authorize t
 
 ## Related
 
+- [Configuring a mailbox at your provider](../users/mailbox-providers.md) — the address, the port, and the credential
+  kind each popular mail service publishes
 - [Configuration reference](configuration-reference.md) — every key in the `OAuth` block
 - [Secret provisioning](secret-provisioning.md) — how a reference is backed by material
 - [IMAP synchronization](../features/imap-synchronization.md) — the transport security policy the token path does not relax

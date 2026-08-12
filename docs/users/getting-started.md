@@ -71,6 +71,11 @@ Synchronization is off until configuration turns it on, and an enabled synchroni
 }
 ```
 
+**What goes in `Host`, `Port`, and `Secrets` depends on where the mailbox lives**, and so does whether IMAP has to be
+switched on first and whether a password is accepted at all. [Configuring a mailbox at your
+provider](mailbox-providers.md) has the address and the credential kind for the popular mail services, and what each
+one does differently once synchronization is running.
+
 Points worth knowing before you adapt it:
 
 - **`AccountId` and `Alias` are your names**, not the server's. They are what every tool argument, log line, and error

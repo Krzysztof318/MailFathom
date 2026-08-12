@@ -32,11 +32,13 @@ says so and names the release, rather than describing it as though you could alr
    its full guide is.
 2. **[Getting started](getting-started.md)** — from an installed instance to a synchronized mailbox and a first
    successful tool call, including secrets, the schema step, health verification, and connecting an MCP client.
-3. **[Using the tools](usage.md)** — what `list_emails`, `search_emails`, `get_email_content`, and `ask_mail` do, what
+3. **[Configuring a mailbox at your provider](mailbox-providers.md)** — the address, port, and credential kind each
+   popular mail service publishes, and what each one does differently once synchronization runs.
+4. **[Using the tools](usage.md)** — what `list_emails`, `search_emails`, `get_email_content`, and `ask_mail` do, what
    they deliberately bound, and how to read a failure.
-4. **[Administering your deployment](administering.md)** — the `mfctl` command: what it is for, signing in to a
+5. **[Administering your deployment](administering.md)** — the `mfctl` command: what it is for, signing in to a
    deployment from your own machine, and what it cannot do yet.
-5. **[Configuration reference](../operations/configuration-reference.md)** — every user-settable option in one place,
+6. **[Configuration reference](../operations/configuration-reference.md)** — every user-settable option in one place,
    with its type, default, constraints, and whether changing it needs a restart.
 
 ## Once it is running
@@ -53,3 +55,4 @@ says so and names the release, rather than describing it as though you could alr
 | Where does configuration come from, and what reloads without a restart? | [Configuration sources](../operations/configuration-sources.md), [configuration reference](../operations/configuration-reference.md) |
 | What does it record about itself, and where do the records go? | [Telemetry](../operations/telemetry.md), [host startup telemetry](../operations/host-startup-telemetry.md) |
 | What exactly does synchronization store and reconcile? | [IMAP synchronization](../features/imap-synchronization.md) |
+| What address and credential does my mail service want? | [Configuring a mailbox at your provider](mailbox-providers.md) |
