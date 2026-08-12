@@ -22,10 +22,19 @@ namespace MailFathom.Application.Rules.Actions;
 /// </remarks>
 public sealed record MailRuleActionPlan
 {
-    private MailRuleActionPlan(IReadOnlyList<PlannedMailRuleAction> actions, IReadOnlyList<string> withheldRuleNames)
+    private MailRuleActionPlan(
+        IReadOnlyList<PlannedMailRuleAction> actions,
+        IReadOnlyList<PlannedMailRuleAction> withheldActions)
     {
         this.Actions = actions;
-        this.WithheldRuleNames = withheldRuleNames;
+        this.WithheldActions = withheldActions;
+        this.WithheldRuleNames =
+        [
+            .. withheldActions
+                .Select(withheld => withheld.RuleName)
+                .Distinct(StringComparer.Ordinal)
+                .Order(StringComparer.Ordinal),
+        ];
     }
 
     /// <summary>Gets the plan of an email whose rules ask for nothing.</summary>
@@ -33,6 +42,13 @@ public sealed record MailRuleActionPlan
 
     /// <summary>Gets the actions to apply, in the order MailFathom applies them.</summary>
     public IReadOnlyList<PlannedMailRuleAction> Actions { get; }
+
+    /// <summary>Gets the actions another rule had already settled, in the order they were reached.</summary>
+    /// <remarks>
+    /// The actions themselves rather than only the rules that declared them, because a rule declaring two changes may
+    /// have one honored and one withheld, and a record saying only that the rule gave way could not say which.
+    /// </remarks>
+    public IReadOnlyList<PlannedMailRuleAction> WithheldActions { get; }
 
     /// <summary>Gets the names of the rules at least one of whose actions another rule had already settled.</summary>
     public IReadOnlyList<string> WithheldRuleNames { get; }
@@ -49,20 +65,22 @@ public sealed record MailRuleActionPlan
         ArgumentNullException.ThrowIfNull(matchedRules);
 
         var honored = new List<PlannedMailRuleAction>();
-        var withheld = new SortedSet<string>(StringComparer.Ordinal);
+        var withheld = new List<PlannedMailRuleAction>();
 
         foreach (var rule in matchedRules)
         {
-            foreach (var action in rule.Actions.Actions)
+            foreach (var (action, position) in rule.Actions.Actions.Select((action, position) => (action, position)))
             {
-                if (MailRuleActionSet.FindRefusal([.. honored.Select(planned => planned.Action)], action) is not null)
+                var planned = new PlannedMailRuleAction(rule.Name, action, position);
+
+                if (MailRuleActionSet.FindRefusal([.. honored.Select(honoredAction => honoredAction.Action)], action) is not null)
                 {
-                    withheld.Add(rule.Name);
+                    withheld.Add(planned);
 
                     continue;
                 }
 
-                honored.Add(new PlannedMailRuleAction(rule.Name, action));
+                honored.Add(planned);
             }
         }
 
@@ -75,6 +93,6 @@ public sealed record MailRuleActionPlan
         // earlier rule moves the occurrence it would have been written on.
         return new MailRuleActionPlan(
             [.. honored.OrderBy(planned => MailRuleActionSet.ApplicationOrderOf(planned.Action))],
-            [.. withheld]);
+            withheld);
     }
 }

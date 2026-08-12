@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.CommandLine;
+using MailFathom.Cli.Commands.Rules;
 using MailFathom.Versioning;
 
 namespace MailFathom.Cli.Commands;
@@ -47,6 +48,18 @@ internal static class CliRootCommand
             CancelEmbeddingReindexCommand.Create(context),
         };
 
+        // Reading and running, and nothing that writes. A rule lives in the deployment's configuration so that what an
+        // instance will do to a mailbox is reviewable in a diff before it runs, so there is deliberately no command here
+        // that creates, edits, enables, disables, or deletes one — and there will not be.
+        Command rulesCommand = new("rules", "Read the deployment's mail rules, run them, and read what they did.")
+        {
+            ListRulesCommand.Create(context),
+            ShowRuleCommand.Create(context),
+            RunRulesCommand.Create(context),
+            RuleRunStatusCommand.Create(context),
+            RuleHistoryCommand.Create(context),
+        };
+
         return new RootCommand($"MailFathom administration tool ({version.Version}).")
         {
             LoginCommand.Create(context),
@@ -56,6 +69,7 @@ internal static class CliRootCommand
             StatusCommand.Create(context),
             mailboxCommand,
             embeddingCommand,
+            rulesCommand,
         };
     }
 }

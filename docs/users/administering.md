@@ -228,9 +228,32 @@ that is simply between passes looks exactly like one that is broken.
 operator's reference for all three, and [changing the embedding model](../operations/embedding-profiles.md) is what a
 switch and a rollback cost.
 
+## Applying your rules, and seeing what they did
+
+[Mail rules](../features/mail-rules.md) select mail as it arrives, so a rule you write today does nothing about the mail
+already in the mailbox until you ask. That asking is a command, and so is finding out what the rules have been doing:
+
+| What you want | Command |
+| --- | --- |
+| See which rules your deployment is running, in order | `mfctl rules list` |
+| Read one of them in full | `mfctl rules show file-invoices` |
+| Apply them to mail that arrived before them | `mfctl rules run --account work` |
+| Watch that run | `mfctl rules run-status --account work` |
+| Find out what a rule did, or why a message is where it is | `mfctl rules history --account work` |
+
+`mfctl rules list` is the one to run after editing a rule file. A deployment refuses a reload whose rules do not
+validate and goes on running the previous set, which it reports to its log and nowhere else — so this is where you find
+out whether your edit took effect, rather than from mail that kept being filed the old way.
+
+None of these writes a rule, and none ever will: rules are configuration, so you change one by editing the file your
+deployment reads. [Reading the rules, running them, and finding out what they
+did](../operations/admin-endpoint.md#reading-the-rules-running-them-and-finding-out-what-they-did) is the operator's
+reference for all five, including what the history records and what it deliberately does not.
+
 ## Where to go next
 
 - [Administering a deployment](../operations/admin-endpoint.md) — the operator's reference for everything above
+- [Mail rules](../features/mail-rules.md) — every fact, operator, and action a rule can use
 - [Mailbox OAuth](../operations/mailbox-oauth.md) — registering the application, and every mode of the sign-in above
 - [Changing the embedding model](../operations/embedding-profiles.md) — what activating, switching, and rolling back cost
 - [Configuration reference](../operations/configuration-reference.md#adminendpoint) — every `AdminEndpoint` key

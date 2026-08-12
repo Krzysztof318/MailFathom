@@ -450,6 +450,102 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                     b.ToTable("mail_rule_evaluation_runs", (string)null);
                 });
 
+            modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.MailRuleExecutedActionEntity", b =>
+                {
+                    b.Property<Guid>("MailRuleExecutionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Position")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("DestinationAlias")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<string>("FailureReason")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("Mutation")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<Guid?>("MutationRecordId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Outcome")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.HasKey("MailRuleExecutionId", "Position");
+
+                    b.ToTable("mail_rule_executed_actions", (string)null);
+                });
+
+            modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.MailRuleExecutionEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ConditionFailure")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<TimeSpan>("Duration")
+                        .HasColumnType("interval");
+
+                    b.Property<DateTimeOffset>("EvaluatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("MailboxAccountId")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<string>("Outcome")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.PrimitiveCollection<string[]>("ReadFacts")
+                        .IsRequired()
+                        .HasColumnType("text[]");
+
+                    b.Property<string>("Revision")
+                        .IsRequired()
+                        .HasMaxLength(12)
+                        .HasColumnType("character(12)")
+                        .IsFixedLength();
+
+                    b.Property<string>("RuleName")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<Guid>("StoredEmailId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Trigger")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("MailboxAccountId", "EvaluatedAt", "Id")
+                        .HasDatabaseName("ix_mail_rule_executions_account_evaluated");
+
+                    b.HasIndex("StoredEmailId", "EvaluatedAt", "Id")
+                        .HasDatabaseName("ix_mail_rule_executions_email_evaluated");
+
+                    b.HasIndex("MailboxAccountId", "RuleName", "EvaluatedAt", "Id")
+                        .HasDatabaseName("ix_mail_rule_executions_account_rule_evaluated");
+
+                    b.ToTable("mail_rule_executions", (string)null);
+                });
+
             modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.MailboxAccountEntity", b =>
                 {
                     b.Property<string>("Id")
@@ -988,6 +1084,24 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                     b.Navigation("MailboxAccount");
                 });
 
+            modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.MailRuleExecutedActionEntity", b =>
+                {
+                    b.HasOne("MailFathom.Infrastructure.Persistence.Entities.MailRuleExecutionEntity", null)
+                        .WithMany("Actions")
+                        .HasForeignKey("MailRuleExecutionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.MailRuleExecutionEntity", b =>
+                {
+                    b.HasOne("MailFathom.Infrastructure.Persistence.Entities.StoredEmailEntity", null)
+                        .WithMany()
+                        .HasForeignKey("StoredEmailId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.MailboxMutationEntity", b =>
                 {
                     b.HasOne("MailFathom.Infrastructure.Persistence.Entities.MailFolderEntity", "MailFolder")
@@ -1049,6 +1163,11 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                     b.Navigation("StoredEmails");
 
                     b.Navigation("SynchronizationCheckpoint");
+                });
+
+            modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.MailRuleExecutionEntity", b =>
+                {
+                    b.Navigation("Actions");
                 });
 
             modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.MailboxAccountEntity", b =>

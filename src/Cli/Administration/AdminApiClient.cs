@@ -8,6 +8,7 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Serialization.Metadata;
 using MailFathom.Cli.Administration.Embeddings;
+using MailFathom.Cli.Administration.Rules;
 using MailFathom.Cli.Transport;
 using MailFathom.Versioning;
 
@@ -221,6 +222,92 @@ internal sealed class AdminApiClient
             CliJsonContext.Default.EmbeddingReindexCancellation,
             cancellationToken);
 
+    /// <summary>Asks the deployment which mail rules it has loaded.</summary>
+    /// <param name="token">The bearer credential to present.</param>
+    /// <param name="cancellationToken">Cancels the request.</param>
+    /// <returns>The rule set in force, and whether the configuration on disk is the one it was read from.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="token" /> is <see langword="null" />.</exception>
+    /// <exception cref="CliFailure">Thrown when the deployment refused the credential, could not be reached, or answered with something that is not a rule set.</exception>
+    internal Task<LoadedRuleSet> ReadRulesAsync(string token, CancellationToken cancellationToken) =>
+        this.RequestAsync(
+            HttpMethod.Get,
+            AdminEndpointRoutes.RulesPath,
+            token,
+            CliJsonContext.Default.LoadedRuleSet,
+            cancellationToken);
+
+    /// <summary>Asks the deployment to run one account's rules over every message it holds for that account.</summary>
+    /// <param name="token">The bearer credential to present.</param>
+    /// <param name="account">The account the run is asked for, as the deployment's configuration names it.</param>
+    /// <param name="cancellationToken">Cancels the request.</param>
+    /// <returns>The run the account now has, and whether this request is what started it.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
+    /// <exception cref="CliFailure">Thrown when the deployment refused the request or the credential, could not be reached, or answered with something that is not a run.</exception>
+    /// <remarks>
+    /// It returns as soon as the deployment has written the request down. The run itself is carried by the account's
+    /// synchronization runs, so this command is never what keeps a walk of a mailbox alive and closing the terminal
+    /// cannot cancel one.
+    /// </remarks>
+    internal Task<MailRuleRunStart> StartRuleRunAsync(
+        string token,
+        string account,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(account);
+
+        return this.RequestAsync(
+            HttpMethod.Post,
+            AdminEndpointRoutes.RuleRunsPath,
+            token,
+            CliJsonContext.Default.MailRuleRunStart,
+            cancellationToken,
+            JsonContent.Create(new MailRuleRunRequest(account), CliJsonContext.Default.MailRuleRunRequest));
+    }
+
+    /// <summary>Asks the deployment where one account's whole-mailbox run has got to.</summary>
+    /// <param name="token">The bearer credential to present.</param>
+    /// <param name="account">The account whose run is read.</param>
+    /// <param name="cancellationToken">Cancels the request.</param>
+    /// <returns>The run, which is absent where the account has never been asked for one.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
+    /// <exception cref="CliFailure">Thrown when the deployment refused the request or the credential, could not be reached, or answered with something that is not a run.</exception>
+    internal Task<MailRuleRunState> ReadRuleRunAsync(
+        string token,
+        string account,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(account);
+
+        return this.RequestAsync(
+            HttpMethod.Get,
+            $"{AdminEndpointRoutes.RuleRunsPath}?account={Uri.EscapeDataString(account)}",
+            token,
+            CliJsonContext.Default.MailRuleRunState,
+            cancellationToken);
+    }
+
+    /// <summary>Asks the deployment what its rules concluded about one account's mail.</summary>
+    /// <param name="token">The bearer credential to present.</param>
+    /// <param name="query">Which account, and how the page is narrowed and continued.</param>
+    /// <param name="cancellationToken">Cancels the request.</param>
+    /// <returns>One page of the history, and the cursor the next page is asked with where one exists.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
+    /// <exception cref="CliFailure">Thrown when the deployment refused the request or the credential, could not be reached, or answered with something that is not a page.</exception>
+    internal Task<MailRuleHistoryPage> ReadRuleHistoryAsync(
+        string token,
+        MailRuleHistoryQuery query,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(query);
+
+        return this.RequestAsync(
+            HttpMethod.Get,
+            $"{AdminEndpointRoutes.RuleHistoryPath}{query.ToQueryString()}",
+            token,
+            CliJsonContext.Default.MailRuleHistoryPage,
+            cancellationToken);
+    }
+
     /// <summary>Sends one credentialed request and reads the answer, or turns the refusal into a sentence.</summary>
     /// <remarks>
     /// <para>
@@ -240,14 +327,15 @@ internal sealed class AdminApiClient
         string path,
         string token,
         JsonTypeInfo<TAnswer> answerContract,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        HttpContent? content = null)
         where TAnswer : class
     {
         ArgumentNullException.ThrowIfNull(token);
 
         await this.EnsureSettledAsync(token, cancellationToken);
 
-        using var request = new HttpRequestMessage(method, path);
+        using var request = new HttpRequestMessage(method, path) { Content = content };
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
 
         using var response = await this.SendAsync(request, cancellationToken);

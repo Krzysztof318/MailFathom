@@ -78,6 +78,10 @@ reverse proxy, write the public URL and keep the path: `https://mail.example.tes
 | `GET /api/admin/embeddings/activation` | Reports what activating the declared model would do and what it would cost, writing nothing. |
 | `POST /api/admin/embeddings/activation` | Takes up the declared model and begins embedding under it. **This is the one route that starts a provider bill.** |
 | `POST /api/admin/embeddings/reindex/cancellation` | Stops the reindex under way, leaving the generation that is serving where it is. |
+| `GET /api/admin/rules` | Reports the [mail rules](../features/mail-rules.md) this deployment has loaded, in the order they run, and whether the configuration as it now stands is the one they were read from. |
+| `POST /api/admin/rules/runs` | Asks for one account's rules to be run over every message already stored for it, and answers with the run already under way where there is one. |
+| `GET /api/admin/rules/runs` | Reports where that run has got to, or how the last one ended. |
+| `GET /api/admin/rules/history` | Reads one account's record of what its rules concluded and what those conclusions asked for. |
 
 The write route's body carries a long-lived credential for a named mailbox owner, which is what makes the clear-text
 warning below matter more here than it does for a session probe. It refuses, with `400` and a sentence naming what was
@@ -255,6 +259,86 @@ whole procedure these three commands drive, including what a switch and a rollba
 
 Nothing any of the four routes answers with is mail: model names, counts, character totals, timestamps, and a profile
 identifier are the whole of it.
+
+### Reading the rules, running them, and finding out what they did
+
+Five commands, and none of them writes a rule. A rule is authored in configuration, where an edit is reviewable in a
+diff before it reaches a mailbox, so `mfctl` runs the rules and reads what they concluded and never creates, edits,
+enables, disables, or deletes one. [`MailRules`](configuration-reference.md#mailrules) is the section they are declared
+in, and [mail rules](../features/mail-rules.md) is the whole authoring surface.
+
+**`mfctl rules list` is the command to run after editing rules.** A reload whose rules do not validate is refused and
+leaves the previous set running, which reaches the deployment's log and nothing else — so an edited file and an
+unchanged deployment read identically until this is asked:
+
+```console
+$ mfctl rules list
+production — rule set a1b2c3d4e5f6
+Configuration: accepted. What is running is what the file says.
+
+file-invoices
+  Applies to: work
+  A match:    relocate → archive; ends the pass
+mark-newsletters
+  Applies to: every account
+  A match:    setSeen → read
+```
+
+The order is the answer as much as the rules are: which rule reaches a message first is a property of the set, and a
+rule above another that ends the pass is why the one below it never runs. `mfctl rules show <name>` reports one rule in
+full, including the facts its condition can read. Neither prints the condition an operator wrote — a compiled rule
+carries no text, which is what keeps an address somebody typed into a condition out of every record naming the rule.
+
+**`mfctl rules run --account <id>` applies the rules to mail that arrived before them.** It returns as soon as the
+deployment has written the request down and never waits for the walk; the pass is a step of the account's
+synchronization run, so this terminal is not what keeps it alive and closing it cannot cancel one. Asking twice is
+asking once, and the command says which of the two happened:
+
+```console
+$ mfctl rules run --account work
+A rule run over work has been asked for.
+Progress: 0 evaluated, 0 matched, 0 skipped
+The run is carried by the account's synchronization runs. Watch it with 'mfctl rules run-status --account work'.
+```
+
+`mfctl rules run-status --account <id>` is where it is watched from, and an account nobody has ever asked for a run is
+an answer rather than an error. [Running the rules over mail you already
+have](../features/mail-rules.md#running-the-rules-over-mail-you-already-have) holds what a run guarantees, including
+what happens to one when the rules change under it.
+
+**`mfctl rules history --account <id>` answers what a rule did, and why a message is where it is.** Narrowing to a rule
+with `--rule` answers "what is this rule doing", including the case where the answer is that it is evaluated constantly
+and never matches; narrowing to a message with `--email` answers "why is this message here". `--page-size` and
+`--cursor` walk it, newest first:
+
+```console
+$ mfctl rules history --account work --rule file-invoices
+2026-08-08 11:59:00Z  file-invoices — Matched
+  Message:  0199c3d0-0000-7000-8000-000000000002
+  Rule set: a1b2c3d4e5f6 (RequestedRun, 4.0 ms)
+  Read:     senderDomain, attachmentCount
+  Asked:    relocate → archive: Requested
+```
+
+Each line is one rule's conclusion about one message. A rule that was reached and answered no is recorded as
+`NotMatched`, a rule that could not answer at all is `Failed` with its
+[reason](../features/mail-rules.md#when-a-condition-cannot-answer) beside it, and a rule the pass never reached leaves
+nothing at all — which is what tells "never matches" from "never asked". A change the rule asked for is `Requested`
+when a mutation record was opened for it, `Refused` with a classification where one could not be, and `Withheld` where
+another rule had already settled the message's fate.
+
+**The facts are names and never values.** `senderDomain` says the condition read the sender's domain; what that domain
+was is not recorded, and neither is a subject, a matched span, or any other value the mailbox supplied. What the
+condition compared is retrievable from the rule set revision printed beside it, which identifies the configuration the
+expression was read from — so the reasoning is reconstructible without the record becoming a second copy of the
+mailbox. The same holds for what the run asked for: the record points at the mutation it opened rather than restating
+what happened on the server, which [the mutation
+trail](../features/imap-synchronization.md#an-account-can-keep-a-record-of-what-was-done-to-it-and-none-does-by-default)
+answers.
+
+The history is held for [`MailRules:HistoryRetention`](configuration-reference.md#mailrules) and is erased with the mail
+it describes, whichever comes first. Nothing any of these four routes answers with is mail: rule names, folder aliases,
+mutation names, fact names, counts, instants, and identifiers are the whole of it.
 
 ## Rate limiting
 

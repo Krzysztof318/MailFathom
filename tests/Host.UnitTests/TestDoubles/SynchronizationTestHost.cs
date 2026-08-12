@@ -16,6 +16,7 @@ using MailFathom.Application.Rules;
 using MailFathom.Application.Rules.Actions;
 using MailFathom.Application.Rules.Conditions;
 using MailFathom.Application.Rules.Evaluation;
+using MailFathom.Application.Rules.History;
 using MailFathom.Application.Synchronization;
 using MailFathom.Application.Synchronization.Checkpoints;
 using MailFathom.Application.Synchronization.Reconciliation;
@@ -169,7 +170,15 @@ internal static class SynchronizationTestHost
         services.AddScoped<IMailRuleActionPermissionReader>(
             provider => provider.GetRequiredService<MailSynchronizationOptions>());
         services.AddScoped<MailRuleActionRecorder>();
+        // One instance across every scope a run opens, so what several scopes appended is readable as one history.
+        var ruleHistory = new MailRuleExecutionRecordingStore();
+        services.AddSingleton(ruleHistory);
+        services.AddSingleton<IMailRuleExecutionStore>(ruleHistory);
         services.AddScoped<MailRuleEvaluationPass>();
+
+        // The history's retention pass rides the same run, and a supervisor resolves it from the same scope. These
+        // tests configure no mail to evaluate, so it answers that there is nothing to erase.
+        services.AddScoped<MailRuleHistoryRetention>();
         services.AddLogging();
 
         // Each run hands its own snapshot to the scopes it opens, and every per-account reader answers from that

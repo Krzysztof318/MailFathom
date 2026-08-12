@@ -30,4 +30,13 @@ public sealed class MailRuleEvaluationOptions
 
     /// <summary>Gets or sets how many batches one walk of one pass may commit before it leaves the rest to the next run.</summary>
     public int MaxBatchesPerPass { get; set; } = 5;
+
+    /// <summary>Gets or sets how long a recorded rule execution is kept before the account's next run erases it.</summary>
+    /// <remarks>
+    /// The one bound the history has of its own. Everything else about its lifetime it inherits from the mail it
+    /// describes, because an execution names a message and goes when that message does; this is what stops a deployment
+    /// nobody deletes mail from accumulating a row per rule per message for as long as it runs. Zero or less declares no
+    /// window, which keeps every execution until the message it names is erased.
+    /// </remarks>
+    public TimeSpan HistoryRetention { get; set; } = TimeSpan.FromDays(30);
 }
