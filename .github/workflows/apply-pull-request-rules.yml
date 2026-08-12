@@ -1,0 +1,328 @@
+# Copyright © 2026 Krzysztof Kasprowicz
+# Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
+# Project repository: https://github.com/Krzysztof318/MailFathom
+
+name: Apply pull request rules
+
+# Every fact a pull request earns, decided in one pipeline. A change is read in places the issues it
+# closes never reach — a list, a notification, a reviewer deciding how closely to look, a board
+# column the owner works from — and each of those facts follows from the same few inputs: the pull
+# request, the issues it closes, and whether it still merges. Deriving them here rather than in a
+# workflow apiece is what keeps a new rule from costing another trigger, another checkout, and
+# another run for one small thing.
+#
+# Every condition lives in a script under `.github/pull-request/` and this file holds none.
+# `select-labels.sh` says which labels the change earns and `select-board-status.sh` says which board
+# status its current state earns, so a new rule is one edit to a script the contract suite runs
+# rather than a rule spread across the workflows that happen to care.
+#
+# The two jobs are split by the event that can answer them, which is also what keeps each run short:
+#
+# - **Labels** follow from the body, so they are decided on a `pull_request` event and on that one
+#   pull request. `Fathom review` waits for this workflow's run to conclude before it reads the
+#   labels off a pull request, so anything slower added to that path delays every review.
+# - **A board status** follows from whether a pull request still merges, and *that* changes when
+#   something else merges into `main` rather than through any event on the pull request itself. So it
+#   is decided on a push to `main`, across every open pull request at once, and never on a
+#   `pull_request` event — where it would answer nothing and lengthen the wait above.
+#
+# It only ever adds a label. A label a hand applied answers a question this workflow cannot see —
+# `Fathom review`'s own `fathom-review` label is the worked example of a label that means *somebody
+# asked* — and a workflow that tidied the list would erase it. The board write is bounded the other
+# way, by the statuses each rule declares it may act on.
+#
+# `pull_request` rather than `pull_request_target`, which is reserved for `Fathom review` alone and
+# is what `only_the_reviewer_workflow_uses_pull_request_target` in `scripts/test-agent-workflow.sh`
+# keeps true. Nothing here needs the elevated token that trigger carries: the branch is never checked
+# out, nothing from it is executed, and the workspace holds the base commit for one script. What that
+# choice costs is a fork's pull request, where GitHub hands every workflow a read-only token whatever
+# this file declares — the write is refused there and the run says so rather than failing, and the
+# maintainer labels a fork's pull request by hand exactly as they already start its review by hand.
+# The board half is unaffected by that, because it runs on a push to `main` with this repository's
+# own token and reads a fork's pull request exactly as it reads any other.
+on:
+  pull_request:
+    types:
+      # `edited` is here because the body is an input: a closing reference added after the pull
+      # request was opened changes which issues describe the change, and therefore which labels it
+      # earns. The other three are the points at which a pull request becomes something a reader
+      # reaches for.
+      - opened
+      - reopened
+      - ready_for_review
+      - edited
+    branches:
+      - main
+
+  # A merge into `main` is what makes another pull request stop merging, and GitHub raises no event
+  # on the pull request that it happened to. This is that event, read from the other side.
+  push:
+    branches:
+      - main
+
+  # For a sweep by hand, after a rule changes or after a run was cancelled. It takes a ref and that
+  # is harmless here: no credential in this workflow is one a branch could spend, and the board
+  # scripts it would run from that ref are covered by `Protected paths`.
+  workflow_dispatch:
+
+concurrency:
+  # One run per pull request for the labelling, and one per branch for the sweep. A newer run
+  # supersedes whatever is still deciding in either case: the labels are a function of a body that
+  # has since changed, and a sweep started by a later merge reads a state that already contains
+  # everything the earlier one was going to find. `Fathom review` waits for this group to go quiet
+  # before it reads the labels.
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  label:
+    name: Apply the labels the change earns
+    # The labels follow from the body, so only an event that carries one asks the question. A push to
+    # `main` skips this job in about a second, which is what keeps the sweep from appearing to a
+    # reader as a labelling run that failed to label anything.
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      # The labels on the issues the body closes. `pull-requests` reaches the pull request and not
+      # the issues it names, so this is stated rather than inherited from the repository being
+      # public.
+      issues: read
+      # The one write in this workflow, and the whole of what it exists to do. On a pull request from
+      # a fork GitHub downgrades it to read whatever is written here, which is the case the run
+      # reports and passes over.
+      pull-requests: write
+    steps:
+      # For `select-labels.sh` and the reference collection it calls. The default ref for this
+      # trigger is the merge commit the pull request would produce, and that is deliberately kept
+      # rather than pinned to the base.
+      #
+      # `Fathom review` pins the base for the opposite reason, and the two are not in conflict:
+      # `pull_request_target` runs the workflow file from the default branch, so pinning the base
+      # there is what stops the branch supplying any of the code that judges it. `pull_request` runs
+      # the workflow file from the *head*, so the branch already supplies the job — pinning the base
+      # would not withhold anything from it, and would only guarantee that a change adding a script
+      # and the call to it runs the new call against the old tree. It did exactly that on the pull
+      # request that introduced this workflow, which failed with `No such file or directory`.
+      #
+      # Nothing is granted by the merge ref that the trigger does not already grant. A fork's pull
+      # request receives a read-only token on this event whatever the block above declares, so a
+      # script it authored can read and post nothing; a branch in this repository is pushed by
+      # somebody who can already run anything here.
+      - name: Check out the pull request
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Apply the labels
+        id: label
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          PULL_REQUEST_NUMBER: ${{ github.event.pull_request.number }}
+          SELECT_LABELS_SCRIPT: ${{ github.workspace }}/.github/pull-request/select-labels.sh
+          REFERENCED_ISSUES_SCRIPT: ${{ github.workspace }}/.github/pull-request/collect-referenced-issues.sh
+          # Twice the reviewer's closing-reference ceiling, because this reads every issue the body
+          # names rather than only the ones merging closes, and a body that names one of each is the
+          # ordinary shape rather than a large one. It is still a ceiling: a body is untrusted text,
+          # and one issue is fetched per line.
+          REFERENCE_LIMIT: '10'
+        run: |
+          set -euo pipefail
+
+          labels_file="$(mktemp)"
+
+          # What the ceiling cut reaches the log, because a label the pull request did not earn only
+          # because a reference fell off the end is a decision somebody has to be able to see.
+          "$SELECT_LABELS_SCRIPT" \
+            "$REPOSITORY" "$PULL_REQUEST_NUMBER" "$REFERENCED_ISSUES_SCRIPT" "$REFERENCE_LIMIT" \
+            > "$labels_file"
+
+          if [[ ! -s "$labels_file" ]]; then
+            echo 'The change earns no label.'
+            exit 0
+          fi
+
+          # One request carrying every label, and additive by definition: this endpoint adds to the
+          # list rather than replacing it, so a label already present stays exactly once and a label
+          # somebody applied by hand is untouched. Re-applying one changes nothing and fires no
+          # event, which is what keeps a second run from relabelling and from waking anything that
+          # listens for `labeled`.
+          arguments=()
+
+          while IFS= read -r label; do
+            [[ -n "$label" ]] || continue
+
+            arguments+=(-f "labels[]=${label}")
+          done < "$labels_file"
+
+          # A file holding nothing but blank lines is the empty case reached the other way, and it is
+          # answered here rather than left to expand into a request that names no label.
+          if ((${#arguments[@]} == 0)); then
+            echo 'The change earns no label.'
+            exit 0
+          fi
+
+          # A refused write is reported and passed over. This runs on a fork's pull request with a
+          # read-only token by design, and a red job there would say the pipeline is broken when what
+          # happened is the trigger doing what it is documented to do.
+          if gh api "repos/${REPOSITORY}/issues/${PULL_REQUEST_NUMBER}/labels" \
+               --method POST "${arguments[@]}" --silent; then
+            printf 'Applied: %s\n' "$(tr '\n' ' ' < "$labels_file")"
+          else
+            echo "::notice::The labels could not be applied, which is expected on a pull request from a fork."
+          fi
+
+  # What the open pull requests say about the issues they close, once something has merged into
+  # `main`. A merge is what makes another branch stop merging, and GitHub raises nothing on the pull
+  # request it happened to, so the state of every open one is read from here rather than waited for
+  # there.
+  board:
+    name: Apply the board statuses the open pull requests earn
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      # The open pull requests and whether each still merges. Writing the board is not a repository
+      # permission at all: it is the classic token below, which is why nothing here is `write`.
+      pull-requests: read
+    steps:
+      # For the two scripts below. `main` is what this event is about, so the default checkout is
+      # already the tree the rules are read from.
+      - name: Check out the rules
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Move the issues whose pull requests earn a status
+        id: board
+        shell: bash
+        env:
+          # The workflow token reads the pull requests; the board token is used for the project calls
+          # and nothing else, and it is named on those calls inside `write-board-status.sh` rather
+          # than on this whole step.
+          GH_TOKEN: ${{ github.token }}
+          BOARD_TOKEN: ${{ secrets.BOARD_PROJECT_TOKEN }}
+          REPOSITORY: ${{ github.repository }}
+          # The board is the owner's rather than an organization's, which is why the credential above
+          # is a classic token carrying the `project` scope. The number belongs to that login's
+          # namespace.
+          BOARD_OWNER: Krzysztof318
+          BOARD_NUMBER: '4'
+          STATUS_FIELD: Status
+          BASE_BRANCH: main
+          SELECT_BOARD_STATUS_SCRIPT: ${{ github.workspace }}/.github/pull-request/select-board-status.sh
+          CLOSING_ISSUES_SCRIPT: ${{ github.workspace }}/.github/pull-request/collect-closing-issues.sh
+          BOARD_STATUS_SCRIPT: ${{ github.workspace }}/.github/pull-request/write-board-status.sh
+          CLOSING_ISSUE_LIMIT: '5'
+          # More open pull requests than this repository has ever had at once, and still a ceiling:
+          # one project call is made per issue below it, so an unbounded sweep is an unbounded number
+          # of them.
+          PULL_REQUEST_LIMIT: '50'
+          # GitHub computes mergeability when it is asked and not before, so every open pull request
+          # reads `UNKNOWN` for the first seconds after a merge — which is exactly when this runs.
+          # The window is what turns that into an answer instead of a guess; what it does not cover
+          # is reported per pull request and acted on by the next push.
+          MERGEABILITY_LIMIT_SECONDS: '180'
+          MERGEABILITY_POLL_SECONDS: '15'
+        run: |
+          set -euo pipefail
+
+          open_file="$(mktemp)"
+          pull_request_file="$(mktemp)"
+
+          # Every open pull request in one call, with the state every rule reads. Asking per pull
+          # request would multiply the polling below by the number of them for an answer GitHub
+          # computes for the whole repository at once.
+          read_open_pull_requests() {
+            gh api graphql \
+              -f owner="${REPOSITORY%/*}" \
+              -f name="${REPOSITORY#*/}" \
+              -f base="$BASE_BRANCH" \
+              -F first="$PULL_REQUEST_LIMIT" \
+              -f query='
+                query($owner: String!, $name: String!, $base: String!, $first: Int!) {
+                  repository(owner: $owner, name: $name) {
+                    pullRequests(states: OPEN, baseRefName: $base, first: $first,
+                                 orderBy: {field: UPDATED_AT, direction: DESC}) {
+                      totalCount
+                      nodes {
+                        number
+                        mergeable
+                        isDraft
+                        state
+                        labels(first: 20) { nodes { name } }
+                      }
+                    }
+                  }
+                }' \
+              --jq '.data.repository.pullRequests
+                    | {total: .totalCount,
+                       pull_requests: [.nodes[]
+                                       | {number, mergeable, isDraft, state,
+                                          labels: [.labels.nodes[].name]}]}'
+          }
+
+          waited=0
+
+          while true; do
+            read_open_pull_requests > "$open_file"
+
+            pending="$(jq '[.pull_requests[] | select(.mergeable == "UNKNOWN")] | length' "$open_file")"
+
+            if (( pending == 0 )); then
+              break
+            fi
+
+            if (( waited >= MERGEABILITY_LIMIT_SECONDS )); then
+              # Named rather than counted, because the pull request GitHub never answered for is the
+              # one whose board item this run did not decide, and the next push decides it.
+              jq -r --argjson waited "$waited" \
+                '.pull_requests[] | select(.mergeable == "UNKNOWN")
+                 | "::notice::GitHub had not decided whether #\(.number) still merges after \($waited)s, so no rule read it."' \
+                "$open_file"
+              break
+            fi
+
+            sleep "$MERGEABILITY_POLL_SECONDS"
+            waited=$(( waited + MERGEABILITY_POLL_SECONDS ))
+          done
+
+          collected="$(jq '.pull_requests | length' "$open_file")"
+          total="$(jq '.total' "$open_file")"
+
+          printf 'Read %s open pull requests after %ss.\n' "$collected" "$waited"
+
+          # What the ceiling cut, reported for the reason every ceiling in this repository reports
+          # it: a pull request nobody was told about is a board item silently left behind. The list
+          # is ordered by when each was last updated, so what falls off the end is the least recently
+          # touched.
+          if (( total > collected )); then
+            printf '::notice::%s pull requests are open against %s and this run read the %s most recently updated.\n' \
+              "$total" "$BASE_BRANCH" "$collected"
+          fi
+
+          while IFS= read -r number; do
+            [[ -n "$number" ]] || continue
+
+            jq --argjson number "$number" '.pull_requests[] | select(.number == $number)' \
+              "$open_file" > "$pull_request_file"
+
+            # No rule matched, which is the ordinary answer for almost every pull request on almost
+            # every merge. The rule states the statuses it may act on, and they are passed through
+            # rather than decided here, so this file holds no condition and no authority.
+            rule="$("$SELECT_BOARD_STATUS_SCRIPT" "$pull_request_file")"
+
+            [[ -n "$rule" ]] || continue
+
+            IFS=$'\t' read -r status required preserved <<< "$rule"
+
+            printf 'Pull request %s earns %s.\n' "$number" "$status"
+
+            PULL_REQUEST_NUMBER="$number" \
+              "$BOARD_STATUS_SCRIPT" "$status" "$preserved" "$required"
+          done < <(jq -r '.pull_requests[].number' "$open_file")

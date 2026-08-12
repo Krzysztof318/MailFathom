@@ -110,7 +110,7 @@ jobs:
     permissions:
       contents: read
       pull-requests: read
-      # Whether `Apply pull request labels` is still deciding this head's labels, which the step
+      # Whether `Apply pull request rules` is still deciding this head's labels, which the step
       # below waits on before it reads them. Listing a workflow's runs is `actions`, and it is read
       # rather than write: nothing here starts, cancels, or reruns anything.
       actions: read
@@ -316,7 +316,7 @@ jobs:
           echo "Review: ${review} (${reason})."
 
       # `security` says this change needs a security review before it merges. It is written on the
-      # issue — `docs/operations/issue-tracking.md` § "Labels" — and `Apply pull request labels`
+      # issue — `docs/operations/issue-tracking.md` § "Labels" — and `Apply pull request rules`
       # carries it onto the pull request, which is the only place this workflow reads it from. That
       # split is deliberate: which conditions put which label on a pull request is one decision, it
       # is going to grow more conditions than this one, and a reviewer that re-derived the answer
@@ -335,6 +335,10 @@ jobs:
       # no pass. Only a run that is still going is waited for, which is why a push waits not at all:
       # the labelling does not run on one — a label follows from the body and the issues it names
       # rather than from the diff — so what is already on the pull request is the answer.
+      #
+      # What is waited for is a run of the whole rules workflow, so the wait is only as short as its
+      # slowest job on this event. That is what the board half of it is kept off `pull_request`
+      # events for: on the events this waits on, the labelling is the only job that runs.
       - name: Read the labels the change carries
         id: security
         if: steps.gate.outputs.review == 'true'
@@ -349,7 +353,7 @@ jobs:
           # file states.
           SECURITY_MODEL: 'claude-opus-5'
           SECURITY_LABEL: security
-          LABELLING_WORKFLOW: apply-pull-request-labels.yml
+          LABELLING_WORKFLOW: apply-pull-request-rules.yml
           # A short wait, because the labelling run reads a body and a handful of issues and posts
           # one label. Past the ceiling the review proceeds on the labels the pull request carries
           # now: this decides which model reviews rather than whether a review happens, so a stuck
@@ -464,9 +468,9 @@ jobs:
           BOARD_OWNER: Krzysztof318
           BOARD_NUMBER: '4'
           STATUS_FIELD: Status
-          CLOSING_REFERENCES_SCRIPT: ${{ github.workspace }}/.github/fathom-review/collect-closing-references.sh
-          CLOSING_REFERENCE_LIMIT: '5'
-          BOARD_STATUS_SCRIPT: ${{ github.workspace }}/.github/fathom-review/write-board-status.sh
+          CLOSING_ISSUES_SCRIPT: ${{ github.workspace }}/.github/pull-request/collect-closing-issues.sh
+          CLOSING_ISSUE_LIMIT: '5'
+          BOARD_STATUS_SCRIPT: ${{ github.workspace }}/.github/pull-request/write-board-status.sh
           IN_REVIEW_STATUS: In review
           PRESERVED_STATUSES: Done,Blocked
         run: |
@@ -682,7 +686,7 @@ jobs:
           echo "snapshot_taken=${snapshot_taken}" >> "$GITHUB_OUTPUT"
 
           # The labels come with it because one of them changes how the change is read: `security`
-          # says a security review is owed before this merges, and `Apply pull request labels` is
+          # says a security review is owed before this merges, and `Apply pull request rules` is
           # what puts it here. The prompt turns it into a pass over every file, and the job above
           # reads the same label to decide which model performs that pass — one label, read twice,
           # written once.
@@ -823,23 +827,19 @@ jobs:
                  '[.[-$limit:][] | .body |= .[0:$bytes]]' \
             > "$REVIEW_DIRECTORY/issue-comments.json"
 
-          # Every issue the body closes, not the first one. Merging closes all of them, so a review
+          # Every issue merging closes, not the first one. Merging closes all of them, so a review
           # that read one can approve a change that finishes it and leaves another open with a
-          # closing reference pointing at it. The parsing is a script of its own under `.github/`,
-          # where `Protected paths` covers it and `scripts/test-agent-workflow.sh` can run it
-          # against a body without a `gh` stub: which keywords and which spellings count is a
-          # decision, and matching fewer of them than GitHub acts on is how an issue closes unread.
-          jq -r '.body // ""' "$REVIEW_DIRECTORY/pull-request.json" > "$REVIEW_DIRECTORY/body.txt"
-
+          # closing reference pointing at it. Which issues those are is asked of GitHub rather than
+          # read out of the body here: the list the merge will act on is the list the change is held
+          # to, and the same script answers it for the board write, so the contract and the column
+          # cannot come to disagree about what this change closes.
           : > "$REVIEW_DIRECTORY/issues.ndjson"
 
           # The ceiling lives in the script rather than in this loop so that what it cuts is
-          # reported by the same code that cuts it, and so the contract suite can exercise both
-          # without standing up a `gh` stub for the whole collection. The list arrives on standard
-          # output and the note about what was dropped on standard error, which is why the two are
-          # redirected apart here.
-          "${GITHUB_WORKSPACE}/.github/fathom-review/collect-closing-references.sh" \
-            "$REVIEW_DIRECTORY/body.txt" "$REPOSITORY" "$closing_reference_limit" \
+          # reported by the same code that cuts it. The list arrives on standard output and the note
+          # about what was dropped on standard error, which is why the two are redirected apart here.
+          "${GITHUB_WORKSPACE}/.github/pull-request/collect-closing-issues.sh" \
+            "$REPOSITORY" "$PULL_REQUEST_NUMBER" "$closing_reference_limit" \
             > "$REVIEW_DIRECTORY/closing-references.txt" \
             2>> "$REVIEW_DIRECTORY/truncation.txt"
 
@@ -865,8 +865,7 @@ jobs:
           done < "$REVIEW_DIRECTORY/closing-references.txt"
 
           jq -s . "$REVIEW_DIRECTORY/issues.ndjson" > "$REVIEW_DIRECTORY/issues.json"
-          rm -f "$REVIEW_DIRECTORY/issues.ndjson" "$REVIEW_DIRECTORY/body.txt" \
-            "$REVIEW_DIRECTORY/closing-references.txt"
+          rm -f "$REVIEW_DIRECTORY/issues.ndjson" "$REVIEW_DIRECTORY/closing-references.txt"
 
           changed_files="$(jq -r '.changed_files' "$REVIEW_DIRECTORY/pull-request.json")"
           collected_files="$(jq -r 'length' "$REVIEW_DIRECTORY/files.json")"
@@ -1384,9 +1383,9 @@ jobs:
       contents: read
       pull-requests: read
     steps:
-      # For `collect-closing-references.sh` alone, from the base commit for the reason every other
-      # read of this repository in this file is: the branch under review must not supply the code
-      # that decides which issues its own merge closes.
+      # For `collect-closing-issues.sh` alone, from the base commit for the reason every other read
+      # of this repository in this file is: the branch under review must not supply the code that
+      # decides which issues its own merge closes.
       - name: Check out the base commit
         uses: actions/checkout@v7
         with:
@@ -1410,14 +1409,15 @@ jobs:
           BOARD_OWNER: Krzysztof318
           BOARD_NUMBER: '4'
           STATUS_FIELD: Status
-          # The same script the collection step runs, so which keywords and which spellings close an
-          # issue is one decision rather than two that can drift apart.
-          CLOSING_REFERENCES_SCRIPT: ${{ github.workspace }}/.github/fathom-review/collect-closing-references.sh
-          CLOSING_REFERENCE_LIMIT: '5'
-          # The walk itself — read the body, resolve the field, move each item — is shared with the
-          # job that announces the review, because the two writes differ only in the value and in
-          # what they refuse to overwrite.
-          BOARD_STATUS_SCRIPT: ${{ github.workspace }}/.github/fathom-review/write-board-status.sh
+          # The same script the collection step runs, so which issues this change closes is one
+          # answer rather than two that can drift apart.
+          CLOSING_ISSUES_SCRIPT: ${{ github.workspace }}/.github/pull-request/collect-closing-issues.sh
+          CLOSING_ISSUE_LIMIT: '5'
+          # The walk itself — collect what the pull request closes, resolve the field, move each
+          # item — is shared with the job that announces the review and with `Apply pull request
+          # rules`, because those writes differ only in the value and in the statuses they may act
+          # on.
+          BOARD_STATUS_SCRIPT: ${{ github.workspace }}/.github/pull-request/write-board-status.sh
           # The two values a review decides, and the two this job refuses to write over. `Done` is
           # the merge and the close, so a verdict arriving after one must not drag a finished item
           # back into review. `Blocked` is the one status a hand writes: it says the issue is

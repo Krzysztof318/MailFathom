@@ -737,15 +737,21 @@ Three of its decisions are the ones a reader would otherwise have to reconstruct
 
 On a pull request from a fork the run gets the token GitHub grants that event, which is not the token a branch in this repository gets, and whether the alert upload succeeds there follows from GitHub's rules rather than from anything in this file. The check is required by nothing either way, so no merge waits on how it resolves, and the push to `main` after the merge analyses the same code under a token that certainly can upload.
 
-The fifth workflow, `Apply pull request labels`, carries one job and is the only one here that writes
-anything to the pull request. It runs when a pull request is opened, reopened, marked ready, or
-edited, checks out the merge commit for one script, and applies the labels
-`.github/pull-request-labels/select-labels.sh` says the change earns — today, `security` when any
-issue the body refers to carries it, whether the change closes that issue or merely names it. It reports no status check and blocks nothing; a draft runs it,
-because a label is worth having while the change is still being written. It only ever adds, so a
-label a hand applied stays. [Labels on the pull
-request](agent-workflow.md#labels-on-the-pull-request) carries the reasoning, including why it takes
-`pull_request` rather than the trigger `Fathom review` holds and what that costs on a fork.
+The fifth workflow, `Apply pull request rules`, derives every fact a pull request earns and carries
+two jobs, split by the event that can answer them. On a `pull_request` — opened, reopened, marked
+ready, or edited — it checks out the merge commit and applies the labels
+`.github/pull-request/select-labels.sh` says the change earns, today `security` when any issue the
+body refers to carries it, whether the change closes that issue or merely names it. On a push to
+`main` it instead sweeps every open pull request, asks GitHub whether each still merges, and writes
+the roadmap board where `.github/pull-request/select-board-status.sh` says a state earns a status —
+today, moving what a conflicting pull request closes from `Ready to merge` to `Conflicts`. Each job
+runs on one of those events and skips the other, which is what keeps the labelling as short as it
+was: `Fathom review` waits for this workflow's run before it reads the labels. It reports no status
+check and blocks nothing; a draft runs it, because a label is worth having while the change is still
+being written. It only ever adds a label, so one a hand applied stays. [Rules on the pull
+request](agent-workflow.md#rules-on-the-pull-request) carries the reasoning, including why the
+labelling takes `pull_request` rather than the trigger `Fathom review` holds and what that costs on a
+fork.
 
 ### `CI` after a merge to `main`
 

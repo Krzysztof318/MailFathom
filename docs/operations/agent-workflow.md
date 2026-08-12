@@ -1,6 +1,6 @@
 # Agent workflow
 
-<!-- describes: scripts/**, .agents/skills/**, .github/workflows/**, .github/fathom-review/**, .github/pull-request-labels/**, **/.editorconfig, .gitignore, .worktreeinclude -->
+<!-- describes: scripts/**, .agents/skills/**, .github/workflows/**, .github/fathom-review/**, .github/pull-request/**, **/.editorconfig, .gitignore, .worktreeinclude -->
 
 Codex and Claude Code share one repository-owned workflow. Deterministic Git and
 .NET operations live in scripts, while repository-specific judgment lives in
@@ -414,34 +414,47 @@ Skills live under `.agents/skills/`. Claude Code consumes the same directory
 through the relative symlink `.claude/skills -> ../.agents/skills`; do not copy
 or maintain a second skill tree.
 
-## Labels on the pull request
+## Rules on the pull request
 
-What a change *is* gets recorded on the issues it closes, and nothing carried that to the
-pull request — which is where the change is actually read: a list, a notification, a
-reviewer deciding how closely to look. `Apply pull request labels` does. It runs on
-`pull_request` when one is opened, reopened, marked ready, or **edited**, that last one
-because the body is an input: a closing reference added afterwards changes which issues
-describe the change and therefore which labels it earns.
+`Apply pull request rules` derives every fact a pull request earns. A change is read in
+places the issues it closes never reach — a list, a notification, a reviewer deciding how
+closely to look, a board column the owner works from — and each of those facts follows from
+the same few inputs: the pull request, the issues it closes, and whether it still merges.
+Deriving them in one pipeline rather than in a workflow apiece is what keeps a new rule from
+costing another trigger, another checkout, and another run for one small thing.
 
-Every condition lives in `.github/pull-request-labels/select-labels.sh` and none of them in
-the workflow, so a new condition is one edit to a script the contract suite runs rather
-than a rule spread across whichever workflows happen to care. One condition exists today:
-a pull request earns `security` when any issue it **refers to** carries `security`, the
-label [Issue tracking](issue-tracking.md#labels) defines as *needs a security review before
-it merges*.
+Every condition lives in a script under `.github/pull-request/` and none of them in the
+workflow, so a new rule is one edit to a script the contract suite runs rather than a rule
+spread across whichever workflows happen to care.
+
+The two jobs are split by the event that can answer them, which is also what keeps each run
+short. `Fathom review` waits for this workflow's run to conclude before it reads the labels
+off a pull request, so anything slower on that path delays every review.
+
+### Labels the change earns
+
+Labels follow from the body, so they are decided on a `pull_request` event when one is
+opened, reopened, marked ready, or **edited** — that last one because the body is an input:
+a closing reference added afterwards changes which issues describe the change and therefore
+which labels it earns.
+
+One condition exists today: a pull request earns `security` when any issue it **refers to**
+carries `security`, the label [Issue tracking](issue-tracking.md#labels) defines as *needs a
+security review before it merges*.
 
 Refers to, not closes, and the difference is the point. `collect-referenced-issues.sh`
 collects every issue the body names — a closing reference, a bare `#123`, and a link to an
-issue in this repository alike — where `collect-closing-references.sh`, which the
-reviewer's collection uses, deliberately leaves a mention out. The two answer different
-questions: what merging *completes* is a contract a review holds the change to, while what
-the change is *about* is what a label says, and "part of #123" against a security issue is
-a change somebody wants read that way whether or not it finishes the issue. A
-cross-repository `owner/repo#123` is neither, in both scripts: that number belongs to
-another project, and reading it here would earn a label from whichever local issue happens
-to hold the same number.
+issue in this repository alike — where `collect-closing-issues.sh`, which the reviewer's
+collection and every board write use, asks GitHub for the issues the merge will actually
+close. The two answer different questions: what merging *completes* is a contract a review
+holds the change to and a set of items the board acts on, while what the change is *about*
+is what a label says, and "part of #123" against a security issue is a change somebody
+wants read that way whether or not it finishes the issue. That is also why only one of them
+is a reading of the body: a mention has no resolved answer to ask GitHub for. An issue in
+another repository is left out by both, because a label earned from another project's
+numbering and a board item on another project's roadmap are the same mistake.
 
-The workflow only ever adds. A label a hand applied answers a question this pipeline cannot
+The labelling only ever adds. A label a hand applied answers a question this pipeline cannot
 see — `fathom-review` is the worked example, and it means *somebody asked* — so nothing
 here removes one, and re-applying a label already present changes nothing and fires no
 event. An issue that cannot be fetched earns nothing rather than stopping the walk: reading
@@ -465,6 +478,46 @@ against a tree without the script. That is not hypothetical — it is how the pu
 introducing this workflow failed, with `No such file or directory`. So the checkout is the
 merge ref this trigger defaults to, which is the tree the workflow file itself came from,
 and the read-only token on a fork is what bounds what a script from there can do.
+
+### The board status the state earns
+
+A board status follows from whether a pull request still merges, and *that* changes when
+something else merges into `main` rather than through any event on the pull request itself.
+GitHub raises nothing on the branch it happened to, so this job is triggered by the push to
+`main` and reads every open pull request from the other side. It never runs on a
+`pull_request` event, where it would answer nothing and lengthen the wait `Fathom review`
+performs on this workflow's run.
+
+One rule exists today, in `.github/pull-request/select-board-status.sh`: a pull request that
+no longer merges moves the issues it closes from `Ready to merge` to `Conflicts`.
+`Ready to merge` says the change is waiting on nothing but the owner pressing the button,
+and a conflict is precisely the discovery that it is not. From `Ready to merge` and from
+nowhere else — an item still being written, already blocked, or already done says nothing
+about whether a conflict is news, and a rule that moved those would report the same conflict
+on every push to `main` for as long as it went unresolved.
+
+A rule states the statuses it may act on and the statuses it refuses to overwrite, and the
+job passes both to `write-board-status.sh` unread. Those are the two directions of one
+question, and which one a rule uses says what it means: a review's verdict describes any
+item it finds and names the two statuses it must not erase, while a rule about an approved
+change is only true of an approved item and names the one status it is entitled to move.
+
+The waiting is the part with no shorter form. GitHub computes mergeability when it is asked
+and not before, so every open pull request reads `UNKNOWN` for the first seconds after a
+merge — which is exactly when this runs. The job polls within a bounded window and names, as
+a notice, every pull request it never got an answer for; the next push to `main` decides
+those. Reading `UNKNOWN` as a conflict would instead move an item on every merge.
+
+Two ceilings bound the sweep and both report what they cut: how many open pull requests one
+run reads, ordered by when each was last updated, and how many issues one pull request's
+closing references are followed. A pull request or an issue nobody was told about is a board
+item silently left behind, which is the same reason the reviewer's own ceilings report.
+
+Nothing here is refused on a fork's pull request, unlike the labelling above: the sweep runs
+on a push to this repository with this repository's own token, and it reads a fork's pull
+request exactly as it reads any other. What it does need is `BOARD_PROJECT_TOKEN`, the same
+classic token carrying the `project` scope that `Fathom review`'s two writes need, and
+without it the job says so and ends green.
 
 ## Review on the pull request
 
@@ -805,7 +858,7 @@ buys no protection against that.
 
 ### What the security label decides
 
-`security` on the pull request — put there by `Apply pull request labels`, from an
+`security` on the pull request — put there by `Apply pull request rules`, from an
 issue the change refers to, which need not be one it closes — is the one input that
 changes how the review is *conducted* rather than only what it concludes. Two things follow from it, and the
 reviewer reads the label off the pull request for both rather than deriving it from
@@ -898,14 +951,15 @@ contradiction between what the change says and what it does, never a preference
 about clarity, length, or order, and an issue the run could not fetch supports no
 finding at all — the reviewer says so in the summary and judges nothing by it.
 
-Every issue the body closes is collected, not the first one, and every keyword
-GitHub acts on is matched rather than the three a body usually spells:
-`.github/fathom-review/collect-closing-references.sh` owns that parsing, so which
-spellings count is pinned by `scripts/test-agent-workflow.sh` instead of living in
-a grep nobody rereads. Matching fewer than GitHub does is how an issue closes on
-merge with nothing having read what it asked for. A bare `#123` is a mention and
-closes nothing, so it is left out; a link to another project's issue is one this
-reviewer cannot fetch and must not hold the change to.
+Every issue merging will close is collected, not the first one, and the list comes
+from GitHub rather than from a reading of the body:
+`.github/pull-request/collect-closing-issues.sh` asks for the pull request's
+`closingIssuesReferences`, which is the resolved answer the merge itself will act
+on. Collecting fewer than that is how an issue closes on merge with nothing having
+read what it asked for, and collecting more is how a review holds a change to a
+contract nobody wrote. An issue in another repository is the one thing the script
+drops, because it is neither a contract this reviewer can fetch nor an item on this
+board.
 
 A defect in what the change says about itself is usually a property of the change
 rather than of a line, so those findings carry a null `path` and the submission
@@ -1096,11 +1150,16 @@ findings, `Ready to merge` where it approved. A run that publishes no verdict
 writes nothing and leaves `In review` standing, where a reader sees that a review
 was asked for and produced nothing.
 
-Both writes are one script, `write-board-status.sh`. The walk is identical — read
-the body, collect what it closes, resolve the field and the option by name, find
-the item on this board, mutate it — and the two callers differ only in the value
-they pass. Which values they refuse to overwrite is an argument too, so that the
-decision stays with the caller, but both currently name the same pair.
+Both writes are one script, `write-board-status.sh`, and so is the conflict rule
+in `Apply pull request rules`. The walk is identical — collect what the pull
+request closes, resolve the field and the option by name, find the item on this
+board, mutate it — and the callers differ only in the value they write and in the
+statuses they may write it over. That authority is two arguments rather than one,
+because it is one question asked in two directions: the statuses a write refuses
+to overwrite, and the statuses it may act on and no others. Both reviews name the
+same preserved pair and no required list, because a verdict describes whatever
+item it finds; the conflict rule names one required status and no preserved list,
+because it is only true of an item that is currently approved.
 
 It exists because that half of the field had no writer at all. The board's
 built-in `Code changes requested` and `Code review approved` workflows fire on a
@@ -1115,9 +1174,9 @@ The verdict is a job output rather than a second reading of the pull request. Th
 submission step states it in the one branch that posted a review, so a run that
 ended for any of the other reasons it returns on moves nothing, and a verdict
 that exists always names a review a reader can go and look at. The closing
-references come from `collect-closing-references.sh`, the same script the
-collection step runs, so which keywords close an issue is one decision rather
-than two that drift.
+issues come from `collect-closing-issues.sh`, the same script the collection step
+and `Apply pull request rules` run, so which issues a merge closes is one answer
+GitHub gives rather than three derivations of it that drift.
 
 Two statuses are never written over, by either end of the review. `Done` is the
 merge and the close, so a verdict arriving after one must not drag a finished
