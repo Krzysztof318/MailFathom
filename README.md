@@ -94,8 +94,9 @@ MailFathom is built as an enterprise-grade system from the first line, even whil
 - The MCP surface is five tools — `list_accounts`, `list_emails`, `get_email_content`, `search_emails`, `ask_mail` — and that is all of it. There is no write tool to enable.
 - Synchronization is incapable of marking remote mail as read.
 - No response carries an attachment's bytes. A call that asks for them by name receives a signed link per file instead, valid for minutes, scoped to that one attachment, and resolved through the live mailbox so it dies with the message it points at.
+- Configuration is read-only to the process, permanently. No request, command, or tool changes a setting, and the service never rewrites the file it was configured from. So the file you provisioned is the file in force: how an instance is configured is reviewable as a diff and restorable from a backup, and nothing reachable over the network can move it out from under you. What the service itself has to modify lives in the database instead.
 
-→ [MCP tools](https://krzysztof318.github.io/MailFathom/features/mcp-tools.html)
+→ [MCP tools](https://krzysztof318.github.io/MailFathom/features/mcp-tools.html), [configuration sources](https://krzysztof318.github.io/MailFathom/operations/configuration-sources.html)
 
 ### Secure by default, and explicit about every weakening
 
