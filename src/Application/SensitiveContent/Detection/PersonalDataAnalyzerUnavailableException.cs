@@ -16,11 +16,10 @@ namespace MailFathom.Application.SensitiveContent.Detection;
 /// carried on is not.
 /// </para>
 /// <para>
-/// <b>This is the one sensitive-content failure that names an address.</b>
-/// <see cref="SensitiveContentScannerUnavailableException" /> names no endpoint because nothing a caller does with a
-/// refused scan depends on one. Here the address is the whole content of the message: it is the deployment's own
-/// configured analyzer rather than a remote party's server, an operator cannot repair what they are not told, and the
-/// value is already in the configuration file they would edit.
+/// <b>No message here carries the analyzer's address</b>, because a message is what reaches a log and a host name never
+/// does. Each one names <c>SensitiveContent:PersonalDataAnalyzer:Endpoint</c> instead — the key an operator edits to
+/// repair any of these three states, and the one thing they need to be told, since the value is already in the file they
+/// would open. The resolved address stays on <see cref="Endpoint" /> for a caller with somewhere safe to put it.
 /// </para>
 /// </remarks>
 public sealed class PersonalDataAnalyzerUnavailableException : MailFathomException
@@ -51,10 +50,7 @@ public sealed class PersonalDataAnalyzerUnavailableException : MailFathomExcepti
         ArgumentNullException.ThrowIfNull(failure);
 
         return new PersonalDataAnalyzerUnavailableException(
-            string.Format(
-                CultureInfo.InvariantCulture,
-                "The personal-data scanner is switched on and the analyzer at {0} could not be reached. Personal-data scanning fails closed, so this deployment would refuse every read, derived write, and egress it guards. Start the analyzer beside this service, correct SensitiveContent:PersonalDataAnalyzer:Endpoint, or switch the scanner off.",
-                endpoint),
+            "The personal-data scanner is switched on and the analyzer named by SensitiveContent:PersonalDataAnalyzer:Endpoint could not be reached. Personal-data scanning fails closed, so this deployment would refuse every read, derived write, and egress it guards. Start the analyzer beside this service, correct that address, or switch the scanner off.",
             endpoint,
             failure);
     }
@@ -76,8 +72,7 @@ public sealed class PersonalDataAnalyzerUnavailableException : MailFathomExcepti
         return new PersonalDataAnalyzerUnavailableException(
             string.Format(
                 CultureInfo.InvariantCulture,
-                "The analyzer at {0} answered the personal-data scanner's startup probe with {1}. Check that the address serves a Presidio analyzer rather than another service, and that the language this deployment is configured for is one its own configuration loads a model for.",
-                endpoint,
+                "The analyzer named by SensitiveContent:PersonalDataAnalyzer:Endpoint answered the personal-data scanner's startup probe with {0}. Check that the address serves a Presidio analyzer rather than another service, and that the language this deployment is configured for is one its own configuration loads a model for.",
                 status),
             endpoint);
     }
@@ -102,8 +97,7 @@ public sealed class PersonalDataAnalyzerUnavailableException : MailFathomExcepti
         return new PersonalDataAnalyzerUnavailableException(
             string.Format(
                 CultureInfo.InvariantCulture,
-                "The analyzer at {0} recognises no entity the '{1}' category maps onto, so that category would be scanned for and never found. Configure the analyzer's recognizer registry to load it, or leave the category out of the configured list.",
-                endpoint,
+                "The analyzer named by SensitiveContent:PersonalDataAnalyzer:Endpoint recognises no entity the '{0}' category maps onto, so that category would be scanned for and never found. Configure the analyzer's recognizer registry to load it, or leave the category out of the configured list.",
                 category),
             endpoint);
     }

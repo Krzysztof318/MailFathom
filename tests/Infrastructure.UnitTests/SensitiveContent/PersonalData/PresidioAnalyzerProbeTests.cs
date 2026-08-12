@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.Diagnostics.CodeAnalysis;
+using System.Globalization;
 using System.Net;
 using System.Text;
 using MailFathom.Application.SensitiveContent;
@@ -17,8 +18,8 @@ namespace MailFathom.Infrastructure.UnitTests.SensitiveContent.PersonalData;
 /// <summary>Covers the one question asked before the host finishes coming up: can this analyzer answer at all?</summary>
 /// <remarks>
 /// Every failure this class produces would otherwise surface as no findings, and no findings is indistinguishable from a
-/// clean mailbox. That is why the probe fails startup rather than logging, and why its message names the address — the only
-/// sensitive-content failure that does, because it is the only one an operator can act on.
+/// clean mailbox. That is why the probe fails startup rather than logging, and why its message names the configuration key
+/// an operator would edit rather than the address that key resolved to, which stays on the failure's own property.
 /// </remarks>
 public sealed class PresidioAnalyzerProbeTests
 {
@@ -72,7 +73,7 @@ public sealed class PresidioAnalyzerProbeTests
 
         // Assert
         Assert.Contains("HealthIdentifier", failure.Message, StringComparison.Ordinal);
-        Assert.Contains("analyzer.invalid", failure.Message, StringComparison.Ordinal);
+        Assert.Contains("SensitiveContent:PersonalDataAnalyzer:Endpoint", failure.Message, StringComparison.Ordinal);
     }
 
     /// <summary>An address that answers something other than an analyzer, and an analyzer with no model for the language, land here.</summary>
@@ -90,7 +91,7 @@ public sealed class PresidioAnalyzerProbeTests
             () => context.Probe.VerifyAvailableAsync(CancellationToken.None));
 
         // Assert
-        Assert.Contains(((int)status).ToString(System.Globalization.CultureInfo.InvariantCulture), failure.Message, StringComparison.Ordinal);
+        Assert.Contains(((int)status).ToString(CultureInfo.InvariantCulture), failure.Message, StringComparison.Ordinal);
         Assert.Equal("http://analyzer.invalid:3000/", failure.Endpoint);
     }
 
@@ -115,7 +116,7 @@ public sealed class PresidioAnalyzerProbeTests
     }
 
     [Fact]
-    public async Task VerifyAvailableAsync_AnalyzerThatCannotBeReached_RefusesToStartNamingTheAddress()
+    public async Task VerifyAvailableAsync_AnalyzerThatCannotBeReached_RefusesToStartNamingTheConfigurationKey()
     {
         // Arrange
         using var context = AnalyzerFailingWith(new HttpRequestException("connection refused"));
@@ -125,8 +126,43 @@ public sealed class PresidioAnalyzerProbeTests
             () => context.Probe.VerifyAvailableAsync(CancellationToken.None));
 
         // Assert
-        Assert.Contains("analyzer.invalid", failure.Message, StringComparison.Ordinal);
+        Assert.Contains("SensitiveContent:PersonalDataAnalyzer:Endpoint", failure.Message, StringComparison.Ordinal);
         Assert.IsType<HttpRequestException>(failure.InnerException);
+    }
+
+    /// <summary>
+    /// A message is what reaches a log, so none of the three refusals carries the analyzer's host name. The address stays
+    /// on the failure's own property, which a caller can put somewhere a log line cannot.
+    /// </summary>
+    [Fact]
+    public async Task VerifyAvailableAsync_EveryRefusal_KeepsTheAnalyzerAddressOutOfTheMessage()
+    {
+        // Arrange
+        var narrowedPlan = PersonalDataScanningPlans.For(
+            [PersonalDataScanningPlans.Category("PaymentCard"), PersonalDataScanningPlans.Category("HealthIdentifier")]);
+
+        using var unreachable = AnalyzerFailingWith(new HttpRequestException("connection refused"));
+        using var refusing = AnalyzerAnswering("""{"error":"refused"}""", status: HttpStatusCode.InternalServerError);
+        using var recognisingNothingOfACategory = AnalyzerAnswering("""["CREDIT_CARD"]""", narrowedPlan);
+
+        // Act
+        var failures = await Task.WhenAll(
+            new[] { unreachable, refusing, recognisingNothingOfACategory }.Select(
+                context => Assert.ThrowsAsync<PersonalDataAnalyzerUnavailableException>(
+                    () => context.Probe.VerifyAvailableAsync(CancellationToken.None))));
+
+        // Assert
+        Assert.All(
+            failures,
+            failure =>
+            {
+                Assert.DoesNotContain("analyzer.invalid", failure.Message, StringComparison.Ordinal);
+                Assert.Contains(
+                    "SensitiveContent:PersonalDataAnalyzer:Endpoint",
+                    failure.Message,
+                    StringComparison.Ordinal);
+                Assert.Equal("http://analyzer.invalid:3000/", failure.Endpoint);
+            });
     }
 
     /// <summary>An address that answers an empty list is something other than a configured analyzer, whatever its status was.</summary>

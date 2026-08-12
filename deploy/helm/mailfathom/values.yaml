@@ -211,10 +211,11 @@ personalDataScanning:
 
     # How sure the analyzer must be before a finding is redacted, from 0 to 1. Redaction acts on every finding whatever
     # its confidence, so this floor is the only thing between a deployment and the analyzer's weakest guesses: with no
-    # floor at all a payment card number is also reported as a bank account number at 0.05 and an arbitrary run of
-    # characters as a driving licence at 0.01. Raising it trades recall for readable text — above 0.4 an American passport
-    # number stops being found at all.
-    minimumConfidence: 0.3
+    # floor at all an eight-digit build number is reported as a bank account number at 0.05 and a contract reference of a
+    # letter and seven digits as a driving licence at 0.3. The default is the one value that drops every measured false
+    # positive while leaving every category detectable — a passport number and a bank routing number both score exactly
+    # 0.4, so raising it at all stops two of the five default categories from being found.
+    minimumConfidence: 0.4
 
     # An immutable tag naming the analyzer release, like the database image above and unlike the application image: this
     # is a dependency the chart operates rather than a version a deployment chooses. It is the same pin the Compose

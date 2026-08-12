@@ -107,7 +107,7 @@ Environment=Persistence__Password__SecretReference=systemd-credential:mailfathom
 #Environment=SensitiveContent__Pii__Enabled=true
 #Environment=SensitiveContent__PersonalDataAnalyzer__Endpoint=http://mailfathom-presidio:3000
 #Environment=SensitiveContent__PersonalDataAnalyzer__Language=en
-#Environment=SensitiveContent__PersonalDataAnalyzer__MinimumConfidence=0.3
+#Environment=SensitiveContent__PersonalDataAnalyzer__MinimumConfidence=0.4
 
 # The same posture the image and the other two deployment shapes carry: nothing writable but one bounded tmpfs, no
 # capabilities, and no way to gain a privilege. /tmp is the one path the runtime needs to write.

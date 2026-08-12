@@ -225,7 +225,7 @@ public sealed class SensitiveContentOptionsTests
         // Assert
         Assert.Null(settings.PersonalDataAnalyzer.Endpoint);
         Assert.Equal("en", settings.PersonalDataAnalyzer.Language);
-        Assert.Equal(0.3, settings.PersonalDataAnalyzer.MinimumConfidence);
+        Assert.Equal(0.4, settings.PersonalDataAnalyzer.MinimumConfidence);
     }
 
     [Fact]

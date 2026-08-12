@@ -50,7 +50,7 @@ public sealed class PersonalDataAnalyzerStartupGateTests
 
         // Assert
         Assert.False(startupGates.Completed);
-        Assert.Contains("http://presidio-analyzer:3000/", failure.Message, StringComparison.Ordinal);
+        Assert.Equal("http://presidio-analyzer:3000/", failure.Endpoint);
     }
 
     [Fact]

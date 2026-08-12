@@ -43,12 +43,22 @@ namespace MailFathom.IntegrationTests.SensitiveContent;
 /// answers at rather than by stopping the analyzer: the container is shared with the rest of the run, stopping a resource
 /// this class did not start would break every test behind it, and the code path is identical either way.
 /// </para>
+/// <para>
+/// The false-positive corpus is here rather than in the unit suite for the reason the rest of this class is: detection
+/// happens in the analyzer, so a substitute asked about prose answers whatever the substitute was written to answer. Its
+/// counterpart for the in-process secret scanner is a unit test, because there the detector really is in the process.
+/// </para>
 /// </remarks>
 [Collection(OrchestratedInfrastructureCollectionDefinition.Name)]
 public sealed class OrchestratedPersonalDataAnalyzerTests(MailFathomOrchestrationFixture orchestration)
 {
-    /// <summary>The floor the tests state, low enough that every fixture below is reported and high enough to drop the analyzer's sub-0.1 noise.</summary>
-    private const double MinimumConfidence = 0.3;
+    /// <summary>The product's own default floor, which is what these fixtures are chosen to sit on either side of.</summary>
+    /// <remarks>
+    /// Stated as a literal rather than read from the options type, because the two claims this class makes about it are that
+    /// a deployment's default finds every category and reports nothing in prose. Reading the value under test out of the
+    /// code under test would make both hold at whatever the default became.
+    /// </remarks>
+    private const double MinimumConfidence = 0.4;
 
     /// <summary>
     /// One synthetic value per category the product detects by default, each in the surrounding words the analyzer's
@@ -65,7 +75,31 @@ public sealed class OrchestratedPersonalDataAnalyzerTests(MailFathomOrchestratio
         { "NationalIdentifier", "US_ITIN", "ITIN 912-70-1234 filed", "912-70-1234", 5, 11 },
         { "IdentityDocument", "US_DRIVER_LICENSE", "Driver license number D1234567 shown", "D1234567", 22, 8 },
         { "HealthIdentifier", "UK_NHS", "NHS number 943 476 5919 recorded", "943 476 5919", 11, 12 },
+
+        // The second identity-document row is the one that pins the floor from above: the analyzer scores this number at
+        // exactly 0.4, so a default raised by any amount stops finding passport numbers and fails here.
+        { "IdentityDocument", "US_PASSPORT", "Passport number 912803456 issued", "912803456", 16, 9 },
     };
+
+    /// <summary>Prose a mailbox is full of that carries no identifier of any default category.</summary>
+    /// <remarks>
+    /// Each line is something the analyzer's own recognizers come close to and score below the default floor: a commit
+    /// hash, an invoice reference and a build number it reads as a bank account at 0.05, a contract reference it reads as a
+    /// driving licence at 0.3, a hyphenated ticket number shaped like a social security number, a room and an order number,
+    /// and a host address. The 0.3 line is why the default is what it is, and this corpus is what fails if that stops being
+    /// true — through a floor somebody lowered or an analyzer release that scores a pattern differently.
+    /// </remarks>
+    private static IReadOnlyList<string> FalsePositiveCorpus { get; } =
+    [
+        "The fix landed in commit 9f2c1ab7e45d0836ba91cc57de204f6a8b3e1d92, please rebase onto it.",
+        "Invoice 2026/08/0142 for 1 240,00 EUR is attached; the reference is INV-20260812-0142.",
+        "The build number is 20260812 and the release notes are attached.",
+        "Contract A1234567 was signed by both parties last week.",
+        "Ticket 123-45-6789 in the tracker is the one about the flaky formatter test.",
+        "Session begins at 09:30 CEST in room 4471; the agenda is in the shared folder.",
+        "Order 4471 shipped on Tuesday and the courier left it with reception.",
+        "The staging environment is at 10.0.0.14 and the database listens on port 5432.",
+    ];
 
     /// <summary>Every category the product hides by default is one the shipped analyzer really finds, in the region it really occupies.</summary>
     [Theory]
@@ -88,6 +122,12 @@ public sealed class OrchestratedPersonalDataAnalyzerTests(MailFathomOrchestratio
         // Assert
         var finding = Assert.Single(findings, candidate => candidate.Rule.HasName(entity));
         Assert.True(finding.Category.HasName(category));
+
+        // Nothing else is reported either. A second recognizer reading the same span as another category is exactly what
+        // the floor holds back — a passport number is also a national identifier at 0.3 — so tolerating extra findings here
+        // would let a lowered floor pass.
+        Assert.All(findings, candidate => Assert.True(candidate.Category.HasName(category)));
+
         Assert.Equal(expectedStart, finding.Span.Start);
         Assert.Equal(expectedLength, finding.Span.Length);
 
@@ -122,6 +162,34 @@ public sealed class OrchestratedPersonalDataAnalyzerTests(MailFathomOrchestratio
         // what makes those two numbers different from the ones a .NET string is indexed by.
         Assert.Equal(8, finding.Span.Start);
         Assert.Equal(24, finding.Span.End);
+    }
+
+    /// <summary>
+    /// A mailbox is prose, and the floor is the only thing keeping the analyzer's weakest patterns out of it. This is the
+    /// test that fails if the default stops suppressing them.
+    /// </summary>
+    /// <remarks>
+    /// Asserted over the whole corpus at once rather than one line per case, so a failure names every line that started
+    /// reporting something instead of the first one.
+    /// </remarks>
+    [Fact]
+    public async Task ScanAsync_ProseCarryingNoIdentifier_ReportsNothingAtTheDefaultFloor()
+    {
+        // Arrange
+        await using var composition = this.Compose(PersonalDataScanningPlan.Default);
+        var scanner = ScannerOf(composition);
+
+        // Act
+        var scanned = await Task.WhenAll(FalsePositiveCorpus.Select(async line => new
+        {
+            Line = line,
+            Findings = await scanner.ScanAsync(line, TestContext.Current.CancellationToken),
+        }));
+
+        // Assert
+        Assert.Empty(scanned
+            .Where(result => result.Findings.Count > 0)
+            .Select(result => $"{result.Line} => {string.Join(", ", result.Findings.Select(finding => finding.Rule))}"));
     }
 
     /// <summary>

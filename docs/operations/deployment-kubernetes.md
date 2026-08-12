@@ -323,7 +323,7 @@ with nothing to authenticate to and one more thing to steal.
 
 | Probe | Path | Consults |
 | --- | --- | --- |
-| Startup | `/started` | The host's own startup gates: every secret reference resolved, the database schema verified. Its budget is what a slow first start is allowed, and it holds liveness off until it succeeds. |
+| Startup | `/started` | The host's own startup gates: every secret reference resolved, the database schema verified, and — only with `personalDataScanning.enabled` — the analyzer answering for every configured category. Its budget is what a slow first start is allowed, and it holds liveness off until it succeeds. |
 | Readiness | `/health` | The dependencies a request needs, the database included. A pod that cannot serve leaves the Service's endpoints. |
 | Liveness | `/alive` | The process alone, so a database outage never becomes a restart loop that cannot fix it. |
 

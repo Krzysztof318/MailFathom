@@ -115,7 +115,7 @@ services:
       SensitiveContent__Pii__Enabled: ${MAILFATHOM_PERSONAL_DATA_SCANNING:-false}
       SensitiveContent__PersonalDataAnalyzer__Endpoint: ${MAILFATHOM_PERSONAL_DATA_ANALYZER:-http://presidio-analyzer:3000}
       SensitiveContent__PersonalDataAnalyzer__Language: ${MAILFATHOM_PERSONAL_DATA_LANGUAGE:-en}
-      SensitiveContent__PersonalDataAnalyzer__MinimumConfidence: ${MAILFATHOM_PERSONAL_DATA_MINIMUM_CONFIDENCE:-0.3}
+      SensitiveContent__PersonalDataAnalyzer__MinimumConfidence: ${MAILFATHOM_PERSONAL_DATA_MINIMUM_CONFIDENCE:-0.4}
     secrets:
       - mailfathom-database-password
     volumes:

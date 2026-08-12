@@ -224,7 +224,7 @@ public sealed class SensitiveContentPlanMapperTests
         var profile = SensitiveContentPlanMapper.MapAnalyzerProfile(settings);
 
         // Assert
-        Assert.Equal(0.3, profile.MinimumConfidence);
+        Assert.Equal(0.4, profile.MinimumConfidence);
     }
 
     /// <summary>Startup validation refuses both of these first, so reaching either means the two passes disagree.</summary>

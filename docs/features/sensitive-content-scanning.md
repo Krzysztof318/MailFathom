@@ -117,11 +117,11 @@ no switch at all, because the operator would believe it was in force.
 Every one of those failures reports error code `81001` and names the scanner. None of them names the text or the
 finding: the content the scan was about is exactly what must not appear in a failure written to a log.
 
-There is exactly one failure in this feature that names an address, and it is a startup failure rather than a scan's:
-`81002`, raised when the personal-data analyzer cannot be reached or recognises nothing the configured categories need.
-It names the endpoint because an operator reading it has to know which of several addresses in their own configuration is
-the wrong one, and because it is raised while the host is coming up — before any mail has been read, so there is no
-content for it to be about.
+One failure in this feature is a startup failure rather than a scan's: `81002`, raised when the personal-data analyzer
+cannot be reached, answers the startup probe with a refusal, or recognises nothing the configured categories need. It
+names `SensitiveContent:PersonalDataAnalyzer:Endpoint` — the key an operator edits — rather than the address that key
+resolved to, because a message reaches a log and no message this system writes carries a host name. The resolved address
+is on the failure itself for a caller that has somewhere safe to put it.
 
 ## The secret scanner
 
@@ -280,14 +280,16 @@ inside a category that still works.
 ### The confidence floor
 
 The analyzer scores every finding, and redaction acts on a finding without weighing it. The floor is therefore the only
-thing between a deployment and the analyzer's weakest guesses — and those are weak: with no floor at all a payment card
-number is *also* reported as a bank account number at 0.05, and an arbitrary run of characters as a driving licence at
-0.01.
+thing between a deployment and the analyzer's weakest guesses — and those are weak. Measured against the pinned image with
+no floor at all, an eight-digit build number is reported as a bank account number at 0.05 and as a driving licence at
+0.01, a contract reference of one letter and seven digits as a driving licence at 0.3, and a nine-digit passport number as
+a national identifier at 0.3 on top of being a passport number.
 
-The default is `0.3`, which keeps every pattern the analyzer scores as a real match and drops that layer beneath it.
-Raising it trades recall for readable text: above 0.4 an American passport number stops being found at all, because a bare
-nine-digit run scores 0.4 until the surrounding words raise it. The floor is sent to the analyzer rather than applied to
-its answer, so the weakest guesses never cross the process boundary at all.
+The default is `0.4`, and it is the only value that drops all of those while leaving every category detectable. Both of
+its bounds are the analyzer's rather than a preference: everything above is measured noise, and *at* 0.4 sit a passport
+number and a bank routing number, so raising the floor at all stops two of the five default categories from being found.
+The floor is sent to the analyzer rather than applied to its answer, so the weakest guesses never cross the process
+boundary at all, and it is compared inclusively — a finding scored exactly 0.4 survives a floor of 0.4.
 
 It is not part of the detector revision a finding carries, and neither is the category list. The revision names *how*
 detection was performed — which mapping this build ships, and which model the analyzer loaded — while both of those name

@@ -353,7 +353,7 @@
               "type": "number",
               "minimum": 0,
               "maximum": 1,
-              "description": "How sure the analyzer must be before a finding is redacted. Redaction acts on every finding whatever its confidence, so a floor of zero redacts the analyzer's weakest guesses: a payment card number is also reported as a bank account number at 0.05."
+              "description": "How sure the analyzer must be before a finding is redacted. Redaction acts on every finding whatever its confidence, so a floor of zero redacts the analyzer's weakest guesses: an eight-digit build number is reported as a bank account number at 0.05 and a contract reference as a driving licence at 0.3. Raising it above the default stops a passport number and a bank routing number, both scored at exactly 0.4, from being found at all."
             },
             "image": {
               "type": "object",

@@ -54,19 +54,20 @@ internal sealed class PersonalDataAnalyzerOptions
     /// <para>
     /// Redaction acts on every finding it is given whatever its confidence, so this floor is the only thing between a
     /// deployment and the analyzer's weakest guesses — and those are weak by design rather than by accident. Measured
-    /// against the shipped image, a payment card number is also reported as a bank account number at 0.05 and an
-    /// arbitrary run of characters as a driving licence at 0.01, so a deployment with no floor redacts a great deal of
-    /// text nothing was actually found in.
+    /// against the shipped image, an eight-digit build number is reported as a bank account number at 0.05 and as a
+    /// driving licence at 0.01, and a contract reference of one letter and seven digits as a driving licence at 0.3, so a
+    /// deployment with no floor redacts a great deal of text nothing was actually found in.
     /// </para>
     /// <para>
-    /// The default keeps every pattern the analyzer scores as a real match and drops that sub-0.1 layer. Raising it
-    /// trades recall for readable text — above 0.4 an American passport number stops being found at all, because the
-    /// analyzer scores a bare nine-digit run at 0.4 until surrounding words raise it — and lowering it to zero is the
-    /// state described above. It is compared inclusively, as the analyzer compares it.
+    /// The default is the one value that drops every measured false positive while leaving every category detectable, and
+    /// both halves of that are decided by the analyzer rather than by taste. Below it sit the 0.3 pattern above and a
+    /// nine-digit passport number that a second recognizer also reads as a national identifier at 0.3; at it sit that
+    /// passport number's own 0.4 and a bank routing number's 0.4, so raising the floor at all stops two of the five
+    /// default categories from being found. It is compared inclusively, as the analyzer compares it.
     /// </para>
     /// </remarks>
     public double MinimumConfidence { get; set; } = DefaultMinimumConfidence;
 
     /// <summary>The floor a deployment that states none receives.</summary>
-    internal const double DefaultMinimumConfidence = 0.3;
+    internal const double DefaultMinimumConfidence = 0.4;
 }

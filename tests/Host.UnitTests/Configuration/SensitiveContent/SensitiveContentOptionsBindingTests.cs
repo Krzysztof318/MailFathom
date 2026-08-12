@@ -125,7 +125,7 @@ public sealed class SensitiveContentOptionsBindingTests
         var settings = Bind(configuration);
 
         // Assert
-        Assert.Equal(0.3, settings.PersonalDataAnalyzer.MinimumConfidence);
+        Assert.Equal(0.4, settings.PersonalDataAnalyzer.MinimumConfidence);
     }
 
     /// <summary>An operator narrowing one bound must not reset the other two, which a partially bound section otherwise would.</summary>
