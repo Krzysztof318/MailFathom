@@ -771,7 +771,7 @@
       "properties": {
         "path": {
           "const": "/started",
-          "description": "Startup reports whether the host's own startup gates have completed \u2014 every secret reference resolved, the database schema verified. Every other path is refused: /alive answers before those gates have run and would end the startup grace period while the pod is still coming up, and /health consults the database."
+          "description": "Startup reports whether the host's own startup gates have completed \u2014 every secret reference resolved, the database schema verified, and, only with personalDataScanning.enabled, the analyzer answering for every configured category. Every other path is refused: /alive answers before those gates have run and would end the startup grace period while the pod is still coming up, and /health consults the database."
         },
         "initialDelaySeconds": {
           "$ref": "#/definitions/probeTiming/initialDelaySeconds"

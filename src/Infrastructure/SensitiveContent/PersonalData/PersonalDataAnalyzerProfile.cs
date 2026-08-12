@@ -91,8 +91,10 @@ public sealed partial record PersonalDataAnalyzerProfile
 
         if (!endpoint.IsAbsoluteUri || (endpoint.Scheme != Uri.UriSchemeHttp && endpoint.Scheme != Uri.UriSchemeHttps))
         {
+            // The address it was given is deliberately not echoed, as in the options validator this normally runs behind:
+            // a message reaches a log and a host name never does.
             throw new ArgumentException(
-                $"'{endpoint}' is not an address the personal-data analyzer can be reached at. State an absolute http or https address, such as http://presidio-analyzer:3000.",
+                "That is not an address the personal-data analyzer can be reached at. State an absolute http or https address, such as http://presidio-analyzer:3000.",
                 nameof(endpoint));
         }
 
