@@ -2,6 +2,11 @@
 
 <!-- describes: src/Infrastructure/Mail/OAuth/**, src/Common/MailboxOAuth/**, src/Common/OAuth/**, src/Cli/**, src/Host/Api/**, src/Application/Accounts/**, src/Infrastructure/Persistence/Accounts/** -->
 
+> [!WARNING]
+> Some of the steps on this page are performed in a product this project does not control. Any screen, menu, or field
+> named here can be renamed or moved there at any time. Where this page and that product's own documentation disagree,
+> the product's documentation is right.
+
 How a mailbox that no longer accepts a password is authenticated, and what each provider requires before it will
 issue the credential MailFathom runs on.
 

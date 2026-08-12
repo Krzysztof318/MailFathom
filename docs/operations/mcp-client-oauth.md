@@ -2,6 +2,11 @@
 
 <!-- describes: src/Host/Configuration/Access/**, src/Host/Security/Mcp/OAuthTokenValidation.cs, src/Host/Security/Mcp/OAuthAuthorizationServerMetadataRetriever.cs, src/Host/Security/Mcp/InsufficientScopeResultHandler.cs, src/Host/Security/Transport/ProtectedResourceMetadataAddress.cs, src/Common/OAuth/OAuthMetadataAddresses.cs -->
 
+> [!WARNING]
+> Some of the steps on this page are performed in a product this project does not control. Any screen, menu, or field
+> named here can be renamed or moved there at any time. Where this page and that product's own documentation disagree,
+> the product's documentation is right.
+
 You have MailFathom running and you want an MCP client signed in through the identity provider you already operate.
 This page is the order those steps happen in, and it is written from the **provider's** side. Two other pages own the
 rest: [the MCP endpoint](mcp-endpoint.md#oauth) is the reference for every setting named here and for what a token has to
@@ -17,9 +22,6 @@ MailFathom's to own, and all of it decides whether MailFathom answers.
 **Whether you need any of this** is decided by the client, not by MailFathom: two of the popular chat clients offer no
 field for a static header, so an [API key](mcp-endpoint.md#api-keys) cannot reach them and OAuth is the only shape left.
 The client page above says which ones, and reading it first is what tells you whether this page is optional.
-
-> A provider's or a client's own documentation is authoritative about its own console. A dialog described here may have
-> been rearranged since, and the field names below are an illustration of the sequence rather than a contract.
 
 ## What MailFathom is not
 

@@ -2,6 +2,11 @@
 
 <!-- describes: src/AI/ProviderAdapters/**, src/AI/Embeddings/**, src/AI/Chat/**, tests/IntegrationTests/ProviderAdapters/** -->
 
+> [!WARNING]
+> Some of the steps on this page are performed in a product this project does not control. Any screen, menu, or field
+> named here can be renamed or moved there at any time. Where this page and that product's own documentation disagree,
+> the product's documentation is right.
+
 MailFathom reaches a model through one client construction that speaks the OpenAI wire protocol, so pointing a
 deployment at a service is a configuration entry rather than a feature request. [Embedding generation § an endpoint is
 any service that speaks the OpenAI wire

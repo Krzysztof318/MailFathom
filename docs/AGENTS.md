@@ -33,3 +33,24 @@ A page under `docs/` opens with one marker naming the paths it is written about:
 - `*` stops at a directory separator and `**` crosses one, which is what separates `src/*/*.csproj` from `src/**`. Between two slashes `**` also matches *no* directory at all, so `src/**/*Options.cs` covers `src/FooOptions.cs` as well as `src/Host/Configuration/McpOptions.cs`; a leading `**/` reaches the repository root the same way. These are git's own `:(glob)` rules, and `scripts/test-agent-workflow.sh` resolves every marker through git, so a pattern means here exactly what `git ls-files -- ':(glob)<pattern>'` says it means. Separate patterns with commas.
 - `describes: none` for a page that documents no part of the repository. A `README`, an `AGENTS.md`, and the ADR templates need no marker at all.
 - An ADR carries one too. It records a decision the code implements, so the code moving away from it is exactly what a reader needs to be told.
+
+## Pages whose steps happen in somebody else's product
+
+Some pages walk a reader through screens this project does not own — a cloud console, an identity provider's tenant, a service's API-keys page. Those products change their own navigation and their own requirements whenever they like, and nothing here can notice the day they do: no script reads them and no build fails over them. The reader meets that as a step naming a button that is no longer there, with no way to tell a stale page from their own mistake — so they retrace the page instead of going to the product's documentation, which is the worse of the two failures. A page that rests on somebody else's product says so before its first instruction.
+
+The device is a GitHub-flavored alert, which renders as an alert in both places these pages are read: GitHub's own view, and the site, where docfx renders it through Markdig. Nothing about it needs raw HTML or a stylesheet of its own. The wording is fixed:
+
+<!-- third-party-notice -->
+```markdown
+> [!WARNING]
+> Some of the steps on this page are performed in a product this project does not control. Any screen, menu, or field
+> named here can be renamed or moved there at any time. Where this page and that product's own documentation disagree,
+> the product's documentation is right.
+```
+
+`scripts/test-agent-workflow.sh` reads that wording out of the block above rather than holding a second copy, the same arrangement the licensing header has with `.editorconfig`: the sentence is one decision recorded in one place, and a page wording it differently fails rather than quietly carrying its own variant.
+
+- **It goes directly under the `describes:` marker**, above the page's first paragraph, and a page carries exactly one. The marker has to stay within the first fifteen lines, so the notice goes under it rather than above it. Both halves are checked — a second copy, and a copy anywhere but there.
+- **It is never adapted to the page.** A notice written per page is text to keep accurate on every page carrying it, which is the cost this notice exists to reduce rather than add to. The page's subject is already in its title, so the notice names no vendor; it carries no date and no version, because neither answers the reader's question, which is *is this still true* rather than *when was it written*.
+- **Which pages take it is a judgement about the page's subject**, not about whether a vendor is mentioned somewhere on it, which is why no script decides it and this rule carries that half. A page takes the notice when following it means working in somebody else's product: `users/mailbox-providers.md`, `operations/mailbox-oauth.md`, `operations/provider-endpoints.md`, and `operations/mcp-client-oauth.md` do, and a new page describing a third-party setup takes one without anybody remembering to ask. `operations/mcp-endpoint.md` deliberately does not: its subject is MailFathom's own endpoint and its own configuration, a notice at the top would be wrong about most of the page, and the one part of it describing a third-party connector is a section rather than the page.
+- **The page says it once, in the notice.** Nothing else on the page is rewritten to accommodate it, and no page gains a second statement of it in its own prose. Prose already saying it — that a console may have been rearranged since, that the vendor's own documentation is the authority — is the per-page version this replaces, so it goes when the notice arrives rather than sitting under it saying the same thing again.
