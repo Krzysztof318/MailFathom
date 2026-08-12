@@ -254,18 +254,28 @@ no default.
 ## What an older systemd leaves you
 
 Below systemd 258 the encrypted path is unavailable and the unit fails before Podman runs. Everything else in this
-deployment still works, and `LoadCredential=` is what replaces the encrypted line:
+deployment still works, and `LoadCredential=` is what replaces the encrypted line. The material goes in
+`~/.config/credstore/` — systemd's plain-credential location, the one beside the encrypted store used above — and each
+line names it by absolute path for the same reason the encrypted ones do, so a missing file fails the unit:
+
+```bash
+mkdir -p ~/.config/credstore
+chmod 700 ~/.config/credstore
+systemd-ask-password -n > ~/.config/credstore/imap-primary-password
+chmod 400 ~/.config/credstore/imap-primary-password
+```
 
 ```ini
 [Service]
-LoadCredential=imap-primary-password:%h/.config/mailfathom/credentials/imap-primary-password
+LoadCredential=imap-primary-password:%h/.config/credstore/imap-primary-password
 ```
 
 What you keep is most of what the shape was for: the material is copied into a per-unit directory readable by your
 account alone, kept out of swap where the platform permits, and removed with the unit — and every
 `systemd-credential:` reference resolves unchanged. What you give up is encryption at rest, so the source file is a
-plaintext file the host's permissions protect, exactly as under Compose. Keep it at `0400` in a `0700` directory, and
-keep it out of any backup that the database's own backup does not already cover.
+plaintext file the host's permissions protect, exactly as under Compose. The `0700` and the `0400` above are that
+protection rather than hygiene here, which is the difference from the encrypted store; keep the file out of any backup
+that the database's own backup does not already cover.
 
 ## Upgrading
 
@@ -294,8 +304,11 @@ schema step in front of it and is a decision rather than a background task.
 **Upgrading a deployment whose volume was written by PostgreSQL 17** is the same dump-and-restore this deployment's
 database image needs anywhere, and
 [the Compose page describes it in full](deployment-compose.md#upgrading-a-deployment-that-ran-postgresql-17) — including
-the two flags that keep the restore clean. Read it there and substitute `podman` for `docker compose exec`; the
-container is `mailfathom-postgres` and the volume is `mailfathom-postgres-data`.
+the two flags that keep the restore clean, which are what separates a failed migration from one that merely reports an
+error after the rows are already in. Read the sequence there and substitute the commands: `systemctl --user stop
+mailfathom.service mailfathom-postgres.service` for `docker compose down`, `podman run`, `podman exec`, and
+`podman volume rm` for their Docker equivalents, and `systemctl --user start mailfathom-postgres.service` for
+`docker compose up -d postgres`. The container is `mailfathom-postgres` and the volume is `mailfathom-postgres-data`.
 
 ## Backup, and what survives removal
 
