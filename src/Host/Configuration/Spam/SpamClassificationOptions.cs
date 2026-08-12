@@ -5,6 +5,7 @@
 using System.ComponentModel.DataAnnotations;
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
+using MailFathom.Application.Spam.Runs;
 using MailFathom.Domain.Folders;
 
 namespace MailFathom.Host.Configuration.Spam;
@@ -69,6 +70,25 @@ internal sealed class SpamClassificationOptions : IValidatableObject
     /// </remarks>
     public double? ScannerThreshold { get; set; }
 
+    /// <summary>Gets or sets how many stored occurrences one batch of an on-demand run classifies and commits.</summary>
+    /// <remarks>
+    /// A batch is the unit of progress an interrupted pass gives back. Nothing about it is a schedule: when a pass
+    /// happens is the account's synchronization interval, and this is how wide one is allowed to be. Smaller than the
+    /// rule pass's batch because the work per message is not comparable — a classification reads the stored message and,
+    /// with a scanner configured, sends the whole of it across a socket and waits.
+    /// </remarks>
+    [Range(1, 10_000)]
+    public int RunBatchSize { get; set; } = 50;
+
+    /// <summary>Gets or sets how many batches one pass may commit before leaving the rest to the next account run.</summary>
+    /// <remarks>
+    /// What bounds a pass rather than what bounds the run: a mailbox nobody has scored is walked over as many account
+    /// runs as its size needs, instead of turning one run into a walk of its whole history while the folders that run
+    /// exists to fetch wait behind it.
+    /// </remarks>
+    [Range(1, 1_000)]
+    public int MaxRunBatchesPerPass { get; set; } = 4;
+
     /// <summary>Gets or sets where the scanner daemon is and what one scan of a message may cost.</summary>
     /// <remarks>
     /// Always present so that a deployment which states none of its keys still binds and validates, and read only where
@@ -84,6 +104,14 @@ internal sealed class SpamClassificationOptions : IValidatableObject
     /// left exactly as it was.
     /// </remarks>
     public SpamActionOptions Actions { get; set; } = new();
+
+    /// <summary>Turns the declared limits into the bounds one pass of an on-demand run works under.</summary>
+    /// <returns>The bounds.</returns>
+    public SpamClassificationRunOptions ToRunOptions() => new()
+    {
+        BatchSize = this.RunBatchSize,
+        MaxBatchesPerPass = this.MaxRunBatchesPerPass,
+    };
 
     /// <inheritdoc />
     public IEnumerable<ValidationResult> Validate(ValidationContext validationContext) => this.FindErrors();

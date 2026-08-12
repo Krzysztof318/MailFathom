@@ -187,6 +187,7 @@ public sealed class EmailSpamClassifier
             decision.DecidedBy,
             decision.Assessment,
             decision.CorpusRevision,
+            settings.Profile,
             [.. reading.Signals, .. ScannerSignals(scan)],
             this.timeProvider.GetUtcNow());
     }

@@ -103,8 +103,8 @@ public sealed class AdminApiEndpointsTests
             .Select(endpoint => $"/{endpoint.RoutePattern.RawText?.TrimStart('/')}")
             .Order(StringComparer.Ordinal);
 
-        // The activation path and the rule-run path each appear twice, because each is one resource read with a get and
-        // performed with a post, and both verbs are mapped separately.
+        // The activation path, the rule-run path, and the classification-run path each appear twice, because each is one
+        // resource read with a get and performed with a post, and both verbs are mapped separately.
         Assert.Equal(
             [
                 $"{AdminEndpointOptions.RoutePrefix}{MailAnsweringAuditEndpoint.Route}",
@@ -119,6 +119,9 @@ public sealed class AdminApiEndpointsTests
                 $"{AdminEndpointOptions.RoutePrefix}{MailRuleEndpoints.RunsRoute}",
                 $"{AdminEndpointOptions.RoutePrefix}{MailRuleEndpoints.RunsRoute}",
                 $"{AdminEndpointOptions.RoutePrefix}/session",
+                $"{AdminEndpointOptions.RoutePrefix}{SpamClassificationEndpoints.ClassificationsRoute}",
+                $"{AdminEndpointOptions.RoutePrefix}{SpamClassificationEndpoints.RunsRoute}",
+                $"{AdminEndpointOptions.RoutePrefix}{SpamClassificationEndpoints.RunsRoute}",
             ],
             routes);
     }

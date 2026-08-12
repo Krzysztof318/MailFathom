@@ -73,6 +73,7 @@ internal static class AdminApiEndpoints
         api.MapMailAnsweringAudit();
         api.MapEmbeddingProfile();
         api.MapMailRules();
+        api.MapSpamClassification();
 
         return api;
     }

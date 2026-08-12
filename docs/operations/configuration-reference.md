@@ -421,6 +421,8 @@ described below.
 | `SpamClassification:UseScanner` | bool | `false` | Asking for a scanner while `Enabled` is false fails startup, because a scanner is only consulted where classification runs | restart |
 | `SpamClassification:ScannedFolders:<n>` | string | unset | A usable folder alias; an absent list is every account's inbox mapping, and an explicitly empty list is no folder at all | reload |
 | `SpamClassification:ScannerThreshold` | double | unset | 0.1 – 1000; unset keeps the threshold the scanner itself answered with | reload |
+| `SpamClassification:RunBatchSize` | int | `50` | 1 – 10 000 | reload |
+| `SpamClassification:MaxRunBatchesPerPass` | int | `4` | 1 – 1 000 | reload |
 | `SpamClassification:Scanner:Host` | string | unset | Required once `UseScanner` is on, and a host name or IP address rather than a URL or an address with the port on it | restart |
 | `SpamClassification:Scanner:Port` | int | `783` | 1 – 65535 | restart |
 | `SpamClassification:Scanner:ScanTimeoutSeconds` | int | `30` | 1 – 120 | restart |
@@ -475,6 +477,14 @@ with `synchronize: false` files spam out of the instance entirely, under the acc
 classification asks for none to be created — an account that maps no destination **fails startup naming that account**,
 rather than leaving its spam unfiled with nothing said about why. A folder the account only maps is resolved against the
 server the first time a filing needs it, exactly as a rule's destination is.
+
+`RunBatchSize` and `MaxRunBatchesPerPass` bound one pass of the [classification
+run](../features/spam-classification.md#classifying-the-mail-you-already-have) an operator asks for, and neither is a
+schedule: a pass is a step of the account's synchronization run, so how often one happens is that run's interval. What
+these decide is how much of a mailbox one pass takes in hand — raising them walks a mailbox nobody has scored in fewer
+account runs, and lowering them shortens the stretch an interrupted pass has to cover again and leaves more of each run
+for the folders it exists to fetch. Both defaults are smaller than the rule pass's, because a classification reads the
+stored message and, with a scanner configured, sends the whole of it across a socket and waits for a score.
 
 `Threshold` judges what a scanner scored, in the scanner's own scale, so an operator can label at `ScannerThreshold` and
 move mail only from a higher score. It reaches no other stage, exactly as `ScannerThreshold` does not: a verdict resting

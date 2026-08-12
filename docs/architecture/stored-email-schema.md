@@ -144,8 +144,13 @@ removes a request with the email it is about.
 
 `email_spam_classifications` is one-to-one with `stored_emails` and holds what spam classification concluded: the
 `Verdict`, the stage that `DecidedBy`, the `Score` and the `Threshold` it was judged against, the `CorpusRevision` the
-deciding stage ran under, and when it was `EvaluatedAt`. [Spam
+deciding stage ran under, the `Profile` it was reached under, and when it was `EvaluatedAt`. [Spam
 classification](../features/spam-classification.md#what-a-classification-records) describes what produces each value.
+
+`Profile` is a twelve-character digest of the settings the verdict rests on — whether a scanner was consulted and the
+threshold its score was judged by — and it is nullable because a row written before the column existed names terms
+nothing can compare. That is what it is for: a run over a whole mailbox reads it to decide whether a message has
+already been decided under the settings now in force, and a row carrying none is scored again rather than skipped.
 
 Keyed by the email rather than carrying an identity of its own, which is what makes one classification per message a
 property of the schema instead of a rule somebody has to remember: classifying the same message twice reaches the same
@@ -368,6 +373,23 @@ that the message can be fetched and read whole through the reads that already se
 The row survives the run it describes, holding the last ending until a new request replaces it, and there is no history behind it: one account has one row. Nothing cascades into it and it carries no foreign key onto `mailbox_accounts`, for the reason `mailbox_refresh_tokens` carries none — a run may be asked for before any folder of the account has been bound.
 
 Nothing in it is personal data. An account alias, a derived rule set identity, a message identifier, three counts, and three instants are MailFathom's own names for things, which is what lets a run be explained without any of the mail it walked being copied.
+
+## The whole-mailbox classification run an account has outstanding
+
+`spam_classification_runs` holds the one classification of an account's whole mailbox that somebody has asked for, and how far the account's synchronization runs have carried it. It is keyed by the account for the reason the rule run above is, and answers the same way when two requests arrive together.
+
+| Column | What it records |
+|---|---|
+| `mailbox_account_id` | The account whose mail the run walks, and the primary key |
+| `requested_at` | When the run was asked for |
+| `folder_aliases`, `posture`, `rescores` | The terms the operator asked for: which folders the walk covers, whether it writes down what its verdicts ask of the mailbox or only works it out, and whether mail already decided under its profile is scored again. Stored rather than read again per pass, because a walk that spans hours has to mean the same thing at its end as at its start |
+| `profile` | The classification settings the run is bound to, null until the first pass picks it up. Bound when the run starts rather than when it is requested, for the reason the rule run's revision is; a profile that moves under an outstanding run ends it rather than being applied to the half of the mailbox that is left |
+| `position` | The identity of the last occurrence a batch committed, null while the run has committed none. Committed with the counts it accounts for, which is what makes the run resumable rather than merely restartable |
+| `classified_email_count`, `spam_email_count`, `undetermined_email_count`, `skipped_email_count`, `unclassifiable_email_count`, `acted_email_count` | What the run has found and done so far, across every account run that has carried it. `acted` is one count for both postures, because it means the same thing under each: this is the mail the switches reach |
+| `ended_at`, `ending` | When and how the run stopped being outstanding — `Completed`, `Superseded` by a moved profile, or `Disabled` by classification being switched off under it. Text for the reason every other outcome here is |
+| `ConcurrencyVersion` | The `xmin` token again, because a pass committing a position and a request arriving can both reach this row |
+
+The row survives the run it describes and there is no history behind it, exactly as the rule run has none, and it carries no foreign key onto `mailbox_accounts` for the same reason. Nothing in it is personal data: an account alias, folder aliases, a derived settings identity, an occurrence identifier, six counts, and two instants are MailFathom's own names for things. What each of those counts is about per message is the classification records themselves, which is why no per-run history table exists.
 
 ## What each rule concluded, and what the conclusion asked for
 

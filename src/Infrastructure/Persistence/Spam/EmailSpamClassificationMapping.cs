@@ -28,6 +28,7 @@ internal static class EmailSpamClassificationMapping
             ? SpamAssessment.Create(score, threshold)
             : null,
         entity.CorpusRevision,
+        entity.Profile is { } profile ? SpamClassificationProfile.Restore(profile) : default,
         [
             .. entity.Signals
                 .OrderBy(static signal => signal.Ordinal)
@@ -49,6 +50,7 @@ internal static class EmailSpamClassificationMapping
         entity.Score = classification.Assessment?.Score;
         entity.Threshold = classification.Assessment?.Threshold;
         entity.CorpusRevision = classification.CorpusRevision;
+        entity.Profile = classification.Profile.IsSpecified ? classification.Profile.Value : null;
         entity.EvaluatedAt = classification.EvaluatedAt;
     }
 

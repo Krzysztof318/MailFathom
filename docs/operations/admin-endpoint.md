@@ -1,6 +1,6 @@
 # Administering a deployment
 
-<!-- describes: src/Host/Configuration/Endpoints/AdminEndpointOptions.cs, src/Host/Api/Admin*.cs, src/Host/Api/Embedding*.cs, src/Host/Api/Mail*.cs, src/Host/Hosting/Startup/SurfaceIsolation.cs, src/Host/Hosting/Warnings/AdminTransportSecurityWarning.cs, src/Host/Security/Endpoints/TransportListenerBinder.cs, src/Host/Security/Transport/TransportRateLimiting.cs, src/Cli/** -->
+<!-- describes: src/Host/Configuration/Endpoints/AdminEndpointOptions.cs, src/Host/Api/Admin*.cs, src/Host/Api/Embedding*.cs, src/Host/Api/Mail*.cs, src/Host/Api/Spam*.cs, src/Host/Hosting/Startup/SurfaceIsolation.cs, src/Host/Hosting/Warnings/AdminTransportSecurityWarning.cs, src/Host/Security/Endpoints/TransportListenerBinder.cs, src/Host/Security/Transport/TransportRateLimiting.cs, src/Cli/** -->
 
 How the `mfctl` command reaches a running deployment, and what that deployment has to have enabled before it will
 answer.
@@ -82,6 +82,9 @@ reverse proxy, write the public URL and keep the path: `https://mail.example.tes
 | `POST /api/admin/rules/runs` | Asks for one account's rules to be run over every message already stored for it, and answers with the run already under way where there is one. |
 | `GET /api/admin/rules/runs` | Reports where that run has got to, or how the last one ended. |
 | `GET /api/admin/rules/history` | Reads one account's record of what its rules concluded and what those conclusions asked for. |
+| `POST /api/admin/spam/runs` | Asks for every message already stored for one account to be [classified](../features/spam-classification.md), and answers with the run already under way where there is one. It is a dry run unless the body asks to apply. |
+| `GET /api/admin/spam/runs` | Reports where that run has got to, or how the last one ended. |
+| `GET /api/admin/spam/classifications` | Reads one account's classifications, newest first, and the changes each verdict asked the mailbox for. |
 
 The write route's body carries a long-lived credential for a named mailbox owner, which is what makes the clear-text
 warning below matter more here than it does for a session probe. It refuses, with `400` and a sentence naming what was
@@ -354,6 +357,78 @@ does this deployment's configuration say*. A **history** entry carries the alias
 answers *what happened to this message*. An action the run never requested — refused, or withheld because another rule
 had already settled the message — carries what the rule wrote instead, since a role that reached no folder has no alias
 to name and the rule's own words are what an operator has to correct.
+
+### Classifying the mail you already have, and reading what was concluded
+
+Three commands, and none of them writes a setting. Whether mail is classified at all, what a scanner is judged by, and
+what happens to junk are configuration for the reason a rule is, so `mfctl` applies them to the mail a deployment
+already holds and reads what was decided. [`SpamClassification`](configuration-reference.md#spamclassification) is the
+section, and [spam classification](../features/spam-classification.md) is what the feature does.
+
+**`mfctl spam run --account <id>` is a dry run unless you add `--apply`.** It returns as soon as the deployment has
+written the request down and never waits for the walk; the run is carried by the account's synchronization runs, so
+this terminal is not what keeps it alive and closing it cannot cancel one:
+
+```console
+$ mfctl spam run --account work
+A classification run over work has been asked for.
+Folders:  INBOX
+Acting:   no — this is a dry run; it records verdicts and leaves the mailbox alone. Add --apply to carry out what the switches ask for.
+Progress: 0 scored, 0 already decided, 0 unreadable
+The run is carried by the account's synchronization runs. Watch it with 'mfctl spam run-status --account work'.
+```
+
+`--folder` narrows the walk and is repeatable; it narrows *within* the configured scope, and a folder outside it is
+refused naming the section to edit, because a run over a folder nobody classifies would read the whole of it and record
+nothing. `--rescore` scores mail again even where its verdict was already reached under the settings now in force,
+which is the one form of the run that costs a scanner call per message however recently it was decided.
+
+Asking twice is asking once, and the command says which of the two happened — including that the terms the second
+request carried were not applied to the walk under way.
+
+**`mfctl spam run-status --account <id>` is where the run is watched from**, and where the answer to *what would it do*
+is read:
+
+```console
+$ mfctl spam run-status --account work
+work — Completed at 2026-08-12 11:30:00Z
+Requested: 2026-08-12 11:00:00Z
+Folders:   INBOX
+Acting:    no — dry run
+Rescoring: no
+Profile:   a1b2c3d4e5f6
+Progress:  1240 scored, 0 already decided, 3 unreadable
+Found:     37 junk, 4 undetermined, 37 would be acted on
+```
+
+`Found:` is what an operator is deciding on: the junk the run reached, and how much of it the switches would act on.
+An account nobody has ever asked for a run is an answer rather than an error, and a run that ended an hour ago is still
+reported — *it completed* and *you never asked* are different answers. `Superseded` is a run the settings moved under,
+and `Disabled` one that was switched off under it.
+
+**`mfctl spam classifications --account <id>` answers why a message was filed.** Narrowing to a message with `--email`
+answers "why is this in junk"; narrowing with `--verdict` answers "what would this run file". `--page-size` and
+`--cursor` walk it, newest first:
+
+```console
+$ mfctl spam classifications --account work --verdict Spam
+2026-08-12 11:04:11Z  Spam (Scanner 15.2/5)
+  Message: 0199c3d0-0000-7000-8000-000000000002 in INBOX
+  Under:   a1b2c3d4e5f6, scanner corpus spamassassin.4.0.2+20260801
+  Signals: X-Spam-Status, BAYES_99
+  Asked:   relocate (0199c3d0-0000-7000-8000-000000000009)
+```
+
+**The signals are names and never values.** `X-Spam-Status` says the verdict rests on that header; what the header said
+is not recorded here, and neither is a subject, an address, or a sending domain. `Under:` is the profile the verdict was
+reached under, which is what a run compares before scoring a message again. `Asked:` names the change and the mutation
+record carrying it rather than restating what happened on the server, which [the mutation
+trail](../features/imap-synchronization.md#an-account-can-keep-a-record-of-what-was-done-to-it-and-none-does-by-default)
+answers.
+
+Nothing any of these three routes answers with is mail: counts, verdicts, scores, signal names, folder aliases,
+mutation names, instants, and identifiers are the whole of it. Every refusal is `400` naming what to change, including
+an account this deployment does not configure, and the run route reads at most 8 KB of body.
 
 ## Rate limiting
 

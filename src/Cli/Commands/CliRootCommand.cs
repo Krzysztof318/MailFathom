@@ -4,6 +4,7 @@
 
 using System.CommandLine;
 using MailFathom.Cli.Commands.Rules;
+using MailFathom.Cli.Commands.Spam;
 using MailFathom.Versioning;
 
 namespace MailFathom.Cli.Commands;
@@ -60,6 +61,17 @@ internal static class CliRootCommand
             RuleHistoryCommand.Create(context),
         };
 
+        // Running and reading, and nothing that writes a setting. Whether mail is classified at all, what a scanner is
+        // judged by, and what happens to junk are configuration for the reason a rule is, so there is deliberately no
+        // command here that switches any of them — what an operator does from here is apply them to the mail they
+        // already have, and find out what was decided.
+        Command spamCommand = new("spam", "Classify the mail a deployment already holds, and read what it concluded.")
+        {
+            ClassifyMailCommand.Create(context),
+            ClassificationRunStatusCommand.Create(context),
+            ClassificationsCommand.Create(context),
+        };
+
         return new RootCommand($"MailFathom administration tool ({version.Version}).")
         {
             LoginCommand.Create(context),
@@ -70,6 +82,7 @@ internal static class CliRootCommand
             mailboxCommand,
             embeddingCommand,
             rulesCommand,
+            spamCommand,
         };
     }
 }

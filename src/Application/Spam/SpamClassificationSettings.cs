@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Domain.Folders;
+using MailFathom.Domain.Spam;
 
 namespace MailFathom.Application.Spam;
 
@@ -23,6 +24,7 @@ public sealed record SpamClassificationSettings
         this.UsesScanner = usesScanner;
         this.ScannedFolderAliases = scannedFolderAliases;
         this.ScannerThreshold = scannerThreshold;
+        this.Profile = SpamClassificationProfile.Create(usesScanner, scannerThreshold);
     }
 
     /// <summary>Gets the settings a deployment that configured nothing runs with.</summary>
@@ -59,6 +61,13 @@ public sealed record SpamClassificationSettings
     /// this one knows nothing about.
     /// </remarks>
     public double? ScannerThreshold { get; }
+
+    /// <summary>Gets the identity of the terms a verdict reached under these settings was decided by.</summary>
+    /// <remarks>
+    /// Derived once here rather than at each use, because it is a digest and every classification records it. What it
+    /// covers and what it deliberately leaves out is <see cref="SpamClassificationProfile" />'s own contract.
+    /// </remarks>
+    public SpamClassificationProfile Profile { get; }
 
     /// <summary>Builds the settings an operator's answers describe.</summary>
     /// <param name="isEnabled">Whether classification runs.</param>

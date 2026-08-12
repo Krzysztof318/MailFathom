@@ -9,6 +9,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization.Metadata;
 using MailFathom.Cli.Administration.Embeddings;
 using MailFathom.Cli.Administration.Rules;
+using MailFathom.Cli.Administration.Spam;
 using MailFathom.Cli.Transport;
 using MailFathom.Versioning;
 
@@ -305,6 +306,78 @@ internal sealed class AdminApiClient
             $"{AdminEndpointRoutes.RuleHistoryPath}{query.ToQueryString()}",
             token,
             CliJsonContext.Default.MailRuleHistoryPage,
+            cancellationToken);
+    }
+
+    /// <summary>Asks the deployment to classify every message it holds for one account.</summary>
+    /// <param name="token">The bearer credential to present.</param>
+    /// <param name="request">The account, the folders to walk, and the two switches.</param>
+    /// <param name="cancellationToken">Cancels the request.</param>
+    /// <returns>The run the account now has, and whether this request is what started it.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
+    /// <exception cref="CliFailure">Thrown when the deployment refused the request or the credential, could not be reached, or answered with something that is not a run.</exception>
+    /// <remarks>
+    /// It returns as soon as the deployment has written the request down. The run itself is carried by the account's
+    /// synchronization runs, so this command is never what keeps a walk of a mailbox alive and closing the terminal
+    /// cannot cancel one — including a run that was asked to act on the mailbox.
+    /// </remarks>
+    internal Task<SpamClassificationRunStart> StartSpamClassificationRunAsync(
+        string token,
+        SpamClassificationRunRequest request,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        return this.RequestAsync(
+            HttpMethod.Post,
+            AdminEndpointRoutes.SpamClassificationRunsPath,
+            token,
+            CliJsonContext.Default.SpamClassificationRunStart,
+            cancellationToken,
+            JsonContent.Create(request, CliJsonContext.Default.SpamClassificationRunRequest));
+    }
+
+    /// <summary>Asks the deployment where one account's whole-mailbox classification run has got to.</summary>
+    /// <param name="token">The bearer credential to present.</param>
+    /// <param name="account">The account whose run is read.</param>
+    /// <param name="cancellationToken">Cancels the request.</param>
+    /// <returns>The run, which is absent where the account has never been asked for one.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
+    /// <exception cref="CliFailure">Thrown when the deployment refused the request or the credential, could not be reached, or answered with something that is not a run.</exception>
+    internal Task<SpamClassificationRunState> ReadSpamClassificationRunAsync(
+        string token,
+        string account,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(account);
+
+        return this.RequestAsync(
+            HttpMethod.Get,
+            $"{AdminEndpointRoutes.SpamClassificationRunsPath}?account={Uri.EscapeDataString(account)}",
+            token,
+            CliJsonContext.Default.SpamClassificationRunState,
+            cancellationToken);
+    }
+
+    /// <summary>Asks the deployment what classification concluded about one account's mail.</summary>
+    /// <param name="token">The bearer credential to present.</param>
+    /// <param name="query">Which account, and how the page is narrowed and continued.</param>
+    /// <param name="cancellationToken">Cancels the request.</param>
+    /// <returns>One page of the classifications, and the cursor the next page is asked with where one exists.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
+    /// <exception cref="CliFailure">Thrown when the deployment refused the request or the credential, could not be reached, or answered with something that is not a page.</exception>
+    internal Task<SpamClassificationPage> ReadSpamClassificationsAsync(
+        string token,
+        SpamClassificationQuery query,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(query);
+
+        return this.RequestAsync(
+            HttpMethod.Get,
+            $"{AdminEndpointRoutes.SpamClassificationsPath}{query.ToQueryString()}",
+            token,
+            CliJsonContext.Default.SpamClassificationPage,
             cancellationToken);
     }
 

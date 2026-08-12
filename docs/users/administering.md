@@ -254,6 +254,31 @@ deployment reads. [Reading the rules, running them, and finding out what they
 did](../operations/admin-endpoint.md#reading-the-rules-running-them-and-finding-out-what-they-did) is the operator's
 reference for all five, including what the history records and what it deliberately does not.
 
+## Classifying the mail you already have
+
+[Spam classification](../features/spam-classification.md) reaches a message when a run somebody asked for reaches it,
+so switching it on — or switching filing on, or moving a threshold — does nothing about the mail already in the mailbox
+until you ask:
+
+| What you want | Command |
+| --- | --- |
+| Find out what classification would do to the mail you have | `mfctl spam run --account work` |
+| Carry that out | `mfctl spam run --account work --apply` |
+| Watch the run | `mfctl spam run-status --account work` |
+| Find out why a message was filed as junk | `mfctl spam classifications --account work --email <id>` |
+
+**The run is a dry run unless you add `--apply`**, and that is the order to do it in: run it, read what it found with
+`run-status`, and only then run it again with `--apply`. With filing switched on, a run over an inbox is the largest
+single thing MailFathom does to your mail, and the dry run tells you how much of it would move before any of it does.
+The verdicts are recorded either way — what `--apply` adds is the mail server being written to.
+
+A second run while one is going does not start a second walk; you are told the first is still under way, on the terms
+it was started with. None of these writes a setting, and none ever will: whether mail is classified, what a scanner is
+judged by, and what happens to junk are configuration, so you change them by editing the file your deployment reads.
+[Classifying the mail you already have, and reading what was
+concluded](../operations/admin-endpoint.md#classifying-the-mail-you-already-have-and-reading-what-was-concluded) is the
+operator's reference for all three.
+
 ## Where to go next
 
 - [Administering a deployment](../operations/admin-endpoint.md) — the operator's reference for everything above

@@ -26,6 +26,9 @@ internal sealed class EmailSpamClassificationEntity
     /// <summary>The greatest length a stored corpus revision has, which the domain value already refuses to exceed.</summary>
     internal const int MaximumCorpusRevisionLength = SpamClassification.MaximumCorpusRevisionLength;
 
+    /// <summary>The length a stored classification profile has, which is the derived identity's own fixed width.</summary>
+    internal const int ProfileLength = SpamClassificationProfile.LengthInCharacters;
+
     public Guid StoredEmailId { get; set; }
 
     /// <summary>Gets or sets the email this classification is about, which a write leaves unset.</summary>
@@ -55,6 +58,14 @@ internal sealed class EmailSpamClassificationEntity
 
     /// <summary>Gets or sets the rule corpus the deciding stage ran under, absent when it has none.</summary>
     public string? CorpusRevision { get; set; }
+
+    /// <summary>Gets or sets the settings the verdict was reached under, absent on a record written before it named one.</summary>
+    /// <remarks>
+    /// Nullable rather than defaulted, because the two states mean different things to a run over a whole mailbox: a row
+    /// naming the profile in force is mail to leave alone, and a row naming none was decided under terms nothing can
+    /// compare and is mail to score again. Filling the column in for existing rows would claim the second was the first.
+    /// </remarks>
+    public string? Profile { get; set; }
 
     public DateTimeOffset EvaluatedAt { get; set; }
 

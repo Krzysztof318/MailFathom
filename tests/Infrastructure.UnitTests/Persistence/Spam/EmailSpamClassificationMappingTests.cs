@@ -53,7 +53,37 @@ public sealed class EmailSpamClassificationMappingTests
         Assert.Equal(classification.Assessment, read.Assessment);
         Assert.Equal(classification.CorpusRevision, read.CorpusRevision);
         Assert.Equal(classification.EvaluatedAt, read.EvaluatedAt);
+        Assert.Equal(classification.Profile, read.Profile);
         Assert.Equal(classification.Signals, read.Signals);
+    }
+
+    /// <summary>The terms a verdict was reached under are what a run reads to decide whether to score a message again.</summary>
+    [Fact]
+    public void Write_ARecordNamingTheTermsItWasReachedUnder_WritesThemAsTheIdentityTheyAre()
+    {
+        // Arrange
+        var entity = EmptyRow();
+        var profile = SpamClassificationProfile.Create(usesScanner: true, scannerThreshold: 5);
+
+        // Act
+        EmailSpamClassificationMapping.Write(entity, ClassificationWith(profile));
+
+        // Assert
+        Assert.Equal(profile.Value, entity.Profile);
+    }
+
+    /// <summary>A row written before the profile joined the record names terms nothing can compare, rather than none.</summary>
+    [Fact]
+    public void Read_ARowNamingNoProfile_ReadsTermsNothingCanCompare()
+    {
+        // Arrange
+        var entity = EmptyRow();
+
+        // Act
+        var classification = EmailSpamClassificationMapping.Read(entity);
+
+        // Assert
+        Assert.False(classification.Profile.IsSpecified);
     }
 
     /// <summary>The order the stages produced the facts in is what a truncated record's meaning rests on.</summary>
@@ -131,6 +161,7 @@ public sealed class EmailSpamClassificationMappingTests
             SpamClassificationStage.Scanner,
             SpamAssessment.Create(9.5, 5.0),
             "4.0.2",
+            SpamClassificationProfile.Create(usesScanner: true, scannerThreshold: 5.0),
             [],
             EvaluatedAt);
 
@@ -146,12 +177,18 @@ public sealed class EmailSpamClassificationMappingTests
         Assert.Equal(EvaluatedAt, entity.EvaluatedAt);
     }
 
-    private static SpamClassification ClassificationWith(params SpamSignal[] signals) => SpamClassification.Create(
+    private static SpamClassification ClassificationWith(params SpamSignal[] signals) =>
+        ClassificationWith(SpamClassificationProfile.Create(usesScanner: false, scannerThreshold: null), signals);
+
+    private static SpamClassification ClassificationWith(
+        SpamClassificationProfile profile,
+        params SpamSignal[] signals) => SpamClassification.Create(
         Occurrence,
         SpamVerdict.Spam,
         SpamClassificationStage.Deterministic,
         assessment: null,
         corpusRevision: null,
+        profile,
         signals,
         EvaluatedAt);
 

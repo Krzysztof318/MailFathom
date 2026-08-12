@@ -402,6 +402,7 @@ public sealed class EmailSpamClassifierTests
         SpamClassificationStage.Deterministic,
         assessment: null,
         corpusRevision: null,
+        SpamClassificationProfile.Create(usesScanner: false, scannerThreshold: null),
         [],
         EvaluatedAt.AddDays(-1));
 
