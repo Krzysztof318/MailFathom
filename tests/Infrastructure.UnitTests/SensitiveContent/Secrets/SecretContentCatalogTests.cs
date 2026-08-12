@@ -3,10 +3,10 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.SensitiveContent;
-using MailFathom.Infrastructure.SensitiveContent;
+using MailFathom.Infrastructure.SensitiveContent.Secrets;
 using Xunit;
 
-namespace MailFathom.Infrastructure.UnitTests.SensitiveContent;
+namespace MailFathom.Infrastructure.UnitTests.SensitiveContent.Secrets;
 
 /// <summary>Covers what the secret scanner declares, which is what a configured name is judged against at startup.</summary>
 public sealed class SecretContentCatalogTests

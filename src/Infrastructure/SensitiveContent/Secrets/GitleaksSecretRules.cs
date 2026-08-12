@@ -4,7 +4,7 @@
 
 using System.Text.RegularExpressions;
 
-namespace MailFathom.Infrastructure.SensitiveContent;
+namespace MailFathom.Infrastructure.SensitiveContent.Secrets;
 
 /// <summary>The third-party half of the secret corpus, carried across from the gitleaks rule data.</summary>
 /// <remarks>

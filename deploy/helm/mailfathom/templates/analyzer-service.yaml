@@ -1,0 +1,28 @@
+{{- /*
+Copyright © 2026 Krzysztof Kasprowicz
+Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
+Project repository: https://github.com/Krzysztof318/MailFathom
+*/ -}}
+{{- if and .Values.personalDataScanning.enabled .Values.personalDataScanning.analyzer.deploy }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "mailfathom.analyzerFullname" . }}
+  labels:
+    {{- include "mailfathom.analyzerLabels" . | nindent 4 }}
+spec:
+  {{- /*
+    ClusterIP, and there is no value to make it anything else. The analyzer receives mail content in the clear and
+    answers where the identifiers in it are, so the one deployment shape this chart supports is one where nothing outside
+    the cluster can reach it — which is also why no ingress rule is rendered for it and why MailFathom asks it over
+    plain HTTP.
+  */}}
+  type: ClusterIP
+  selector:
+    {{- include "mailfathom.analyzerSelectorLabels" . | nindent 4 }}
+  ports:
+    - name: http
+      port: {{ .Values.personalDataScanning.analyzer.service.port }}
+      targetPort: http
+      protocol: TCP
+{{- end }}

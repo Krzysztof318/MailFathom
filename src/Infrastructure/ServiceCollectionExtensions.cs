@@ -34,6 +34,7 @@ using MailFathom.Application.Retrieval.AskMail;
 using MailFathom.Application.Retrieval.AskMail.Audit;
 using MailFathom.Application.Rules.Evaluation;
 using MailFathom.Application.Rules.History;
+using MailFathom.Application.SensitiveContent;
 using MailFathom.Application.SensitiveContent.Detection;
 using MailFathom.Application.Synchronization;
 using MailFathom.Application.Synchronization.Checkpoints;
@@ -66,11 +67,13 @@ using MailFathom.Infrastructure.Secrets.References;
 using MailFathom.Infrastructure.Secrets.Resolution;
 using MailFathom.Infrastructure.Secrets.Sources;
 using MailFathom.Infrastructure.Security.OAuth;
-using MailFathom.Infrastructure.SensitiveContent;
+using MailFathom.Infrastructure.SensitiveContent.PersonalData;
+using MailFathom.Infrastructure.SensitiveContent.Secrets;
 using MailKit.Net.Imap;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Http.Resilience;
 using Microsoft.Extensions.Logging;
 using Npgsql;
 
@@ -83,6 +86,29 @@ public static class ServiceCollectionExtensions
     /// <summary>The largest token endpoint response read, beyond which the request fails.</summary>
     /// <remarks>An RFC 6749 token response is a few hundred bytes; even a JWT access token stays well inside this. The limit exists so a replaced or compromised authorization server cannot make a synchronization run buffer an unbounded body.</remarks>
     private const int MailOAuthTokenResponseSizeLimitInBytes = 64 * 1024;
+
+    /// <summary>How many response bytes one analyzed character of text may produce, which bounds an analyzer answer.</summary>
+    /// <remarks>
+    /// An entity is reported as an object of about ninety bytes naming its type, its offsets, and its score, and the
+    /// shortest thing any recognizer matches is a handful of characters. Four characters per entity is therefore already
+    /// pessimistic, and the ceiling exists for the case that is not a scan at all: an address that answers with something
+    /// other than an analyzer must not be able to make a guarded read buffer an unbounded body. Exceeding it fails the
+    /// scan, which fails the operation closed like any other analyzer that could not answer.
+    /// </remarks>
+    private const int AnalyzerResponseBytesPerAnalyzedCharacter = 24;
+
+    /// <summary>What an analyzer answer costs beyond its entities, which is the JSON array around them.</summary>
+    private const int AnalyzerResponseEnvelopeBytes = 4 * 1024;
+
+    /// <summary>How much longer than one scan's own budget the analyzer transport waits before it gives up.</summary>
+    /// <remarks>
+    /// Deliberately looser than the configured per-scan budget, so a slow analyzer surfaces as this deployment's own
+    /// timeout — which the redactor reports as the scanner not answering in time and names the budget it spent — rather
+    /// than as a transport exception from underneath it that says nothing about a budget at all. It is added to the
+    /// configured budget to produce the resilience handler's attempt and total-request timeouts, which is where the
+    /// transport's bound lives; <see cref="AddPersonalDataAnalyzerClient" /> records why it is not a client property.
+    /// </remarks>
+    private static readonly TimeSpan AnalyzerTransportTimeoutMargin = TimeSpan.FromSeconds(30);
 
     /// <summary>Registers the secret reference grammar, the shipped scheme adapters, and the composite dispatch.</summary>
     /// <param name="services">The service collection.</param>
@@ -529,6 +555,35 @@ public static class ServiceCollectionExtensions
         return services;
     }
 
+    /// <summary>Registers the detector of personal data in mail text, which reaches an analyzer deployed beside this service.</summary>
+    /// <param name="services">The service collection.</param>
+    /// <returns>The service collection, for chaining.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="services" /> is <see langword="null" />.</exception>
+    /// <remarks>
+    /// <para>
+    /// Called only where the <c>Pii</c> switch is on, which is what makes an opt-in nobody took cost nothing: with it off
+    /// no client is registered, no analyzer address is read, and none of the three descriptors below exists. The composed
+    /// <see cref="PersonalDataAnalyzerProfile" /> is the host's to register, because where the analyzer is comes from
+    /// configuration this project does not bind.
+    /// </para>
+    /// <para>
+    /// The probe is registered beside the scanner rather than always, for the reason the catalog is: startup refuses a
+    /// switch that is on with nothing behind it, and either one present without the other would turn that refusal into a
+    /// scanner that runs and finds nothing.
+    /// </para>
+    /// </remarks>
+    public static IServiceCollection AddPersonalDataContentScanning(this IServiceCollection services)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+
+        services.AddSingleton<ISensitiveContentCatalog, PersonalDataContentCatalog>();
+        services.AddSingleton<ISensitiveContentScanner, PresidioContentScanner>();
+        services.AddSingleton<IPersonalDataAnalyzerProbe, PresidioAnalyzerProbe>();
+        AddPersonalDataAnalyzerClient(services);
+
+        return services;
+    }
+
     /// <summary>Registers the transport a mailbox token request is sent over.</summary>
     /// <remarks>
     /// <para>
@@ -560,17 +615,97 @@ public static class ServiceCollectionExtensions
                 // authorization server surfaces as itself rather than as a mailbox timeout.
                 client.Timeout = TimeSpan.FromSeconds(15));
 
-        // This call is the one place the single-layer rule is enforced for HTTP, so it is the one place it can be got
-        // wrong. MailOAuthAccessTokenSource already runs the exchange under the MailAuthorizationServerInvocation
-        // pipeline, and the host's service defaults add the standard resilience handler to every client the factory
-        // builds; leaving both would multiply three attempts by three into nine token requests against an authorization
-        // server that is already refusing. Removal is registered rather than the handler being withheld, because the
-        // defaults apply to a name this project never sees.
+        // This call is one of the two places the single-layer rule is enforced for HTTP, so it is one of the two places it
+        // can be got wrong; AddPersonalDataAnalyzerClient below is the other, and the more delicate one, because it adds a
+        // handler back rather than leaving none, so its own removal has to reach one handler and spare the other.
+        // MailOAuthAccessTokenSource already runs the exchange under the MailAuthorizationServerInvocation
+        // pipeline, and the host's service defaults add the standard resilience handler
+        // to every client the factory builds; leaving both would multiply three attempts by three into nine token requests
+        // against an authorization server that is already refusing. Removal is registered rather than the handler being
+        // withheld, because the defaults apply to a name this project never sees.
         //
         // It removes what is registered before it, so it depends on AddServiceDefaults having run first. Host's
         // composition root does, and MailOAuthTokenTransportTests fails if that ever stops being true.
 #pragma warning disable EXTEXP0001 // RemoveAllResilienceHandlers is experimental, and is how the standard handler is opted out of.
         client.RemoveAllResilienceHandlers();
 #pragma warning restore EXTEXP0001
+    }
+
+    /// <summary>Registers the transport the personal-data analyzer is reached over.</summary>
+    /// <remarks>
+    /// <para>
+    /// The analyzer's address is a base address here, unlike the provider clients, because a deployment reaches one
+    /// analyzer rather than an endpoint chosen per call. Redirects are refused because a redirect would carry the mail
+    /// content in the body to whatever host the answer named, which is the boundary this feature exists to keep the
+    /// content inside.
+    /// </para>
+    /// <para>
+    /// It carries a standard resilience handler, which is the whole of this call's retry story: an analyze request
+    /// establishes what a text carries and changes nothing, so repeating one is safe, and the call runs under no
+    /// <c>OutboundDependency</c> pipeline for the handler to nest inside. The one the host's service defaults add is
+    /// replaced rather than inherited, because that one's bounds are fixed while this deployment's are configured.
+    /// </para>
+    /// <para>
+    /// <b>The handler owns the transport's timeout, so <see cref="HttpClient.Timeout" /> is left disabled.</b> That is the
+    /// handler's own arrangement — it sets the property to <see cref="Timeout.InfiniteTimeSpan" /> so its timeout
+    /// strategies are what bound a call, rather than a property that would cut across the retries as a group. The bound an
+    /// operator configured therefore reaches the transport as
+    /// <c>HttpStandardResilienceOptions.TotalRequestTimeout</c> instead of as a client property, and a registration that
+    /// set both would be deciding by action order which of the two won.
+    /// </para>
+    /// <para>
+    /// Every bound is read from the plan rather than from a snapshot, because this runs on the root provider whenever the
+    /// factory builds a client, and all of them take a restart to change.
+    /// </para>
+    /// </remarks>
+    private static void AddPersonalDataAnalyzerClient(IServiceCollection services)
+    {
+        var client = services.AddHttpClient(PersonalDataAnalyzerProfile.TransportName)
+            .ConfigurePrimaryHttpMessageHandler(static () => new SocketsHttpHandler { AllowAutoRedirect = false })
+            .ConfigureHttpClient(static (provider, client) =>
+            {
+                var bounds = provider.GetRequiredService<SensitiveContentPlan>().Bounds;
+
+                client.BaseAddress = provider.GetRequiredService<PersonalDataAnalyzerProfile>().Endpoint;
+                client.MaxResponseContentBufferSize =
+                    ((long)bounds.MaximumAnalyzedCharacters * AnalyzerResponseBytesPerAnalyzedCharacter)
+                    + AnalyzerResponseEnvelopeBytes;
+            });
+
+        // The inherited handler's bounds are ten seconds per attempt and thirty in total, whatever the deployment
+        // configured. SensitiveContent:ScanTimeout accepts up to two minutes, and the reason to raise it is an analyzer
+        // that is slow over a large body — exactly the scan those fixed bounds would cut a long way inside the budget,
+        // after re-sending the body twice on the way. So it is replaced with one derived from that budget.
+        //
+        // Removal is registered before the replacement because the build-time pass removes what the actions before it
+        // added: the defaults' handler, which is registered against a client name this project never sees, and not the
+        // one added after. PersonalDataAnalyzerTransportTests asserts the outcome rather than the arrangement: it composes
+        // the service defaults around this call and fails if the analyzer client ever carries two handlers, which is what
+        // deleting the removal below does. Measured against that composition, the surviving handler is this call's own and
+        // the order the two registrations run in does not change it.
+#pragma warning disable EXTEXP0001 // RemoveAllResilienceHandlers is experimental, and is how the standard handler is opted out of.
+        client.RemoveAllResilienceHandlers();
+#pragma warning restore EXTEXP0001
+
+        client.AddStandardResilienceHandler().Configure(static (options, provider) =>
+        {
+            var bounds = provider.GetRequiredService<SensitiveContentPlan>().Bounds;
+            var backstop = bounds.ScanTimeout + AnalyzerTransportTimeoutMargin;
+
+            // Both are set above the configured budget rather than inside it, so a scan that runs long is cancelled by
+            // that budget and never by a layer an operator did not set: the redactor then reports the scanner missing the
+            // budget it spent rather than a transport failure that says nothing about a budget. What the handler still
+            // buys is the retry — a refused connection or a fast rejection costs almost none of the budget, so the
+            // attempt after it runs inside one.
+            options.AttemptTimeout.Timeout = backstop;
+            options.TotalRequestTimeout.Timeout = backstop;
+
+            // The handler's own validator refuses a sampling window shorter than twice the attempt timeout, and the
+            // standard thirty seconds is shorter than that for every budget past fifteen.
+            if (options.CircuitBreaker.SamplingDuration < backstop * 2)
+            {
+                options.CircuitBreaker.SamplingDuration = backstop * 2;
+            }
+        });
     }
 }

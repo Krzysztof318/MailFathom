@@ -173,6 +173,93 @@ config:
   # that a restart is how configuration changes.
   pollForChanges: true
 
+### Personal-data scanning
+#
+# MailFathom can hide personal data before mail is copied into a derived store or handed out, and doing that beyond the
+# fixed-format identifiers needs a language model — which MailFathom never loads into its own process. It reaches a
+# Presidio analyzer instead, and this block is the only place the chart decides anything about it.
+#
+# `enabled` is off, which is the product's default and what makes this cost nothing: the chart renders no analyzer
+# workload, no Service for one, and sets no configuration key, so an opt-in you did not take pulls no image and holds no
+# memory. Turning it on writes `SensitiveContent:Pii:Enabled` into the application's environment and points it at the
+# analyzer, so the switch lives in one place rather than in this file and a config file that could disagree.
+#
+# The category list and any rule suppressions are ordinary configuration and belong in `config.files` — they name what
+# is hidden rather than what is deployed, and the chart renders nothing from them. The defaults are the strong
+# identifiers alone; adding a personal name or a postal address to them is a decision documented in
+# docs/features/sensitive-content-scanning.md, because it also empties the chunk store of the terms a search runs on.
+personalDataScanning:
+  enabled: false
+
+  analyzer:
+    # Whether the chart runs the analyzer, exactly as `database.deploy.enabled` decides whether it runs PostgreSQL. On,
+    # the chart creates a Deployment and a Service for it and derives `endpoint` below from the release name, which must
+    # then be left empty. Off, nothing of the sort is rendered and `endpoint` is required.
+    deploy: true
+
+    # Where the analyzer is, when the chart is not the thing running it. **Keep it inside your own network**: the whole
+    # point of scanning is that content is inspected before it leaves the trust boundary, so an analyzer reached across
+    # the public internet hands the mail to a third party in order to establish whether it may be handed to one. Nothing
+    # refuses it — one analyzer serving several services inside a cluster is a legitimate arrangement — and
+    # docs/features/sensitive-content-scanning.md states what is given up.
+    endpoint: ""
+
+    # The two-letter code of the language every request states. The image below carries an English model and nothing
+    # else, so changing this means supplying an analyzer configured for the language in the same edit; MailFathom refuses
+    # to start when the analyzer has no model for what is named here.
+    language: en
+
+    # How sure the analyzer must be before a finding is redacted, from 0 to 1. Redaction acts on every finding whatever
+    # its confidence, so this floor is the only thing between a deployment and the analyzer's weakest guesses: with no
+    # floor at all an eight-digit build number is reported as a bank account number at 0.05 and a contract reference of a
+    # letter and seven digits as a driving licence at 0.3. The default is the one value that drops every measured false
+    # positive while leaving every category detectable — a passport number and a bank routing number both score exactly
+    # 0.4, so raising it at all stops two of the five default categories from being found.
+    minimumConfidence: 0.4
+
+    # An immutable tag naming the analyzer release, like the database image above and unlike the application image: this
+    # is a dependency the chart operates rather than a version a deployment chooses. It is the same pin the Compose
+    # deployment and the integration suite use, so an analyzer reviewed against one is the analyzer running in the others.
+    image:
+      registry: ghcr.io
+      repository: data-privacy-stack/presidio-analyzer
+      tag: 2.2.364
+      pullPolicy: IfNotPresent
+      pullSecrets: []
+
+    # Generous by the standards of everything else this chart runs, because the container loads a spaCy language model
+    # into memory before it serves anything and holds it for the life of the pod. Below roughly a gigabyte it is killed
+    # while loading, which reaches MailFathom as an analyzer that never became ready.
+    resources:
+      requests:
+        cpu: 250m
+        memory: 1Gi
+      limits:
+        cpu: "2"
+        memory: 2Gi
+
+    service:
+      port: 3000
+
+    # The analyzer runs as an unprivileged user in its own image and needs no more than MailFathom does. Its root
+    # filesystem stays writable, unlike MailFathom's: the Python runtime writes bytecode caches under its own
+    # installation, and a read-only root would make the container fail while starting rather than protect anything the
+    # analyzer holds — it stores nothing, receives text, and answers offsets.
+    podSecurityContext:
+      runAsNonRoot: true
+      seccompProfile:
+        type: RuntimeDefault
+
+    containerSecurityContext:
+      allowPrivilegeEscalation: false
+      capabilities:
+        drop:
+          - ALL
+
+    nodeSelector: {}
+    tolerations: []
+    affinity: {}
+
 ### Networking
 service:
   type: ClusterIP
@@ -249,8 +336,9 @@ probes:
   # The Service publishes 8080 alone, so nothing outside the node reaches this listener: an unauthenticated endpoint
   # reporting dependency state is exposed by which network its port is on, and by nothing else.
   port: 8081
-  # Startup reports whether MailFathom has finished coming up — every secret reference resolved and the database schema
-  # verified. Its budget is what a slow first start is allowed, and it holds the liveness probe off until it succeeds.
+  # Startup reports whether MailFathom has finished coming up — every secret reference resolved, the database schema
+  # verified, and, only with personalDataScanning.enabled, the analyzer answering for every configured category. Its
+  # budget is what a slow first start is allowed, and it holds the liveness probe off until it succeeds.
   startup:
     path: /started
     periodSeconds: 5

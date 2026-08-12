@@ -6,7 +6,7 @@ using System.Text.RegularExpressions;
 using MailFathom.Application.SensitiveContent;
 using Microsoft.Security.Utilities;
 
-namespace MailFathom.Infrastructure.SensitiveContent;
+namespace MailFathom.Infrastructure.SensitiveContent.Secrets;
 
 /// <summary>One entry of the secret corpus: the rule an operator can name, and the expression that finds it.</summary>
 /// <remarks>

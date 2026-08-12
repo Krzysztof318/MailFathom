@@ -83,6 +83,51 @@ public sealed class SensitiveContentOptionsBindingTests
         Assert.Empty(settings.Secrets.Suppressions);
     }
 
+    /// <summary>
+    /// The analyzer block is where the personal-data scanner is told what to reach. A getter-only complex property like the
+    /// two switches, so a block that bound as its defaults would leave a deployment probing nothing and refusing to start
+    /// against an address the operator did state.
+    /// </summary>
+    [Fact]
+    public void Bind_AConfiguredAnalyzer_ReadsItsAddressLanguageAndConfidenceFloor()
+    {
+        // Arrange
+        var configuration = ConfigurationFrom(new Dictionary<string, string?>
+        {
+            ["SensitiveContent:Pii:Enabled"] = "true",
+            ["SensitiveContent:PersonalDataAnalyzer:Endpoint"] = "http://presidio-analyzer:3000",
+            ["SensitiveContent:PersonalDataAnalyzer:Language"] = "de",
+            ["SensitiveContent:PersonalDataAnalyzer:MinimumConfidence"] = "0.6",
+        });
+
+        // Act
+        var settings = Bind(configuration);
+
+        // Assert
+        Assert.True(settings.Pii.Enabled);
+        Assert.Equal("http://presidio-analyzer:3000", settings.PersonalDataAnalyzer.Endpoint);
+        Assert.Equal("de", settings.PersonalDataAnalyzer.Language);
+        Assert.Equal(0.6, settings.PersonalDataAnalyzer.MinimumConfidence);
+    }
+
+    /// <summary>An operator stating only an address must keep the floor the product chose rather than fall to the type's zero.</summary>
+    [Fact]
+    public void Bind_AnAnalyzerAddressAlone_LeavesTheConfidenceFloorAtItsDefault()
+    {
+        // Arrange
+        var configuration = ConfigurationFrom(new Dictionary<string, string?>
+        {
+            ["SensitiveContent:Pii:Enabled"] = "true",
+            ["SensitiveContent:PersonalDataAnalyzer:Endpoint"] = "http://presidio-analyzer:3000",
+        });
+
+        // Act
+        var settings = Bind(configuration);
+
+        // Assert
+        Assert.Equal(0.4, settings.PersonalDataAnalyzer.MinimumConfidence);
+    }
+
     /// <summary>An operator narrowing one bound must not reset the other two, which a partially bound section otherwise would.</summary>
     [Fact]
     public void Bind_OneConfiguredBound_LeavesTheRemainingBoundsAtTheirDefaults()
@@ -130,6 +175,9 @@ public sealed class SensitiveContentOptionsBindingTests
     [InlineData("SensitiveContent:Secrets:Suppressions:0:Rules", "gcp-api-key")]
     [InlineData("SensitiveContent:MaximumAnalyzedCharacter", "4096")]
     [InlineData("SensitiveContent:ScanTimeouts", "00:00:30")]
+    [InlineData("SensitiveContent:PersonalDataAnalyzer:Endpont", "http://presidio-analyzer:3000")]
+    [InlineData("SensitiveContent:PersonalDataAnalyser:Endpoint", "http://presidio-analyzer:3000")]
+    [InlineData("SensitiveContent:PersonalDataAnalyzer:MinimumConfidance", "0.6")]
     public void Bind_AnUnrecognizedKey_FailsRatherThanBeingIgnored(string key, string value)
     {
         // Arrange

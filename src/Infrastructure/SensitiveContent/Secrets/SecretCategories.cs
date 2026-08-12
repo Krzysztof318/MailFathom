@@ -4,7 +4,7 @@
 
 using MailFathom.Application.SensitiveContent;
 
-namespace MailFathom.Infrastructure.SensitiveContent;
+namespace MailFathom.Infrastructure.SensitiveContent.Secrets;
 
 /// <summary>The kinds of secret this scanner looks for, which are the names an operator configures it by.</summary>
 /// <remarks>

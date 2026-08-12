@@ -4,10 +4,11 @@
 
 using MailFathom.Application.SensitiveContent;
 using MailFathom.Application.SensitiveContent.Detection;
+using MailFathom.Infrastructure.SensitiveContent.PersonalData;
 
 namespace MailFathom.Host.Configuration.SensitiveContent;
 
-/// <summary>Turns the bound <c>SensitiveContent</c> section into the plan the scanners and the redactor run on.</summary>
+/// <summary>Turns the bound <c>SensitiveContent</c> section into the values the scanners and the redactor run on.</summary>
 /// <remarks>
 /// The mapping is separate from the options type for the reason every mapper in this directory is: the bound object is
 /// mutable, binder-shaped, and full of empty lists that mean "the default", while the plan is the resolved value the
@@ -50,6 +51,38 @@ internal static class SensitiveContentPlanMapper
                 settings.ScanTimeout,
                 settings.MaximumConcurrentScans),
             scanners);
+    }
+
+    /// <summary>Composes the profile the personal-data analyzer is reached under.</summary>
+    /// <param name="settings">The bound section, already judged by <see cref="SensitiveContentOptions.Validate" />.</param>
+    /// <returns>The profile the scanner and the startup probe both read.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="settings" /> is <see langword="null" />.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when the personal-data scanner is not switched on, or names no analyzer address.</exception>
+    /// <remarks>
+    /// Called only where that scanner is switched on, so an absent address here is a defect rather than a configuration
+    /// error to report: startup validation refuses that combination before anything is composed, and reaching this with one
+    /// means the two passes disagree.
+    /// </remarks>
+    public static PersonalDataAnalyzerProfile MapAnalyzerProfile(SensitiveContentOptions settings)
+    {
+        ArgumentNullException.ThrowIfNull(settings);
+
+        if (!settings.Pii.Enabled)
+        {
+            throw new InvalidOperationException(
+                "The personal-data analyzer profile was composed for a deployment whose configuration does not switch that scanner on.");
+        }
+
+        if (!Uri.TryCreate(settings.PersonalDataAnalyzer.Endpoint, UriKind.Absolute, out var endpoint))
+        {
+            throw new InvalidOperationException(
+                "The personal-data scanner is switched on and the validated configuration carries no analyzer address, which startup validation refuses.");
+        }
+
+        return PersonalDataAnalyzerProfile.Create(
+            endpoint,
+            settings.PersonalDataAnalyzer.Language,
+            settings.PersonalDataAnalyzer.MinimumConfidence);
     }
 
     private static SensitiveContentScannerPlan MapScanner(

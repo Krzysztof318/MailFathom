@@ -1,0 +1,80 @@
+# Copyright © 2026 Krzysztof Kasprowicz
+# Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
+# Project repository: https://github.com/Krzysztof318/MailFathom
+
+# The personal-data analyzer, for a deployment that has switched personal-data scanning on. It is the one unit in this
+# directory that is optional, and how it is switched off is that it is not installed: Quadlet has no equivalent of
+# Compose's profiles, so an operator who wants secrets only copies the other five files and never this one — and then no
+# image is pulled, no container exists, and none of the memory below is held. Installing it is half of enabling the
+# feature; the other half is the four Environment= lines commented out in mailfathom.container, and either one alone is a
+# deployment that does not work. docs/operations/deployment-quadlet.md states the order.
+#
+# Rootless, like the units beside it, and installed under ~/.config/containers/systemd/.
+
+[Unit]
+Description=Personal-data analyzer for MailFathom
+Wants=network-online.target
+After=network-online.target
+
+[Container]
+# An immutable tag, like the database image and unlike MailFathom's own: this is a dependency the deployment operates
+# rather than a version it chooses. It is the same pin the Compose deployment, the Helm chart, and the integration suite
+# use, so an analyzer reviewed against one is the analyzer running in all of them. The image is MIT-licensed and loads an
+# MIT-licensed spaCy model; THIRD_PARTY_LICENSES.md records both.
+Image=ghcr.io/data-privacy-stack/presidio-analyzer:2.2.364
+ContainerName=mailfathom-presidio
+
+# Only the internal network, and no PublishPort= at all. The analyzer receives mail content in the clear and answers
+# where the identifiers in it are, so the deployment shape this file supports is one where nothing outside the host can
+# reach it — which is also why MailFathom asks it over plain HTTP.
+Network=mailfathom-backend.network
+
+# No credentials, no volumes, and no configuration. The analyzer holds nothing, is told nothing by this deployment, and
+# reads only the request bodies MailFathom sends it: what to look for is stated per request rather than configured here.
+# The default rootless mapping is therefore enough — nothing in this container has to read a file the invoking user owns,
+# which is what the other two units need `UserNS=keep-id` for.
+
+# The route the analyzer answers readiness on, and the reason this unit has a health check while mailfathom.container has
+# none: the container loads a language model before it serves anything, so a merely running analyzer answers nothing. The
+# start period is generous for that reason, and `curl` is present in the image, so unlike MailFathom's own chiseled image
+# there is something for the check to run in.
+HealthCmd=curl --fail --silent --output /dev/null http://localhost:3000/health
+HealthInterval=10s
+HealthTimeout=5s
+HealthRetries=12
+HealthStartPeriod=90s
+
+# What makes the dependency in mailfathom.container real rather than an approximation of one, exactly as the database
+# unit does it: this unit is not considered started until the health check passes, so an `After=` there waits for an
+# analyzer that answers instead of for a container that exists. It is the part the Compose deployment cannot express,
+# where MailFathom restarts until the model has loaded.
+Notify=healthy
+
+DropCapability=all
+NoNewPrivileges=true
+
+LogDriver=journald
+
+# Core dumps off, like every other container here. This one holds mail content in memory while it analyzes it, which is
+# the same reason docs/operations/secret-provisioning.md gives for the units that hold credentials.
+Ulimit=core=0
+
+# No AutoUpdate=. The image is pinned to an exact tag, and moving it changes what is detected — every finding carries the
+# analyzer profile it was produced under for exactly that reason.
+
+[Service]
+LimitCORE=0
+
+# The unit-level bounds. Generous by the standards of everything else here, because the container holds a language model
+# in memory for its whole life: below roughly a gigabyte it is killed while loading, which reaches MailFathom as an
+# analyzer that never became ready.
+MemoryMax=2G
+CPUQuota=200%
+
+Restart=always
+# Long enough for the health check to pass on a first start, which loads the model before the analyzer answers:
+# HealthStartPeriod plus HealthRetries times HealthInterval, with room to spare.
+TimeoutStartSec=300
+
+[Install]
+WantedBy=default.target

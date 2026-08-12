@@ -101,10 +101,15 @@ material is that each file is ciphertext.
 ### The unit sources
 
 ```bash
-cp deploy/quadlet/*.container deploy/quadlet/*.network deploy/quadlet/*.volume ~/.config/containers/systemd/
+cp deploy/quadlet/mailfathom.container deploy/quadlet/mailfathom-postgres.container \
+   deploy/quadlet/*.network deploy/quadlet/*.volume ~/.config/containers/systemd/
 cp deploy/quadlet/config/10-mailfathom.json.example ~/.config/mailfathom/config/10-mailfathom.json
 cp deploy/compose/postgres/10-create-mailfathom-database.sh ~/.config/mailfathom/postgres-init/
 ```
+
+The two `.container` files are named rather than globbed because there is a third, `mailfathom-presidio.container`, and it
+is the one unit here that is optional: copying it is half of switching personal-data scanning on, and a deployment that
+wants secrets only never copies it at all. See [Personal-data scanning](#personal-data-scanning) below.
 
 The last line is not a mistake. The database initialization script is the Compose deployment's, reused rather than
 forked, which is why the database container mounts its credentials at `/run/secrets`: that is the path the script
@@ -342,7 +347,9 @@ audit trail and the embeddings, is regenerated rather than refetched.
 ## Uninstalling
 
 ```bash
-systemctl --user stop mailfathom.service mailfathom-postgres.service
+# mailfathom-presidio.service only where the analyzer unit was installed; stopping MailFathom does not stop it, because
+# the ordering runs the other way.
+systemctl --user stop mailfathom.service mailfathom-presidio.service mailfathom-postgres.service
 rm ~/.config/containers/systemd/mailfathom*.{container,network,volume}
 systemctl --user daemon-reload
 
@@ -351,6 +358,38 @@ rm -r ~/.config/mailfathom ~/.config/credstore.encrypted
 loginctl disable-linger "$USER"                # only if nothing else of yours runs as a user service
 ```
 
+## Personal-data scanning
+
+Quadlet has no equivalent of Compose's profiles, so how this feature is switched off is that its unit is not installed —
+and off is the default. A deployment that wants secrets only copies the five files above and never
+`mailfathom-presidio.container`, and then no image is pulled, no container exists, and none of its two gigabytes is held.
+[The personal-data scanner](../features/sensitive-content-scanning.md#the-personal-data-scanner) records what the feature
+hides and what each category costs retrieval.
+
+Switching it on is three edits, and each half alone is a deployment that does not work:
+
+```bash
+cp deploy/quadlet/mailfathom-presidio.container ~/.config/containers/systemd/
+```
+
+Then in `~/.config/containers/systemd/mailfathom.container`, uncomment the two ordering lines in `[Unit]` and the four
+`Environment=` lines for `SensitiveContent`, and `systemctl --user daemon-reload`. The analyzer unit declares
+`Notify=healthy` exactly as the database unit does, so that ordering waits for an analyzer that *answers* rather than a
+container that exists — which matters here more than for the database, because the analyzer loads a language model before
+it serves anything and MailFathom refuses to start while it cannot reach one. `TimeoutStartSec=300` is what allows for
+that load. Nothing else in the start sequence changes: the uncommented `Requires=` is what pulls the analyzer in when
+`mailfathom.service` starts, and `systemctl --user status mailfathom-presidio.service` is where its own health check is
+read while the model loads.
+
+To use an analyzer you already operate, copy no unit and point the endpoint line at its address. Keep that address
+**inside your own network**: the point of scanning is that content is inspected before it leaves the trust boundary, and
+the feature page states what pointing it outside gives up.
+
+The analyzer unit is the shortest file in the directory, and what it does not have is the point of it: no credentials, no
+volumes, no configuration, and no `PublishPort=`. It receives request bodies and answers offsets, so it is attached to
+`mailfathom-backend.network` alone and reachable from MailFathom and nothing else. It needs no `UserNS=keep-id` either,
+because nothing in it reads a file you own.
+
 ## Bounds
 
 Every knob is in the unit file, edited in place; there is no `.env` equivalent, which is one of the things this shape
@@ -358,7 +397,7 @@ trades away. The values the units apply:
 
 | Where | What |
 | --- | --- |
-| `[Service] MemoryMax=`, `CPUQuota=` | 1 GiB and two cores per unit, applied by systemd to the whole cgroup rather than to one container inside it |
+| `[Service] MemoryMax=`, `CPUQuota=` | 1 GiB and two cores per unit, applied by systemd to the whole cgroup rather than to one container inside it. The analyzer's is 2 GiB, because it holds a language model for the life of the container and below roughly one gigabyte is killed while loading |
 | `[Service] LimitCORE=0`, `[Container] Ulimit=core=0` | No core dump from the process holding decrypted material, or from what it starts |
 | `[Container] StopTimeout=`, `[Service] TimeoutStopSec=` | 60 and 90 seconds, so the host finishes its shutdown drain rather than being killed mid-run |
 | `[Container] Tmpfs=/tmp` | 64 MiB, the one writable path the runtime needs on an otherwise read-only root filesystem |

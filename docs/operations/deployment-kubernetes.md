@@ -323,7 +323,7 @@ with nothing to authenticate to and one more thing to steal.
 
 | Probe | Path | Consults |
 | --- | --- | --- |
-| Startup | `/started` | The host's own startup gates: every secret reference resolved, the database schema verified. Its budget is what a slow first start is allowed, and it holds liveness off until it succeeds. |
+| Startup | `/started` | The host's own startup gates: every secret reference resolved, the database schema verified, and — only with `personalDataScanning.enabled` — the analyzer answering for every configured category. Its budget is what a slow first start is allowed, and it holds liveness off until it succeeds. |
 | Readiness | `/health` | The dependencies a request needs, the database included. A pod that cannot serve leaves the Service's endpoints. |
 | Liveness | `/alive` | The process alone, so a database outage never becomes a restart loop that cannot fix it. |
 
@@ -347,6 +347,52 @@ key**, and a `subPath` mount, which never updates at all. The chart mounts the w
 
 The Deployment carries a checksum of the rendered ConfigMap, so a `helm upgrade` that changes configuration restarts
 the pods — which is what makes an added or removed key take effect.
+
+## Personal-data scanning
+
+`personalDataScanning.enabled` is off, and off means the chart renders nothing for it: no Deployment, no Service, and no
+configuration key in the application's environment. An opt-in nobody took pulls no image and holds no memory. [The
+personal-data scanner](../features/sensitive-content-scanning.md#the-personal-data-scanner) records what the feature
+hides and what each category costs retrieval.
+
+The block follows `database`'s shape, because it is the same decision: one value decides whether the chart runs the
+dependency, and the address is either derived from the release or stated, never both.
+
+```yaml
+personalDataScanning:
+  enabled: true
+  # analyzer.deploy defaults to true: the chart runs the analyzer and points MailFathom at its own Service.
+```
+
+That renders a single-replica Deployment and a ClusterIP Service, and writes `SensitiveContent__Pii__Enabled`, the
+derived endpoint, the language, and the confidence floor into the application's environment — one decision in one place
+rather than a value here and a configuration file that could disagree. The schema refuses those four keys in
+`config.extraEnvironment` for that reason: an address stated there would send mail content somewhere else while the pod
+the release installed sat idle.
+
+To use an analyzer you already operate:
+
+```yaml
+personalDataScanning:
+  enabled: true
+  analyzer:
+    deploy: false
+    endpoint: http://presidio-analyzer.privacy.svc.cluster.local:3000
+```
+
+The chart refuses `deploy: true` together with an `endpoint`, `deploy: false` without one, an endpoint that is not an
+absolute `http` or `https` address, and an endpoint set while the scanner is off — each with a message naming what to do.
+Keep the address **inside the cluster**: the point of scanning is that content is inspected before it leaves the trust
+boundary, and the feature page states what pointing it outside gives up.
+
+The analyzer's Service is ClusterIP with no value to change it, no ingress rule is rendered for it, and its pod mounts no
+service-account token. It is the pod in the release that reads mail content in the clear.
+
+**Resources and readiness.** The analyzer requests a gigabyte of memory and is limited to two, because it loads a language
+model before it serves anything and holds it for the life of the pod; below roughly a gigabyte it is killed while loading.
+Its startup probe allows five minutes of that, and MailFathom's own startup gate refuses to come up while the analyzer is
+not answering — so on a first install the application pod may restart a few times before the analyzer is ready. `resources`,
+`nodeSelector`, `tolerations`, `affinity`, and both security contexts are values under `personalDataScanning.analyzer`.
 
 ## Scheduling, resources, and placement
 

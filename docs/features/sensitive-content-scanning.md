@@ -40,11 +40,9 @@ entirely rather than accept the second.
 All four combinations are supported configurations. With both off nothing is scanned, nothing is constructed, and no
 cost lands on any path.
 
-> `Secrets` has a detector behind it and is described below. **`Pii` has none**, so switching that one on fails startup
-> naming the scanner that has nothing behind it — the same refusal that protects a deployment whose analyzer went
-> missing. **No consumer redacts through the contract yet either**: none of the rows in the table above redacts today,
-> so each states the path the contract is written for rather than one that is covered. The analyzer and the consumers
-> arrive with their own changes, and this note narrows as they do.
+> Both scanners have a detector behind them and both are described below. **No consumer redacts through the contract
+> yet**: none of the rows in the table above redacts today, so each states the path the contract is written for rather
+> than one that is covered. The consumers arrive with their own changes, and this note narrows as they do.
 
 ## A finding names a position, never a value
 
@@ -116,8 +114,16 @@ text it was handed **refuses the operation it guards**. It blocks the egress, bl
 read rather than serving unfiltered content. An opt-in that degraded to "send it through" under load would be worse than
 no switch at all, because the operator would believe it was in force.
 
-Every one of those failures reports error code `81001` and names the scanner. None of them names the text, the finding,
-or the endpoint: the content the scan was about is exactly what must not appear in a failure written to a log.
+Every one of those failures reports error code `81001` and names the scanner. None of them names the text or the
+finding: the content the scan was about is exactly what must not appear in a failure written to a log.
+
+One failure in this feature is a startup failure rather than a scan's: `81002`, raised when the personal-data analyzer
+cannot be reached, answers the startup probe with a refusal, or recognises nothing the configured categories need. It
+names `SensitiveContent:PersonalDataAnalyzer:Endpoint` — the key an operator edits — rather than the address that key
+resolved to, because a message reaches a log and no message in this feature carries a host name. Neither does it carry
+the analyzer's own words: a refusal is reported as its status number and .NET's name for that status, because a proxy or
+a wrong service at the configured address writes the body and the reason phrase alike. The resolved address is on the
+failure itself for a caller that has somewhere safe to put it.
 
 ## The secret scanner
 
@@ -177,6 +183,133 @@ backreference and no nested quantifier for a backtracking matcher to degrade on,
 several times faster than the linear-time alternative over exactly the text a mailbox produces the worst case with — a
 base64 attachment fragment or a long run of hexadecimal. The engine's own patterns stay on the linear-time matcher it
 selects for them, because their expressions are the package's to reason about rather than this repository's.
+
+## The personal-data scanner
+
+`Pii` reaches **a container beside the service**. Finding a personal name, a postal address, or a national
+identification number in prose needs a language model, and MailFathom loads none into its own process — so this scanner
+sends the text to a [Presidio](https://github.com/data-privacy-stack/presidio) analyzer over HTTP and maps the offsets
+it answers with back onto the text.
+
+Every category goes through the analyzer, the fixed-format ones included. A payment card number could be matched here
+with a checksum and no model at all, but splitting the categories across two implementations would leave two things
+deciding what a personal-data finding is: they would disagree about the same message, each would need a false-positive
+corpus of its own, and the deployment rule below would become a rule per category.
+
+### The analyzer is deployed only when the switch is on
+
+With `Pii` off — the default — no analyzer exists anywhere. The Helm chart renders no workload and no service for one,
+the Compose deployment leaves its analyzer service behind a profile that is not active, and the Quadlet deployment's
+analyzer unit is a file an operator never copies. An opt-in nobody took pulls no image, holds no memory, and adds no
+listener.
+
+Switching it on without a reachable analyzer **fails startup** and names `SensitiveContent:PersonalDataAnalyzer:Endpoint`,
+the key to correct. So does an analyzer that answers but recognises nothing for one of the switched-on categories — a narrower registry than the
+shipped image, or a language it has no model for. Both are refusals rather than warnings, because the alternative is a
+deployment whose configuration reads as protection in force while every scan finds nothing, and nothing finding anything
+is indistinguishable from a clean message.
+
+That probe runs once, while the host comes up. Afterwards the fail-closed contract above is what covers an analyzer that
+disappears: a scan that cannot reach it refuses the operation it guards.
+
+**What it costs to run.** The analyzer loads a language model into memory before it answers anything and holds it for the
+life of the container, so the deployment assets give it roughly a gigabyte to request and two as a ceiling; below about a
+gigabyte it is killed while loading, which reaches MailFathom as an analyzer that never became ready. That load is also
+why the first start after switching the feature on is slow — tens of seconds — and why MailFathom's own startup is
+ordered behind an analyzer that answers rather than one that merely exists. Whether it needs a CPU of its own depends
+entirely on how much mail flows through the guarded paths; the concurrency bound above is what keeps a burst from becoming
+a queue at the analyzer. The per-shape figures are on the deployment pages:
+[Compose](../operations/deployment-compose.md), [Kubernetes](../operations/deployment-kubernetes.md), and
+[Quadlet](../operations/deployment-quadlet.md).
+
+### Keep the endpoint inside the deployment
+
+The whole point of scanning is that content is inspected **before it leaves the trust boundary**. An analyzer on the
+public internet inverts that: the mail is handed to a third party in order to establish whether it may be handed to one.
+
+Nothing in the configuration refuses it, because one analyzer serving several services inside a private network is a
+legitimate arrangement and no rule about addresses can tell the two cases apart. What an operator gives up by pointing it
+outside is stated here rather than enforced: every message that would have been redacted is sent, in full and in the
+clear, to whatever is at that address.
+
+### The categories, and which are on by default
+
+An operator configures MailFathom's categories. They never configure the analyzer's own entity names: those are a third
+party's identifiers, they change between analyzer releases, and a deployment named against them would be configured
+against a service rather than against this product. Each category is declared here with the analyzer entities it covers,
+and one entity is one rule inside it — which is what makes a suppression able to silence a single misfiring recognizer
+inside a category that stays on.
+
+**On by default** — the identifiers that are high harm and low ambiguity. Nothing about the surrounding message makes one
+of them safe:
+
+| Category | What it covers |
+| --- | --- |
+| `PaymentCard` | Payment card numbers |
+| `BankAccount` | IBANs and other bank account numbers |
+| `NationalIdentifier` | National identification, social-security, and tax numbers |
+| `IdentityDocument` | Passport, identity-card, and driving-licence numbers |
+| `HealthIdentifier` | Numbers that name a person inside a health system |
+
+**Off unless configured on** — everything a mailbox is made of. Hiding these is a legitimate choice under a strict
+regime, and it is also what empties a chunk store of the terms a search runs on, so it is the operator's decision rather
+than the product's default:
+
+| Category | What it covers | What switching it on costs retrieval |
+| --- | --- | --- |
+| `PersonName` | Personal names | Every question of the form "what did *she* say about the invoice" stops matching, because the name is gone from the chunk the answer is in and from the query's own match |
+| `EmailAddress` | Email addresses | An address is how a thread's participants are found in text as well as in headers; searching for one returns nothing |
+| `PostalAddress` | Postal addresses, and places named precisely enough to be one | The analyzer reports a place name as this category, so a city or a country in ordinary prose is redacted along with a street |
+| `PhoneNumber` | Telephone numbers | Small, and the one on this list with the least retrieval cost |
+| `Date` | Dates and times, absolute and relative | The heaviest of the six. A mailbox is full of dates in prose, and a redacted one takes the sentence's meaning with it |
+| `NetworkAddress` | IP and MAC addresses | An operational mailbox — alerts, incident threads, log excerpts — loses the addresses the thread is about |
+
+The health, clinical, and demographic entities the analyzer can also report are deliberately unmapped. A disease, a
+medication, or a procedure is health *narrative* rather than a health identifier, and hiding it turns a message about a
+patient into a message about nothing; nationality, religion, and political affiliation is exactly the special category
+that deserves the strongest treatment, and the analyzer's answer for it is a named-entity guess whose false-positive rate
+would make the category unusable rather than protective. Company and vehicle registrations are out for a third reason:
+one names a legal entity rather than a person, and the other matches ordinary prose often enough to empty a chunk store
+on its own.
+
+**A category is only as good as the analyzer behind it.** The shipped image registers nineteen entities for English, so
+most of the entries in each category above — the national identifiers of two dozen countries, the passport formats of
+several — are recognised only by an analyzer configured with the recognizers for them. The startup probe checks that
+every switched-on category has **at least one** entity the analyzer knows, which is what catches a category that would be
+scanned for and never found; it deliberately does not require all of them, because a narrower registry costs recall
+inside a category that still works.
+
+### The confidence floor
+
+The analyzer scores every finding, and redaction acts on a finding without weighing it. The floor is therefore the only
+thing between a deployment and the analyzer's weakest guesses — and those are weak. Measured against the pinned image with
+no floor at all, an eight-digit build number is reported as a bank account number at 0.05 and as a driving licence at
+0.01, a contract reference of one letter and seven digits as a driving licence at 0.3, and a nine-digit passport number as
+a national identifier at 0.3 on top of being a passport number.
+
+The default is `0.4`, and it is the only value that drops all of those while leaving every category detectable. Both of
+its bounds are the analyzer's rather than a preference: everything above is measured noise, and *at* 0.4 sit a passport
+number and a bank routing number, so raising the floor at all stops two of the five default categories from being found.
+The floor is sent to the analyzer rather than applied to its answer, so the weakest guesses never cross the process
+boundary at all, and it is compared inclusively — a finding scored exactly 0.4 survives a floor of 0.4.
+
+It is not part of the detector revision a finding carries, and neither is the category list. The revision names *how*
+detection was performed — which mapping this build ships, and which model the analyzer loaded — while both of those name
+which of the results a deployment wanted. Two deployments on one revision may redact differently; what the revision
+promises is that they asked the same detector the same question.
+
+### Two things the offsets have to survive
+
+The analyzer indexes a Python string and MailFathom indexes a .NET one, so the offsets it answers with count Unicode
+**code points** where a `string` counts UTF-16 code units. Every text made only of basic-plane characters gives the same
+two numbers, and a message with an emoji, an ideograph beyond the basic plane, or a flag in front of the finding does not:
+the region would be shifted, leaving part of the value in the redacted text and destroying part of what surrounded it.
+The translation is part of the adapter, and the integration suite proves it against the real analyzer rather than against
+a payload somebody hand-wrote.
+
+An entity the mapping does not know is **ignored** rather than refused. An analyzer may run recognizers of its own, and
+one reporting something no category covers is answering a question nobody asked; a deployment that refused the whole scan
+over it would fail closed on every message.
 
 ## What a detector is not
 

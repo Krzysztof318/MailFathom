@@ -296,9 +296,9 @@ because the switches it holds reach several of those at once. [Sensitive-content
 scanning](../features/sensitive-content-scanning.md) records what a finding is, what replaces it, and why a scanner that
 cannot answer refuses the operation it guards.
 
-Both scanners are off by default, and an absent section is that default rather than a startup failure. `Secrets` has a
-detector behind it and runs in this process. **`Pii` has none**, so switching that one on fails startup naming it; its
-analyzer arrives with its own change.
+Both scanners are off by default, and an absent section is that default rather than a startup failure. `Secrets` runs in
+this process. `Pii` reaches an analyzer deployed beside it, configured in the block below, and switching it on with
+nowhere to ask **fails startup** rather than running unprotected.
 
 | Key | Type | Default | Constraint | Change |
 | --- | --- | --- | --- | --- |
@@ -310,6 +310,9 @@ analyzer arrives with its own change.
 | `SensitiveContent:Pii:Categories:<n>` | string | unset | As above | restart |
 | `SensitiveContent:Pii:Suppressions:<n>:Category` | string | — | As above | restart |
 | `SensitiveContent:Pii:Suppressions:<n>:Rule` | string | — | As above | restart |
+| `SensitiveContent:PersonalDataAnalyzer:Endpoint` | string | unset | Required once `Pii` is on, and an absolute `http` or `https` address; read by nothing while that switch is off | restart |
+| `SensitiveContent:PersonalDataAnalyzer:Language` | string | `en` | Two lowercase letters, naming a language the analyzer loads a model for | restart |
+| `SensitiveContent:PersonalDataAnalyzer:MinimumConfidence` | double | `0.4` | 0 – 1 inclusive, compared inclusively by the analyzer | restart |
 | `SensitiveContent:MaximumAnalyzedCharacters` | int | `200000` | 1 – 10000000; text beyond it is dropped from the result rather than handed on unscanned | restart |
 | `SensitiveContent:ScanTimeout` | TimeSpan | `00:00:05` | One second to two minutes, per call to one scanner | restart |
 | `SensitiveContent:MaximumConcurrentScans` | int | `4` | 1 – 256, across the process | restart |
@@ -339,6 +342,36 @@ data, `AzureCosmosDBIdentifiableKey` and `UrlCredentials` from the detection eng
 `database-connection-uri-credential` from MailFathom's. [Sensitive-content
 scanning](../features/sensitive-content-scanning.md#the-secret-scanner) records where each corpus comes from and what
 the entropy heuristic costs.
+
+The `Pii` scanner declares these eleven categories. The first five are on when `Categories` names none, and listing
+categories **replaces** that set, so adding a personal name means naming the five wanted alongside it.
+
+| Category | What it finds | On by default |
+| --- | --- | --- |
+| `PaymentCard` | A payment card number | yes |
+| `BankAccount` | An IBAN or another bank account number | yes |
+| `NationalIdentifier` | A national identification, social-security, or tax number | yes |
+| `IdentityDocument` | A passport, identity-card, or driving-licence number | yes |
+| `HealthIdentifier` | A number that names a person inside a health system | yes |
+| `PersonName` | A personal name | **no** |
+| `EmailAddress` | An email address | **no** |
+| `PostalAddress` | A postal address, or a place named precisely enough to be one | **no** |
+| `PhoneNumber` | A telephone number | **no** |
+| `Date` | A date or a time, absolute or relative | **no** |
+| `NetworkAddress` | An address that identifies a machine, whether the network assigned it or the hardware carries it | **no** |
+
+A rule name inside them is the **analyzer's** own entity name, spelled as the analyzer spells it — `CREDIT_CARD`,
+`IBAN_CODE`, `US_SSN`, `UK_NHS` — which is what lets a suppression silence one recognizer inside a category that stays
+on. An operator never names one in `Categories`: those are the units this product publishes, and the mapping between the
+two is MailFathom's. [The personal-data
+scanner](../features/sensitive-content-scanning.md#the-personal-data-scanner) records what each of the six optional
+categories costs retrieval, why the endpoint belongs inside the deployment, and what the confidence floor is protecting
+against.
+
+The analyzer block is read only while `Pii` is on. An address left behind under a scanner nobody runs is accepted and
+inert, for the reason a category list under one is: it describes no protection, so refusing to start over it would be
+refusing over a comment. The reverse — the scanner on with no address, a relative or non-HTTP address, a language that is
+not two lowercase letters, or a floor outside 0 to 1 — fails startup naming the key.
 
 The analyzed ceiling defaults to the same number as `EmailContent:MaxCharactersPerRead`, so an ordinary content read is
 analyzed whole and only something pathological reaches it.

@@ -8,7 +8,7 @@ using MailFathom.Application.SensitiveContent;
 using MailFathom.Application.SensitiveContent.Detection;
 using Microsoft.Security.Utilities;
 
-namespace MailFathom.Infrastructure.SensitiveContent;
+namespace MailFathom.Infrastructure.SensitiveContent.Secrets;
 
 /// <summary>Everything the secret scanner can look for, assembled from the three places its rules come from.</summary>
 /// <remarks>

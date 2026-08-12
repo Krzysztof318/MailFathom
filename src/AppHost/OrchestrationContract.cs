@@ -284,6 +284,28 @@ public static class OrchestrationContract
     /// </remarks>
     public const string MailServerAccountPassword = "integration-tests-only";
 
+    /// <summary>The personal-data analyzer the integration-test topology scans against.</summary>
+    /// <remarks>
+    /// <para>
+    /// Present only under <see cref="IntegrationTestingArgument" />. A developer's orchestration deploys it only where the
+    /// deployment they are running switched personal-data scanning on, which is a property of that deployment's
+    /// configuration rather than of the app model, and starting one beside every local run would cost a container and its
+    /// language model for a feature that is off by default.
+    /// </para>
+    /// <para>
+    /// The suite starts it because it is the one part of the personal-data scanner no substitute settles: a hand-written
+    /// payload proves the mapping works on a hand-written payload, not that the image an operator pulls answers the request
+    /// MailFathom builds with the entities MailFathom expects.
+    /// </para>
+    /// </remarks>
+    public const string PersonalDataAnalyzerResourceName = "presidio-analyzer";
+
+    /// <summary>The analyzer's own HTTP port, which its image publishes and its entrypoint binds.</summary>
+    public const int PersonalDataAnalyzerContainerPort = 3000;
+
+    /// <summary>The endpoint the analyzer answers analysis and supported-entity requests on.</summary>
+    public const string PersonalDataAnalyzerEndpointName = "http";
+
     /// <summary>The MailFathom account identifier every occurrence the integration-test topology stores belongs to.</summary>
     /// <remarks>
     /// Declared here because two sides have to agree on it: the suite writes its mail under this identifier, and the

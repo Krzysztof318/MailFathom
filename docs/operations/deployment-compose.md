@@ -363,11 +363,45 @@ phrase above is the one to use rather than one that is checked. The Helm chart d
 template function can. Neither is a security control: what both buy is that nobody reaches a nightly image without
 reading a sentence saying it is not a release.
 
+## Personal-data scanning
+
+The stack has a third service, and it is not started. `presidio-analyzer` sits behind a Compose profile, so
+`docker compose up` brings up the two services it always did: no image is pulled, no container exists, and none of its
+two gigabytes is held. That is the product's default — [sensitive-content
+scanning](../features/sensitive-content-scanning.md) records what the feature hides and what each category costs.
+
+Switching it on is **two** settings in `.env` rather than one, because Compose cannot make an environment entry
+conditional on a profile. The profile decides whether the analyzer container exists; the switch decides whether
+MailFathom asks it. Either one alone is a deployment that does not work:
+
+```dotenv
+COMPOSE_PROFILES=personal-data-scanning
+MAILFATHOM_PERSONAL_DATA_SCANNING=true
+```
+
+Then `docker compose up -d`. The first start is slow — the analyzer loads a language model before it answers anything,
+which takes tens of seconds — and MailFathom refuses to serve while it cannot reach one. There is no `depends_on` in
+either direction, deliberately: a dependency on a service behind a profile is one Compose resolves differently depending
+on which profiles are active, so `restart: unless-stopped` is what carries MailFathom's startup refusal into a retry
+until the model has loaded. `docker compose ps` shows the analyzer's own health check while that is happening.
+
+To use an analyzer you already operate, set `MAILFATHOM_PERSONAL_DATA_ANALYZER` to its address and leave
+`COMPOSE_PROFILES` alone — nothing is then started for it. Keep that address **inside your own network**: the point of
+scanning is that content is inspected before it leaves the trust boundary, and the feature page states what pointing it
+outside gives up.
+
+The analyzer is attached to the `backend` network alone and publishes no port. It receives mail content in the clear and
+answers where the identifiers in it are, so nothing outside the host can reach it and MailFathom asks it over plain HTTP.
+
 ## Bounds
 
-`.env.example` documents every knob: log rotation, CPU and memory limits for both services, the published bind address
-and port, the database and role names, and the volume name. Each is the value the Compose file already applies, so an
-unset variable and the documented value mean the same thing.
+`.env.example` documents every knob: log rotation, CPU and memory limits for all three services, the published bind
+address and port, the database and role names, the volume name, and the four personal-data settings. Each is the value the
+Compose file already applies, so an unset variable and the documented value mean the same thing.
+
+The analyzer's memory limit is the one worth reading before it is lowered: it defaults to two gigabytes because the model
+is held for the life of the container, and below roughly one it is killed while loading — which reaches MailFathom as an
+analyzer that never became ready.
 
 ## Related
 

@@ -37,6 +37,9 @@ internal sealed class SensitiveContentOptions : IValidatableObject
     /// <summary>Gets the scanner that looks for personal data, and reaches an analyzer deployed beside this process.</summary>
     public SensitiveContentScannerOptions Pii { get; } = new();
 
+    /// <summary>Gets where that analyzer is, what language it is asked in, and how sure it must be.</summary>
+    public PersonalDataAnalyzerOptions PersonalDataAnalyzer { get; } = new();
+
     /// <summary>Gets or sets the greatest number of characters one scan analyzes.</summary>
     /// <remarks>
     /// Text beyond it is dropped from the result rather than handed on unscanned. The default matches what a single
@@ -85,6 +88,72 @@ internal sealed class SensitiveContentOptions : IValidatableObject
                     SectionName,
                     this.ScanTimeout),
                 [nameof(this.ScanTimeout)]);
+        }
+
+        foreach (var result in this.FindAnalyzerErrors())
+        {
+            yield return result;
+        }
+    }
+
+    /// <summary>Finds what is wrong with the analyzer block, which only a switched-on personal-data scanner reads.</summary>
+    /// <remarks>
+    /// Nothing here judges an analyzer address left behind under a scanner nobody runs, for the reason nothing judges a
+    /// category list in that state: it describes no protection, so refusing to start over it would be refusing over a
+    /// comment. What is refused is the reverse — the scanner on with nowhere to ask — because that deployment would fail
+    /// every operation the scanner guards while its own configuration read as protection in force.
+    /// </remarks>
+    private IEnumerable<ValidationResult> FindAnalyzerErrors()
+    {
+        var analyzerKey = $"{SectionName}:{nameof(this.PersonalDataAnalyzer)}";
+
+        if (!this.Pii.Enabled)
+        {
+            yield break;
+        }
+
+        if (string.IsNullOrWhiteSpace(this.PersonalDataAnalyzer.Endpoint))
+        {
+            yield return new ValidationResult(
+                $"{SectionName}:Pii is switched on and {analyzerKey}:Endpoint names no address. The personal-data scanner reaches an analyzer deployed beside this service and fails closed without one, so state its address — http://presidio-analyzer:3000 in the deployments this repository ships — or switch the scanner off.",
+                [nameof(this.PersonalDataAnalyzer)]);
+
+            yield break;
+        }
+
+        // The value it was given is deliberately not echoed. A missing scheme is the commonest way to reach this branch, so
+        // what would be quoted is the analyzer's own host name, and this message goes to a startup log like any other.
+        if (!Uri.TryCreate(this.PersonalDataAnalyzer.Endpoint, UriKind.Absolute, out var endpoint)
+            || (endpoint.Scheme != Uri.UriSchemeHttp && endpoint.Scheme != Uri.UriSchemeHttps))
+        {
+            yield return new ValidationResult(
+                $"{analyzerKey}:Endpoint is not an absolute http or https address, so no request could be composed from it. State one such as http://presidio-analyzer:3000, or switch the scanner off.",
+                [nameof(this.PersonalDataAnalyzer)]);
+        }
+
+        // Two letters, because the analyzer selects a model by this and the code reaches a query string and the detector
+        // revision every finding carries. A wider grammar would let a configured value decide how either one parses.
+        if (this.PersonalDataAnalyzer.Language is not { Length: 2 }
+            || !this.PersonalDataAnalyzer.Language.All(char.IsAsciiLetterLower))
+        {
+            yield return new ValidationResult(
+                $"{analyzerKey}:Language is '{this.PersonalDataAnalyzer.Language}', which is not a two-letter lowercase language code such as en. State one the analyzer's own configuration loads a model for.",
+                [nameof(this.PersonalDataAnalyzer)]);
+        }
+
+        // Checked here rather than through a range attribute, because ValidateDataAnnotations reads the properties of the
+        // bound root and never descends into a block like this one, so an attribute would read as a bound and enforce
+        // nothing.
+        if (double.IsNaN(this.PersonalDataAnalyzer.MinimumConfidence)
+            || this.PersonalDataAnalyzer.MinimumConfidence is < 0 or > 1)
+        {
+            yield return new ValidationResult(
+                string.Format(
+                    CultureInfo.InvariantCulture,
+                    "{0}:MinimumConfidence is {1}, which is not a share of certainty between 0 and 1. Redaction acts on every finding the analyzer reports, so this is what keeps its weakest guesses — a payment card also read as a bank account at 0.05 — out of the text.",
+                    analyzerKey,
+                    this.PersonalDataAnalyzer.MinimumConfidence),
+                [nameof(this.PersonalDataAnalyzer)]);
         }
     }
 }

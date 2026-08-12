@@ -107,6 +107,15 @@ services:
       ConnectionStrings__mailfathom: "Host=postgres;Port=5432;Database=${MAILFATHOM_DATABASE:-mailfathom};Username=${MAILFATHOM_DATABASE_ROLE:-mailfathom}"
       Persistence__Password__Name: mailfathom-database-password
       Persistence__Password__SecretReference: file:/run/secrets/mailfathom-database-password
+      # Personal-data scanning, off by default like the product. Turning it on is two variables in `.env` — this one and
+      # COMPOSE_PROFILES=personal-data-scanning — because Compose cannot make an environment entry conditional on a
+      # profile: the profile decides whether the analyzer container exists and this decides whether MailFathom asks it,
+      # and enabling either alone is a deployment that does not work. The address defaults to the analyzer this file
+      # starts, so an operator running their own analyzer overrides it and enables no profile.
+      SensitiveContent__Pii__Enabled: ${MAILFATHOM_PERSONAL_DATA_SCANNING:-false}
+      SensitiveContent__PersonalDataAnalyzer__Endpoint: ${MAILFATHOM_PERSONAL_DATA_ANALYZER:-http://presidio-analyzer:3000}
+      SensitiveContent__PersonalDataAnalyzer__Language: ${MAILFATHOM_PERSONAL_DATA_LANGUAGE:-en}
+      SensitiveContent__PersonalDataAnalyzer__MinimumConfidence: ${MAILFATHOM_PERSONAL_DATA_MINIMUM_CONFIDENCE:-0.4}
     secrets:
       - mailfathom-database-password
     volumes:
@@ -164,6 +173,55 @@ services:
         limits:
           cpus: ${MAILFATHOM_CPU_LIMIT:-2}
           memory: ${MAILFATHOM_MEMORY_LIMIT:-1g}
+
+  presidio-analyzer:
+    # Started only under its profile, which is what makes an opt-in nobody took cost nothing: no image is pulled, no
+    # container exists, and none of the memory below is held. `docker compose up` without the profile brings up the same
+    # two services it always did.
+    profiles:
+      - personal-data-scanning
+    # An immutable tag, like the database image and unlike MailFathom's own: this is a dependency the deployment operates
+    # rather than a version it chooses. It is the same pin the Helm chart and the integration suite use, so an analyzer
+    # reviewed against one is the analyzer running in the others. MIT-licensed, and it loads an MIT-licensed spaCy model —
+    # both are recorded in THIRD_PARTY_LICENSES.md.
+    image: ${MAILFATHOM_PRESIDIO_IMAGE:-ghcr.io/data-privacy-stack/presidio-analyzer:2.2.364}
+    restart: unless-stopped
+    healthcheck:
+      # The analyzer's own route, and the reason the service has a check at all: the container loads a language model
+      # before it serves anything, so a merely running analyzer answers nothing. Nothing in this file waits on the check
+      # — see the comment on MailFathom's missing `depends_on` below — so what it buys is an operator reading `docker
+      # compose ps` and seeing why the stack is not up yet.
+      test: ["CMD-SHELL", "curl --fail --silent --output /dev/null http://localhost:3000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 90s
+    # No `depends_on` in either direction. MailFathom deliberately does not declare one on this service: a dependency on
+    # a service behind a profile is a dependency Compose resolves differently depending on which profiles are active, and
+    # the behaviour is not something this file should rest on. MailFathom's own startup gate refuses to serve while the
+    # analyzer is not answering, and `restart: unless-stopped` is what turns that refusal into a retry until the model
+    # has loaded.
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      # The internal network only. The analyzer receives mail content in the clear and answers where the identifiers in
+      # it are, so nothing publishes a port for it and it has no route out of the host.
+      - backend
+    logging:
+      driver: json-file
+      options:
+        max-size: ${MAILFATHOM_LOG_MAX_SIZE:-10m}
+        max-file: ${MAILFATHOM_LOG_MAX_FILES:-3}
+    deploy:
+      resources:
+        limits:
+          cpus: ${MAILFATHOM_PRESIDIO_CPU_LIMIT:-2}
+          # Generous by the standards of everything else here, because the model is held in memory for the life of the
+          # container. Below roughly a gigabyte it is killed while loading, which reaches MailFathom as an analyzer that
+          # never became ready.
+          memory: ${MAILFATHOM_PRESIDIO_MEMORY_LIMIT:-2g}
 
 networks:
   # What the database is reachable on, and nothing that is not on it can reach the database. `internal` keeps this

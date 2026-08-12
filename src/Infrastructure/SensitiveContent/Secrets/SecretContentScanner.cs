@@ -7,7 +7,7 @@ using System.Text.RegularExpressions;
 using MailFathom.Application.SensitiveContent;
 using MailFathom.Application.SensitiveContent.Detection;
 
-namespace MailFathom.Infrastructure.SensitiveContent;
+namespace MailFathom.Infrastructure.SensitiveContent.Secrets;
 
 /// <summary>Finds credentials in text, in this process, by matching it against the secret corpus.</summary>
 /// <remarks>
