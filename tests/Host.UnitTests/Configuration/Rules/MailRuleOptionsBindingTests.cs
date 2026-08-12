@@ -51,13 +51,13 @@ public sealed class MailRuleOptionsBindingTests
             """
             {
               "MailRules": {
-                "Rules": [ { "Name": "on-arrival", "Condition": "isSeen", "Triggers": [ "Arrival", "Arival" ] } ]
+                "Rules": [ { "Name": "on-arrival", "Condition": "isSeen", "Triggers": [ "Arrival", "Schedule" ] } ]
               }
             }
             """);
 
         // Assert
-        Assert.Equal(["Arrival", "Arival"], bound.Rules[0].Triggers ?? []);
+        Assert.Equal(["Arrival", "Schedule"], bound.Rules[0].Triggers ?? []);
     }
 
     /// <summary>The section binds strictly, so a key nothing declares fails rather than being read past.</summary>

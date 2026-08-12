@@ -351,7 +351,10 @@ public sealed class MailRuleSetMappingTests
     public void Map_RuleDeclaringATriggerNothingRecognizes_IsRefusedRatherThanMappedAsManualOnly()
     {
         // Arrange
-        var settings = new MailRulesOptions { Rules = [CreateRule("mistyped", "isSeen", triggers: ["Arival"])] };
+        var settings = new MailRulesOptions
+        {
+            Rules = [CreateRule("names-a-trigger-that-does-not-exist", "isSeen", triggers: ["Schedule"])],
+        };
 
         // Act, Assert
         Assert.Throws<InvalidOperationException>(() => MailRuleSetMapper.Map(settings, this.compiler));

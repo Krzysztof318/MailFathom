@@ -71,7 +71,7 @@ public sealed class MailRuleTriggerTests
     [InlineData(null)]
     [InlineData("")]
     [InlineData("   ")]
-    [InlineData("Arival")]
+    [InlineData("Schedule")]
     [InlineData("OnDemand")]
     public void TryParseName_AnUndeclaredName_ProducesTheUnspecifiedDefault(string? name)
     {
@@ -121,7 +121,7 @@ public sealed class MailRuleTriggerTests
     }
 
     [Theory]
-    [InlineData("\"Arival\"")]
+    [InlineData("\"Schedule\"")]
     [InlineData("7")]
     public void JsonConverter_AValueThatNamesNoTrigger_IsRefused(string json)
     {

@@ -735,7 +735,7 @@ public sealed class MailRuleDeclarationRulesTests
     public void FindDeclarationErrors_ATriggerNothingDeclares_IsRefusedNamingTheRuleAndTheValue()
     {
         // Arrange
-        var candidate = new MailRulesOptions { Rules = [CreateRule("housekeeping", "isSeen", triggers: ["Arival"])] };
+        var candidate = new MailRulesOptions { Rules = [CreateRule("housekeeping", "isSeen", triggers: ["Schedule"])] };
 
         // Act
         var errors = MailRuleDeclarationRules.FindDeclarationErrors(candidate, this.compiler, DeclaredAccounts);
@@ -743,7 +743,7 @@ public sealed class MailRuleDeclarationRulesTests
         // Assert
         var error = Assert.Single(errors);
         Assert.Contains("MailRules:Rules:0:Triggers", error, StringComparison.Ordinal);
-        Assert.Contains("Arival", error, StringComparison.Ordinal);
+        Assert.Contains("Schedule", error, StringComparison.Ordinal);
         Assert.Contains("'Arrival'", error, StringComparison.Ordinal);
     }
 
