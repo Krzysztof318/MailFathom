@@ -59,17 +59,6 @@ internal sealed class MailFathomDbContext : DbContext
 
     internal const string EmailSearchDocumentVectorIndexName = "ix_email_search_documents_search_vector";
 
-    /// <summary>The index over the sensitive-content stamp, which is what makes the staleness question cheap to ask.</summary>
-    /// <remarks>
-    /// Both queries that read the column select rows whose stamp is not the current one, and on a deployment that has
-    /// finished a rebuild that predicate matches almost nothing — which is exactly where a sequential scan of a table
-    /// holding every message's body text is worth avoiding. A plain B-tree serves it: the comparison is equality against
-    /// one value, and the null the column takes for a document derived with no scanner on is a value this index carries
-    /// like any other.
-    /// </remarks>
-    internal const string EmailSearchDocumentSensitiveContentStampIndexName =
-        "ix_email_search_documents_sensitive_content_stamp";
-
     internal const string EmailChunkOrdinalUniqueIndexName = "ix_email_chunks_email_ordinal";
 
     /// <summary>The unique index over an embedding profile's identity, which is what makes activation idempotent.</summary>
@@ -955,11 +944,13 @@ internal sealed class MailFathomDbContext : DbContext
             // query and survives any later reordering of the enum.
             entity.Property(document => document.TextSource).HasConversion<string>().HasMaxLength(64).IsRequired();
 
+            // Carried without an index of its own. Both readers of the column ask which rows are *not* stamped with the
+            // current configuration, and a B-tree operator class holds no inequality operator, so nothing could use one;
+            // the staleness count and the rebuilding walk scan, which is what a once-per-start figure and a walk that
+            // reads whole rows anyway can afford.
             entity.Property(document => document.SensitiveContentStamp)
                 .HasMaxLength(SensitiveContentDerivationStamp.Length)
                 .IsFixedLength();
-            entity.HasIndex(document => document.SensitiveContentStamp)
-                .HasDatabaseName(EmailSearchDocumentSensitiveContentStampIndexName);
 
             entity.HasOne(document => document.StoredEmail)
                 .WithOne(email => email.SearchDocument)

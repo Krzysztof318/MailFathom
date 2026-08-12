@@ -127,11 +127,16 @@ digest of: which scanners ran and in what order, each one's detector name and co
 switched on for it, and the rules suppressed inside them. That is the whole of what decides the redacted result, which is
 what makes two rows with the same stamp comparable and two with different stamps not.
 
-What it deliberately leaves out is the scan bounds — the analyzed ceiling, the timeout, and the concurrency limit. Those
-are cost controls an operator tunes on a running deployment, and folding them in would mark a whole mailbox stale for a
-change that was about how much a scan may spend. The personal-data confidence floor is out for the same reason the
-finding's own revision leaves it out: it names which of the analyzer's results this deployment wanted rather than how
-detection was performed. The analyzer's language is in, because it is part of that revision.
+**The analyzed ceiling is part of it**, because on this path it is not a cost control. A redaction returns the text cut
+at the ceiling, and here what is returned is what is stored — so a deployment that lowers
+`SensitiveContent:MaximumAnalyzedCharacters` indexes every message derived afterwards with its body cut at that length,
+and raising it back has to leave those rows stale or the missing text is never restored by anything.
+
+What the stamp does leave out is the per-call timeout and the concurrency limit. Neither changes one character of what a
+scan that finished produced, so folding them in would mark a whole mailbox stale for tuning a deployment does against
+its own load. The personal-data confidence floor is out for the same reason the finding's own revision leaves it out: it
+names which of the analyzer's results this deployment wanted rather than how detection was performed. The analyzer's
+language is in, because it is part of that revision.
 
 **An absent stamp means the text predates any scanner.** It is a different value from every stamp, not a missing one,
 so a mailbox derived before the feature was switched on is counted and rebuilt exactly like one derived under an older

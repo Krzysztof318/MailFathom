@@ -29,20 +29,11 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                 fixedLength: true,
                 maxLength: 64,
                 nullable: true);
-
-            migrationBuilder.CreateIndex(
-                name: "ix_email_search_documents_sensitive_content_stamp",
-                table: "email_search_documents",
-                column: "SensitiveContentStamp");
         }
 
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.DropIndex(
-                name: "ix_email_search_documents_sensitive_content_stamp",
-                table: "email_search_documents");
-
             migrationBuilder.DropColumn(
                 name: "SensitiveContentStamp",
                 table: "email_search_documents");

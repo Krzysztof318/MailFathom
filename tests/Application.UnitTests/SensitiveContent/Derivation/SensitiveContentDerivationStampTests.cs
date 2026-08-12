@@ -103,25 +103,55 @@ public sealed class SensitiveContentDerivationStampTests
         Assert.NotEqual(written, suppressed);
     }
 
-    /// <summary>What one scan may spend decides throughput rather than placeholders, so it must not mark a mailbox stale.</summary>
+    /// <summary>How long a scan may take and how many may run decide throughput rather than placeholders.</summary>
+    /// <remarks>
+    /// Retuning either of these against a deployment's own load changes not one character of what a scan that finished
+    /// produced, so a stamp that moved would send an operator through a re-derivation of the whole mailbox for nothing.
+    /// </remarks>
     [Fact]
-    public void Compute_ADifferentScanBudget_ProducesTheSameStamp()
+    public void Compute_ADifferentTimeoutOrConcurrencyLimit_ProducesTheSameStamp()
     {
         // Arrange
         var scanner = Scanner(SensitiveContentScannerKind.Secrets, "corpus", "1");
-        var widened = SensitiveContentPlan.Create(
+        var retuned = SensitiveContentPlan.Create(
             SensitiveContentScanBounds.Create(
                 SensitiveContentScanBounds.Default.MaximumAnalyzedCharacters,
                 TimeSpan.FromSeconds(45),
+                SensitiveContentScanBounds.Default.MaximumConcurrentScans + 8),
+            [SensitiveContentScannerPlan.Create(scanner.Scanner, [ProviderToken], [])]);
+
+        // Act
+        var written = SensitiveContentDerivationStamp.Compute(Plan(scanner, ProviderToken), [scanner]);
+        var afterRetuning = SensitiveContentDerivationStamp.Compute(retuned, [scanner]);
+
+        // Assert
+        Assert.Equal(written, afterRetuning);
+    }
+
+    /// <summary>The analyzed ceiling decides what a derived row holds, not only what a scan spends getting there.</summary>
+    /// <remarks>
+    /// A redaction returns the text cut at the ceiling and the derived path stores what it returns, so a deployment that
+    /// lowered it indexed every message short from then on. Raising it back has to leave those rows stale, or the
+    /// startup report says the mailbox is current while a rebuild is the only thing that would restore the missing text.
+    /// </remarks>
+    [Fact]
+    public void Compute_ADifferentAnalyzedCeiling_ProducesADifferentStamp()
+    {
+        // Arrange
+        var scanner = Scanner(SensitiveContentScannerKind.Secrets, "corpus", "1");
+        var lowered = SensitiveContentPlan.Create(
+            SensitiveContentScanBounds.Create(
+                20_000,
+                SensitiveContentScanBounds.Default.ScanTimeout,
                 SensitiveContentScanBounds.Default.MaximumConcurrentScans),
             [SensitiveContentScannerPlan.Create(scanner.Scanner, [ProviderToken], [])]);
 
         // Act
         var written = SensitiveContentDerivationStamp.Compute(Plan(scanner, ProviderToken), [scanner]);
-        var retuned = SensitiveContentDerivationStamp.Compute(widened, [scanner]);
+        var truncated = SensitiveContentDerivationStamp.Compute(lowered, [scanner]);
 
         // Assert
-        Assert.Equal(written, retuned);
+        Assert.NotEqual(written, truncated);
     }
 
     /// <summary>A stamp composed from a detector nothing registered would describe a redaction nothing performed.</summary>

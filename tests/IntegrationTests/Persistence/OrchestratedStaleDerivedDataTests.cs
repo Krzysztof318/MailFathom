@@ -126,15 +126,16 @@ public sealed class OrchestratedStaleDerivedDataTests(MailFathomOrchestrationFix
         Assert.Null(underAnotherConfiguration);
     }
 
-    /// <summary>A walk that is not rebuilding must leave the cursor's stamp alone, or the rebuild it precedes finds nothing.</summary>
+    /// <summary>A walk that is not rebuilding clears the cursor's stamp, because it moves the position a rebuild owns.</summary>
     /// <remarks>
-    /// The failure this guards is silent in both directions. An ordinary walk that recorded the current configuration on
-    /// the cursor would leave a deployment whose categories were widened while the rebuild was off with a position row
-    /// already matching: the operator then switches the rebuild on, the walk resumes at the end of the mailbox, and every
-    /// message stays under-redacted while the run reports itself complete.
+    /// The arrangement is the one the clearing exists for, and it is deliberately the *same* configuration throughout: a
+    /// rebuild reaches a position under the current stamp and is switched off, an ordinary walk then advances the
+    /// position past messages that rebuild had not reached, and the rebuild is switched back on. A cursor that kept the
+    /// stamp would match, the walk would resume at the newer position, and every stale row behind it would be skipped
+    /// while the run reported itself complete. Recorded under a different stamp instead, the case would pass either way.
     /// </remarks>
     [Fact]
-    public async Task SaveResumePositionAsync_AWalkThatIsNotRebuilding_LeavesTheStampADifferentConfigurationRecorded()
+    public async Task SaveResumePositionAsync_AWalkThatIsNotRebuilding_ClearsTheStampTheRebuildRecorded()
     {
         // Arrange
         var cancellationToken = TestContext.Current.CancellationToken;
@@ -142,11 +143,17 @@ public sealed class OrchestratedStaleDerivedDataTests(MailFathomOrchestrationFix
         var binding = await OrchestratedFolderBinding.CommitAsync(services, FolderAlias, cancellationToken);
         var stored = await InsertDocumentedEmailsAsync(services, binding, cancellationToken);
 
-        var recordedUnderTheOlderConfiguration = await services.CommitAsync(
-            (scope, session, token) => this.StoreIn(scope, rebuildsStaleDerivedData: true, stamp: OlderStamp)
+        var reachedByTheRebuild = await services.CommitAsync(
+            (scope, session, token) => this.StoreIn(scope, rebuildsStaleDerivedData: true)
                 .SaveResumePositionAsync(session, stored.WrittenUnderAnOlderConfiguration, token),
             cancellationToken);
-        Assert.Equal(PersistenceCommitResult.Committed, recordedUnderTheOlderConfiguration);
+        Assert.Equal(PersistenceCommitResult.Committed, reachedByTheRebuild);
+
+        // The control the case rests on: under that same configuration the rebuild does resume from what it recorded.
+        var resumedBeforeTheOrdinaryWalk = await services.InScopeAsync(
+            (scope, token) => this.StoreIn(scope, rebuildsStaleDerivedData: true).FindResumePositionAsync(token),
+            cancellationToken);
+        Assert.Equal(stored.WrittenUnderAnOlderConfiguration, resumedBeforeTheOrdinaryWalk);
 
         // Act
         var advanced = await services.CommitAsync(
@@ -154,13 +161,13 @@ public sealed class OrchestratedStaleDerivedDataTests(MailFathomOrchestrationFix
                 .SaveResumePositionAsync(session, stored.WrittenUnderTheCurrentConfiguration, token),
             cancellationToken);
 
-        var resumedByARebuild = await services.InScopeAsync(
+        var resumedByTheRebuild = await services.InScopeAsync(
             (scope, token) => this.StoreIn(scope, rebuildsStaleDerivedData: true).FindResumePositionAsync(token),
             cancellationToken);
 
         // Assert
         Assert.Equal(PersistenceCommitResult.Committed, advanced);
-        Assert.Null(resumedByARebuild);
+        Assert.Null(resumedByTheRebuild);
     }
 
     /// <summary>A document recording that extraction never ran can never be re-stamped, so it is neither counted nor walked.</summary>

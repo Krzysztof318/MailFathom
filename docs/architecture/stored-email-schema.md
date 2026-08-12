@@ -64,6 +64,8 @@ It is a table of its own for the reason raw MIME is. The text is large, only sea
 
 `SensitiveContentStamp` is `character(64)` and records the sensitive-content configuration this row's text was derived under: a digest of the scanners that ran, their corpus and profile revisions, the categories switched on, and the rules suppressed. It stands for everything below the message as well as the row it sits on — the chunks cut from this text and the vectors built from those chunks descend from it, so one value answers for the whole derived tree and no write has to stamp a row whose content did not otherwise change. Null is the ordinary value: it means the text was derived while no scanner was on, and it is what every row holds on a deployment that scans nothing. [Derived data](../features/sensitive-content-scanning.md#derived-data-is-written-redacted-and-stamped) states what moves the value and what re-derives a row that no longer matches; `backfill_positions` carries a column of the same name for the same reason, so a walk resumes only within the configuration it was walking under.
 
+It carries no index, deliberately. Both readers ask which rows are *not* stamped with the current configuration, and a B-tree operator class holds no inequality operator, so an index over the column could serve neither: the staleness count and the rebuilding walk both scan. That is a figure read once per start and a walk that reads whole rows anyway, against an index every synchronized and every re-derived message would otherwise maintain.
+
 The copies are bounded more tightly than the columns they come from: 2000 characters of subject and 64 participant addresses in total. A `tsvector` cannot exceed one megabyte, and the whole document — subject, addresses, and up to `MaxExtractedTextCharacters` of body — shares that budget. Exceeding it would not degrade search; it would make the row unwritable, because the generated column is computed on every insert.
 
 ## Message chunks
@@ -457,7 +459,6 @@ What the store delivers is at-least-once execution and nothing stronger. Uniquen
 | `ix_stored_emails_cc_addresses` | `(cc_addresses)`, GIN | Containment tests over the `Cc` recipients |
 | `ix_stored_emails_reply_to_addresses` | `(reply_to_addresses)`, GIN | Containment tests over the `Reply-To` addresses |
 | `ix_email_search_documents_search_vector` | `(search_vector)`, GIN | Lexical search over subject, participants, and body text |
-| `ix_email_search_documents_sensitive_content_stamp` | `(SensitiveContentStamp)` | Which derived text predates the sensitive-content configuration in force: the count reported at startup, and the rows a rebuilding walk selects. Unfiltered rather than partial, because the value the walk compares against changes with the configuration, so no predicate written into an index would still name the current one |
 | `ix_email_chunks_email_ordinal` | `(StoredEmailId, Ordinal)`, unique | One message's passages in reading order, and the constraint a re-cut cannot write an ordinal twice past |
 | `ix_embedding_profiles_identity_fingerprint` | `(IdentityFingerprint)`, unique | One row per vector space, which is what makes activation idempotent |
 | `ix_embedding_profiles_lifecycle_state` | `(LifecycleState)`, unique, where the state is building or active | At most one generation being built and at most one being read |

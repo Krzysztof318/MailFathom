@@ -18,10 +18,16 @@ namespace MailFathom.Application.SensitiveContent.Derivation;
 /// the same statement <see cref="Emails.Embeddings.EmbeddingProfileFingerprint" /> makes about a vector.
 /// </para>
 /// <para>
-/// Everything that decides what a redaction removes is in the digest: which scanners ran, the corpus revision or
-/// analyzer profile each ran under, the categories each looked for, and the rules suppressed inside them. Nothing that
-/// decides only how much one scan may spend is, because a wider ceiling or a longer budget produces the same placeholders
-/// over the text it reaches and would otherwise mark a whole mailbox stale for a tuning change.
+/// Everything that decides what a redaction leaves behind is in the digest: which scanners ran, the corpus revision or
+/// analyzer profile each ran under, the categories each looked for, the rules suppressed inside them, and the analyzed
+/// ceiling. The ceiling is there because on this path it is not a cost control at all: a redaction returns the text cut
+/// at it, and what is returned is what is stored, chunked, and embedded — so lowering it truncates every message derived
+/// afterwards, and raising it back has to leave those rows readably stale rather than silently short.
+/// </para>
+/// <para>
+/// The per-call timeout and the concurrency limit are out, because neither changes one character of what a scan that
+/// finished produced. Those are the tuning a deployment does against its own load, and folding them in would mark a
+/// whole mailbox stale for a change that altered nothing it stored.
 /// </para>
 /// <para>
 /// The digest names no mail. It is computed over a deployment's own configured names and MailFathom's own revisions, so
@@ -64,6 +70,7 @@ public readonly record struct SensitiveContentDerivationStamp
         using var digest = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
 
         AppendText(digest, HashDomain);
+        AppendNumber(digest, plan.Bounds.MaximumAnalyzedCharacters);
         AppendNumber(digest, plan.Scanners.Count);
 
         foreach (var scannerPlan in plan.Scanners)

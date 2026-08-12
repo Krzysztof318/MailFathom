@@ -212,9 +212,6 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
 
                     NpgsqlIndexBuilderExtensions.HasMethod(b.HasIndex("SearchVector"), "GIN");
 
-                    b.HasIndex("SensitiveContentStamp")
-                        .HasDatabaseName("ix_email_search_documents_sensitive_content_stamp");
-
                     b.ToTable("email_search_documents", (string)null);
                 });
 

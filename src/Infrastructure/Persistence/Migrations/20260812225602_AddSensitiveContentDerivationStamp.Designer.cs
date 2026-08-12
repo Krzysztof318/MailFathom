@@ -14,7 +14,7 @@ using Pgvector;
 namespace MailFathom.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(MailFathomDbContext))]
-    [Migration("20260812210153_AddSensitiveContentDerivationStamp")]
+    [Migration("20260812225602_AddSensitiveContentDerivationStamp")]
     partial class AddSensitiveContentDerivationStamp
     {
         /// <inheritdoc />
@@ -214,9 +214,6 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                         .HasDatabaseName("ix_email_search_documents_search_vector");
 
                     NpgsqlIndexBuilderExtensions.HasMethod(b.HasIndex("SearchVector"), "GIN");
-
-                    b.HasIndex("SensitiveContentStamp")
-                        .HasDatabaseName("ix_email_search_documents_sensitive_content_stamp");
 
                     b.ToTable("email_search_documents", (string)null);
                 });
