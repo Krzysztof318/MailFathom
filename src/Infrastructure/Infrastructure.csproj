@@ -24,9 +24,11 @@
          framework, which is why it appears in this project's lock file and not in the host's. -->
     <PackageReference Include="Microsoft.Extensions.Http.Resilience" />
     <PackageReference Include="Microsoft.Extensions.Options.ConfigurationExtensions" />
-    <!-- The secret-detection engine: a masker over registered regular-expression patterns, a corpus of Microsoft
-         credential formats, and the pluggable regex engine the generated matchers are reached through. It carries no
-         package dependencies of its own, so the whole of it stays inside the scanning adapter. -->
+    <!-- The secret-detection corpus and the type a rule is declared as: `RegexPattern`, which also reads its own match
+         back to say which product issued a key, the option defaults its expressions are built with, and the Microsoft
+         credential formats adopted as `ProviderToken` rules. The scanner runs that corpus itself, so the package's
+         masker is unused. It carries no package dependencies of its own, so the whole of it stays inside the scanning
+         adapter. -->
     <PackageReference Include="Microsoft.Security.Utilities.Core" />
     <PackageReference Include="Microsoft.Extensions.Options.DataAnnotations" />
     <!-- The condition language a mail rule is authored in. Referenced by this project alone, so the parser, its AST,

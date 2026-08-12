@@ -5,8 +5,10 @@
 # names it, and the step that does argues why — so a `typos` run started by hand needs
 # `--config .config/typos.toml` or it applies none of what follows.
 #
-# Two unlike kinds of entry live here, and they are kept in separate tables rather than merged into
-# whichever one would happen to accept a given string.
+# Three unlike kinds of entry live here. The vocabulary has tables of its own, because a word is
+# accepted wherever it appears; the other two share `extend-ignore-re`, because each is a decision
+# about one string in one place rather than about a spelling. What keeps them from collapsing into
+# one list is the comment above each entry, which says which kind it is and why.
 #
 # **Vocabulary** is the first kind: spellings MailFathom uses on purpose and would go on using if a
 # dictionary disagreed. `unparseable` is how this repository has consistently described input a
@@ -20,10 +22,6 @@
 # The tests that prove it and the documentation that explains it have to name the misspelling the
 # rule catches, so correcting one of them deletes the example and, in a test, the assertion with it.
 #
-# The two are worth separating because they age differently. A word joins the first table when the
-# project adopts it and leaves when the project stops using it. A fixture joins the second when a
-# test or a document is written around it, and it leaves with that test.
-#
 # **Non-prose literals** are the third kind, and they are the one kind that is not English at all: a
 # regular expression that recognises a credential format, an encoded sample built out of the Latin
 # alphabet, and a rule name reproduced verbatim from the corpus it was taken from. A dictionary reads
@@ -31,8 +29,15 @@
 # one would change what an expression matches or what an operator has to type to suppress a rule, so
 # the entry says the string is data rather than that the spelling was reviewed and kept.
 #
-# Neither table is a place to put a genuine typo that is inconvenient to fix. An entry here says the
-# string is correct or is deliberate, and a reader has to be able to trust that it means one of them.
+# The three are worth separating because they age differently. A word joins the vocabulary when the
+# project adopts it and leaves when the project stops using it. A fixture arrives when a test or a
+# document is written around it, and it leaves with that test. A non-prose literal arrives with the
+# expression or the sample it belongs to, and it leaves when that data does — which for the corpus
+# means a refresh that drops a rule, not a change of mind about a spelling.
+#
+# None of the three is a place to put a genuine typo that is inconvenient to fix. An entry here says
+# the string is correct, is deliberate, or is not prose, and a reader has to be able to trust that it
+# means one of them.
 
 [files]
 # Hidden files are checked, which is not the default. Most of the prose that decides how this
