@@ -865,6 +865,7 @@
           "Microsoft.Extensions.Http.Resilience": "[10.6.0, )",
           "Microsoft.Extensions.Options.ConfigurationExtensions": "[10.0.10, )",
           "Microsoft.Extensions.Options.DataAnnotations": "[10.0.10, )",
+          "Microsoft.Security.Utilities.Core": "[1.21.0, )",
           "MimeKit": "[4.17.0, )",
           "NCalc": "[7.1.0, )",
           "Npgsql.EntityFrameworkCore.PostgreSQL": "[10.0.3, )",
@@ -1079,6 +1080,12 @@
           "Microsoft.Extensions.Http": "10.0.8",
           "Microsoft.Extensions.ServiceDiscovery.Abstractions": "10.6.0"
         }
+      },
+      "Microsoft.Security.Utilities.Core": {
+        "type": "CentralTransitive",
+        "requested": "[1.21.0, )",
+        "resolved": "1.21.0",
+        "contentHash": "mIHFRwByyMkceEQvFD4MJIYM/BI379U9bFr/N3+sc6lBjExJptgc6cNcZxhcDJY+4m22LlQvgzabzq/jUHCeAg=="
       },
       "MimeKit": {
         "type": "CentralTransitive",

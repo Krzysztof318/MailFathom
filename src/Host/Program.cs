@@ -230,6 +230,11 @@ try
         .GetSection(SensitiveContentOptions.SectionName)
         .Get<SensitiveContentOptions>() ?? new SensitiveContentOptions();
 
+    if (declaredSensitiveContent.Secrets.Enabled)
+    {
+        builder.Services.AddSecretContentScanning();
+    }
+
     if (declaredSensitiveContent.IsAnyScannerEnabled)
     {
         builder.Services.AddSingleton(provider => SensitiveContentPlanMapper.Map(

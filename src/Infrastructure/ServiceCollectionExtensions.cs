@@ -32,6 +32,7 @@ using MailFathom.Application.Resilience;
 using MailFathom.Application.Retrieval;
 using MailFathom.Application.Retrieval.AskMail;
 using MailFathom.Application.Retrieval.AskMail.Audit;
+using MailFathom.Application.SensitiveContent.Detection;
 using MailFathom.Application.Synchronization;
 using MailFathom.Application.Synchronization.Checkpoints;
 using MailFathom.Application.Synchronization.Reconciliation;
@@ -62,6 +63,7 @@ using MailFathom.Infrastructure.Secrets.References;
 using MailFathom.Infrastructure.Secrets.Resolution;
 using MailFathom.Infrastructure.Secrets.Sources;
 using MailFathom.Infrastructure.Security.OAuth;
+using MailFathom.Infrastructure.SensitiveContent;
 using MailKit.Net.Imap;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
@@ -485,6 +487,31 @@ public static class ServiceCollectionExtensions
         services.AddScoped<StoredEmailEmbeddingGenerator>();
         services.AddScoped<StoredEmailEmbeddingBackfill>();
         services.AddScoped<EmbeddingGenerationUpkeep>();
+
+        return services;
+    }
+
+    /// <summary>Registers the in-process detector of credentials in mail text, and what it declares it can find.</summary>
+    /// <param name="services">The service collection.</param>
+    /// <returns>The service collection, for chaining.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="services" /> is <see langword="null" />.</exception>
+    /// <remarks>
+    /// <para>
+    /// Called only where the <c>Secrets</c> switch is on, which is what makes an opt-in nobody took cost nothing: with
+    /// it off no corpus is assembled, no expression is compiled, and neither descriptor exists.
+    /// </para>
+    /// <para>
+    /// The catalog is registered beside the scanner rather than always, because startup refuses a switch that is on
+    /// with nothing behind it, and a catalog present without a detector would turn that refusal into a scanner that
+    /// runs and finds nothing. Both are singletons: the corpus is compiled once and the scanner holds it.
+    /// </para>
+    /// </remarks>
+    public static IServiceCollection AddSecretContentScanning(this IServiceCollection services)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+
+        services.AddSingleton<ISensitiveContentCatalog, SecretContentCatalog>();
+        services.AddSingleton<ISensitiveContentScanner, SecretContentScanner>();
 
         return services;
     }

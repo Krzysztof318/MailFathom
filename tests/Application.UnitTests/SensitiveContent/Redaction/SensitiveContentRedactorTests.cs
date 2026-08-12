@@ -302,7 +302,7 @@ public sealed class SensitiveContentRedactorTests
         int length,
         string detector = "in-process-secrets",
         string revision = "2026.08.01") => SensitiveContentFinding.Create(
-        category,
+        SensitiveContentRule.Create(category, "only-rule"),
         SensitiveContentSpan.Create(start, length),
         1,
         detector == Detector.Name && revision == Detector.Revision

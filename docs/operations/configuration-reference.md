@@ -268,9 +268,9 @@ because the switches it holds reach several of those at once. [Sensitive-content
 scanning](../features/sensitive-content-scanning.md) records what a finding is, what replaces it, and why a scanner that
 cannot answer refuses the operation it guards.
 
-Both scanners are off by default, and an absent section is that default rather than a startup failure. **This release
-registers no detector**, so switching either scanner on fails startup naming it; the detectors arrive with their own
-changes.
+Both scanners are off by default, and an absent section is that default rather than a startup failure. `Secrets` has a
+detector behind it and runs in this process. **`Pii` has none**, so switching that one on fails startup naming it; its
+analyzer arrives with its own change.
 
 | Key | Type | Default | Constraint | Change |
 | --- | --- | --- | --- | --- |
@@ -291,6 +291,26 @@ survives the match — so a placeholder in redacted text does not depend on how 
 matches nothing **fails startup and quotes both the value and the categories the scanner does detect**, rather than
 being dropped by the binder and leaving the section reading as protection that is on. So does a suppression naming a
 rule that does not exist. A suppression inside a category this deployment does not look for is accepted and inert.
+
+The `Secrets` scanner declares these seven categories. Six are on when `Categories` names none; the seventh is not, and
+listing categories **replaces** the default set, so switching the entropy heuristic on means naming every category
+wanted alongside it.
+
+| Category | What it finds | On by default |
+| --- | --- | --- |
+| `ProviderToken` | An API token, key, or session credential a named service issued and prefixes as its own | yes |
+| `CloudAccessKey` | An access key or client secret for a cloud platform's own control plane | yes |
+| `PrivateKey` | A private key or certificate bundle, armoured as PEM or encoded whole | yes |
+| `JsonWebToken` | A JSON Web Token, in its ordinary form or encoded a second time | yes |
+| `ConnectionString` | A connection string carrying the credential it connects with | yes |
+| `CredentialUrl` | A URL carrying a credential in its user information, its path, or its query | yes |
+| `HighEntropyString` | A string dense enough to be a credential, recognised by its randomness rather than its shape | **no** |
+
+A rule name inside them is the corpus entry's own name — `github-pat` and `aws-access-token` from the gitleaks rule
+data, `AzureCosmosDBIdentifiableKey` and `UrlCredentials` from the detection engine's own corpus, and
+`database-connection-uri-credential` from MailFathom's. [Sensitive-content
+scanning](../features/sensitive-content-scanning.md#the-secret-scanner) records where each corpus comes from and what
+the entropy heuristic costs.
 
 The analyzed ceiling defaults to the same number as `EmailContent:MaxCharactersPerRead`, so an ordinary content read is
 analyzed whole and only something pathological reaches it.
