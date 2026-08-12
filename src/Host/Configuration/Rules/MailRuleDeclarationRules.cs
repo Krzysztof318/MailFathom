@@ -264,7 +264,7 @@ internal static class MailRuleDeclarationRules
         }
     }
 
-    /// <summary>Judges one rule's actions against one account's mirrored folders and its own permissions.</summary>
+    /// <summary>Judges one rule's actions against one account's mapped folders and its own permissions.</summary>
     private static IEnumerable<string> FindAccountActionErrors(
         string ruleName,
         IReadOnlyList<MailRuleAction> actions,

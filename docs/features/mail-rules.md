@@ -202,13 +202,16 @@ its own.
 
 ### How a change reaches the mail server
 
-**A rule pass opens no connection.** Each action a match asks for is written down as a
+**A rule pass issues no IMAP command a rule asked for.** Each action a match asks for is written down as a
 [durable mutation record](imap-synchronization.md#every-change-is-written-down-before-it-is-issued) inside the same
 transaction that records the evaluation, and the account's own convergence pass — the first thing every account run does
-— is what issues the IMAP commands. Three things follow, and each is the point of the arrangement:
+— is what issues the IMAP commands. The one server call a pass makes for itself is
+[finding a folder the account maps and does not mirror](imap-synchronization.md#what-a-mapping-decides-beyond-where-the-folder-is),
+made before the batch's transaction is opened and only where a rule files into such a folder. Three things follow, and
+each is the point of the arrangement:
 
-- **A pass that fails costs no mail server work.** Evaluation reaches nothing remote, so a local failure never defers the
-  account's fetching.
+- **A pass that fails costs no mail server work.** Nothing the evaluation itself decided is carried remotely, so a local
+  failure never defers the account's fetching.
 - **A change survives a restart.** A record written and not yet carried is picked up by the next run, and
   [a change nobody finished finishes by itself](imap-synchronization.md#a-change-nobody-finished-finishes-by-itself)
   states every way one can be left and what becomes of it.
@@ -493,9 +496,9 @@ queue behind it.
 
 **A rule that cannot answer for one message costs that message's rule and nothing else.** It is recorded as a failed
 rule with a reason, the rules below it still run, the remaining messages of the batch are still evaluated, and the
-message is recorded as evaluated. The account is not put into backoff for it either: a rule pass reaches no mail server,
-so fetching the account's mail less often would answer a local problem by slowing remote work that had nothing to do
-with it. The next section lists the two reasons.
+message is recorded as evaluated. The account is not put into backoff for it either: nothing a rule decided is carried
+remotely, so fetching the account's mail less often would answer a local problem by slowing remote work that had nothing
+to do with it. The next section lists the two reasons.
 
 **Nothing scans on a timer.** The account run recurs already, so anything a scan would find on arrival is found by the
 `Arrival` trigger; a rule whose condition only becomes true with the passage of time — mail older than some age — fires
