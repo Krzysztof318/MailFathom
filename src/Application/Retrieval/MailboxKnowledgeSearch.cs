@@ -5,7 +5,6 @@
 using MailFathom.Application.Emails.Mailboxes;
 using MailFathom.Application.Emails.Search;
 using MailFathom.Application.Emails.SearchEmails;
-using MailFathom.Domain.Accounts;
 
 namespace MailFathom.Application.Retrieval;
 
@@ -69,9 +68,11 @@ public sealed class MailboxKnowledgeSearch : IEmailKnowledgeSearch
             QueryText = query.QueryText,
 
             // The scope is the caller's and overwrites nothing the query carries, because the query carries no scope at
-            // all. That is what makes the boundary a property of these two types rather than of this assignment.
-            Accounts = [.. scope.AccountIds.Select(MailAccountSelector.For)],
-            FolderAliases = scope.FolderAliases,
+            // all. That is what makes the boundary a property of these two types rather than of this assignment. It is
+            // handed over already resolved rather than written back out as accounts and folders, because a folder the
+            // question named by role has resolved to a different alias on each account and naming those aliases again
+            // would let each of them mean whichever account carries it.
+            ResolvedScope = scope,
             SenderAddress = query.SenderAddress,
             RecipientAddress = query.RecipientAddress,
             SubjectFragment = query.SubjectFragment,

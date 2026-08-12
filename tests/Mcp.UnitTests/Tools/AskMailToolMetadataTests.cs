@@ -75,7 +75,7 @@ public sealed class AskMailToolMetadataTests
     public void AddMailFathomServer_AdvertisesTheQuestionAndTheScopeAsInputSchemaProperties()
     {
         // Arrange
-        string[] expectedProperties = ["question", "accounts", "folderAliases"];
+        string[] expectedProperties = ["question", "accounts", "folders"];
 
         // Act
         var advertisedProperties = AdvertisedAskMailTool()

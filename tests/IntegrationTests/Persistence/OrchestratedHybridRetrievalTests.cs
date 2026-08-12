@@ -124,7 +124,9 @@ public sealed class OrchestratedHybridRetrievalTests(MailFathomOrchestrationFixt
         // Act
         var lookup = await services.InScopeAsync(
             (scope, token) => scope.GetRequiredService<MailboxKnowledgeSearch>().FindPassagesAsync(
-                MailboxScope.Create([SyntheticMailAccount.AccountId], [MailFolderAlias.Create(FolderAlias)]),
+                MailboxScope.Create(
+            [SyntheticMailAccount.AccountId],
+            [new MailFolderIdentity(SyntheticMailAccount.AccountId, MailFolderAlias.Create(FolderAlias))]),
                 EmailKnowledgeQuery.ForText(QueryTerm),
                 token),
             cancellationToken);
@@ -170,12 +172,14 @@ public sealed class OrchestratedHybridRetrievalTests(MailFathomOrchestrationFixt
     {
         QueryText = QueryTerm,
         Accounts = [MailAccountSelector.For(SyntheticMailAccount.AccountId)],
-        FolderAliases = [MailFolderAlias.Create(FolderAlias)],
+        Folders = [MailFolderReference.ToAlias(MailFolderAlias.Create(FolderAlias))],
         ResultLimit = 10,
     };
 
     private static MailboxEmailSelection SeededSelection() => MailboxEmailSelection.Create(
-        MailboxScope.Create([SyntheticMailAccount.AccountId], [MailFolderAlias.Create(FolderAlias)]),
+        MailboxScope.Create(
+            [SyntheticMailAccount.AccountId],
+            [new MailFolderIdentity(SyntheticMailAccount.AccountId, MailFolderAlias.Create(FolderAlias))]),
         senderAddress: null,
         recipientAddress: null,
         subjectFragment: null,

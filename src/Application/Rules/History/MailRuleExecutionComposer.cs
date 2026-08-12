@@ -82,15 +82,19 @@ public static class MailRuleExecutionComposer
                 recorded.Position,
                 recorded.Mutation,
                 MailRuleExecutedActionOutcome.Requested,
-                recorded.DestinationAlias,
+                recorded.DestinationAlias?.Value,
                 MutationRecordId: recorded.RecordId))
+
+            // The two below name what the rule wrote rather than an alias, because neither reached a folder: a role
+            // that resolved to none has no alias, and reporting nothing would leave the operator unable to tell which
+            // of a rule's destinations they have to correct.
             .Concat(recording.Failures
                 .Where(refused => StringComparer.Ordinal.Equals(refused.RuleName, ruleName))
                 .Select(refused => new MailRuleExecutedAction(
                     refused.Position,
                     refused.Mutation,
                     MailRuleExecutedActionOutcome.Refused,
-                    refused.DestinationAlias,
+                    refused.Destination?.ToString(),
                     refused.Reason)))
             .Concat(plan.WithheldActions
                 .Where(withheld => StringComparer.Ordinal.Equals(withheld.RuleName, ruleName))
@@ -98,7 +102,7 @@ public static class MailRuleExecutionComposer
                     withheld.Position,
                     withheld.Action.Mutation,
                     MailRuleExecutedActionOutcome.Withheld,
-                    withheld.Action.DestinationAlias)))
+                    withheld.Action.Destination?.ToString())))
             .OrderBy(action => action.Position),
     ];
 }

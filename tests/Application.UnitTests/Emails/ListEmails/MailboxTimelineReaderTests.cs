@@ -425,7 +425,7 @@ public sealed class MailboxTimelineReaderTests
 
         // Act
         var result = await reader.ListEmailsAsync(
-            new ListEmailsRequest { FolderAliases = [MailFolderAlias.Create("archive")] },
+            new ListEmailsRequest { Folders = [MailFolderReference.ToAlias(MailFolderAlias.Create("archive"))] },
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -620,7 +620,7 @@ public sealed class MailboxTimelineReaderTests
             new ListEmailsRequest
             {
                 Accounts = [MailAccountSelector.Create("primary")],
-                FolderAliases = [MailFolderAlias.Create("ARCHIVE")],
+                Folders = [MailFolderReference.ToAlias(MailFolderAlias.Create("ARCHIVE"))],
                 SubjectFragment = "invoice",
                 SenderAddress = "anna@example.test",
                 HasAttachments = true,
@@ -717,7 +717,8 @@ public sealed class MailboxTimelineReaderTests
         new MailboxScopeResolver(
             accountCatalog ?? CatalogServing(EveryAccountTheSyntheticTimelineUses),
             StubMailFolderParticipation.Everything,
-            StubJunkMailFolderCatalog.None));
+            StubJunkMailFolderCatalog.None,
+            StubMailFolderMappings.ResolvingNothing));
 
     /// <summary>Builds a catalog that serves exactly the accounts named, in the order the port promises.</summary>
     private static IMailAccountCatalog CatalogServing(params MailAccountId[] servedAccountIds)

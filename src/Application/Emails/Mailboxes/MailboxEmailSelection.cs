@@ -226,7 +226,12 @@ public sealed record MailboxEmailSelection
         CanonicalFieldSeparator,
         LengthPrefixed("f1"),
         CanonicalList(this.Scope.AccountIds.Select(static accountId => accountId.Value)),
-        CanonicalList(this.Scope.FolderAliases.Select(static alias => alias.Value)),
+
+        // Both halves of a folder are written, because the pair is what the query narrows by: one role selects a
+        // different alias on each account, so two scopes whose alias sets agree can still select different mail.
+        CanonicalList(this.Scope.SelectedFolders.SelectMany(static folder =>
+            new[] { folder.AccountId.Value, folder.Alias.Value })),
+
         // The caller's answer about junk mail, not the folders it withheld. Which folders those are is configuration and
         // deliberately outside this text, for the reason MailboxScope.Hiding gives; whether the caller asked for them is
         // a filter, and a walk resumed under the other answer would skip or repeat rows in the middle of the ordering.

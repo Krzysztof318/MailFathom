@@ -544,7 +544,7 @@ internal sealed class MailFathomDbContext : DbContext
                 .IsRequired();
             entity.Property(action => action.FailureReason)
                 .HasMaxLength(MailRuleExecutionEntity.MaximumOutcomeLength);
-            entity.Property(action => action.DestinationAlias)
+            entity.Property(action => action.Destination)
                 .HasMaxLength(MailRuleExecutionEntity.MaximumAliasLength);
 
             entity.HasOne<MailRuleExecutionEntity>()

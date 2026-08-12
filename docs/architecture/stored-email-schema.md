@@ -386,7 +386,7 @@ Nothing in it is personal data. An account alias, a derived rule set identity, a
 | Column of `mail_rule_executed_actions` | What it records |
 |---|---|
 | `MailRuleExecutionId`, `Position` | The execution the change belongs to and where the change sits in the order its own rule declares them, together the primary key. The position is the rule's own rather than the plan's, because a plan reorders across rules and the position is what names which of a rule's declared changes this was |
-| `Mutation`, `DestinationAlias` | The change asked for, and the folder it named. Both are MailFathom's own configured names, which is what lets what a rule did to a mailbox be recorded without the record describing the mailbox |
+| `Mutation`, `Destination` | The change asked for, and the folder it named — the alias a requested change resolved to, and the text the rule wrote for one that never got that far, which is why the column is not named for an alias. Both are MailFathom's own configured names, which is what lets what a rule did to a mailbox be recorded without the record describing the mailbox |
 | `Outcome`, `FailureReason` | `Requested` where a mutation record was opened, `Refused` with a classification where one could not be, and `Withheld` where another rule had already settled the message's fate. The three are kept apart because a change that was refused and a change nobody asked for read identically without it |
 | `MutationRecordId` | The record carrying the request, present exactly for a `Requested` change. **Deliberately not a foreign key**: it is a pointer into the mutation's own trail, which has its own retention, and a constraint would tie this record's lifetime to one it does not own |
 

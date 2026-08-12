@@ -57,7 +57,7 @@ public sealed class SearchEmailsToolTests
         // Assert
         Assert.NotNull(index.LastSelection);
         Assert.Equal([MailAccountId.Create(ServedAccountId)], index.LastSelection.Scope.AccountIds);
-        Assert.Empty(index.LastSelection.Scope.FolderAliases);
+        Assert.Empty(index.LastSelection.Scope.SelectedFolders);
         Assert.Equal(Query, index.LastQueryText?.Value);
         Assert.Equal(EmailSearchResultLimit.DefaultValue, index.LastLimit);
     }
@@ -75,7 +75,7 @@ public sealed class SearchEmailsToolTests
         await tool.SearchEmailsAsync(
             Query,
             accounts: [ServedAccountId],
-            folderAliases: ["archive"],
+            folders: ["archive"],
             senderAddress: "sender@example.test",
             recipientAddress: "recipient@example.test",
             subjectFragment: "invoice",
@@ -90,7 +90,9 @@ public sealed class SearchEmailsToolTests
         Assert.NotNull(index.LastSelection);
         var selection = index.LastSelection;
         Assert.Equal([MailAccountId.Create(ServedAccountId)], selection.Scope.AccountIds);
-        Assert.Equal([MailFolderAlias.Create("ARCHIVE")], selection.Scope.FolderAliases);
+        Assert.Equal(
+            [new MailFolderIdentity(MailAccountId.Create(ServedAccountId), MailFolderAlias.Create("ARCHIVE"))],
+            selection.Scope.SelectedFolders);
         Assert.Equal("invoice", selection.SubjectFragment);
         Assert.Equal(rangeStart, selection.ReceivedOnOrAfter);
         Assert.Equal(rangeEnd, selection.ReceivedBefore);
@@ -262,7 +264,7 @@ public sealed class SearchEmailsToolTests
         var failure = await Assert.ThrowsAsync<MailboxQueryFilterInvalidException>(
             () => tool.SearchEmailsAsync(
                 Query,
-                folderAliases: [unusable],
+                folders: [unusable],
                 cancellationToken: TestContext.Current.CancellationToken));
 
         // Assert
@@ -581,7 +583,8 @@ public sealed class SearchEmailsToolTests
                 new MailboxScopeResolver(
                     new StubMailAccountCatalog(ServedAccountId),
                     StubMailFolderParticipation.Everything,
-                    junkFolders ?? StubJunkMailFolderCatalog.None),
+                    junkFolders ?? StubJunkMailFolderCatalog.None,
+                    StubMailFolderMappings.ResolvingNothing),
                 bounds),
             bounds,
             new StubMailAccountCatalog(ServedAccountId));

@@ -912,7 +912,8 @@ public sealed class GetEmailContentToolTests
             new MailboxScopeResolver(
                 new StubMailAccountCatalog(ServedAccountId),
                 StubMailFolderParticipation.Everything,
-                StubJunkMailFolderCatalog.None),
+                StubJunkMailFolderCatalog.None,
+                StubMailFolderMappings.ResolvingNothing),
             linkIssuer ?? new StubAttachmentDownloadLinkIssuer(),
             new EmailContentReadOptions()));
 

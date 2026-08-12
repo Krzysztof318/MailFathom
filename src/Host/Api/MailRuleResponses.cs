@@ -83,12 +83,15 @@ internal sealed record MailRuleResponse(
 /// <summary>One change a rule declares, as the administrative endpoint serves it.</summary>
 /// <param name="Position">Where the change sits in the order the rule declares its changes, counted from zero.</param>
 /// <param name="Mutation">The change, named as the mutation it will be requested through.</param>
-/// <param name="DestinationAlias">The folder a relocation or a copy names, absent for every other change.</param>
+/// <param name="Destination">
+/// How a relocation or a copy names its folder, absent for every other change. It is the text the rule wrote — an alias,
+/// or a role as <c>role:Junk</c> — rather than the folder it resolves to, because what this serves is the declaration.
+/// </param>
 /// <param name="DesiredSeenState">Which way a <c>\Seen</c> change was asked for, absent for every other change.</param>
 internal sealed record MailRuleActionResponse(
     int Position,
     string Mutation,
-    string? DestinationAlias,
+    string? Destination,
     bool? DesiredSeenState)
 {
     /// <summary>Describes one declared change for the wire.</summary>
@@ -103,7 +106,7 @@ internal sealed record MailRuleActionResponse(
         return new MailRuleActionResponse(
             position,
             action.Mutation.Name,
-            action.DestinationAlias?.Value,
+            action.Destination?.ToString(),
             action.DesiredSeenState);
     }
 }
@@ -244,7 +247,7 @@ internal sealed record MailRuleExecutionResponse(
 /// <param name="Position">Where the change sits in the order the rule declares its changes, counted from zero.</param>
 /// <param name="Mutation">The change asked for.</param>
 /// <param name="Outcome">What became of it.</param>
-/// <param name="DestinationAlias">The folder the change named, absent for a change naming none.</param>
+/// <param name="Destination">The folder the change named, absent for a change naming none.</param>
 /// <param name="FailureReason">Why nothing was recorded, present exactly for a change the recorder refused.</param>
 /// <param name="MutationRecord">The record carrying the request, present exactly for a change that opened one.</param>
 /// <remarks>
@@ -255,7 +258,7 @@ internal sealed record MailRuleExecutedActionResponse(
     int Position,
     string Mutation,
     string Outcome,
-    string? DestinationAlias,
+    string? Destination,
     string? FailureReason,
     Guid? MutationRecord)
 {
@@ -271,7 +274,7 @@ internal sealed record MailRuleExecutedActionResponse(
             action.Position,
             action.Mutation.Name,
             action.Outcome.ToString(),
-            action.DestinationAlias?.Value,
+            action.Destination,
             action.FailureReason?.ToString(),
             action.MutationRecordId?.Value);
     }

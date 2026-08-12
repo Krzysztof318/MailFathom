@@ -64,7 +64,7 @@ public sealed class AskMailToolTests
         await tool.AskMailAsync(
             Question,
             accounts: [AnsweringDeployment.ServedAccountId],
-            folderAliases: ["archive"],
+            folders: ["archive"],
             cancellationToken: TestContext.Current.CancellationToken);
 
         // Assert
@@ -72,7 +72,9 @@ public sealed class AskMailToolTests
         Assert.Equal(
             [MailAccountId.Create(AnsweringDeployment.ServedAccountId)],
             answerer.LastQuestion.Scope.AccountIds);
-        Assert.Equal([MailFolderAlias.Create("ARCHIVE")], answerer.LastQuestion.Scope.FolderAliases);
+        Assert.Equal(
+            [new MailFolderIdentity(MailAccountId.Create(AnsweringDeployment.ServedAccountId), MailFolderAlias.Create("ARCHIVE"))],
+            answerer.LastQuestion.Scope.SelectedFolders);
     }
 
     [Fact]

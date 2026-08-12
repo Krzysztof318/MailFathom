@@ -94,7 +94,9 @@ public sealed class OrchestratedEmailVectorSearchTests(MailFathomOrchestrationFi
     }
 
     private static MailboxEmailSelection SelectionOf(MailFolderResolution binding) => MailboxEmailSelection.Create(
-        MailboxScope.Create([SyntheticMailAccount.AccountId], [binding.Alias]),
+        MailboxScope.Create(
+            [SyntheticMailAccount.AccountId],
+            [new MailFolderIdentity(SyntheticMailAccount.AccountId, binding.Alias)]),
         senderAddress: null,
         recipientAddress: null,
         subjectFragment: null,

@@ -169,6 +169,10 @@ internal sealed class OrchestratedMailFathomServices : IAsyncDisposable
         // section the account above comes from. Chunking and every mailbox read resolve it, so a harness without it
         // would fail to compose rather than behave like a deployment that configured no folder switch.
         builder.Services.AddSingleton<IMailFolderParticipationReader>(account);
+        // The port a folder named by its role is resolved through, registered by the composition root from the same
+        // options section. Every mailbox read composes a reference resolver over it, so a harness without it would fail
+        // to compose rather than behave like a deployment whose folders carry no role.
+        builder.Services.AddSingleton<IMailFolderMappingReader>(account);
         // How much of a message's body one search result may show, which a composition root composes from the
         // MailboxSearch section. It is the deployment's control on what a query draws out of a mailbox rather than a
         // request's, so the shipped default is what this suite searches under.

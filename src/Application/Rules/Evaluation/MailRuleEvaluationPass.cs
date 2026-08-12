@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Application.Folders;
 using MailFathom.Application.Persistence;
 using MailFathom.Application.Rules.Actions;
 using MailFathom.Application.Rules.Conditions;
@@ -57,6 +58,7 @@ public sealed class MailRuleEvaluationPass
     private readonly IMailRuleEvaluationRunStore runStore;
     private readonly MailRuleActionRecorder actionRecorder;
     private readonly IMailRuleExecutionStore executionStore;
+    private readonly IMailFolderMappingReader folderMappings;
     private readonly OptimisticConcurrencyRetryPolicy commitPolicy;
     private readonly MailRuleEvaluationOptions options;
     private readonly TimeProvider timeProvider;
@@ -68,6 +70,7 @@ public sealed class MailRuleEvaluationPass
     /// <param name="runStore">Reads the requested whole-mailbox run and records how far it has been carried.</param>
     /// <param name="actionRecorder">Writes down the changes a matching rule asks the mailbox for.</param>
     /// <param name="executionStore">Keeps the record of what each rule concluded and what became of what it asked for.</param>
+    /// <param name="folderMappings">Answers what the folder an email is in is configured for, which a condition naming the role reads.</param>
     /// <param name="commitPolicy">Commits a batch's evaluations together with the position they account for.</param>
     /// <param name="options">Bounds one walk.</param>
     /// <param name="timeProvider">Supplies the instant each email is evaluated at and each record is stamped with.</param>
@@ -80,6 +83,7 @@ public sealed class MailRuleEvaluationPass
         IMailRuleEvaluationRunStore runStore,
         MailRuleActionRecorder actionRecorder,
         IMailRuleExecutionStore executionStore,
+        IMailFolderMappingReader folderMappings,
         OptimisticConcurrencyRetryPolicy commitPolicy,
         MailRuleEvaluationOptions options,
         TimeProvider timeProvider)
@@ -90,6 +94,7 @@ public sealed class MailRuleEvaluationPass
         ArgumentNullException.ThrowIfNull(runStore);
         ArgumentNullException.ThrowIfNull(actionRecorder);
         ArgumentNullException.ThrowIfNull(executionStore);
+        ArgumentNullException.ThrowIfNull(folderMappings);
         ArgumentNullException.ThrowIfNull(commitPolicy);
         ArgumentNullException.ThrowIfNull(options);
         ArgumentNullException.ThrowIfNull(timeProvider);
@@ -102,6 +107,7 @@ public sealed class MailRuleEvaluationPass
         this.runStore = runStore;
         this.actionRecorder = actionRecorder;
         this.executionStore = executionStore;
+        this.folderMappings = folderMappings;
         this.commitPolicy = commitPolicy;
         this.options = options;
         this.timeProvider = timeProvider;
@@ -419,6 +425,7 @@ public sealed class MailRuleEvaluationPass
             var facts = new MailRuleFacts(
                 candidate.Facts,
                 new StoredEmailBodyTextReader(this.store, candidate.StoredEmailId),
+                this.folderMappings,
                 evaluatedAt);
 
             var evaluation = await this.evaluator.EvaluateAsync(ruleSet, facts, cancellationToken);

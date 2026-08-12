@@ -72,8 +72,8 @@ A rule declares what a match leads to in an `Actions` block, one named key per c
 
 | Key | Value | What a match asks for |
 | --- | --- | --- |
-| `MoveTo` | a folder alias | The message leaves the folder it matched in and is filed into the named one |
-| `CopyTo` | a folder alias | A second copy of the message is placed in the named folder, and the one that matched stays where it is |
+| `MoveTo` | a folder alias or role | The message leaves the folder it matched in and is filed into the named one |
+| `CopyTo` | a folder alias or role | A second copy of the message is placed in the named folder, and the one that matched stays where it is |
 | `Delete` | `true` | The message is removed from the folder it matched in |
 | `MarkAsRead` | `true` or `false` | The message's remote `\Seen` flag is set, or cleared |
 
@@ -92,6 +92,14 @@ never a path on the server. What that alias is bound to is resolved when the cha
 working across a server that renames the folder underneath it, and a rule may only name a folder the account actually
 mirrors. [Folder aliases and discovery](imap-synchronization.md#folder-aliases-and-discovery) states what a binding is
 and when it moves.
+
+A destination may instead name the **role** the folder plays, written `role:<role>` — `role:Junk`, `role:Archive`, and
+the rest. That is what lets one rule file mail correctly across accounts whose folders you named differently, since the
+role is asked of the account the mail belongs to. Anything without the `role:` prefix is an alias, so an alias spelled
+`Junk` still means that alias. Startup refuses a role no folder of a reached account carries, exactly as it refuses an
+alias nothing mirrors, and refuses text that reads as neither an alias nor a role, naming the roles that exist.
+[What a role says, beside how a folder is found](imap-synchronization.md#what-a-role-says-beside-how-a-folder-is-found)
+states what a role is and why an account has at most one folder per role.
 
 ### Which combinations a rule may declare
 
@@ -191,7 +199,7 @@ Each is recorded against the rule that asked, and the actions beside it are stil
 
 | Reason | What happened |
 | --- | --- |
-| `DestinationFolderUnresolved` | The destination alias is bound to no folder on the server — nothing has discovered it yet, or the folder it named has gone |
+| `DestinationFolderUnresolved` | The destination is bound to no folder on the server — nothing has discovered the alias yet, the folder it named has gone, or the account maps no folder to the role it named |
 | `AccountNoLongerConfigured` | The account was withdrawn from the configuration between the rule set being read and the change being written |
 | `ActionNoLongerPermitted` | The account has stopped permitting this action since the rule set that declares it was read |
 
@@ -203,13 +211,14 @@ metric, or a span.
 
 ## The facts a condition can read
 
-A condition reaches these twenty-one names and nothing else. Each carries one shape of value, which is what the
+A condition reaches these twenty-two names and nothing else. Each carries one shape of value, which is what the
 comparison, operator, and function checks below are made against.
 
 | Fact | Type | What it holds |
 | --- | --- | --- |
 | `account` | text | The configured alias of the account the email belongs to |
 | `folder` | text | The configured alias of the folder the email occurrence is in |
+| `folderRole` | text | The [special-use role](imap-synchronization.md#what-a-role-says-beside-how-a-folder-is-found) that folder plays — `Inbox`, `Junk`, `Archive` and the rest; absent when its mapping names none |
 | `subject` | text | The subject line; absent when the email carries none |
 | `senderAddress` | text | The sender's address in its comparison form; absent when the email names no sender |
 | `senderDomain` | text | The part of the sender's address after the at sign; absent when there is no sender |
@@ -234,7 +243,8 @@ Names are case-sensitive. `senderDomain` is a fact and `SenderDomain` is not, so
 surface accepted are the same one.
 
 **Every fact resolves only if the condition names it, and once per email however many rules name it.** Twenty of the
-twenty-one come from metadata a pass already holds, so they cost nothing to read. `bodyText` is the exception: it reads
+twenty-two come from metadata a pass already holds, so they cost nothing to read. `folderRole` is read from configuration,
+which costs no read either. `bodyText` is the exception: it reads
 stored content, which is why a rule set naming it nowhere pays for no read at all, and one naming it in five conditions
 pays for one. The boolean operators short-circuit, so a condition whose first half already decides it never resolves
 what its second half would have named.
@@ -324,7 +334,7 @@ Every condition is read while the host composes itself, before any mail is seen.
 each is refused with a message naming the rule, what was wrong, and where:
 
 - **Syntax.** The condition parses, and a failure reports the position it failed at.
-- **The names.** Every identifier is one of the twenty-one facts and every call is one of the seven functions.
+- **The names.** Every identifier is one of the twenty-two facts and every call is one of the seven functions.
 - **The types.** Every comparison, operator, and argument holds between shapes that could match. `subject == 1`,
   `sizeInBytes > 'large'`, `recipientDomains == 'example.test'`, and `contains(subject, 3)` are each refused here.
 - **The result.** The condition produces a boolean. A condition producing text or a number is refused rather than read
@@ -335,8 +345,8 @@ none is repeated.
 
 So is its `Actions` block, against the rule itself and against every account the rule reaches:
 
-- **The destinations.** Each names something readable as a folder alias, and each names a folder the account actually
-  mirrors — a rule filing into a folder nothing mirrors could never resolve a destination.
+- **The destinations.** Each names something readable as a folder alias or as `role:<role>`, and each names a folder the
+  account actually mirrors — a rule filing into a folder nothing mirrors could never resolve a destination.
 - **The combination.** The actions are ones MailFathom applies together, per [the table above](#which-combinations-a-rule-may-declare).
 - **The permissions.** Every action is one the account permits a rule to take.
 
@@ -463,6 +473,11 @@ Three distinctions the record exists to keep:
 - **A change that was refused** is distinguishable from one **another rule had already settled**, and from a rule that
   simply asked for nothing. The refusal carries its classification, and the change that gave way names the rule that
   declared it.
+
+A change that named its folder by role is recorded against the **folder it resolved to**, so the history names the alias
+mail was actually filed into rather than the word the rule was written with. One that never resolved a destination —
+a role this account maps no folder with, an alias nothing has bound — names no folder at all, and its
+[refusal](#when-a-change-cannot-be-made) is what says why.
 
 **The facts are recorded by name and never by value.** That a condition read `senderDomain` is kept; what the domain
 was is not, and neither is a subject, a matched span, or any other value the message supplied. The revision recorded

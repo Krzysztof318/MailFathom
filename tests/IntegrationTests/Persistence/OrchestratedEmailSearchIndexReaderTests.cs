@@ -213,7 +213,9 @@ public sealed class OrchestratedEmailSearchIndexReaderTests(MailFathomOrchestrat
     }
 
     private static MailboxEmailSelection SeededSelection() => MailboxEmailSelection.Create(
-        MailboxScope.Create([SyntheticMailAccount.AccountId], [MailFolderAlias.Create(FolderAlias)]),
+        MailboxScope.Create(
+            [SyntheticMailAccount.AccountId],
+            [new MailFolderIdentity(SyntheticMailAccount.AccountId, MailFolderAlias.Create(FolderAlias))]),
         senderAddress: null,
         recipientAddress: null,
         subjectFragment: null,

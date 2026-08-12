@@ -193,7 +193,7 @@ public sealed class MailRuleActionSet
     /// <summary>Names one action the way an operator wrote it, so a refusal points at the key they edit.</summary>
     private static string Describe(MailRuleAction action) => action switch
     {
-        { DestinationAlias: { } alias } => $"'{action.Mutation.Name}' into '{alias.Value}'",
+        { Destination: { } destination } => $"'{action.Mutation.Name}' into '{destination}'",
         { DesiredSeenState: { } isSeen } => $"'{action.Mutation.Name}' to {(isSeen ? "read" : "unread")}",
         _ => $"'{action.Mutation.Name}'",
     };

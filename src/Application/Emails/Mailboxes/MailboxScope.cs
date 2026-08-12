@@ -7,14 +7,19 @@ using MailFathom.Domain.Folders;
 
 namespace MailFathom.Application.Emails.Mailboxes;
 
-/// <summary>Names the accounts and folder aliases a mailbox query is restricted to.</summary>
+/// <summary>Names the accounts and the folders of those accounts a mailbox query is restricted to.</summary>
 /// <remarks>
 /// <para>
-/// A request that names no folder alias is restricted to none: an empty list of aliases means every folder of the
-/// accounts in scope. Accounts read differently once the scope reaches a query, because the accounts a deployment serves
-/// are a smaller set than the accounts a store holds rows for — an operator can remove an account whose mail is still
-/// stored. <see cref="Create" /> therefore states what a request asked for, and the use case resolves an unnamed account
-/// list to the served accounts through <see cref="RestrictedToServedAccounts" /> before anything is read.
+/// This is what a query runs with rather than what a request asked for. Both differences are settled before the scope is
+/// built: an unnamed account list becomes the accounts this deployment serves, because a store holds rows for accounts
+/// an operator has since removed, and every folder a request named — by its alias or by the role it plays — becomes the
+/// folder of the account it means. A folder is therefore named here as an account and an alias together, never as an
+/// alias alone, so one account's junk folder cannot admit another account's folder that happens to share the name.
+/// </para>
+/// <para>
+/// A request that names no folder is restricted to none: an empty folder list means every folder of the accounts in
+/// scope. An account in scope that appears in no pair while others do is the opposite case — it maps no folder the
+/// request named, and contributes nothing.
 /// </para>
 /// <para>
 /// Both lists are deduplicated and ordered when the scope is created, so two requests that name the same accounts in a
@@ -27,34 +32,54 @@ public sealed record MailboxScope
     /// <summary>The greatest number of account identifiers one request may name.</summary>
     /// <remarks>
     /// The bound exists because the scope reaches a database predicate and a caller supplies it. It counts the
-    /// identifiers a request names rather than the distinct ones left after deduplication, so the limit can be enforced
-    /// while the caller's sequence is read instead of after it has been materialized. It is generous against any
-    /// deployment's configured account count, so meeting it means a request enumerated identifiers rather than described
-    /// a mailbox.
+    /// identifiers a request names rather than the distinct ones left after deduplication, so a request cannot buy a
+    /// larger predicate by repeating one name. It is generous against any deployment's configured account count, so
+    /// meeting it means a request enumerated identifiers rather than described a mailbox.
     /// </remarks>
     public const int MaximumAccountIds = 64;
 
-    /// <summary>The greatest number of folder aliases one request may name, counted the same way as <see cref="MaximumAccountIds" />.</summary>
+    /// <summary>The greatest number of folders one request may name, counted the same way as <see cref="MaximumAccountIds" />.</summary>
+    /// <remarks>
+    /// Both bounds are enforced where the caller's own list is read, in <see cref="MailboxScopeResolver" />, rather than
+    /// over the resolved lists this type holds. Resolution can only produce more: a request naming no account resolves
+    /// to every served account, and one role a request named resolves to a folder on each of them.
+    /// </remarks>
     public const int MaximumFolderAliases = 64;
 
-    private MailboxScope(IReadOnlyList<MailAccountId> accountIds, IReadOnlyList<MailFolderAlias> folderAliases)
+    private MailboxScope(IReadOnlyList<MailAccountId> accountIds, IReadOnlyList<MailFolderIdentity> selectedFolders)
     {
         this.AccountIds = accountIds;
-        this.FolderAliases = folderAliases;
+        this.SelectedFolders = selectedFolders;
     }
 
-    /// <summary>Gets the scope a request that named neither an account nor a folder produces.</summary>
+    /// <summary>Gets the scope that restricts nothing, which is what a deployment serving no account resolves to.</summary>
     /// <remarks>
-    /// It is what a caller asked for rather than what a query runs with. A mailbox query resolves its accounts before it
-    /// reads, so an empty account list never reaches storage as an absent predicate.
+    /// A read never runs against it in a deployment that serves accounts, because resolution replaces an unnamed account
+    /// list with the served ones before the scope is built. A use case handed it therefore answers with nothing rather
+    /// than reading the store unrestricted.
     /// </remarks>
     public static MailboxScope Unrestricted { get; } = new([], []);
 
     /// <summary>Gets the accounts the query is restricted to, deduplicated and ordered, or empty when the request named none.</summary>
     public IReadOnlyList<MailAccountId> AccountIds { get; }
 
-    /// <summary>Gets the folder aliases the query is restricted to, deduplicated and ordered, or empty for every folder.</summary>
-    public IReadOnlyList<MailFolderAlias> FolderAliases { get; }
+    /// <summary>Gets the folders the query is restricted to as account-and-alias pairs, deduplicated and ordered, or empty for every folder.</summary>
+    /// <remarks>
+    /// <para>
+    /// A folder named by alias is paired with every account in scope, because an alias is the caller's own name and
+    /// means the same folder on each of them. A folder named by role is paired with the account that answered for it,
+    /// because a role means a different folder on each account: <c>role:Junk</c> across two accounts is two pairs
+    /// rather than two names either account might carry. Reading the aliases alone would admit a folder of the second
+    /// account that happens to share the first account's junk alias and plays no role at all — the same mistake
+    /// <c>AccountScopedMailFolders</c> exists to prevent on the withholding side.
+    /// </para>
+    /// <para>
+    /// An account of <see cref="AccountIds" /> that appears in no pair while the list is non-empty contributes nothing,
+    /// which is what an account mapping no folder for a named role means. That is why a query reads this against the
+    /// accounts in scope rather than against the pairs alone.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<MailFolderIdentity> SelectedFolders { get; }
 
     /// <summary>Gets the folders no query built from this scope may return anything from, ordered, or empty when none is withheld.</summary>
     /// <remarks>
@@ -96,49 +121,38 @@ public sealed record MailboxScope
             .DistinctBy(static folder => (folder.AccountId.Value, folder.Alias.Value)),
     ];
 
-    /// <summary>Creates a normalized scope from what a request named.</summary>
-    /// <param name="accountIds">The accounts to restrict to, or <see langword="null" /> to name none.</param>
-    /// <param name="folderAliases">The folder aliases to restrict to, or <see langword="null" /> to name none.</param>
+    /// <summary>Creates the scope a query runs with, from identities already resolved against configuration.</summary>
+    /// <param name="accountIds">The accounts the query runs against, which are the served ones when a request named none.</param>
+    /// <param name="selectedFolders">The folders the query runs against, one pair per account, with every role a request named already turned into the folder it means on that account, or <see langword="null" /> to name none.</param>
     /// <returns>The scope, with both lists deduplicated and ordered.</returns>
-    /// <exception cref="MailboxQueryFilterInvalidException">Thrown when either list names more values than its limit permits.</exception>
+    /// <remarks>
+    /// No count limit applies to either list, and the two constants above say where the limits are enforced instead.
+    /// Both lists are configuration read through a resolution rather than caller input: a deployment that serves more
+    /// accounts than a request may name still answers a request that names none, and one role a request named can mean
+    /// a folder on each of those accounts.
+    /// </remarks>
     public static MailboxScope Create(
         IEnumerable<MailAccountId>? accountIds,
-        IEnumerable<MailFolderAlias>? folderAliases)
+        IEnumerable<MailFolderIdentity>? selectedFolders)
     {
-        var requestedAccountIds = Canonical(
-            accountIds,
-            static accountId => accountId.Value,
-            MaximumAccountIds,
-            "accounts");
-        var requestedFolderAliases = Canonical(
-            folderAliases,
-            static alias => alias.Value,
-            MaximumFolderAliases,
-            "folder aliases");
-
-        return requestedAccountIds.Length is 0 && requestedFolderAliases.Length is 0
-            ? Unrestricted
-            : new MailboxScope(requestedAccountIds, requestedFolderAliases);
-    }
-
-    /// <summary>Creates the scope a query runs with, naming the accounts a deployment serves rather than the ones a request asked for.</summary>
-    /// <param name="servedAccountIds">The accounts the deployment serves, which the caller did not supply.</param>
-    /// <param name="folderAliases">The folder aliases the request named, already normalized.</param>
-    /// <returns>The scope, with the served accounts deduplicated and ordered.</returns>
-    /// <remarks>
-    /// No count limit applies. The account list is configuration rather than caller input, so a deployment that serves
-    /// more accounts than a request may name still answers a request that names none, and the limit that exists to bound
-    /// untrusted input would otherwise refuse it.
-    /// </remarks>
-    internal static MailboxScope RestrictedToServedAccounts(
-        IEnumerable<MailAccountId> servedAccountIds,
-        IReadOnlyList<MailFolderAlias> folderAliases) => new(
+        MailAccountId[] accounts =
         [
-            .. servedAccountIds
+            .. (accountIds ?? [])
                 .DistinctBy(static accountId => accountId.Value, StringComparer.Ordinal)
                 .OrderBy(static accountId => accountId.Value, StringComparer.Ordinal),
-        ],
-        folderAliases);
+        ];
+        MailFolderIdentity[] folders =
+        [
+            .. (selectedFolders ?? [])
+                .DistinctBy(static folder => (folder.AccountId.Value, folder.Alias.Value))
+                .OrderBy(static folder => folder.AccountId.Value, StringComparer.Ordinal)
+                .ThenBy(static folder => folder.Alias.Value, StringComparer.Ordinal),
+        ];
+
+        return accounts.Length is 0 && folders.Length is 0
+            ? Unrestricted
+            : new MailboxScope(accounts, folders);
+    }
 
     /// <summary>Withholds the folders configuration says no tool may read from.</summary>
     /// <param name="hiddenFolders">The folders to withhold, empty when none is.</param>
@@ -189,29 +203,4 @@ public sealed record MailboxScope
                 ],
         };
 
-    /// <summary>Deduplicates and orders one requested list, refusing it as soon as it names more values than the limit.</summary>
-    /// <remarks>
-    /// The limit is checked while the sequence is read rather than over the result, which is a loop rather than a query
-    /// because a pipeline would have to enumerate the whole input before its count could be refused. A request that
-    /// repeats one identifier a million times is therefore rejected after reading the value that crosses the limit, and
-    /// nothing beyond it is ever materialized.
-    /// </remarks>
-    private static TValue[] Canonical<TValue>(
-        IEnumerable<TValue>? values,
-        Func<TValue, string> text,
-        int limit,
-        string filterName)
-    {
-        var namedCount = 0;
-        var byText = new SortedDictionary<string, TValue>(StringComparer.Ordinal);
-
-        foreach (var value in values ?? [])
-        {
-            MailboxQueryFilterInvalidException.ThrowIfCountExceeded(++namedCount, limit, filterName);
-
-            byText.TryAdd(text(value), value);
-        }
-
-        return [.. byText.Values];
-    }
 }

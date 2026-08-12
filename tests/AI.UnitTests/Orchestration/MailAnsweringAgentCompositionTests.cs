@@ -30,8 +30,9 @@ namespace MailFathom.AI.UnitTests.Orchestration;
 /// </remarks>
 public sealed class MailAnsweringAgentCompositionTests
 {
-    private static readonly MailboxScope OnePrimaryAccount =
-        MailboxScope.Create([MailAccountId.Create("primary")], [MailFolderAlias.Create("INBOX")]);
+    private static readonly MailboxScope OnePrimaryAccount = MailboxScope.Create(
+        [MailAccountId.Create("primary")],
+        [new MailFolderIdentity(MailAccountId.Create("primary"), MailFolderAlias.Create("INBOX"))]);
 
     /// <summary>On demand rather than before every call: a question needing no mail must not drag a mailbox through a provider.</summary>
     [Fact]

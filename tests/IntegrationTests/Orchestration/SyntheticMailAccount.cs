@@ -53,8 +53,13 @@ internal sealed class SyntheticMailAccount(
     IMailboxMutationAuditSettingsReader,
     IMailAnsweringAuditSettingsReader,
     IMailAccountCatalog,
-    IMailFolderParticipationReader
+    IMailFolderParticipationReader,
+    IMailFolderMappingReader
 {
+    private static readonly MailFolderMapping Inbox = MailFolderMapping.ToSpecialUse(
+        MailFolderAlias.Create(nameof(MailFolderSpecialUse.Inbox)),
+        MailFolderSpecialUse.Inbox);
+
     /// <summary>The window this account keeps an answering entry for, which a retention test writes an older entry than.</summary>
     internal static readonly TimeSpan AnsweringAuditRetention = TimeSpan.FromDays(30);
 
@@ -122,6 +127,19 @@ internal sealed class SyntheticMailAccount(
     /// <inheritdoc />
     public MailFolderParticipation GetParticipation(MailAccountId accountId, MailFolderAlias folderAlias) =>
         MailFolderParticipation.Full;
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Only the inbox is mapped, and only for the served account, because that is the one folder every test's
+    /// arrangement shares; the folders a test creates for itself are named by alias everywhere they are used. Answering
+    /// for an alias nothing mapped would make a role look answerable when nothing configured one.
+    /// </remarks>
+    public MailFolderMapping? FindFolderPlayingRole(MailAccountId accountId, MailFolderSpecialUse role) =>
+        accountId == AccountId && Inbox.Plays(role) ? Inbox : null;
+
+    /// <inheritdoc />
+    public MailFolderMapping? FindFolderNamed(MailAccountId accountId, MailFolderAlias folderAlias) =>
+        accountId == AccountId && Inbox.Alias == folderAlias ? Inbox : null;
 
     /// <inheritdoc />
     /// <remarks>

@@ -244,7 +244,8 @@ public sealed class EmailAttachmentDownloadReaderTests
         new MailboxScopeResolver(
             accountCatalog ?? CatalogServing(MailAccountId.Create(summary?.AccountId.Value ?? ServedAccountId)),
             folderParticipation ?? StubMailFolderParticipation.Everything,
-            StubJunkMailFolderCatalog.None));
+            StubJunkMailFolderCatalog.None,
+            StubMailFolderMappings.ResolvingNothing));
 
     private static IStoredEmailSummaryReader SummaryReaderReturning(EmailSummary? summary)
     {

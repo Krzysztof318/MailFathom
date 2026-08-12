@@ -28,14 +28,16 @@ public sealed record ListEmailsRequest
     /// <remarks>An account may be named by its configured identifier or by the display name it is published under, and the use case settles which against the accounts it serves.</remarks>
     public IReadOnlyList<MailAccountSelector> Accounts { get; init; } = [];
 
-    /// <summary>Gets the folder aliases to list from, or empty for every folder of the named accounts.</summary>
-    public IReadOnlyList<MailFolderAlias> FolderAliases { get; init; } = [];
+    /// <summary>Gets the folders to list from, or empty for every folder of the named accounts.</summary>
+    /// <remarks>A folder may be named by its alias or by the role it plays, and the use case settles which folder of which account each one means.</remarks>
+    public IReadOnlyList<MailFolderReference> Folders { get; init; } = [];
 
     /// <summary>Gets whether the account's junk folder is listed too, which it is not unless the caller asks.</summary>
     /// <remarks>
-    /// Naming the junk folder in <see cref="FolderAliases" /> is not asking: a scope filter says which of the readable
-    /// folders to read, and this says which folders are readable at all. A request that names the junk alias without
-    /// setting this therefore lists nothing, the same answer a folder holding no matching mail gives.
+    /// Naming the junk folder in <see cref="Folders" />, by its alias or as <c>role:Junk</c>, is not asking: a scope
+    /// filter says which of the readable folders to read, and this says which folders are readable at all. A request
+    /// that names it without setting this therefore lists nothing, the same answer a folder holding no matching mail
+    /// gives.
     /// </remarks>
     public bool IncludeJunkMail { get; init; }
 

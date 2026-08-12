@@ -57,7 +57,7 @@ internal sealed class AskMailTool(
     /// <summary>Answers one question about the local mailbox copy, citing the emails the answer was drawn from.</summary>
     /// <param name="question">What to answer.</param>
     /// <param name="accounts">The accounts the answer may be drawn from, named by identifier or display name, or none for every account this deployment serves.</param>
-    /// <param name="folderAliases">The folder aliases the answer may be drawn from, or none for every folder of those accounts.</param>
+    /// <param name="folders">The folders the answer may be drawn from, each named by alias or by role, or none for every folder of those accounts.</param>
     /// <param name="cancellationToken">Cancels the run when the caller disconnects or the host shuts down.</param>
     /// <returns>The answer, the emails it cites, and whether either had to be cut.</returns>
     /// <exception cref="MailboxQueryFilterInvalidException">Thrown when text naming an account or a folder alias is not a value this system could have issued.</exception>
@@ -90,15 +90,15 @@ internal sealed class AskMailTool(
         string question,
         [Description("MailFathom accounts the answer may be drawn from, each named by its configured account identifier or by the display name it is published under. Omit to draw on every account this deployment serves; call list_accounts to see what they are. At most 64 may be named, and a name this deployment does not serve is refused rather than answered from the rest.")]
         string[]? accounts = null,
-        [Description("MailFathom folder aliases the answer may be drawn from, such as INBOX. Omit to draw on every folder of the accounts in scope. At most 64 may be named. An alias is MailFathom's own name for a folder and is matched without regard to case.")]
-        string[]? folderAliases = null,
+        [Description("MailFathom folders the answer may be drawn from, each named by its alias, such as INBOX, or by the role it plays, written as role:Junk. Roles are Inbox, Archive, Drafts, Sent, Junk, Trash, All, Flagged, and Important; naming one draws on whichever folder each account in scope maps with that role, whatever it is called there. Omit to draw on every folder of the accounts in scope. At most 64 may be named. An alias is MailFathom's own name for a folder and is matched without regard to case.")]
+        string[]? folders = null,
         CancellationToken cancellationToken = default)
     {
         var request = new AskMailRequest
         {
             QuestionText = question,
             Accounts = MailboxScopeArguments.Accounts(accounts),
-            FolderAliases = MailboxScopeArguments.FolderAliases(folderAliases),
+            Folders = MailboxScopeArguments.Folders(folders),
         };
 
         var result = await mailboxQuestionReader.AnswerQuestionAsync(request, cancellationToken);

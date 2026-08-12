@@ -106,7 +106,7 @@ public sealed class MailRuleExecutionComposerTests
         var action = Assert.Single(executions[0].Actions);
         Assert.Equal(MailRuleExecutedActionOutcome.Requested, action.Outcome);
         Assert.Equal(recordId, action.MutationRecordId);
-        Assert.Equal(Archive, action.DestinationAlias);
+        Assert.Equal(Archive.Value, action.Destination);
         Assert.Null(action.FailureReason);
     }
 
@@ -123,7 +123,7 @@ public sealed class MailRuleExecutionComposerTests
                     0,
                     MailboxMutation.Relocate,
                     MailRuleActionFailureReason.DestinationFolderUnresolved,
-                    Archive),
+                    MailFolderReference.ToAlias(Archive)),
             ]);
 
         // Act
@@ -136,6 +136,56 @@ public sealed class MailRuleExecutionComposerTests
         Assert.Null(action.MutationRecordId);
     }
 
+    /// <summary>A role that reached no folder has no alias, so the record names what the rule wrote and stays correctable.</summary>
+    [Fact]
+    public void Compose_ARefusedActionNamingARole_CarriesTheRoleTheRuleWrote()
+    {
+        // Arrange
+        var recording = new MailRuleActionRecording(
+            [],
+            [
+                new MailRuleActionFailure(
+                    "file-invoices",
+                    0,
+                    MailboxMutation.Relocate,
+                    MailRuleActionFailureReason.DestinationFolderUnresolved,
+                    MailFolderReference.ToRole(MailFolderSpecialUse.Junk)),
+            ]);
+
+        // Act
+        var executions = Compose(SetOf(MailRuleEvaluation.Matched("file-invoices")), recording);
+
+        // Assert
+        var action = Assert.Single(executions[0].Actions);
+        Assert.Equal("role:Junk", action.Destination);
+    }
+
+    /// <summary>A withheld action never resolved either, so it names the role the same way a refused one does.</summary>
+    [Fact]
+    public void Compose_AWithheldActionNamingARole_CarriesTheRoleTheRuleWrote()
+    {
+        // Arrange
+        var plan = MailRuleActionPlan.Compose(
+        [
+            RuleNamed("file-invoices", MailRuleAction.Relocate(MailFolderReference.ToAlias(Archive))),
+            RuleNamed("file-junk", MailRuleAction.Relocate(MailFolderReference.ToRole(MailFolderSpecialUse.Junk))),
+        ]);
+
+        var evaluation = MailRuleSetEvaluation.Create(
+            Revision,
+            [MailRuleEvaluation.Matched("file-invoices"), MailRuleEvaluation.Matched("file-junk")],
+            stoppedEarly: false,
+            plan);
+
+        // Act
+        var executions = Compose(evaluation, MailRuleActionRecording.Nothing);
+
+        // Assert
+        var withheld = Assert.Single(executions[1].Actions);
+        Assert.Equal(MailRuleExecutedActionOutcome.Withheld, withheld.Outcome);
+        Assert.Equal("role:Junk", withheld.Destination);
+    }
+
     /// <summary>A rule that gave way to another says so, which reads differently from a rule that never matched.</summary>
     [Fact]
     public void Compose_AnActionAnotherRuleHadAlreadySettled_RecordsItAgainstTheRuleThatGaveWay()
@@ -143,8 +193,8 @@ public sealed class MailRuleExecutionComposerTests
         // Arrange
         var plan = MailRuleActionPlan.Compose(
         [
-            RuleNamed("file-invoices", MailRuleAction.Relocate(Archive)),
-            RuleNamed("file-everything", MailRuleAction.Relocate(Backup)),
+            RuleNamed("file-invoices", MailRuleAction.Relocate(MailFolderReference.ToAlias(Archive))),
+            RuleNamed("file-everything", MailRuleAction.Relocate(MailFolderReference.ToAlias(Backup))),
         ]);
 
         var evaluation = MailRuleSetEvaluation.Create(
@@ -160,7 +210,7 @@ public sealed class MailRuleExecutionComposerTests
         var withheld = Assert.Single(executions[1].Actions);
         Assert.Equal("file-everything", executions[1].RuleName);
         Assert.Equal(MailRuleExecutedActionOutcome.Withheld, withheld.Outcome);
-        Assert.Equal(Backup, withheld.DestinationAlias);
+        Assert.Equal(Backup.Value, withheld.Destination);
         Assert.DoesNotContain(
             executions[0].Actions,
             action => action.Outcome == MailRuleExecutedActionOutcome.Withheld);
@@ -187,8 +237,8 @@ public sealed class MailRuleExecutionComposerTests
 
         var plan = MailRuleActionPlan.Compose(
         [
-            RuleNamed("file-everything", MailRuleAction.Relocate(Backup)),
-            RuleNamed("file-invoices", MailRuleAction.SetSeen(isSeen: true), MailRuleAction.Relocate(Archive)),
+            RuleNamed("file-everything", MailRuleAction.Relocate(MailFolderReference.ToAlias(Backup))),
+            RuleNamed("file-invoices", MailRuleAction.SetSeen(isSeen: true), MailRuleAction.Relocate(MailFolderReference.ToAlias(Archive))),
         ]);
 
         var evaluation = MailRuleSetEvaluation.Create(
@@ -209,7 +259,7 @@ public sealed class MailRuleExecutionComposerTests
         Assert.Equal(
             [MailRuleExecutedActionOutcome.Refused, MailRuleExecutedActionOutcome.Withheld],
             gaveWay.Select(action => action.Outcome));
-        Assert.Equal(Archive, gaveWay[1].DestinationAlias);
+        Assert.Equal(Archive.Value, gaveWay[1].Destination);
     }
 
     /// <summary>A rule that answered no asked the mailbox for nothing, so the record holds no action to explain.</summary>

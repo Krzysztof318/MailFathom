@@ -25,10 +25,15 @@ namespace MailFathom.Host.Configuration.Rules;
 [SuppressMessage("Performance", "CA1812:Avoid uninstantiated internal classes", Justification = "The options framework materializes this type during configuration binding.")]
 internal sealed class MailRuleActionOptions
 {
-    /// <summary>Gets or sets the alias of the folder a matching email is moved into.</summary>
+    /// <summary>Gets or sets the folder a matching email is moved into, named by its alias or as <c>role:&lt;name&gt;</c>.</summary>
+    /// <remarks>
+    /// Naming a role rather than an alias is what lets one rule reach several accounts whose junk folders are configured
+    /// under different aliases. Which folder of an account the role means is settled where the change is written down,
+    /// and a rule naming a role that no account it reaches maps fails startup.
+    /// </remarks>
     public string? MoveTo { get; set; }
 
-    /// <summary>Gets or sets the alias of the folder a second occurrence of a matching email is put into.</summary>
+    /// <summary>Gets or sets the folder a second occurrence of a matching email is put into, named the same way as <see cref="MoveTo" />.</summary>
     public string? CopyTo { get; set; }
 
     /// <summary>Gets or sets whether a matching email is removed from the folder it is in.</summary>
@@ -44,8 +49,8 @@ internal sealed class MailRuleActionOptions
     /// <summary>Reads the declared keys as the actions they name, in the order they are written above.</summary>
     /// <returns>The actions, empty for a rule that selects mail and changes nothing.</returns>
     /// <remarks>
-    /// An alias that is not one this system issues is left out rather than thrown over, because a blank or unusable
-    /// alias is reported by validation against the key an operator edits and reading it here would raise instead.
+    /// A destination that is not one this system reads is left out rather than thrown over, because a blank or unusable
+    /// one is reported by validation against the key an operator edits and reading it here would raise instead.
     /// </remarks>
     internal IReadOnlyList<MailRuleAction> ToActions() =>
     [
@@ -58,15 +63,15 @@ internal sealed class MailRuleActionOptions
         }.OfType<MailRuleAction>(),
     ];
 
-    /// <summary>Reports the aliases the block names, whether or not they are values this system could issue.</summary>
-    /// <returns>The destination aliases as they were written, in declared order.</returns>
+    /// <summary>Reports the destinations the block names, whether or not they are values this system could read.</summary>
+    /// <returns>The destinations as they were written, in declared order.</returns>
     internal IReadOnlyList<string> DeclaredDestinations() =>
-        [.. new[] { this.MoveTo, this.CopyTo }.Where(alias => alias is not null).OfType<string>()];
+        [.. new[] { this.MoveTo, this.CopyTo }.Where(destination => destination is not null).OfType<string>()];
 
     private static MailRuleAction? TryReadDestination(
-        string? alias,
-        Func<MailFolderAlias, MailRuleAction> toAction) =>
-        TryReadAlias(alias, out var readAlias) ? toAction(readAlias) : null;
+        string? destination,
+        Func<MailFolderReference, MailRuleAction> toAction) =>
+        MailFolderReference.TryCreate(destination, out var reference) ? toAction(reference) : null;
 
     /// <summary>Reads an alias without raising, so an unusable one is reported by validation rather than here.</summary>
     internal static bool TryReadAlias(string? value, out MailFolderAlias alias)

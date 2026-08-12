@@ -169,6 +169,13 @@ internal static class SynchronizationTestHost
             provider => provider.GetRequiredService<MailSynchronizationOptions>());
         services.AddScoped<IMailRuleActionPermissionReader>(
             provider => provider.GetRequiredService<MailSynchronizationOptions>());
+
+        // A rule may name its destination by the role a folder plays, and a condition may ask what role the folder an
+        // email is in plays, so both the recorder and the pass read the account's mappings through this port. The host
+        // answers it from the same snapshot every other per-account reader answers from.
+        services.AddScoped<IMailFolderMappingReader>(
+            provider => provider.GetRequiredService<MailSynchronizationOptions>());
+        services.AddScoped<MailFolderReferenceResolver>();
         services.AddScoped<MailRuleActionRecorder>();
         // One instance across every scope a run opens, so what several scopes appended is readable as one history.
         var ruleHistory = new MailRuleExecutionRecordingStore();

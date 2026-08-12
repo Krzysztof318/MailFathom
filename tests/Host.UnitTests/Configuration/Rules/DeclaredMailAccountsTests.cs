@@ -79,7 +79,7 @@ public sealed class DeclaredMailAccountsTests
         var account = Assert.Single(DeclaredMailAccounts.ReadFrom(configuration));
 
         // Assert
-        Assert.Equal(["INBOX"], account.MirroredFolderAliases.Select(alias => alias.Value));
+        Assert.Equal(["INBOX"], account.MirroredFolders.Select(folder => folder.Alias.Value));
     }
 
     /// <summary>Nothing binds an unmirrored folder to a remote path, so it is not a folder a rule can file into.</summary>
@@ -101,7 +101,7 @@ public sealed class DeclaredMailAccountsTests
         var account = Assert.Single(DeclaredMailAccounts.ReadFrom(configuration));
 
         // Assert
-        Assert.Equal(["INBOX"], account.MirroredFolderAliases.Select(alias => alias.Value));
+        Assert.Equal(["INBOX"], account.MirroredFolders.Select(folder => folder.Alias.Value));
     }
 
     /// <summary>Deletion is opt-in on every account, and the three reversible actions are permitted until refused.</summary>
@@ -193,6 +193,6 @@ public sealed class DeclaredMailAccountsTests
     private static IReadOnlyList<string> Describe(IEnumerable<DeclaredMailAccount> accounts) =>
     [
         .. accounts.Select(account =>
-            $"{account.AccountId}|{string.Join(',', account.MirroredFolderAliases.Select(alias => alias.Value))}|{account.PermittedRuleActions}"),
+            $"{account.AccountId}|{string.Join(',', account.MirroredFolders.Select(folder => folder.Alias.Value))}|{account.PermittedRuleActions}"),
     ];
 }

@@ -101,6 +101,7 @@ public sealed class NCalcMailRuleConditionTests
         var facts = new MailRuleFacts(
             new MailRuleEmailFacts { Account = "work", Folder = "inbox" },
             new RecordingMailRuleBodyTextReader(),
+            StubMailFolderMappings.Nothing,
             EvaluatedAt);
 
         // Act
@@ -212,6 +213,7 @@ public sealed class NCalcMailRuleConditionTests
                 HasExtractedContent = true,
             },
             bodyTextReader ?? new RecordingMailRuleBodyTextReader("Amount due on receipt."),
+            StubMailFolderMappings.Nothing,
             EvaluatedAt);
 
     private IMailRuleCondition Compile(string conditionText)

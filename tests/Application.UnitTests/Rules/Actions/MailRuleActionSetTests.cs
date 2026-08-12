@@ -17,22 +17,22 @@ public sealed class MailRuleActionSetTests
 
     public static TheoryData<string, MailRuleAction[]> PermittedCombinations => new()
     {
-        { "relocate alone", [MailRuleAction.Relocate(Archive)] },
-        { "copy alone", [MailRuleAction.Copy(Archive)] },
+        { "relocate alone", [MailRuleAction.Relocate(MailFolderReference.ToAlias(Archive))] },
+        { "copy alone", [MailRuleAction.Copy(MailFolderReference.ToAlias(Archive))] },
         { "delete alone", [MailRuleAction.Delete()] },
         { "flag alone", [MailRuleAction.SetSeen(isSeen: true)] },
-        { "relocate and flag", [MailRuleAction.Relocate(Archive), MailRuleAction.SetSeen(isSeen: true)] },
-        { "copy and flag", [MailRuleAction.Copy(Archive), MailRuleAction.SetSeen(isSeen: false)] },
+        { "relocate and flag", [MailRuleAction.Relocate(MailFolderReference.ToAlias(Archive)), MailRuleAction.SetSeen(isSeen: true)] },
+        { "copy and flag", [MailRuleAction.Copy(MailFolderReference.ToAlias(Archive)), MailRuleAction.SetSeen(isSeen: false)] },
     };
 
     public static TheoryData<string, MailRuleAction[]> RefusedCombinations => new()
     {
-        { "relocate and copy", [MailRuleAction.Relocate(Archive), MailRuleAction.Copy(Backup)] },
-        { "relocate and delete", [MailRuleAction.Relocate(Archive), MailRuleAction.Delete()] },
-        { "copy and delete", [MailRuleAction.Copy(Archive), MailRuleAction.Delete()] },
+        { "relocate and copy", [MailRuleAction.Relocate(MailFolderReference.ToAlias(Archive)), MailRuleAction.Copy(MailFolderReference.ToAlias(Backup))] },
+        { "relocate and delete", [MailRuleAction.Relocate(MailFolderReference.ToAlias(Archive)), MailRuleAction.Delete()] },
+        { "copy and delete", [MailRuleAction.Copy(MailFolderReference.ToAlias(Archive)), MailRuleAction.Delete()] },
         { "delete and flag", [MailRuleAction.Delete(), MailRuleAction.SetSeen(isSeen: true)] },
         { "flag and delete", [MailRuleAction.SetSeen(isSeen: true), MailRuleAction.Delete()] },
-        { "two relocations", [MailRuleAction.Relocate(Archive), MailRuleAction.Relocate(Backup)] },
+        { "two relocations", [MailRuleAction.Relocate(MailFolderReference.ToAlias(Archive)), MailRuleAction.Relocate(MailFolderReference.ToAlias(Backup))] },
         { "two flags", [MailRuleAction.SetSeen(isSeen: true), MailRuleAction.SetSeen(isSeen: false)] },
     };
 
@@ -80,7 +80,7 @@ public sealed class MailRuleActionSetTests
     {
         // Act
         var actions = MailRuleActionSet
-            .Create([MailRuleAction.Relocate(Archive), MailRuleAction.SetSeen(isSeen: true)])
+            .Create([MailRuleAction.Relocate(MailFolderReference.ToAlias(Archive)), MailRuleAction.SetSeen(isSeen: true)])
             .Actions;
 
         // Assert
@@ -94,8 +94,8 @@ public sealed class MailRuleActionSetTests
     public void Create_TheSameTwoActionsWrittenEitherWay_ProducesOneOrder()
     {
         // Act
-        var flagFirst = MailRuleActionSet.Create([MailRuleAction.SetSeen(isSeen: true), MailRuleAction.Copy(Archive)]);
-        var copyFirst = MailRuleActionSet.Create([MailRuleAction.Copy(Archive), MailRuleAction.SetSeen(isSeen: true)]);
+        var flagFirst = MailRuleActionSet.Create([MailRuleAction.SetSeen(isSeen: true), MailRuleAction.Copy(MailFolderReference.ToAlias(Archive))]);
+        var copyFirst = MailRuleActionSet.Create([MailRuleAction.Copy(MailFolderReference.ToAlias(Archive)), MailRuleAction.SetSeen(isSeen: true)]);
 
         // Assert
         Assert.Equal(
@@ -119,7 +119,7 @@ public sealed class MailRuleActionSetTests
     [Theory]
     [InlineData("relocate=ARCHIVE")]
     public void CanonicalForm_ADestinationAction_NamesTheMutationAndTheFolder(string expected) =>
-        Assert.Equal(expected, MailRuleAction.Relocate(Archive).CanonicalForm);
+        Assert.Equal(expected, MailRuleAction.Relocate(MailFolderReference.ToAlias(Archive)).CanonicalForm);
 
     [Fact]
     public void CanonicalForm_TheTwoFlagDirections_RenderDifferently() =>

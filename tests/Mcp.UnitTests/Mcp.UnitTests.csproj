@@ -12,6 +12,7 @@
     <Compile Include="..\shared\RecordingLoggerProvider.cs" Link="RecordingLoggerProvider.cs" />
     <Compile Include="..\shared\StubMailFolderParticipation.cs" Link="StubMailFolderParticipation.cs" />
     <Compile Include="..\shared\StubJunkMailFolderCatalog.cs" Link="StubJunkMailFolderCatalog.cs" />
+    <Compile Include="..\shared\StubMailFolderMappings.cs" Link="StubMailFolderMappings.cs" />
     <Compile Include="..\shared\SyntheticServedAccount.cs" Link="SyntheticServedAccount.cs" />
   </ItemGroup>
 

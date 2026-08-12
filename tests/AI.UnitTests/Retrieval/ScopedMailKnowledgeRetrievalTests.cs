@@ -28,8 +28,9 @@ public sealed class ScopedMailKnowledgeRetrievalTests
 {
     private const string Query = "what did the insurer agree to pay";
 
-    private static readonly MailboxScope OnePrimaryAccount =
-        MailboxScope.Create([MailAccountId.Create("primary")], [MailFolderAlias.Create("INBOX")]);
+    private static readonly MailboxScope OnePrimaryAccount = MailboxScope.Create(
+        [MailAccountId.Create("primary")],
+        [new MailFolderIdentity(MailAccountId.Create("primary"), MailFolderAlias.Create("INBOX"))]);
 
     /// <summary>The whole point of the narrowing: it reaches the port as the query rather than as words that have to rank.</summary>
     [Fact]

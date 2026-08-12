@@ -167,7 +167,7 @@ internal sealed class StoredEmailEmbeddingBackfillStore(
     /// finding those messages outstanding on every sweep for the rest of the deployment's life, since a message with a
     /// body and no passages is exactly what the second group selects.
     /// </remarks>
-    private IQueryable<StoredEmailEntity> EmailsAwaitingEmbedding(Guid profileId) => ExcludedMailFolders.Excluding(
+    private IQueryable<StoredEmailEntity> EmailsAwaitingEmbedding(Guid profileId) => AccountScopedMailFolders.Excluding(
         dbContext.StoredEmails
             .AsNoTracking()
             .Where(StoredEmailTombstone.IsNotTombstoned)

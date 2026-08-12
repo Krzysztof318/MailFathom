@@ -126,7 +126,7 @@ public sealed class MailboxQuestionReader
         // hunting a wrongly filed message uses the listing or the search that can ask for it.
         var scope = this.scopeResolver.ReadableScope(
             request.Accounts,
-            request.FolderAliases,
+            request.Folders,
             JunkMailInclusion.Excluded);
 
         var gate = await this.capability.ResolveAsync(cancellationToken);

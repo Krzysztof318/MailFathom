@@ -201,10 +201,15 @@ public sealed class MailboxSearchReader
     }
 
     /// <summary>Validates the request's structured filters and restricts the search to the accounts this deployment serves.</summary>
+    /// <remarks>
+    /// A request carrying a scope its caller already resolved is searched with that one rather than resolved a second
+    /// time. <see cref="SearchEmailsRequest.ResolvedScope" /> says why that is the narrower answer as well as the
+    /// cheaper one, and why nothing outside this assembly can set it.
+    /// </remarks>
     private MailboxEmailSelection ReadableSelection(SearchEmailsRequest request) => MailboxEmailSelection.Create(
-        this.scopeResolver.ReadableScope(
+        request.ResolvedScope ?? this.scopeResolver.ReadableScope(
             request.Accounts,
-            request.FolderAliases,
+            request.Folders,
             request.IncludeJunkMail ? JunkMailInclusion.Included : JunkMailInclusion.Excluded),
         request.SenderAddress,
         request.RecipientAddress,

@@ -146,7 +146,7 @@ public sealed class MailFolderTests
     }
 
     [Fact]
-    public void ToRemotePath_ConfiguredPath_NamesExactlyOneTarget()
+    public void ToRemotePath_ConfiguredPathAndNoRole_IsFoundByPathAndPlaysNoRole()
     {
         // Arrange
         var alias = MailFolderAlias.Create("archive");
@@ -158,10 +158,46 @@ public sealed class MailFolderTests
         Assert.Equal(MailFolderMappingTarget.RemotePath, mapping.Target);
         Assert.Equal("Archief", mapping.RemotePath!.Value.Value);
         Assert.Null(mapping.SpecialUse);
+        Assert.False(mapping.Plays(MailFolderSpecialUse.Archive));
+    }
+
+    /// <summary>The pair a server advertising no attribute needs: the path finds the folder and the role says what it is for.</summary>
+    [Fact]
+    public void ToRemotePath_ConfiguredPathAndARole_IsStillFoundByPathAndPlaysTheRole()
+    {
+        // Arrange
+        var alias = MailFolderAlias.Create("spam");
+
+        // Act
+        var mapping = MailFolderMapping.ToRemotePath(
+            alias,
+            RemoteFolderPath.Create("INBOX.Spam"),
+            specialUse: MailFolderSpecialUse.Junk);
+
+        // Assert
+        Assert.Equal(MailFolderMappingTarget.RemotePath, mapping.Target);
+        Assert.Equal("INBOX.Spam", mapping.RemotePath!.Value.Value);
+        Assert.True(mapping.Plays(MailFolderSpecialUse.Junk));
+        Assert.False(mapping.Plays(MailFolderSpecialUse.Trash));
     }
 
     [Fact]
-    public void ToSpecialUse_ConfiguredRole_NamesExactlyOneTarget()
+    public void ToRemotePath_RoleThatDoesNotExist_ThrowsArgumentOutOfRangeException()
+    {
+        // Arrange
+        var alias = MailFolderAlias.Create("spam");
+
+        // Act, Assert
+        Assert.Throws<ArgumentOutOfRangeException>(
+            () => MailFolderMapping.ToRemotePath(
+                alias,
+                RemoteFolderPath.Create("INBOX.Spam"),
+                specialUse: (MailFolderSpecialUse)99));
+    }
+
+    /// <summary>A role names the folder as well as finding it, which is what a mapping naming one has always meant.</summary>
+    [Fact]
+    public void ToSpecialUse_ConfiguredRole_IsFoundByTheRoleAndPlaysIt()
     {
         // Arrange
         var alias = MailFolderAlias.Create("inbox");
@@ -172,6 +208,7 @@ public sealed class MailFolderTests
         // Assert
         Assert.Equal(MailFolderMappingTarget.SpecialUse, mapping.Target);
         Assert.Equal(MailFolderSpecialUse.Inbox, mapping.SpecialUse);
+        Assert.True(mapping.Plays(MailFolderSpecialUse.Inbox));
         Assert.Null(mapping.RemotePath);
     }
 

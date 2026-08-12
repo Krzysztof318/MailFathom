@@ -134,12 +134,13 @@ configured name for an account and carries nothing the caller did not already wr
 | `52002` | A continuation cursor was issued for different filters | A cursor reused after a filter or the reading direction changed |
 | `53001` | The call named a mail account this deployment does not serve | An account identifier nobody configured, or one belonging to someone else — the two are deliberately one answer |
 | `53002` | The call named an email the local mailbox copy holds no row for | An email never synchronized, one expunged and collected, or one of an account this deployment stopped serving — deliberately one answer |
+| `53003` | The call named a folder by a role no folder in scope is mapped with | A `folders` element written `role:Junk` on a deployment whose accounts map no junk folder; naming the alias, or mapping the role, is what answers it |
 | `54001` | The call failed for a reason the boundary deliberately does not describe | Anything undiagnosed; the detail is in the server log |
 | `55001` | The email exists locally and its stored content is missing, damaged, or unreadable | A local copy being repaired; the call is worth repeating once repair has run |
 | `56001` | This deployment cannot answer questions about mail, either at all or for now | `ask_mail` called on a server that declared no chat endpoint or embeds no mail, or one whose chat provider is currently refusing; the message says which |
 | `57001` | Answering would cost more than this deployment allows | `ask_mail` on a server whose current period has spent its allowance, or a run that reached what one question may spend; the message says which, and only the first becomes answerable by waiting |
 
-Codes `51001` through `53002`, `55001`, `56001`, and `57001` are the use cases' own, allocated in the MCP-boundary category because that is
+Codes `51001` through `53003`, `55001`, `56001`, and `57001` are the use cases' own, allocated in the MCP-boundary category because that is
 where they surface, and every one of them is written for a caller to read. That is the whole rule the boundary applies: a
 failure whose code belongs to that category is published as it stands, and a failure from any other category — a schema
 mismatch, an IMAP authentication refusal, a concurrency conflict — describes MailFathom's internals to whoever asked and
@@ -235,7 +236,7 @@ Every argument is optional.
 | Argument | Type | Meaning |
 |---|---|---|
 | `accounts` | `string[]` | Accounts to read, each named by its configured account identifier or by the display name it is published under. Omitted reads every account this deployment serves; a name it does not serve is refused with `53001` |
-| `folderAliases` | `string[]` | MailFathom folder aliases such as `INBOX`. Omitted reads every folder of the accounts in scope. Case is normalized, so a repeated spelling names one folder |
+| `folders` | `string[]` | Folders to read, each named by its MailFathom alias such as `INBOX` or by the role it plays, written `role:Junk`. Omitted reads every folder of the accounts in scope. Case is normalized, so a repeated spelling names one folder; a role no folder of an account in scope carries is refused with `53003` |
 | `senderAddress` | `string` | The whole address the sender must carry, in any case — not a fragment |
 | `recipientAddress` | `string` | The whole address a `To` or `Cc` recipient must carry. `Reply-To` is stored and filterable through the use case but not searched here |
 | `subjectFragment` | `string` | Text the subject must contain, case-insensitively, up to 256 characters. Wildcards a caller writes match themselves |
@@ -473,7 +474,7 @@ how the extracts are cut, and why there is no cursor — where those are enforce
 |---|---|---|
 | `queryText` | `string` | **Required.** The text to search for, up to 512 characters. Blank is refused with `51002`, because a search with no text is a listing |
 | `accounts` | `string[]` | Accounts to search, each named by its configured account identifier or by the display name it is published under. Omitted searches every account this deployment serves; a name it does not serve is refused with `53001` |
-| `folderAliases` | `string[]` | MailFathom folder aliases such as `INBOX`. Omitted searches every folder of the accounts in scope |
+| `folders` | `string[]` | Folders to search, each named by its MailFathom alias such as `INBOX` or by the role it plays, written `role:Junk`. Omitted searches every folder of the accounts in scope; a role no folder of an account in scope carries is refused with `53003` |
 | `senderAddress` | `string` | The whole address the sender must carry, in any case — not a fragment |
 | `recipientAddress` | `string` | The whole address a `To` or `Cc` recipient must carry |
 | `subjectFragment` | `string` | Text the subject must contain, case-insensitively, up to 256 characters |
@@ -616,7 +617,7 @@ messages, search when the messages themselves are what is wanted.
 |---|---|---|
 | `question` | `string` | **Required.** The question to answer, up to 1000 characters. It is not a search query: its words are not matched against the mail, and the lookups are written by the model |
 | `accounts` | `string[]` | Accounts the answer may be drawn from, each named by its configured account identifier or by the display name it is published under. Omitted draws on every account this deployment serves; a name it does not serve is refused with `53001` |
-| `folderAliases` | `string[]` | MailFathom folder aliases such as `INBOX`. Omitted draws on every folder of the accounts in scope. Case is normalized, so a repeated spelling names one folder |
+| `folders` | `string[]` | Folders the answer may be drawn from, each named by its MailFathom alias such as `INBOX` or by the role it plays, written `role:Junk`. Omitted draws on every folder of the accounts in scope. Case is normalized, so a repeated spelling names one folder; a role no folder of an account in scope carries is refused with `53003` |
 
 There is no structured filter beside the scope, and that is a decision rather than an omission. A sender or a date range
 supplied here would narrow every lookup the model makes without the model knowing why its searches were returning

@@ -297,12 +297,20 @@ public sealed class OrchestratedStoredEmailTimelineReaderTests(MailFathomOrchest
         // Act
         var withinScope = await ReadFreshnessAsync(
             services,
-            MailboxScope.Create([SyntheticMailAccount.AccountId], [seededAlias]),
+            MailboxScope.Create(
+            [SyntheticMailAccount.AccountId],
+            [new MailFolderIdentity(SyntheticMailAccount.AccountId, seededAlias)]),
             cancellationToken);
         var acrossEveryFolder = await ReadFreshnessAsync(services, MailboxScope.Unrestricted, cancellationToken);
         var outsideScope = await ReadFreshnessAsync(
             services,
-            MailboxScope.Create(null, [MailFolderAlias.Create("a-folder-nobody-bound")]),
+            MailboxScope.Create(
+                null,
+                [
+                    new MailFolderIdentity(
+                        SyntheticMailAccount.AccountId,
+                        MailFolderAlias.Create("a-folder-nobody-bound")),
+                ]),
             cancellationToken);
 
         // Assert
@@ -374,7 +382,7 @@ public sealed class OrchestratedStoredEmailTimelineReaderTests(MailFathomOrchest
             EmailTimelineFilter.Create(
                 MailboxScope.Create(
                     [SyntheticMailAccount.AccountId],
-                    [MailFolderAlias.Create(FolderAlias)]),
+                    [new MailFolderIdentity(SyntheticMailAccount.AccountId, MailFolderAlias.Create(FolderAlias))]),
                 senderAddress: "sender@mailfathom.test",
                 recipientAddress,
                 subjectFragment,
@@ -393,8 +401,12 @@ public sealed class OrchestratedStoredEmailTimelineReaderTests(MailFathomOrchest
                 new MailboxScopeResolver(
                     scope.GetRequiredService<IMailAccountCatalog>(),
                     scope.GetRequiredService<IMailFolderParticipationReader>(),
-                    scope.GetRequiredService<IJunkMailFolderCatalog>())
-                    .ReadableScope([], [MailFolderAlias.Create(FolderAlias)], JunkMailInclusion.Excluded)),
+                    scope.GetRequiredService<IJunkMailFolderCatalog>(),
+                    scope.GetRequiredService<MailFolderReferenceResolver>())
+                    .ReadableScope(
+                        [],
+                        [MailFolderReference.ToAlias(MailFolderAlias.Create(FolderAlias))],
+                        JunkMailInclusion.Excluded)),
             cancellationToken);
 
     /// <summary>Ensures the seeded folder exists and returns the filter every test in this class reads it through.</summary>
@@ -408,7 +420,9 @@ public sealed class OrchestratedStoredEmailTimelineReaderTests(MailFathomOrchest
         await EnsureSeededAsync(services, binding, cancellationToken);
 
         return EmailTimelineFilter.Create(
-            MailboxScope.Create([SyntheticMailAccount.AccountId], [binding.Alias]),
+            MailboxScope.Create(
+            [SyntheticMailAccount.AccountId],
+            [new MailFolderIdentity(SyntheticMailAccount.AccountId, binding.Alias)]),
             senderAddress: "sender@mailfathom.test",
             recipientAddress: null,
             subjectFragment: null,

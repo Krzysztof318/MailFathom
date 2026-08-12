@@ -72,12 +72,15 @@ Two further narrowings apply underneath, and neither can widen anything:
 - Retrieval goes through the same mailbox search a caller reaches with `search_emails`, which restricts every query to
   the accounts the deployment actually serves. Answering a question therefore cannot see mail that searching for it
   would not. [Email search](email-search.md) describes that ranking and its filters.
-- An account or folder named in the scope that the deployment does not serve simply matches nothing.
+- A folder alias named in the scope that this deployment holds no mail under simply matches nothing. An account it does
+  not serve is refused instead, and so is a folder named by a [role](imap-synchronization.md#what-a-role-says-beside-how-a-folder-is-found)
+  no account in scope maps: both are names the caller could not have meant, while an alias that matches nothing is a
+  folder that is simply empty here.
 - The account's junk folder is outside retrieval, and unlike `list_emails` and `search_emails` there is **no override**.
   An answer here is composed by a model from the mail it retrieved, so content written to deceive a reader would arrive
-  as ordinary correspondence with nothing left to notice it. [Spam
-  classification](spam-classification.md#the-junk-folder-is-left-out-of-listing-and-search) records where that folder
-  comes from.
+  as ordinary correspondence with nothing left to notice it. Naming `role:Junk` in the scope does not reach it either.
+  [Spam classification](spam-classification.md#the-junk-folder-is-left-out-of-listing-and-search) records where that
+  folder comes from.
 
 ## What one retrieval may hand over
 

@@ -47,6 +47,16 @@ public readonly record struct MailRuleFact
     /// <summary>Gets the configured alias of the folder the email occurrence is in.</summary>
     public static MailRuleFact Folder { get; } = new("folder", MailRuleFactType.Text);
 
+    /// <summary>Gets the special-use role the folder plays for its account, absent when configuration gave it none.</summary>
+    /// <remarks>
+    /// It is a fact of its own rather than a second spelling of <see cref="Folder" />, because a condition compares one
+    /// value against one literal: a single fact answering to both an alias and a role would make
+    /// <c>folder == 'Junk'</c> true for a folder actually called <c>Junk</c> and for whichever folder plays that role,
+    /// and an operator could no longer write a condition meaning only one of them. Naming this one is how a rule reaches
+    /// <em>the junk folder of whichever account this email came from</em> without knowing what each account called it.
+    /// </remarks>
+    public static MailRuleFact FolderRole { get; } = new("folderRole", MailRuleFactType.Text);
+
     #endregion
 
     #region Who wrote it and who it reached
@@ -137,6 +147,7 @@ public readonly record struct MailRuleFact
     [
         Account,
         Folder,
+        FolderRole,
         Subject,
         SenderAddress,
         SenderDomain,

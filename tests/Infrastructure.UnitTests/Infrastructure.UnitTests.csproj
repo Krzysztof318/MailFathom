@@ -24,5 +24,9 @@
     <!-- The body text is the one mail-rule fact whose resolution costs a read, and both this project and
          Application.UnitTests prove a claim about how often it happens. -->
     <Compile Include="..\shared\RecordingMailRuleBodyTextReader.cs" Link="RecordingMailRuleBodyTextReader.cs" />
+
+    <!-- A fact surface is built with the folder mappings a condition naming a folder's role reads, so a condition test
+         supplies one whether or not it is about roles. -->
+    <Compile Include="..\shared\StubMailFolderMappings.cs" Link="StubMailFolderMappings.cs" />
   </ItemGroup>
 </Project>

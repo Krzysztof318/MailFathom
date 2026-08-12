@@ -3,9 +3,11 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.Accounts;
+using MailFathom.Application.Folders;
 using MailFathom.Application.Persistence;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Failures;
+using MailFathom.Domain.Folders;
 using MailFathom.Mcp.Observability;
 using MailFathom.TestSupport;
 using Microsoft.Extensions.Logging;
@@ -88,6 +90,25 @@ public sealed class McpToolCallReporterTests
         Assert.Equal(
             MailFathomErrorCode.MailAccountNotAccessible.Value,
             Assert.Contains("ErrorCode", Assert.Single(logs.Records).Properties));
+    }
+
+    /// <summary>Naming a folder by a role nothing carries is the caller's to fix, so the answer says so rather than collapsing.</summary>
+    [Fact]
+    public async Task ReportAsync_RoleNoFolderInScopeCarries_ReportsItsOwnCodeAndNamesNoAccount()
+    {
+        // Arrange
+        var refusal = new MailFolderRoleUnmappedException(MailFolderSpecialUse.Junk);
+        using var logs = new RecordingLoggerProvider();
+        var reporter = ReporterOver(logs, out _);
+
+        // Act
+        var result = await reporter.ReportAsync((_, _) => throw refusal, CallContext(), CancellationToken.None);
+
+        // Assert
+        Assert.True(result.IsError);
+        var reportedText = Assert.IsType<TextContentBlock>(Assert.Single(result.Content)).Text;
+        Assert.Equal($"MailFathom error {MailFathomErrorCode.MailFolderRoleUnmapped}: {refusal.Message}", reportedText);
+        Assert.Contains("Junk", reportedText, StringComparison.Ordinal);
     }
 
     /// <summary>A failure from any other category describes MailFathom's own internals, so its message stays on the server.</summary>

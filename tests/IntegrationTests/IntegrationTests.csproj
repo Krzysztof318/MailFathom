@@ -29,6 +29,7 @@
          than committed: nothing here provisions material a second way. -->
     <Compile Include="..\shared\TestCertificates.cs" Link="TestCertificates.cs" />
     <Compile Include="..\shared\SyntheticServedAccount.cs" Link="SyntheticServedAccount.cs" />
+    <Compile Include="..\shared\StubMailFolderMappings.cs" Link="StubMailFolderMappings.cs" />
   </ItemGroup>
 
   <ItemGroup>

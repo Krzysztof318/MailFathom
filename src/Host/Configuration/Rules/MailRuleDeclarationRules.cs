@@ -6,6 +6,7 @@ using System.ComponentModel.DataAnnotations;
 using MailFathom.Application.Rules;
 using MailFathom.Application.Rules.Actions;
 using MailFathom.Application.Rules.Conditions;
+using MailFathom.Domain.Folders;
 
 namespace MailFathom.Host.Configuration.Rules;
 
@@ -171,9 +172,10 @@ internal static class MailRuleDeclarationRules
     /// <remarks>
     /// <para>
     /// Three separate claims are checked here. Whether the declared actions can be honored together is a property of
-    /// the rule alone. Whether a destination names a folder the account mirrors, and whether the account permits the
-    /// action at all, are claims about the synchronization section — and both are refused rather than deferred, because
-    /// a rule that would be skipped when the mail reached it is indistinguishable from a rule nothing matched.
+    /// the rule alone. Whether a destination names a folder the account mirrors — by its alias or by the role it plays
+    /// — and whether the account permits the action at all, are claims about the synchronization section, and both are
+    /// refused rather than deferred, because a rule that would be skipped when the mail reached it is indistinguishable
+    /// from a rule nothing matched.
     /// </para>
     /// <para>
     /// A rule that is switched off is judged like any other, exactly as its scope already is. Only the condition is
@@ -189,12 +191,14 @@ internal static class MailRuleDeclarationRules
             $"{MailRulesOptions.SectionName}:{nameof(MailRulesOptions.Rules)}:{position}:{nameof(MailRuleOptions.Actions)}";
         var declared = DeclaredActions(rule);
         var unusable = declared.DeclaredDestinations()
-            .Where(alias => !MailRuleActionOptions.TryReadAlias(alias, out _))
+            .Where(destination => !MailFolderReference.TryCreate(destination, out _))
             .ToArray();
 
         if (unusable.Length > 0)
         {
-            yield return $"{opening} — a destination folder is named by nothing this system could read as an alias.";
+            yield return
+                $"{opening} — a destination folder is named by nothing this system could read as an alias or as a "
+                + $"'{MailFolderReference.RoleScheme}<role>' naming one of {string.Join(", ", Enum.GetNames<MailFolderSpecialUse>())}.";
 
             yield break;
         }
@@ -229,10 +233,10 @@ internal static class MailRuleDeclarationRules
         }
 
         foreach (var action in actions.Where(action =>
-            action.DestinationAlias is { } alias && !account.MirroredFolderAliases.Contains(alias)))
+            action.Destination is { } destination && !account.Mirrors(destination)))
         {
             yield return
-                $"Rule '{ruleName}' files into '{action.DestinationAlias!.Value.Value}', which account '{account.AccountId}' does not declare as a mirrored folder, so nothing would bind it to a folder on the server.";
+                $"Rule '{ruleName}' files into '{action.Destination}', which account '{account.AccountId}' does not declare as a mirrored folder, so nothing would bind it to a folder on the server.";
         }
     }
 

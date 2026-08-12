@@ -52,7 +52,7 @@ public sealed class MailboxQuestionReaderTests
         var question = Assert.Single(answerer.Questions);
         Assert.Equal("was the invoice attached", question.Text.Value);
         Assert.Equal([MailAccountId.Create(ServedAccountId)], question.Scope.AccountIds);
-        Assert.Empty(question.Scope.FolderAliases);
+        Assert.Empty(question.Scope.SelectedFolders);
         Assert.Equal("The invoice was attached.", result.AnswerText);
     }
 
@@ -70,13 +70,15 @@ public sealed class MailboxQuestionReaderTests
             {
                 QuestionText = "what did the insurer agree to pay",
                 Accounts = [MailAccountSelector.Create(ServedAccountId)],
-                FolderAliases = [MailFolderAlias.Create("archive")],
+                Folders = [MailFolderReference.ToAlias(MailFolderAlias.Create("archive"))],
             });
 
         // Assert
         var question = Assert.Single(answerer.Questions);
         Assert.Equal([MailAccountId.Create(ServedAccountId)], question.Scope.AccountIds);
-        Assert.Equal([MailFolderAlias.Create("ARCHIVE")], question.Scope.FolderAliases);
+        Assert.Equal(
+            [new MailFolderIdentity(MailAccountId.Create(ServedAccountId), MailFolderAlias.Create("ARCHIVE"))],
+            question.Scope.SelectedFolders);
     }
 
     /// <summary>The access decision is made before a provider is reached, so an unserved account costs nothing to refuse.</summary>
@@ -578,7 +580,8 @@ public sealed class MailboxQuestionReaderTests
             new MailboxScopeResolver(
                 CatalogServing(MailAccountId.Create(ServedAccountId)),
                 StubMailFolderParticipation.Everything,
-                StubJunkMailFolderCatalog.None),
+                StubJunkMailFolderCatalog.None,
+                StubMailFolderMappings.ResolvingNothing),
             spendLedger ?? LedgerAdmitting(),
             bounds ?? MailAnswerBounds.Default,
             runTelemetry ?? new RecordingMailAnsweringRunTelemetry(),

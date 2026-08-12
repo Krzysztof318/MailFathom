@@ -40,7 +40,7 @@ the same reason. It stays distinguishable from a message whose body was genuinel
 |---|---|---|
 | `QueryText` | The text to search for | refused — see below |
 | `Accounts` | The accounts to search, each named by its identifier or by its display name | every account this deployment serves |
-| `FolderAliases` | The folder aliases to search | every folder of those accounts |
+| `Folders` | The folders to search, each named by its alias or by the role it plays | every folder of those accounts |
 | `SenderAddress` | The address the sender must carry, in any case | any sender |
 | `RecipientAddress` | The address a `To` or `Cc` recipient must carry | any recipient |
 | `SubjectFragment` | Text the stored subject must contain, compared without regard to case | any subject |
@@ -328,7 +328,7 @@ caller cannot tell a folder that holds nothing matching from one whose synchroni
   query over the same filter predicate.
 - `MailFathom.Host.Configuration.Mail.MailboxSearchOptions` — the snippet bounds, bound strictly and validated on start.
 - `MailFathom.Mcp.Tools` — `SearchEmailsTool`, the protocol adapter, and `MailboxScopeArguments`, the conversion of
-  caller-supplied text into account identifiers and folder aliases that it shares with the listing tool.
+  caller-supplied text into account identifiers and folder references that it shares with the listing tool.
 - `MailFathom.Mcp.Tools.Results` — `SearchEmailsToolResult`, `SearchedEmailMatch`, `EmailRetrievalMode`, and
   `SemanticSearchAvailability`, the published contract.
 

@@ -11,6 +11,7 @@ using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Folders;
 using MailFathom.Domain.Mutations;
+using MailFathom.TestSupport;
 using NSubstitute;
 using Xunit;
 
@@ -27,6 +28,7 @@ public sealed class MailRuleActionRecorderTests
 
     private readonly InMemoryMailboxMutationRecordStore records = new();
     private readonly InMemoryMailFolderResolutionStore folders = new();
+    private readonly StubMailFolderMappings folderMappings = StubMailFolderMappings.Nothing;
     private readonly IAuthoredDeleteEmailDispositionReader dispositions =
         Substitute.For<IAuthoredDeleteEmailDispositionReader>();
 
@@ -51,7 +53,7 @@ public sealed class MailRuleActionRecorderTests
         var binding = this.folders.Bind(Account, Archive, "INBOX/Archive");
 
         // Act
-        var recording = await this.RecordAsync(Planned("file-invoices", MailRuleAction.Relocate(Archive)));
+        var recording = await this.RecordAsync(Planned("file-invoices", MailRuleAction.Relocate(MailFolderReference.ToAlias(Archive))));
 
         // Assert
         var request = Assert.Single(this.records.OpenedRequests);
@@ -69,7 +71,7 @@ public sealed class MailRuleActionRecorderTests
         this.folders.Bind(Account, Archive);
 
         // Act
-        await this.RecordAsync(Planned("file-invoices", MailRuleAction.Relocate(Archive)));
+        await this.RecordAsync(Planned("file-invoices", MailRuleAction.Relocate(MailFolderReference.ToAlias(Archive))));
 
         // Assert
         Assert.Null(Assert.Single(this.records.OpenedRequests).LocalDisposition);
@@ -136,14 +138,53 @@ public sealed class MailRuleActionRecorderTests
     public async Task RecordAsync_ADestinationNothingHasBound_WritesNothingAndSaysWhy()
     {
         // Act
-        var recording = await this.RecordAsync(Planned("file-invoices", MailRuleAction.Relocate(Archive)));
+        var recording = await this.RecordAsync(Planned("file-invoices", MailRuleAction.Relocate(MailFolderReference.ToAlias(Archive))));
 
         // Assert
         Assert.Equal(0, this.records.OpenedRecordCount);
         var failure = Assert.Single(recording.Failures);
         Assert.Equal("file-invoices", failure.RuleName);
         Assert.Equal(MailRuleActionFailureReason.DestinationFolderUnresolved, failure.Reason);
-        Assert.Equal(Archive, failure.DestinationAlias);
+        Assert.Equal(MailFolderReference.ToAlias(Archive), failure.Destination);
+    }
+
+    /// <summary>A rule naming what the folder is for files into whatever this account calls that folder.</summary>
+    [Fact]
+    public async Task RecordAsync_ARuleFilingIntoARole_WritesARelocationNamingTheFolderPlayingIt()
+    {
+        // Arrange
+        this.folderMappings.With(
+            Account,
+            MailFolderMapping.ToRemotePath(
+                Archive,
+                RemoteFolderPath.Create("INBOX/Archive"),
+                specialUse: MailFolderSpecialUse.Archive));
+        var binding = this.folders.Bind(Account, Archive, "INBOX/Archive");
+
+        // Act
+        var recording = await this.RecordAsync(
+            Planned("file-invoices", MailRuleAction.Relocate(MailFolderReference.ToRole(MailFolderSpecialUse.Archive))));
+
+        // Assert
+        Assert.Empty(recording.Failures);
+        var request = Assert.Single(this.records.OpenedRequests);
+        Assert.Equal(MailboxMutation.Relocate, request.Mutation);
+        Assert.Equal(binding.RemotePath, request.DestinationPath);
+    }
+
+    /// <summary>A role no folder of this account carries stops the one action rather than the whole pass, so every other rule still runs.</summary>
+    [Fact]
+    public async Task RecordAsync_ARuleFilingIntoARoleTheAccountDoesNotMap_WritesNothingAndSaysWhy()
+    {
+        // Act
+        var recording = await this.RecordAsync(
+            Planned("file-spam", MailRuleAction.Relocate(MailFolderReference.ToRole(MailFolderSpecialUse.Junk))));
+
+        // Assert
+        Assert.Equal(0, this.records.OpenedRecordCount);
+        var failure = Assert.Single(recording.Failures);
+        Assert.Equal(MailRuleActionFailureReason.DestinationFolderUnresolved, failure.Reason);
+        Assert.Equal(MailFolderReference.ToRole(MailFolderSpecialUse.Junk), failure.Destination);
     }
 
     /// <summary>What a withdrawn account decided about its own deletions is unknown, and no value invented here would be it.</summary>
@@ -194,7 +235,7 @@ public sealed class MailRuleActionRecorderTests
             .Returns(MailRuleActionPermissions.Default with { PermitsRelocate = false });
         var plan = MailRuleActionPlan.Compose(
         [
-            RuleNamed("file-invoices", MailRuleAction.Relocate(Archive)),
+            RuleNamed("file-invoices", MailRuleAction.Relocate(MailFolderReference.ToAlias(Archive))),
             RuleNamed("mark-them-read", MailRuleAction.SetSeen(isSeen: true)),
         ]);
 
@@ -220,14 +261,14 @@ public sealed class MailRuleActionRecorderTests
             .Returns(_ => throw new InvalidOperationException("Account 'work' is not configured."));
 
         // Act
-        var recording = await this.RecordAsync(Planned("file-invoices", MailRuleAction.Relocate(Archive)));
+        var recording = await this.RecordAsync(Planned("file-invoices", MailRuleAction.Relocate(MailFolderReference.ToAlias(Archive))));
 
         // Assert
         Assert.Equal(0, this.records.OpenedRecordCount);
         Assert.Equal(0, recording.RecordedCount);
         var failure = Assert.Single(recording.Failures);
         Assert.Equal(MailRuleActionFailureReason.AccountNoLongerConfigured, failure.Reason);
-        Assert.Equal(Archive, failure.DestinationAlias);
+        Assert.Equal(MailFolderReference.ToAlias(Archive), failure.Destination);
     }
 
     /// <summary>One failing action must not cost the ones beside it, which is why each is recorded on its own.</summary>
@@ -237,7 +278,7 @@ public sealed class MailRuleActionRecorderTests
         // Arrange
         var plan = MailRuleActionPlan.Compose(
         [
-            RuleNamed("file-invoices", MailRuleAction.Relocate(Archive)),
+            RuleNamed("file-invoices", MailRuleAction.Relocate(MailFolderReference.ToAlias(Archive))),
             RuleNamed("mark-them-read", MailRuleAction.SetSeen(isSeen: true)),
         ]);
 
@@ -257,7 +298,7 @@ public sealed class MailRuleActionRecorderTests
         // Arrange
         this.folders.Bind(Account, Archive);
         var recorder = this.CreateRecorder();
-        var plan = MailRuleActionPlan.Compose([RuleNamed("file-invoices", MailRuleAction.Relocate(Archive))]);
+        var plan = MailRuleActionPlan.Compose([RuleNamed("file-invoices", MailRuleAction.Relocate(MailFolderReference.ToAlias(Archive)))]);
 
         // Act
         foreach (var uid in Enumerable.Range(1, 3))
@@ -311,5 +352,5 @@ public sealed class MailRuleActionRecorderTests
             TestContext.Current.CancellationToken);
 
     private MailRuleActionRecorder CreateRecorder() =>
-        new(this.records, this.folders, this.dispositions, this.permissions);
+        new(this.records, this.folders, this.folderMappings.Resolver, this.dispositions, this.permissions);
 }

@@ -64,7 +64,7 @@ public sealed class MailAccountDirectoryReader
         // Scoped to the served accounts rather than read unscoped, for the reason every other read is: local state holds
         // folders of accounts an operator has since removed, and an account this deployment no longer serves must not
         // reappear in the one answer that lists them.
-        var scope = MailboxScope.RestrictedToServedAccounts(
+        var scope = MailboxScope.Create(
             servedAccounts.Select(static account => account.Id),
             []);
 

@@ -651,7 +651,8 @@ account's folders through `IRemoteFolderCatalog` and matches the mapping against
 | Mapping | Matches |
 | --- | --- |
 | `RemotePath` | The advertised folder whose path is the configured text. |
-| `SpecialUse` | The advertised folder carrying that RFC 6154 role. |
+| `SpecialUse`, alone | The advertised folder carrying that RFC 6154 role. |
+| `RemotePath` and `SpecialUse` together | The advertised folder whose path is the configured text; the role is what that folder *plays* rather than how it is found. |
 
 A role several folders carry does **not** resolve to whichever the server listed first. `LIST` ordering is a response
 order rather than an identity contract, so taking the first would let a reordered response repoint the alias, start a
@@ -668,6 +669,40 @@ An alias that resolves to no single folder ends that one folder's run and no oth
 `FolderAliasUnresolved` or `FolderAliasAmbiguous`, logged as a warning naming the alias, and the account's remaining
 folders continue — a mistyped alias is a configuration mistake, not a mail-server failure, and the three are logged as
 different things because each asks the operator for something different.
+
+### What a role says, beside how a folder is found
+
+`SpecialUse` answers two questions that used to be one. *Where is this folder* is answered by whichever of `RemotePath`
+and `SpecialUse` the mapping names — the table above. *What is this folder for* is answered by `SpecialUse` alone, and
+it goes on being answered when the path is what found the folder:
+
+```json
+{ "Alias": "spam", "RemotePath": "INBOX.Spam", "SpecialUse": "Junk" }
+```
+
+That mapping is found by its path, so no advertised attribute is needed, and it still answers the question *which
+folder of this account is the junk folder*. A server that advertises nothing therefore loses none of what a role is
+for, which is what makes a rule or a request written once work against every account you configure.
+
+A role belongs to **at most one folder of an account**. Startup refuses a configuration that gives one role to two
+folders of the same account, naming both aliases and the role, because *the* junk folder has to be one folder for the
+question to have an answer. Two accounts naming the same role is ordinary: the question is asked per account. Roles are
+optional, and a mapping that names only a `RemotePath` carries none.
+
+The question is answered from configuration rather than from the server, so it costs no listing and does not depend on
+a run having happened. It is answered the same way for a folder nothing mirrors: `Synchronize: false` withdraws a folder
+from what MailFathom stores, not from what it is for, so the role still names it and a rule condition still reads
+`folderRole` for it.
+
+What such a folder cannot be is a rule's **destination**. A rule may only file into a folder the account mirrors, and
+startup refuses a rule that names one it does not — by its alias or by its role alike — because nothing would bind the
+name to a folder on the server. Give the destination `Synchronize: true` if a rule is to file into it.
+
+Wherever something names a folder — a rule's destination, a rule condition's `folderRole` fact, an MCP tool's `folders`
+argument — the role is written `role:<role>`, for example `role:Junk`. Anything without that prefix is an alias, so a
+deployment whose alias happens to be spelled `Junk` keeps meaning that alias. The name is turned into the folder it
+means in one place, so every caller gets the same answer and the same refusal: a role no folder of the account carries
+is refused, naming the role, rather than quietly answered with nothing.
 
 ### A folder the mapping asked for is created
 
@@ -710,9 +745,11 @@ A creation the server refuses fails as itself, under error code `26001` and with
 deliberately distinguishable from the alias that resolves to nothing: a quota, a namespace that forbids the name, or a
 name the server will not accept each ask you for something different from a path you mistyped.
 
-`CreateIfMissing: true` beside a `SpecialUse` mapping **fails startup**, naming the alias. A folder that does not exist
-advertises no role, so creating one from a role would mean either an extension whose support is uneven or MailFathom
-inventing a name in your own mailbox — and writing the path you wanted is one line of configuration.
+`CreateIfMissing: true` on a mapping that names no `RemotePath` **fails startup**, naming the alias. A folder that does
+not exist advertises no role, so creating one from a role alone would mean either an extension whose support is uneven
+or MailFathom inventing a name in your own mailbox — and writing the path you wanted is one line of configuration. A
+mapping naming a path *and* a role may ask for the creation: the path says what to create, and the role is what the
+created folder plays.
 
 The creation is issued over the account's **single write connection**, the same one the mutations run over, so it costs
 no second login. It reaches that connection through a port of its own, `IRemoteFolderCreator`, rather than through the
@@ -1433,7 +1470,7 @@ The extraction backfill has a section of its own rather than a block inside the 
 
 Every configured account carries a `DisplayName`, whether or not synchronization is enabled, because the stored copy stays readable after the switch is turned off and the name is what a caller reads the account back as. There is no fallback to `AccountId`: a name MailFathom invented would be published to callers as though an operator had chosen it. The two share one naming space — a request may name an account by either — so startup refuses a display name another account's identifier or display name already carries, compared without regard to case; one equal to the account's own identifier is accepted, since both spellings then reach the same mailbox.
 
-When enabled, at least one account with a non-blank `AccountId`, host, and user name must be configured. The account password is not a configuration value at all: `Secrets.Password` carries a reference, and startup fails when it cannot be resolved. Each entry of `Folders` names an alias and exactly one of `RemotePath` and `SpecialUse`; naming both, naming neither, or naming a role that does not exist fails startup with a message identifying the alias. Supported roles are `Inbox`, `Archive`, `Drafts`, `Sent`, `Junk`, `Trash`, `All`, `Flagged`, and `Important`. An entry naming a `RemotePath` may additionally set `CreateIfMissing`, which defaults to `false` and is what [creates the folder](#a-folder-the-mapping-asked-for-is-created) when the server advertises none at that path; setting it beside a `SpecialUse` fails startup naming the alias. If an account omits `Folders`, its supervisor applies the post-binding default of one alias `inbox` mapped to the inbox role; explicit folder lists replace that default.
+When enabled, at least one account with a non-blank `AccountId`, host, and user name must be configured. The account password is not a configuration value at all: `Secrets.Password` carries a reference, and startup fails when it cannot be resolved. Each entry of `Folders` names an alias and at least one of `RemotePath` and `SpecialUse`; naming neither, or naming a role that does not exist, fails startup with a message identifying the alias. Naming both is how a folder found by its path still [plays a role](#what-a-role-says-beside-how-a-folder-is-found), and two folders of one account naming the same role fails startup with a message identifying both aliases and the role. Supported roles are `Inbox`, `Archive`, `Drafts`, `Sent`, `Junk`, `Trash`, `All`, `Flagged`, and `Important`. An entry naming a `RemotePath` may additionally set `CreateIfMissing`, which defaults to `false` and is what [creates the folder](#a-folder-the-mapping-asked-for-is-created) when the server advertises none at that path; setting it on an entry that names no `RemotePath` fails startup naming the alias. If an account omits `Folders`, its supervisor applies the post-binding default of one alias `inbox` mapped to the inbox role; explicit folder lists replace that default.
 
 ### Bounding how far back a run reaches
 

@@ -157,9 +157,20 @@ chosen it. The two share one naming space so that a name can never select two ma
 display name that another account's identifier or display name already carries; a display name equal to the account's
 *own* identifier is fine, since both spellings then reach the same mailbox.
 
-A folder entry names `Alias` (required — your stable name for the folder) and **exactly one** of `RemotePath` (the
-server's own path) or `SpecialUse` (a role discovery resolves: `Inbox`, `Archive`, `Drafts`, `Sent`, `Junk`, `Trash`,
-`All`, `Flagged`, `Important`). Configuring no folder synchronizes the inbox by role.
+A folder entry names `Alias` (required — your stable name for the folder) and **at least one** of `RemotePath` (the
+server's own path) or `SpecialUse` (`Inbox`, `Archive`, `Drafts`, `Sent`, `Junk`, `Trash`, `All`, `Flagged`,
+`Important`). Configuring no folder synchronizes the inbox by role.
+
+`SpecialUse` says what the folder is *for*, and where the folder is found is a separate question. Named alone it
+answers both: discovery resolves the folder the server advertises with that role. Named beside a `RemotePath`, the path
+is what finds the folder and the role is what the folder plays, which is how a server that advertises nothing still
+gets a junk folder anything can name by its role. A role belongs to **at most one folder per account**: startup refuses
+a configuration giving one role to two folders of an account, naming both aliases and the role. Roles are optional and
+most folders carry none.
+
+Wherever a folder is named — a rule's destination, an MCP tool's `folders` argument — the role is written as
+`role:<role>`, for example `role:Junk`, and anything without that prefix is an alias. A role no folder of the account
+carries is refused, naming the role, rather than answered with an empty result.
 
 The same entry decides what MailFathom does with the folder, through three switches that each default to `true`, and
 whether the folder may be created at all, through a fourth that defaults to `false`:
@@ -169,7 +180,7 @@ whether the folder may be created at all, through a fourth that defaults to `fal
 | `…:Folders:<n>:Synchronize` | bool | `true` | With `false`, no run schedules the folder: no connection is opened for it and nothing of it is stored | reload; the next run stops scheduling it and begins erasing what is stored for it |
 | `…:Folders:<n>:GenerateEmbeddings` | bool | `true` | With `false`, stored mail of the folder is never cut into passages and never reaches an embedding provider; refused alongside `Synchronize: false` | reload; governs what is stored from then on, and passages already produced stay |
 | `…:Folders:<n>:VisibleToTools` | bool | `true` | With `false`, no MCP tool lists, searches, reads, or answers from the folder; refused alongside `Synchronize: false` | reload; the next request reads the new value |
-| `…:Folders:<n>:CreateIfMissing` | bool | `false` | With `true`, the folder is created on the mail server when the server advertises none at `RemotePath`; refused alongside `SpecialUse` | reload; the next resolution of the alias creates it |
+| `…:Folders:<n>:CreateIfMissing` | bool | `false` | With `true`, the folder is created on the mail server when the server advertises none at `RemotePath`; refused on a mapping that names no `RemotePath` | reload; the next resolution of the alias creates it |
 
 Startup refuses a folder that asks for embedding or tool visibility while `Synchronize` is `false`, naming the alias,
 because a folder that stores nothing has nothing to embed and nothing a tool could read. Leaving a switch out is not
@@ -180,8 +191,10 @@ readers there are.
 `CreateIfMissing` is the one switch here that authorizes an act against your mail server rather than withdrawing an
 existing folder from something MailFathom does locally, which is why it defaults to `false` while the other three
 default to `true`: a mapping that says nothing keeps a mistyped `RemotePath` reporting itself as an alias that resolves
-to nothing, instead of turning the mistake into a folder named after it. Startup refuses it beside a `SpecialUse`
-mapping, naming the alias, because a folder that does not exist advertises no role. It is issued where the alias is
+to nothing, instead of turning the mistake into a folder named after it. Startup refuses it on a mapping that names no
+`RemotePath`, naming the alias, because a folder that does not exist advertises no role and only an explicit path says
+what to create. A mapping naming both a path and a role may ask for the creation: the path is what is created, and the
+role is what the created folder plays. It is issued where the alias is
 resolved, and a run resolves the folders it mirrors and no others, so the switch creates nothing on a mapping that also
 carries `Synchronize: false`. Renaming, deleting, and unsubscribing from a folder stay refused outright, and no folder
 MailFathom did not create is ever subscribed to.
@@ -191,7 +204,8 @@ a server's refusal reports.
 
 Switching `Synchronize` off for a folder that was mirrored **erases what is stored for it**, in bounded passes on the
 account's own runs and through the deletion path an erasing disposition already uses. The mapping stays, so the alias
-goes on resolving and the folder remains a destination a rule may file mail into.
+goes on resolving and any role the mapping names goes on being answered — but the folder stops being a destination a
+rule may file mail into, and startup refuses a rule that still names it.
 [What a mapping decides beyond where the folder is](../features/imap-synchronization.md#what-a-mapping-decides-beyond-where-the-folder-is)
 states all three switches together, what an unmapped folder is instead, and what becomes of the local copy of a message
 relocated into a folder nothing mirrors.

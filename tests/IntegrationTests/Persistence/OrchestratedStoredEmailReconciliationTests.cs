@@ -415,7 +415,9 @@ public sealed class OrchestratedStoredEmailReconciliationTests(MailFathomOrchest
             cancellationToken);
 
     private static MailboxScope ScopeOf(MailFolderResolution binding) =>
-        MailboxScope.Create([SyntheticMailAccount.AccountId], [binding.Alias]);
+        MailboxScope.Create(
+            [SyntheticMailAccount.AccountId],
+            [new MailFolderIdentity(SyntheticMailAccount.AccountId, binding.Alias)]);
 
     /// <summary>Reads every row one folder holds, keyed by UID so an assertion names a message rather than an identifier.</summary>
     private static async Task<IReadOnlyDictionary<uint, StoredEmailEntity>> ReadRowsAsync(

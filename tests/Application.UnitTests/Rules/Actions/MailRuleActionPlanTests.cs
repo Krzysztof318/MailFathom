@@ -22,8 +22,8 @@ public sealed class MailRuleActionPlanTests
     public void Compose_TwoRulesFilingIntoDifferentFolders_HonorsTheOneDeclaredFirst()
     {
         // Arrange
-        var first = RuleNamed("file-invoices", MailRuleAction.Relocate(Archive));
-        var second = RuleNamed("file-everything", MailRuleAction.Relocate(Backup));
+        var first = RuleNamed("file-invoices", MailRuleAction.Relocate(MailFolderReference.ToAlias(Archive)));
+        var second = RuleNamed("file-everything", MailRuleAction.Relocate(MailFolderReference.ToAlias(Backup)));
 
         // Act
         var plan = MailRuleActionPlan.Compose([first, second]);
@@ -31,7 +31,7 @@ public sealed class MailRuleActionPlanTests
         // Assert
         var honored = Assert.Single(plan.Actions);
         Assert.Equal("file-invoices", honored.RuleName);
-        Assert.Equal(Archive, honored.Action.DestinationAlias);
+        Assert.Equal(MailFolderReference.ToAlias(Archive), honored.Action.Destination);
         Assert.Equal(["file-everything"], plan.WithheldRuleNames);
     }
 
@@ -40,8 +40,8 @@ public sealed class MailRuleActionPlanTests
     public void Compose_TheSameTwoRulesReordered_HonorsTheOtherOne()
     {
         // Arrange
-        var filing = RuleNamed("file-invoices", MailRuleAction.Relocate(Archive));
-        var everything = RuleNamed("file-everything", MailRuleAction.Relocate(Backup));
+        var filing = RuleNamed("file-invoices", MailRuleAction.Relocate(MailFolderReference.ToAlias(Archive)));
+        var everything = RuleNamed("file-everything", MailRuleAction.Relocate(MailFolderReference.ToAlias(Backup)));
 
         // Act
         var plan = MailRuleActionPlan.Compose([everything, filing]);
@@ -58,7 +58,7 @@ public sealed class MailRuleActionPlanTests
     {
         // Arrange
         var deleting = RuleNamed("drop-notifications", MailRuleAction.Delete());
-        var filing = RuleNamed("file-invoices", MailRuleAction.Relocate(Archive));
+        var filing = RuleNamed("file-invoices", MailRuleAction.Relocate(MailFolderReference.ToAlias(Archive)));
 
         // Act
         var plan = MailRuleActionPlan.Compose([deleting, filing]);
@@ -73,7 +73,7 @@ public sealed class MailRuleActionPlanTests
     public void Compose_AFilingRuleAndAFlaggingRuleBelowIt_AppliesTheFlagFirst()
     {
         // Arrange
-        var filing = RuleNamed("file-invoices", MailRuleAction.Relocate(Archive));
+        var filing = RuleNamed("file-invoices", MailRuleAction.Relocate(MailFolderReference.ToAlias(Archive)));
         var flagging = RuleNamed("mark-them-read", MailRuleAction.SetSeen(isSeen: true));
 
         // Act
@@ -91,7 +91,7 @@ public sealed class MailRuleActionPlanTests
     public void Compose_ActionsFromTwoRules_EachNamesTheRuleThatAskedForIt()
     {
         // Arrange
-        var filing = RuleNamed("file-invoices", MailRuleAction.Relocate(Archive));
+        var filing = RuleNamed("file-invoices", MailRuleAction.Relocate(MailFolderReference.ToAlias(Archive)));
         var flagging = RuleNamed("mark-them-read", MailRuleAction.SetSeen(isSeen: true));
 
         // Act

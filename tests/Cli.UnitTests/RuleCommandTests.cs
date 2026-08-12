@@ -37,14 +37,14 @@ public sealed class RuleCommandTests : IDisposable
               "name": "file-invoices",
               "accounts": ["work"],
               "readableFacts": ["senderDomain", "subject"],
-              "actions": [{"position":0,"mutation":"relocate","destinationAlias":"archive","desiredSeenState":null}],
+              "actions": [{"position":0,"mutation":"relocate","destination":"archive","desiredSeenState":null}],
               "stopWhenMatched": true
             },
             {
               "name": "mark-newsletters",
               "accounts": [],
               "readableFacts": ["senderDomain"],
-              "actions": [{"position":0,"mutation":"setSeen","destinationAlias":null,"desiredSeenState":true}],
+              "actions": [{"position":0,"mutation":"setSeen","destination":null,"desiredSeenState":true}],
               "stopWhenMatched": false
             }
           ]
@@ -304,7 +304,7 @@ public sealed class RuleCommandTests : IDisposable
                   "conditionFailure": null,
                   "readFacts": ["senderDomain", "attachmentCount"],
                   "actions": [
-                    {"position":0,"mutation":"relocate","outcome":"Requested","destinationAlias":"archive","failureReason":null,"mutationRecord":"0199c3d0-0000-7000-8000-000000000003"}
+                    {"position":0,"mutation":"relocate","outcome":"Requested","destination":"archive","failureReason":null,"mutationRecord":"0199c3d0-0000-7000-8000-000000000003"}
                   ],
                   "evaluatedAt": "2026-08-08T11:59:00+00:00",
                   "duration": "00:00:00.0040000"
