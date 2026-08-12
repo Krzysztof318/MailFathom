@@ -52,7 +52,7 @@ internal static class MailboxScopeArguments
     /// no folder of any of them meets the same refusal wherever it came from.
     /// </remarks>
     public static IReadOnlyList<MailFolderReference> Folders(string[]? folders) =>
-        Parse(folders, MailFolderReference.Create, MailboxScope.MaximumFolderAliases, "folder aliases");
+        Parse(folders, MailFolderReference.Create, MailboxScope.MaximumFolders, "folders");
 
     /// <summary>Converts one list of caller-supplied text into the domain identity it names.</summary>
     /// <remarks>

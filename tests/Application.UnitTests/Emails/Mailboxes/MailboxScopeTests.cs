@@ -95,7 +95,7 @@ public sealed class MailboxScopeTests
     {
         // Arrange
         var folders = Enumerable
-            .Range(0, MailboxScope.MaximumFolderAliases + 1)
+            .Range(0, MailboxScope.MaximumFolders + 1)
             .Select(position => Folder(Primary, $"folder-{position}"))
             .ToArray();
 

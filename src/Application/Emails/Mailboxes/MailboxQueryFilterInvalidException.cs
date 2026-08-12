@@ -50,7 +50,7 @@ public sealed class MailboxQueryFilterInvalidException : MailFathomException
         filterName);
 
     /// <summary>Refuses text that names no identity this system issues, such as an account identifier or a folder alias.</summary>
-    /// <param name="filterName">How this assembly names the filter, for example <c>folder aliases</c>.</param>
+    /// <param name="filterName">How this assembly names the filter, for example <c>folders</c>.</param>
     /// <param name="cause">The validation failure the domain identity raised, kept as the inner exception.</param>
     /// <returns>The failure to raise.</returns>
     /// <remarks>
@@ -66,7 +66,7 @@ public sealed class MailboxQueryFilterInvalidException : MailFathomException
         cause);
 
     /// <summary>Refuses text that names no identity this system issues, where no other failure explains why.</summary>
-    /// <param name="filterName">How this assembly names the filter, for example <c>folder aliases</c>.</param>
+    /// <param name="filterName">How this assembly names the filter, for example <c>folders</c>.</param>
     /// <returns>The failure to raise.</returns>
     /// <remarks>
     /// The overload without a cause exists for the checks an adapter makes itself, before a domain type is asked to read

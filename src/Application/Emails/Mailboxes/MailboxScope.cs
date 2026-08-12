@@ -40,11 +40,13 @@ public sealed record MailboxScope
 
     /// <summary>The greatest number of folders one request may name, counted the same way as <see cref="MaximumAccountIds" />.</summary>
     /// <remarks>
-    /// Both bounds are enforced where the caller's own list is read, in <see cref="MailboxScopeResolver" />, rather than
-    /// over the resolved lists this type holds. Resolution can only produce more: a request naming no account resolves
-    /// to every served account, and one role a request named resolves to a folder on each of them.
+    /// It counts what the caller wrote rather than folders, which is the same distinction the bound above makes and one
+    /// a role sharpens: <c>role:Junk</c> is one name however many accounts answer it. Both bounds are enforced where the
+    /// caller's own list is read, in <see cref="MailboxScopeResolver" />, rather than over the resolved lists this type
+    /// holds. Resolution can only produce more: a request naming no account resolves to every served account, and one
+    /// role a request named resolves to a folder on each of them.
     /// </remarks>
-    public const int MaximumFolderAliases = 64;
+    public const int MaximumFolders = 64;
 
     private MailboxScope(IReadOnlyList<MailAccountId> accountIds, IReadOnlyList<MailFolderIdentity> selectedFolders)
     {
@@ -202,5 +204,4 @@ public sealed record MailboxScope
                         .ThenBy(static folder => folder.Alias.Value, StringComparer.Ordinal),
                 ],
         };
-
 }

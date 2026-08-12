@@ -471,7 +471,7 @@ public sealed class MailboxScopeResolverTests
         // Arrange
         var resolver = ResolverServing(Work);
         var tooMany = Enumerable
-            .Range(0, MailboxScope.MaximumFolderAliases + 1)
+            .Range(0, MailboxScope.MaximumFolders + 1)
             .Select(position => MailFolderReference.ToAlias(MailFolderAlias.Create($"folder-{position}")))
             .ToArray();
 

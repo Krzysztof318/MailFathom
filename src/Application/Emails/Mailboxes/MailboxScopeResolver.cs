@@ -122,8 +122,8 @@ public sealed class MailboxScopeResolver
             "accounts");
         MailboxQueryFilterInvalidException.ThrowIfCountExceeded(
             folders.Count,
-            MailboxScope.MaximumFolderAliases,
-            "folder aliases");
+            MailboxScope.MaximumFolders,
+            "folders");
 
         var requestedAccountIds = accountSelectors
             .Select(selector => ResolvedAccountId(selector, servedAccounts))
