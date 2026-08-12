@@ -253,9 +253,11 @@ rather than replaying a batch or stepping over one.
 
 **A message whose body text has not been extracted yet is skipped and stays eligible.** It applies only where the
 account's rules actually name `bodyText`: such a message is left in the queue and evaluated once its text has been
-derived, rather than evaluated against a fact that would answer absent and then never reconsidered. A message whose
-content will never yield text — one stored without its payload, for instance — is evaluated now with the fact absent,
-because waiting for text that is not coming would stall the queue behind it.
+derived, rather than evaluated against a fact that would answer absent and then never reconsidered. Mail whose payload
+local storage has not had headroom for is waited on the same way, because a later run fetches it as soon as the ceiling
+permits. A message whose content will never yield text — one above the size limit, which every later run refuses for
+the same reason — is evaluated now with the fact absent, because waiting for text that is not coming would stall the
+queue behind it.
 
 **A rule that cannot answer for one message costs that message's rule and nothing else.** It is recorded as a failed
 rule with a reason, the rules below it still run, the remaining messages of the batch are still evaluated, and the

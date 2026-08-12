@@ -94,6 +94,50 @@ public sealed class OrchestratedMailRuleEvaluationTests(MailFathomOrchestrationF
     }
 
     /// <summary>
+    /// The two ways an email can be sitting in the queue without extracted text, which the projection has to tell apart:
+    /// content the ceiling has not had headroom for is still coming, and content above the size limit never is.
+    /// </summary>
+    /// <remarks>
+    /// The distinction decides whether a message is waited for or evaluated with the body-text fact absent, and getting
+    /// it wrong is silent — the email is stamped as evaluated, leaves the queue for good, and a rule naming its text
+    /// never sees it. It is a <c>CASE</c> PostgreSQL evaluates over a string-converted enum column beside a correlated
+    /// existence check, so only a real database settles what it produces.
+    /// </remarks>
+    [Fact]
+    public async Task TheArrivalQueue_MailWhoseTextWasNeverExtracted_WaitsOnlyForContentThatIsStillComing()
+    {
+        // Arrange
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var services = await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken);
+        await DrainArrivalQueueAsync(services, cancellationToken);
+        var headroomPending = await StoreOneUnextractedMessageAsync(
+            services,
+            uid: 9431,
+            StoredEmailContentAvailability.AwaitingStorageHeadroom,
+            cancellationToken);
+        var oversized = await StoreOneUnextractedMessageAsync(
+            services,
+            uid: 9432,
+            StoredEmailContentAvailability.ExceededSizeLimit,
+            cancellationToken);
+
+        // Act
+        var queued = await ReadArrivalQueueAsync(services, resumeAfter: null, DrainBatchSize, cancellationToken);
+
+        // Assert
+        var waited = Assert.Single(queued, candidate => candidate.StoredEmailId == headroomPending);
+        var evaluatedWithoutText = Assert.Single(queued, candidate => candidate.StoredEmailId == oversized);
+
+        Assert.False(waited.Facts.HasExtractedContent);
+        Assert.False(evaluatedWithoutText.Facts.HasExtractedContent);
+
+        // The control the assertion below needs: both rows look identical to a reader of the search document, so an
+        // observation that reported nothing would pass the first assertion and fail the second.
+        Assert.True(waited.AwaitsExtraction);
+        Assert.False(evaluatedWithoutText.AwaitsExtraction);
+    }
+
+    /// <summary>
     /// The whole-mailbox walk against a real schema: it selects mail a pass has already evaluated, it never hands the
     /// same email to two batches, and the position one batch commits is exactly what the next resumes past.
     /// </summary>
@@ -220,6 +264,33 @@ public sealed class OrchestratedMailRuleEvaluationTests(MailFathomOrchestrationF
                         SyntheticEmail.BodyTextContaining(subject, wordCount: 40),
                         RecipientAddress),
                     StoredEmailContentAvailability.Available,
+                    token),
+            cancellationToken);
+
+        Assert.Equal(PersistenceCommitResult.Committed, commitResult);
+
+        return storedEmailId;
+    }
+
+    /// <summary>Stores one synthetic message whose MIME nothing read, under the content state a test names.</summary>
+    private static async Task<StoredEmailId> StoreOneUnextractedMessageAsync(
+        OrchestratedMailFathomServices services,
+        uint uid,
+        StoredEmailContentAvailability contentAvailability,
+        CancellationToken cancellationToken)
+    {
+        var binding = await OrchestratedFolderBinding.CommitAsync(services, FolderAlias, cancellationToken);
+        var occurrenceId = SyntheticEmail.OccurrenceIn(binding, uid);
+        var storedEmailId = default(StoredEmailId);
+
+        var commitResult = await services.CommitAsync(
+            async (scope, session, token) => storedEmailId = await scope
+                .GetRequiredService<IEmailMetadataRepository>()
+                .UpsertMetadataAsync(
+                    session,
+                    SyntheticEmail.RemoteMetadataOf(occurrenceId, SubjectOf(uid)),
+                    extractedMetadata: null,
+                    contentAvailability,
                     token),
             cancellationToken);
 

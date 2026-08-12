@@ -11,9 +11,10 @@ namespace MailFathom.Application.Rules.Evaluation;
 /// <param name="StoredEmailId">The local identity the pass records its progress and its evaluation against.</param>
 /// <param name="Facts">The metadata every fact but the body text is resolved from.</param>
 /// <param name="AwaitsExtraction">
-/// Whether text is still expected to be derived from this email's stored content. It separates a message whose body text
-/// has not been extracted <em>yet</em> from one that will never have any, which is the difference between skipping the
-/// email until the text arrives and evaluating it now with the fact absent.
+/// Whether text is still expected to be derived from this email's content — the content already stored, or the content a
+/// later run will fetch once local storage has headroom for it. It separates a message whose body text has not been
+/// extracted <em>yet</em> from one that will never have any, which is the difference between skipping the email until
+/// the text arrives and evaluating it now with the fact absent.
 /// </param>
 public sealed record StoredEmailAwaitingRuleEvaluation(
     StoredEmailId StoredEmailId,

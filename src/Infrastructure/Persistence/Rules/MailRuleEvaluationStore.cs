@@ -98,9 +98,19 @@ internal sealed class MailRuleEvaluationStore(MailFathomDbContext dbContext) : I
 
     /// <summary>Reads one keyset batch of an account's mail as the fact surface a condition is evaluated against.</summary>
     /// <remarks>
+    /// <para>
     /// Ordering is by the primary key, which is total, stable, and already indexed for this account. Both the ordering
     /// and the keyset comparison are evaluated by PostgreSQL, so a walk runs entirely under that server's <c>uuid</c>
     /// ordering and never has to agree with how the CLR compares two identifiers.
+    /// </para>
+    /// <para>
+    /// Text is still expected wherever content is stored or is going to be, which is why
+    /// <see cref="StoredEmailContentAvailability.AwaitingStorageHeadroom" /> counts alongside
+    /// <see cref="StoredEmailContentAvailability.Available" />: a later run fetches that payload as soon as the ceiling
+    /// permits, and evaluating the email now would stamp it as evaluated and leave a rule naming the body text never
+    /// seeing it. <see cref="StoredEmailContentAvailability.ExceededSizeLimit" /> is the opposite future — every later
+    /// run refuses it for the same reason — so such an email is evaluated now with the fact absent rather than waited on.
+    /// </para>
     /// </remarks>
     private async Task<IReadOnlyList<StoredEmailAwaitingRuleEvaluation>> ReadCandidatesAsync(
         IQueryable<StoredEmailEntity> emails,
@@ -141,7 +151,8 @@ internal sealed class MailRuleEvaluationStore(MailFathomDbContext dbContext) : I
                 email.IsRemotelyFlagged,
                 email.IsRemotelyDraft,
                 HasExtractedContent = email.SearchDocument != null,
-                AwaitsExtraction = email.ContentAvailability == StoredEmailContentAvailability.Available
+                AwaitsExtraction = (email.ContentAvailability == StoredEmailContentAvailability.Available
+                        || email.ContentAvailability == StoredEmailContentAvailability.AwaitingStorageHeadroom)
                     && email.SearchDocument == null,
             })
             .ToArrayAsync(cancellationToken);
