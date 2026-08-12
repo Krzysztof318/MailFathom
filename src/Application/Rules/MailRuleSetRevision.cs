@@ -112,6 +112,31 @@ public readonly record struct MailRuleSetRevision
         return new MailRuleSetRevision(Convert.ToHexStringLower(digest)[..LengthInCharacters]);
     }
 
+    /// <summary>Reads back an identity this system derived earlier and recorded.</summary>
+    /// <param name="value">The recorded identity.</param>
+    /// <returns>The revision, which compares equal to a freshly derived one of the same rule set.</returns>
+    /// <exception cref="ArgumentException">Thrown when the value is not an identity this type could have produced.</exception>
+    /// <remarks>
+    /// A durable record of a run has to say which rule set the run was bound to, and it survives the process that
+    /// derived it — so the identity has to come back from storage rather than only out of <see cref="Create" />. The
+    /// shape is checked rather than trusted, because a value that is not one this type produces would compare unequal
+    /// to every rule set and silently make every run look superseded.
+    /// </remarks>
+    public static MailRuleSetRevision Restore(string value)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(value);
+
+        if (value.Length != LengthInCharacters
+            || !value.All(static character => char.IsAsciiDigit(character) || char.IsAsciiLetterLower(character) && character <= 'f'))
+        {
+            throw new ArgumentException(
+                $"A rule set revision is exactly {LengthInCharacters} lowercase hexadecimal characters.",
+                nameof(value));
+        }
+
+        return new MailRuleSetRevision(value);
+    }
+
     /// <inheritdoc />
     public override string ToString() => this.value ?? "(unspecified)";
 }

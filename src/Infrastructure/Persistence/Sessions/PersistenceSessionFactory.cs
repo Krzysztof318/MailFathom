@@ -79,6 +79,11 @@ internal sealed class PersistenceSessionFactory(MailFathomDbContext dbContext) :
         /// crossing the application boundary, and the activation turns that into the answer the operator needs, which
         /// is that a different reindex is already running.
         /// </para>
+        /// <para>
+        /// The last is the mutation identity's case once more, for the account's whole-mailbox rule run: two requests
+        /// for an account that has never had one reach the database together, and the retry reads back the run the
+        /// winner asked for instead of the second caller starting a second walk of one mailbox.
+        /// </para>
         /// </remarks>
         public bool IsConcurrencyConflict(DbUpdateException exception) =>
             exception.InnerException is PostgresException
@@ -90,7 +95,8 @@ internal sealed class PersistenceSessionFactory(MailFathomDbContext dbContext) :
                     or MailFathomDbContext.MailboxMutationIdentityUniqueIndexName
                     or MailFathomDbContext.MailboxMutationAuditEntryMutationUniqueIndexName
                     or MailFathomDbContext.EmbeddingProfileFingerprintUniqueIndexName
-                    or MailFathomDbContext.EmbeddingProfileLifecycleUniqueIndexName,
+                    or MailFathomDbContext.EmbeddingProfileLifecycleUniqueIndexName
+                    or MailFathomDbContext.MailRuleEvaluationRunPrimaryKeyConstraintName,
             };
 
         public void ClearTrackedState() => dbContext.ChangeTracker.Clear();

@@ -24,6 +24,7 @@ using MailFathom.Application.Persistence;
 using MailFathom.Application.Retrieval.AskMail.Audit;
 using MailFathom.Application.Rules;
 using MailFathom.Application.Rules.Conditions;
+using MailFathom.Application.Rules.Evaluation;
 using MailFathom.Application.SensitiveContent.Detection;
 using MailFathom.Application.SensitiveContent.Redaction;
 using MailFathom.Application.Synchronization;
@@ -300,6 +301,13 @@ try
         provider.GetRequiredService<ILogger<ValidatedSettingsSnapshot<MailRulesOptions>>>()));
     builder.Services.AddSingleton<ISettingsSnapshot<MailRulesOptions>>(
         provider => provider.GetRequiredService<ValidatedSettingsSnapshot<MailRulesOptions>>());
+    // Evaluation is a step of the account's synchronization run, so its collaborators are scoped exactly as that run's
+    // other steps are: one scope per work unit, and the pass bounds read from the published snapshot when the scope is
+    // built rather than captured once at startup.
+    builder.Services.AddScoped(provider =>
+        provider.GetRequiredService<ISettingsSnapshot<MailRulesOptions>>().Current.ToEvaluationOptions());
+    builder.Services.AddScoped<MailRuleEvaluationPass>();
+    builder.Services.AddScoped<MailRuleEvaluationRunRequests>();
     builder.Services.AddHostedService(
         provider => provider.GetRequiredService<ValidatedSettingsSnapshot<MailRulesOptions>>());
     // The published snapshot, not the bound one, is what every consumer reads: a reload whose secret references do not

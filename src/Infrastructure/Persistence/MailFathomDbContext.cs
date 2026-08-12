@@ -41,6 +41,12 @@ internal sealed class MailFathomDbContext : DbContext
 
     internal const string StoredEmailAwaitingContentIndexName = "ix_stored_emails_awaiting_content";
 
+    /// <summary>The order a requested whole-mailbox rule run walks an account's mail in.</summary>
+    internal const string StoredEmailAccountIdentityIndexName = "ix_stored_emails_account_identity";
+
+    /// <summary>The queue of mail no rule pass has evaluated, which is read once per account run and is usually empty.</summary>
+    internal const string StoredEmailAwaitingRuleEvaluationIndexName = "ix_stored_emails_awaiting_rule_evaluation";
+
     internal const string StoredEmailSenderIndexName = "ix_stored_emails_sender";
 
     internal const string StoredEmailToAddressesIndexName = "ix_stored_emails_to_addresses";
@@ -89,6 +95,14 @@ internal sealed class MailFathomDbContext : DbContext
     internal const string EmailEmbeddingProfileIndexName = "ix_email_embeddings_profile";
 
     internal const string MailboxRefreshTokenKeyIndexName = "ix_mailbox_refresh_tokens_data_encryption_key";
+
+    /// <summary>The key that keeps one whole-mailbox rule run per account, and which a second request is recognized by.</summary>
+    /// <remarks>
+    /// Named because losing this race is the mechanism rather than a fault: two requests for one account's first run
+    /// reach the database together, one of them violates this key, and the retry reads back the run the winner asked
+    /// for — which is exactly how asking twice produces one walk of one mailbox.
+    /// </remarks>
+    internal const string MailRuleEvaluationRunPrimaryKeyConstraintName = "pk_mail_rule_evaluation_runs";
 
     /// <summary>The constraint a mutation's idempotency identity is enforced by, and which a losing writer is recognized from.</summary>
     /// <remarks>
@@ -161,6 +175,8 @@ internal sealed class MailFathomDbContext : DbContext
     internal DbSet<EmailContentRepairRequestEntity> EmailContentRepairRequests => this.Set<EmailContentRepairRequestEntity>();
 
     internal DbSet<BackfillPositionEntity> BackfillPositions => this.Set<BackfillPositionEntity>();
+
+    internal DbSet<MailRuleEvaluationRunEntity> MailRuleEvaluationRuns => this.Set<MailRuleEvaluationRunEntity>();
 
     internal DbSet<SynchronizationCheckpointEntity> SynchronizationCheckpoints => this.Set<SynchronizationCheckpointEntity>();
 
@@ -336,6 +352,23 @@ internal sealed class MailFathomDbContext : DbContext
                 .WithOne(email => email.ContentRepairRequest)
                 .HasForeignKey<EmailContentRepairRequestEntity>(repairRequest => repairRequest.StoredEmailId)
                 .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // One row per account, which is what makes "one outstanding whole-mailbox rule run" a property of the key rather
+        // than of a check. The ending is stored as text for the reason every other outcome here is: it stays readable
+        // in an ad-hoc query and survives a later reordering of the enum.
+        modelBuilder.Entity<MailRuleEvaluationRunEntity>(entity =>
+        {
+            entity.ToTable("mail_rule_evaluation_runs");
+            entity.HasKey(run => run.MailboxAccountId).HasName(MailRuleEvaluationRunPrimaryKeyConstraintName);
+            entity.Property(run => run.MailboxAccountId).HasMaxLength(128).ValueGeneratedNever();
+            entity.Property(run => run.Revision)
+                .HasMaxLength(MailRuleEvaluationRunEntity.RevisionLength)
+                .IsFixedLength();
+            entity.Property(run => run.Ending).HasConversion<string>().HasMaxLength(64);
+
+            // See the stored-email mapping: this is the PostgreSQL `xmin` system column, not a user-defined column.
+            entity.Property(run => run.ConcurrencyVersion).IsRowVersion();
         });
 
         modelBuilder.Entity<BackfillPositionEntity>(entity =>
@@ -854,6 +887,21 @@ internal sealed class MailFathomDbContext : DbContext
             .HasDatabaseName(StoredEmailAwaitingContentIndexName)
             .HasFilter(
                 $"\"{nameof(StoredEmailEntity.ContentAvailability)}\" = '{nameof(StoredEmailContentAvailability.AwaitingStorageHeadroom)}'");
+
+        // The order a requested whole-mailbox rule run walks in. It is the identity rather than the timeline because a
+        // walk that has to resume needs a total order no later write disturbs, and because the position it commits is
+        // one column rather than a nullable timestamp paired with a tie-breaker.
+        entity.HasIndex(email => new { email.MailboxAccountId, email.Id })
+            .HasDatabaseName(StoredEmailAccountIdentityIndexName);
+
+        // The arrival queue, and the filter is the whole point of it. In steady state almost every row of an account
+        // has been evaluated, so without the filter this read would walk the account's entire index once per run to
+        // find the handful of rows that qualify — and it runs for every account on every synchronization run.
+        entity.HasIndex(
+                email => new { email.MailboxAccountId, email.Id },
+                StoredEmailAwaitingRuleEvaluationIndexName)
+            .HasDatabaseName(StoredEmailAwaitingRuleEvaluationIndexName)
+            .HasFilter($"\"{nameof(StoredEmailEntity.RulesEvaluatedAt)}\" IS NULL");
 
         entity.HasIndex(email => email.SenderNormalizedAddress)
             .HasDatabaseName(StoredEmailSenderIndexName);

@@ -6,6 +6,7 @@ using System.Diagnostics.CodeAnalysis;
 using MailFathom.Application.Folders;
 using MailFathom.Application.Mail.Mutations;
 using MailFathom.Application.Persistence;
+using MailFathom.Application.Rules.Evaluation;
 using MailFathom.Application.Synchronization;
 using MailFathom.Application.Synchronization.Sessions;
 using MailFathom.Domain.Accounts;
@@ -607,6 +608,89 @@ public sealed class AccountSynchronizationSupervisorTests
         return options;
     }
 
+    /// <summary>A rule may only see mail its own run has already committed, which is what running last is for.</summary>
+    [Fact]
+    public async Task RunAsync_RulesEvaluated_ReachesTheAccountOnlyAfterItsFoldersHaveRun()
+    {
+        // Arrange
+        var evaluatedAfterTheFolder = new TaskCompletionSource<bool>();
+        var folderWasOpened = 0;
+        var sessionFactory = Substitute.For<IMailboxSessionFactory>();
+        sessionFactory
+            .OpenReadOnlyAsync(
+                Arg.Any<MailAccountId>(),
+                Arg.Any<MailFolderResolution>(),
+                Arg.Any<MailTransportSecurityPolicy>(),
+                Arg.Any<CancellationToken>())
+            .Returns(_ =>
+            {
+                Volatile.Write(ref folderWasOpened, 1);
+
+                return Task.FromException<IMailboxSession>(new InvalidOperationException("connect failed"));
+            });
+        var ruleStore = Substitute.For<IMailRuleEvaluationStore>();
+        ruleStore
+            .GetEmailsAwaitingFirstEvaluationAsync(
+                Arg.Any<MailAccountId>(),
+                Arg.Any<StoredEmailId?>(),
+                Arg.Any<int>(),
+                Arg.Any<CancellationToken>())
+            .Returns(_ =>
+            {
+                evaluatedAfterTheFolder.TrySetResult(Volatile.Read(ref folderWasOpened) == 1);
+
+                return Task.FromResult<IReadOnlyList<StoredEmailAwaitingRuleEvaluation>>([]);
+            });
+        using var harness = CreateHarness(
+            SynchronizationTestHost.CreateSingleAccountOptions(enabled: true, "INBOX"),
+            sessionFactory,
+            ruleEvaluationStore: ruleStore);
+
+        // Act
+        await harness.SuperviseUntilAsync(evaluatedAfterTheFolder.Task);
+
+        // Assert
+        Assert.True(await evaluatedAfterTheFolder.Task);
+    }
+
+    /// <summary>Evaluation reaches no mail server, so failing one must not make the account fetch its mail less often.</summary>
+    [Fact]
+    public async Task RunAsync_RuleEvaluationFails_DoesNotDeferTheAccountsNextRun()
+    {
+        // Arrange
+        var passFailed = new TaskCompletionSource();
+        var ruleStore = Substitute.For<IMailRuleEvaluationStore>();
+        ruleStore
+            .GetEmailsAwaitingFirstEvaluationAsync(
+                Arg.Any<MailAccountId>(),
+                Arg.Any<StoredEmailId?>(),
+                Arg.Any<int>(),
+                Arg.Any<CancellationToken>())
+            .Returns<Task<IReadOnlyList<StoredEmailAwaitingRuleEvaluation>>>(_ =>
+            {
+                passFailed.TrySetResult();
+
+                throw new InvalidOperationException("The rule candidates could not be read.");
+            });
+        using var harness = CreateHarness(
+            SynchronizationTestHost.CreateSingleAccountOptions(enabled: true),
+            Substitute.For<IMailboxSessionFactory>(),
+            ruleEvaluationStore: ruleStore);
+
+        // Act
+        await harness.SuperviseUntilAsync(passFailed.Task);
+
+        // Assert
+        Assert.Contains(
+            harness.Logger.Messages,
+            message => message.Contains(
+                "Evaluating the rules of account primary ended unexpectedly",
+                StringComparison.Ordinal));
+        Assert.DoesNotContain(
+            harness.Logger.Messages,
+            message => message.Contains("runs in a row", StringComparison.Ordinal));
+    }
+
     private static IMailboxSessionFactory CreateFailingSessionFactory(
         List<string> attemptedFolders,
         TaskCompletionSource runReached,
@@ -669,6 +753,7 @@ public sealed class AccountSynchronizationSupervisorTests
         IRemoteFolderCatalog? remoteFolderCatalog = null,
         IMailboxMutationRecordStore? mutationRecordStore = null,
         IStoredMailFolderMirrorStore? folderMirrorStore = null,
+        IMailRuleEvaluationStore? ruleEvaluationStore = null,
         params string[] unadvertisedAliases)
     {
         var clock = new FakeTimeProvider();
@@ -682,6 +767,7 @@ public sealed class AccountSynchronizationSupervisorTests
             remoteFolderCatalog,
             mutationRecordStore,
             folderMirrorStore,
+            ruleEvaluationStore,
             unadvertisedAliases);
 
         return new SupervisorHarness(

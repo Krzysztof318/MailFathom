@@ -12,6 +12,9 @@ using MailFathom.Application.Mail.Mutations;
 using MailFathom.Application.Mail.Mutations.Audit;
 using MailFathom.Application.Mail.Mutations.Convergence;
 using MailFathom.Application.Persistence;
+using MailFathom.Application.Rules;
+using MailFathom.Application.Rules.Conditions;
+using MailFathom.Application.Rules.Evaluation;
 using MailFathom.Application.Synchronization;
 using MailFathom.Application.Synchronization.Checkpoints;
 using MailFathom.Application.Synchronization.Reconciliation;
@@ -77,6 +80,7 @@ internal static class SynchronizationTestHost
     /// <param name="remoteFolderCatalog">Replaces the catalog that advertises exactly the configured folders.</param>
     /// <param name="mutationRecordStore">Replaces the record store that reports nothing outstanding to converge.</param>
     /// <param name="folderMirrorStore">Replaces the store a run erases an unmirrored folder's local copy through.</param>
+    /// <param name="ruleEvaluationStore">Replaces the store a rule pass reads its candidates from; one with nothing to evaluate is the default.</param>
     /// <param name="unadvertisedAliases">Aliases the modelled server does not advertise.</param>
     /// <returns>A provider whose scopes resolve a synchronizer over substituted infrastructure.</returns>
     internal static ServiceProvider BuildServiceProvider(
@@ -88,6 +92,7 @@ internal static class SynchronizationTestHost
         IRemoteFolderCatalog? remoteFolderCatalog = null,
         IMailboxMutationRecordStore? mutationRecordStore = null,
         IStoredMailFolderMirrorStore? folderMirrorStore = null,
+        IMailRuleEvaluationStore? ruleEvaluationStore = null,
         params string[] unadvertisedAliases)
     {
         var services = new ServiceCollection();
@@ -146,6 +151,15 @@ internal static class SynchronizationTestHost
         // from its own scope. The store below records which folders it was asked about and erases nothing.
         services.AddSingleton(folderMirrorStore ?? new RecordingMailFolderMirrorStore());
         services.AddScoped<UnmirroredMailFolderEraser>();
+
+        // The run's last local step. The default rule set declares nothing and the default store holds nothing, so a
+        // test that is not about rules pays for one query that finds no mail and no outstanding run.
+        services.AddSingleton(ruleEvaluationStore ?? CreateRuleStoreWithNothingToEvaluate());
+        services.AddSingleton(CreateRunStoreWithNothingOutstanding());
+        services.AddSingleton(CreateSourceOfAnEmptyRuleSet());
+        services.AddSingleton(new MailRuleSetEvaluator(timeProvider));
+        services.AddScoped(_ => new MailRuleEvaluationOptions());
+        services.AddScoped<MailRuleEvaluationPass>();
         services.AddLogging();
 
         // Each run hands its own snapshot to the scopes it opens, and every per-account reader answers from that
@@ -159,6 +173,48 @@ internal static class SynchronizationTestHost
         services.AddScoped<IRemotelyDeletedEmailDispositionReader>(provider => provider.GetRequiredService<MailSynchronizationOptions>());
 
         return services.BuildServiceProvider();
+    }
+
+    /// <summary>Answers every rule query with nothing, which is what an account whose mail is all evaluated looks like.</summary>
+    private static IMailRuleEvaluationStore CreateRuleStoreWithNothingToEvaluate()
+    {
+        var store = Substitute.For<IMailRuleEvaluationStore>();
+
+        store.GetEmailsAwaitingFirstEvaluationAsync(
+                Arg.Any<MailAccountId>(),
+                Arg.Any<StoredEmailId?>(),
+                Arg.Any<int>(),
+                Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IReadOnlyList<StoredEmailAwaitingRuleEvaluation>>([]));
+        store.GetStoredEmailsAsync(
+                Arg.Any<MailAccountId>(),
+                Arg.Any<StoredEmailId?>(),
+                Arg.Any<int>(),
+                Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IReadOnlyList<StoredEmailAwaitingRuleEvaluation>>([]));
+
+        return store;
+    }
+
+    /// <summary>Answers with a rule set that declares nothing, which is what a deployment configuring no rule has.</summary>
+    private static IMailRuleSetSource CreateSourceOfAnEmptyRuleSet()
+    {
+        var ruleSetSource = Substitute.For<IMailRuleSetSource>();
+
+        ruleSetSource.Current.Returns(
+            MailRuleSet.Create([], MailRuleSetRevision.Create([]), MailRuleConditionBounds.Default));
+
+        return ruleSetSource;
+    }
+
+    private static IMailRuleEvaluationRunStore CreateRunStoreWithNothingOutstanding()
+    {
+        var runStore = Substitute.For<IMailRuleEvaluationRunStore>();
+
+        runStore.FindOutstandingAsync(Arg.Any<MailAccountId>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<MailRuleEvaluationRun?>(null));
+
+        return runStore;
     }
 
     /// <summary>Advances a fake clock until the awaited signal arrives, or until the test's own guard gives up.</summary>

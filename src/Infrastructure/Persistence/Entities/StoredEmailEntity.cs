@@ -159,6 +159,22 @@ internal sealed class StoredEmailEntity
 
     public bool IsRemotelyDeleted { get; set; }
 
+    /// <summary>
+    /// Gets or sets when a rule pass last evaluated this email, or <see langword="null" /> while none has.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The column is the arrival queue. A pass reads the account's rows carrying no value, in identity order, and
+    /// writing one is what takes a row out of the queue — so a rule applies to mail arriving from now on rather than to
+    /// a mailbox's whole history, and running the rules over mail already stored is something an owner asks for.
+    /// </para>
+    /// <para>
+    /// The migration that adds it stamps every row already stored, which is the same statement made about the mail that
+    /// existed before rules ran at all: an upgrade must not turn a first rule set loose on years of correspondence.
+    /// </para>
+    /// </remarks>
+    public DateTimeOffset? RulesEvaluatedAt { get; set; }
+
     public uint ConcurrencyVersion { get; set; }
 
     public EmailMessageContentEntity? Content { get; set; }

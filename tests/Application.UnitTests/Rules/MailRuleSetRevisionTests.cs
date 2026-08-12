@@ -115,6 +115,35 @@ public sealed class MailRuleSetRevisionTests
         Assert.Equal(revision.Value, revision.ToString());
     }
 
+    /// <summary>A durable record of a run names the rule set it was bound to, so the identity has to come back from storage.</summary>
+    [Fact]
+    public void Restore_AnIdentityThisTypeDerived_ComparesEqualToTheDerivedOne()
+    {
+        // Arrange
+        var derived = MailRuleSetRevision.Create([FileInvoices]);
+
+        // Act
+        var restored = MailRuleSetRevision.Restore(derived.Value);
+
+        // Assert
+        Assert.Equal(derived, restored);
+        Assert.True(restored.IsSpecified);
+    }
+
+    /// <summary>A value this type could not have produced would compare unequal to every rule set and say nothing about why.</summary>
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    [InlineData("abc")]
+    [InlineData("abcdef0123456")]
+    [InlineData("ABCDEF012345")]
+    [InlineData("abcdefg12345")]
+    public void Restore_AValueThatIsNotADerivedIdentity_IsRefused(string value)
+    {
+        // Act, Assert
+        Assert.Throws<ArgumentException>(() => MailRuleSetRevision.Restore(value));
+    }
+
     [Fact]
     public void Value_UnspecifiedDefault_IsRefusedRatherThanAnswered()
     {

@@ -32,6 +32,7 @@ using MailFathom.Application.Resilience;
 using MailFathom.Application.Retrieval;
 using MailFathom.Application.Retrieval.AskMail;
 using MailFathom.Application.Retrieval.AskMail.Audit;
+using MailFathom.Application.Rules.Evaluation;
 using MailFathom.Application.SensitiveContent.Detection;
 using MailFathom.Application.Synchronization;
 using MailFathom.Application.Synchronization.Checkpoints;
@@ -56,6 +57,7 @@ using MailFathom.Infrastructure.Persistence.Connections;
 using MailFathom.Infrastructure.Persistence.Emails;
 using MailFathom.Infrastructure.Persistence.Embeddings;
 using MailFathom.Infrastructure.Persistence.Mutations;
+using MailFathom.Infrastructure.Persistence.Rules;
 using MailFathom.Infrastructure.Persistence.Sessions;
 using MailFathom.Infrastructure.Persistence.Synchronization;
 using MailFathom.Infrastructure.Resilience;
@@ -274,6 +276,8 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IStoredEmailContentInventory, StoredEmailContentInventory>();
         services.AddScoped<IStoredEmailExtractionBackfillStore, StoredEmailExtractionBackfillStore>();
         services.AddScoped<IStoredEmailReconciliationStore, StoredEmailReconciliationStore>();
+        services.AddScoped<IMailRuleEvaluationStore, MailRuleEvaluationStore>();
+        services.AddScoped<IMailRuleEvaluationRunStore, MailRuleEvaluationRunStore>();
         // The read side takes no persistence session and joins no transaction, so its ports are registered beside the
         // write repositories rather than through one of them.
         services.AddScoped<IStoredEmailTimelineReader, StoredEmailTimelineReader>();

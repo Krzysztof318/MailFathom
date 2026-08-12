@@ -9,6 +9,7 @@ using MailFathom.Application.Mail.Mutations.Audit;
 using MailFathom.Application.Mail.Mutations.Convergence;
 using MailFathom.Application.Persistence;
 using MailFathom.Application.Retrieval.AskMail.Audit;
+using MailFathom.Application.Rules.Evaluation;
 using MailFathom.Application.Synchronization;
 using MailFathom.Application.Synchronization.Reconciliation;
 using MailFathom.Application.Synchronization.Sessions;
@@ -244,6 +245,7 @@ internal sealed partial class AccountSynchronizationSupervisor
             {
                 await this.EraseUnmirroredFolderContentAsync(runSettings, unmirroredFolders, workUnitToken);
                 await this.EraseExpiredAuditEntriesAsync(runSettings, workUnitToken);
+                await this.EvaluateMailRulesAsync(runSettings, workUnitToken);
             }
         }
         finally
@@ -424,6 +426,125 @@ internal sealed partial class AccountSynchronizationSupervisor
             this.LogAuditRetentionFailed(exception, this.accountId.Value);
         }
     }
+
+    /// <summary>Runs this account's rules over the mail that has arrived, and over its whole mailbox where one was asked for.</summary>
+    /// <remarks>
+    /// <para>
+    /// Last of the run's local steps, and after the folders rather than beside them, which is what makes "evaluation
+    /// never runs inside the synchronization transaction" true rather than merely intended: every message it can reach
+    /// was committed by a folder that has already finished, in a scope and a transaction of its own. It is also after
+    /// the unmirrored erasure, so a folder the operator has stopped mirroring has already given up its rows instead of
+    /// offering them to a rule on the way out.
+    /// </para>
+    /// <para>
+    /// A failure never fails the run. Evaluation reaches no mail server — everything it reads was already stored — so
+    /// backing the account off, which is to say fetching its mail less often, would answer a local problem by slowing
+    /// the remote work that had nothing to do with it. What a pass did not finish, the next run resumes from the
+    /// batches this one committed.
+    /// </para>
+    /// </remarks>
+    [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "Rule evaluation is a local pass rather than a mail operation; one that failed is logged and resumed by the next run rather than putting the account into backoff.")]
+    private async Task EvaluateMailRulesAsync(
+        MailSynchronizationOptions runSettings,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            using var scope = this.scopeFactory.CreateScope();
+
+            scope.ServiceProvider.GetRequiredService<ScopedMailSynchronizationSettings>().UseRunSnapshot(runSettings);
+
+            var report = await scope.ServiceProvider
+                .GetRequiredService<MailRuleEvaluationPass>()
+                .RunAsync(this.accountId, cancellationToken);
+
+            this.ReportRuleEvaluation(report);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception exception)
+        {
+            this.LogMailRuleEvaluationFailed(exception, this.accountId.Value);
+        }
+    }
+
+    /// <summary>Emits what the rules did, in counts and rule names; nothing derived from a message may appear here.</summary>
+    /// <remarks>
+    /// A pass that found nothing says nothing, so an account whose mail is all evaluated does not repeat a line per
+    /// interval forever. A rule's name is the one part of a rule that can be promised to carry no address somebody
+    /// typed, which is what makes naming the rules that matched safe as well as useful.
+    /// </remarks>
+    private void ReportRuleEvaluation(MailRuleEvaluationReport report)
+    {
+        if (!report.Arrivals.IsEmpty)
+        {
+            var matchedRuleNames = NameList(report.Arrivals.MatchedRuleNames);
+
+            this.LogArrivedMailEvaluated(
+                this.accountId.Value,
+                report.Revision.Value,
+                report.Arrivals.EvaluatedEmailCount,
+                report.Arrivals.MatchedEmailCount,
+                report.Arrivals.SkippedEmailCount,
+                matchedRuleNames,
+                report.Arrivals.EmailsRemain);
+        }
+
+        this.ReportFailedRules(report.Arrivals);
+
+        if (report.RequestedRun is { } requestedRun)
+        {
+            if (!requestedRun.IsEmpty)
+            {
+                var matchedRuleNames = NameList(requestedRun.MatchedRuleNames);
+
+                this.LogRequestedRunProgressed(
+                    this.accountId.Value,
+                    requestedRun.EvaluatedEmailCount,
+                    requestedRun.MatchedEmailCount,
+                    requestedRun.SkippedEmailCount,
+                    matchedRuleNames,
+                    requestedRun.EmailsRemain);
+            }
+
+            this.ReportFailedRules(requestedRun);
+        }
+
+        switch (report.RequestedRunEnding)
+        {
+            case MailRuleEvaluationRunEnding.Completed:
+                this.LogRequestedRunCompleted(this.accountId.Value, report.Revision.Value);
+
+                break;
+            case MailRuleEvaluationRunEnding.Superseded:
+                this.LogRequestedRunSuperseded(this.accountId.Value);
+
+                break;
+            default:
+                break;
+        }
+    }
+
+    private void ReportFailedRules(MailRuleEvaluationWalk walk)
+    {
+        if (walk.FailedRuleCount == 0)
+        {
+            return;
+        }
+
+        var failedRuleNames = NameList(walk.FailedRuleNames);
+
+        this.LogRuleEvaluationsFailed(
+            this.accountId.Value,
+            walk.FailedRuleCount,
+            walk.TimedOutRuleCount,
+            failedRuleNames);
+    }
+
+    /// <summary>Renders a set of rule names for one log line, which is safe because a rule name carries nothing personal.</summary>
+    private static string NameList(IReadOnlyList<string> ruleNames) => string.Join(", ", ruleNames);
 
     /// <summary>Synchronizes one folder in a scope of its own and reports whether it completed and what it resolved to.</summary>
     /// <remarks>
@@ -771,6 +892,57 @@ internal sealed partial class AccountSynchronizationSupervisor
         Level = LogLevel.Warning,
         Message = "Erasing the stored mail of the folders account {AccountId} no longer mirrors ended unexpectedly; the account is not backed off for it and its next run erases what this one did not.")]
     private partial void LogUnmirroredFolderErasureFailed(Exception exception, string accountId);
+
+    /// <summary>States what the rules did to mail that has just arrived, naming the revision so an edit is visible in the record.</summary>
+    [LoggerMessage(
+        Level = LogLevel.Information,
+        Message = "Evaluated rule set {RuleSetRevision} over {EvaluatedEmailCount} newly stored messages of account {AccountId}; {MatchedEmailCount} matched, {SkippedEmailCount} are waiting for their text to be extracted, rules that matched: [{MatchedRuleNames}], and more remain: {EmailsRemain}.")]
+    private partial void LogArrivedMailEvaluated(
+        string accountId,
+        string ruleSetRevision,
+        int evaluatedEmailCount,
+        int matchedEmailCount,
+        int skippedEmailCount,
+        string matchedRuleNames,
+        bool emailsRemain);
+
+    /// <summary>Reports one account run's share of a whole-mailbox run, which spans as many runs as its batch budget needs.</summary>
+    [LoggerMessage(
+        Level = LogLevel.Information,
+        Message = "Carried the whole-mailbox rule run of account {AccountId} over {EvaluatedEmailCount} messages; {MatchedEmailCount} matched, {SkippedEmailCount} are waiting for their text to be extracted, rules that matched: [{MatchedRuleNames}], and more remain: {EmailsRemain}.")]
+    private partial void LogRequestedRunProgressed(
+        string accountId,
+        int evaluatedEmailCount,
+        int matchedEmailCount,
+        int skippedEmailCount,
+        string matchedRuleNames,
+        bool emailsRemain);
+
+    [LoggerMessage(
+        Level = LogLevel.Information,
+        Message = "The whole-mailbox rule run of account {AccountId} reached the end of its mail under rule set {RuleSetRevision}.")]
+    private partial void LogRequestedRunCompleted(string accountId, string ruleSetRevision);
+
+    /// <summary>Names the remedy, because a superseded run is answered by asking for another rather than by waiting.</summary>
+    [LoggerMessage(
+        Level = LogLevel.Warning,
+        Message = "The rule set changed while the whole-mailbox rule run of account {AccountId} was outstanding, so the run ended without reaching the end of its mail; ask for it again to re-evaluate under the rules now in force.")]
+    private partial void LogRequestedRunSuperseded(string accountId);
+
+    /// <summary>Separates a rule that could not answer for one message from a pass that did not run, which are different faults.</summary>
+    [LoggerMessage(
+        Level = LogLevel.Warning,
+        Message = "{FailedRuleCount} rule evaluations produced no answer for account {AccountId}, {TimedOutRuleCount} of them by outlasting the condition timeout; rules: [{FailedRuleNames}]. The messages are recorded as evaluated and the pass continued.")]
+    private partial void LogRuleEvaluationsFailed(
+        string accountId,
+        int failedRuleCount,
+        int timedOutRuleCount,
+        string failedRuleNames);
+
+    [LoggerMessage(
+        Level = LogLevel.Warning,
+        Message = "Evaluating the rules of account {AccountId} ended unexpectedly; the account is not backed off for it and its next run resumes from the batches this one committed.")]
+    private partial void LogMailRuleEvaluationFailed(Exception exception, string accountId);
 
     [LoggerMessage(
         Level = LogLevel.Warning,
