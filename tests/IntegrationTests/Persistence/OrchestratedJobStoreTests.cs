@@ -134,9 +134,11 @@ public sealed class OrchestratedJobStoreTests(MailFathomOrchestrationFixture orc
     /// <summary>
     /// A worker that died holding a job leaves a lease that runs out, and the next claim takes the job with a second
     /// attempt counted. Nothing is told the process is gone: an expired lease and an abandoned one are the same row.
+    /// The attempt that was displaced then writes nothing through either terminal operation, which is the exclusivity
+    /// the whole store is built around.
     /// </summary>
     [Fact]
-    public async Task ClaimAsync_AJobHeldUnderAnExpiredLease_IsReclaimedAndCountsTheSecondAttempt()
+    public async Task ClaimAsync_AJobHeldUnderAnExpiredLease_IsReclaimedAndTheDisplacedAttemptWritesNothing()
     {
         // Arrange
         var cancellationToken = TestContext.Current.CancellationToken;
@@ -159,8 +161,15 @@ public sealed class OrchestratedJobStoreTests(MailFathomOrchestrationFixture orc
         Assert.Equal(2, job.AttemptCount);
         Assert.NotEqual(abandoned[0].Lease.Owner, job.Lease.Owner);
 
-        // The attempt whose lease was taken from it writes nothing, which is what stops a slow worker finishing late
-        // and overwriting the outcome of the attempt that replaced it.
+        // Releasing on shutdown is what the displaced attempt is most likely to reach, and it is the more damaging of
+        // the two: a release that ignored the owner would put a job the second attempt is actively running back into
+        // Pending, and a third attempt would then run it alongside.
+        Assert.False(await ReleaseAsync(services, jobId, abandoned[0].Lease.Owner, cancellationToken));
+        Assert.Equal(nameof(JobState.Claimed), await ReadStateAsync(services, jobId, cancellationToken));
+        Assert.Equal(job.Lease.Owner.Value, await ReadLeaseOwnerAsync(services, jobId, cancellationToken));
+
+        // Completing is the same compare-and-set, which is what stops a slow worker finishing late and overwriting the
+        // outcome of the attempt that replaced it.
         Assert.False(await CompleteAsync(services, jobId, abandoned[0].Lease.Owner, cancellationToken));
         Assert.Equal(nameof(JobState.Claimed), await ReadStateAsync(services, jobId, cancellationToken));
     }
@@ -325,10 +334,7 @@ public sealed class OrchestratedJobStoreTests(MailFathomOrchestrationFixture orc
             cancellationToken);
 
         // Act
-        var released = await services.InScopeAsync(
-            (scope, token) => scope.GetRequiredService<IJobStore>()
-                .ReleaseAsync(jobId, Assert.Single(claimed).Lease.Owner, token),
-            cancellationToken);
+        var released = await ReleaseAsync(services, jobId, Assert.Single(claimed).Lease.Owner, cancellationToken);
 
         // Assert
         Assert.True(released);
@@ -400,6 +406,14 @@ public sealed class OrchestratedJobStoreTests(MailFathomOrchestrationFixture orc
             (scope, token) => scope.GetRequiredService<IJobStore>().CompleteAsync(jobId, owner, token),
             cancellationToken);
 
+    private static Task<bool> ReleaseAsync(
+        OrchestratedMailFathomServices services,
+        JobId jobId,
+        JobLeaseOwner owner,
+        CancellationToken cancellationToken) => services.InScopeAsync(
+            (scope, token) => scope.GetRequiredService<IJobStore>().ReleaseAsync(jobId, owner, token),
+            cancellationToken);
+
     /// <summary>Takes everything claimable and completes it, so a test acts on a queue holding only its own work.</summary>
     private static async Task DrainAsync(
         OrchestratedMailFathomServices services,
@@ -436,6 +450,21 @@ public sealed class OrchestratedJobStoreTests(MailFathomOrchestrationFixture orc
                 .SqlQuery<string?>($"""SELECT "State" AS "Value" FROM jobs WHERE "Id" = {jobId}""")
                 .SingleOrDefaultAsync(token),
             cancellationToken);
+
+    /// <summary>Reads the lease holder straight from the row, so an assertion about it depends on no other operation.</summary>
+    private static Task<string?> ReadLeaseOwnerAsync(
+        OrchestratedMailFathomServices services,
+        JobId jobId,
+        CancellationToken cancellationToken)
+    {
+        var jobIdValue = jobId.Value;
+
+        return services.InScopeAsync(
+            (scope, token) => scope.GetRequiredService<MailFathomDbContext>().Database
+                .SqlQuery<string?>($"""SELECT "LeaseOwner" AS "Value" FROM jobs WHERE "Id" = {jobIdValue}""")
+                .SingleOrDefaultAsync(token),
+            cancellationToken);
+    }
 
     private static Task<int> CountJobsWithKeyAsync(
         OrchestratedMailFathomServices services,
