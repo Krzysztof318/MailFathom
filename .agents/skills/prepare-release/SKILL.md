@@ -145,10 +145,11 @@ that only deletes, because the groundwork for a capability nobody can invoke is 
 onto. Write the action, and no more of the feature than the case above allows.
 
 **A parent left open is the expected shape here rather than a fault to correct.** A release never waits for one to
-close, and `Queue: Parent` says that feature was always going to arrive in stages. Nothing in this reading blocks the
-release or moves an issue either: step 3 is what carries whatever is still open into the next milestone, and it does so
-for every open item rather than for a parent's children in particular — a parent aimed at the release being cut and
-still open when it is cut moves with them, which is the target correcting itself rather than a judgement to make here.
+close, and a parent whose milestone names a later release says that feature was always going to arrive in stages.
+Nothing in this reading blocks the release or moves an issue either: step 3 is what carries whatever is still open into
+the next milestone, and it does so for every open item rather than for a parent's children in particular — a parent
+aimed at the release being cut and still open when it is cut moves with them, which is the target correcting itself
+rather than a judgement to make here.
 
 **The withheld sentence is not lost, it is early.** The release that closes the last child is where the capability is
 named, in the reader's terms and truthfully, and that is the release they would act on anyway. Writing it sooner buys

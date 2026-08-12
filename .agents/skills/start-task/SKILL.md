@@ -102,9 +102,9 @@ them if that access were ever removed.
    milestone when the milestone rule assigns one, and a `Size` value estimated from the scope the
    body describes. Decide each from the rules on that page rather than asking. `Queue: Next` is never
    one of them: the owner chooses it, and `$finish-change` writes it once the pull request exists, so
-   a new issue takes `Later`, `Needs decision`, or `Parked` — and `Parent` where the issue being
-   opened is a parent whose children span releases. Every parent's title begins `[P]` whatever its
-   `Queue` value, including one that fits a single milestone and therefore holds an ordinary one.
+   a new issue takes `Later`, `Needs decision`, or `Parked`, and a parent takes one of those three by
+   the same rules as any other issue. What marks a parent instead is the `parent` label and the `[P] `
+   prefix every parent's title begins with, whatever `Queue` value it holds.
    Verify the values landed, because the built-in workflows set `Status` and nothing else, and an
    unplaced issue disappears from the views the owner reads.
 
