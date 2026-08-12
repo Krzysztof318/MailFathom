@@ -48,11 +48,17 @@ cost lands on any path.
 
 ## A finding names a position, never a value
 
-A detection is a category, a region of the analyzed text, a confidence from 0 to 1, the detector that produced it, and
-the revision of the rule corpus or analyzer profile it ran under, stamped with when it was evaluated.
+A detection is the corpus entry that matched, the category that entry belongs to, a region of the analyzed text, a
+confidence from 0 to 1, the detector that produced it, and the revision of the rule corpus or analyzer profile it ran
+under, stamped with when it was evaluated.
 
 It never carries the detected value. Recording one would recreate the leak inside the object written to prevent it, and
 every consumer that logs, stores, or audits a finding would carry the credential with it.
+
+The rule travels with the finding because it is the one thing a suppression is written from. A category says what kind
+of material was found and is what the placeholder names; the rule says which entry decided that, which is what an
+operator needs when one entry misfires and the other several hundred are doing their job. Reporting only the category
+would leave them switching off every rule in it.
 
 The detector and its revision travel with the finding rather than being read from the deployment, because redaction is
 only reproducible against a stated corpus: the same text under a newer rule set is a different result, and something
