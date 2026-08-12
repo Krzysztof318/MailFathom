@@ -81,7 +81,9 @@ HTTP+SSE transport alone; MailFathom serves no such endpoint, and a client limit
 through a dialog that offers OAuth or nothing, so the deployment shape most readers start from — one API key, one
 client — has no way to present its credential there. Neither is a MailFathom limitation and neither has a workaround
 worth writing down: the endpoint's answer for those clients is
-[an OAuth entry](../operations/mcp-endpoint.md#oauth) beside or instead of the key.
+[an OAuth entry](../operations/mcp-endpoint.md#oauth) beside or instead of the key, and
+[MCP client OAuth](../operations/mcp-client-oauth.md) is the sequence that gets one working — the identity provider's
+side, which is where nearly all of that work is.
 
 ## The ChatGPT web application, in developer mode
 

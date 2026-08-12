@@ -223,6 +223,10 @@ its absence is the deployment telling you it cannot answer questions yet rather 
 [Verifying an enabled endpoint](../operations/mcp-endpoint.md#verifying-an-enabled-endpoint) is the checklist form of
 this, including what the refusals look like when the key or the origin is wrong.
 
+**Signing a person in through your own identity provider instead of sharing a key** is the other way to connect, and it is
+the only way for a client whose dialog takes no header. Most of that work is in the provider rather than here:
+[MCP client OAuth](../operations/mcp-client-oauth.md) walks it end to end from a deployment in exactly this state.
+
 ## 8. Make the first call, and read it correctly
 
 Ask the connected agent to list recent mail, or have the client call `list_emails` with a small page. Two parts of the

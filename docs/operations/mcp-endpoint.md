@@ -334,6 +334,10 @@ An external authorization server the operator already runs signs users in and is
 server signed and nothing else. It is **never** an authorization server: it stores no password, issues no token, redeems no
 authorization code, holds no refresh token, and has no login page.
 
+This section is the reference for every setting below and for what a token has to prove.
+[MCP client OAuth](mcp-client-oauth.md) is the order those settings are arrived at in, including the half that happens in
+the identity provider — read that first if this is a deployment's first OAuth connection.
+
 ```json
 {
   "McpEndpoint": {
@@ -376,6 +380,15 @@ the `Host` or `X-Forwarded-Host` header would tell each client to authenticate f
 one an attacker chose. That stays true with
 [a trusted proxy configured](#behind-a-tls-terminating-reverse-proxy) — a forwarded header makes a request state the
 name it arrived under, and leaves the resource identifier a value you wrote.
+
+It must be an `https` URL with no user information, no query, and no fragment, and startup refuses anything else.
+**What is published and compared is that value brought to one canonical form**, rather than the characters you typed:
+the scheme and host are lowercased, a default port is dropped, and a trailing slash is dropped where the path is empty —
+`HTTPS://Mail.Example.TEST:443/mcp` and `https://mail.example.test/mcp` are one identifier. A trailing slash on a path
+that names something is part of what it names and is left alone, so `/mcp` and `/mcp/` stay two identifiers. That is why
+the value a client is configured with comes from the published metadata document rather than from the configuration
+file: an audience is settled by an exact string comparison, and only one of the two spellings ever reaches it. An issuer
+is deliberately the opposite and is never rewritten, for the reason the next paragraph gives.
 
 **`Issuer` is copied verbatim from the authorization server**, trailing slash included where there is one. It is compared
 against a token's `iss` by exact string equality and checked against the `issuer` the discovery document reports. Several
@@ -503,6 +516,10 @@ its redirect URIs, and make the server issue `https://mail.example.test/mcp` as 
 yet implement Resource Indicators ([RFC 8707](https://www.rfc-editor.org/rfc/rfc8707.html)) can still do that through its own
 audience mapping — Keycloak, for example, through a client scope carrying an audience mapper. **Do not answer such a server by
 relaxing audience validation**; there is no setting for it, deliberately.
+
+[MCP client OAuth](mcp-client-oauth.md) walks that work in the order it happens, with one provider's field names, the
+callback URL a client generates rather than accepts, a verification recipe to run before a client is touched, and what
+each failed sign-in looks like.
 
 ### Requiring no credential
 
