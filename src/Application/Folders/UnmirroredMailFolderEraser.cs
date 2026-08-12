@@ -12,18 +12,16 @@ namespace MailFathom.Application.Folders;
 /// <summary>Takes away the local copy of a folder whose mapping has stopped mirroring it.</summary>
 /// <remarks>
 /// <para>
-/// Turning a folder's synchronization off is something an operator may do to a folder that is already mirrored, and the
-/// mail that is already stored is the part configuration alone cannot answer for. Leaving it would leave rows no run
-/// will ever refresh: the folder is no longer read, so its emails would keep whatever flags they had on the day the
-/// switch was flipped, would keep answering searches with them, and would never learn that the server had moved or
-/// removed them.
+/// Nothing runs this because a configuration value changed. Turning a folder's synchronization off keeps what the
+/// folder had already stored, because rows nobody may read are not stale in a way anybody observes and erasing them
+/// would charge an operator a whole remirror for a switch they may flip back the same week. Getting rid of the local
+/// copy is therefore an act somebody performs, and this is what such a command runs.
 /// </para>
 /// <para>
 /// The removal is the deletion path an erasing disposition already uses rather than a second one — the row goes, and
 /// PostgreSQL takes its raw MIME, its search document, its passages, and their vectors with it. It is bounded per pass
-/// and repeated on the account's own runs for the same reason reconciliation is: a mailbox's worth of rows is not one
-/// transaction, and a pass that ended early leaves the rest for the next run rather than half a folder in an
-/// unrepeatable state.
+/// for the same reason reconciliation is: a mailbox's worth of rows is not one transaction, and a pass that ended early
+/// leaves the rest for the next one rather than half a folder in an unrepeatable state.
 /// </para>
 /// </remarks>
 public sealed class UnmirroredMailFolderEraser

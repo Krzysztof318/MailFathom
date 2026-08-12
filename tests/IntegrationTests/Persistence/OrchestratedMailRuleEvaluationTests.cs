@@ -7,6 +7,7 @@ using MailFathom.Application.Rules;
 using MailFathom.Application.Rules.Evaluation;
 using MailFathom.Application.Synchronization;
 using MailFathom.Domain.Emails;
+using MailFathom.Domain.Folders;
 using MailFathom.IntegrationTests.Orchestration;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
@@ -29,6 +30,9 @@ namespace MailFathom.IntegrationTests.Persistence;
 public sealed class OrchestratedMailRuleEvaluationTests(MailFathomOrchestrationFixture orchestration)
 {
     private const string FolderAlias = "rule-evaluation";
+
+    /// <summary>The folder whose synchronization is switched off after it has stored mail, which is what retention is.</summary>
+    private const string ParkedFolderAlias = "rule-evaluation-parked";
 
     private const string RecipientAddress = "recipient@mailfathom.test";
 
@@ -239,15 +243,62 @@ public sealed class OrchestratedMailRuleEvaluationTests(MailFathomOrchestrationF
         Assert.Null(afterEnding);
     }
 
+    /// <summary>
+    /// Mail a folder kept after its synchronization was switched off is out of both walks, and out of them because the
+    /// database left it out rather than because the rows are gone: the same mail is stored first under a deployment
+    /// that mirrors the folder, and a message in a folder that stayed mirrored comes back from both walks beside it.
+    /// </summary>
+    /// <remarks>
+    /// The exclusion is a clause PostgreSQL evaluates over an account and an alias together, so only a real database
+    /// settles whether it narrows anything. It matters most to the arrival queue: a message the walk returned and the
+    /// pass then declined to evaluate would sit at the head of that queue for the rest of the deployment's life, since
+    /// recording an evaluation is the only thing that takes an email out of it.
+    /// </remarks>
+    [Fact]
+    public async Task BothWalks_MailAFolderKeptAfterItStoppedBeingMirrored_LeaveItOutAndKeepReadingTheRest()
+    {
+        // Arrange
+        var cancellationToken = TestContext.Current.CancellationToken;
+        StoredEmailId parked;
+        StoredEmailId mirrored;
+
+        await using (var whileMirrored =
+            await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken))
+        {
+            parked = await StoreOneMessageAsync(whileMirrored, uid: 9441, cancellationToken, ParkedFolderAlias);
+            mirrored = await StoreOneMessageAsync(whileMirrored, uid: 9442, cancellationToken);
+        }
+
+        await using var services = await OrchestratedMailFathomServices.StartAsync(
+            orchestration,
+            cancellationToken,
+            foldersNotMirrored:
+            [
+                new MailFolderIdentity(SyntheticMailAccount.AccountId, MailFolderAlias.Create(ParkedFolderAlias)),
+            ]);
+
+        // Act
+        var queued = await ReadArrivalQueueAsync(services, resumeAfter: null, DrainBatchSize, cancellationToken);
+        var walked = await WalkWholeMailboxAsync(services, cancellationToken);
+
+        // Assert
+        var queuedIds = queued.Select(candidate => candidate.StoredEmailId).ToArray();
+        Assert.Contains(mirrored, queuedIds);
+        Assert.DoesNotContain(parked, queuedIds);
+        Assert.Contains(mirrored, walked);
+        Assert.DoesNotContain(parked, walked);
+    }
+
     private static string SubjectOf(uint uid) => $"{FolderAlias}-{uid}";
 
     /// <summary>Stores one synthetic message, whose extraction the same session derives its search document from.</summary>
     private static async Task<StoredEmailId> StoreOneMessageAsync(
         OrchestratedMailFathomServices services,
         uint uid,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        string folderAlias = FolderAlias)
     {
-        var binding = await OrchestratedFolderBinding.CommitAsync(services, FolderAlias, cancellationToken);
+        var binding = await OrchestratedFolderBinding.CommitAsync(services, folderAlias, cancellationToken);
         var occurrenceId = SyntheticEmail.OccurrenceIn(binding, uid);
         var subject = SubjectOf(uid);
         var storedEmailId = default(StoredEmailId);

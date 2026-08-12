@@ -177,7 +177,7 @@ whether the folder may be created at all, through a fourth that defaults to `fal
 
 | Key | Type | Default | Constraint | Change |
 | --- | --- | --- | --- | --- |
-| `…:Folders:<n>:Synchronize` | bool | `true` | With `false`, no run schedules the folder: no connection is opened for it and nothing of it is stored | reload; the next run stops scheduling it and begins erasing what is stored for it |
+| `…:Folders:<n>:Synchronize` | bool | `true` | With `false`, no run schedules the folder: no connection is opened for it and nothing further of it is stored | reload; the next run stops scheduling it and keeps everything already stored for it |
 | `…:Folders:<n>:GenerateEmbeddings` | bool | `true` | With `false`, stored mail of the folder is never cut into passages and never reaches an embedding provider; refused alongside `Synchronize: false` | reload; governs what is stored from then on, and passages already produced stay |
 | `…:Folders:<n>:VisibleToTools` | bool | `true` | With `false`, no MCP tool lists, searches, reads, or answers from the folder; refused alongside `Synchronize: false` | reload; the next request reads the new value |
 | `…:Folders:<n>:CreateIfMissing` | bool | `false` | With `true`, the folder is created on the mail server when the server advertises none at `RemotePath`; refused on a mapping that names no `RemotePath` | reload; the next resolution of the alias creates it |
@@ -202,10 +202,15 @@ unsubscribing from a folder stay refused outright, and no folder MailFathom did 
 states when the creation happens, what it does with a folder that already exists and with a hierarchical path, and what
 a server's refusal reports.
 
-Switching `Synchronize` off for a folder that was mirrored **erases what is stored for it**, in bounded passes on the
-account's own runs and through the deletion path an erasing disposition already uses. The mapping stays, so the alias
-goes on resolving, any role the mapping names goes on being answered, and the folder stays a destination a rule may file
-mail into — resolved the first time a change names it, since no run schedules it.
+Switching `Synchronize` off for a folder that was mirrored **keeps what is stored for it**. Nothing is removed, and the
+folder's checkpoint stays where the last run left it, so switching the folder back on resumes: the next run fetches
+what arrived while it was off and reconciles the retained mail rather than mirroring the folder again. What is kept is
+inert — no tool lists, searches, reads, or answers from it, nothing of it is embedded, and no rule evaluates it — so
+the only thing an operator gives up by leaving the switch off is the storage it occupies. No configuration value erases
+stored mail: taking a folder's local copy away is an act somebody performs, never something a switch performs on their
+behalf. The mapping stays too, so the alias goes on resolving, any role the mapping names goes on being answered, and
+the folder stays a destination a rule may file mail into — resolved the first time a change names it, since no run
+schedules it.
 [What a mapping decides beyond where the folder is](../features/imap-synchronization.md#what-a-mapping-decides-beyond-where-the-folder-is)
 states all three switches together, what an unmapped folder is instead, and what becomes of the local copy of a message
 relocated into a folder nothing mirrors.

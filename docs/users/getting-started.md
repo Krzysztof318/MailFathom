@@ -94,7 +94,9 @@ Points worth knowing before you adapt it:
 - **A mapped folder is mirrored, embedded, and readable by tools** unless you say otherwise. `Synchronize`,
   `GenerateEmbeddings`, and `VisibleToTools` each default to `true` on a folder entry, and switching one off is how a
   folder stays nameable while its mail stays out of the local copy, out of an embedding provider, or out of everything
-  an assistant can read.
+  an assistant can read. Mail the folder had already stored is kept when you turn mirroring off, withheld from
+  everything that reads a mailbox, so turning it back on later fetches what arrived meanwhile rather than the whole
+  folder again.
   [What a mapping decides beyond where the folder is](../features/imap-synchronization.md#what-a-mapping-decides-beyond-where-the-folder-is)
   states what each one costs, including what happens to mail already stored when you turn mirroring off.
 - **A folder you name is created only if you ask for it.** Add `CreateIfMissing: true` beside a `RemotePath` and

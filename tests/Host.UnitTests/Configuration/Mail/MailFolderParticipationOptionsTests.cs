@@ -30,6 +30,7 @@ public sealed class MailFolderParticipationOptionsTests
         Assert.Equal(MailFolderParticipation.Full, participation);
         Assert.Empty(options.FoldersHiddenFromTools);
         Assert.Empty(options.FoldersWithoutEmbeddings);
+        Assert.Empty(options.FoldersNotMirrored);
     }
 
     /// <summary>A folder that names its target and no switch behaves exactly as it did before the switches existed.</summary>
@@ -98,9 +99,13 @@ public sealed class MailFolderParticipationOptionsTests
         Assert.Empty(options.FoldersHiddenFromTools);
     }
 
-    /// <summary>A folder nothing mirrors takes part in nothing, so it appears in both exclusions without either being configured.</summary>
+    /// <summary>
+    /// A folder nothing mirrors takes part in nothing, so it appears in every exclusion without any of them being
+    /// configured. That is what keeps the mail it stored before the switch was flipped inert while it is kept: no tool
+    /// reads it, nothing embeds it, and no rule pass walks it.
+    /// </summary>
     [Fact]
-    public void GetParticipation_AFolderNothingMirrors_IsWithdrawnFromEmbeddingAndFromTools()
+    public void GetParticipation_AFolderNothingMirrors_IsWithdrawnFromEveryReaderThereIs()
     {
         // Arrange
         var options = OptionsFor(CreateAccount(new MailFolderMappingOptions
@@ -118,6 +123,28 @@ public sealed class MailFolderParticipationOptionsTests
         Assert.Equal(MailFolderParticipation.MappedOnly, participation);
         Assert.Equal([junk], options.FoldersHiddenFromTools);
         Assert.Equal([junk], options.FoldersWithoutEmbeddings);
+        Assert.Equal([junk], options.FoldersNotMirrored);
+    }
+
+    /// <summary>
+    /// A mirrored folder withheld from tools is not a folder nothing mirrors, so the list a rule walk narrows by names
+    /// it as little as the list a tool narrows by names a folder that is merely unembedded.
+    /// </summary>
+    [Fact]
+    public void FoldersNotMirrored_AFolderWithdrawnFromToolsOrEmbedding_NamesNeither()
+    {
+        // Arrange
+        var options = OptionsFor(CreateAccount(
+            new MailFolderMappingOptions { Alias = "private", RemotePath = "Private", VisibleToTools = false },
+            new MailFolderMappingOptions
+            {
+                Alias = "newsletters",
+                RemotePath = "Newsletters",
+                GenerateEmbeddings = false,
+            }));
+
+        // Act, Assert
+        Assert.Empty(options.FoldersNotMirrored);
     }
 
     /// <summary>A folder nothing maps is stored mail nobody withdrew anything from, so a removed mapping never hides a mailbox.</summary>

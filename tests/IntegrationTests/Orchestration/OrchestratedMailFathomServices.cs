@@ -138,6 +138,10 @@ internal sealed class OrchestratedMailFathomServices : IAsyncDisposable
     /// The folders this account withholds from every tool, empty everywhere but the class proving that the narrowing
     /// this produces is one PostgreSQL evaluates.
     /// </param>
+    /// <param name="foldersNotMirrored">
+    /// The folders this account has stopped mirroring, empty everywhere but the class proving that mail such a folder
+    /// still holds reaches no rule pass.
+    /// </param>
     /// <param name="spamClassification">
     /// What this deployment decided about classifying mail, or <see langword="null" /> for the shipped default of
     /// classifying nothing. Stated only by the class that classifies, because the switch decides whether the use case
@@ -159,6 +163,7 @@ internal sealed class OrchestratedMailFathomServices : IAsyncDisposable
         IChatClient? answeringChatClient = null,
         IReadOnlyList<MailFolderIdentity>? foldersWithoutEmbeddings = null,
         IReadOnlyList<MailFolderIdentity>? foldersHiddenFromTools = null,
+        IReadOnlyList<MailFolderIdentity>? foldersNotMirrored = null,
         SpamClassificationSettings? spamClassification = null,
         SpamAssassinScannerProfile? spamScanner = null)
     {
@@ -169,7 +174,8 @@ internal sealed class OrchestratedMailFathomServices : IAsyncDisposable
             auditTrailEnabled,
             answeringAuditTrailEnabled,
             foldersWithoutEmbeddings,
-            foldersHiddenFromTools);
+            foldersHiddenFromTools,
+            foldersNotMirrored);
 
         builder.Services.AddSingleton(TimeProvider.System);
         builder.Services.AddSecretResolution(SecretValueInterpretation.ReferenceOnly);

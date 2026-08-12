@@ -10,11 +10,15 @@ using MailFathom.Domain.Folders;
 namespace MailFathom.Host.UnitTests.TestDoubles;
 
 /// <summary>Records which folders a run asked to have erased, and answers with an erasure the test arranged.</summary>
+/// <remarks>
+/// Nothing in an account run reaches this store any more, because a folder whose synchronization was switched off keeps
+/// what it stored. What the recording is for is proving exactly that: an empty list here is the assertion, and it is
+/// worth making against a store a run could have reached rather than against one nothing is registered for.
+/// </remarks>
 internal sealed class RecordingMailFolderMirrorStore(MailFolderMirrorErasure? erasure = null)
     : IStoredMailFolderMirrorStore
 {
     private readonly List<MailFolderIdentity> erasedFolders = [];
-    private readonly TaskCompletionSource firstErasureReached = new();
 
     /// <summary>Gets the folders each pass named, in the order the run reached them.</summary>
     internal IReadOnlyList<MailFolderIdentity> ErasedFolders
@@ -28,9 +32,6 @@ internal sealed class RecordingMailFolderMirrorStore(MailFolderMirrorErasure? er
         }
     }
 
-    /// <summary>Gets a signal a run raises once it has reached the erasure pass, which is after every folder it scheduled.</summary>
-    internal Task FirstErasureReached => this.firstErasureReached.Task;
-
     /// <inheritdoc />
     public Task<MailFolderMirrorErasure> EraseFolderMirrorAsync(
         IPersistenceSession session,
@@ -43,8 +44,6 @@ internal sealed class RecordingMailFolderMirrorStore(MailFolderMirrorErasure? er
         {
             this.erasedFolders.Add(new MailFolderIdentity(accountId, folderAlias));
         }
-
-        this.firstErasureReached.TrySetResult();
 
         return Task.FromResult(erasure ?? MailFolderMirrorErasure.Nothing);
     }

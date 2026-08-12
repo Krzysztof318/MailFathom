@@ -16,7 +16,7 @@ namespace MailFathom.Application.Folders;
 /// than from the tools somebody remembered.
 /// </para>
 /// <para>
-/// The two exclusion lists exist beside <see cref="GetParticipation" /> because a query cannot ask one folder at a time.
+/// The exclusion lists exist beside <see cref="GetParticipation" /> because a query cannot ask one folder at a time.
 /// A read narrows a table and needs the whole excluded set as a value it can put into a predicate, while a write path
 /// holds one email and asks about that email's folder; both answers come from the same configuration, so neither can
 /// drift from the other.
@@ -29,6 +29,16 @@ public interface IMailFolderParticipationReader
 
     /// <summary>Gets the folders whose content is never cut into passages and never reaches an embedding provider.</summary>
     IReadOnlyList<MailFolderIdentity> FoldersWithoutEmbeddings { get; }
+
+    /// <summary>Gets the folders no run mirrors, whose stored mail is therefore kept and read by nothing.</summary>
+    /// <remarks>
+    /// Switching a folder's synchronization off keeps what it had already stored, so the rows outlive the decision that
+    /// stopped refreshing them and every read has to leave them out by name. The other two lists already contain such a
+    /// folder, because <see cref="MailFolderParticipation.Create" /> derives both switches from an unmirrored one, and
+    /// neither says what this says: a read excluded for its own reason must not also be the way mail nobody mirrors
+    /// stays out of a walk that has nothing to do with tools or embeddings.
+    /// </remarks>
+    IReadOnlyList<MailFolderIdentity> FoldersNotMirrored { get; }
 
     /// <summary>Gets what one folder takes part in.</summary>
     /// <param name="accountId">The account the folder belongs to.</param>

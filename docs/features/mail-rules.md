@@ -463,12 +463,17 @@ already has everything a rule pass needs — one account at a time, a slot count
 a jittered backoff when something is wrong, and a shutdown that lets work in flight finish — so evaluation joins it
 instead of adding a second thing to configure and watch.
 
-The step is the last of the run's local work: it comes after every folder has synchronized and committed, after mail
-belonging to folders the account no longer mirrors has been erased, and outside the synchronization transaction
-entirely. Two consequences follow that are worth stating rather than inferring. A rule can only ever see mail the run
-before it has already stored, so a provider redelivering a message or a synchronization retry cannot produce a different
-processing boundary than a clean run. And nothing an MCP tool does waits on a rule: reads are served from what is
-already stored, and a pass neither blocks one nor is blocked by one.
+The step is the last of the run's local work: it comes after every folder has synchronized and committed, and outside
+the synchronization transaction entirely. Two consequences follow that are worth stating rather than inferring. A rule
+can only ever see mail the run before it has already stored, so a provider redelivering a message or a synchronization
+retry cannot produce a different processing boundary than a clean run. And nothing an MCP tool does waits on a rule:
+reads are served from what is already stored, and a pass neither blocks one nor is blocked by one.
+
+**A pass reads nothing out of a folder the account does not mirror.** Such a folder keeps whatever it stored before its
+synchronization was switched off, and neither the arrival queue nor a whole-mailbox run walks those rows: their flags
+are whatever they were on the day the switch was flipped and nothing will ever correct them, so a rule reading one
+would act on a mailbox MailFathom stopped observing. The exclusion is applied where the candidates are read rather than
+after they come back, which is what keeps such a message from sitting at the head of the arrival queue forever.
 
 **A rule declaring `Arrival` applies to mail that arrives after the rule exists.** Each message is evaluated once, and
 the record of that

@@ -43,8 +43,10 @@ public sealed record MailFolderParticipation
 
     /// <summary>Gets whether the folder's mail is mirrored locally.</summary>
     /// <remarks>
-    /// Off, no synchronization connection is opened for the folder, nothing of it is stored, and what a previous
-    /// configuration stored is erased. The alias goes on naming the folder, which is what a mutation writes into.
+    /// Off, no synchronization connection is opened for the folder and nothing further of it is stored. What a previous
+    /// configuration stored is kept, inert and read by nothing, so switching the folder back on resumes from the
+    /// checkpoint it left rather than mirroring the folder again; erasing it is a command an operator runs. The alias
+    /// goes on naming the folder, which is what a mutation writes into.
     /// </remarks>
     public bool IsSynchronized { get; }
 

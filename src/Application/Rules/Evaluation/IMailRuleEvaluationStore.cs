@@ -21,6 +21,11 @@ namespace MailFathom.Application.Rules.Evaluation;
 /// position it reached rather than the implementation remembering one, so a batch that stopped short of its own end
 /// resumes at the email nobody read.
 /// </para>
+/// <para>
+/// Neither walk reaches a folder the account does not mirror. Mail such a folder stored before its synchronization was
+/// switched off is kept rather than erased, and a rule reading it would act on a mailbox MailFathom stopped observing:
+/// the flags are whatever they were on the day the switch was flipped, and nothing will ever correct them.
+/// </para>
 /// </remarks>
 public interface IMailRuleEvaluationStore
 {
