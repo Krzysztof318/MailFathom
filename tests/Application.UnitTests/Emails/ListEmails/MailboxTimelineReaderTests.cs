@@ -714,7 +714,9 @@ public sealed class MailboxTimelineReaderTests
         ISynchronizationFreshnessReader? freshnessReader = null) => new(
         timeline,
         freshnessReader ?? FreshnessReaderReturning(InboxFreshness),
-        new MailboxScopeResolver(accountCatalog ?? CatalogServing(EveryAccountTheSyntheticTimelineUses)));
+        new MailboxScopeResolver(
+            accountCatalog ?? CatalogServing(EveryAccountTheSyntheticTimelineUses),
+            StubMailFolderParticipation.Everything));
 
     /// <summary>Builds a catalog that serves exactly the accounts named, in the order the port promises.</summary>
     private static IMailAccountCatalog CatalogServing(params MailAccountId[] servedAccountIds)

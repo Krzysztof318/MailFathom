@@ -101,8 +101,11 @@ matches. [`list_accounts`](mcp-tools.md#list_accounts) is where a caller learns 
 Naming no account means every account this deployment serves, and the request is narrowed to that set before anything is
 read rather than left without an account predicate. The two are not the same: removing an account from configuration
 leaves its stored rows in place, so an absent predicate would keep publishing mail from an account MailFathom no longer
-serves. Switching synchronization off is a different matter and hides nothing — it stops runs from fetching mail, and the
-copy already stored stays readable.
+serves. Switching `MailSynchronization:Enabled` off is a different matter and hides nothing — it stops runs from fetching
+mail, and the copy already stored stays readable. Switching a single folder's `Synchronize` off is a third thing again:
+that folder's stored mail is erased rather than hidden, which
+[what a mapping decides beyond where the folder is](imap-synchronization.md#what-a-mapping-decides-beyond-where-the-folder-is)
+states.
 
 A deployment that serves no account at all is a configuration the options accept, and a listing then returns an empty
 page with no freshness entries. Every filter is still validated first, so what a request is refused for never depends on
@@ -111,6 +114,26 @@ how many accounts happen to be configured.
 Because the resolved accounts are what the query runs with, they are also what the cursor's fingerprint covers. A cursor
 issued while three accounts were served is therefore refused after one of them is removed, which is correct: the result
 set it named no longer exists.
+
+### Folders withheld from tools
+
+A folder mapped with `VisibleToTools: false` is outside every read a tool performs, whatever the request named. It is not
+listed, not searched, not answered from, and not readable by identifier: naming its alias in `FolderAliases` narrows the
+listing to a folder that is then excluded, so the page is empty rather than refused, and asking for one of its emails by
+identifier reports the email as not found rather than as withheld. An attachment link minted before the switch was set
+stops serving for the same reason, because the question is asked where the download is served rather than where the link
+was issued. None of those answers says the folder exists, because a refusal naming it would publish exactly what the
+switch withholds.
+
+The exclusion is applied once, where the scope every read model is expressed in is resolved, and it narrows by the
+account and the alias **together** — one account's withheld folder never hides another account's folder of the same
+name. It deliberately takes no part in the cursor's fingerprint: a cursor stays valid across the change, and the pages
+after it simply stop admitting the folder, which is what an operator asking for it to be withheld meant.
+
+Freshness follows the same exclusion, so a withheld folder is absent from the entries a listing reports rather than
+present with a timestamp nothing may read behind it.
+[What a mapping decides beyond where the folder is](imap-synchronization.md#what-a-mapping-decides-beyond-where-the-folder-is)
+states the switch beside the other two and what an unmapped folder is instead.
 
 ### Attachment presence
 

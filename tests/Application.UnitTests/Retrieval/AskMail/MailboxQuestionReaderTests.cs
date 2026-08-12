@@ -575,7 +575,9 @@ public sealed class MailboxQuestionReaderTests
                 healthReader,
                 timeProvider,
                 answerer),
-            new MailboxScopeResolver(CatalogServing(MailAccountId.Create(ServedAccountId))),
+            new MailboxScopeResolver(
+                CatalogServing(MailAccountId.Create(ServedAccountId)),
+                StubMailFolderParticipation.Everything),
             spendLedger ?? LedgerAdmitting(),
             bounds ?? MailAnswerBounds.Default,
             runTelemetry ?? new RecordingMailAnsweringRunTelemetry(),

@@ -397,9 +397,12 @@ The three fetch-again defects stay distinct from `Unreadable` because they say d
 a second fetch fixes the first three and may well reproduce the fourth. Which one was found is named in the failure's
 message.
 
-An email the local copy holds no row for, or one belonging to an account this deployment no longer serves, is reported as
-`53002 StoredEmailNotFound`. One failure covers both, for the reason `53001 MailAccountNotAccessible` covers both of its
-cases: a caller that could tell them apart could learn which identifiers exist by asking.
+An email the local copy holds no row for, one belonging to an account this deployment no longer serves, and one stored in
+a folder mapped with `VisibleToTools: false` are all reported as `53002 StoredEmailNotFound`. One failure covers all
+three, for the reason `53001 MailAccountNotAccessible` covers both of its cases: a caller that could tell them apart
+could learn which identifiers exist by asking. An attachment link minted before the folder was withheld stops serving
+the same way, because the question is asked where the download is served;
+[folders withheld from tools](mailbox-queries.md#folders-withheld-from-tools) states the switch and what it withholds.
 
 The two codes are distinct on purpose. `StoredEmailNotFound` names an email that was never stored here;
 `EmailContentUnavailable` names one that is stored and whose body cannot currently be served, and only the second is

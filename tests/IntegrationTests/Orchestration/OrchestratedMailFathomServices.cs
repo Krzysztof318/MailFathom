@@ -13,6 +13,7 @@ using MailFathom.Application.Emails.Embeddings.Generation;
 using MailFathom.Application.Emails.Embeddings.Limits;
 using MailFathom.Application.Emails.Extraction;
 using MailFathom.Application.Emails.Search;
+using MailFathom.Application.Folders;
 using MailFathom.Application.Mail;
 using MailFathom.Application.Mail.Mutations;
 using MailFathom.Application.Mail.Mutations.Audit;
@@ -25,6 +26,7 @@ using MailFathom.Application.Synchronization;
 using MailFathom.Application.Synchronization.Checkpoints;
 using MailFathom.Application.Synchronization.Reconciliation;
 using MailFathom.Domain.Emails;
+using MailFathom.Domain.Folders;
 using MailFathom.Infrastructure;
 using MailFathom.Infrastructure.DataEncryption;
 using MailFathom.Infrastructure.Mail;
@@ -126,6 +128,14 @@ internal sealed class OrchestratedMailFathomServices : IAsyncDisposable
     /// questions. Absent everywhere but the class that asks one, because a registered answerer is what makes the
     /// capability report that this instance answers at all.
     /// </param>
+    /// <param name="foldersWithoutEmbeddings">
+    /// The folders this account is configured to leave unembedded, empty everywhere but the class proving that a
+    /// message stored in one is cut into no passages at all.
+    /// </param>
+    /// <param name="foldersHiddenFromTools">
+    /// The folders this account withholds from every tool, empty everywhere but the class proving that the narrowing
+    /// this produces is one PostgreSQL evaluates.
+    /// </param>
     /// <returns>The composed services, which the caller owns and must dispose.</returns>
     internal static async Task<OrchestratedMailFathomServices> StartAsync(
         MailFathomOrchestrationFixture orchestration,
@@ -134,14 +144,18 @@ internal sealed class OrchestratedMailFathomServices : IAsyncDisposable
             RemotelyDeletedEmailDisposition.RetainTombstone,
         bool auditTrailEnabled = false,
         bool answeringAuditTrailEnabled = false,
-        IChatClient? answeringChatClient = null)
+        IChatClient? answeringChatClient = null,
+        IReadOnlyList<MailFolderIdentity>? foldersWithoutEmbeddings = null,
+        IReadOnlyList<MailFolderIdentity>? foldersHiddenFromTools = null)
     {
         var builder = new HostApplicationBuilder();
         var account = new SyntheticMailAccount(
             orchestration.MailServer,
             remotelyDeletedEmailDisposition,
             auditTrailEnabled,
-            answeringAuditTrailEnabled);
+            answeringAuditTrailEnabled,
+            foldersWithoutEmbeddings,
+            foldersHiddenFromTools);
 
         builder.Services.AddSingleton(TimeProvider.System);
         builder.Services.AddSecretResolution(SecretValueInterpretation.ReferenceOnly);
@@ -151,6 +165,10 @@ internal sealed class OrchestratedMailFathomServices : IAsyncDisposable
         // options section the account above comes from. Without it a search or a listing resolves nothing rather than
         // narrowing to this account, so it belongs here with the other host-bound ports.
         builder.Services.AddSingleton<IMailAccountCatalog>(account);
+        // The port every folder decision is read through, registered by the composition root from the same options
+        // section the account above comes from. Chunking and every mailbox read resolve it, so a harness without it
+        // would fail to compose rather than behave like a deployment that configured no folder switch.
+        builder.Services.AddSingleton<IMailFolderParticipationReader>(account);
         // How much of a message's body one search result may show, which a composition root composes from the
         // MailboxSearch section. It is the deployment's control on what a query draws out of a mailbox rather than a
         // request's, so the shipped default is what this suite searches under.

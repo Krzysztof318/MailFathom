@@ -549,6 +549,8 @@ public sealed class ListEmailsToolTests
         new MailboxTimelineReader(
             timeline,
             freshness ?? new StubSynchronizationFreshnessReader(),
-            new MailboxScopeResolver(new StubMailAccountCatalog(ServedAccountId))),
+            new MailboxScopeResolver(
+                new StubMailAccountCatalog(ServedAccountId),
+                StubMailFolderParticipation.Everything)),
         new StubMailAccountCatalog(ServedAccountId));
 }

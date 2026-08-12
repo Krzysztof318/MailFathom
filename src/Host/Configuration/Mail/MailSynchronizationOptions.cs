@@ -6,6 +6,7 @@ using System.ComponentModel.DataAnnotations;
 using System.Diagnostics.CodeAnalysis;
 using System.Security.Cryptography.X509Certificates;
 using MailFathom.Application.Accounts;
+using MailFathom.Application.Folders;
 using MailFathom.Application.Mail;
 using MailFathom.Application.Mail.Mutations;
 using MailFathom.Application.Mail.Mutations.Audit;
@@ -35,7 +36,8 @@ internal sealed class MailSynchronizationOptions
         IAuthoredDeleteEmailDispositionReader,
         IMailboxMutationAuditSettingsReader,
         IMailAnsweringAuditSettingsReader,
-        IMailAccountCatalog
+        IMailAccountCatalog,
+        IMailFolderParticipationReader
 {
     /// <summary>The shutdown budget the .NET Generic Host applies when nothing configures one.</summary>
     private static readonly TimeSpan DefaultHostShutdownTimeout = TimeSpan.FromSeconds(30);
@@ -455,6 +457,34 @@ internal sealed class MailSynchronizationOptions
             .OrderBy(static account => account.Id.Value, StringComparer.Ordinal),
     ];
 
+    /// <inheritdoc />
+    public IReadOnlyList<MailFolderIdentity> FoldersHiddenFromTools =>
+        [.. this.ConfiguredFolders().Where(static folder => !folder.Participation.IsVisibleToTools).Select(static folder => folder.Identity)];
+
+    /// <inheritdoc />
+    public IReadOnlyList<MailFolderIdentity> FoldersWithoutEmbeddings =>
+        [.. this.ConfiguredFolders().Where(static folder => !folder.Participation.GeneratesEmbeddings).Select(static folder => folder.Identity)];
+
+    /// <inheritdoc />
+    public MailFolderParticipation GetParticipation(MailAccountId accountId, MailFolderAlias folderAlias) =>
+        this.ConfiguredFolders()
+            .FirstOrDefault(folder => folder.Identity.AccountId == accountId && folder.Identity.Alias == folderAlias)
+            ?.Participation
+        ?? MailFolderParticipation.Full;
+
+    /// <summary>Reads every account's folders as the pair of identity and participation the port answers with.</summary>
+    /// <remarks>
+    /// It walks <see cref="MailSynchronizationAccountOptions.EffectiveFolders" /> rather than the configured list, so an
+    /// account that configures no folder answers for the inbox mapping it is actually run with. An entry whose alias or
+    /// account identifier is unusable is skipped: startup validation refuses that configuration, and inventing an
+    /// identity for it here would attach one folder's decision to a name no operator wrote.
+    /// </remarks>
+    private IEnumerable<ConfiguredFolderParticipation> ConfiguredFolders() =>
+        (this.Accounts ?? [])
+            .SelectMany(account => account.EffectiveFolders.Select(folder => new { account.AccountId, Folder = folder }))
+            .Select(static configured => ConfiguredFolderParticipation.TryRead(configured.AccountId, configured.Folder))
+            .OfType<ConfiguredFolderParticipation>();
+
     /// <summary>Finds every configured earliest received date that could not mean anything on the supplied date.</summary>
     /// <param name="today">The current date the configured bounds are read against.</param>
     /// <returns>One result per account whose bound lies in the future, empty when every bound is usable.</returns>
@@ -589,6 +619,29 @@ internal sealed class MailSynchronizationOptions
     private MailSynchronizationAccountOptions FindAccount(string normalizedAccountId) =>
         this.FindConfiguredAccount(MailAccountId.Create(normalizedAccountId))
         ?? throw new InvalidOperationException($"Account '{normalizedAccountId}' is not configured.");
+
+    /// <summary>One configured folder read as the identity and the participation the folder port answers with.</summary>
+    private sealed record ConfiguredFolderParticipation(
+        MailFolderIdentity Identity,
+        MailFolderParticipation Participation)
+    {
+        /// <summary>Reads one account's folder entry, or nothing when its names are not values this system issues.</summary>
+        internal static ConfiguredFolderParticipation? TryRead(
+            string configuredAccountId,
+            MailFolderMappingOptions folder)
+        {
+            if (string.IsNullOrWhiteSpace(configuredAccountId) || string.IsNullOrWhiteSpace(folder.Alias))
+            {
+                return null;
+            }
+
+            return new ConfiguredFolderParticipation(
+                new MailFolderIdentity(
+                    MailAccountId.Create(configuredAccountId),
+                    MailFolderAlias.Create(folder.Alias)),
+                folder.Participation);
+        }
+    }
 }
 
 /// <summary>Configures one account for periodic IMAP synchronization.</summary>

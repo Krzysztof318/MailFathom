@@ -13,13 +13,16 @@ using MailFathom.Application.EmailContent.Repair;
 using MailFathom.Application.EmailContent.Storage;
 using MailFathom.Application.Emails.Extraction;
 using MailFathom.Application.Emails.GetEmailContent;
+using MailFathom.Application.Emails.Mailboxes;
 using MailFathom.Application.Emails.Summaries;
+using MailFathom.Application.Folders;
 using MailFathom.Application.Synchronization;
 using MailFathom.Application.Synchronization.Sessions;
 using MailFathom.Application.UnitTests.TestDoubles;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Failures;
+using MailFathom.Domain.Folders;
 using MailFathom.TestSupport;
 using NSubstitute;
 using Xunit;
@@ -680,6 +683,28 @@ public sealed class EmailContentReaderTests
         Assert.Equal(MailFathomErrorCode.StoredEmailNotFound, failure.ErrorCode);
     }
 
+    /// <summary>A folder an operator withheld from tools is unreadable by identifier too, and refused the same way as mail that is not there.</summary>
+    [Fact]
+    public async Task ReadContentAsync_EmailOfAFolderWithheldFromTools_IsReportedAsNotFound()
+    {
+        // Arrange
+        var summary = SyntheticEmailSummaries.Create();
+        var reader = ReaderOver(
+            summary,
+            RendererReturning(RenderingOf()),
+            folderParticipation: StubMailFolderParticipation.Hiding(
+                new MailFolderIdentity(summary.AccountId, summary.FolderAlias)));
+
+        // Act
+        var result = await reader.ReadContentAsync(
+            RequestFor([summary.StoredEmailId]),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        var failure = FailureOf(Assert.Single(result.Emails));
+        Assert.Equal(MailFathomErrorCode.StoredEmailNotFound, failure.ErrorCode);
+    }
+
     /// <summary>One email nobody here can serve costs the caller that email, and nothing else it asked about.</summary>
     [Fact]
     public async Task ReadContentAsync_OneUnknownEmailAmongKnownOnes_ServesTheRestAndReportsOnlyThatOne()
@@ -947,12 +972,15 @@ public sealed class EmailContentReaderTests
         IEmailContentStore? contentStore = null,
         IMailAccountCatalog? accountCatalog = null,
         IAttachmentDownloadLinkIssuer? linkIssuer = null,
-        EmailContentReadOptions? readOptions = null) => new(
+        EmailContentReadOptions? readOptions = null,
+        IMailFolderParticipationReader? folderParticipation = null) => new(
         SummaryReaderReturning(summary),
         contentStore ?? ContentStoreReturning(IntactContent()),
         renderer,
         repairRequestStore ?? new RecordingEmailContentRepairRequestStore(),
-        accountCatalog ?? CatalogServing(MailAccountId.Create(summary?.AccountId.Value ?? SyntheticEmailSummaries.DefaultAccountId)),
+        new MailboxScopeResolver(
+            accountCatalog ?? CatalogServing(MailAccountId.Create(summary?.AccountId.Value ?? SyntheticEmailSummaries.DefaultAccountId)),
+            folderParticipation ?? StubMailFolderParticipation.Everything),
         linkIssuer ?? new RecordingAttachmentDownloadLinkIssuer(),
         readOptions ?? new EmailContentReadOptions());
 
@@ -968,7 +996,9 @@ public sealed class EmailContentReaderTests
         contentStore ?? ContentStoreReturning(IntactContent()),
         renderer,
         repairRequestStore ?? new RecordingEmailContentRepairRequestStore(),
-        accountCatalog ?? CatalogServing(MailAccountId.Create(SyntheticEmailSummaries.DefaultAccountId)),
+        new MailboxScopeResolver(
+            accountCatalog ?? CatalogServing(MailAccountId.Create(SyntheticEmailSummaries.DefaultAccountId)),
+            StubMailFolderParticipation.Everything),
         linkIssuer ?? new RecordingAttachmentDownloadLinkIssuer(),
         readOptions ?? new EmailContentReadOptions());
 

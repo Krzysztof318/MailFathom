@@ -5,6 +5,7 @@
 using MailFathom.Application.Emails.Chunking;
 using MailFathom.Application.Emails.Embeddings.Limits;
 using MailFathom.Application.Emails.Extraction;
+using MailFathom.Application.Folders;
 using MailFathom.CodeCoverage;
 using MailFathom.Infrastructure.Observability;
 using MailFathom.Infrastructure.Persistence.Entities;
@@ -26,6 +27,7 @@ internal sealed class EmailChunkWriter(
     EmailChunkingRules rules,
     EmbeddingInputBound inputBound,
     EmailEmbeddingTelemetry telemetry,
+    IMailFolderParticipationReader folderParticipation,
     TimeProvider timeProvider)
 {
     /// <summary>Saves the passages one extraction yields, leaving an unchanged message's rows untouched.</summary>
@@ -51,6 +53,13 @@ internal sealed class EmailChunkWriter(
         ArgumentNullException.ThrowIfNull(dbContext);
         ArgumentNullException.ThrowIfNull(storedEmail);
         ArgumentNullException.ThrowIfNull(text);
+
+        // Every path that cuts passages arrives here, which is what makes one check enough: a folder configured not to
+        // embed keeps no passages, and a message with no passages reaches no embedding provider however it was stored.
+        if (!await this.FolderGeneratesEmbeddingsAsync(dbContext, storedEmail, cancellationToken))
+        {
+            return;
+        }
 
         var cut = chunker.DeriveChunks(text, rules, inputBound);
         var chunks = cut.Chunks;
@@ -100,6 +109,34 @@ internal sealed class EmailChunkWriter(
         }
 
         this.Insert(dbContext, storedEmail, cut);
+    }
+
+    /// <summary>Reports whether the folder this message was read from is one an operator asked to have embedded.</summary>
+    /// <remarks>
+    /// The excluded set is read first so a deployment that excludes nothing — which is every deployment that has not
+    /// configured a folder otherwise — pays neither a lookup nor a query. Where something is excluded, the binding is
+    /// read from the message's own row: the live path arrives with it loaded, and both backfills reach a message through
+    /// its primary key alone, so the alias has to be fetched rather than assumed present.
+    /// </remarks>
+    private async Task<bool> FolderGeneratesEmbeddingsAsync(
+        MailFathomDbContext dbContext,
+        StoredEmailEntity storedEmail,
+        CancellationToken cancellationToken)
+    {
+        var excluded = folderParticipation.FoldersWithoutEmbeddings;
+        if (excluded.Count == 0)
+        {
+            return true;
+        }
+
+        var folderAlias = storedEmail.MailFolder is { } loadedFolder
+            ? loadedFolder.Alias
+            : await dbContext.MailFolders
+                .Where(folder => folder.Id == storedEmail.MailFolderId)
+                .Select(folder => folder.Alias)
+                .SingleAsync(cancellationToken);
+
+        return !ExcludedMailFolders.Contains(excluded, storedEmail.MailboxAccountId, folderAlias);
     }
 
     private static EmailChunkEntity[] FindStaged(MailFathomDbContext dbContext, Guid storedEmailId) =>

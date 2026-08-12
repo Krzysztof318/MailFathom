@@ -7,6 +7,7 @@ using MailFathom.Application.Synchronization.Checkpoints;
 using MailFathom.CodeCoverage;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Folders;
+using MailFathom.Infrastructure.Persistence.Emails;
 using MailFathom.Infrastructure.Persistence.Entities;
 using Microsoft.EntityFrameworkCore;
 
@@ -78,6 +79,8 @@ internal sealed class SynchronizationFreshnessReader(MailFathomDbContext dbConte
             folders = folders.Where(folder => folderAliases.Contains(folder.Alias));
         }
 
-        return folders;
+        // A folder withheld from tools is withheld from how fresh it is as well. The timestamp says a folder exists and
+        // when it was last read, which is exactly what a caller must not learn about a folder they may not read.
+        return ExcludedMailFolders.Excluding(folders, scope.HiddenFolders);
     }
 }

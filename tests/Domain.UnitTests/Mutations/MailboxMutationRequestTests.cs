@@ -108,19 +108,61 @@ public sealed class MailboxMutationRequestTests
         Assert.Equal("localDisposition", refusal.ParamName);
     }
 
-    /// <summary>Only a delete disposes of a local copy, so a disposition on any other mutation names a decision it never takes.</summary>
+    /// <summary>A copy adds an occurrence and removes none, so it never disposes of a local copy and a disposition on one names nothing.</summary>
     [Fact]
-    public void Create_RelocationNamingALocalDisposition_IsRefused()
+    public void Create_CopyNamingALocalDisposition_IsRefused()
     {
         // Act
         var refusal = Assert.Throws<ArgumentException>(() => MailboxMutationRequest.Create(
             LocalEmail,
             Occurrence(),
-            MailboxMutation.Relocate,
+            MailboxMutation.Copy,
             Requester,
             Archive,
             desiredSeenState: null,
             AuthoredDeleteEmailDisposition.EraseLocalCopy));
+
+        // Assert
+        Assert.Equal("localDisposition", refusal.ParamName);
+    }
+
+    /// <summary>A relocation into a folder MailFathom does not mirror loses the occurrence for good, so it disposes of the local copy exactly as a delete does.</summary>
+    [Theory]
+    [InlineData(AuthoredDeleteEmailDisposition.EraseLocalCopy)]
+    [InlineData(AuthoredDeleteEmailDisposition.RetainLocalCopy)]
+    public void Relocate_ADestinationNothingMirrors_CarriesTheDispositionItWasAuthoredUnder(
+        AuthoredDeleteEmailDisposition disposition)
+    {
+        // Act
+        var request = MailboxMutationRequest.Relocate(LocalEmail, Occurrence(), Requester, Archive, disposition);
+
+        // Assert
+        Assert.Equal(disposition, request.LocalDisposition);
+        Assert.Equal(Archive, request.DestinationPath);
+    }
+
+    /// <summary>A destination MailFathom mirrors carries the row across instead, so the relocation decides nothing about the local copy.</summary>
+    [Fact]
+    public void Relocate_AMirroredDestination_CarriesNoLocalDisposition()
+    {
+        // Act
+        var request = MailboxMutationRequest.Relocate(LocalEmail, Occurrence(), Requester, Archive);
+
+        // Assert
+        Assert.Null(request.LocalDisposition);
+    }
+
+    /// <summary>A disposition outside the declared set is refused wherever it arrives, so a relocation cannot write one a record could not be read back from.</summary>
+    [Fact]
+    public void Relocate_AnUndeclaredDisposition_IsRefused()
+    {
+        // Act
+        var refusal = Assert.Throws<ArgumentOutOfRangeException>(() => MailboxMutationRequest.Relocate(
+            LocalEmail,
+            Occurrence(),
+            Requester,
+            Archive,
+            (AuthoredDeleteEmailDisposition)99));
 
         // Assert
         Assert.Equal("localDisposition", refusal.ParamName);

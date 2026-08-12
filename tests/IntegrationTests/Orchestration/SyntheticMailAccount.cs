@@ -5,6 +5,7 @@
 using System.Diagnostics.CodeAnalysis;
 using MailFathom.AppHost;
 using MailFathom.Application.Accounts;
+using MailFathom.Application.Folders;
 using MailFathom.Application.Mail;
 using MailFathom.Application.Mail.Mutations;
 using MailFathom.Application.Mail.Mutations.Audit;
@@ -13,6 +14,7 @@ using MailFathom.Application.Synchronization.Checkpoints;
 using MailFathom.Application.Synchronization.Reconciliation;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
+using MailFathom.Domain.Folders;
 using MailFathom.Domain.Synchronization;
 using MailFathom.Domain.Transport;
 using MailFathom.Infrastructure.Mail;
@@ -40,7 +42,9 @@ internal sealed class SyntheticMailAccount(
     RemotelyDeletedEmailDisposition remotelyDeletedEmailDisposition =
         RemotelyDeletedEmailDisposition.RetainTombstone,
     bool auditTrailEnabled = false,
-    bool answeringAuditTrailEnabled = false)
+    bool answeringAuditTrailEnabled = false,
+    IReadOnlyList<MailFolderIdentity>? foldersWithoutEmbeddings = null,
+    IReadOnlyList<MailFolderIdentity>? foldersHiddenFromTools = null)
     : IImapAccountSettingsProvider,
     IMailTransportSecurityPolicyReader,
     IMailSynchronizationWindowReader,
@@ -48,7 +52,8 @@ internal sealed class SyntheticMailAccount(
     IAuthoredDeleteEmailDispositionReader,
     IMailboxMutationAuditSettingsReader,
     IMailAnsweringAuditSettingsReader,
-    IMailAccountCatalog
+    IMailAccountCatalog,
+    IMailFolderParticipationReader
 {
     /// <summary>The window this account keeps an answering entry for, which a retention test writes an older entry than.</summary>
     internal static readonly TimeSpan AnsweringAuditRetention = TimeSpan.FromDays(30);
@@ -75,6 +80,21 @@ internal sealed class SyntheticMailAccount(
 
     /// <inheritdoc />
     /// <remarks>
+    /// Empty unless a test asks otherwise, which is what a deployment that configures none of the folder switches
+    /// behaves like; arranging one for every test would silently narrow every other read. The one class that does ask
+    /// needs it, because whether the narrowing translates to SQL at all is settled by a real database and nothing else.
+    /// </remarks>
+    public IReadOnlyList<MailFolderIdentity> FoldersHiddenFromTools => foldersHiddenFromTools ?? [];
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Empty unless a test asks otherwise, for the reason above. The one class that does ask names a folder of its own,
+    /// because whether a message is cut into passages at all is settled by the rows a real transaction leaves behind.
+    /// </remarks>
+    public IReadOnlyList<MailFolderIdentity> FoldersWithoutEmbeddings => foldersWithoutEmbeddings ?? [];
+
+    /// <inheritdoc />
+    /// <remarks>
     /// Off unless a test asks for it, which is the deployed default and the state every other test needs: an audit
     /// entry per finished mutation would otherwise accumulate across a suite that authors many of them. The retention
     /// is long enough that no orchestrated run erases what it just wrote.
@@ -98,6 +118,10 @@ internal sealed class SyntheticMailAccount(
     /// synchronization defect rather than like the arrangement it was.
     /// </remarks>
     public MailSynchronizationWindow GetWindow(MailAccountId accountId) => MailSynchronizationWindow.Unbounded;
+
+    /// <inheritdoc />
+    public MailFolderParticipation GetParticipation(MailAccountId accountId, MailFolderAlias folderAlias) =>
+        MailFolderParticipation.Full;
 
     /// <inheritdoc />
     /// <remarks>

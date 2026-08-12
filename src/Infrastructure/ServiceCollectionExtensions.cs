@@ -324,9 +324,11 @@ public static class ServiceCollectionExtensions
             provider.GetRequiredService<DataEncryptionKeyRing>(),
             provider.GetRequiredService<TimeProvider>()));
         services.AddScoped<IMailFolderResolutionStore, MailFolderResolutionStore>();
+        services.AddScoped<IStoredMailFolderMirrorStore, StoredMailFolderMirrorStore>();
         services.AddScoped<IMailFolderMappingChangeAuditor, LoggedMailFolderMappingChangeAuditor>();
         services.AddScoped<OptimisticConcurrencyRetryPolicy>();
         services.AddScoped<MailFolderResolver>();
+        services.AddScoped<UnmirroredMailFolderEraser>();
         services.AddScoped<MailboxSynchronizer>();
         services.AddScoped<MailboxReconciler>();
         services.AddScoped<StoredEmailExtractionBackfill>();

@@ -81,6 +81,12 @@ Points worth knowing before you adapt it:
 - **Folders are best named by role.** `SpecialUse` lets discovery find the folder whatever the server calls it —
   a German server's `Gesendet` is still `Sent` — and configuring no folder at all synchronizes the inbox. Naming an
   exact server path is the alternative for folders with no role.
+- **A mapped folder is mirrored, embedded, and readable by tools** unless you say otherwise. `Synchronize`,
+  `GenerateEmbeddings`, and `VisibleToTools` each default to `true` on a folder entry, and switching one off is how a
+  folder stays nameable while its mail stays out of the local copy, out of an embedding provider, or out of everything
+  an assistant can read.
+  [What a mapping decides beyond where the folder is](../features/imap-synchronization.md#what-a-mapping-decides-beyond-where-the-folder-is)
+  states what each one costs, including what happens to mail already stored when you turn mirroring off.
 - **The transport is TLS by default.** Port 993 with TLS-on-connect is the default posture, and every weakening —
   an unencrypted connection, clear-text authentication over one — must be stated explicitly and fails startup
   otherwise. A server with a private certificate authority is supported by trusting that authority, never by turning

@@ -54,6 +54,8 @@ The structured filters are the ones `ListEmails` takes and they mean exactly the
 apply one validated `MailboxEmailSelection` and one SQL predicate.
 [Mailbox queries](mailbox-queries.md#what-each-filter-accepts-and-what-it-refuses) documents what each of them accepts
 and refuses, including the attachment-presence rule and the account-scope resolution; nothing about them changes here.
+A folder mapped with `VisibleToTools: false` is outside a search for the same reason it is outside a listing, and by the
+same single decision — [folders withheld from tools](mailbox-queries.md#folders-withheld-from-tools).
 
 `SubjectFragment` and `QueryText` are unrelated. The fragment is a structured filter over the stored subject column that
 narrows which emails are eligible; the query text is what the eligible ones are matched and ranked against.

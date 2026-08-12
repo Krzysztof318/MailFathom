@@ -6,6 +6,7 @@ using MailFathom.Application.Emails.Chunking;
 using MailFathom.Application.Persistence;
 using MailFathom.Application.Synchronization;
 using MailFathom.Domain.Emails;
+using MailFathom.Domain.Folders;
 using MailFathom.Infrastructure.Persistence;
 using MailFathom.IntegrationTests.Orchestration;
 using Microsoft.EntityFrameworkCore;
@@ -31,6 +32,9 @@ namespace MailFathom.IntegrationTests.Persistence;
 public sealed class OrchestratedEmailChunkTests(MailFathomOrchestrationFixture orchestration)
 {
     private const string FolderAlias = "email-chunks";
+
+    /// <summary>A folder of its own, because leaving one unembedded is configured per folder rather than per account.</summary>
+    private const string UnembeddedFolderAlias = "email-chunks-unembedded";
 
     /// <summary>
     /// The hash is what decides, so re-deriving an unchanged message replaces nothing: the same rows survive, which is
@@ -95,6 +99,45 @@ public sealed class OrchestratedEmailChunkTests(MailFathomOrchestrationFixture o
         // an emptied query afterwards reports the cascade rather than a predicate that never matched anything.
         Assert.Equal(1, await DeleteEmailAsync(services, occurrenceId, cancellationToken));
         Assert.Empty(await ReadPassagesAsync(services, occurrenceId, cancellationToken));
+    }
+
+    /// <summary>
+    /// A folder the account leaves unembedded is cut into no passages at all, so nothing of its mail can reach an
+    /// embedding provider — while a folder beside it under the same run is cut exactly as before.
+    /// </summary>
+    /// <remarks>
+    /// The claim is about the rows one transaction leaves behind, which is what a substitute for the database cannot
+    /// settle. The second half is the control the absence needs: without it a query returning nothing would report a
+    /// predicate that never matched rather than a message deliberately left uncut.
+    /// </remarks>
+    [Fact]
+    public async Task UpsertMetadataAsync_AFolderTheAccountLeavesUnembedded_CutsNoPassagesAndLeavesTheRestCut()
+    {
+        // Arrange
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var unembedded = new MailFolderIdentity(
+            SyntheticMailAccount.AccountId,
+            MailFolderAlias.Create(UnembeddedFolderAlias));
+        await using var services = await OrchestratedMailFathomServices.StartAsync(
+            orchestration,
+            cancellationToken,
+            foldersWithoutEmbeddings: [unembedded]);
+        var unembeddedBinding = await OrchestratedFolderBinding.CommitAsync(
+            services,
+            UnembeddedFolderAlias,
+            cancellationToken);
+        var embeddedBinding = await OrchestratedFolderBinding.CommitAsync(services, FolderAlias, cancellationToken);
+        var uncutOccurrenceId = SyntheticEmail.OccurrenceIn(unembeddedBinding, uid: 9004);
+        var cutOccurrenceId = SyntheticEmail.OccurrenceIn(embeddedBinding, uid: 9004);
+        var body = BodyOfSeveralPassages("unembedded");
+
+        // Act
+        await StoreAsync(services, uncutOccurrenceId, "chunks-unembedded", body, cancellationToken);
+        await StoreAsync(services, cutOccurrenceId, "chunks-embedded", body, cancellationToken);
+
+        // Assert
+        Assert.Empty(await ReadPassagesAsync(services, uncutOccurrenceId, cancellationToken));
+        Assert.NotEmpty(await ReadPassagesAsync(services, cutOccurrenceId, cancellationToken));
     }
 
     /// <summary>

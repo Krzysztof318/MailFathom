@@ -27,6 +27,26 @@ internal sealed class MailFolderMappingOptions : IValidatableObject
     /// <summary>Gets or sets the special-use role the alias names, which is mutually exclusive with <see cref="RemotePath" />.</summary>
     public string? SpecialUse { get; set; }
 
+    /// <summary>Gets or sets whether the folder's mail is mirrored locally, which every mapped folder does unless it is turned off.</summary>
+    /// <remarks>
+    /// It is nullable so that leaving it out and writing <c>true</c> stay distinguishable. Both mirror the folder, but
+    /// only the second is an operator asking for something, which is what validation needs to tell a contradiction from
+    /// a default.
+    /// </remarks>
+    public bool? Synchronize { get; set; }
+
+    /// <summary>Gets or sets whether the mirrored content is cut into passages and embedded.</summary>
+    public bool? GenerateEmbeddings { get; set; }
+
+    /// <summary>Gets or sets whether MCP tools may list, search, read, or answer from the folder.</summary>
+    public bool? VisibleToTools { get; set; }
+
+    /// <summary>Gets what this configured folder takes part in, with every unset switch reading as its default.</summary>
+    internal MailFolderParticipation Participation => MailFolderParticipation.Create(
+        this.Synchronize ?? true,
+        this.GenerateEmbeddings ?? true,
+        this.VisibleToTools ?? true);
+
     /// <summary>Builds the domain mapping this configured folder expresses.</summary>
     /// <returns>The mapping folder resolution reads.</returns>
     /// <exception cref="InvalidOperationException">Thrown when configuration that passed startup validation no longer expresses exactly one target.</exception>
@@ -36,12 +56,12 @@ internal sealed class MailFolderMappingOptions : IValidatableObject
 
         if (!string.IsNullOrWhiteSpace(this.RemotePath))
         {
-            return MailFolderMapping.ToRemotePath(alias, RemoteFolderPath.Create(this.RemotePath));
+            return MailFolderMapping.ToRemotePath(alias, RemoteFolderPath.Create(this.RemotePath), this.Participation);
         }
 
         if (TryParseSpecialUse(this.SpecialUse, out var specialUse))
         {
-            return MailFolderMapping.ToSpecialUse(alias, specialUse);
+            return MailFolderMapping.ToSpecialUse(alias, specialUse, this.Participation);
         }
 
         throw new InvalidOperationException(
@@ -77,6 +97,40 @@ internal sealed class MailFolderMappingOptions : IValidatableObject
         foreach (var result in this.ValidateConfiguredValues(namesRemotePath))
         {
             yield return result;
+        }
+
+        foreach (var result in this.ValidateParticipation())
+        {
+            yield return result;
+        }
+    }
+
+    /// <summary>Refuses a folder asked to do something an unmirrored folder cannot do.</summary>
+    /// <remarks>
+    /// Nothing here is a safety rule — the participation value already withdraws both from an unsynchronized folder, so
+    /// the configuration would work. What it would not do is what it says, and a folder configured to embed mail nobody
+    /// stores is an operator expecting a bill and a search result they will never get. The unset case is deliberately
+    /// not refused: leaving a switch out is not asking for it.
+    /// </remarks>
+    private IEnumerable<ValidationResult> ValidateParticipation()
+    {
+        if (this.Synchronize is not false)
+        {
+            yield break;
+        }
+
+        if (this.GenerateEmbeddings is true)
+        {
+            yield return new ValidationResult(
+                $"Folder alias '{this.Alias}' asks for embeddings while 'Synchronize' is false, and an unsynchronized folder stores no content to embed.",
+                [nameof(this.GenerateEmbeddings)]);
+        }
+
+        if (this.VisibleToTools is true)
+        {
+            yield return new ValidationResult(
+                $"Folder alias '{this.Alias}' asks to be visible to tools while 'Synchronize' is false, and an unsynchronized folder stores nothing a tool could read.",
+                [nameof(this.VisibleToTools)]);
         }
     }
 

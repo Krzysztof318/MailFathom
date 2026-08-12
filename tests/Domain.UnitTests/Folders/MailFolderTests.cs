@@ -175,6 +175,38 @@ public sealed class MailFolderTests
         Assert.Null(mapping.RemotePath);
     }
 
+    /// <summary>A mapping written before the switches existed still means the same thing, which is what keeps an existing configuration unchanged.</summary>
+    [Fact]
+    public void ToRemotePath_NoParticipationNamed_TakesPartInEverything()
+    {
+        // Arrange
+        var alias = MailFolderAlias.Create("archive");
+
+        // Act
+        var mapping = MailFolderMapping.ToRemotePath(alias, RemoteFolderPath.Create("Archief"));
+
+        // Assert
+        Assert.Equal(MailFolderParticipation.Full, mapping.Participation);
+    }
+
+    /// <summary>Resolution is what an unmirrored folder keeps, so the mapping carries its target unchanged beside a participation that mirrors nothing.</summary>
+    [Fact]
+    public void ToSpecialUse_AFolderNothingMirrors_StillNamesItsRole()
+    {
+        // Arrange
+        var alias = MailFolderAlias.Create("junk");
+
+        // Act
+        var mapping = MailFolderMapping.ToSpecialUse(
+            alias,
+            MailFolderSpecialUse.Junk,
+            MailFolderParticipation.MappedOnly);
+
+        // Assert
+        Assert.Equal(MailFolderSpecialUse.Junk, mapping.SpecialUse);
+        Assert.False(mapping.Participation.IsSynchronized);
+    }
+
     [Fact]
     public void RepointedTo_DifferentRemoteFolder_StartsTheNextGenerationUnderTheSameAlias()
     {

@@ -3,13 +3,13 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.Collections.ObjectModel;
-using MailFathom.Application.Accounts;
 using MailFathom.Application.EmailContent;
 using MailFathom.Application.EmailContent.Attachments;
 using MailFathom.Application.EmailContent.Rendering;
 using MailFathom.Application.EmailContent.Repair;
 using MailFathom.Application.EmailContent.Storage;
 using MailFathom.Application.Emails.Extraction;
+using MailFathom.Application.Emails.Mailboxes;
 using MailFathom.Application.Emails.Summaries;
 using MailFathom.Domain.Emails;
 
@@ -53,7 +53,7 @@ public sealed class EmailContentReader
     private readonly IEmailContentStore contentStore;
     private readonly IEmailContentRenderer renderer;
     private readonly IEmailContentRepairRequestStore repairRequestStore;
-    private readonly IMailAccountCatalog accountCatalog;
+    private readonly MailboxScopeResolver scopeResolver;
     private readonly IAttachmentDownloadLinkIssuer linkIssuer;
     private readonly EmailContentReadOptions readOptions;
 
@@ -62,7 +62,7 @@ public sealed class EmailContentReader
     /// <param name="contentStore">Reads the raw MIME stored for an email, with what was recorded about it.</param>
     /// <param name="renderer">Turns stored raw MIME into headers, a body, and a description of every attachment.</param>
     /// <param name="repairRequestStore">Records durably that a local copy has to be fetched or read again.</param>
-    /// <param name="accountCatalog">Answers which accounts this deployment serves.</param>
+    /// <param name="scopeResolver">Answers whether a tool may read the mailbox an email was stored from.</param>
     /// <param name="linkIssuer">Mints the short-lived capability a caller fetches an attachment with.</param>
     /// <param name="readOptions">The bounds on how much body text one call returns.</param>
     /// <exception cref="ArgumentNullException">Thrown when any argument is <see langword="null" />.</exception>
@@ -71,7 +71,7 @@ public sealed class EmailContentReader
         IEmailContentStore contentStore,
         IEmailContentRenderer renderer,
         IEmailContentRepairRequestStore repairRequestStore,
-        IMailAccountCatalog accountCatalog,
+        MailboxScopeResolver scopeResolver,
         IAttachmentDownloadLinkIssuer linkIssuer,
         EmailContentReadOptions readOptions)
     {
@@ -79,7 +79,7 @@ public sealed class EmailContentReader
         ArgumentNullException.ThrowIfNull(contentStore);
         ArgumentNullException.ThrowIfNull(renderer);
         ArgumentNullException.ThrowIfNull(repairRequestStore);
-        ArgumentNullException.ThrowIfNull(accountCatalog);
+        ArgumentNullException.ThrowIfNull(scopeResolver);
         ArgumentNullException.ThrowIfNull(linkIssuer);
         ArgumentNullException.ThrowIfNull(readOptions);
 
@@ -87,7 +87,7 @@ public sealed class EmailContentReader
         this.contentStore = contentStore;
         this.renderer = renderer;
         this.repairRequestStore = repairRequestStore;
-        this.accountCatalog = accountCatalog;
+        this.scopeResolver = scopeResolver;
         this.linkIssuer = linkIssuer;
         this.readOptions = readOptions;
     }
@@ -141,10 +141,10 @@ public sealed class EmailContentReader
     {
         var summary = await this.summaryReader.FindAsync(storedEmailId, cancellationToken);
 
-        // An account this deployment no longer serves leaves its stored rows in place, so the row existing is not
-        // enough. The two cases produce one answer: telling them apart would let a caller learn which identifiers
-        // exist by asking about them.
-        if (summary is null || !this.accountCatalog.ServedAccounts.Any(account => account.Id == summary.AccountId))
+        // An account this deployment no longer serves leaves its stored rows in place, and a folder an operator withheld
+        // from tools keeps its own, so the row existing is not enough. All three cases produce one answer: telling them
+        // apart would let a caller learn which identifiers exist by asking about them.
+        if (summary is null || !this.scopeResolver.IsReadableByTools(summary.AccountId, summary.FolderAlias))
         {
             return EmailContentReadOutcome.NotFound(storedEmailId);
         }

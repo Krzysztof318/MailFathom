@@ -200,6 +200,47 @@ public sealed class MailboxReconcilerTests
         Assert.Null(attributed.LocalDisposition);
     }
 
+    /// <summary>
+    /// A relocation into a folder nothing mirrors takes the message out of the mirrored mailbox for good, so the source
+    /// disappearance carries the disposition the change was authored under exactly as a delete does.
+    /// </summary>
+    [Theory]
+    [InlineData(AuthoredDeleteEmailDisposition.RetainLocalCopy)]
+    [InlineData(AuthoredDeleteEmailDisposition.RetainTombstone)]
+    [InlineData(AuthoredDeleteEmailDisposition.EraseLocalCopy)]
+    public async Task ReconcileAsync_OccurrenceRemovedByARelocationNothingMirrors_CarriesTheDispositionItWasAuthoredUnder(
+        AuthoredDeleteEmailDisposition authoredDisposition)
+    {
+        // Arrange
+        var store = new FakeReconciliationStore(StoredOccurrences(11));
+        var mutationStore = new InMemoryMailboxMutationReconciliationStore();
+        mutationStore.Add(MutationRemoving(
+            store.StoredEmailIdOf(11),
+            uid: 11,
+            isRelocation: true,
+            relocationDisposition: authoredDisposition));
+        await using var mailboxSession = CreateSessionHolding();
+        var reconciler = CreateReconciler(
+            store,
+            RemotelyDeletedEmailDisposition.RetainTombstone,
+            mutationStore: mutationStore);
+
+        // Act
+        var result = await reconciler.ReconcileAsync(
+            mailboxSession,
+            Account,
+            InboxFolder,
+            SelectedUidValidity,
+            reconciledThroughModSeq: null,
+            CancellationToken.None);
+
+        // Assert
+        Assert.Equal(1, result.OwnMutationCompletedEmailCount);
+
+        var attributed = Assert.Single(Assert.Single(store.AppliedOutcomes).RemovedByOwnMutation);
+        Assert.Equal(authoredDisposition, attributed.LocalDisposition);
+    }
+
     /// <summary>One occurrence can carry several records, and the disappearance is credited to the one that has been outstanding longest.</summary>
     /// <remarks>
     /// The case is real rather than theoretical: a record matches at every stage past <c>Recorded</c>, abandoned
@@ -1100,7 +1141,8 @@ public sealed class MailboxReconcilerTests
         uint uid,
         bool isRelocation,
         DateTimeOffset? recordedAt = null,
-        AuthoredDeleteEmailDisposition localDisposition = AuthoredDeleteEmailDisposition.RetainLocalCopy)
+        AuthoredDeleteEmailDisposition localDisposition = AuthoredDeleteEmailDisposition.RetainLocalCopy,
+        AuthoredDeleteEmailDisposition? relocationDisposition = null)
     {
         var occurrence = EmailOccurrenceId.Create(Account, InboxFolder.Id, SelectedUidValidity, ImapUid.Create(uid));
         var requester = MailboxMutationRequester.Rule("file-newsletters", 1);
@@ -1114,7 +1156,8 @@ public sealed class MailboxReconcilerTests
                     storedEmailId,
                     occurrence,
                     requester,
-                    RemoteFolderPath.Create("Archive", '/'))
+                    RemoteFolderPath.Create("Archive", '/'),
+                    relocationDisposition)
                 : MailboxMutationRequest.Delete(
                     storedEmailId,
                     occurrence,

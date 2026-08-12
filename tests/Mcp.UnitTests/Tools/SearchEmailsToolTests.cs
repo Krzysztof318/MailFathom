@@ -17,6 +17,7 @@ using MailFathom.Domain.Folders;
 using MailFathom.Mcp.Tools;
 using MailFathom.Mcp.Tools.Results;
 using MailFathom.Mcp.UnitTests.TestDoubles;
+using MailFathom.TestSupport;
 using Microsoft.Extensions.Time.Testing;
 using NSubstitute;
 using Xunit;
@@ -537,7 +538,9 @@ public sealed class SearchEmailsToolTests
                 index,
                 LexicalOnlySemanticSearch(),
                 freshness ?? new StubSynchronizationFreshnessReader(),
-                new MailboxScopeResolver(new StubMailAccountCatalog(ServedAccountId)),
+                new MailboxScopeResolver(
+                    new StubMailAccountCatalog(ServedAccountId),
+                    StubMailFolderParticipation.Everything),
                 bounds),
             bounds,
             new StubMailAccountCatalog(ServedAccountId));

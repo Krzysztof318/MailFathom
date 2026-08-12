@@ -65,6 +65,11 @@ internal static class StoredEmailSelectionPredicate
             emails = emails.Where(email => folderAliases.Contains(email.MailFolder.Alias));
         }
 
+        // Withheld after the requested narrowing rather than before it, because the two are different statements: the
+        // filters above are what the caller asked for, and this is what no caller may have. It cannot be turned off for
+        // the same reason the tombstone exclusion above cannot.
+        emails = ExcludedMailFolders.Excluding(emails, selection.Scope.HiddenFolders);
+
         if (selection.SenderNormalizedAddress is { } senderAddress)
         {
             emails = emails.Where(email => email.SenderNormalizedAddress == senderAddress);

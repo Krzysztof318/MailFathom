@@ -4,9 +4,11 @@
 
 using MailFathom.Application.Accounts;
 using MailFathom.Application.Emails.Mailboxes;
+using MailFathom.Application.Folders;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Folders;
 using MailFathom.Domain.Synchronization;
+using MailFathom.TestSupport;
 using NSubstitute;
 using Xunit;
 
@@ -145,7 +147,93 @@ public sealed class MailboxScopeResolverTests
         Assert.Throws<MailboxQueryFilterInvalidException>(() => resolver.ReadableScope(tooMany, []));
     }
 
-    private static MailboxScopeResolver ResolverServing(params ServedMailAccount[] servedAccounts)
+    /// <summary>A withheld folder reaches every read model through the scope, which is what makes one decision cover four tools.</summary>
+    [Fact]
+    public void ReadableScope_AFolderWithheldFromTools_CarriesItAsHiddenWhateverTheRequestNamed()
+    {
+        // Arrange
+        var privateFolder = new MailFolderIdentity(Work.Id, MailFolderAlias.Create("PRIVATE"));
+        var resolver = ResolverServing(StubMailFolderParticipation.Hiding(privateFolder), Work, Private);
+
+        // Act
+        var scope = resolver.ReadableScope([], [MailFolderAlias.Create("PRIVATE")]);
+
+        // Assert
+        Assert.Equal([privateFolder], scope.HiddenFolders);
+        Assert.Equal([MailFolderAlias.Create("PRIVATE")], scope.FolderAliases);
+    }
+
+    /// <summary>Configuration that withholds nothing leaves the scope exactly as it was, so nothing pays for a switch it never set.</summary>
+    [Fact]
+    public void ReadableScope_NothingWithheld_CarriesNoHiddenFolder()
+    {
+        // Arrange
+        var resolver = ResolverServing(Work);
+
+        // Act
+        var scope = resolver.ReadableScope([], []);
+
+        // Assert
+        Assert.Empty(scope.HiddenFolders);
+    }
+
+    /// <summary>Two readings of one configuration must produce one predicate, so the hidden folders are ordered rather than left as read.</summary>
+    [Fact]
+    public void ReadableScope_SeveralFoldersWithheld_OrdersThemByAccountAndAlias()
+    {
+        // Arrange
+        var resolver = ResolverServing(
+            StubMailFolderParticipation.Hiding(
+                new MailFolderIdentity(Private.Id, MailFolderAlias.Create("PRIVATE")),
+                new MailFolderIdentity(Work.Id, MailFolderAlias.Create("SPAM")),
+                new MailFolderIdentity(Work.Id, MailFolderAlias.Create("DRAFTS"))),
+            Work,
+            Private);
+
+        // Act
+        var scope = resolver.ReadableScope([], []);
+
+        // Assert
+        Assert.Equal(
+            [
+                new MailFolderIdentity(Work.Id, MailFolderAlias.Create("DRAFTS")),
+                new MailFolderIdentity(Work.Id, MailFolderAlias.Create("SPAM")),
+                new MailFolderIdentity(Private.Id, MailFolderAlias.Create("PRIVATE")),
+            ],
+            scope.HiddenFolders);
+    }
+
+    /// <summary>The reads that reach an email by its identifier ask the same question, so a withheld folder is unreadable through them too.</summary>
+    [Fact]
+    public void IsReadableByTools_AFolderWithheldFromTools_IsNotReadable()
+    {
+        // Arrange
+        var resolver = ResolverServing(
+            StubMailFolderParticipation.Hiding(new MailFolderIdentity(Work.Id, MailFolderAlias.Create("PRIVATE"))),
+            Work);
+
+        // Act, Assert
+        Assert.False(resolver.IsReadableByTools(Work.Id, MailFolderAlias.Create("PRIVATE")));
+        Assert.True(resolver.IsReadableByTools(Work.Id, MailFolderAlias.Create("INBOX")));
+    }
+
+    /// <summary>An account the deployment stopped serving keeps its stored rows, and neither question may admit them.</summary>
+    [Fact]
+    public void IsReadableByTools_AnAccountTheDeploymentDoesNotServe_IsNotReadable()
+    {
+        // Arrange
+        var resolver = ResolverServing(Work);
+
+        // Act, Assert
+        Assert.False(resolver.IsReadableByTools(Private.Id, MailFolderAlias.Create("INBOX")));
+    }
+
+    private static MailboxScopeResolver ResolverServing(params ServedMailAccount[] servedAccounts) =>
+        ResolverServing(StubMailFolderParticipation.Everything, servedAccounts);
+
+    private static MailboxScopeResolver ResolverServing(
+        IMailFolderParticipationReader folderParticipation,
+        params ServedMailAccount[] servedAccounts)
     {
         var catalog = Substitute.For<IMailAccountCatalog>();
         catalog.ServedAccounts.Returns(
@@ -153,6 +241,6 @@ public sealed class MailboxScopeResolverTests
             .. servedAccounts.OrderBy(account => account.Id.Value, StringComparer.Ordinal),
         ]);
 
-        return new MailboxScopeResolver(catalog);
+        return new MailboxScopeResolver(catalog, folderParticipation);
     }
 }

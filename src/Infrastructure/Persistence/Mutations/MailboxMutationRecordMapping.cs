@@ -64,24 +64,33 @@ internal static class MailboxMutationRecordMapping
         };
     }
 
-    /// <summary>Restores what the delete decided about the local copy, refusing a delete row that decided nothing.</summary>
+    /// <summary>Restores what the change decided about the local copy, refusing a delete row that decided nothing.</summary>
     /// <remarks>
-    /// The absence is a defect rather than a value to supply, because every disposition destroys something a different
-    /// one keeps. Reading a missing one as the default would silently retain mail an operator configured away, and
-    /// reading it as the erasure would destroy mail nobody agreed to lose, so the row is refused instead.
+    /// <para>
+    /// A delete always decided one, and the absence is a defect rather than a value to supply, because every disposition
+    /// destroys something a different one keeps. Reading a missing one as the default would silently retain mail an
+    /// operator configured away, and reading it as the erasure would destroy mail nobody agreed to lose, so the row is
+    /// refused instead.
+    /// </para>
+    /// <para>
+    /// A relocation carries one only when it moved the message to a folder nothing mirrors, which is where its local
+    /// copy stops being on its way somewhere and becomes mail that has left the mirrored mailbox. The value is read back
+    /// rather than recomputed, for the reason it was written down: it is what the owner authored the change under, and
+    /// reconciliation applies it in a later run the account may by then be configured differently for.
+    /// </para>
     /// </remarks>
     private static AuthoredDeleteEmailDisposition? ToLocalDisposition(
         MailboxMutationEntity entity,
         MailboxMutation mutation)
     {
-        if (mutation != MailboxMutation.Delete)
+        if (mutation == MailboxMutation.Delete)
         {
-            return null;
+            return entity.LocalDisposition
+                ?? throw new InvalidOperationException(
+                    $"Mailbox mutation record {entity.Id} deletes an email and names no local disposition.");
         }
 
-        return entity.LocalDisposition
-            ?? throw new InvalidOperationException(
-                $"Mailbox mutation record {entity.Id} deletes an email and names no local disposition.");
+        return mutation == MailboxMutation.Relocate ? entity.LocalDisposition : null;
     }
 
     /// <summary>Restores the destination folder a relocation or a copy named, exactly as it was stored.</summary>

@@ -117,9 +117,10 @@ internal sealed class StoredEmailReconciliationStore(MailFathomDbContext readCon
         }
 
         // A disappearance MailFathom itself caused is not the remote deletion the disposition below answers for, so it
-        // never reaches that setting. A relocation moves the queue timestamp and nothing else, because the row is on
-        // its way into another folder; a delete additionally applies the disposition its own record carries, which is
-        // the one the owner authored it under rather than whatever the account is configured with by now.
+        // never reaches that setting. A relocation into a mirrored folder moves the queue timestamp and nothing else,
+        // because the row is on its way into that folder; a delete, and a relocation that carried the message out of the
+        // mirrored mailbox altogether, additionally apply the disposition their own record carries, which is the one the
+        // owner authored the change under rather than whatever the account is configured with by now.
         var erasedByAuthoredDelete = new List<StoredEmailEntity>();
 
         foreach (var attributed in outcome.RemovedByOwnMutation)
@@ -132,8 +133,8 @@ internal sealed class StoredEmailReconciliationStore(MailFathomDbContext readCon
 
             row.RemoteFlagsObservedAt = outcome.ObservedAt;
 
-            // Only a delete names one, which is the request's own invariant. A relocation reaching here has its row
-            // carried into the destination folder by the placement instead.
+            // Absent for a relocation whose destination MailFathom mirrors, which is the request's own invariant: such a
+            // relocation has its row carried into the destination folder by the placement instead.
             if (attributed.LocalDisposition is not { } authoredDisposition)
             {
                 continue;

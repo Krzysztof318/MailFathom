@@ -5,6 +5,7 @@
 using MailFathom.Application.Emails.Embeddings;
 using MailFathom.Application.Emails.Embeddings.Backfill;
 using MailFathom.Application.Emails.Extraction;
+using MailFathom.Application.Folders;
 using MailFathom.Application.Persistence;
 using MailFathom.CodeCoverage;
 using MailFathom.Domain.Emails;
@@ -20,7 +21,8 @@ namespace MailFathom.Infrastructure.Persistence.Embeddings;
 internal sealed class StoredEmailEmbeddingBackfillStore(
     MailFathomDbContext dbContext,
     TimeProvider timeProvider,
-    EmailChunkWriter chunkWriter)
+    EmailChunkWriter chunkWriter,
+    IMailFolderParticipationReader folderParticipation)
     : IStoredEmailEmbeddingBackfillStore
 {
     /// <inheritdoc />
@@ -159,14 +161,22 @@ internal sealed class StoredEmailEmbeddingBackfillStore(
     /// cut. A message an expunge has been observed for is in neither group: vectors nothing may retrieve are a provider
     /// bill with no reader.
     /// </remarks>
-    private IQueryable<StoredEmailEntity> EmailsAwaitingEmbedding(Guid profileId) => dbContext.StoredEmails
-        .AsNoTracking()
-        .Where(StoredEmailTombstone.IsNotTombstoned)
-        .Where(email => email.Chunks.Any(chunk =>
-                !chunk.Embeddings.Any(vector => vector.EmbeddingProfileId == profileId))
-            || (!email.Chunks.Any()
-                && email.SearchDocument != null
-                && email.SearchDocument.BodyText != null));
+    /// <remarks>
+    /// A folder configured not to embed is left out here as well as where its passages would have been cut, and the two
+    /// answer different halves of one decision. The cut is what stops the passages existing; this is what stops the walk
+    /// finding those messages outstanding on every sweep for the rest of the deployment's life, since a message with a
+    /// body and no passages is exactly what the second group selects.
+    /// </remarks>
+    private IQueryable<StoredEmailEntity> EmailsAwaitingEmbedding(Guid profileId) => ExcludedMailFolders.Excluding(
+        dbContext.StoredEmails
+            .AsNoTracking()
+            .Where(StoredEmailTombstone.IsNotTombstoned)
+            .Where(email => email.Chunks.Any(chunk =>
+                    !chunk.Embeddings.Any(vector => vector.EmbeddingProfileId == profileId))
+                || (!email.Chunks.Any()
+                    && email.SearchDocument != null
+                    && email.SearchDocument.BodyText != null)),
+        folderParticipation.FoldersWithoutEmbeddings);
 
     /// <summary>Rebuilds the extraction the chunker reads from the two readings the search document stored.</summary>
     /// <remarks>

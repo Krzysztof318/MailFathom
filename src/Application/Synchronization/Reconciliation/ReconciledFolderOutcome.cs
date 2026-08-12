@@ -20,9 +20,10 @@ public sealed record ObservedEmailFlags(StoredEmailId StoredEmailId, RemoteEmail
 /// already use rather than sending a reader back to the record to find out.
 /// </param>
 /// <param name="LocalDisposition">
-/// What the delete decided about the local copy, and <see langword="null" /> for every other mutation. It is read off
-/// the record rather than from the account's configuration, because the configuration says what a delete authored
-/// *now* would do and this window is applying one authored earlier.
+/// What the change decided about the local copy — a delete always, a relocation whose destination MailFathom does not
+/// mirror — and <see langword="null" /> where nothing local is disposed of. It is read off the record rather than from
+/// the account's configuration, because the configuration says what a change authored *now* would do and this window is
+/// applying one authored earlier.
 /// </param>
 public sealed record MutationAttributedDisappearance(
     StoredEmailId StoredEmailId,
@@ -41,8 +42,9 @@ public sealed record MutationAttributedDisappearance(
 /// The emails the folder no longer holds because MailFathom itself relocated or deleted them, each named with the record
 /// that says so. They are separated from <paramref name="Disappeared" /> before <paramref name="Disposition" /> is
 /// reached, because that setting answers what becomes of mail somebody else deleted and these are not that. A relocation
-/// moves the queue timestamp and nothing else, leaving the row for the placement to carry across; a delete additionally
-/// applies the disposition its own record carries, which is the one the owner authored it under.
+/// into a mirrored folder moves the queue timestamp and nothing else, leaving the row for the placement to carry across;
+/// a delete, and a relocation into a folder MailFathom does not mirror, additionally apply the disposition their own
+/// record carries, which is the one the owner authored the change under.
 /// </param>
 /// <param name="Disposition">
 /// What becomes of the local copy of each email in <paramref name="Disappeared" />. It never reaches
