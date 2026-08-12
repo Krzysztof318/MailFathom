@@ -8,6 +8,11 @@ how much traffic it accepts before it starts refusing, and how it is served over
 tools it serves are described in
 `docs/features/mcp-tools.md`.
 
+What a reader does at the other end of the connection is a separate page:
+[connecting the chat client you already use](../users/mcp-clients.md) has the dialog, the address kind, and the
+authentication shapes of each popular client by name — including the two that offer no field for a static header, which
+decides what a deployment configures here rather than only how it is set up.
+
 ## The endpoint is off by default
 
 A deployment that configures nothing serves no MCP endpoint. That is a security default rather than a convenience: the
