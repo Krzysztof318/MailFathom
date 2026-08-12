@@ -77,6 +77,14 @@ internal sealed class SpamClassificationOptions : IValidatableObject
     /// </remarks>
     public SpamScannerOptions Scanner { get; set; } = new();
 
+    /// <summary>Gets or sets what happens to mail a verdict calls junk.</summary>
+    /// <remarks>
+    /// Always present so that a deployment which states none of its keys still binds and validates. Both of its switches
+    /// are off, which is what keeps a classification derived data by default: a verdict is recorded and the mailbox is
+    /// left exactly as it was.
+    /// </remarks>
+    public SpamActionOptions Actions { get; set; } = new();
+
     /// <inheritdoc />
     public IEnumerable<ValidationResult> Validate(ValidationContext validationContext) => this.FindErrors();
 
@@ -101,6 +109,11 @@ internal sealed class SpamClassificationOptions : IValidatableObject
         }
 
         foreach (var result in this.Scanner.FindErrors(this.UseScanner))
+        {
+            yield return result;
+        }
+
+        foreach (var result in this.Actions.FindErrors(this.Enabled))
         {
             yield return result;
         }

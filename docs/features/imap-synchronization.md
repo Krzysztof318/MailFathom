@@ -410,10 +410,13 @@ message ends up filed once whichever command the stop landed between.
 The record answers three questions with one row.
 
 **Whether asking again is the same request.** Its identity is the email occurrence, the mutation, and who asked — a rule
-together with the revision of it that matched, or the identity of one invocation. Two callers asking for the same change
-at the same moment both reach the database and the unique index refuses one of them, so the same request twice performs
-one change rather than two. That is enforced by the constraint rather than by a check, because no check made between
-reading and writing closes the window two concurrent writers fall through.
+together with the revision of it that matched, the identity of one invocation, or the profile a spam verdict was decided
+under, which is the deciding stage's rule corpus together with the score the operator acts at. The three are told apart
+on the record by their origin, so an operator reading a change knows whether a rule they wrote, something they did, or
+[spam classification](spam-classification.md#what-an-operator-can-let-a-verdict-do) asked for it. Two callers asking for
+the same change at the same moment both reach the database and the unique index refuses one of them, so the same request
+twice performs one change rather than two. That is enforced by the constraint rather than by a check, because no check
+made between reading and writing closes the window two concurrent writers fall through.
 
 **Where to continue from.** A relocation whose copy is confirmed removes its source without copying again; a delete
 whose flag landed reissues only the expunge; a `\Seen` change simply repeats, because the store is idempotent on the

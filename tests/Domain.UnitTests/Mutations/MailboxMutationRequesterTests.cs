@@ -24,6 +24,63 @@ public sealed class MailboxMutationRequesterTests
         Assert.Equal(MailboxMutationRequester.Rule("file-newsletters", "3"), third);
     }
 
+    /// <summary>Rescanning under the same corpus asks for nothing new; a corpus update is a fresh reason to act.</summary>
+    [Fact]
+    public void Classification_TwoCorpusRevisions_AreDifferentRequesters()
+    {
+        // Arrange
+        var august = MailboxMutationRequester.Classification("spamassassin.4.0.2+20260801", actingThreshold: 8);
+
+        // Act
+        var september = MailboxMutationRequester.Classification("spamassassin.4.0.2+20260901", actingThreshold: 8);
+
+        // Assert
+        Assert.NotEqual(august, september);
+        Assert.Equal(
+            MailboxMutationRequester.Classification("spamassassin.4.0.2+20260801", actingThreshold: 8),
+            august);
+    }
+
+    /// <summary>An operator moving the score they act at is a decision taken afresh, not a repeat of the previous one.</summary>
+    [Fact]
+    public void Classification_TwoActingThresholds_AreDifferentRequesters()
+    {
+        // Arrange
+        var strict = MailboxMutationRequester.Classification("Deterministic", actingThreshold: 8);
+
+        // Act
+        var unbounded = MailboxMutationRequester.Classification("Deterministic", actingThreshold: null);
+
+        // Assert
+        Assert.NotEqual(strict, unbounded);
+        Assert.Equal(MailboxMutationOrigin.Classification, unbounded.Origin);
+        Assert.Equal("Deterministic@none", unbounded.Identity);
+    }
+
+    [Theory]
+    [InlineData(double.NaN)]
+    [InlineData(double.NegativeInfinity)]
+    public void Classification_AnActingThresholdThatIsNotFinite_IsRefused(double actingThreshold)
+    {
+        // Act
+        var refusal = () => MailboxMutationRequester.Classification("Deterministic", actingThreshold);
+
+        // Assert
+        Assert.Throws<ArgumentOutOfRangeException>(refusal);
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    public void Classification_NothingNamingWhatDecided_IsRefused(string decidedUnder)
+    {
+        // Act
+        var refusal = () => MailboxMutationRequester.Classification(decidedUnder, actingThreshold: 8);
+
+        // Assert
+        Assert.Throws<ArgumentException>(refusal);
+    }
+
     /// <summary>Two requesters that differ only in kind are different, so an invocation named like a rule is never the same request.</summary>
     [Fact]
     public void Create_SameIdentityUnderDifferentOrigins_AreDifferentRequesters()

@@ -61,6 +61,50 @@ public sealed record MailboxMutationRequester
         return new MailboxMutationRequester(MailboxMutationOrigin.Rule, ValidIdentity(identity, nameof(ruleName)));
     }
 
+    /// <summary>Names the profile a spam classification was decided under, which is what asked for the mutation.</summary>
+    /// <param name="decidedUnder">What the deciding stage ran under — a scanner's rule corpus, or the stage's own name where it has none.</param>
+    /// <param name="actingThreshold">The score MailFathom itself requires before it touches mail, or <see langword="null" /> when the operator configured none.</param>
+    /// <returns>A requester naming that profile.</returns>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="decidedUnder" /> is blank, carries a control character, or is long enough that the composed identity exceeds <see cref="MaximumIdentityLength" />.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="actingThreshold" /> is not a finite number.</exception>
+    /// <remarks>
+    /// <para>
+    /// A classification asks the way a rule does — on its own, repeatedly, about mail nobody is looking at — so it needs
+    /// the same kind of identity: one that does not move when the same decision is reached again, and does move when the
+    /// terms of the decision change. What a rule answers with its name and revision, a classification answers with the
+    /// corpus its verdict was reached against and the threshold MailFathom would act at. Rescanning the same message
+    /// against the same corpus therefore asks for nothing new, and a corpus update or a threshold an operator moved asks
+    /// afresh.
+    /// </para>
+    /// <para>
+    /// The occurrence is deliberately not part of this text. It is already the first third of the record's own
+    /// idempotency identity, so repeating it here would spend the identity's length on a value the constraint already
+    /// compares.
+    /// </para>
+    /// </remarks>
+    public static MailboxMutationRequester Classification(string decidedUnder, double? actingThreshold)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(decidedUnder);
+
+        if (actingThreshold is { } threshold && !double.IsFinite(threshold))
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(actingThreshold),
+                threshold,
+                "An acting threshold is a finite number.");
+        }
+
+        var identity = string.Create(
+            CultureInfo.InvariantCulture,
+            $"{decidedUnder.Trim()}@{DescribeThreshold(actingThreshold)}");
+
+        // Reported against the corpus rather than against the composed identity, for the reason the rule factory gives:
+        // it is the part the caller supplied and the only part they can shorten.
+        return new MailboxMutationRequester(
+            MailboxMutationOrigin.Classification,
+            ValidIdentity(identity, nameof(decidedUnder)));
+    }
+
     /// <summary>Names one invocation somebody made.</summary>
     /// <param name="invocationIdentity">The identity of the invocation, which is the same for a retry of it and different for a second one.</param>
     /// <returns>A requester naming that invocation.</returns>
@@ -87,6 +131,16 @@ public sealed record MailboxMutationRequester
 
         return new MailboxMutationRequester(origin, ValidIdentity(identity, nameof(identity)));
     }
+
+    /// <summary>Writes the acting threshold into the identity, with a name of its own for the absent case.</summary>
+    /// <remarks>
+    /// An unconfigured threshold is written rather than left out, so that configuring one changes the identity instead of
+    /// producing text that could also be read as a corpus nobody judged. The invariant culture is what keeps two
+    /// instances of one deployment agreeing on the identity whatever locale each process starts under.
+    /// </remarks>
+    private static string DescribeThreshold(double? actingThreshold) => actingThreshold is { } threshold
+        ? threshold.ToString(CultureInfo.InvariantCulture)
+        : "none";
 
     /// <summary>Validates an identity and reports a refusal against the parameter the caller actually supplied.</summary>
     /// <remarks>
