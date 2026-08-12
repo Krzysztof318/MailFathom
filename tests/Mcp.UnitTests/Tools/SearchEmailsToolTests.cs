@@ -268,7 +268,7 @@ public sealed class SearchEmailsToolTests
                 cancellationToken: TestContext.Current.CancellationToken));
 
         // Assert
-        Assert.Equal("folder aliases", failure.FilterName);
+        Assert.Equal("folders", failure.FilterName);
         Assert.Equal(0, index.ReadCount);
     }
 

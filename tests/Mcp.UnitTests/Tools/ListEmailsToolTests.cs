@@ -196,7 +196,7 @@ public sealed class ListEmailsToolTests
 
         // Assert
         Assert.Equal(MailFathomErrorCode.MailboxQueryFilterInvalid, failure.ErrorCode);
-        Assert.Equal("folder aliases", failure.FilterName);
+        Assert.Equal("folders", failure.FilterName);
         Assert.Equal(0, timeline.ReadCount);
     }
 
@@ -228,7 +228,7 @@ public sealed class ListEmailsToolTests
         var timeline = new StubStoredEmailTimelineReader();
         var tool = ToolOver(timeline);
         var namedFolders = Enumerable
-            .Range(0, MailboxScope.MaximumFolderAliases + 1)
+            .Range(0, MailboxScope.MaximumFolders + 1)
             .Select(index => $"folder-{index}")
             .ToArray();
 
@@ -237,7 +237,7 @@ public sealed class ListEmailsToolTests
             () => tool.ListEmailsAsync(folders: namedFolders, cancellationToken: TestContext.Current.CancellationToken));
 
         // Assert
-        Assert.Equal("folder aliases", failure.FilterName);
+        Assert.Equal("folders", failure.FilterName);
         Assert.Equal(0, timeline.ReadCount);
     }
 

@@ -125,7 +125,7 @@ configured name for an account and carries nothing the caller did not already wr
 | Code | Meaning | Typical cause |
 |---|---|---|
 | `51001` | A page size outside the range the query serves | A page size of 0 or above 100, refused rather than clamped |
-| `51002` | A filter carries a value, a count, or a length the query does not accept | An unusable address, a subject fragment over 256 characters or carrying a control character, a received range that ends before it starts, more than 64 accounts or folder aliases, an account identifier or folder alias that is blank, over 256 characters, or carrying a control character, a search query that is blank, over 512 characters, or carrying a control character |
+| `51002` | A filter carries a value, a count, or a length the query does not accept | An unusable address, a subject fragment over 256 characters or carrying a control character, a received range that ends before it starts, more than 64 accounts or folders, an account identifier or folder alias that is blank, over 256 characters, or carrying a control character, a search query that is blank, over 512 characters, or carrying a control character |
 | `51003` | A search asked for more ranked results than a search serves | A `resultLimit` of 0 or above 50, refused rather than clamped |
 | `51004` | The call named an email with text that is no identifier this system issues | A `storedEmailIds` element that is blank, not a UUID, or the all-zero UUID, refused before anything is looked up |
 | `51005` | A content read named no emails, or more than one call serves | A `storedEmailIds` list that is empty or holds more than 10 entries, refused rather than truncated |
@@ -250,7 +250,7 @@ Every argument is optional.
 | `cursor` | `string` | The `nextCursor` of a previous call, reused with the same filters and direction |
 
 An unbounded date range is deliberately legal; only an unbounded page is not. The page size stops at 100, and the scope
-stops at 64 accounts and 64 folder aliases counted while the caller's list is read, so a request that repeats one
+stops at 64 accounts and 64 folders counted while the caller's list is read, so a request that repeats one
 identifier a million times is refused after the value that crosses the limit rather than after the list has been
 materialized. Every one of those bounds lives in the use case rather than here, which is what makes them hold for an
 entrypoint added later; naming one served account repeatedly is legal and is read once.
