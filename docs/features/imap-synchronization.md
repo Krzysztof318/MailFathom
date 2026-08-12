@@ -727,7 +727,7 @@ by remote path or by special-use role, so the folder stays a **destination**: a 
 into it over the account's existing write session, through the same commands and the same
 [recorded change](#every-change-is-written-down-before-it-is-issued) any other destination takes. Nothing new is opened,
 no capability is added, and what
-[ADR 0007](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0007-mailbox-mutation-boundary.md)
+[ADR 0007](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0007-remote-mailbox-mutation-boundary-and-write-session.md)
 refuses is untouched — the destination is still never searched for the message afterwards.
 
 What differs is what becomes of the local copy. A relocation into a mirrored folder carries the row into that folder and
