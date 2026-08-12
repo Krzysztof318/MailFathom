@@ -24,6 +24,7 @@ using MailFathom.Application.Emails.Search;
 using MailFathom.Application.Emails.SearchEmails;
 using MailFathom.Application.Emails.Summaries;
 using MailFathom.Application.Folders;
+using MailFathom.Application.Jobs;
 using MailFathom.Application.Mail.Mutations;
 using MailFathom.Application.Mail.Mutations.Audit;
 using MailFathom.Application.Mail.Mutations.Convergence;
@@ -65,6 +66,7 @@ using MailFathom.Infrastructure.Persistence.Answering;
 using MailFathom.Infrastructure.Persistence.Connections;
 using MailFathom.Infrastructure.Persistence.Emails;
 using MailFathom.Infrastructure.Persistence.Embeddings;
+using MailFathom.Infrastructure.Persistence.Jobs;
 using MailFathom.Infrastructure.Persistence.Mutations;
 using MailFathom.Infrastructure.Persistence.Rules;
 using MailFathom.Infrastructure.Persistence.Sessions;
@@ -316,6 +318,10 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IMailRuleEvaluationRunStore, MailRuleEvaluationRunStore>();
         services.AddSingleton<MailRuleHistoryTelemetry>();
         services.AddScoped<IMailRuleExecutionStore, MailRuleExecutionStore>();
+        // Scoped like every other store, and deliberately not registered beside a worker: nothing here runs a job. It
+        // takes no persistence session either, so a caller cannot enlist an enqueue in the transaction that stored the
+        // message the work is about.
+        services.AddScoped<IJobStore, JobStore>();
 
         // Registered whether or not classification is switched on, for the reason every other store here is: what a
         // deployment decides is whether anything calls it, and a port resolvable only under one configuration is a
