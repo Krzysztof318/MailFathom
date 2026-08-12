@@ -9,6 +9,8 @@
   href: installation.md
 - name: Getting started
   href: getting-started.md
+- name: Configuring a mailbox at your provider
+  href: mailbox-providers.md
 - name: Using the tools
   href: usage.md
 - name: Administering your deployment

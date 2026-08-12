@@ -11,7 +11,8 @@ it publishes, and what a new page owes it.
 
 [The user guide](users/README.md) is the guided path for people who install, configure, and use MailFathom rather
 than develop it: [choosing an installation](users/installation.md), [getting started](users/getting-started.md) from
-first mailbox to first tool call, [using the tools](users/usage.md), and
+first mailbox to first tool call, [configuring a mailbox at your provider](users/mailbox-providers.md),
+[using the tools](users/usage.md), and
 [administering a running deployment](users/administering.md) with the `mfctl` command. It links into the sections
 below for depth instead of duplicating them.
 
