@@ -33,10 +33,12 @@ the boundary owns is the one thing a use case cannot: turning a caller's text in
 alias, and refusing text that names neither.
 
 Where a table below says a tool reads every folder of the accounts in scope, "every folder" means every folder the
-deployment lets tools read. A folder mapped with `VisibleToTools: false` is outside all four mailbox tools and is never
-mentioned by one — a request naming its alias comes back empty rather than refused, and an email of it reads as not
-found. The exclusion is applied once, where the scope a read is expressed in is resolved, so it holds for a tool added
-later without that tool doing anything;
+deployment lets tools read: a folder configuration maps and does not withhold. A folder mapped with
+`VisibleToTools: false` and a folder **no mapping names** are both outside all four mailbox tools and are never
+mentioned by one — a request naming such an alias comes back empty rather than refused, and an email of it reads as not
+found. The decision is made once, where the scope a read is expressed in is resolved, and what it carries is the list of
+folders that may be read, so it holds for a tool added later without that tool doing anything, and an account whose
+configuration maps no folder reads as empty;
 [folders withheld from tools](mailbox-queries.md#folders-withheld-from-tools) states what a caller sees and why nothing
 says the folder exists.
 
@@ -198,7 +200,7 @@ the deployment is refreshing its local copy at all.
 | `accountId` | The configured identifier. It is what every other result reports as `accountId`, and it is stable across a change of the display name |
 | `displayName` | The readable name the operator gave the account |
 | `synchronizationMode` | `polling` or `push`, stating what the operator asked to start the account's next pass |
-| `folders` | One entry per folder local state knows of, in the same shape `folderFreshness` takes elsewhere: the alias, when synchronization last committed progress for it, and whether it ever has |
+| `folders` | One entry per folder this deployment maps and lets tools read, in the same shape `folderFreshness` takes elsewhere: the alias, when synchronization last committed progress for it, and whether it ever has |
 
 **Either name may be used to select the account.** The identifier is matched exactly and the display name without regard
 to case, and configuration refuses a display name that another account's identifier or display name already carries, so
@@ -209,10 +211,15 @@ cursor issued for one stays valid for the other.
 folder against what the mail server advertises and how recent attempts went, which is an observation about a run rather
 than a property of the account.
 
-**An empty `folders` list is a statement.** It says synchronization has never reached the account, which means its mail
-may be absent entirely rather than merely out of date — a distinction an empty listing cannot make for itself.
-`synchronizationEnabled` answers the other half: `false` means the timestamps below it are as current as any answer will
-get, because nothing is advancing them.
+**An empty `folders` list is a statement.** It says synchronization has never reached a folder this account lets tools
+read — or that it lets them read none — which means its mail may be absent entirely rather than merely out of date, a
+distinction an empty listing cannot make for itself. `synchronizationEnabled` answers the other half: `false` means the
+timestamps below it are as current as any answer will get, because nothing is advancing them.
+
+**The list is the same set every other tool reads.** It is resolved through the one scope every mailbox read is
+expressed in, so a folder mapped with `VisibleToTools: false` and a folder no mapping names are both absent from it —
+naming a folder here is publishing that it exists, which is the whole of what this answer does. The account's junk
+folder is present, because withholding that one is about not returning its mail unasked and no mail is returned here.
 
 ### What it deliberately does not publish
 

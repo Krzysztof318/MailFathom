@@ -80,7 +80,7 @@ internal static class AnsweringDeployment
             Capability(answerer),
             new MailboxScopeResolver(
                 AccountCatalog(),
-                StubMailFolderParticipation.Everything,
+                StubMailFolderParticipation.Nothing,
                 StubJunkMailFolderCatalog.None,
                 StubMailFolderMappings.ResolvingNothing),
             spendLedger ?? LedgerAdmitting(),

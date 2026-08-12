@@ -344,7 +344,7 @@ public sealed class SemanticEmailSearchTests
             EmbeddingInputPreparation.Create(2_000, passageInstruction: null, normalizesVector: true));
 
     private static MailboxEmailSelection UnfilteredSelection() => MailboxEmailSelection.Create(
-        MailboxScope.Unrestricted,
+        MailboxScope.NothingReadable,
         senderAddress: null,
         recipientAddress: null,
         subjectFragment: null,

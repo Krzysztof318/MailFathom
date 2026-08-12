@@ -43,7 +43,8 @@ Nothing about how MailFathom reaches a mailbox is returned: no server, no port, 
 
 Returns a page of summaries, newest received first by default, filtered by any combination of account, folder, sender,
 recipient, subject fragment, received range, seen state, and attachment presence. Every argument is optional; a bare
-call reads every folder of every served account.
+call reads every folder every served account maps and lets tools read — configuration is what says which folders those
+are, and a folder it does not name is one this deployment does not have.
 
 A summary is enough to recognize a message — subject, sender, recipients, timestamps, size, attachment counts, remote
 flags — and carries `storedEmailId`, the identifier a content read uses. It names its account both ways, as `accountId`

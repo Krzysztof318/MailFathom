@@ -43,7 +43,7 @@ public sealed class MailboxKnowledgeSearchTests
 
     /// <summary>The scope a question carrying no narrowing of its own arrives with, which is every served account.</summary>
     /// <remarks>
-    /// Never <see cref="MailboxScope.Unrestricted" />: this retrieval is handed a scope somebody already resolved, and
+    /// Never <see cref="MailboxScope.NothingReadable" />: this retrieval is handed a scope somebody already resolved, and
     /// the unrestricted one is what a deployment serving no account at all resolves to.
     /// </remarks>
     private static readonly MailboxScope EveryAccount = MailboxScope.Create(EveryServedAccount, selectedFolders: null);
@@ -446,7 +446,7 @@ public sealed class MailboxKnowledgeSearchTests
             FreshnessReaderReturningNothing(),
             new MailboxScopeResolver(
                 CatalogServing(EveryServedAccount),
-                StubMailFolderParticipation.Everything,
+                StubMailFolderParticipation.Nothing,
                 StubJunkMailFolderCatalog.None,
                 StubMailFolderMappings.ResolvingNothing),
             EmailSearchSnippetBounds.Default,

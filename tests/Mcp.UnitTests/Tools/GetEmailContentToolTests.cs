@@ -911,11 +911,19 @@ public sealed class GetEmailContentToolTests
             repairRequestStore ?? Substitute.For<IEmailContentRepairRequestStore>(),
             new MailboxScopeResolver(
                 new StubMailAccountCatalog(ServedAccountId),
-                StubMailFolderParticipation.Everything,
+                MappedInbox,
                 StubJunkMailFolderCatalog.None,
                 StubMailFolderMappings.ResolvingNothing),
             linkIssuer ?? new StubAttachmentDownloadLinkIssuer(),
             new EmailContentReadOptions()));
+
+    /// <summary>The one folder this deployment maps, which is what makes the mail these tests store readable at all.</summary>
+    /// <remarks>
+    /// A folder no mapping names does not exist as far as MailFathom is concerned, so a tool arranged over an unmapped
+    /// alias answers every read with a refusal. Every summary here is stored in the inbox, so the mapping is one entry.
+    /// </remarks>
+    private static StubMailFolderParticipation MappedInbox => StubMailFolderParticipation.Mapping(
+        new MailFolderIdentity(MailAccountId.Create(ServedAccountId), MailFolderAlias.Create("INBOX")));
 
     private static EmailSummary SummaryOf(
         DateTimeOffset? sentAt = null,

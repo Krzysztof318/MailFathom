@@ -13,8 +13,13 @@ namespace MailFathom.Infrastructure.Persistence.Emails;
 /// A folder decision is made about an account and an alias together, and no column holds that pair, so the narrowing is
 /// written once here rather than at each query that needs it. One clause is composed per account the decision reaches —
 /// <c>account &lt;&gt; 'a' OR alias &lt;&gt; ALL(…)</c> to withhold, <c>account &lt;&gt; 'a' OR alias = ANY(…)</c> to
-/// select — which is bounded by how many accounts are configured and disappears entirely when the decision reaches
-/// none, so the common deployment pays nothing for it.
+/// select or to admit — which is bounded by how many accounts are configured.
+/// </para>
+/// <para>
+/// What an empty list means is the one thing that differs between the three, and it follows from what each list is. A
+/// withheld set that is empty withholds nothing and a selected set that is empty is a caller who named no folder, so
+/// both disappear and the query is unnarrowed; an admitted set that is empty admits nothing, because a folder is
+/// readable by being mapped rather than by not being mentioned.
 /// </para>
 /// <para>
 /// Narrowing by the alias alone would be the silent mistake this exists to prevent, and it fails differently on each
@@ -55,6 +60,53 @@ internal static class AccountScopedMailFolders
         {
             folders = folders.Where(folder =>
                 folder.MailboxAccountId != accountId || !aliases.Contains(folder.Alias));
+        }
+
+        return folders;
+    }
+
+    /// <summary>Narrows stored emails to the folders configuration admits, each within its own account.</summary>
+    /// <param name="emails">The emails to narrow.</param>
+    /// <param name="admitted">The folders a read may return mail from, empty when none may.</param>
+    /// <returns>The narrowed query, which PostgreSQL evaluates in full.</returns>
+    /// <remarks>
+    /// The same shape as <see cref="Selecting(IQueryable{StoredEmailEntity}, IReadOnlyList{MailFolderIdentity})" /> and
+    /// one difference that is the whole point of having two: an empty list admits nothing rather than everything. A
+    /// caller's folder filter is absent when they named no folder, and configuration's admission is empty when the
+    /// deployment maps no folder a tool may read — which has to mean no mail rather than all of it, since the store
+    /// holds rows of folders no mapping names any more.
+    /// </remarks>
+    internal static IQueryable<StoredEmailEntity> Admitting(
+        IQueryable<StoredEmailEntity> emails,
+        IReadOnlyList<MailFolderIdentity> admitted)
+    {
+        var admittedAccounts = AccountsOf(admitted);
+        emails = emails.Where(email => admittedAccounts.Contains(email.MailboxAccountId));
+
+        foreach (var (accountId, aliases) in AliasesByAccount(admitted))
+        {
+            emails = emails.Where(email =>
+                email.MailboxAccountId != accountId || aliases.Contains(email.MailFolder.Alias));
+        }
+
+        return emails;
+    }
+
+    /// <summary>Narrows folder bindings to the folders configuration admits, read the same way as above.</summary>
+    /// <param name="folders">The bindings to narrow.</param>
+    /// <param name="admitted">The folders a read may report on, empty when none may.</param>
+    /// <returns>The narrowed query, which PostgreSQL evaluates in full.</returns>
+    internal static IQueryable<MailFolderEntity> Admitting(
+        IQueryable<MailFolderEntity> folders,
+        IReadOnlyList<MailFolderIdentity> admitted)
+    {
+        var admittedAccounts = AccountsOf(admitted);
+        folders = folders.Where(folder => admittedAccounts.Contains(folder.MailboxAccountId));
+
+        foreach (var (accountId, aliases) in AliasesByAccount(admitted))
+        {
+            folders = folders.Where(folder =>
+                folder.MailboxAccountId != accountId || aliases.Contains(folder.Alias));
         }
 
         return folders;
@@ -118,15 +170,15 @@ internal static class AccountScopedMailFolders
         return folders;
     }
 
-    /// <summary>Reports whether the excluded set names one folder.</summary>
-    /// <param name="excluded">The excluded folders.</param>
+    /// <summary>Reports whether a set of folder decisions names one folder.</summary>
+    /// <param name="decided">The folders the decision reaches, whichever direction it runs in.</param>
     /// <param name="accountId">The account the folder belongs to.</param>
     /// <param name="folderAlias">MailFathom's own name for the folder.</param>
-    /// <returns><see langword="true" /> when the pair is excluded.</returns>
+    /// <returns><see langword="true" /> when the set names that pair.</returns>
     internal static bool Contains(
-        IReadOnlyList<MailFolderIdentity> excluded,
+        IReadOnlyList<MailFolderIdentity> decided,
         string accountId,
-        string folderAlias) => excluded.Any(folder =>
+        string folderAlias) => decided.Any(folder =>
             StringComparer.Ordinal.Equals(folder.AccountId.Value, accountId)
             && StringComparer.Ordinal.Equals(folder.Alias.Value, folderAlias));
 

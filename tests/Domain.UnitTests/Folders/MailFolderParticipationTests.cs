@@ -17,9 +17,33 @@ public sealed class MailFolderParticipationTests
         var participation = MailFolderParticipation.Full;
 
         // Assert
+        Assert.True(participation.IsMapped);
         Assert.True(participation.IsSynchronized);
         Assert.True(participation.GeneratesEmbeddings);
         Assert.True(participation.IsVisibleToTools);
+    }
+
+    /// <summary>A folder no mapping names does not exist here, so nothing it once stored takes part in anything.</summary>
+    [Fact]
+    public void Unmapped_ByItself_TakesPartInNothing()
+    {
+        // Act
+        var participation = MailFolderParticipation.Unmapped;
+
+        // Assert
+        Assert.False(participation.IsMapped);
+        Assert.False(participation.IsSynchronized);
+        Assert.False(participation.GeneratesEmbeddings);
+        Assert.False(participation.IsVisibleToTools);
+    }
+
+    /// <summary>A folder an operator stopped mirroring and a folder they stopped mapping are two decisions, so one value cannot stand for both.</summary>
+    [Fact]
+    public void Unmapped_AgainstMappedOnly_IsADifferentValue()
+    {
+        // Act, Assert
+        Assert.NotEqual(MailFolderParticipation.MappedOnly, MailFolderParticipation.Unmapped);
+        Assert.True(MailFolderParticipation.MappedOnly.IsMapped);
     }
 
     /// <summary>An unmirrored folder stores nothing, so neither of the other two answers can be anything but no.</summary>
@@ -76,5 +100,25 @@ public sealed class MailFolderParticipationTests
         Assert.Equal(
             MailFolderParticipation.MappedOnly,
             MailFolderParticipation.Create(isSynchronized: false, generatesEmbeddings: true, isVisibleToTools: true));
+    }
+
+    /// <summary>The three switches are what a mapping says, so every value built from them is a mapped folder's.</summary>
+    [Theory]
+    [InlineData(true, true, true)]
+    [InlineData(true, false, false)]
+    [InlineData(false, false, false)]
+    public void Create_AnyThreeAnswers_DescribeAMappedFolder(
+        bool isSynchronized,
+        bool generatesEmbeddings,
+        bool isVisibleToTools)
+    {
+        // Act
+        var participation = MailFolderParticipation.Create(
+            isSynchronized,
+            generatesEmbeddings,
+            isVisibleToTools);
+
+        // Assert
+        Assert.True(participation.IsMapped);
     }
 }

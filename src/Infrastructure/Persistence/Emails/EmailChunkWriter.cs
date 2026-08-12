@@ -113,20 +113,22 @@ internal sealed class EmailChunkWriter(
 
     /// <summary>Reports whether the folder this message was read from is one an operator asked to have embedded.</summary>
     /// <remarks>
-    /// The excluded set is read first so a deployment that excludes nothing — which is every deployment that has not
-    /// configured a folder otherwise — pays neither a lookup nor a query. Where something is excluded, the binding is
-    /// read from the message's own row: the live path arrives with it loaded, and both backfills reach a message through
-    /// its primary key alone, so the alias has to be fetched rather than assumed present.
+    /// The question is which folders a mapping admits rather than which ones it withheld, so a message stored under an
+    /// alias configuration does not name is not embedded — the answer an exclusion could never give, since no list of
+    /// names carries a folder nobody named. That is also why the alias is always resolved rather than skipped where a
+    /// deployment withholds nothing: there is no longer a set whose emptiness means everything. The binding is read from
+    /// the message's own row, since the live path arrives with it loaded while both backfills reach a message through
+    /// its primary key alone.
     /// </remarks>
     private async Task<bool> FolderGeneratesEmbeddingsAsync(
         MailFathomDbContext dbContext,
         StoredEmailEntity storedEmail,
         CancellationToken cancellationToken)
     {
-        var excluded = folderParticipation.FoldersWithoutEmbeddings;
-        if (excluded.Count == 0)
+        var admitted = folderParticipation.FoldersGeneratingEmbeddings;
+        if (admitted.Count == 0)
         {
-            return true;
+            return false;
         }
 
         var folderAlias = storedEmail.MailFolder is { } loadedFolder
@@ -136,7 +138,7 @@ internal sealed class EmailChunkWriter(
                 .Select(folder => folder.Alias)
                 .SingleAsync(cancellationToken);
 
-        return !AccountScopedMailFolders.Contains(excluded, storedEmail.MailboxAccountId, folderAlias);
+        return AccountScopedMailFolders.Contains(admitted, storedEmail.MailboxAccountId, folderAlias);
     }
 
     private static EmailChunkEntity[] FindStaged(MailFathomDbContext dbContext, Guid storedEmailId) =>

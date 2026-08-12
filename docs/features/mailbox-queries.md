@@ -26,7 +26,7 @@ divergence neither copy would look wrong for on its own.
 | Field | Meaning | Absent means |
 |---|---|---|
 | `Accounts` | The accounts to list from, each named by its identifier or by its display name | every account this deployment serves |
-| `Folders` | The folders to list from, each named by its alias or by the role it plays | every folder of those accounts |
+| `Folders` | The folders to list from, each named by its alias or by the role it plays | every folder those accounts map and let tools read |
 | `SenderAddress` | The address the sender must carry, in any case | any sender |
 | `RecipientAddress` | The address a `To` or `Cc` recipient must carry | any recipient |
 | `SubjectFragment` | Text the subject must contain, compared without regard to case | any subject |
@@ -50,7 +50,8 @@ folders. A role no account in scope maps is refused with `53003 MailFolderRoleUn
 which selects nothing — an alias is already a name the caller chose to use, while a role that reached no folder anywhere
 would leave a caller reading an empty page as an empty folder.
 
-A listing that names no folder reads every folder, so a message that exists in two of them — because it was copied, by
+A listing that names no folder reads every folder the account maps and lets tools read, so a message that exists in two
+of them — because it was copied, by
 the mailbox owner or by MailFathom — is two entries, one per folder. Nothing collapses them, because a stored row is one
 occurrence and no identity spans two;
 [what a message MailFathom copied becomes locally](imap-synchronization.md#what-a-message-mailfathom-copied-becomes-locally)
@@ -138,15 +139,22 @@ stops serving for the same reason, because the question is asked where the downl
 was issued. None of those answers says the folder exists, because a refusal naming it would publish exactly what the
 switch withholds.
 
-The exclusion is applied once, where the scope every read model is expressed in is resolved, and it narrows by the
-account and the alias **together** — one account's withheld folder never hides another account's folder of the same
-name. It deliberately takes no part in the cursor's fingerprint: a cursor stays valid across the change, and the pages
-after it simply stop admitting the folder, which is what an operator asking for it to be withheld meant.
+A folder **no mapping names** gives the same answers, and for a stronger reason: the scope carries the folders a mapping
+names and leaves visible, so a read admits that list and nothing else. Mail stored under an alias whose mapping was
+later removed is therefore mail no page reaches, no search matches, and no identifier resolves — the rows stay in the
+table and stop being readable the moment configuration stops naming their folder. An account whose configuration maps no
+folder at all reads as empty rather than as unrestricted, which is what "a folder MailFathom does not have" has to mean
+for it to mean anything.
 
-Freshness follows the same exclusion, so a withheld folder is absent from the entries a listing reports rather than
-present with a timestamp nothing may read behind it.
+The decision is made once, where the scope every read model is expressed in is resolved, and it narrows by the account
+and the alias **together** — one account's mapping never admits or withholds another account's folder of the same name.
+It deliberately takes no part in the cursor's fingerprint: a cursor stays valid across the change, and the pages after it
+simply stop admitting the folder, which is what an operator withholding it or removing its mapping meant.
+
+Freshness follows the same rule, so a folder a mapping withholds or does not name is absent from the entries a listing
+reports rather than present with a timestamp nothing may read behind it.
 [What a mapping decides beyond where the folder is](imap-synchronization.md#what-a-mapping-decides-beyond-where-the-folder-is)
-states the switch beside the other two and what an unmapped folder is instead.
+states the switch beside the other two, what an unmapped folder is instead, and how to empty one.
 
 ### The junk folder, withheld by default and reachable on request
 

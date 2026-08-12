@@ -57,9 +57,87 @@ internal sealed class SyntheticMailAccount(
     IMailFolderParticipationReader,
     IMailFolderMappingReader
 {
+    /// <summary>Every folder alias this suite's configuration maps, which is every alias its tests bind one to.</summary>
+    /// <remarks>
+    /// <para>
+    /// A folder no mapping names does not exist as far as MailFathom is concerned, so a harness that named none would
+    /// make every read answer with nothing and every message reach the chunker unembedded. This is that configuration:
+    /// one entry per alias a test class owns, which is what an operator's <c>…:Folders</c> list would hold for the same
+    /// mailbox.
+    /// </para>
+    /// <para>
+    /// A test class that introduces an alias adds it here. Forgetting shows up in that class alone and shows up as
+    /// emptiness — a listing that returns no mail the same run stored, or a message cut into no passages — which is why
+    /// the aliases are kept together rather than derived from whatever a run happened to bind.
+    /// </para>
+    /// </remarks>
+    internal static readonly IReadOnlyList<string> MappedFolderAliases =
+    [
+        nameof(MailFolderSpecialUse.Inbox),
+        "inbox",
+        "a-folder-nobody-bound",
+        "answering-audit-inbox",
+        "ask-mail",
+        "ask-mail-elsewhere",
+        "audit-trail-inbox",
+        "authored-delete",
+        "content-inventory",
+        "content-read",
+        "content-store",
+        "convergence-inbox",
+        "createdarchive",
+        "email-chunks",
+        "email-chunks-unembedded",
+        "email-embeddings",
+        "embedding-backfill",
+        "embedding-generation",
+        "embedding-generations",
+        "embedding-workload",
+        "extraction-backfill",
+        "hybrid-retrieval",
+        "lexical-search",
+        "manual-move-source",
+        "manual-move-target",
+        "mcp-tool-contract",
+        "mutation-identity",
+        "mutation-reconciliation",
+        "mutation-record-inbox",
+        "occurrence-identity",
+        "persistence-session",
+        "persistence-session-race",
+        "persistence-session-retry",
+        "push-watched",
+        "reconciliation-erasure",
+        "reconciliation-tombstone",
+        "reconciliation-window",
+        "relocation-source",
+        "relocation-target",
+        "rule-evaluation",
+        "seen-state-provenance",
+        "spam-scan",
+        "synchronized",
+        "timeline-and-search",
+        "timeline-read-model",
+        "vector-search",
+    ];
+
+    /// <summary>An alias this configuration deliberately maps nothing to, which is what a folder MailFathom does not have looks like.</summary>
+    /// <remarks>
+    /// Kept beside the mapped aliases and deliberately absent from them, so a test that needs the unmapped case names
+    /// this rather than inventing an alias somebody could later add to the list without noticing what it was for.
+    /// </remarks>
+    internal const string UnmappedFolderAlias = "no-mapping-names-this";
+
     private static readonly MailFolderMapping Inbox = MailFolderMapping.ToSpecialUse(
         MailFolderAlias.Create(nameof(MailFolderSpecialUse.Inbox)),
         MailFolderSpecialUse.Inbox);
+
+    private static readonly IReadOnlyList<MailFolderIdentity> MappedFolders =
+    [
+        .. MappedFolderAliases
+            .Select(static alias => new MailFolderIdentity(AccountId, MailFolderAlias.Create(alias)))
+            .Distinct(),
+    ];
 
     /// <summary>The window this account keeps an answering entry for, which a retention test writes an older entry than.</summary>
     internal static readonly TimeSpan AnsweringAuditRetention = TimeSpan.FromDays(30);
@@ -86,25 +164,33 @@ internal sealed class SyntheticMailAccount(
 
     /// <inheritdoc />
     /// <remarks>
-    /// Empty unless a test asks otherwise, which is what a deployment that configures none of the folder switches
-    /// behaves like; arranging one for every test would silently narrow every other read. The one class that does ask
-    /// needs it, because whether the narrowing translates to SQL at all is settled by a real database and nothing else.
+    /// Every folder this suite maps, less the ones a test stopped mirroring. That is the list a pass over stored mail
+    /// runs against, so it is what keeps two kinds of row out of one: mail of a folder whose synchronization was
+    /// switched off, which a test arranges here, and mail of a folder outside <see cref="MappedFolderAliases" />, which
+    /// no arrangement can put back because an unmapped alias is not a folder this deployment has.
     /// </remarks>
-    public IReadOnlyList<MailFolderIdentity> FoldersHiddenFromTools => foldersHiddenFromTools ?? [];
+    public IReadOnlyList<MailFolderIdentity> FoldersSynchronized =>
+        [.. MappedFolders.Where(folder => !(foldersNotMirrored ?? []).Contains(folder))];
 
     /// <inheritdoc />
     /// <remarks>
-    /// Empty unless a test asks otherwise, for the reason above. The one class that does ask names a folder of its own,
-    /// because whether a message is cut into passages at all is settled by the rows a real transaction leaves behind.
+    /// Every folder this suite maps, less the ones a test withheld. The subtraction is stated that way round because a
+    /// withholding is what a test arranges, while being mapped at all is what makes MailFathom have the folder: an
+    /// alias outside <see cref="MappedFolderAliases" /> is not a folder this deployment has, and every read of it
+    /// answers with nothing. The one class that withholds a mapped folder needs it, because whether the narrowing
+    /// translates to SQL at all is settled by a real database and nothing else.
     /// </remarks>
-    public IReadOnlyList<MailFolderIdentity> FoldersWithoutEmbeddings => foldersWithoutEmbeddings ?? [];
+    public IReadOnlyList<MailFolderIdentity> FoldersVisibleToTools =>
+        [.. this.FoldersSynchronized.Where(folder => !(foldersHiddenFromTools ?? []).Contains(folder))];
 
     /// <inheritdoc />
     /// <remarks>
-    /// Empty unless a test asks otherwise, for the reason above. The class that does ask names a folder it has already
-    /// stored mail into, because keeping that mail out of a walk is only worth asserting where the rows exist.
+    /// Read the same way as the folders above. The one class that leaves a mapped folder unembedded names a folder of
+    /// its own, because whether a message is cut into passages at all is settled by the rows a real transaction leaves
+    /// behind.
     /// </remarks>
-    public IReadOnlyList<MailFolderIdentity> FoldersNotMirrored => foldersNotMirrored ?? [];
+    public IReadOnlyList<MailFolderIdentity> FoldersGeneratingEmbeddings =>
+        [.. this.FoldersSynchronized.Where(folder => !(foldersWithoutEmbeddings ?? []).Contains(folder))];
 
     /// <inheritdoc />
     /// <remarks>
@@ -133,8 +219,22 @@ internal sealed class SyntheticMailAccount(
     public MailSynchronizationWindow GetWindow(MailAccountId accountId) => MailSynchronizationWindow.Unbounded;
 
     /// <inheritdoc />
-    public MailFolderParticipation GetParticipation(MailAccountId accountId, MailFolderAlias folderAlias) =>
-        MailFolderParticipation.Full;
+    /// <remarks>
+    /// Answered from the same mapped set the two lists above are read from, so the per-folder question and the
+    /// per-query one cannot disagree — which is the property the production reader has and the one a read that reaches
+    /// an email by its identifier depends on.
+    /// </remarks>
+    public MailFolderParticipation GetParticipation(MailAccountId accountId, MailFolderAlias folderAlias)
+    {
+        var folder = new MailFolderIdentity(accountId, folderAlias);
+
+        return MappedFolders.Contains(folder)
+            ? MailFolderParticipation.Create(
+                this.FoldersSynchronized.Contains(folder),
+                this.FoldersGeneratingEmbeddings.Contains(folder),
+                this.FoldersVisibleToTools.Contains(folder))
+            : MailFolderParticipation.Unmapped;
+    }
 
     /// <inheritdoc />
     /// <remarks>

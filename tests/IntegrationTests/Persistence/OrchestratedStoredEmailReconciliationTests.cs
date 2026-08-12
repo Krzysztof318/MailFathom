@@ -371,7 +371,7 @@ public sealed class OrchestratedStoredEmailReconciliationTests(MailFathomOrchest
         CancellationToken cancellationToken) => services.InScopeAsync(
             (scope, token) => scope.GetRequiredService<IStoredEmailTimelineReader>().ReadPageAsync(
                 EmailTimelineFilter.Create(
-                    ScopeOf(binding),
+                    ScopeOf(scope, binding),
                     senderAddress: null,
                     recipientAddress: null,
                     subjectFragment: null,
@@ -393,7 +393,7 @@ public sealed class OrchestratedStoredEmailReconciliationTests(MailFathomOrchest
             {
                 var reader = scope.GetRequiredService<IEmailSearchIndexReader>();
                 var selection = MailboxEmailSelection.Create(
-                    ScopeOf(binding),
+                    ScopeOf(scope, binding),
                     senderAddress: null,
                     recipientAddress: null,
                     subjectFragment: null,
@@ -414,10 +414,8 @@ public sealed class OrchestratedStoredEmailReconciliationTests(MailFathomOrchest
             },
             cancellationToken);
 
-    private static MailboxScope ScopeOf(MailFolderResolution binding) =>
-        MailboxScope.Create(
-            [SyntheticMailAccount.AccountId],
-            [new MailFolderIdentity(SyntheticMailAccount.AccountId, binding.Alias)]);
+    private static MailboxScope ScopeOf(IServiceProvider scope, MailFolderResolution binding) =>
+        OrchestratedMailboxScope.Readable(scope, [binding.Alias.Value]);
 
     /// <summary>Reads every row one folder holds, keyed by UID so an assertion names a message rather than an identifier.</summary>
     private static async Task<IReadOnlyDictionary<uint, StoredEmailEntity>> ReadRowsAsync(

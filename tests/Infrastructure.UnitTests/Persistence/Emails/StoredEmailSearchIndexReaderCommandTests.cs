@@ -158,7 +158,7 @@ public sealed class StoredEmailSearchIndexReaderCommandTests
     {
         // Arrange
         var selection = MailboxEmailSelection.Create(
-            MailboxScope.Unrestricted,
+            MailboxScope.NothingReadable,
             senderAddress: null,
             recipientAddress: null,
             subjectFragment: null,
@@ -185,7 +185,7 @@ public sealed class StoredEmailSearchIndexReaderCommandTests
     {
         // Arrange
         var selection = MailboxEmailSelection.Create(
-            MailboxScope.Unrestricted,
+            MailboxScope.NothingReadable,
             senderAddress: "anna@example.test",
             recipientAddress: null,
             subjectFragment: null,
@@ -204,7 +204,7 @@ public sealed class StoredEmailSearchIndexReaderCommandTests
 
     /// <summary>Gets the selection that narrows nothing, which is what a command test uses unless the filters are its subject.</summary>
     private static MailboxEmailSelection UnfilteredSelection => MailboxEmailSelection.Create(
-        MailboxScope.Unrestricted,
+        MailboxScope.NothingReadable,
         senderAddress: null,
         recipientAddress: null,
         subjectFragment: null,

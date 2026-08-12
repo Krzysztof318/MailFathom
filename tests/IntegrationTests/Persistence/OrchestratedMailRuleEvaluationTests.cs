@@ -382,6 +382,40 @@ public sealed class OrchestratedMailRuleEvaluationTests(MailFathomOrchestrationF
         Assert.Empty(queued);
     }
 
+    /// <summary>
+    /// Neither walk reaches mail stored under an alias no mapping names, so a folder an operator withdrew is not mail
+    /// a rule may move, file, or flag.
+    /// </summary>
+    /// <remarks>
+    /// Both walks are asserted because they select different mail — one the arrival queue, the other the whole mailbox
+    /// — and a narrowing applied to only one of them would leave a requested run acting on exactly the folder the
+    /// account run left alone. The mapped message beside it is the control the two absences need.
+    /// </remarks>
+    [Fact]
+    public async Task BothWalks_MailInAFolderNoMappingNames_LeaveItOutWhileItStaysStored()
+    {
+        // Arrange
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var services = await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken);
+        await DrainArrivalQueueAsync(services, cancellationToken);
+        var unmapped = await StoreOneMessageAsync(
+            services,
+            uid: 9441,
+            cancellationToken,
+            SyntheticMailAccount.UnmappedFolderAlias);
+        var mapped = await StoreOneMessageAsync(services, uid: 9442, cancellationToken);
+
+        // Act
+        var queued = await ReadArrivalQueueAsync(services, resumeAfter: null, DrainBatchSize, cancellationToken);
+        var walked = await WalkWholeMailboxAsync(services, cancellationToken);
+
+        // Assert
+        Assert.DoesNotContain(unmapped, queued.Select(candidate => candidate.StoredEmailId));
+        Assert.DoesNotContain(unmapped, walked);
+        Assert.Contains(mapped, queued.Select(candidate => candidate.StoredEmailId));
+        Assert.Contains(mapped, walked);
+    }
+
     /// <summary>Pages the whole-mailbox walk to its end, the way a requested run does across account runs.</summary>
     private static async Task<IReadOnlyList<StoredEmailId>> WalkWholeMailboxAsync(
         OrchestratedMailFathomServices services,

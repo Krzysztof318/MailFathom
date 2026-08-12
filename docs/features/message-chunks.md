@@ -28,8 +28,12 @@ one, which is what keeps its content from reaching an embedding provider at all.
 unchanged — it is mirrored, listed, searched lexically, and read like any other. Passages cut before the switch was set
 stay where they are; nothing removes them, and the embedding backfill stops selecting the folder rather than sweeping
 for the vectors it now never produces.
+A message of a folder **no mapping names** is cut into nothing for a different reason: cutting is offered to the folders
+configuration maps and leaves embedded, so a folder outside that list is outside the offer rather than switched off
+inside it. Mail stored under an alias whose mapping was later removed therefore gains no further passages, and an
+account mapping no folder at all gains none anywhere.
 [What a mapping decides beyond where the folder is](imap-synchronization.md#what-a-mapping-decides-beyond-where-the-folder-is)
-states the switch beside the other two.
+states the switch beside the other two and what an unmapped folder is instead.
 
 A run that could not read a message's body at all — because the raw MIME was never stored, or because nothing could parse
 it — leaves the passages alone rather than removing them. A remote message is immutable, so a run that failed this time is

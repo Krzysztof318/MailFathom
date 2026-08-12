@@ -151,7 +151,7 @@ public sealed class EmailTimelineFilterTests
         bool? isRemotelySeen = null,
         bool? hasAttachments = null,
         EmailTimelineDirection direction = EmailTimelineDirection.NewestFirst) => EmailTimelineFilter.Create(
-        scope ?? MailboxScope.Unrestricted,
+        scope ?? MailboxScope.NothingReadable,
         senderAddress,
         recipientAddress,
         subjectFragment,

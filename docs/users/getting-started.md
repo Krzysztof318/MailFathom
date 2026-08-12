@@ -91,6 +91,11 @@ Points worth knowing before you adapt it:
   nothing. One role belongs to one folder per account.
   [What a role says, beside how a folder is found](../features/imap-synchronization.md#what-a-role-says-beside-how-a-folder-is-found)
   states what naming a role buys you everywhere else.
+- **A folder left out of the list is a folder MailFathom does not have.** The list is not a filter over your mailbox; it
+  is the whole of what this deployment knows about. A folder no entry names is never mirrored, never listed, searched,
+  read, or answered from, never embedded, and never evaluated by a rule — and so is mail an earlier configuration had
+  already stored under an entry you later removed, which stays in the database and stops being reachable.
+  *Working out the list* below is how to arrive at one you meant.
 - **A mapped folder is mirrored, embedded, and readable by tools** unless you say otherwise. `Synchronize`,
   `GenerateEmbeddings`, and `VisibleToTools` each default to `true` on a folder entry, and switching one off is how a
   folder stays nameable while its mail stays out of the local copy, out of an embedding provider, or out of everything
@@ -124,6 +129,45 @@ Points worth knowing before you adapt it:
   neither — which is polled instead and says so in the log. Push **adds** to the schedule rather than replacing it — the
   account still runs on its `Interval`, and a notification only starts the next run sooner.
   [Push synchronization](../features/imap-synchronization.md#push-synchronization) records the whole model.
+
+### Working out the list
+
+Nothing discovers folders into that list for you, so writing it is a step of its own. From an empty configuration:
+
+1. **Look at what the server actually holds.** Any mail client you already use lists the account's folders, and the paths
+   it shows are the paths `RemotePath` takes — including their separator, which is `/` on some servers and `.` on
+   others. [Configuring a mailbox at your provider](mailbox-providers.md) names the folders the popular services create
+   and which of them carry a role, so a Gmail account is a different starting list from a Fastmail one.
+2. **Name by role whatever carries one.** `Inbox`, `Sent`, `Drafts`, `Junk`, `Trash`, `Archive`, `All`, `Flagged`, and
+   `Important` are the roles a server can advertise; a mapping that names one finds the folder whatever it is called and
+   keeps working when the localization or the path changes. Each role belongs to one folder per account.
+3. **Name the rest by path.** A project folder, a mailing-list folder, a folder a filter on the server files into —
+   none of these carries a role, so each takes a `RemotePath` and an alias of your own.
+4. **Create the folder that is not there yet.** A folder you want a rule to file into — an archive of your own, say —
+   does not have to be made in a mail client first: give the mapping its `RemotePath` and `CreateIfMissing: true`, and
+   MailFathom creates it on the first run that resolves the alias. It is the only thing MailFathom ever changes about
+   your mailbox's shape.
+5. **Leave out what you do not want mirrored.** Leaving a folder out is the way to keep its mail out of MailFathom
+   entirely, and it stays out until an entry names it.
+
+The account's `Folders` then grows from the two entries above into the list you meant, mixing the three kinds of entry:
+
+```json
+{
+  "Folders": [
+    { "Alias": "inbox", "SpecialUse": "Inbox" },
+    { "Alias": "sent", "SpecialUse": "Sent" },
+    { "Alias": "spam", "RemotePath": "INBOX.Spam", "SpecialUse": "Junk" },
+    { "Alias": "projects", "RemotePath": "INBOX.Work.Projects" },
+    { "Alias": "archive", "RemotePath": "INBOX.Archive", "SpecialUse": "Archive", "CreateIfMissing": true }
+  ]
+}
+```
+
+Once the service is running, `list_accounts` reports one entry per folder this deployment mapped and lets tools read,
+with when each last synchronized — so a mistyped path shows up as a folder missing from that answer rather than as one
+holding no mail. The log names an alias that resolved to nothing or to more than one folder, in both cases naming the
+remedy.
 
 The Compose deployment reads this from `config/10-mailfathom.json`; Kubernetes mounts it as a ConfigMap key; a native
 process names the file through [`ConfigurationSources`](../operations/configuration-sources.md).

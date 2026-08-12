@@ -95,7 +95,8 @@ per provider here:
   service that advertises no role for a folder loses none of this — name the path and the role together, and everything
   that asks for `role:Junk` still reaches it.
   [Folder aliases and discovery](../features/imap-synchronization.md#folder-aliases-and-discovery) covers the matching,
-  and [what a role says](../features/imap-synchronization.md#what-a-role-says-beside-how-a-folder-is-found) the rest.
+  [what a role says](../features/imap-synchronization.md#what-a-role-says-beside-how-a-folder-is-found) the rest, and
+  [the folders, and what each service calls them](#the-folders-and-what-each-service-calls-them) what you are naming.
 - **Reading never marks mail read.** MailFathom does not set the remote `\Seen` flag while synchronizing, reconciling,
   fetching content, or answering a tool call — the sessions those run on hold no operation capable of writing a flag.
   If mail is turning up read at your service, it is another client or a rule at the service, not this one.
@@ -125,6 +126,43 @@ gives. Everything else takes the account block above with the address and the cr
 
 *Not documented as required* is the honest answer rather than a *no*: the service's own setup documentation names no
 switch, and this review made no connection that would establish one.
+
+## The folders, and what each service calls them
+
+**MailFathom mirrors the folders your configuration names and nothing else.** Nothing discovers a folder into that list,
+so a folder left out of it is a folder this deployment does not have — not one it holds and hides.
+[Getting started § working out the list](getting-started.md#working-out-the-list) is how to arrive at one; this table is
+the part of it that depends on where the mailbox lives.
+
+| Service | What its own folders are called | Roles the server advertises | Evidence |
+| --- | --- | --- | --- |
+| Gmail, personal and Workspace alike | `INBOX`, and the system labels under a `[Gmail]` prefix: `[Gmail]/All Mail`, `[Gmail]/Drafts`, `[Gmail]/Important`, `[Gmail]/Sent Mail`, `[Gmail]/Spam`, `[Gmail]/Starred`, `[Gmail]/Trash` | Documented: `\All`, `\Drafts`, `\Important`, `\Sent`, `\Junk`, `\Flagged`, `\Trash` | Documented, 2026-08-12 |
+| Outlook.com, Exchange Online, Microsoft 365 | Inbox, Drafts, Sent Items, Deleted Items, Junk Email, Archive | Not documented in the pages this review read | Documented, 2026-08-12 |
+| Yahoo Mail | Inbox, Draft, Sent, Archive, Spam, Trash | Not documented in the pages this review read | Documented, 2026-08-12 |
+| iCloud Mail | Inbox, VIP, Drafts, Sent, Archive, Trash (Bin in some regions), Junk | Not documented in the pages this review read | Documented, 2026-08-12 |
+| Proton Mail, through the bridge | All Mail, Inbox, Drafts, Sent, Starred, Archive, Spam, Trash, and each of your labels as a folder under `Labels` | Not documented in the pages this review read | Documented, 2026-08-12 |
+| Fastmail | Inbox, Archive, Drafts, Sent, Spam, Trash | Not documented in the pages this review read | Documented, 2026-08-12 |
+| Zoho Mail | Inbox, Drafts, Sent, Spam, Trash | Not documented in the pages this review read | Documented, 2026-08-12 |
+
+**A name in that middle column is what the service calls the folder, not necessarily the IMAP path.** A service may serve
+its folders under a prefix, translate them into the account's language, or rewrite a character its own interface allows —
+Gmail's prefix and Fastmail's replacement of `.` in a custom folder name are both documented behaviours. That is the
+argument for naming a folder by its role wherever it has one: `SpecialUse` finds the folder whatever path it is at, and
+the configuration survives a rename, a language change, and a move to another service.
+
+**"Not documented" is not "not advertised".** Only Google publishes which RFC 6154 attributes its server sends, so the
+other rows say what this review could establish rather than what the server does. Where a role matters and the service
+documents no attribute, name the folder's path and its role together — `{ "Alias": "spam", "RemotePath": "Junk Email",
+"SpecialUse": "Junk" }` — and everything that asks for `role:Junk` reaches it regardless of what the server advertised.
+A mapping whose role finds nothing reports the alias as unresolved in the log rather than failing the account.
+
+Sources: [Gmail IMAP extensions](https://developers.google.com/workspace/gmail/imap/imap-extensions),
+[Working with message folders in Outlook.com](https://support.microsoft.com/en-US/Outlook/working-with-message-folders-in-outlook-com),
+[Archive and un-archive messages in Yahoo Mail](https://help.yahoo.com/kb/SLN26466.html),
+[Organize email with folders in Mail on iCloud.com](https://support.apple.com/guide/icloud/mm6b1a6730/icloud),
+[Labels in Bridge](https://proton.me/support/labels-in-bridge),
+[Setting up and using folders](https://www.fastmail.help/hc/en-us/articles/1500000280301-Setting-up-and-using-folders),
+[Using folders](https://www.zoho.com/mail/help/using-folders.html).
 
 ## Gmail, on a personal account
 

@@ -29,20 +29,25 @@ public sealed class MailAccountDirectoryReader
 {
     private readonly IMailAccountCatalog accountCatalog;
     private readonly ISynchronizationFreshnessReader freshnessReader;
+    private readonly MailboxScopeResolver scopeResolver;
 
     /// <summary>Initializes the use case.</summary>
     /// <param name="accountCatalog">Describes the accounts this deployment serves.</param>
     /// <param name="freshnessReader">Reads how current the local copy of each folder is.</param>
+    /// <param name="scopeResolver">Answers which folders of those accounts a tool may see.</param>
     /// <exception cref="ArgumentNullException">Thrown when any argument is <see langword="null" />.</exception>
     public MailAccountDirectoryReader(
         IMailAccountCatalog accountCatalog,
-        ISynchronizationFreshnessReader freshnessReader)
+        ISynchronizationFreshnessReader freshnessReader,
+        MailboxScopeResolver scopeResolver)
     {
         ArgumentNullException.ThrowIfNull(accountCatalog);
         ArgumentNullException.ThrowIfNull(freshnessReader);
+        ArgumentNullException.ThrowIfNull(scopeResolver);
 
         this.accountCatalog = accountCatalog;
         this.freshnessReader = freshnessReader;
+        this.scopeResolver = scopeResolver;
     }
 
     /// <summary>Reads the served accounts and their synchronization freshness.</summary>
@@ -61,12 +66,12 @@ public sealed class MailAccountDirectoryReader
             return new MailAccountDirectory(this.accountCatalog.SynchronizationEnabled, []);
         }
 
-        // Scoped to the served accounts rather than read unscoped, for the reason every other read is: local state holds
-        // folders of accounts an operator has since removed, and an account this deployment no longer serves must not
-        // reappear in the one answer that lists them.
-        var scope = MailboxScope.Create(
-            servedAccounts.Select(static account => account.Id),
-            []);
+        // Resolved rather than built here, for the reason every other read is: local state holds folders of accounts an
+        // operator has since removed and folders no mapping names any more, and neither may reappear in the one answer
+        // that lists them. Naming a folder is publishing that it exists, which is the whole of what this answer does.
+        // Junk is included because it is a mapped folder whose freshness the operator asked to see; withholding it is
+        // about not returning its mail unasked, and no mail is returned here.
+        var scope = this.scopeResolver.ReadableScope([], [], JunkMailInclusion.Included);
 
         var folderFreshness = await this.freshnessReader.ReadAsync(scope, cancellationToken);
         var foldersByAccount = folderFreshness

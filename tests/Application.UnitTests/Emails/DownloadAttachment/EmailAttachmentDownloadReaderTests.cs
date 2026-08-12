@@ -135,8 +135,30 @@ public sealed class EmailAttachmentDownloadReaderTests
         var summary = SyntheticEmailSummaries.Create();
         var reader = ReaderOver(
             summary,
-            folderParticipation: StubMailFolderParticipation.Hiding(
-                new MailFolderIdentity(summary.AccountId, summary.FolderAlias)));
+            folderParticipation: StubMailFolderParticipation
+                .Mapping(new MailFolderIdentity(summary.AccountId, summary.FolderAlias))
+                .Hiding(new MailFolderIdentity(summary.AccountId, summary.FolderAlias)));
+
+        // Act
+        await using var attachment = await reader.OpenAsync(
+            new AttachmentDownloadTicket(summary.StoredEmailId, AttachmentPosition: 0),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Null(attachment);
+    }
+
+    /// <summary>
+    /// A mapping an operator removed withdraws the folder, so a capability minted while it was mapped opens nothing
+    /// afterwards. It is refused exactly as a withheld folder is, because the deployment no longer has the folder at
+    /// all.
+    /// </summary>
+    [Fact]
+    public async Task OpenAsync_EmailOfAFolderNoMappingNames_Refuses()
+    {
+        // Arrange
+        var summary = SyntheticEmailSummaries.Create();
+        var reader = ReaderOver(summary, folderParticipation: StubMailFolderParticipation.Nothing);
 
         // Act
         await using var attachment = await reader.OpenAsync(
@@ -243,9 +265,18 @@ public sealed class EmailAttachmentDownloadReaderTests
         repairRequestStore ?? new RecordingEmailContentRepairRequestStore(),
         new MailboxScopeResolver(
             accountCatalog ?? CatalogServing(MailAccountId.Create(summary?.AccountId.Value ?? ServedAccountId)),
-            folderParticipation ?? StubMailFolderParticipation.Everything,
+            folderParticipation ?? MappingFolderOf(summary),
             StubJunkMailFolderCatalog.None,
             StubMailFolderMappings.ResolvingNothing));
+
+    /// <summary>Maps the folder this email was stored from, which is what a deployment holding it has configured.</summary>
+    /// <remarks>
+    /// A folder no mapping names does not exist as far as MailFathom is concerned, so a reader arranged without one
+    /// refuses every download. Stating the mapping is therefore part of arranging stored mail at all.
+    /// </remarks>
+    private static StubMailFolderParticipation MappingFolderOf(EmailSummary? summary) => summary is null
+        ? StubMailFolderParticipation.Nothing
+        : StubMailFolderParticipation.Mapping(new MailFolderIdentity(summary.AccountId, summary.FolderAlias));
 
     private static IStoredEmailSummaryReader SummaryReaderReturning(EmailSummary? summary)
     {

@@ -55,8 +55,9 @@ The structured filters are the ones `ListEmails` takes and they mean exactly the
 apply one validated `MailboxEmailSelection` and one SQL predicate.
 [Mailbox queries](mailbox-queries.md#what-each-filter-accepts-and-what-it-refuses) documents what each of them accepts
 and refuses, including the attachment-presence rule and the account-scope resolution; nothing about them changes here.
-A folder mapped with `VisibleToTools: false` is outside a search for the same reason it is outside a listing, and by the
-same single decision — [folders withheld from tools](mailbox-queries.md#folders-withheld-from-tools).
+A folder mapped with `VisibleToTools: false`, and a folder no mapping names at all, are outside a search for the same
+reason each is outside a listing, and by the same single decision —
+[folders withheld from tools](mailbox-queries.md#folders-withheld-from-tools).
 The account's junk folder is left out by the same one decision and lifted by the same caller override, which the
 result reports back — [the junk folder, withheld by default](mailbox-queries.md#the-junk-folder-withheld-by-default-and-reachable-on-request).
 

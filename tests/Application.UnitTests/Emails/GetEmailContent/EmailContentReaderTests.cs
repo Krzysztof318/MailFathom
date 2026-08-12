@@ -692,8 +692,33 @@ public sealed class EmailContentReaderTests
         var reader = ReaderOver(
             summary,
             RendererReturning(RenderingOf()),
-            folderParticipation: StubMailFolderParticipation.Hiding(
-                new MailFolderIdentity(summary.AccountId, summary.FolderAlias)));
+            folderParticipation: StubMailFolderParticipation
+                .Mapping(new MailFolderIdentity(summary.AccountId, summary.FolderAlias))
+                .Hiding(new MailFolderIdentity(summary.AccountId, summary.FolderAlias)));
+
+        // Act
+        var result = await reader.ReadContentAsync(
+            RequestFor([summary.StoredEmailId]),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        var failure = FailureOf(Assert.Single(result.Emails));
+        Assert.Equal(MailFathomErrorCode.StoredEmailNotFound, failure.ErrorCode);
+    }
+
+    /// <summary>
+    /// Stored mail under an alias no mapping names is a folder this deployment does not have, so it is answered exactly
+    /// as mail that is not there — which is what stops a removed mapping from leaving a mailbox readable and unrefreshed.
+    /// </summary>
+    [Fact]
+    public async Task ReadContentAsync_EmailOfAFolderNoMappingNames_IsReportedAsNotFound()
+    {
+        // Arrange
+        var summary = SyntheticEmailSummaries.Create();
+        var reader = ReaderOver(
+            summary,
+            RendererReturning(RenderingOf()),
+            folderParticipation: StubMailFolderParticipation.Nothing);
 
         // Act
         var result = await reader.ReadContentAsync(
@@ -980,7 +1005,7 @@ public sealed class EmailContentReaderTests
         repairRequestStore ?? new RecordingEmailContentRepairRequestStore(),
         new MailboxScopeResolver(
             accountCatalog ?? CatalogServing(MailAccountId.Create(summary?.AccountId.Value ?? SyntheticEmailSummaries.DefaultAccountId)),
-            folderParticipation ?? StubMailFolderParticipation.Everything,
+            folderParticipation ?? MappingFoldersOf(summary is null ? [] : [summary]),
             StubJunkMailFolderCatalog.None,
             StubMailFolderMappings.ResolvingNothing),
         linkIssuer ?? new RecordingAttachmentDownloadLinkIssuer(),
@@ -1000,11 +1025,21 @@ public sealed class EmailContentReaderTests
         repairRequestStore ?? new RecordingEmailContentRepairRequestStore(),
         new MailboxScopeResolver(
             accountCatalog ?? CatalogServing(MailAccountId.Create(SyntheticEmailSummaries.DefaultAccountId)),
-            StubMailFolderParticipation.Everything,
+            MappingFoldersOf(summaries),
             StubJunkMailFolderCatalog.None,
             StubMailFolderMappings.ResolvingNothing),
         linkIssuer ?? new RecordingAttachmentDownloadLinkIssuer(),
         readOptions ?? new EmailContentReadOptions());
+
+    /// <summary>Maps the folders these emails were stored from, which is what a deployment holding them has configured.</summary>
+    /// <remarks>
+    /// A folder no mapping names does not exist as far as MailFathom is concerned, so a reader arranged without one
+    /// answers every read with nothing. Stating the mapping is therefore part of arranging stored mail at all, rather
+    /// than something only a test about folder participation does.
+    /// </remarks>
+    private static StubMailFolderParticipation MappingFoldersOf(IReadOnlyList<EmailSummary> summaries) =>
+        StubMailFolderParticipation.Mapping(
+            [.. summaries.Select(summary => new MailFolderIdentity(summary.AccountId, summary.FolderAlias))]);
 
     private static IStoredEmailSummaryReader SummaryReaderReturning(EmailSummary? summary)
     {

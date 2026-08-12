@@ -806,7 +806,7 @@ public sealed class MailboxTimelineReaderTests
         freshnessReader ?? FreshnessReaderReturning(InboxFreshness),
         new MailboxScopeResolver(
             accountCatalog ?? CatalogServing(EveryAccountTheSyntheticTimelineUses),
-            StubMailFolderParticipation.Everything,
+            StubMailFolderParticipation.Nothing,
             StubJunkMailFolderCatalog.None,
             StubMailFolderMappings.ResolvingNothing),
         egressGuard ?? SensitiveContentEgressGuards.Inactive());

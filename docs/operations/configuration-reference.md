@@ -161,6 +161,15 @@ A folder entry names `Alias` (required — your stable name for the folder) and 
 server's own path) or `SpecialUse` (`Inbox`, `Archive`, `Drafts`, `Sent`, `Junk`, `Trash`, `All`, `Flagged`,
 `Important`). Configuring no folder synchronizes the inbox by role.
 
+**This list is what the deployment has.** A folder no entry names does not exist for any reader: nothing lists, searches,
+reads, or answers from it, no rule is evaluated against its mail, nothing cuts it into passages or embeds it, and no
+alias of it resolves as a rule's destination. That holds for mail an earlier configuration had already stored — removing
+an entry makes its rows unreachable and leaves them in the database, since removing a mapping is an edit rather than an
+act against stored mail, exactly as `Synchronize: false` is. Naming the folder again is what makes its mail readable
+again, and the folder resumes from the checkpoint it kept rather than mirroring afresh.
+[What a mapping decides beyond where the folder is](../features/imap-synchronization.md#what-a-mapping-decides-beyond-where-the-folder-is)
+states it beside the three switches.
+
 `SpecialUse` says what the folder is *for*, and where the folder is found is a separate question. Named alone it
 answers both: discovery resolves the folder the server advertises with that role. Named beside a `RemotePath`, the path
 is what finds the folder and the role is what the folder plays, which is how a server that advertises nothing still

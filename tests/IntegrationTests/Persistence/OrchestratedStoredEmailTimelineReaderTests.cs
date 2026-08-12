@@ -2,11 +2,9 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-using MailFathom.Application.Accounts;
 using MailFathom.Application.Emails.Extraction;
 using MailFathom.Application.Emails.Mailboxes;
 using MailFathom.Application.Emails.Summaries;
-using MailFathom.Application.Folders;
 using MailFathom.Application.Persistence;
 using MailFathom.Application.Synchronization;
 using MailFathom.Application.Synchronization.Checkpoints;
@@ -106,10 +104,11 @@ public sealed class OrchestratedStoredEmailTimelineReaderTests(MailFathomOrchest
 
     /// <summary>A folder withheld from tools is narrowed out by the server, whatever the request named.</summary>
     /// <remarks>
-    /// The narrowing is composed per excluded account rather than written as a filter over one column, so whether it
+    /// The narrowing is composed per admitted account rather than written as a filter over one column, so whether it
     /// translates at all is settled here and nowhere else: a predicate that does not is an exception at runtime. The
-    /// control is the same mail read through a scope that withholds nothing, so an empty answer reports the exclusion
-    /// rather than a folder nothing was seeded into.
+    /// control is the same mail read through a deployment that withholds nothing, which is a second composition because
+    /// the folder decision belongs to the configuration a deployment was started with — so an empty answer reports the
+    /// withholding rather than a folder nothing was seeded into.
     /// </remarks>
     [Fact]
     public async Task ReadPageAsync_AFolderWithheldFromTools_IsNarrowedOutWhileItsMailStaysStored()
@@ -117,13 +116,19 @@ public sealed class OrchestratedStoredEmailTimelineReaderTests(MailFathomOrchest
         // Arrange
         var cancellationToken = TestContext.Current.CancellationToken;
         var withheld = new MailFolderIdentity(SyntheticMailAccount.AccountId, MailFolderAlias.Create(FolderAlias));
-        await using var services = await OrchestratedMailFathomServices.StartAsync(
+        await using var readableDeployment = await OrchestratedMailFathomServices.StartAsync(
+            orchestration,
+            cancellationToken);
+        var readableFilter = await SeededFilterAsync(
+            readableDeployment,
+            EmailTimelineDirection.NewestFirst,
+            cancellationToken);
+        await using var withholdingDeployment = await OrchestratedMailFathomServices.StartAsync(
             orchestration,
             cancellationToken,
             foldersHiddenFromTools: [withheld]);
-        var readableFilter = await SeededFilterAsync(services, EmailTimelineDirection.NewestFirst, cancellationToken);
         var withheldFilter = EmailTimelineFilter.Create(
-            await ReadableScopeAsync(services, cancellationToken),
+            await ReadableScopeAsync(withholdingDeployment, cancellationToken),
             senderAddress: "sender@mailfathom.test",
             recipientAddress: null,
             subjectFragment: null,
@@ -134,14 +139,60 @@ public sealed class OrchestratedStoredEmailTimelineReaderTests(MailFathomOrchest
             EmailTimelineDirection.NewestFirst);
 
         // Act
-        var throughTheWithheldScope = await ReadAllAsync(services, withheldFilter, cancellationToken);
+        var throughTheWithheldScope = await ReadAllAsync(withholdingDeployment, withheldFilter, cancellationToken);
 
         // Assert
         Assert.Empty(throughTheWithheldScope);
-        Assert.Equal([withheld], withheldFilter.Selection.Scope.HiddenFolders);
+        Assert.DoesNotContain(withheld, withheldFilter.Selection.Scope.ReadableFolders);
 
-        // The control: the same mail is there to be read through a scope that withholds nothing.
-        Assert.NotEmpty(await ReadAllAsync(services, readableFilter, cancellationToken));
+        // The control: the same mail is there to be read through a deployment that withholds nothing.
+        Assert.NotEmpty(await ReadAllAsync(readableDeployment, readableFilter, cancellationToken));
+    }
+
+    /// <summary>Mail stored under an alias no mapping names is unreachable, and stays stored.</summary>
+    /// <remarks>
+    /// This is the case that used to read as full participation: an operator who removed a folder's mapping got its
+    /// stored mail published by every tool and refreshed by nothing. The rows are counted afterwards through the
+    /// context rather than through a read model, because what has to be true is both halves at once — nothing is
+    /// published, and nothing was erased for a configuration value having changed.
+    /// </remarks>
+    [Fact]
+    public async Task ReadPageAsync_AFolderNoMappingNames_ReturnsNothingWhileItsRowsStay()
+    {
+        // Arrange
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var services = await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken);
+        var binding = await OrchestratedFolderBinding.CommitAsync(
+            services,
+            SyntheticMailAccount.UnmappedFolderAlias,
+            cancellationToken);
+        await EnsureSeededAsync(services, binding, cancellationToken);
+        var unmappedScope = await OrchestratedMailboxScope.ReadableAsync(
+            services,
+            [SyntheticMailAccount.UnmappedFolderAlias],
+            cancellationToken);
+
+        // Act
+        var listed = await ReadAllAsync(
+            services,
+            EmailTimelineFilter.Create(
+                unmappedScope,
+                senderAddress: null,
+                recipientAddress: null,
+                subjectFragment: null,
+                receivedOnOrAfter: null,
+                receivedBefore: null,
+                isRemotelySeen: null,
+                hasAttachments: null,
+                EmailTimelineDirection.NewestFirst),
+            cancellationToken);
+        var freshness = await ReadFreshnessAsync(services, unmappedScope, cancellationToken);
+
+        // Assert
+        Assert.Empty(listed);
+        Assert.Empty(freshness);
+        Assert.Empty(unmappedScope.ReadableFolders);
+        Assert.Equal(SeededEmailCount, await CountSeededEmailsAsync(services, binding, cancellationToken));
     }
 
     /// <summary>Applies every filter the read model publishes, which is what proves each one translates and selects.</summary>
@@ -297,20 +348,18 @@ public sealed class OrchestratedStoredEmailTimelineReaderTests(MailFathomOrchest
         // Act
         var withinScope = await ReadFreshnessAsync(
             services,
-            MailboxScope.Create(
-            [SyntheticMailAccount.AccountId],
-            [new MailFolderIdentity(SyntheticMailAccount.AccountId, seededAlias)]),
+            await OrchestratedMailboxScope.ReadableAsync(services, [FolderAlias], cancellationToken),
             cancellationToken);
-        var acrossEveryFolder = await ReadFreshnessAsync(services, MailboxScope.Unrestricted, cancellationToken);
+        var acrossEveryFolder = await ReadFreshnessAsync(
+            services,
+            await OrchestratedMailboxScope.ReadableAsync(services, [], cancellationToken),
+            cancellationToken);
         var outsideScope = await ReadFreshnessAsync(
             services,
-            MailboxScope.Create(
-                null,
-                [
-                    new MailFolderIdentity(
-                        SyntheticMailAccount.AccountId,
-                        MailFolderAlias.Create("a-folder-nobody-bound")),
-                ]),
+            await OrchestratedMailboxScope.ReadableAsync(
+                services,
+                ["a-folder-nobody-bound"],
+                cancellationToken),
             cancellationToken);
 
         // Assert
@@ -369,7 +418,7 @@ public sealed class OrchestratedStoredEmailTimelineReaderTests(MailFathomOrchest
             cancellationToken);
 
     /// <summary>Reads every email one filter selects, scoped to the folder this class seeded.</summary>
-    private static Task<IReadOnlyList<EmailSummary>> ReadFilteredAsync(
+    private static async Task<IReadOnlyList<EmailSummary>> ReadFilteredAsync(
         OrchestratedMailFathomServices services,
         string? recipientAddress = null,
         string? subjectFragment = null,
@@ -377,12 +426,10 @@ public sealed class OrchestratedStoredEmailTimelineReaderTests(MailFathomOrchest
         DateTimeOffset? receivedBefore = null,
         bool? isRemotelySeen = null,
         bool? hasAttachments = null,
-        CancellationToken cancellationToken = default) => ReadAllAsync(
+        CancellationToken cancellationToken = default) => await ReadAllAsync(
             services,
             EmailTimelineFilter.Create(
-                MailboxScope.Create(
-                    [SyntheticMailAccount.AccountId],
-                    [new MailFolderIdentity(SyntheticMailAccount.AccountId, MailFolderAlias.Create(FolderAlias))]),
+                await ReadableScopeAsync(services, cancellationToken),
                 senderAddress: "sender@mailfathom.test",
                 recipientAddress,
                 subjectFragment,
@@ -396,18 +443,8 @@ public sealed class OrchestratedStoredEmailTimelineReaderTests(MailFathomOrchest
     /// <summary>Resolves the scope a tool reads through, which is where a withheld folder is attached to it.</summary>
     private static Task<MailboxScope> ReadableScopeAsync(
         OrchestratedMailFathomServices services,
-        CancellationToken cancellationToken) => services.InScopeAsync(
-            (scope, _) => Task.FromResult(
-                new MailboxScopeResolver(
-                    scope.GetRequiredService<IMailAccountCatalog>(),
-                    scope.GetRequiredService<IMailFolderParticipationReader>(),
-                    scope.GetRequiredService<IJunkMailFolderCatalog>(),
-                    scope.GetRequiredService<MailFolderReferenceResolver>())
-                    .ReadableScope(
-                        [],
-                        [MailFolderReference.ToAlias(MailFolderAlias.Create(FolderAlias))],
-                        JunkMailInclusion.Excluded)),
-            cancellationToken);
+        CancellationToken cancellationToken) =>
+        OrchestratedMailboxScope.ReadableAsync(services, [FolderAlias], cancellationToken);
 
     /// <summary>Ensures the seeded folder exists and returns the filter every test in this class reads it through.</summary>
     private static async Task<EmailTimelineFilter> SeededFilterAsync(
@@ -420,9 +457,7 @@ public sealed class OrchestratedStoredEmailTimelineReaderTests(MailFathomOrchest
         await EnsureSeededAsync(services, binding, cancellationToken);
 
         return EmailTimelineFilter.Create(
-            MailboxScope.Create(
-            [SyntheticMailAccount.AccountId],
-            [new MailFolderIdentity(SyntheticMailAccount.AccountId, binding.Alias)]),
+            await ReadableScopeAsync(services, cancellationToken),
             senderAddress: "sender@mailfathom.test",
             recipientAddress: null,
             subjectFragment: null,

@@ -27,10 +27,10 @@ public sealed class MailFolderParticipationOptionsTests
         var participation = options.GetParticipation(Primary, MailFolderAlias.Create("INBOX"));
 
         // Assert
+        var inbox = new MailFolderIdentity(Primary, MailFolderAlias.Create("INBOX"));
         Assert.Equal(MailFolderParticipation.Full, participation);
-        Assert.Empty(options.FoldersHiddenFromTools);
-        Assert.Empty(options.FoldersWithoutEmbeddings);
-        Assert.Empty(options.FoldersNotMirrored);
+        Assert.Equal([inbox], options.FoldersVisibleToTools);
+        Assert.Equal([inbox], options.FoldersGeneratingEmbeddings);
     }
 
     /// <summary>A folder that names its target and no switch behaves exactly as it did before the switches existed.</summary>
@@ -53,7 +53,7 @@ public sealed class MailFolderParticipationOptionsTests
 
     /// <summary>Withholding a folder from tools leaves everything else about it alone, which is the whole point of the switch being its own.</summary>
     [Fact]
-    public void FoldersHiddenFromTools_AFolderWithdrawnFromTools_NamesThatFolderAndKeepsItMirrored()
+    public void FoldersVisibleToTools_AFolderWithdrawnFromTools_LeavesItOutAndKeepsItMirrored()
     {
         // Arrange
         var options = OptionsFor(CreateAccount(new MailFolderMappingOptions
@@ -62,22 +62,24 @@ public sealed class MailFolderParticipationOptionsTests
             RemotePath = "Private",
             VisibleToTools = false,
         }));
+        var privateFolder = new MailFolderIdentity(Primary, MailFolderAlias.Create("PRIVATE"));
 
         // Act
-        var hidden = options.FoldersHiddenFromTools;
+        var visible = options.FoldersVisibleToTools;
         var participation = options.GetParticipation(Primary, MailFolderAlias.Create("PRIVATE"));
 
         // Assert
-        Assert.Equal([new MailFolderIdentity(Primary, MailFolderAlias.Create("PRIVATE"))], hidden);
+        Assert.DoesNotContain(privateFolder, visible);
         Assert.True(participation.IsSynchronized);
         Assert.True(participation.GeneratesEmbeddings);
         Assert.False(participation.IsVisibleToTools);
-        Assert.Empty(options.FoldersWithoutEmbeddings);
+        Assert.Equal([privateFolder], options.FoldersGeneratingEmbeddings);
+        Assert.Equal([privateFolder], options.FoldersSynchronized);
     }
 
     /// <summary>A noisy folder can stay listed and filterable while costing no provider tokens.</summary>
     [Fact]
-    public void FoldersWithoutEmbeddings_AFolderWithdrawnFromEmbedding_NamesThatFolderAndKeepsItReadable()
+    public void FoldersGeneratingEmbeddings_AFolderWithdrawnFromEmbedding_LeavesItOutAndKeepsItReadable()
     {
         // Arrange
         var options = OptionsFor(CreateAccount(new MailFolderMappingOptions
@@ -86,26 +88,22 @@ public sealed class MailFolderParticipationOptionsTests
             RemotePath = "Newsletters",
             GenerateEmbeddings = false,
         }));
+        var newsletters = new MailFolderIdentity(Primary, MailFolderAlias.Create("NEWSLETTERS"));
 
         // Act
         var participation = options.GetParticipation(Primary, MailFolderAlias.Create("NEWSLETTERS"));
 
         // Assert
-        Assert.Equal(
-            [new MailFolderIdentity(Primary, MailFolderAlias.Create("NEWSLETTERS"))],
-            options.FoldersWithoutEmbeddings);
+        Assert.DoesNotContain(newsletters, options.FoldersGeneratingEmbeddings);
         Assert.False(participation.GeneratesEmbeddings);
         Assert.True(participation.IsVisibleToTools);
-        Assert.Empty(options.FoldersHiddenFromTools);
+        Assert.Equal([newsletters], options.FoldersVisibleToTools);
+        Assert.Equal([newsletters], options.FoldersSynchronized);
     }
 
-    /// <summary>
-    /// A folder nothing mirrors takes part in nothing, so it appears in every exclusion without any of them being
-    /// configured. That is what keeps the mail it stored before the switch was flipped inert while it is kept: no tool
-    /// reads it, nothing embeds it, and no rule pass walks it.
-    /// </summary>
+    /// <summary>A folder nothing mirrors takes part in nothing, so it is admitted to neither without either switch being configured.</summary>
     [Fact]
-    public void GetParticipation_AFolderNothingMirrors_IsWithdrawnFromEveryReaderThereIs()
+    public void GetParticipation_AFolderNothingMirrors_IsWithdrawnFromEmbeddingAndFromTools()
     {
         // Arrange
         var options = OptionsFor(CreateAccount(new MailFolderMappingOptions
@@ -114,42 +112,35 @@ public sealed class MailFolderParticipationOptionsTests
             SpecialUse = "Junk",
             Synchronize = false,
         }));
-        var junk = new MailFolderIdentity(Primary, MailFolderAlias.Create("JUNK"));
 
         // Act
         var participation = options.GetParticipation(Primary, MailFolderAlias.Create("JUNK"));
 
         // Assert
         Assert.Equal(MailFolderParticipation.MappedOnly, participation);
-        Assert.Equal([junk], options.FoldersHiddenFromTools);
-        Assert.Equal([junk], options.FoldersWithoutEmbeddings);
-        Assert.Equal([junk], options.FoldersNotMirrored);
+        Assert.True(participation.IsMapped);
+        Assert.Empty(options.FoldersVisibleToTools);
+        Assert.Empty(options.FoldersGeneratingEmbeddings);
     }
 
-    /// <summary>
-    /// A mirrored folder withheld from tools is not a folder nothing mirrors, so the list a rule walk narrows by names
-    /// it as little as the list a tool narrows by names a folder that is merely unembedded.
-    /// </summary>
+    /// <summary>A pass over stored mail runs against the folders a mapping mirrors, which is neither an unmirrored one nor an unmapped one.</summary>
     [Fact]
-    public void FoldersNotMirrored_AFolderWithdrawnFromToolsOrEmbedding_NamesNeither()
+    public void FoldersSynchronized_AnUnmirroredFolderBesideAMirroredOne_NamesOnlyTheMirroredOne()
     {
         // Arrange
         var options = OptionsFor(CreateAccount(
-            new MailFolderMappingOptions { Alias = "private", RemotePath = "Private", VisibleToTools = false },
-            new MailFolderMappingOptions
-            {
-                Alias = "newsletters",
-                RemotePath = "Newsletters",
-                GenerateEmbeddings = false,
-            }));
+            new MailFolderMappingOptions { Alias = "archive", RemotePath = "Archive" },
+            new MailFolderMappingOptions { Alias = "junk", SpecialUse = "Junk", Synchronize = false }));
 
         // Act, Assert
-        Assert.Empty(options.FoldersNotMirrored);
+        Assert.Equal(
+            [new MailFolderIdentity(Primary, MailFolderAlias.Create("ARCHIVE"))],
+            options.FoldersSynchronized);
     }
 
-    /// <summary>A folder nothing maps is stored mail nobody withdrew anything from, so a removed mapping never hides a mailbox.</summary>
+    /// <summary>A folder no mapping names is a folder MailFathom does not have, so what it stored earlier takes part in nothing.</summary>
     [Fact]
-    public void GetParticipation_AnAliasNothingMaps_TakesPartInEverything()
+    public void GetParticipation_AnAliasNothingMaps_TakesPartInNothingAndIsNotMapped()
     {
         // Arrange
         var options = OptionsFor(CreateAccount(new MailFolderMappingOptions
@@ -163,12 +154,36 @@ public sealed class MailFolderParticipationOptionsTests
         var participation = options.GetParticipation(Primary, MailFolderAlias.Create("ARCHIVE"));
 
         // Assert
-        Assert.Equal(MailFolderParticipation.Full, participation);
+        Assert.Equal(MailFolderParticipation.Unmapped, participation);
+        Assert.False(participation.IsMapped);
+        Assert.False(participation.IsSynchronized);
+        Assert.False(participation.GeneratesEmbeddings);
+        Assert.False(participation.IsVisibleToTools);
+    }
+
+    /// <summary>Removing a mapping is not the same decision as switching a mapped folder off, so the two answers are not one value.</summary>
+    [Fact]
+    public void GetParticipation_AnUnmappedAliasBesideAnUnmirroredFolder_AnswersWithTwoDifferentValues()
+    {
+        // Arrange
+        var options = OptionsFor(CreateAccount(new MailFolderMappingOptions
+        {
+            Alias = "junk",
+            SpecialUse = "Junk",
+            Synchronize = false,
+        }));
+
+        // Act
+        var unmirrored = options.GetParticipation(Primary, MailFolderAlias.Create("JUNK"));
+        var unmapped = options.GetParticipation(Primary, MailFolderAlias.Create("ARCHIVE"));
+
+        // Assert
+        Assert.NotEqual(unmirrored, unmapped);
     }
 
     /// <summary>One account's decision is never another account's, which is what makes the identity a pair rather than an alias.</summary>
     [Fact]
-    public void FoldersHiddenFromTools_TheSameAliasInTwoAccounts_NamesOnlyTheAccountThatWithheldIt()
+    public void FoldersVisibleToTools_TheSameAliasInTwoAccounts_NamesOnlyTheAccountThatDidNotWithholdIt()
     {
         // Arrange
         var options = new MailSynchronizationOptions
@@ -190,10 +205,12 @@ public sealed class MailFolderParticipationOptionsTests
         };
 
         // Act
-        var hidden = options.FoldersHiddenFromTools;
+        var visible = options.FoldersVisibleToTools;
 
         // Assert
-        Assert.Equal([new MailFolderIdentity(Primary, MailFolderAlias.Create("PRIVATE"))], hidden);
+        Assert.Equal(
+            [new MailFolderIdentity(MailAccountId.Create("secondary"), MailFolderAlias.Create("PRIVATE"))],
+            visible);
         Assert.True(options
             .GetParticipation(MailAccountId.Create("secondary"), MailFolderAlias.Create("PRIVATE"))
             .IsVisibleToTools);

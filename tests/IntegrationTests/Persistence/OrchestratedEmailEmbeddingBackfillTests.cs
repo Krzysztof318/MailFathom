@@ -111,6 +111,41 @@ public sealed class OrchestratedEmailEmbeddingBackfillTests(MailFathomOrchestrat
         Assert.Null(positionAfterSweep);
     }
 
+    /// <summary>
+    /// Mail stored under an alias no mapping names is outside the walk, so a folder an operator withdrew never becomes
+    /// a bill: nothing of it is cut and nothing of it is embedded, however long the deployment runs.
+    /// </summary>
+    /// <remarks>
+    /// The walk is where this has to be proved rather than at the cut, because the two answer different halves. A
+    /// message with a body and no passages is exactly what the sweep's second group selects, so a folder left out only
+    /// at the cut would be found outstanding on every sweep for the rest of the deployment's life. The mapped message
+    /// beside it is the control: without it, zero passages would report a query that selected nothing at all.
+    /// </remarks>
+    [Fact]
+    public async Task Sweeping_MailInAFolderNoMappingNames_CutsNothingAndEmbedsNothingOfIt()
+    {
+        // Arrange
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var services = await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken);
+        var unmapped = await StoreOneMessageAsync(
+            services,
+            uid: 9321,
+            cancellationToken,
+            SyntheticMailAccount.UnmappedFolderAlias);
+        var mapped = await StoreOneMessageAsync(services, uid: 9322, cancellationToken);
+        await RemovePassagesAsync(services, mapped, cancellationToken);
+        var profileId = await OrchestratedEmbeddingProfile.EnsureActiveDeterministicAsync(services, cancellationToken);
+
+        // Act
+        await SweepAsync(services, cancellationToken);
+
+        // Assert
+        Assert.Equal(0, await CountPassagesAsync(services, unmapped, cancellationToken));
+        Assert.Equal(0, await CountVectorsAsync(services, unmapped, profileId, cancellationToken));
+        Assert.True(await CountPassagesAsync(services, mapped, cancellationToken) > 0);
+        Assert.True(await CountVectorsAsync(services, mapped, profileId, cancellationToken) > 0);
+    }
+
     /// <summary>Runs the backfill until the sweep ends, and answers with the last run that did any work.</summary>
     private static async Task<StoredEmailEmbeddingBackfillResult> SweepAsync(
         OrchestratedMailFathomServices services,
@@ -182,9 +217,10 @@ public sealed class OrchestratedEmailEmbeddingBackfillTests(MailFathomOrchestrat
     private static async Task<StoredEmailId> StoreOneMessageAsync(
         OrchestratedMailFathomServices services,
         uint uid,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        string folderAlias = FolderAlias)
     {
-        var binding = await OrchestratedFolderBinding.CommitAsync(services, FolderAlias, cancellationToken);
+        var binding = await OrchestratedFolderBinding.CommitAsync(services, folderAlias, cancellationToken);
         var occurrenceId = SyntheticEmail.OccurrenceIn(binding, uid);
         var subject = $"embedding-backfill-{uid}";
         var storedEmailId = default(StoredEmailId);

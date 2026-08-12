@@ -613,7 +613,7 @@ public sealed class MailboxSearchReaderTests
         FreshnessReaderReturning(InboxFreshness),
         new MailboxScopeResolver(
             accountCatalog ?? CatalogServing(EveryAccountTheSyntheticIndexUses),
-            StubMailFolderParticipation.Everything,
+            StubMailFolderParticipation.Nothing,
             StubJunkMailFolderCatalog.None,
             StubMailFolderMappings.ResolvingNothing),
         snippetBounds ?? EmailSearchSnippetBounds.Default,

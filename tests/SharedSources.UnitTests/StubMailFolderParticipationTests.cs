@@ -9,96 +9,114 @@ using Xunit;
 
 namespace MailFathom.SharedSources.UnitTests;
 
-/// <summary>Covers the participation reader every suite arranging a withheld folder answers through.</summary>
+/// <summary>Covers the participation reader every suite arranging a folder decision answers through.</summary>
 /// <remarks>
-/// A fault here reports somebody else's arrangement. A reader that named a folder in the wrong list would let a test
-/// about tool visibility pass on an exclusion a rule walk applies, and one whose derived answer disagreed with its own
-/// lists would prove a narrowing that configuration never produces.
+/// A fault here reports somebody else's arrangement. A reader that admitted a folder no test mapped would make a
+/// mailbox read return mail the deployment does not have while the test read as proof that it does; one whose two lists
+/// disagreed with its per-folder answer would let a folder be readable through a query and unreadable through an
+/// identifier, which is exactly the divergence the production reader exists to prevent.
 /// </remarks>
 public sealed class StubMailFolderParticipationTests
 {
     private static readonly MailAccountId Work = MailAccountId.Create("work");
+    private static readonly MailAccountId Private = MailAccountId.Create("private");
 
-    private static readonly MailFolderIdentity Archive =
-        new(Work, MailFolderAlias.Create("archive"));
+    private static readonly MailFolderIdentity WorkInbox = new(Work, MailFolderAlias.Create("inbox"));
+    private static readonly MailFolderIdentity WorkArchive = new(Work, MailFolderAlias.Create("archive"));
+    private static readonly MailFolderIdentity PrivateInbox = new(Private, MailFolderAlias.Create("inbox"));
 
-    /// <summary>The supply an existing arrangement takes, which has to keep saying what it said before folder switches existed.</summary>
     [Fact]
-    public void Everything_AFolderNobodyArranged_WithholdsNothing()
+    public void Mapping_TheFoldersItNames_AdmitsEachOfThemToEverything()
+    {
+        // Act
+        var participation = StubMailFolderParticipation.Mapping(WorkInbox, PrivateInbox);
+
+        // Assert
+        Assert.Equal([WorkInbox, PrivateInbox], participation.FoldersSynchronized);
+        Assert.Equal([WorkInbox, PrivateInbox], participation.FoldersVisibleToTools);
+        Assert.Equal([WorkInbox, PrivateInbox], participation.FoldersGeneratingEmbeddings);
+        Assert.Equal(MailFolderParticipation.Full, participation.GetParticipation(Work, WorkInbox.Alias));
+    }
+
+    /// <summary>A folder no arrangement mapped is a folder the deployment does not have, which is what the reader has to say.</summary>
+    [Fact]
+    public void GetParticipation_AFolderNothingMapped_AnswersUnmapped()
     {
         // Arrange
-        var participation = StubMailFolderParticipation.Everything;
+        var participation = StubMailFolderParticipation.Mapping(WorkInbox);
 
         // Act, Assert
-        Assert.Empty(participation.FoldersHiddenFromTools);
-        Assert.Empty(participation.FoldersWithoutEmbeddings);
-        Assert.Empty(participation.FoldersNotMirrored);
-        Assert.Equal(MailFolderParticipation.Full, participation.GetParticipation(Work, Archive.Alias));
+        Assert.Equal(MailFolderParticipation.Unmapped, participation.GetParticipation(Work, WorkArchive.Alias));
+        Assert.Equal(MailFolderParticipation.Unmapped, participation.GetParticipation(Private, WorkInbox.Alias));
+        Assert.Empty(StubMailFolderParticipation.Nothing.FoldersVisibleToTools);
+        Assert.Empty(StubMailFolderParticipation.Nothing.FoldersGeneratingEmbeddings);
     }
 
     [Fact]
-    public void Hiding_TheFolderItNames_WithholdsItFromToolsAndFromNothingElse()
+    public void Hiding_AMappedFolder_LeavesItOutOfTheToolsListAndKeepsItEmbedded()
     {
-        // Arrange
-        var participation = StubMailFolderParticipation.Hiding(Archive);
-
         // Act
-        var arranged = participation.GetParticipation(Work, Archive.Alias);
+        var participation = StubMailFolderParticipation.Mapping(WorkInbox, WorkArchive).Hiding(WorkArchive);
 
         // Assert
-        Assert.Equal([Archive], participation.FoldersHiddenFromTools);
-        Assert.Empty(participation.FoldersWithoutEmbeddings);
-        Assert.Empty(participation.FoldersNotMirrored);
-        Assert.False(arranged.IsVisibleToTools);
-        Assert.True(arranged.IsSynchronized);
-        Assert.True(arranged.GeneratesEmbeddings);
+        Assert.Equal([WorkInbox], participation.FoldersVisibleToTools);
+        Assert.Equal([WorkInbox, WorkArchive], participation.FoldersGeneratingEmbeddings);
+        Assert.False(participation.GetParticipation(Work, WorkArchive.Alias).IsVisibleToTools);
+        Assert.True(participation.GetParticipation(Work, WorkArchive.Alias).GeneratesEmbeddings);
     }
 
     [Fact]
-    public void WithoutEmbeddingsIn_TheFolderItNames_LeavesItMirroredAndReadable()
+    public void WithoutEmbeddingsIn_AMappedFolder_LeavesItOutOfTheEmbeddingListAndKeepsItReadable()
     {
-        // Arrange
-        var participation = StubMailFolderParticipation.WithoutEmbeddingsIn(Archive);
-
         // Act
-        var arranged = participation.GetParticipation(Work, Archive.Alias);
+        var participation = StubMailFolderParticipation
+            .Mapping(WorkInbox, WorkArchive)
+            .WithoutEmbeddingsIn(WorkArchive);
 
         // Assert
-        Assert.Equal([Archive], participation.FoldersWithoutEmbeddings);
-        Assert.Empty(participation.FoldersHiddenFromTools);
-        Assert.Empty(participation.FoldersNotMirrored);
-        Assert.False(arranged.GeneratesEmbeddings);
-        Assert.True(arranged.IsVisibleToTools);
+        Assert.Equal([WorkInbox, WorkArchive], participation.FoldersVisibleToTools);
+        Assert.Equal([WorkInbox], participation.FoldersGeneratingEmbeddings);
     }
 
-    /// <summary>A folder nothing mirrors is in every list at once, which is what configuration derives for one.</summary>
+    /// <summary>A folder nothing mirrors takes part in nothing, so it is admitted to no list while staying mapped.</summary>
     [Fact]
-    public void Unmirroring_TheFolderItNames_WithdrawsItFromEveryReaderThereIs()
+    public void Unmirroring_AMappedFolder_AdmitsItToNoListAndKeepsItMapped()
     {
-        // Arrange
-        var participation = StubMailFolderParticipation.Unmirroring(Archive);
-
         // Act
-        var arranged = participation.GetParticipation(Work, Archive.Alias);
+        var participation = StubMailFolderParticipation.Mapping(WorkInbox, WorkArchive).Unmirroring(WorkArchive);
 
         // Assert
-        Assert.Equal([Archive], participation.FoldersNotMirrored);
-        Assert.Equal([Archive], participation.FoldersHiddenFromTools);
-        Assert.Equal([Archive], participation.FoldersWithoutEmbeddings);
-        Assert.Equal(MailFolderParticipation.MappedOnly, arranged);
+        Assert.Equal([WorkInbox], participation.FoldersSynchronized);
+        Assert.Equal([WorkInbox], participation.FoldersVisibleToTools);
+        Assert.Equal([WorkInbox], participation.FoldersGeneratingEmbeddings);
+        Assert.Equal(MailFolderParticipation.MappedOnly, participation.GetParticipation(Work, WorkArchive.Alias));
     }
 
-    /// <summary>One account's arrangement is never another account's, which is what makes the identity a pair.</summary>
+    /// <summary>An arrangement states one decision per folder, so the last thing a test said about one is what it answers.</summary>
     [Fact]
-    public void GetParticipation_TheSameAliasInAnotherAccount_IsNotTheFolderThatWasArranged()
+    public void With_AFolderArrangedTwice_KeepsTheDecisionStatedLast()
     {
-        // Arrange
-        var participation = StubMailFolderParticipation.Unmirroring(Archive);
-
         // Act
-        var elsewhere = participation.GetParticipation(MailAccountId.Create("private"), Archive.Alias);
+        var participation = StubMailFolderParticipation.Mapping(WorkInbox).Hiding(WorkInbox);
 
         // Assert
-        Assert.Equal(MailFolderParticipation.Full, elsewhere);
+        Assert.Empty(participation.FoldersVisibleToTools);
+        Assert.Equal([WorkInbox], participation.FoldersGeneratingEmbeddings);
+    }
+
+    /// <summary>The arrangement is per reader, so a test that took the default answer never sees a folder another one mapped.</summary>
+    [Fact]
+    public void Nothing_ReadTwice_AnswersFromTwoSeparateArrangements()
+    {
+        // Arrange
+        var arranged = StubMailFolderParticipation.Nothing;
+        arranged.With(WorkInbox, MailFolderParticipation.Full);
+
+        // Act
+        var untouched = StubMailFolderParticipation.Nothing;
+
+        // Assert
+        Assert.NotEmpty(arranged.FoldersVisibleToTools);
+        Assert.Empty(untouched.FoldersVisibleToTools);
     }
 }

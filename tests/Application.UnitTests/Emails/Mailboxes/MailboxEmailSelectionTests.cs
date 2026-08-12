@@ -249,7 +249,7 @@ public sealed class MailboxEmailSelectionTests
 
         return new MailboxScopeResolver(
             catalog,
-            StubMailFolderParticipation.Everything,
+            StubMailFolderParticipation.Nothing,
             junkFolders ?? StubJunkMailFolderCatalog.Naming(
                 new MailFolderIdentity(Account, MailFolderAlias.Create("JUNK"))),
             StubMailFolderMappings.ResolvingNothing);
@@ -264,7 +264,7 @@ public sealed class MailboxEmailSelectionTests
         DateTimeOffset? receivedBefore = null,
         bool? isRemotelySeen = null,
         bool? hasAttachments = null) => MailboxEmailSelection.Create(
-        scope ?? MailboxScope.Unrestricted,
+        scope ?? MailboxScope.NothingReadable,
         senderAddress,
         recipientAddress,
         subjectFragment,

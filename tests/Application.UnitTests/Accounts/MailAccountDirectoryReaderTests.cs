@@ -8,6 +8,7 @@ using MailFathom.Application.Synchronization.Checkpoints;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Folders;
 using MailFathom.Domain.Synchronization;
+using MailFathom.TestSupport;
 using NSubstitute;
 using Xunit;
 
@@ -145,7 +146,14 @@ public sealed class MailAccountDirectoryReaderTests
         catalog.SynchronizationEnabled.Returns(synchronizationEnabled);
         catalog.ServedAccounts.Returns([.. servedAccounts]);
 
-        return new MailAccountDirectoryReader(catalog, freshnessReader);
+        return new MailAccountDirectoryReader(
+            catalog,
+            freshnessReader,
+            new MailboxScopeResolver(
+                catalog,
+                StubMailFolderParticipation.Nothing,
+                StubJunkMailFolderCatalog.None,
+                StubMailFolderMappings.ResolvingNothing));
     }
 
     /// <summary>Answers the folders local state knows of, in an order the reader is expected to correct.</summary>
