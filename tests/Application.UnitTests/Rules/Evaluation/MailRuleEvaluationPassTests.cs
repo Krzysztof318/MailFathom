@@ -2,13 +2,17 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Application.Mail.Mutations;
 using MailFathom.Application.Persistence;
 using MailFathom.Application.Rules;
+using MailFathom.Application.Rules.Actions;
 using MailFathom.Application.Rules.Conditions;
 using MailFathom.Application.Rules.Evaluation;
 using MailFathom.Application.Rules.Facts;
 using MailFathom.Application.UnitTests.TestDoubles;
 using MailFathom.Domain.Accounts;
+using MailFathom.Domain.Folders;
+using MailFathom.Domain.Mutations;
 using Microsoft.Extensions.Time.Testing;
 using NSubstitute;
 using Xunit;
@@ -21,10 +25,25 @@ public sealed class MailRuleEvaluationPassTests
     private static readonly DateTimeOffset EvaluatedAt = new(2026, 4, 2, 11, 0, 0, TimeSpan.Zero);
     private static readonly MailAccountId Account = MailAccountId.Create("work");
     private static readonly MailAccountId OtherAccount = MailAccountId.Create("personal");
+    private static readonly MailFolderAlias Archive = MailFolderAlias.Create("archive");
+    private static readonly MailFolderAlias Backup = MailFolderAlias.Create("backup");
 
     private readonly InMemoryMailRuleEvaluationStore store = new();
     private readonly InMemoryMailRuleEvaluationRunStore runStore = new();
+    private readonly InMemoryMailboxMutationRecordStore mutations = new();
+    private readonly InMemoryMailFolderResolutionStore folders = new();
+    private readonly IAuthoredDeleteEmailDispositionReader deleteDispositions =
+        Substitute.For<IAuthoredDeleteEmailDispositionReader>();
+
+    private readonly IMailRuleActionPermissionReader permissions =
+        Substitute.For<IMailRuleActionPermissionReader>();
+
     private readonly FakeTimeProvider timeProvider = new(EvaluatedAt);
+
+    public MailRuleEvaluationPassTests() =>
+        this.permissions
+            .GetRuleActionPermissions(Arg.Any<MailAccountId>())
+            .Returns(MailRuleActionPermissions.Default with { PermitsDelete = true });
 
     [Fact]
     public async Task RunAsync_MailNoPassHasEvaluated_EvaluatesItAndRecordsIt()
@@ -44,6 +63,99 @@ public sealed class MailRuleEvaluationPassTests
         Assert.Equal(1, report.Arrivals.MatchedEmailCount);
         Assert.Equal(["file-it"], report.Arrivals.MatchedRuleNames);
         Assert.False(report.Arrivals.EmailsRemain);
+    }
+
+    /// <summary>What a match leads to is a durable request, written in the batch's own transaction and issued by nothing here.</summary>
+    [Fact]
+    public async Task RunAsync_ARuleWithAnAction_WritesTheChangeDownAgainstTheMatchedOccurrence()
+    {
+        // Arrange
+        this.folders.Bind(Account, Archive);
+        var arrived = this.store.Add(FactsFor(Account));
+        var pass = this.CreatePass(RuleSetOf(FilingRule("file-it")));
+
+        // Act
+        var report = await pass.RunAsync(Account, TestContext.Current.CancellationToken);
+
+        // Assert
+        var request = Assert.Single(this.mutations.OpenedRequests);
+        Assert.Equal(MailboxMutation.Relocate, request.Mutation);
+        Assert.Equal(arrived, request.StoredEmailId);
+        Assert.Equal(MailboxMutationOrigin.Rule, request.Requester.Origin);
+        Assert.Equal(1, report.Arrivals.RequestedActionCount);
+    }
+
+    /// <summary>Two rules asking for one email's fate resolve by declared order, and the withheld one is reported by name.</summary>
+    [Fact]
+    public async Task RunAsync_TwoRulesFilingOneEmailDifferently_AsksOnceAndNamesTheRuleItWithheld()
+    {
+        // Arrange
+        this.folders.Bind(Account, Archive);
+        this.folders.Bind(Account, Backup);
+        this.store.Add(FactsFor(Account));
+        var pass = this.CreatePass(RuleSetOf(FilingRule("file-invoices"), FilingRule("file-everything", Backup)));
+
+        // Act
+        var report = await pass.RunAsync(Account, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(1, this.mutations.OpenedRecordCount);
+        Assert.Equal(1, report.Arrivals.RequestedActionCount);
+        Assert.Equal(1, report.Arrivals.WithheldActionCount);
+        Assert.Equal(["file-everything"], report.Arrivals.UnappliedActionRuleNames);
+    }
+
+    /// <summary>A whole-mailbox run re-asks under the same identity, so re-running the rules performs each change once.</summary>
+    [Fact]
+    public async Task RunAsync_AWholeMailboxRunOverMailAlreadyFiled_OpensNoSecondRecord()
+    {
+        // Arrange
+        this.folders.Bind(Account, Archive);
+        this.store.Add(FactsFor(Account));
+        var ruleSet = RuleSetOf(FilingRule("file-it"));
+        await this.CreatePass(ruleSet).RunAsync(Account, TestContext.Current.CancellationToken);
+        this.runStore.Arrange(RequestedRun());
+
+        // Act
+        var report = await this.CreatePass(ruleSet).RunAsync(Account, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(1, this.mutations.OpenedRecordCount);
+        Assert.Equal(1, report.RequestedRun?.RequestedActionCount);
+    }
+
+    /// <summary>A destination that has stopped resolving fails visibly rather than filing the mail somewhere unintended.</summary>
+    [Fact]
+    public async Task RunAsync_ADestinationNothingHasBound_RecordsNothingAndNamesTheRule()
+    {
+        // Arrange
+        this.store.Add(FactsFor(Account));
+        var pass = this.CreatePass(RuleSetOf(FilingRule("file-it")));
+
+        // Act
+        var report = await pass.RunAsync(Account, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(0, this.mutations.OpenedRecordCount);
+        Assert.Equal(1, report.Arrivals.FailedActionCount);
+        Assert.Equal(["file-it"], report.Arrivals.UnappliedActionRuleNames);
+    }
+
+    /// <summary>A rule that selects mail and changes nothing is an ordinary rule, so the mailbox is asked for nothing.</summary>
+    [Fact]
+    public async Task RunAsync_AMatchingRuleThatDeclaresNoAction_AsksTheMailboxForNothing()
+    {
+        // Arrange
+        this.store.Add(FactsFor(Account));
+        var pass = this.CreatePass(
+            RuleSetOf(MailRule.Create("select-only", ScriptedMailRuleCondition.Answering(matches: true))));
+
+        // Act
+        var report = await pass.RunAsync(Account, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(0, this.mutations.OpenedRecordCount);
+        Assert.Equal(0, report.Arrivals.RequestedActionCount);
     }
 
     /// <summary>The arrival queue must never become a back door to reprocessing, whatever the rule set now says.</summary>
@@ -71,7 +183,7 @@ public sealed class MailRuleEvaluationPassTests
         var condition = ScriptedMailRuleCondition.Answering(matches: true);
         var arrived = this.store.Add(FactsFor(Account));
         var pass = this.CreatePass(
-            RuleSetOf(MailRule.Create("other-account", condition, stopWhenMatched: false, [OtherAccount.Value])));
+            RuleSetOf(MailRule.Create("other-account", condition, stopWhenMatched: false, accounts: [OtherAccount.Value])));
 
         // Act
         await pass.RunAsync(Account, TestContext.Current.CancellationToken);
@@ -313,6 +425,12 @@ public sealed class MailRuleEvaluationPassTests
     private static MailRuleEmailFacts FactsFor(MailAccountId accountId) =>
         new() { Account = accountId.Value, Folder = "inbox" };
 
+    /// <summary>A rule that matches everything and files it, which is the shape every action assertion here needs.</summary>
+    private static MailRule FilingRule(string name, MailFolderAlias? destination = null) => MailRule.Create(
+        name,
+        ScriptedMailRuleCondition.Answering(matches: true),
+        MailRuleActionSet.Create([MailRuleAction.Relocate(destination ?? Archive)]));
+
     private static MailRuleEvaluationRun RequestedRun() => new()
     {
         AccountId = Account,
@@ -322,7 +440,7 @@ public sealed class MailRuleEvaluationPassTests
     private static MailRuleSet RuleSetOf(params MailRule[] rules) => MailRuleSet.Create(
         rules,
         MailRuleSetRevision.Create(
-            [.. rules.Select(rule => new MailRuleDeclaration(rule.Name, "isSeen", rule.StopWhenMatched, [.. rule.Accounts]))]),
+            [.. rules.Select(rule => new MailRuleDeclaration(rule.Name, "isSeen", [.. rule.Actions.Actions], rule.StopWhenMatched, [.. rule.Accounts]))]),
         MailRuleConditionBounds.Default);
 
     private MailRuleEvaluationPass CreatePass(
@@ -341,6 +459,7 @@ public sealed class MailRuleEvaluationPassTests
             new MailRuleSetEvaluator(this.timeProvider),
             this.store,
             this.runStore,
+            new MailRuleActionRecorder(this.mutations, this.folders, this.deleteDispositions, this.permissions),
             new OptimisticConcurrencyRetryPolicy(
                 sessionFactory,
                 new PersistenceConcurrencyOptions(),

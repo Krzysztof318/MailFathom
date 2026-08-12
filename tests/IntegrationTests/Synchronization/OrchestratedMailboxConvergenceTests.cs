@@ -69,7 +69,7 @@ public sealed class OrchestratedMailboxConvergenceTests(MailFathomOrchestrationF
         RemoteFolderPath.Create(CopyFolderName, hierarchyDelimiter: '.');
 
     private static readonly MailboxMutationRequester Requester =
-        MailboxMutationRequester.Rule("converge-to-archive", 1);
+        MailboxMutationRequester.Rule("converge-to-archive", "1");
 
     /// <summary>
     /// The restart case the whole design exists for. A process stopped between the copy and the expunge left the

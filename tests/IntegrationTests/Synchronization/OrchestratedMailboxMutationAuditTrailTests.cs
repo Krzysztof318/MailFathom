@@ -50,7 +50,7 @@ public sealed class OrchestratedMailboxMutationAuditTrailTests(MailFathomOrchest
         RemoteFolderPath.Create(ArchiveFolderName, hierarchyDelimiter: '.');
 
     private static readonly MailboxMutationRequester Requester =
-        MailboxMutationRequester.Rule("keep-an-audit-trail", 1);
+        MailboxMutationRequester.Rule("keep-an-audit-trail", "1");
 
     /// <summary>
     /// Every change MailFathom is permitted to make leaves exactly one entry on an account that asked for a trail, and

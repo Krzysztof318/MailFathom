@@ -73,7 +73,7 @@ public sealed class OrchestratedRelocationReconciliationTests(MailFathomOrchestr
         RemoteFolderPath.Create(TargetFolderName, hierarchyDelimiter: '.');
 
     private static readonly MailboxMutationRequester Requester =
-        MailboxMutationRequester.Rule("file-to-relocation-target", 1);
+        MailboxMutationRequester.Rule("file-to-relocation-target", "1");
 
     /// <summary>The message arrives in its new folder as an ordinary discovery, and is the email that was already stored.</summary>
     [Fact]

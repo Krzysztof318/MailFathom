@@ -2,6 +2,8 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Domain.Folders;
+using MailFathom.Domain.Mutations;
 using MailFathom.Host.Configuration.Rules;
 using MailFathom.Host.UnitTests.TestDoubles;
 using MailFathom.Infrastructure.Rules;
@@ -219,12 +221,76 @@ public sealed class MailRuleSetMappingTests
         Assert.NotEqual(beforeScoping.Revision, afterScoping.Revision);
     }
 
+    /// <summary>The declared keys become the actions the pass asks for, in the order MailFathom applies them.</summary>
+    [Fact]
+    public void Map_DeclaredActions_ReachTheRuleInTheOrderTheyAreApplied()
+    {
+        // Arrange
+        var settings = new MailRulesOptions
+        {
+            Rules =
+            [
+                CreateRule(
+                    "file-invoices",
+                    "isSeen",
+                    actions: new MailRuleActionOptions { MoveTo = "archive", MarkAsRead = true }),
+            ],
+        };
+
+        // Act
+        var ruleSet = MailRuleSetMapper.Map(settings, this.compiler);
+
+        // Assert
+        var actions = ruleSet.Rules[0].Actions.Actions;
+        Assert.Equal(
+            [MailboxMutation.SetSeen, MailboxMutation.Relocate],
+            actions.Select(action => action.Mutation));
+        Assert.Equal(MailFolderAlias.Create("archive"), actions[1].DestinationAlias);
+        Assert.True(actions[0].DesiredSeenState);
+    }
+
+    [Fact]
+    public void Map_ARuleDeclaringNoAction_SelectsMailAndChangesNothing()
+    {
+        // Arrange
+        var settings = new MailRulesOptions { Rules = [CreateRule("select-only", "isSeen")] };
+
+        // Act
+        var ruleSet = MailRuleSetMapper.Map(settings, this.compiler);
+
+        // Assert
+        Assert.True(ruleSet.Rules[0].Actions.IsEmpty);
+    }
+
+    /// <summary>A request's identity carries the revision, so an edited action asks afresh rather than reusing the old record.</summary>
+    [Fact]
+    public void Map_EditingWhatARuleDoes_MovesTheRevision()
+    {
+        // Arrange
+        var filing = new MailRulesOptions
+        {
+            Rules = [CreateRule("running", "isDraft", actions: new MailRuleActionOptions { MoveTo = "archive" })],
+        };
+        var copying = new MailRulesOptions
+        {
+            Rules = [CreateRule("running", "isDraft", actions: new MailRuleActionOptions { CopyTo = "archive" })],
+        };
+
+        // Act
+        var beforeEdit = MailRuleSetMapper.Map(filing, this.compiler);
+        var afterEdit = MailRuleSetMapper.Map(copying, this.compiler);
+
+        // Assert
+        Assert.NotEqual(beforeEdit.Revision, afterEdit.Revision);
+    }
+
     private static MailRuleOptions CreateRule(
         string name,
         string conditionText,
         bool stopWhenMatched = false,
         bool enabled = true,
-        string[]? accounts = null) =>
+        string[]? accounts = null,
+        MailRuleActionOptions? actions = null) =>
         new()
         {
             Name = name,
@@ -232,5 +298,6 @@ public sealed class MailRuleSetMappingTests
             StopWhenMatched = stopWhenMatched,
             Enabled = enabled,
             Accounts = accounts ?? [],
+            Actions = actions ?? new MailRuleActionOptions(),
         };
 }

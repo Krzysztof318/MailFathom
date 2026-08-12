@@ -8,6 +8,7 @@ using MailFathom.Application.Rules.Facts;
 using MailFathom.CodeCoverage;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
+using MailFathom.Domain.Folders;
 using MailFathom.Infrastructure.Persistence.Emails;
 using MailFathom.Infrastructure.Persistence.Entities;
 using MailFathom.Infrastructure.Persistence.Sessions;
@@ -135,6 +136,9 @@ internal sealed class MailRuleEvaluationStore(MailFathomDbContext dbContext) : I
             {
                 email.Id,
                 email.MailFolder.Alias,
+                email.MailFolder.ResolutionGeneration,
+                email.UidValidity,
+                email.Uid,
                 email.Subject,
                 email.SenderNormalizedAddress,
                 email.ToAddresses,
@@ -161,6 +165,13 @@ internal sealed class MailRuleEvaluationStore(MailFathomDbContext dbContext) : I
         [
             .. candidates.Select(candidate => new StoredEmailAwaitingRuleEvaluation(
                 StoredEmailId.Create(candidate.Id),
+                EmailOccurrenceId.Create(
+                    accountId,
+                    new MailFolderResolutionId(
+                        MailFolderAlias.Create(candidate.Alias),
+                        MailFolderResolutionGeneration.Create(candidate.ResolutionGeneration)),
+                    ImapUidValidity.Create(candidate.UidValidity),
+                    ImapUid.Create(candidate.Uid)),
                 new MailRuleEmailFacts
                 {
                     Account = mailboxAccountId,

@@ -41,6 +41,15 @@ internal sealed class MailRuleOptions
     [Required]
     public string Condition { get; set; } = string.Empty;
 
+    /// <summary>Gets or sets what a match does to the matching email.</summary>
+    /// <remarks>
+    /// Optional, because a rule that changes nothing is a rule that selects mail: paired with
+    /// <see cref="StopWhenMatched" /> it is how mail is kept away from the rules below it. A combination naming two
+    /// fates for one occurrence is refused when the configuration is read rather than resolved while mail is being
+    /// processed.
+    /// </remarks>
+    public MailRuleActionOptions Actions { get; set; } = new();
+
     /// <summary>Gets or sets whether a match ends the pass rather than continuing to the rules below this one.</summary>
     public bool StopWhenMatched { get; set; }
 

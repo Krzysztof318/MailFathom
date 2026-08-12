@@ -14,14 +14,14 @@ public sealed class MailboxMutationRequesterTests
     public void Rule_TwoRevisionsOfOneRule_AreDifferentRequesters()
     {
         // Arrange
-        var third = MailboxMutationRequester.Rule("file-newsletters", 3);
+        var third = MailboxMutationRequester.Rule("file-newsletters", "3");
 
         // Act
-        var fourth = MailboxMutationRequester.Rule("file-newsletters", 4);
+        var fourth = MailboxMutationRequester.Rule("file-newsletters", "4");
 
         // Assert
         Assert.NotEqual(third, fourth);
-        Assert.Equal(MailboxMutationRequester.Rule("file-newsletters", 3), third);
+        Assert.Equal(MailboxMutationRequester.Rule("file-newsletters", "3"), third);
     }
 
     /// <summary>Two requesters that differ only in kind are different, so an invocation named like a rule is never the same request.</summary>
@@ -63,16 +63,26 @@ public sealed class MailboxMutationRequesterTests
         Assert.Equal("invocationIdentity", refusal.ParamName);
     }
 
-    [Fact]
-    public void Rule_NegativeRevision_IsRefused() =>
-        Assert.Throws<ArgumentOutOfRangeException>(() => MailboxMutationRequester.Rule("file-newsletters", -1));
+    /// <summary>A revision is what makes an edited rule ask again, so a request naming none could never be told from a repeat.</summary>
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    public void Rule_RevisionNamingNothing_IsRefused(string revision)
+    {
+        // Act
+        var refusal = Assert.Throws<ArgumentException>(
+            () => MailboxMutationRequester.Rule("file-newsletters", revision));
+
+        // Assert
+        Assert.Equal("revision", refusal.ParamName);
+    }
 
     /// <summary>A record hands back what it stored, so restoring has to produce the requester that was written.</summary>
     [Fact]
     public void Create_FromTheStoredOriginAndIdentity_RestoresTheRequesterThatWasWritten()
     {
         // Arrange
-        var original = MailboxMutationRequester.Rule("file-newsletters", 3);
+        var original = MailboxMutationRequester.Rule("file-newsletters", "3");
 
         // Act
         var restored = MailboxMutationRequester.Create(original.Origin, original.Identity);

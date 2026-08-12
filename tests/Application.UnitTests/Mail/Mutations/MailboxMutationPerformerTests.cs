@@ -332,7 +332,7 @@ public sealed class MailboxMutationPerformerTests
         var context = new PerformerContext();
         var occurrence = Occurrence(42U);
         var storedEmailId = StoredEmailId.Create(Guid.CreateVersion7());
-        var requester = MailboxMutationRequester.Rule("file-newsletters", 3);
+        var requester = MailboxMutationRequester.Rule("file-newsletters", "3");
 
         // Act
         await context.Performer.PerformAsync(
@@ -394,7 +394,7 @@ public sealed class MailboxMutationPerformerTests
         var request = MailboxMutationRequest.SetSeen(
             StoredEmailId.Create(Guid.CreateVersion7()),
             occurrence,
-            MailboxMutationRequester.Rule("surface-invoices", 2),
+            MailboxMutationRequester.Rule("surface-invoices", "2"),
             isSeen);
 
         // Act
@@ -553,7 +553,7 @@ public sealed class MailboxMutationPerformerTests
     {
         var storedEmailId = StoredEmailId.Create(Guid.CreateVersion7());
         var occurrence = Occurrence(42U);
-        var requester = MailboxMutationRequester.Rule("file-newsletters", 3);
+        var requester = MailboxMutationRequester.Rule("file-newsletters", "3");
 
         return mutationName switch
         {
@@ -577,7 +577,7 @@ public sealed class MailboxMutationPerformerTests
     private static MailboxMutationRequest RelocationRequest() => MailboxMutationRequest.Relocate(
         StoredEmailId.Create(Guid.CreateVersion7()),
         Occurrence(42U),
-        MailboxMutationRequester.Rule("file-newsletters", 3),
+        MailboxMutationRequester.Rule("file-newsletters", "3"),
         ArchivePath);
 
     /// <summary>Assembles the performer over an in-memory record store and a substituted write session.</summary>

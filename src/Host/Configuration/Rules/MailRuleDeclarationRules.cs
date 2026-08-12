@@ -4,6 +4,7 @@
 
 using System.ComponentModel.DataAnnotations;
 using MailFathom.Application.Rules;
+using MailFathom.Application.Rules.Actions;
 using MailFathom.Application.Rules.Conditions;
 
 namespace MailFathom.Host.Configuration.Rules;
@@ -34,7 +35,7 @@ internal static class MailRuleDeclarationRules
     /// <summary>Reports everything an operator must fix before a declared rule set can be used.</summary>
     /// <param name="candidate">The bound declaration, or <see langword="null" /> when the deployment wrote no section.</param>
     /// <param name="compiler">Reads each condition against the fact surface.</param>
-    /// <param name="declaredAccounts">The identifiers of the accounts the deployment declares, which a rule's scope may name.</param>
+    /// <param name="declaredAccounts">The accounts the deployment declares, which a rule's scope, destinations, and actions are judged against.</param>
     /// <returns>One message per rule the declaration breaks, empty when it is usable.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="compiler" /> or <paramref name="declaredAccounts" /> is <see langword="null" />.</exception>
     /// <remarks>
@@ -44,7 +45,7 @@ internal static class MailRuleDeclarationRules
     public static IReadOnlyList<string> FindDeclarationErrors(
         MailRulesOptions? candidate,
         IMailRuleConditionCompiler compiler,
-        IReadOnlyCollection<string> declaredAccounts)
+        IReadOnlyCollection<DeclaredMailAccount> declaredAccounts)
     {
         ArgumentNullException.ThrowIfNull(compiler);
         ArgumentNullException.ThrowIfNull(declaredAccounts);
@@ -79,10 +80,11 @@ internal static class MailRuleDeclarationRules
     private static IReadOnlyList<string> FindDeclaredRuleErrors(
         MailRuleOptions rule,
         int position,
-        IReadOnlyCollection<string> declaredAccounts) =>
+        IReadOnlyCollection<DeclaredMailAccount> declaredAccounts) =>
     [
         .. FindRuleErrors(rule, position),
         .. FindScopeErrors(rule, position, declaredAccounts),
+        .. FindActionErrors(rule, position, declaredAccounts),
         .. FindIdentityErrors(rule, position),
     ];
 
@@ -113,7 +115,10 @@ internal static class MailRuleDeclarationRules
             .Where(_ => MailRuleSetRevision.ContainsSeparator(rule.Condition))
             .Concat(rule.Accounts
                 .Where(MailRuleSetRevision.ContainsSeparator)
-                .Select(_ => nameof(MailRuleOptions.Accounts)));
+                .Select(_ => nameof(MailRuleOptions.Accounts)))
+            .Concat(DeclaredActions(rule).DeclaredDestinations()
+                .Where(MailRuleSetRevision.ContainsSeparator)
+                .Select(_ => nameof(MailRuleOptions.Actions)));
 
         return offending
             .Distinct(StringComparer.Ordinal)
@@ -131,8 +136,10 @@ internal static class MailRuleDeclarationRules
     private static IEnumerable<string> FindScopeErrors(
         MailRuleOptions rule,
         int position,
-        IReadOnlyCollection<string> declaredAccounts)
+        IReadOnlyCollection<DeclaredMailAccount> declaredAccounts)
     {
+        var declaredIdentifiers = declaredAccounts.Select(account => account.AccountId).ToArray();
+
         var opening =
             $"{MailRulesOptions.SectionName}:{nameof(MailRulesOptions.Rules)}:{position}:{nameof(MailRuleOptions.Accounts)}";
         var scope = rule.Accounts.Select(account => account?.Trim() ?? string.Empty).ToArray();
@@ -153,12 +160,106 @@ internal static class MailRuleDeclarationRules
             yield return $"{opening} — the account '{repeated.Key}' is named more than once.";
         }
 
-        foreach (var unknown in scope.Where(account => !declaredAccounts.Contains(account, StringComparer.Ordinal)))
+        foreach (var unknown in scope.Where(account => !declaredIdentifiers.Contains(account, StringComparer.Ordinal)))
         {
             yield return
                 $"{opening} — no account named '{unknown}' is declared under MailSynchronization:Accounts, so this rule would reach no mail.";
         }
     }
+
+    /// <summary>Judges what a rule does to the mail it selects, against the rule itself and against every account it reaches.</summary>
+    /// <remarks>
+    /// <para>
+    /// Three separate claims are checked here. Whether the declared actions can be honored together is a property of
+    /// the rule alone. Whether a destination names a folder the account mirrors, and whether the account permits the
+    /// action at all, are claims about the synchronization section — and both are refused rather than deferred, because
+    /// a rule that would be skipped when the mail reached it is indistinguishable from a rule nothing matched.
+    /// </para>
+    /// <para>
+    /// A rule that is switched off is judged like any other, exactly as its scope already is. Only the condition is
+    /// exempt from being read, because reading one is what costs a compilation.
+    /// </para>
+    /// </remarks>
+    private static IEnumerable<string> FindActionErrors(
+        MailRuleOptions rule,
+        int position,
+        IReadOnlyCollection<DeclaredMailAccount> declaredAccounts)
+    {
+        var opening =
+            $"{MailRulesOptions.SectionName}:{nameof(MailRulesOptions.Rules)}:{position}:{nameof(MailRuleOptions.Actions)}";
+        var declared = DeclaredActions(rule);
+        var unusable = declared.DeclaredDestinations()
+            .Where(alias => !MailRuleActionOptions.TryReadAlias(alias, out _))
+            .ToArray();
+
+        if (unusable.Length > 0)
+        {
+            yield return $"{opening} — a destination folder is named by nothing this system could read as an alias.";
+
+            yield break;
+        }
+
+        var actions = declared.ToActions();
+        var ruleName = DescribeRule(rule, position);
+
+        foreach (var refusal in MailRuleActionSet.FindErrors(ruleName, actions))
+        {
+            yield return $"{opening} — {refusal}";
+        }
+
+        foreach (var account in AccountsTheRuleReaches(rule, declaredAccounts))
+        {
+            foreach (var refusal in FindAccountActionErrors(ruleName, actions, account))
+            {
+                yield return $"{opening} — {refusal}";
+            }
+        }
+    }
+
+    /// <summary>Judges one rule's actions against one account's mirrored folders and its own permissions.</summary>
+    private static IEnumerable<string> FindAccountActionErrors(
+        string ruleName,
+        IReadOnlyList<MailRuleAction> actions,
+        DeclaredMailAccount account)
+    {
+        foreach (var action in actions.Where(action => !account.PermittedRuleActions.Permits(action.Mutation)))
+        {
+            yield return
+                $"Rule '{ruleName}' declares '{action.Mutation.Name}', which account '{account.AccountId}' does not permit a rule to do. Permit it under MailSynchronization:Accounts:<n>:RuleActions or narrow the rule's scope.";
+        }
+
+        foreach (var action in actions.Where(action =>
+            action.DestinationAlias is { } alias && !account.MirroredFolderAliases.Contains(alias)))
+        {
+            yield return
+                $"Rule '{ruleName}' files into '{action.DestinationAlias!.Value.Value}', which account '{account.AccountId}' does not declare as a mirrored folder, so nothing would bind it to a folder on the server.";
+        }
+    }
+
+    /// <summary>Reads the accounts one rule's mail can come from, which is every declared account for an unscoped rule.</summary>
+    private static IEnumerable<DeclaredMailAccount> AccountsTheRuleReaches(
+        MailRuleOptions rule,
+        IReadOnlyCollection<DeclaredMailAccount> declaredAccounts)
+    {
+        var scope = rule.Accounts?.Select(account => account?.Trim() ?? string.Empty).ToArray() ?? [];
+
+        // An account the scope names and nothing declares is already reported against the scope, so it is left out here
+        // rather than reported a second time under a different key.
+        return scope.Length == 0
+            ? declaredAccounts
+            : declaredAccounts.Where(account => scope.Contains(account.AccountId, StringComparer.Ordinal));
+    }
+
+    /// <summary>Names a rule the way a message about it should, falling back to its position when it has no name.</summary>
+    /// <remarks>
+    /// A nameless rule is refused by its own attribute bound, and this keeps a second message about the same rule
+    /// readable rather than quoting an empty name.
+    /// </remarks>
+    private static string DescribeRule(MailRuleOptions rule, int position) =>
+        string.IsNullOrWhiteSpace(rule.Name) ? $"#{position}" : rule.Name.Trim();
+
+    /// <summary>Reads a rule's action block, treating one an operator wrote as empty as a rule that changes nothing.</summary>
+    private static MailRuleActionOptions DeclaredActions(MailRuleOptions rule) => rule.Actions ?? new MailRuleActionOptions();
 
     /// <summary>Runs the section's own attribute bounds and everything <see cref="MailRulesOptions.Validate" /> reports.</summary>
     private static IEnumerable<string> FindSectionErrors(MailRulesOptions candidate) =>

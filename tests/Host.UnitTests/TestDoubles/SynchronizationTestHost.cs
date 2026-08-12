@@ -13,6 +13,7 @@ using MailFathom.Application.Mail.Mutations.Audit;
 using MailFathom.Application.Mail.Mutations.Convergence;
 using MailFathom.Application.Persistence;
 using MailFathom.Application.Rules;
+using MailFathom.Application.Rules.Actions;
 using MailFathom.Application.Rules.Conditions;
 using MailFathom.Application.Rules.Evaluation;
 using MailFathom.Application.Synchronization;
@@ -159,6 +160,11 @@ internal static class SynchronizationTestHost
         services.AddSingleton(CreateSourceOfAnEmptyRuleSet());
         services.AddSingleton(new MailRuleSetEvaluator(timeProvider));
         services.AddScoped(_ => new MailRuleEvaluationOptions());
+        services.AddScoped<IAuthoredDeleteEmailDispositionReader>(
+            provider => provider.GetRequiredService<MailSynchronizationOptions>());
+        services.AddScoped<IMailRuleActionPermissionReader>(
+            provider => provider.GetRequiredService<MailSynchronizationOptions>());
+        services.AddScoped<MailRuleActionRecorder>();
         services.AddScoped<MailRuleEvaluationPass>();
         services.AddLogging();
 

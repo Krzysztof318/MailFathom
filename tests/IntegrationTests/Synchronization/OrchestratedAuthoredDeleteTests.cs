@@ -49,7 +49,7 @@ public sealed class OrchestratedAuthoredDeleteTests(MailFathomOrchestrationFixtu
         RemoteFolderPath.Create(FolderName, hierarchyDelimiter: '.'));
 
     private static readonly MailboxMutationRequester Requester =
-        MailboxMutationRequester.Rule("free-the-server", 1);
+        MailboxMutationRequester.Rule("free-the-server", "1");
 
     /// <summary>Each disposition decides one local copy, and the account's remote-deletion setting decides none of them.</summary>
     [Fact]

@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.Rules;
+using MailFathom.Application.Rules.Actions;
 using MailFathom.Application.Rules.Conditions;
 
 namespace MailFathom.Host.Configuration.Rules;
@@ -38,6 +39,7 @@ internal static class MailRuleSetMapper
             .Select(rule => new MailRuleDeclaration(
                 rule.Name,
                 rule.Condition,
+                (rule.Actions ?? new MailRuleActionOptions()).ToActions(),
                 rule.StopWhenMatched,
                 [.. rule.Accounts.Select(account => account.Trim())]))
             .ToArray();
@@ -46,6 +48,7 @@ internal static class MailRuleSetMapper
             .Select(declaration => MailRule.Create(
                 declaration.Name,
                 Compile(compiler, declaration, bounds),
+                MailRuleActionSet.Create(declaration.Actions),
                 declaration.StopWhenMatched,
                 declaration.Accounts))
             .ToArray();

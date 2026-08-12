@@ -2,13 +2,10 @@
 
 <!-- describes: src/Application/Rules/**, src/Infrastructure/Rules/**, src/Infrastructure/Persistence/Rules/**, src/Host/Configuration/Rules/** -->
 
-A mail rule selects mail. It is a name, a condition, the accounts it applies to, and whether a match ends the pass, and
-an owner writes it in the configuration their deployment already carries. This page documents the whole of what a
-condition may say: every fact it can read, every function and operator available to it, the limits it is read and run
-under, and the order a set of rules is evaluated in.
-
-What a match leads to is not a property of the rule set and is not on this page. A rule states which mail it selects,
-and nothing more.
+A mail rule selects mail and changes it. It is a name, a condition, the accounts it applies to, what a match leads to,
+and whether a match ends the pass, and an owner writes it in the configuration their deployment already carries. This
+page documents both halves: every fact a condition can read, every function and operator available to it, the limits it
+is read and run under, the order a set of rules is evaluated in, and the four changes a matching rule can ask for.
 
 Rules live in configuration rather than in a table, and a condition is one expression rather than a nested structure of
 predicates. [ADR 0010](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0010-rule-authoring-in-configuration-and-ncalc-conditions.md)
@@ -25,6 +22,7 @@ MCP, not the administrative endpoint. An owner who wants to change what their in
         "Name": "supplier-invoices",
         "Accounts": [ "work" ],
         "Condition": "senderDomain == 'supplier.test' and attachmentCount > 0",
+        "Actions": { "MoveTo": "invoices", "MarkAsRead": true },
         "StopWhenMatched": true
       },
       {
@@ -67,6 +65,141 @@ that applies to several.
 
 [Configuration reference](../operations/configuration-reference.md#mailrules) lists every key of the section with its
 type, default, and constraint.
+
+## What a matching rule does
+
+A rule declares what a match leads to in an `Actions` block, one named key per change:
+
+| Key | Value | What a match asks for |
+| --- | --- | --- |
+| `MoveTo` | a folder alias | The message leaves the folder it matched in and is filed into the named one |
+| `CopyTo` | a folder alias | A second copy of the message is placed in the named folder, and the one that matched stays where it is |
+| `Delete` | `true` | The message is removed from the folder it matched in |
+| `MarkAsRead` | `true` or `false` | The message's remote `\Seen` flag is set, or cleared |
+
+**An absent key is a change the rule does not ask for**, which is why `MarkAsRead` carries a value rather than being a
+switch: `MarkAsRead: false` is a rule asking for mail to be marked *unread*, and leaving the key out is a rule that does
+not touch the flag at all. `Delete: false` says the same thing as leaving `Delete` out. One key per action rather than a
+list of action objects, because a rule declaring the same action twice is then unrepresentable rather than merely
+refused, and because a binder drops a list element whose value it cannot read — which would leave a rule quietly doing
+less than its file says.
+
+**A rule that declares no action is not a defect.** It selects mail and changes nothing, which is what a rule ending the
+pass with `StopWhenMatched` does to keep the mail it names away from the rules below it.
+
+A destination is a **folder alias** — one an account declares under `MailSynchronization:Accounts:<n>:Folders` — and
+never a path on the server. What that alias is bound to is resolved when the change is written down, so a rule goes on
+working across a server that renames the folder underneath it, and a rule may only name a folder the account actually
+mirrors. [Folder aliases and discovery](imap-synchronization.md#folder-aliases-and-discovery) states what a binding is
+and when it moves.
+
+### Which combinations a rule may declare
+
+At most one action decides where the matched occurrence ends up — a relocation, a copy, or a deletion — and a deletion
+admits nothing beside it.
+
+| Combination | Verdict | Why |
+| --- | --- | --- |
+| `MoveTo` alone | permitted | |
+| `CopyTo` alone | permitted | |
+| `Delete` alone | permitted | |
+| `MarkAsRead` alone | permitted | |
+| `MoveTo` and `MarkAsRead` | permitted | The flag is written first, on the occurrence the condition matched |
+| `CopyTo` and `MarkAsRead` | permitted | The same: the flag is written before the copy is placed |
+| `MoveTo` and `CopyTo` | refused | Two fates for one occurrence; whichever ran second would act on a message no longer where the rule matched it |
+| `MoveTo` and `Delete` | refused | The same, and the deletion would undo the filing |
+| `CopyTo` and `Delete` | refused | The same |
+| `Delete` and `MarkAsRead` | refused | A flag written on a message being removed is a flag nobody will ever read |
+
+**A refused combination is refused where it is written.** Startup fails naming the rule, the key, and which action could
+not be honored beside which, rather than a run resolving it against a mailbox — no resolution invented at run time would
+be the one the operator meant, and a rule that resolved differently depending on what a server answered would not be a
+rule.
+
+### The order they are applied in
+
+The actions of one rule are applied in **MailFathom's order rather than the order they were written in**, so that every
+permitted combination acts on the occurrence the condition matched, and so that the answer is the same on every run and
+on every instance:
+
+1. `MarkAsRead`
+2. `CopyTo`
+3. `MoveTo`
+4. `Delete`
+
+The same order governs the actions of two rules that both match one email, which no single rule's block could order on
+its own.
+
+### How a change reaches the mail server
+
+**A rule pass opens no connection.** Each action a match asks for is written down as a
+[durable mutation record](imap-synchronization.md#every-change-is-written-down-before-it-is-issued) inside the same
+transaction that records the evaluation, and the account's own convergence pass — the first thing every account run does
+— is what issues the IMAP commands. Three things follow, and each is the point of the arrangement:
+
+- **A pass that fails costs no mail server work.** Evaluation reaches nothing remote, so a local failure never defers the
+  account's fetching.
+- **A change survives a restart.** A record written and not yet carried is picked up by the next run, and
+  [a change nobody finished finishes by itself](imap-synchronization.md#a-change-nobody-finished-finishes-by-itself)
+  states every way one can be left and what becomes of it.
+- **Asking twice asks once.** The record's identity is the email occurrence, the mutation, and who asked — and for a
+  rule, *who asked* is the rule's name together with the revision of the rule set that matched. So a whole-mailbox run
+  over mail a rule has already acted on issues nothing, while an edit to the rule set is a new revision and therefore a
+  fresh request. An owner who moved the message back by hand is not overruled by the rule that filed it.
+
+**A change MailFathom made does not come back as something to act on.** A rule filing a message would otherwise meet it
+in its new folder, match again, and file it again for as long as the folder is watched;
+[a change MailFathom made is not a change to react to](imap-synchronization.md#a-change-mailfathom-made-is-not-a-change-to-react-to)
+states how the record answers that exactly, without a cycle counter or a rate limit.
+
+**What a deletion does to the local copy is the account's decision**, taken from `AuthoredDeleteEmailDisposition` at the
+moment the request is written, exactly as a deletion somebody authored through a tool is.
+[What becomes of a message MailFathom deleted itself](imap-synchronization.md#what-becomes-of-a-message-mailfathom-deleted-itself)
+states the three answers.
+
+### What an account permits a rule to do
+
+Each account states, under `MailSynchronization:Accounts:<n>:RuleActions`, which of the four changes a rule may make to
+its mailbox:
+
+| Key | Default | What it permits |
+| --- | --- | --- |
+| `Move` | `true` | A rule may file this account's mail into another of its folders |
+| `Copy` | `true` | A rule may place a copy of this account's mail in another of its folders |
+| `Delete` | `false` | A rule may remove this account's mail |
+| `MarkAsRead` | `true` | A rule may set or clear this account's `\Seen` flag |
+
+**Deletion is opt-in and the other three are opt-out**, because deletion is the one action whose result cannot be
+undone by editing a rule afterwards.
+
+**A rule declaring an action an account it reaches does not permit is refused when the configuration is read**, naming
+the rule, the action, and the account. It is refused rather than skipped for the reason a mistyped account identifier
+is: a rule that silently did less on one account than on another would be indistinguishable from a rule that never
+matched there. An unscoped rule reaches every declared account, so the remedy is either to permit the action on that
+account or to narrow the rule's `Accounts` filter to the accounts that permit it.
+
+**Withdrawing a permission takes effect at the next pass, not at the next edit of the rules.** The two sections reload
+independently, so narrowing what an account permits leaves a rule set nobody edited in force; the permission is
+therefore read again when each change is written down, and an action it now refuses is
+[a failed action](#when-a-change-cannot-be-made) rather than one more deletion. The rule itself stays as written and is
+refused the next time the rule section is read, which is the message that says what to edit.
+
+### When a change cannot be made
+
+Validation settles what a rule may declare, so what is left is what only the mailbox in front of the pass can cause.
+Each is recorded against the rule that asked, and the actions beside it are still carried:
+
+| Reason | What happened |
+| --- | --- |
+| `DestinationFolderUnresolved` | The destination alias is bound to no folder on the server — nothing has discovered it yet, or the folder it named has gone |
+| `AccountNoLongerConfigured` | The account was withdrawn from the configuration between the rule set being read and the change being written |
+| `ActionNoLongerPermitted` | The account has stopped permitting this action since the rule set that declares it was read |
+
+Nothing is written down in any of the three cases: filing into whichever folder looked closest to the name is precisely
+what a stale destination must not do. The account run reports how many changes it asked for, how many it withheld because
+another matching rule had already settled the same message, and how many named something that no longer resolves,
+together with the rules involved. Counts and rule names only — nothing derived from a message reaches a log line, a
+metric, or a span.
 
 ## The facts a condition can read
 
@@ -200,6 +333,13 @@ each is refused with a message naming the rule, what was wrong, and where:
 The rule's `Accounts` filter is checked beside those four: every identifier names a declared account, none is blank, and
 none is repeated.
 
+So is its `Actions` block, against the rule itself and against every account the rule reaches:
+
+- **The destinations.** Each names something readable as a folder alias, and each names a folder the account actually
+  mirrors — a rule filing into a folder nothing mirrors could never resolve a destination.
+- **The combination.** The actions are ones MailFathom applies together, per [the table above](#which-combinations-a-rule-may-declare).
+- **The permissions.** Every action is one the account permits a rule to take.
+
 Every defect in every rule is reported together, so a rule set with three mistakes is fixed once rather than three
 restarts running.
 
@@ -223,6 +363,18 @@ outcome on every run and on every instance.
 
 `StopWhenMatched` on a rule that matches ends the pass, and the rules below it are not reached. It defaults to `false`.
 A rule that does not match never stops a pass whatever it declares.
+
+**Declared order also settles what two matching rules do to one email.** Their actions are gathered in that order, and
+an action the ones already gathered leave no room for is **withheld** — judged by exactly the table one rule's own
+actions are judged by, so two rules naming incompatible fates settle the way one rule declaring both would have been
+refused. Two rules filing one email into different folders therefore file it into the folder the rule written first
+names; the same two rules the other way round file it the other way; and a rule deleting an email leaves nothing for a
+later rule to file. Whatever survives is then applied in the fixed order above, so a flag a later rule asked for is
+still written before an earlier rule moves the message.
+
+A withheld action is reported with the name of the rule that asked for it, because a rule that appears not to have fired
+is otherwise indistinguishable from one that never matched. `StopWhenMatched` is the way to say which rule owns a
+message rather than leaving it to be settled this way.
 
 ## When rules run
 
@@ -313,7 +465,7 @@ and two instances reading the same file name the same revision.
 
 What moves it and what does not:
 
-- Changing a rule's name, its condition, its `StopWhenMatched`, or the accounts it applies to moves it.
+- Changing a rule's name, its condition, its actions, its `StopWhenMatched`, or the accounts it applies to moves it.
 - Adding, removing, or switching off a rule moves it.
 - Reordering the rules moves it, because declared order is part of what a rule set means.
 - Reformatting the file, reordering the keys within one rule, and changing an unrelated configuration section all leave
@@ -322,6 +474,10 @@ What moves it and what does not:
 The identity carries none of the authored text and no ordering. A record naming a revision therefore holds nothing
 personal that a condition contributed, and a record that has to say which of two revisions came first carries its own
 timestamp rather than inferring one.
+
+The revision is also half of what makes a change idempotent, so moving it has a consequence worth stating: a rule whose
+actions were edited asks afresh for mail it has already acted on, while an unchanged rule re-evaluated under the same
+revision asks for nothing it has already asked for.
 
 ## Worked conditions
 
@@ -379,4 +535,61 @@ Size measured in a unit an owner thinks in:
 
 ```text
 sizeInBytes / 1048576 > 25
+```
+
+## Worked rules
+
+Filing supplier invoices and marking them read, on one account, so that the rules below never see them:
+
+```json
+{
+  "Name": "supplier-invoices",
+  "Accounts": [ "work" ],
+  "Condition": "senderDomain == 'supplier.test' and attachmentCount > 0",
+  "Actions": { "MoveTo": "invoices", "MarkAsRead": true },
+  "StopWhenMatched": true
+}
+```
+
+Keeping a copy of everything a regulator sends, without disturbing where the message itself sits or whether it has been
+read:
+
+```json
+{
+  "Name": "regulator-copies",
+  "Condition": "senderDomain == 'regulator.example'",
+  "Actions": { "CopyTo": "compliance" }
+}
+```
+
+Putting automated notices back in front of somebody by clearing the flag, and nothing else:
+
+```json
+{
+  "Name": "unread-alerts",
+  "Condition": "contains(subject, 'alert') and isSeen",
+  "Actions": { "MarkAsRead": false }
+}
+```
+
+Deleting mail nobody needs — which the account has to permit under
+`MailSynchronization:Accounts:<n>:RuleActions:Delete`, and which is refused at startup if it does not:
+
+```json
+{
+  "Name": "drop-build-notifications",
+  "Accounts": [ "work" ],
+  "Condition": "senderAddress == 'builds@ci.example' and ageInDays > 7",
+  "Actions": { "Delete": true }
+}
+```
+
+Selecting mail and changing nothing, which is what a rule owning a message ahead of the rules below it looks like:
+
+```json
+{
+  "Name": "leave-family-mail-alone",
+  "Condition": "senderDomain == 'family.example'",
+  "StopWhenMatched": true
+}
 ```

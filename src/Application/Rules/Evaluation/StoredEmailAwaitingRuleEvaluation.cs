@@ -9,6 +9,11 @@ namespace MailFathom.Application.Rules.Evaluation;
 
 /// <summary>One stored email a pass is about to evaluate, with everything a condition can read without a second query.</summary>
 /// <param name="StoredEmailId">The local identity the pass records its progress and its evaluation against.</param>
+/// <param name="Occurrence">
+/// Where the email is on the mail server, which is what a change a matching rule asks for is issued against. It is read
+/// with the facts rather than looked up afterwards, because an occurrence a later query returned would be the one the
+/// mailbox holds now rather than the one the rule matched.
+/// </param>
 /// <param name="Facts">The metadata every fact but the body text is resolved from.</param>
 /// <param name="AwaitsExtraction">
 /// Whether text is still expected to be derived from this email's content — the content already stored, or the content a
@@ -18,5 +23,6 @@ namespace MailFathom.Application.Rules.Evaluation;
 /// </param>
 public sealed record StoredEmailAwaitingRuleEvaluation(
     StoredEmailId StoredEmailId,
+    EmailOccurrenceId Occurrence,
     MailRuleEmailFacts Facts,
     bool AwaitsExtraction);

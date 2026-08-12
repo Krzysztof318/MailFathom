@@ -433,6 +433,23 @@ public sealed class MailSynchronizationOptionsTests
             && message.Contains("answering audit trail configuration must be a block", StringComparison.Ordinal));
     }
 
+    /// <summary>A missing block would read as an account permitting nothing, which refuses rules while naming the wrong cause.</summary>
+    [Fact]
+    public void ValidateForSynchronization_AccountWithNoRuleActionBlock_ReportsIt()
+    {
+        // Arrange
+        var account = CreateAccount("primary");
+        account.RuleActions = null!;
+        var options = new MailSynchronizationOptions { Enabled = true, Accounts = [account] };
+
+        // Act
+        var messages = options.ValidateForSynchronization().Select(result => result.ErrorMessage).ToArray();
+
+        // Assert
+        Assert.Contains(messages, message => message!.Contains("Account 'primary'", StringComparison.Ordinal)
+            && message.Contains("rule action permissions must be a block", StringComparison.Ordinal));
+    }
+
     /// <summary>Off by default and separate from the mutation trail, which is what the two blocks together have to mean.</summary>
     [Fact]
     public void GetAnsweringAuditSettings_AnAccountThatTurnedOnlyTheMutationTrailOn_KeepsTheAnsweringRecordOff()

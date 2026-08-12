@@ -147,7 +147,7 @@ public sealed class MailboxMutationAuditQueryTests
         DestinationFolderPath = RemoteFolderPath.Create("Archive", '/'),
         Placement = RemoteEmailPlacement.NotReported(),
         DesiredSeenState = null,
-        Requester = MailboxMutationRequester.Rule("file-newsletters", 3),
+        Requester = MailboxMutationRequester.Rule("file-newsletters", "3"),
         RequestedAt = CompletedAt.AddMinutes(-1),
         CompletedAt = CompletedAt,
         Outcome = MailboxMutationAuditOutcome.Performed,

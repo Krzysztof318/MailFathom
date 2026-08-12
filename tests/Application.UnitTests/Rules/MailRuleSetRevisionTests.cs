@@ -3,6 +3,8 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.Rules;
+using MailFathom.Application.Rules.Actions;
+using MailFathom.Domain.Folders;
 using Xunit;
 
 namespace MailFathom.Application.UnitTests.Rules;
@@ -10,11 +12,22 @@ namespace MailFathom.Application.UnitTests.Rules;
 /// <summary>Covers what moves a rule set's identity and, just as importantly, what leaves it alone.</summary>
 public sealed class MailRuleSetRevisionTests
 {
+    private static readonly MailRuleAction FileIntoArchive =
+        MailRuleAction.Relocate(MailFolderAlias.Create("archive"));
+
+    public static TheoryData<string, MailRuleAction[]> ActionEdits => new()
+    {
+        { "a different destination", [MailRuleAction.Relocate(MailFolderAlias.Create("backup"))] },
+        { "a different mutation", [MailRuleAction.Copy(MailFolderAlias.Create("archive"))] },
+        { "one more action", [FileIntoArchive, MailRuleAction.SetSeen(isSeen: true)] },
+        { "no action at all", [] },
+    };
+
     private static readonly MailRuleDeclaration FileInvoices =
-        new("file-invoices", "senderDomain == 'supplier.test'", StopWhenMatched: true, Accounts: []);
+        new("file-invoices", "senderDomain == 'supplier.test'", Actions: [], StopWhenMatched: true, Accounts: []);
 
     private static readonly MailRuleDeclaration ArchiveOld =
-        new("archive-old", "ageInDays > 365", StopWhenMatched: false, Accounts: []);
+        new("archive-old", "ageInDays > 365", Actions: [], StopWhenMatched: false, Accounts: []);
 
     [Fact]
     public void Create_SameRulesInSameOrder_ProducesTheSameIdentity()
@@ -52,10 +65,38 @@ public sealed class MailRuleSetRevisionTests
         string[] accounts)
     {
         // Act
-        var changed = MailRuleSetRevision.Create([new MailRuleDeclaration(name, conditionText, stopWhenMatched, accounts)]);
+        var changed = MailRuleSetRevision.Create(
+            [new MailRuleDeclaration(name, conditionText, FileInvoices.Actions, stopWhenMatched, accounts)]);
 
         // Assert
         Assert.NotEqual(MailRuleSetRevision.Create([FileInvoices]), changed);
+    }
+
+    /// <summary>A request's identity carries the revision, so an edited action has to ask afresh rather than be answered by the old record.</summary>
+    [Theory]
+    [MemberData(nameof(ActionEdits))]
+    public void Create_AnEditToWhatARuleDoes_ProducesADifferentIdentity(string scenario, MailRuleAction[] actions)
+    {
+        // Act
+        var edited = MailRuleSetRevision.Create([FileInvoices with { Actions = actions }]);
+
+        // Assert
+        Assert.NotEqual(MailRuleSetRevision.Create([FileInvoices with { Actions = [FileIntoArchive] }]), edited);
+        Assert.False(string.IsNullOrWhiteSpace(scenario));
+    }
+
+    /// <summary>The actions inside one rule are separated too, so two action sets cannot render as the same text.</summary>
+    [Fact]
+    public void Create_ActionsWhoseNamesRunTogether_StayDistinct()
+    {
+        // Act
+        var twoActions = MailRuleSetRevision.Create(
+            [FileInvoices with { Actions = [MailRuleAction.SetSeen(isSeen: true), FileIntoArchive] }]);
+        var oneAction = MailRuleSetRevision.Create(
+            [FileInvoices with { Actions = [MailRuleAction.Relocate(MailFolderAlias.Create("set-seen=truerelocate=archive"))] }]);
+
+        // Assert
+        Assert.NotEqual(twoActions, oneAction);
     }
 
     /// <summary>No separator a rule could contain, so two different sets cannot render as one.</summary>
@@ -65,13 +106,13 @@ public sealed class MailRuleSetRevisionTests
         // Act
         var first = MailRuleSetRevision.Create(
         [
-            new MailRuleDeclaration("a", "isSeen", StopWhenMatched: false, Accounts: []),
-            new MailRuleDeclaration("b", "isDraft", StopWhenMatched: false, Accounts: []),
+            new MailRuleDeclaration("a", "isSeen", Actions: [], StopWhenMatched: false, Accounts: []),
+            new MailRuleDeclaration("b", "isDraft", Actions: [], StopWhenMatched: false, Accounts: []),
         ]);
         var second = MailRuleSetRevision.Create(
         [
-            new MailRuleDeclaration("a", "isSeen", StopWhenMatched: false, Accounts: []),
-            new MailRuleDeclaration("bisDraft", "continue", StopWhenMatched: false, Accounts: []),
+            new MailRuleDeclaration("a", "isSeen", Actions: [], StopWhenMatched: false, Accounts: []),
+            new MailRuleDeclaration("bisDraft", "continue", Actions: [], StopWhenMatched: false, Accounts: []),
         ]);
 
         // Assert
@@ -84,9 +125,9 @@ public sealed class MailRuleSetRevisionTests
     {
         // Act
         var twoAccounts = MailRuleSetRevision.Create(
-            [new MailRuleDeclaration("a", "isSeen", StopWhenMatched: false, Accounts: ["primary", "work"])]);
+            [new MailRuleDeclaration("a", "isSeen", Actions: [], StopWhenMatched: false, Accounts: ["primary", "work"])]);
         var oneAccount = MailRuleSetRevision.Create(
-            [new MailRuleDeclaration("a", "isSeen", StopWhenMatched: false, Accounts: ["primarywork"])]);
+            [new MailRuleDeclaration("a", "isSeen", Actions: [], StopWhenMatched: false, Accounts: ["primarywork"])]);
 
         // Assert
         Assert.NotEqual(twoAccounts, oneAccount);

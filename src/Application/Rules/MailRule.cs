@@ -3,11 +3,12 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.Collections.Frozen;
+using MailFathom.Application.Rules.Actions;
 using MailFathom.Application.Rules.Conditions;
 
 namespace MailFathom.Application.Rules;
 
-/// <summary>One rule of a bound rule set: a name, the accounts it applies to, a condition, and what a match does to the pass.</summary>
+/// <summary>One rule of a bound rule set: a name, the accounts it applies to, a condition, and what a match does.</summary>
 /// <remarks>
 /// Carries a compiled condition rather than the text it was written from, so nothing downstream of binding can read what
 /// an operator typed. What a rule can be reported by is its name, which is MailFathom's own configured name for it and
@@ -18,11 +19,13 @@ public sealed class MailRule
     private MailRule(
         string name,
         IMailRuleCondition condition,
+        MailRuleActionSet actions,
         bool stopWhenMatched,
         FrozenSet<string> accounts)
     {
         this.Name = name;
         this.Condition = condition;
+        this.Actions = actions;
         this.StopWhenMatched = stopWhenMatched;
         this.Accounts = accounts;
     }
@@ -32,6 +35,13 @@ public sealed class MailRule
 
     /// <summary>Gets the condition an email is matched against.</summary>
     public IMailRuleCondition Condition { get; }
+
+    /// <summary>Gets what a match does to the matching email, in the order the changes are applied.</summary>
+    /// <remarks>
+    /// Empty for a rule that selects mail and changes nothing, which is what a rule ending the pass declares to keep the
+    /// mail it names away from the rules below it.
+    /// </remarks>
+    public MailRuleActionSet Actions { get; }
 
     /// <summary>Gets whether a match ends the pass rather than continuing to the rules declared below this one.</summary>
     public bool StopWhenMatched { get; }
@@ -47,6 +57,7 @@ public sealed class MailRule
     /// <summary>Creates a rule from a condition that has already been proven usable.</summary>
     /// <param name="name">The name the rule is declared and reported under.</param>
     /// <param name="condition">The compiled condition.</param>
+    /// <param name="actions">What a match does to the matching email, or nothing for a rule that changes nothing.</param>
     /// <param name="stopWhenMatched">Whether a match ends the pass.</param>
     /// <param name="accounts">The accounts the rule applies to, or nothing for a rule that applies to every account.</param>
     /// <returns>The rule.</returns>
@@ -55,7 +66,8 @@ public sealed class MailRule
     public static MailRule Create(
         string name,
         IMailRuleCondition condition,
-        bool stopWhenMatched,
+        MailRuleActionSet? actions = null,
+        bool stopWhenMatched = false,
         IReadOnlyList<string>? accounts = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
@@ -69,6 +81,7 @@ public sealed class MailRule
         return new MailRule(
             name,
             condition,
+            actions ?? MailRuleActionSet.Empty,
             stopWhenMatched,
             accounts is null ? FrozenSet<string>.Empty : accounts.Select(account => account.Trim()).ToFrozenSet(StringComparer.Ordinal));
     }

@@ -11,6 +11,7 @@ using MailFathom.Application.Mail;
 using MailFathom.Application.Mail.Mutations;
 using MailFathom.Application.Mail.Mutations.Audit;
 using MailFathom.Application.Retrieval.AskMail.Audit;
+using MailFathom.Application.Rules.Actions;
 using MailFathom.Application.Synchronization;
 using MailFathom.Application.Synchronization.Checkpoints;
 using MailFathom.Application.Synchronization.Reconciliation;
@@ -34,6 +35,7 @@ internal sealed class MailSynchronizationOptions
         IMailSynchronizationWindowReader,
         IRemotelyDeletedEmailDispositionReader,
         IAuthoredDeleteEmailDispositionReader,
+        IMailRuleActionPermissionReader,
         IMailboxMutationAuditSettingsReader,
         IMailAnsweringAuditSettingsReader,
         IMailAccountCatalog,
@@ -416,6 +418,14 @@ internal sealed class MailSynchronizationOptions
     }
 
     /// <inheritdoc />
+    public MailRuleActionPermissions GetRuleActionPermissions(MailAccountId accountId)
+    {
+        var account = this.FindAccount(accountId.Value);
+
+        return (account.RuleActions ?? new MailRuleActionPermissionOptions()).ToPermissions();
+    }
+
+    /// <inheritdoc />
     /// <remarks>
     /// An account this snapshot no longer names reports <see cref="MailboxMutationAuditSettings.Disabled" /> rather
     /// than failing, unlike every other per-account reader here. The two callers are why: a mutation is only recorded
@@ -736,6 +746,14 @@ internal sealed class MailSynchronizationAccountOptions : IValidatableObject
     public AuthoredDeleteEmailDisposition AuthoredDeleteEmailDisposition { get; set; } =
         AuthoredDeleteEmailDisposition.RetainLocalCopy;
 
+    /// <summary>Gets or sets which changes a mail rule may make to this account's mailbox.</summary>
+    /// <remarks>
+    /// Omitting the block permits the three reversible actions and refuses deletion, which is what every account gets
+    /// until it says otherwise. What a rule declares is judged against this when the rule set is read, so an account
+    /// that refuses an action never has a rule silently skipped over it.
+    /// </remarks>
+    public MailRuleActionPermissionOptions RuleActions { get; set; } = new();
+
     /// <summary>Gets or sets whether and for how long this account keeps a record of the changes MailFathom made to it.</summary>
     /// <remarks>
     /// Omitting the block leaves the trail off, which is the default for the reason the privacy rules require: the trail
@@ -859,6 +877,16 @@ internal sealed class MailSynchronizationAccountOptions : IValidatableObject
             yield return new ValidationResult(
                 $"Account '{this.AccountId}': the answering audit trail retention must be between {MailAnsweringAuditTrailOptions.MinimumRetention} and {MailAnsweringAuditTrailOptions.MaximumRetention}.",
                 [nameof(this.AnsweringAuditTrail)]);
+        }
+
+        // Checked here for the reason the blocks above are. A missing block would read as an account that permits
+        // nothing, so every rule declaring an action over it would be refused with a message naming the rule rather
+        // than the configuration that actually went missing.
+        if (this.RuleActions is null)
+        {
+            yield return new ValidationResult(
+                $"Account '{this.AccountId}': the rule action permissions must be a block.",
+                [nameof(this.RuleActions)]);
         }
 
         if (this.Folders is null)

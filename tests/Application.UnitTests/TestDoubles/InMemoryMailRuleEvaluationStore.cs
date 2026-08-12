@@ -7,6 +7,7 @@ using MailFathom.Application.Rules.Evaluation;
 using MailFathom.Application.Rules.Facts;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
+using MailFathom.Domain.Folders;
 
 namespace MailFathom.Application.UnitTests.TestDoubles;
 
@@ -43,6 +44,13 @@ internal sealed class InMemoryMailRuleEvaluationStore : IMailRuleEvaluationStore
         var row = new StoredRow
         {
             Id = StoredEmailId.Create(Guid.CreateVersion7()),
+            Occurrence = EmailOccurrenceId.Create(
+                MailAccountId.Create(facts.Account),
+                new MailFolderResolutionId(
+                    MailFolderAlias.Create(facts.Folder),
+                    MailFolderResolutionGeneration.First),
+                ImapUidValidity.Create(1),
+                ImapUid.Create((uint)this.rows.Count + 1)),
             Facts = facts,
             AwaitsExtraction = awaitsExtraction,
             BodyText = bodyText,
@@ -128,13 +136,19 @@ internal sealed class InMemoryMailRuleEvaluationStore : IMailRuleEvaluationStore
                 .Skip(startIndex)
                 .Where(row => row.Facts.Account == accountId.Value && admits(row))
                 .Take(batchSize)
-                .Select(row => new StoredEmailAwaitingRuleEvaluation(row.Id, row.Facts, row.AwaitsExtraction)),
+                .Select(row => new StoredEmailAwaitingRuleEvaluation(
+                    row.Id,
+                    row.Occurrence,
+                    row.Facts,
+                    row.AwaitsExtraction)),
         ];
     }
 
     private sealed class StoredRow
     {
         internal required StoredEmailId Id { get; init; }
+
+        internal required EmailOccurrenceId Occurrence { get; init; }
 
         internal required MailRuleEmailFacts Facts { get; set; }
 

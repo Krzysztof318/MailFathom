@@ -1148,12 +1148,12 @@ happens to mail a person moved or deleted in their own client.
 #### A change MailFathom made is not a change to react to
 
 The join above is one reader of the record. The other is provenance: a change MailFathom performed must not come back
-as something to act on. Once rules can write to a mailbox, that stops being tidiness. A rule matching on folder would
-file a message, meet it in its new folder, match again, and go round for as long as the folder is watched — an IMAP
-command a lap — and two rules with overlapping conditions would do the same to each other. `\Seen` is the case that
-makes it unavoidable: a flag change reaches synchronization as a changed modification sequence, which is precisely the
-signal a person marking mail read in their own client produces, so a rule conditioned on unread mail that marks mail
-read would re-evaluate everything it had just acted on.
+as something to act on. Rules write to a mailbox, which is what makes that a correctness rule rather than tidiness. A
+rule matching on folder would file a message, meet it in its new folder, match again, and go round for as long as the
+folder is watched — an IMAP command a lap — and two rules with overlapping conditions would do the same to each other.
+`\Seen` is the case that makes it unavoidable: a flag change reaches synchronization as a changed modification
+sequence, which is precisely the signal a person marking mail read in their own client produces, so a rule conditioned
+on unread mail that marks mail read would re-evaluate everything it had just acted on.
 
 A run therefore **withholds** every change a mutation record accounts for, and raises everything else. There is no
 cycle counter, no depth limit, and no rate limit involved, and that is deliberate: a cycle limit stops a loop only

@@ -49,6 +49,27 @@ public sealed record MailRuleEvaluationWalk
     /// <summary>Gets the names of the rules that failed to answer during the walk, sorted and without repetition.</summary>
     public IReadOnlyList<string> FailedRuleNames { get; init; } = [];
 
+    /// <summary>Gets how many changes to the mailbox the walk asked for, counted per action rather than per email.</summary>
+    /// <remarks>
+    /// A change is asked for by writing a durable record down; the account's convergence pass is what carries it to the
+    /// mail server. A record a previous pass already opened for the same rule, revision, and email is counted here as
+    /// well, because asking again is the same request rather than a second one.
+    /// </remarks>
+    public int RequestedActionCount { get; init; }
+
+    /// <summary>Gets how many actions another matching rule had already settled the same occurrence's fate for.</summary>
+    public int WithheldActionCount { get; init; }
+
+    /// <summary>Gets how many actions nothing was asked for because what they named had stopped being resolvable.</summary>
+    public int FailedActionCount { get; init; }
+
+    /// <summary>Gets the names of the rules at least one of whose actions the walk did not carry out, sorted and without repetition.</summary>
+    /// <remarks>
+    /// Sorted for the reason <see cref="MatchedRuleNames" /> is. Both a withheld action and a failed one put a rule
+    /// here, because to the operator reading a rule that appears not to have fired they are the same question.
+    /// </remarks>
+    public IReadOnlyList<string> UnappliedActionRuleNames { get; init; } = [];
+
     /// <summary>Gets whether the walk left work behind because its batch budget ran out.</summary>
     public bool EmailsRemain { get; init; }
 

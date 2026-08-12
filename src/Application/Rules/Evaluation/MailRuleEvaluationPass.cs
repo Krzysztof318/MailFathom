@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.Persistence;
+using MailFathom.Application.Rules.Actions;
 using MailFathom.Application.Rules.Conditions;
 using MailFathom.Application.Rules.Facts;
 using MailFathom.Domain.Accounts;
@@ -34,6 +35,13 @@ namespace MailFathom.Application.Rules.Evaluation;
 /// at the email nobody read rather than replaying one or stepping over one. What a batch budget leaves behind is the
 /// next account run's, which is the same answer synchronization itself gives to a folder it could not finish.
 /// </para>
+/// <para>
+/// What a match asks the mailbox for is written down in the batch's own transaction, as the durable mutation record
+/// every requester uses, and never issued from here: a pass reaches no mail server, and the account's convergence pass
+/// is what carries each record to a completed or a dead-lettered ending. Committing the requests with the evaluations
+/// is what makes the pair atomic — an email is never recorded as evaluated while the change its rules asked for was
+/// lost, and a rolled-back batch asks again under the same identity.
+/// </para>
 /// </remarks>
 public sealed class MailRuleEvaluationPass
 {
@@ -41,6 +49,7 @@ public sealed class MailRuleEvaluationPass
     private readonly MailRuleSetEvaluator evaluator;
     private readonly IMailRuleEvaluationStore store;
     private readonly IMailRuleEvaluationRunStore runStore;
+    private readonly MailRuleActionRecorder actionRecorder;
     private readonly OptimisticConcurrencyRetryPolicy commitPolicy;
     private readonly MailRuleEvaluationOptions options;
     private readonly TimeProvider timeProvider;
@@ -50,6 +59,7 @@ public sealed class MailRuleEvaluationPass
     /// <param name="evaluator">Runs a rule set over one email and classifies every way a condition can fail to answer.</param>
     /// <param name="store">Reads the candidates and records which emails have been evaluated.</param>
     /// <param name="runStore">Reads the requested whole-mailbox run and records how far it has been carried.</param>
+    /// <param name="actionRecorder">Writes down the changes a matching rule asks the mailbox for.</param>
     /// <param name="commitPolicy">Commits a batch's evaluations together with the position they account for.</param>
     /// <param name="options">Bounds one walk.</param>
     /// <param name="timeProvider">Supplies the instant each email is evaluated at and each record is stamped with.</param>
@@ -60,6 +70,7 @@ public sealed class MailRuleEvaluationPass
         MailRuleSetEvaluator evaluator,
         IMailRuleEvaluationStore store,
         IMailRuleEvaluationRunStore runStore,
+        MailRuleActionRecorder actionRecorder,
         OptimisticConcurrencyRetryPolicy commitPolicy,
         MailRuleEvaluationOptions options,
         TimeProvider timeProvider)
@@ -68,6 +79,7 @@ public sealed class MailRuleEvaluationPass
         ArgumentNullException.ThrowIfNull(evaluator);
         ArgumentNullException.ThrowIfNull(store);
         ArgumentNullException.ThrowIfNull(runStore);
+        ArgumentNullException.ThrowIfNull(actionRecorder);
         ArgumentNullException.ThrowIfNull(commitPolicy);
         ArgumentNullException.ThrowIfNull(options);
         ArgumentNullException.ThrowIfNull(timeProvider);
@@ -78,6 +90,7 @@ public sealed class MailRuleEvaluationPass
         this.evaluator = evaluator;
         this.store = store;
         this.runStore = runStore;
+        this.actionRecorder = actionRecorder;
         this.commitPolicy = commitPolicy;
         this.options = options;
         this.timeProvider = timeProvider;
@@ -163,11 +176,20 @@ public sealed class MailRuleEvaluationPass
                 var evaluatedAt = this.timeProvider.GetUtcNow();
 
                 await this.commitPolicy.CommitAsync(
-                    (session, attemptCancellationToken) => this.store.RecordEvaluatedAsync(
-                        session,
-                        outcome.EvaluatedEmailIds,
-                        evaluatedAt,
-                        attemptCancellationToken),
+                    async (session, attemptCancellationToken) =>
+                    {
+                        await this.store.RecordEvaluatedAsync(
+                            session,
+                            outcome.EvaluatedEmailIds,
+                            evaluatedAt,
+                            attemptCancellationToken);
+
+                        await this.RecordActionsAsync(
+                            session,
+                            ruleSet.Revision,
+                            outcome,
+                            attemptCancellationToken);
+                    },
                     cancellationToken);
             }
 
@@ -281,6 +303,8 @@ public sealed class MailRuleEvaluationPass
                     recordedAt,
                     attemptCancellationToken);
 
+                await this.RecordActionsAsync(session, ruleSet.Revision, outcome, attemptCancellationToken);
+
                 await this.runStore.SaveAsync(session, carried, attemptCancellationToken);
             },
             cancellationToken);
@@ -288,6 +312,34 @@ public sealed class MailRuleEvaluationPass
         tally.Add(outcome);
 
         return carried;
+    }
+
+    /// <summary>Writes down every change the batch's matching rules asked for, inside the batch's own transaction.</summary>
+    /// <remarks>
+    /// The counts are reset at the start rather than added to, because the commit policy re-runs this whole delegate
+    /// when it loses an optimistic race. Adding to them would count the losing attempt's records as well as the winning
+    /// one's, and the losing attempt wrote nothing.
+    /// </remarks>
+    private async Task RecordActionsAsync(
+        IPersistenceSession session,
+        MailRuleSetRevision revision,
+        MailRuleEvaluationBatch outcome,
+        CancellationToken cancellationToken)
+    {
+        outcome.ForgetRecordedActions();
+
+        foreach (var pending in outcome.PendingActions)
+        {
+            var recording = await this.actionRecorder.RecordAsync(
+                session,
+                pending.StoredEmailId,
+                pending.Occurrence,
+                pending.Plan,
+                revision,
+                cancellationToken);
+
+            outcome.ActionsRecorded(recording);
+        }
     }
 
     private Task CommitRunAsync(MailRuleEvaluationRun run, CancellationToken cancellationToken) =>
@@ -332,7 +384,7 @@ public sealed class MailRuleEvaluationPass
 
             var evaluation = await this.evaluator.EvaluateAsync(ruleSet, facts, cancellationToken);
 
-            outcome.Evaluated(candidate.StoredEmailId, evaluation);
+            outcome.Evaluated(candidate, evaluation);
         }
 
         return outcome;
@@ -353,15 +405,25 @@ public sealed class MailRuleEvaluationPass
 
         internal int TimedOutRuleCount { get; private set; }
 
+        internal int RequestedActionCount { get; private set; }
+
+        internal int WithheldActionCount { get; private set; }
+
+        internal int FailedActionCount { get; private set; }
+
         internal SortedSet<string> MatchedRuleNames { get; } = new(StringComparer.Ordinal);
 
         internal SortedSet<string> FailedRuleNames { get; } = new(StringComparer.Ordinal);
 
+        internal SortedSet<string> UnappliedActionRuleNames { get; } = new(StringComparer.Ordinal);
+
+        internal List<PendingMailRuleActions> PendingActions { get; } = [];
+
         internal void Skipped() => this.SkippedEmailCount++;
 
-        internal void Evaluated(StoredEmailId storedEmailId, MailRuleSetEvaluation evaluation)
+        internal void Evaluated(StoredEmailAwaitingRuleEvaluation candidate, MailRuleSetEvaluation evaluation)
         {
-            this.EvaluatedEmailIds.Add(storedEmailId);
+            this.EvaluatedEmailIds.Add(candidate.StoredEmailId);
 
             if (evaluation.MatchedRuleNames.Count > 0)
             {
@@ -379,20 +441,57 @@ public sealed class MailRuleEvaluationPass
                     this.TimedOutRuleCount++;
                 }
             }
+
+            // The withheld actions are counted where the plan is composed rather than where it is recorded, because
+            // nothing about them reaches the database and a retried commit would otherwise count them twice.
+            this.WithheldActionCount += evaluation.ActionPlan.WithheldRuleNames.Count;
+            this.UnappliedActionRuleNames.UnionWith(evaluation.ActionPlan.WithheldRuleNames);
+
+            if (!evaluation.ActionPlan.IsEmpty)
+            {
+                this.PendingActions.Add(new PendingMailRuleActions(
+                    candidate.StoredEmailId,
+                    candidate.Occurrence,
+                    evaluation.ActionPlan));
+            }
+        }
+
+        /// <summary>Drops what a commit attempt recorded, so a retry of it counts its own writes and not the lost ones.</summary>
+        internal void ForgetRecordedActions()
+        {
+            this.RequestedActionCount = 0;
+            this.FailedActionCount = 0;
+        }
+
+        internal void ActionsRecorded(MailRuleActionRecording recording)
+        {
+            this.RequestedActionCount += recording.RecordedCount;
+            this.FailedActionCount += recording.Failures.Count;
+            this.UnappliedActionRuleNames.UnionWith(recording.Failures.Select(failure => failure.RuleName));
         }
     }
+
+    /// <summary>One evaluated email whose matching rules asked for a change, held until the batch commits.</summary>
+    private sealed record PendingMailRuleActions(
+        StoredEmailId StoredEmailId,
+        EmailOccurrenceId Occurrence,
+        MailRuleActionPlan Plan);
 
     /// <summary>Adds up the batches of one walk into the counts an operator reads.</summary>
     private sealed class EvaluationTally
     {
         private readonly SortedSet<string> matchedRuleNames = new(StringComparer.Ordinal);
         private readonly SortedSet<string> failedRuleNames = new(StringComparer.Ordinal);
+        private readonly SortedSet<string> unappliedActionRuleNames = new(StringComparer.Ordinal);
 
         private int evaluatedEmailCount;
         private int matchedEmailCount;
         private int skippedEmailCount;
         private int failedRuleCount;
         private int timedOutRuleCount;
+        private int requestedActionCount;
+        private int withheldActionCount;
+        private int failedActionCount;
 
         internal void Add(MailRuleEvaluationBatch batch)
         {
@@ -401,8 +500,12 @@ public sealed class MailRuleEvaluationPass
             this.skippedEmailCount += batch.SkippedEmailCount;
             this.failedRuleCount += batch.FailedRuleCount;
             this.timedOutRuleCount += batch.TimedOutRuleCount;
+            this.requestedActionCount += batch.RequestedActionCount;
+            this.withheldActionCount += batch.WithheldActionCount;
+            this.failedActionCount += batch.FailedActionCount;
             this.matchedRuleNames.UnionWith(batch.MatchedRuleNames);
             this.failedRuleNames.UnionWith(batch.FailedRuleNames);
+            this.unappliedActionRuleNames.UnionWith(batch.UnappliedActionRuleNames);
         }
 
         internal MailRuleEvaluationWalk ToWalk(bool emailsRemain) => new()
@@ -412,8 +515,12 @@ public sealed class MailRuleEvaluationPass
             SkippedEmailCount = this.skippedEmailCount,
             FailedRuleCount = this.failedRuleCount,
             TimedOutRuleCount = this.timedOutRuleCount,
+            RequestedActionCount = this.requestedActionCount,
+            WithheldActionCount = this.withheldActionCount,
+            FailedActionCount = this.failedActionCount,
             MatchedRuleNames = [.. this.matchedRuleNames],
             FailedRuleNames = [.. this.failedRuleNames],
+            UnappliedActionRuleNames = [.. this.unappliedActionRuleNames],
             EmailsRemain = emailsRemain,
         };
     }
