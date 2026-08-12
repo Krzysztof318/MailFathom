@@ -105,15 +105,16 @@ internal sealed class PresidioAnalyzerProbe : IPersonalDataAnalyzerProbe
 
             if (!response.IsSuccessStatusCode)
             {
-                // The status alone. A refusal's body is written by a service this process does not own, and the analyzer's
-                // answer to an unsupported language quotes the request back.
+                // The status alone, as its number and .NET's own name for it. A refusal's body is written by a service this
+                // process does not own, and so is the reason phrase beside the status line — a proxy or a wrong service at
+                // the configured address composes both, and this message reaches a startup log.
                 throw PersonalDataAnalyzerUnavailableException.Refused(
                     this.profile.Endpoint.ToString(),
                     string.Format(
                         CultureInfo.InvariantCulture,
                         "{0:D} {1}",
                         response.StatusCode,
-                        response.ReasonPhrase ?? response.StatusCode.ToString()));
+                        response.StatusCode));
             }
 
             supported = await response.Content.ReadFromJsonAsync(

@@ -16,10 +16,13 @@ namespace MailFathom.Application.SensitiveContent.Detection;
 /// carried on is not.
 /// </para>
 /// <para>
-/// <b>No message here carries the analyzer's address</b>, because a message is what reaches a log and a host name never
-/// does. Each one names <c>SensitiveContent:PersonalDataAnalyzer:Endpoint</c> instead — the key an operator edits to
+/// <b>No message here carries the analyzer's address</b>, because a message is what reaches a log and
+/// <c>src/AGENTS.md</c> § <i>Failures</i> lists a host name beside a credential among the things one may never carry.
+/// Each one names <c>SensitiveContent:PersonalDataAnalyzer:Endpoint</c> instead — the key an operator edits to
 /// repair any of these three states, and the one thing they need to be told, since the value is already in the file they
-/// would open. The resolved address stays on <see cref="Endpoint" /> for a caller with somewhere safe to put it.
+/// would open. The resolved address stays on <see cref="Endpoint" /> for a caller with somewhere safe to put it. Nor does
+/// a message carry anything the analyzer wrote: the <c>status</c> a refusal is reported with is the caller's own rendering
+/// of the status code, because a proxy or a wrong service at that address composes both the body and the reason phrase.
 /// </para>
 /// </remarks>
 public sealed class PersonalDataAnalyzerUnavailableException : MailFathomException

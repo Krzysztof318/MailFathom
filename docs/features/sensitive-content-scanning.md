@@ -120,8 +120,10 @@ finding: the content the scan was about is exactly what must not appear in a fai
 One failure in this feature is a startup failure rather than a scan's: `81002`, raised when the personal-data analyzer
 cannot be reached, answers the startup probe with a refusal, or recognises nothing the configured categories need. It
 names `SensitiveContent:PersonalDataAnalyzer:Endpoint` — the key an operator edits — rather than the address that key
-resolved to, because a message reaches a log and no message this system writes carries a host name. The resolved address
-is on the failure itself for a caller that has somewhere safe to put it.
+resolved to, because a message reaches a log and no message in this feature carries a host name. Neither does it carry
+the analyzer's own words: a refusal is reported as its status number and .NET's name for that status, because a proxy or
+a wrong service at the configured address writes the body and the reason phrase alike. The resolved address is on the
+failure itself for a caller that has somewhere safe to put it.
 
 ## The secret scanner
 

@@ -96,16 +96,17 @@ public sealed class PresidioAnalyzerProbeTests
     }
 
     /// <summary>
-    /// The refusal body is composed by a service this process does not own, and the analyzer's own answer to a rejected
-    /// request quotes what it was asked.
+    /// The refusal body is composed by a service this process does not own, and so is the reason phrase beside its status
+    /// line; the analyzer's own answer to a rejected request quotes what it was asked.
     /// </summary>
     [Fact]
-    public async Task VerifyAvailableAsync_AnalyzerRefusingTheProbe_QuotesNoneOfTheAnswerBody()
+    public async Task VerifyAvailableAsync_AnalyzerRefusingTheProbe_QuotesNothingTheAnswerCarried()
     {
         // Arrange
         using var context = AnalyzerAnswering(
             """{"error":"a body nobody here composed"}""",
-            status: HttpStatusCode.InternalServerError);
+            status: HttpStatusCode.InternalServerError,
+            reasonPhrase: "a phrase nobody here composed");
 
         // Act
         var failure = await Assert.ThrowsAsync<PersonalDataAnalyzerUnavailableException>(
@@ -113,6 +114,9 @@ public sealed class PresidioAnalyzerProbeTests
 
         // Assert
         Assert.DoesNotContain("nobody here composed", failure.Message, StringComparison.Ordinal);
+
+        // What it reports instead is the status twice over, both renderings this process owns.
+        Assert.Contains("500 InternalServerError", failure.Message, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -203,11 +207,13 @@ public sealed class PresidioAnalyzerProbeTests
     private static ProbeContext AnalyzerAnswering(
         string body,
         SensitiveContentPlan? plan = null,
-        HttpStatusCode status = HttpStatusCode.OK)
+        HttpStatusCode status = HttpStatusCode.OK,
+        string? reasonPhrase = null)
     {
         var handler = FakeHttpMessageHandler.AlwaysResponding(() => new HttpResponseMessage(status)
         {
             Content = new StringContent(body, Encoding.UTF8, "application/json"),
+            ReasonPhrase = reasonPhrase,
         });
 
         return Context(handler, plan);
