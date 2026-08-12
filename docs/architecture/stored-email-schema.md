@@ -304,7 +304,7 @@ one of them.
 | `DestinationFolderPath`, `DestinationHierarchyDelimiter` | Where a relocation or a copy was aimed, and null for every other mutation |
 | `PlacementUidValidity`, `PlacementUid` | Where the server said it put the message, where it supplied `COPYUID` |
 | `DesiredSeenState` | Which way a `\Seen` change was asked for, and null for every other mutation |
-| `RequesterOrigin`, `RequesterIdentity` | Who asked — a rule together with the revision that matched, or one invocation |
+| `RequesterOrigin`, `RequesterIdentity` | Who asked — a rule together with the revision that matched, one invocation, or the profile a spam verdict was decided under |
 | `RequestedAt`, `CompletedAt` | When it was asked for and when it ended |
 | `Outcome`, `FailureCode` | `Performed`, or `Abandoned` with the five-digit code it was given up on for |
 

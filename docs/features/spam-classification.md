@@ -8,8 +8,9 @@ decided what it thought of it — in an `Authentication-Results` header, in a pr
 the message in the junk folder. Spam classification is what keeps that decision rather than discarding it, and records
 it as derived data beside the message.
 
-Two things ship here and are independent of each other: the classification record with the stage that fills it, and the
-junk folder becoming a fact that mailbox reads act on. The second is true of a mailbox with no classification at all.
+Three things ship here and are independent of each other: the classification record with the stage that fills it, the
+two switches that let a verdict reach the mail server, and the junk folder becoming a fact that mailbox reads act on.
+The last is true of a mailbox with no classification at all.
 
 ## The junk folder is left out of listing and search
 
@@ -33,7 +34,8 @@ content written to deceive a reader would reach the model as ordinary correspond
 
 One classification per occurrence, replacing whatever was recorded for it. It is derived data of the same kind as an
 embedding: computed locally, never mirrored to the mail server, and never a statement about where the message lives or
-which flags it carries. Filing a message somewhere is a different feature and is not part of this one.
+which flags it carries. Where a message lives is the server's, which is why acting on a verdict is a separate decision
+behind switches of its own — described in [what an operator can let a verdict do](#what-an-operator-can-let-a-verdict-do).
 
 | What it holds | Why |
 | --- | --- |
@@ -153,6 +155,95 @@ The image is pinned to an exact digest in all four places that name it, and movi
 which is what the recorded corpus revision exists to make visible. `THIRD_PARTY_LICENSES.md` records the image, its
 licences, that whole messages are sent to it, and that it bundles no plugin reporting anything outside the deployment.
 
+## What an operator can let a verdict do
+
+Two switches, independent of each other and **both off by default**. With neither on, a verdict is recorded and no
+mailbox is written to, which is what makes classification safe to watch for a while before it is allowed to act.
+
+**File junk in the junk folder.** The message is moved on the mail server, through the same durable mutation record and
+the same write session that carries a change somebody made by hand — described in
+[IMAP synchronization](imap-synchronization.md#every-change-is-written-down-before-it-is-issued). The local row changes
+afterwards, because synchronization observed the move; nothing writes a folder locally ahead of the server. What an
+operator agrees to by switching this on is that spam moves in every client they open, and that correcting a false
+positive means dragging the message back in any one of them — there is no MailFathom-specific undo to learn, and the
+next section says what happens when they do.
+
+**Mark it read.** The remote `\Seen` flag is set. This is the one authored act that sets it: synchronization and content
+retrieval still never do, so reading mail on the owner's behalf goes on leaving the flag alone. A message the server
+already reports read is not written to at all.
+
+With both on, **the flag is set before the move**. On a server without RFC 6851 `MOVE` a relocation gives the message a
+new UID, so a flag stored afterwards would be aimed at an occurrence the source folder no longer holds.
+
+Nothing else is ever done. No delete, no flag other than `\Seen`, no folder created, nothing sent —
+[ADR 0007](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0007-remote-mailbox-mutation-boundary-and-write-session.md)
+refuses the rest and this feature does not reopen that record.
+
+### Where junk is filed, and why it need not be mirrored
+
+The destination is whichever folder the account maps to the `Junk` role, or a folder named explicitly in the
+configuration. **It does not have to be a folder MailFathom mirrors, and for most deployments it should not be**: the
+point of filing spam is to be rid of it rather than to move it around inside the instance. Filing into an unmirrored
+folder takes the local copy with it, under the account's own answer about mail it deletes; filing into a mirrored one
+files identically and leaves the message stored, excluded from listing and search by the rule at the top of this page.
+[IMAP synchronization](imap-synchronization.md#what-a-mapping-decides-beyond-where-the-folder-is) holds what a folder's
+participation decides.
+
+The folder is found the same way a rule's destination is, through the one resolution every author of a filing shares:
+a mirrored folder is read from the binding its own run recorded, and an unmirrored one is resolved against what the
+server advertises the first time a filing needs it. **Classification asks for no folder to be created.** Whether a
+mapping creates its folder when the server advertises none is that mapping's own declaration in the synchronization
+section, decided once for every author rather than by this feature.
+
+An account that maps no destination at all fails startup naming that account, rather than leaving its spam unfiled with
+nothing said about why.
+
+### A message the owner moved back is never filed again
+
+Two rules keep filing from becoming an argument with the person whose mailbox it is.
+
+A message already in the destination is not moved into it. And a message this feature has already asked to have filed,
+which is not in the destination, is **left alone entirely** — not filed again, and not marked read again. Either
+somebody moved it back out, which is exactly the correction a false positive is supposed to have, or the change is
+written down and has not been carried out yet; asking again would argue with the first or duplicate the second. That is
+read from the durable mutation record rather than from the message, because the record is what survives the message
+moving.
+
+The two readings are deliberately not told apart. Doing so would mean treating a change that ran out of attempts as
+licence to file afresh — and a message that sat there failing to move is precisely the one somebody is most likely to
+have moved by hand.
+
+The protection reaches as far as the mirror does. A junk folder MailFathom does not mirror is one it stops seeing into,
+so a message moved back out of *that* folder arrives as new mail and is classified afresh — which is the trade an
+unmirrored destination makes, and the reason a deployment that expects to correct verdicts often may prefer a mirrored
+one.
+
+### The score an operator is willing to act at
+
+A threshold of its own decides whether to act, separate from the one the verdict was reached under, so an operator can
+label at five and move mail only from eight. It judges what a **scanner** scored, in the scanner's own scale, for the
+reason the classification threshold reaches no other stage: a provider's header carries a threshold in a scale this one
+knows nothing about, and a verdict resting on where the receiving server filed the message carries no score at all. Both
+of those are the receiving server's own decision, taken with network context nothing after delivery has, and both are
+acted on.
+
+Raising the threshold is deliberately not the same edit as switching classification off. The verdicts go on being
+recorded and only the acting stops.
+
+### Asking twice is one change
+
+A change is written down under an identity made of the occurrence, the mutation, and what asked for it — and what asked
+here is the **profile the verdict was decided under**: the rule corpus the deciding stage ran against, together with the
+score the operator acts at. Rescanning the same message against the same corpus therefore asks for nothing new, while a
+corpus update or a threshold somebody moved asks afresh. A rule and a classification are told apart on the record by
+their origin, so an operator reading a stuck change knows whether to look at a rule they wrote or at this section.
+
+Where a filing has nowhere to go — a mapping withdrawn while mail was being classified, a mirrored folder no run has
+bound yet, a folder the server advertises none of, or a role two folders carry — **nothing is written down at all**,
+including a `\Seen` change asked for beside it. The same holds for an account a reload stopped declaring, whose answer
+about mail it files away is then nobody's to guess. Marking spam read while leaving it in the inbox takes the unread
+marker off mail that is still there, which is worse than waiting; a later attempt performs the pair whole.
+
 ## Classifying is idempotent, and reclassifying is explicit
 
 Classification is keyed to the occurrence, so repeating it either leaves the existing record alone or replaces it with
@@ -172,6 +263,10 @@ Nothing. Every switch is off by default, and the checks run in the order of what
 on at all is free, the scope and any existing record are one lookup each, and only then is a message's content read. An
 occurrence outside the configured scope therefore costs no read of its mail.
 
+The action switches are the same shape. With both off, deciding what a verdict causes is one property read and nothing
+else: no mailbox is looked at, **no write session is ever obtained**, and no account holds the write connection that
+would carry a change.
+
 ## Configuration
 
 The `SpamClassification` section, in full, is in the
@@ -182,24 +277,28 @@ The `SpamClassification` section, in full, is in the
 - which folder aliases are classified, defaulting to whichever alias each account maps to its inbox;
 - the threshold a scanner's score is judged against, defaulting to the scanner's own.
 
-The scanner's own address and bounds are a block below it, `SpamClassification:Scanner`, read only where the scanner is
-switched on.
+Two blocks sit below it. `SpamClassification:Scanner` holds the daemon's address and bounds and is read only where the
+scanner is switched on. `SpamClassification:Actions` holds the two switches, the folder junk is filed into, and the score
+an operator is willing to act at; it is read per verdict, so switching filing on reaches the next one without a restart.
 
 An operator who switched the scanner on and left classification off is told at startup rather than given the quiet
-answer, and so is one who switched it on and named no address for it. An unusable folder alias, an out-of-range
-threshold, and a bound outside its range each fail startup naming themselves.
+answer, and so is one who switched it on and named no address for it, one who asked for junk to be acted on with
+classification off, and one whose accounts do not all map the folder a filing would go to. An unusable folder alias, an
+out-of-range threshold, and a bound outside its range each fail startup naming themselves.
 
 ## What is not here
 
-No mutation of the remote mailbox, and no on-demand run over a mailbox that is already stored. The classification is
-recorded and read back; nothing yet schedules it as mail arrives, because the durable job model it is to run as an
-execution in is not built.
+No on-demand run over a mailbox that is already stored, and nothing yet schedules classification as mail arrives,
+because the durable job model it is to run as an execution in is not built. Until something calls it, the switches above
+describe what a verdict causes rather than something happening on a schedule.
 
 ## Privacy
 
 A classification is derived from mail content and inherits its classification, retention, and deletion constraints: the
 record hangs off the message occurrence and is removed with it, so whatever erasure and retention already reach the
-message reach the record too.
+message reach the record too. A change a verdict asked for is the same kind of thing and follows the same rule: the
+mutation record says where a person's mail was moved and holds a folder path, a UID, and a decision profile — never
+anything from the message — and it is removed with the email it describes.
 
 Nothing about a message's content reaches a log line or a telemetry attribute from any path here — not a header value,
 not an authentication detail, not a subject. What is safe to report is the occurrence identifier, the folder alias, the

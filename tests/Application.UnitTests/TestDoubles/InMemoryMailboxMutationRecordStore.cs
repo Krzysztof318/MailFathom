@@ -6,6 +6,7 @@ using MailFathom.Application.Mail.Mutations;
 using MailFathom.Application.Mail.Mutations.Convergence;
 using MailFathom.Application.Persistence;
 using MailFathom.Domain.Accounts;
+using MailFathom.Domain.Emails;
 using MailFathom.Domain.Failures;
 using MailFathom.Domain.Folders;
 using MailFathom.Domain.Mutations;
@@ -77,6 +78,16 @@ internal sealed class InMemoryMailboxMutationRecordStore : IMailboxMutationRecor
 
         return Task.FromResult(record);
     }
+
+    /// <inheritdoc />
+    public Task<bool> HasRecordAsync(
+        StoredEmailId storedEmailId,
+        MailboxMutation mutation,
+        MailboxMutationOrigin origin,
+        CancellationToken cancellationToken) => Task.FromResult(this.recordsById.Values.Any(record =>
+            record.Request.StoredEmailId == storedEmailId
+            && record.Request.Mutation == mutation
+            && record.Request.Requester.Origin == origin));
 
     /// <inheritdoc />
     public Task<int> CountAttemptAsync(

@@ -5,6 +5,7 @@
 using MailFathom.Application.Mail.Mutations.Convergence;
 using MailFathom.Application.Persistence;
 using MailFathom.Domain.Accounts;
+using MailFathom.Domain.Emails;
 using MailFathom.Domain.Failures;
 using MailFathom.Domain.Mutations;
 
@@ -35,6 +36,34 @@ public interface IMailboxMutationRecordStore
     Task<MailboxMutationRecord> OpenAsync(
         IPersistenceSession session,
         MailboxMutationRequest request,
+        CancellationToken cancellationToken);
+
+    /// <summary>Reports whether one local email has ever had a mutation of a given kind asked for by a given kind of requester.</summary>
+    /// <param name="storedEmailId">The local email, which is the identity that survives the email being moved.</param>
+    /// <param name="mutation">The change asked for.</param>
+    /// <param name="origin">The kind of act that asked.</param>
+    /// <param name="cancellationToken">Cancels the read.</param>
+    /// <returns><see langword="true" /> when at least one such record exists, whatever stage it reached.</returns>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="mutation" /> is unspecified.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="origin" /> is not a declared origin.</exception>
+    /// <remarks>
+    /// <para>
+    /// It answers a question the idempotency identity deliberately cannot: whether this email was ever moved by this kind
+    /// of requester, rather than whether one particular request has already been made. The identity is keyed to the
+    /// occurrence and to what asked, so a message that has since moved is a new occurrence and a requester whose terms
+    /// changed is a new requester — both of which ask afresh, which is right for a retry and wrong for deciding whether
+    /// somebody has since undone the change.
+    /// </para>
+    /// <para>
+    /// Every stage counts, including an abandoned one. What the caller is establishing is that MailFathom has already
+    /// acted on this email once, and a change that was attempted and given up on is still a change the owner may have
+    /// seen and reversed.
+    /// </para>
+    /// </remarks>
+    Task<bool> HasRecordAsync(
+        StoredEmailId storedEmailId,
+        MailboxMutation mutation,
+        MailboxMutationOrigin origin,
         CancellationToken cancellationToken);
 
     /// <summary>Counts one attempt against the record before that attempt is made.</summary>

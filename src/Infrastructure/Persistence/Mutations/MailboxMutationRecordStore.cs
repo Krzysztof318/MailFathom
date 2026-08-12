@@ -8,6 +8,7 @@ using MailFathom.Application.Mail.Mutations.Convergence;
 using MailFathom.Application.Persistence;
 using MailFathom.CodeCoverage;
 using MailFathom.Domain.Accounts;
+using MailFathom.Domain.Emails;
 using MailFathom.Domain.Failures;
 using MailFathom.Domain.Mutations;
 using MailFathom.Infrastructure.Persistence.Entities;
@@ -95,6 +96,44 @@ internal sealed class MailboxMutationRecordStore(
         writeContext.MailboxMutations.Add(entity);
 
         return MailboxMutationRecordMapping.ToRecord(entity, folder);
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Read through the scoped context, because it joins no transaction, and narrowed by the local email first: the
+    /// foreign key onto the email is indexed, and the handful of rows one email ever carries is what the two remaining
+    /// comparisons run over. The mutation is compared by its stored name and the origin by the text its conversion
+    /// writes, which is what keeps the predicate translatable rather than evaluated in this process.
+    /// </remarks>
+    public Task<bool> HasRecordAsync(
+        StoredEmailId storedEmailId,
+        MailboxMutation mutation,
+        MailboxMutationOrigin origin,
+        CancellationToken cancellationToken)
+    {
+        if (!mutation.IsSpecified)
+        {
+            throw new ArgumentException("A mutation record is read by a permitted mutation.", nameof(mutation));
+        }
+
+        if (!Enum.IsDefined(origin))
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(origin),
+                origin,
+                "The mutation requester origin is not one this system declares.");
+        }
+
+        var emailId = storedEmailId.Value;
+        var mutationName = mutation.Name;
+
+        return readContext.MailboxMutations
+            .AsNoTracking()
+            .AnyAsync(
+                record => record.StoredEmailId == emailId
+                    && record.Mutation == mutationName
+                    && record.RequesterOrigin == origin,
+                cancellationToken);
     }
 
     /// <inheritdoc />

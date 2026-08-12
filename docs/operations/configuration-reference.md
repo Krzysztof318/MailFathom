@@ -412,6 +412,10 @@ described below.
 | `SpamClassification:Scanner:ScanTimeoutSeconds` | int | `30` | 1 – 120 | restart |
 | `SpamClassification:Scanner:MaximumMessageBytes` | int | `512000` | 32 000 – 33 554 432 | restart |
 | `SpamClassification:Scanner:MaximumConcurrentScans` | int | `5` | 1 – 64 | restart |
+| `SpamClassification:Actions:FileInJunkFolder` | bool | `false` | Asking for it while `Enabled` is false fails startup, and so does an account that maps no destination to file into | reload |
+| `SpamClassification:Actions:MarkAsRead` | bool | `false` | Asking for it while `Enabled` is false fails startup | reload |
+| `SpamClassification:Actions:JunkFolder` | string | `role:Junk` | A folder alias, or a role written as `role:<name>`; every configured account has to map it once filing is on | reload |
+| `SpamClassification:Actions:Threshold` | double | unset | 0.1 – 1000; unset acts on every spam verdict, and a value judges what a scanner scored | reload |
 
 `UseScanner` and the `Scanner` block are read once, at startup: whether a scanner exists at all decides what is
 constructed and whether the host refuses to start without a daemon, which a reload cannot revisit. Everything else in
@@ -445,6 +449,23 @@ never does is revisit a message already classified: replacing a verdict is an ex
 Which folder is left out of `list_emails` and `search_emails` is not configured here. It is the folder mapped to the
 `Junk` special use in [`MailSynchronization`](#one-account--mailsynchronizationaccountsn), and it is withheld whether or
 not this section switches anything on.
+
+The `Actions` block is the only part of this section that writes to a mailbox, and both of its switches are off. Each
+works alone: filing moves the message on the server, marking read sets its `\Seen` flag, and turning both on sets the
+flag first, because a relocation can renumber the message. Nothing else is ever done — no delete, no other flag, no
+folder created, nothing sent.
+
+`JunkFolder` **does not have to be a folder MailFathom mirrors, and for most deployments it should not be**: mapping it
+with `synchronize: false` files spam out of the instance entirely, under the account's own
+`AuthoredDeleteEmailDisposition`. What it does have to be is a folder every configured account maps, because
+classification asks for none to be created — an account that maps no destination **fails startup naming that account**,
+rather than leaving its spam unfiled with nothing said about why. A folder the account only maps is resolved against the
+server the first time a filing needs it, exactly as a rule's destination is.
+
+`Threshold` judges what a scanner scored, in the scanner's own scale, so an operator can label at `ScannerThreshold` and
+move mail only from a higher score. It reaches no other stage, exactly as `ScannerThreshold` does not: a verdict resting
+on a provider's header or on where the receiving server filed the message carries no score in this scale, and is acted
+on. Raising it is deliberately not the same edit as switching classification off — the verdicts go on being recorded.
 
 ## `MailboxSearch`
 

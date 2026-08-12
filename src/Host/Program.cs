@@ -30,6 +30,7 @@ using MailFathom.Application.Rules.History;
 using MailFathom.Application.SensitiveContent.Detection;
 using MailFathom.Application.SensitiveContent.Redaction;
 using MailFathom.Application.Spam;
+using MailFathom.Application.Spam.Actions;
 using MailFathom.Application.Synchronization;
 using MailFathom.Application.Synchronization.Checkpoints;
 using MailFathom.Application.Synchronization.Reconciliation;
@@ -271,6 +272,11 @@ try
             binderOptions => binderOptions.ErrorOnUnknownConfiguration = true)
         .ValidateDataAnnotations()
         .ValidateOnStart();
+    // Whether the junk folder a filing names exists is a claim about the synchronization section, which no attribute on
+    // this graph can reach. Registered whatever the switches say, because a filing switched on with no folder behind it
+    // is exactly what it refuses.
+    builder.Services.AddSingleton<IValidateOptions<SpamClassificationOptions>>(
+        new SpamJunkFolderValidator(builder.Configuration));
 
     // Read while the services are being registered, for the reason the scanner declarations above are: whether a
     // scanner exists at all decides which services this process has, and that is decided before a container that could
@@ -408,6 +414,7 @@ try
     builder.Services.AddScoped<IJunkMailFolderCatalog>(provider => provider.GetRequiredService<MailSynchronizationOptions>());
     builder.Services.AddScoped<IMailFolderMappingReader>(provider => provider.GetRequiredService<MailSynchronizationOptions>());
     builder.Services.AddScoped<ISpamClassificationSettingsReader, ConfiguredSpamClassificationSettingsReader>();
+    builder.Services.AddScoped<ISpamActionSettingsReader, ConfiguredSpamActionSettingsReader>();
     builder.Services.AddScoped<IImapAccountSettingsProvider, ConfiguredImapAccountSettingsProvider>();
     builder.Services.AddScoped<IMailOAuthSettingsProvider, ConfiguredMailOAuthSettingsProvider>();
     // A singleton, unlike the settings around it, because the pool that reads it is one: the write connection is

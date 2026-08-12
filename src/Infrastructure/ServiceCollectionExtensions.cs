@@ -38,6 +38,7 @@ using MailFathom.Application.Rules.History;
 using MailFathom.Application.SensitiveContent;
 using MailFathom.Application.SensitiveContent.Detection;
 using MailFathom.Application.Spam;
+using MailFathom.Application.Spam.Actions;
 using MailFathom.Application.Spam.Scanning;
 using MailFathom.Application.Spam.Signals;
 using MailFathom.Application.Synchronization;
@@ -319,6 +320,7 @@ public static class ServiceCollectionExtensions
         // composition that fails at the moment somebody changes their mind rather than at startup.
         services.AddScoped<IEmailSpamClassificationStore, EmailSpamClassificationStore>();
         services.AddScoped<IClassifiableEmailReader, ClassifiableEmailReader>();
+        services.AddScoped<ISpamActionOccurrenceReader, SpamActionOccurrenceReader>();
 
         // The read side takes no persistence session and joins no transaction, so its ports are registered beside the
         // write repositories rather than through one of them.
@@ -406,6 +408,10 @@ public static class ServiceCollectionExtensions
             provider.GetRequiredService<OptimisticConcurrencyRetryPolicy>(),
             provider.GetRequiredService<TimeProvider>(),
             provider.GetService<ISpamScanner>()));
+        // Registered beside the classifier and independent of it: what a verdict causes is a decision of its own, and the
+        // classifier resolves nothing from here, which is what keeps a deployment that records verdicts and touches
+        // nothing genuinely unable to reach a mailbox through classification.
+        services.AddScoped<SpamActionRecorder>();
         // Registered for every deployment rather than only where a chat endpoint was declared, because what it is is a
         // reading of the search above: an instance that answers no questions simply resolves it and never calls it, and
         // the bounds it hands passages over under are the same wherever the retrieval is reached from.
