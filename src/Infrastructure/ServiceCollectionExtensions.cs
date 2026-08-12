@@ -73,6 +73,7 @@ using MailKit.Net.Imap;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Http.Resilience;
 using Microsoft.Extensions.Logging;
 using Npgsql;
 
@@ -103,7 +104,9 @@ public static class ServiceCollectionExtensions
     /// <remarks>
     /// Deliberately looser than the configured per-scan budget, so a slow analyzer surfaces as this deployment's own
     /// timeout — which the redactor reports as the scanner not answering in time and names the budget it spent — rather
-    /// than as a transport exception from underneath it that says nothing about a budget at all.
+    /// than as a transport exception from underneath it that says nothing about a budget at all. It is added to the
+    /// configured budget to produce the resilience handler's attempt and total-request timeouts, which is where the
+    /// transport's bound lives; <see cref="AddPersonalDataAnalyzerClient" /> records why it is not a client property.
     /// </remarks>
     private static readonly TimeSpan AnalyzerTransportTimeoutMargin = TimeSpan.FromSeconds(30);
 
@@ -635,28 +638,69 @@ public static class ServiceCollectionExtensions
     /// content inside.
     /// </para>
     /// <para>
-    /// It keeps the standard resilience handler the host's service defaults add, which is the whole of this call's retry
-    /// story: an analyze request establishes what a text carries and changes nothing, so repeating one is safe, and the
-    /// call runs under no <c>OutboundDependency</c> pipeline for the handler to nest inside. The enclosing per-scan budget
-    /// bounds the attempts as a group, so an analyzer that is refusing costs the operation its budget once rather than the
-    /// handler's whole window.
+    /// It carries a standard resilience handler, which is the whole of this call's retry story: an analyze request
+    /// establishes what a text carries and changes nothing, so repeating one is safe, and the call runs under no
+    /// <c>OutboundDependency</c> pipeline for the handler to nest inside. The one the host's service defaults add is
+    /// replaced rather than inherited, because that one's bounds are fixed while this deployment's are configured.
     /// </para>
     /// <para>
-    /// Both bounds are read from the plan rather than from a snapshot, because this runs on the root provider whenever the
-    /// factory builds a client, and both take a restart to change.
+    /// <b>The handler owns the transport's timeout, so <see cref="HttpClient.Timeout" /> is left disabled.</b> That is the
+    /// handler's own arrangement — it sets the property to <see cref="Timeout.InfiniteTimeSpan" /> so its timeout
+    /// strategies are what bound a call, rather than a property that would cut across the retries as a group. The bound an
+    /// operator configured therefore reaches the transport as
+    /// <c>HttpStandardResilienceOptions.TotalRequestTimeout</c> instead of as a client property, and a registration that
+    /// set both would be deciding by action order which of the two won.
+    /// </para>
+    /// <para>
+    /// Every bound is read from the plan rather than from a snapshot, because this runs on the root provider whenever the
+    /// factory builds a client, and all of them take a restart to change.
     /// </para>
     /// </remarks>
-    private static void AddPersonalDataAnalyzerClient(IServiceCollection services) =>
-        services.AddHttpClient(PersonalDataAnalyzerProfile.TransportName)
+    private static void AddPersonalDataAnalyzerClient(IServiceCollection services)
+    {
+        var client = services.AddHttpClient(PersonalDataAnalyzerProfile.TransportName)
             .ConfigurePrimaryHttpMessageHandler(static () => new SocketsHttpHandler { AllowAutoRedirect = false })
             .ConfigureHttpClient(static (provider, client) =>
             {
                 var bounds = provider.GetRequiredService<SensitiveContentPlan>().Bounds;
 
                 client.BaseAddress = provider.GetRequiredService<PersonalDataAnalyzerProfile>().Endpoint;
-                client.Timeout = bounds.ScanTimeout + AnalyzerTransportTimeoutMargin;
                 client.MaxResponseContentBufferSize =
                     ((long)bounds.MaximumAnalyzedCharacters * AnalyzerResponseBytesPerAnalyzedCharacter)
                     + AnalyzerResponseEnvelopeBytes;
             });
+
+        // The inherited handler's bounds are ten seconds per attempt and thirty in total, whatever the deployment
+        // configured. SensitiveContent:ScanTimeout accepts up to two minutes, and the reason to raise it is an analyzer
+        // that is slow over a large body — exactly the scan those fixed bounds would cut a long way inside the budget,
+        // after re-sending the body twice on the way. So it is replaced with one derived from that budget.
+        //
+        // Removal is registered before the replacement because the build-time pass removes what the actions before it
+        // added: the defaults' handler, which is registered against a client name this project never sees, and not the
+        // one added after.
+#pragma warning disable EXTEXP0001 // RemoveAllResilienceHandlers is experimental, and is how the standard handler is opted out of.
+        client.RemoveAllResilienceHandlers();
+#pragma warning restore EXTEXP0001
+
+        client.AddStandardResilienceHandler().Configure(static (options, provider) =>
+        {
+            var bounds = provider.GetRequiredService<SensitiveContentPlan>().Bounds;
+            var backstop = bounds.ScanTimeout + AnalyzerTransportTimeoutMargin;
+
+            // Both are set above the configured budget rather than inside it, so a scan that runs long is cancelled by
+            // that budget and never by a layer an operator did not set: the redactor then reports the scanner missing the
+            // budget it spent rather than a transport failure that says nothing about a budget. What the handler still
+            // buys is the retry — a refused connection or a fast rejection costs almost none of the budget, so the
+            // attempt after it runs inside one.
+            options.AttemptTimeout.Timeout = backstop;
+            options.TotalRequestTimeout.Timeout = backstop;
+
+            // The handler's own validator refuses a sampling window shorter than twice the attempt timeout, and the
+            // standard thirty seconds is shorter than that for every budget past fifteen.
+            if (options.CircuitBreaker.SamplingDuration < backstop * 2)
+            {
+                options.CircuitBreaker.SamplingDuration = backstop * 2;
+            }
+        });
+    }
 }

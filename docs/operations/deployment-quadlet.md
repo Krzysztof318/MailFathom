@@ -347,7 +347,9 @@ audit trail and the embeddings, is regenerated rather than refetched.
 ## Uninstalling
 
 ```bash
-systemctl --user stop mailfathom.service mailfathom-postgres.service
+# mailfathom-presidio.service only where the analyzer unit was installed; stopping MailFathom does not stop it, because
+# the ordering runs the other way.
+systemctl --user stop mailfathom.service mailfathom-presidio.service mailfathom-postgres.service
 rm ~/.config/containers/systemd/mailfathom*.{container,network,volume}
 systemctl --user daemon-reload
 

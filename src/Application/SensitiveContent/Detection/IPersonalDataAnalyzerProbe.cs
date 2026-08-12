@@ -25,10 +25,13 @@ namespace MailFathom.Application.SensitiveContent.Detection;
 /// </remarks>
 public interface IPersonalDataAnalyzerProbe
 {
-    /// <summary>Verifies that the configured analyzer answers and understands the language it is configured for.</summary>
+    /// <summary>
+    /// Verifies that the configured analyzer answers, and that it recognises at least one entity of every category this
+    /// deployment switched on.
+    /// </summary>
     /// <param name="cancellationToken">Cancels the probe.</param>
-    /// <returns>A task that completes when the analyzer answered.</returns>
-    /// <exception cref="PersonalDataAnalyzerUnavailableException">Thrown when the analyzer could not be reached, refused the probe, or answered without the configured language.</exception>
+    /// <returns>A task that completes when the analyzer answered for every switched-on category.</returns>
+    /// <exception cref="PersonalDataAnalyzerUnavailableException">Thrown when the analyzer could not be reached, refused the probe, or recognises no entity of a switched-on category — the last of which would otherwise be scanned for and never found, which reads exactly like a clean message.</exception>
     /// <exception cref="OperationCanceledException">Thrown when <paramref name="cancellationToken" /> is cancelled.</exception>
     Task VerifyAvailableAsync(CancellationToken cancellationToken);
 }

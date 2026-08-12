@@ -120,11 +120,20 @@ public sealed class SensitiveContentOptionsTests
     }
 
     /// <summary>An address no request can be composed from is worth refusing at startup rather than at the first guarded read.</summary>
+    /// <remarks>
+    /// The refusal must also not quote what it was given. A missing scheme is the commonest way to reach this branch, so the
+    /// value would be the analyzer's own host name and this message goes to a startup log; each row therefore states the
+    /// part of its own value that must not appear, so that an edit interpolating the value back fails here rather than in a
+    /// deployment. The rows deliberately name an address other than the one the message offers as an example, because a
+    /// value that was a substring of that example could not be distinguished from it.
+    /// </remarks>
     [Theory]
-    [InlineData("presidio-analyzer:3000")]
-    [InlineData("/presidio")]
-    [InlineData("ftp://presidio-analyzer:3000")]
-    public void Validate_AnalyzerAddressThatCarriesNoHttpRequest_IsReported(string endpoint)
+    [InlineData("mail-analyzer.internal:3000", "mail-analyzer.internal")]
+    [InlineData("/private/analyzer", "/private/analyzer")]
+    [InlineData("ftp://mail-analyzer.internal:3000", "mail-analyzer.internal")]
+    public void Validate_AnalyzerAddressThatCarriesNoHttpRequest_IsReportedWithoutQuotingIt(
+        string endpoint,
+        string addressThatMustNotAppear)
     {
         // Arrange
         var settings = new SensitiveContentOptions();
@@ -137,6 +146,7 @@ public sealed class SensitiveContentOptionsTests
         // Assert
         var result = Assert.Single(results);
         Assert.Contains("not an absolute http or https address", result.ErrorMessage!, StringComparison.Ordinal);
+        Assert.DoesNotContain(addressThatMustNotAppear, result.ErrorMessage!, StringComparison.Ordinal);
     }
 
     /// <summary>The code reaches a query argument and the detector revision every finding carries.</summary>

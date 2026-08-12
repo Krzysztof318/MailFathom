@@ -19,7 +19,9 @@ using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Http.Resilience;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using Npgsql;
 using Xunit;
 
@@ -400,10 +402,64 @@ public sealed class ServiceCollectionExtensionsTests
             .GetRequiredService<IHttpClientFactory>()
             .CreateClient(PersonalDataAnalyzerProfile.TransportName);
         Assert.Equal("http://presidio-analyzer:3000/", client.BaseAddress?.ToString());
-        Assert.Equal(
-            SensitiveContentScanBounds.Default.ScanTimeout + TimeSpan.FromSeconds(30),
-            client.Timeout);
         Assert.True(client.MaxResponseContentBufferSize > SensitiveContentScanBounds.Default.MaximumAnalyzedCharacters);
+
+        // The resilience handler disables this property deliberately, so that its own timeout strategies bound a call
+        // rather than one that would cut across the retries as a group. Asserted rather than left unstated, because a
+        // registration that set a finite value here would be deciding by action order which of the two won; the budget
+        // the transport actually enforces is the theory below.
+        Assert.Equal(Timeout.InfiniteTimeSpan, client.Timeout);
+    }
+
+    /// <summary>
+    /// The resilience handler's own bounds follow the configured per-scan budget, which the inherited standard handler's
+    /// fixed ten seconds per attempt and thirty in total would otherwise cut a long way inside.
+    /// </summary>
+    /// <remarks>
+    /// Both ends of the accepted range are stated, because the failure this guards against is at the top of it — a budget
+    /// of two minutes against a window the handler refuses as too short for it — while the bottom is what proves the
+    /// derived values stay inside what the handler's own validator accepts at all. Resolving the named options is what runs
+    /// that validator, so a combination it rejects fails here rather than at a deployment's startup.
+    /// </remarks>
+    [Theory]
+    [InlineData(1)]
+    [InlineData(120)]
+    public void AddPersonalDataContentScanning_Called_BoundsTheAnalyzerResilienceHandlerByTheConfiguredScanBudget(
+        int scanTimeoutSeconds)
+    {
+        // Arrange
+        var budget = TimeSpan.FromSeconds(scanTimeoutSeconds);
+        var services = new ServiceCollection();
+        services.AddSingleton(TimeProvider.System);
+        services.AddSingleton(PersonalDataAnalyzerProfile.Create(
+            new Uri("http://presidio-analyzer:3000"),
+            "en",
+            0.4));
+        services.AddSingleton(SensitiveContentPlan.Create(
+            SensitiveContentScanBounds.Create(
+                SensitiveContentScanBounds.Default.MaximumAnalyzedCharacters,
+                budget,
+                SensitiveContentScanBounds.Default.MaximumConcurrentScans),
+            [
+                SensitiveContentScannerPlan.Create(
+                    SensitiveContentScannerKind.Pii,
+                    [SensitiveContentCategory.Create("PaymentCard")],
+                    []),
+            ]));
+
+        // Act
+        services.AddPersonalDataContentScanning();
+
+        // Assert
+        using var provider = services.BuildServiceProvider();
+        var resilience = provider
+            .GetRequiredService<IOptionsMonitor<HttpStandardResilienceOptions>>()
+            .Get($"{PersonalDataAnalyzerProfile.TransportName}-standard");
+
+        var backstop = budget + TimeSpan.FromSeconds(30);
+        Assert.Equal(backstop, resilience.AttemptTimeout.Timeout);
+        Assert.Equal(backstop, resilience.TotalRequestTimeout.Timeout);
+        Assert.True(resilience.CircuitBreaker.SamplingDuration >= backstop * 2);
     }
 
     [Fact]
