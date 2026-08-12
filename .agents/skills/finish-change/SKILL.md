@@ -60,9 +60,10 @@ Do not proceed while a gate fails.
    confirm the value landed. No project automation can
    write that field, so a value that did not land is an incomplete gate in the same way a missing
    `Closes #<issue>` is. It sits outside the owner's five-slot cap and needs no clearing: the merge
-   closes the issue out of every view that reads `Queue`. It never overwrites `Queue: Parent`, because
-   a pull request closes the issue that does the work rather than the parent grouping it, and a
-   `Closes` reference pointing at a parent is the defect to correct rather than a value to write over.
+   closes the issue out of every view that reads `Queue`. It is not written on an issue carrying the
+   `parent` label, because a pull request closes the issue that does the work rather than the parent
+   grouping it, and a `Closes` reference pointing at a parent is the defect to correct rather than an
+   issue to move to `Next`.
 
    Without that access there is no board write and no gate here. The board is the owner's and a grant
    on it is theirs to make, so this is not a step that failed or was skipped for convenience — it is a
