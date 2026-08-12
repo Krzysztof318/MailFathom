@@ -120,6 +120,18 @@ ARG IMAGE_CREATED=1970-01-01T00:00:00Z
 # which is the state an image reaches long before anyone asks what it is. Its default is deliberately neither channel:
 # an image nobody published belongs to neither.
 ARG IMAGE_RELEASE_CHANNEL=local
+# The directory the documentation site publishes this build's pages under, which is what
+# `org.opencontainers.image.documentation` below is composed into an address from. It is derived from `IMAGE_VERSION`
+# rather than declared beside it, and its default is the whole derivation for a release: the site names a version's
+# directory after that version's tag.
+#
+# The one build that overrides it is the nightly, which is why this is an argument rather than the interpolation
+# written inline. A nightly is named after the release it will become, and the site publishes no directory for a
+# version nobody has released — what a nightly actually carries is whatever `main` was, which is what `latest`
+# documents. A Dockerfile cannot decide that for itself, so the publication that already knows the channel passes it,
+# exactly as it passes the version and the revision. `MailFathom.Common`'s DocumentationAddress reads the same rule off
+# a version at run time for the surfaces that can.
+ARG IMAGE_DOCUMENTATION_VERSION=v${IMAGE_VERSION}
 
 # `org.opencontainers.image.licenses` is the SPDX identifier a registry and a scanner read without unpacking the
 # image, and it says the same thing as the root LICENSE, the SPDX assembly metadata, and every source header. The
@@ -131,6 +143,11 @@ ARG IMAGE_RELEASE_CHANNEL=local
 # there. Docker Hub accepts 100 bytes for that field and silently truncates a longer one, so this line stays inside that
 # budget and the workflow fails the release if it ever stops fitting — see docs/operations/container-image.md.
 #
+# `org.opencontainers.image.documentation` is where somebody holding only an image reference finds the pages for what
+# they are holding. It names the version's own documentation directory rather than the site root, because the site
+# opens on the newest release and a reader who pulled an older tag would otherwise be shown pages describing settings
+# their image does not accept.
+#
 # `io.artifacthub.package.logo-url` is the one label here that OCI does not define: the specification has no field for a
 # project icon, so a listing reads a vendor label instead. It names the same asset as the Helm chart's `icon`, and it is
 # a URL rather than a copied file because a label carries no payload.
@@ -138,6 +155,7 @@ LABEL org.opencontainers.image.licenses="Apache-2.0" \
       org.opencontainers.image.title="MailFathom" \
       org.opencontainers.image.description="A brain for your mail: self-hosted and AI-native, IMAP synchronized and served over MCP." \
       org.opencontainers.image.source="https://github.com/Krzysztof318/MailFathom" \
+      org.opencontainers.image.documentation="https://krzysztof318.github.io/MailFathom/${IMAGE_DOCUMENTATION_VERSION}/" \
       org.opencontainers.image.version="${IMAGE_VERSION}" \
       org.opencontainers.image.revision="${IMAGE_REVISION}" \
       org.opencontainers.image.created="${IMAGE_CREATED}" \

@@ -1554,6 +1554,26 @@ about why. When a client reports `54001`, the server log is where the reason is.
 A refused call is logged with the five-digit code it was refused with, so an operator can correlate a client's complaint
 against a server record without learning what was searched for.
 
+## What a client learns while connecting
+
+The `initialize` handshake reports this deployment as `MailFathom` and names the version the protocol assembly was built
+with — not the host's assembly name, which would tell a client about a composition detail rather than about the surface
+it is talking to, and not the source revision, which is build provenance an operator reads from the [startup
+record](host-startup-telemetry.md) instead.
+
+Beside that, the handshake carries **instructions**: one sentence naming where the documentation for that running
+version is published, at `https://krzysztof318.github.io/MailFathom/v<version>/`. A client that connected over MCP may
+be the only way its user meets MailFathom at all, so the session itself is what says where to read — otherwise an agent
+asked to consult the documentation reaches whichever version a search engine ranked first. The address is derived from
+the version the same handshake reports and is not configurable, so the pages it names cannot come to describe a
+different build from the one the client was told it is talking to. A deployment running a nightly names `latest`, which
+is what a nightly carries, and a build whose version cannot be read carries no instructions rather than an address that
+goes nowhere.
+
+Nothing else travels in them. The protocol places no bound on what instructions may hold, and a client may put them in
+front of a model, so what belongs there is where to read rather than what to read: this makes the documentation
+findable and never serves it over the protocol.
+
 ## Verifying an enabled endpoint
 
 With the endpoint enabled, the Streamable HTTP transport answers on `/mcp` and advertises four tools, or five. Any MCP

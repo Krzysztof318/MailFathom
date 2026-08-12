@@ -133,6 +133,12 @@
           "MailFathom.Domain": "[0.6.0, )"
         }
       },
+      "MailFathom.Common": {
+        "type": "Project",
+        "dependencies": {
+          "MailFathom.Domain": "[0.6.0, )"
+        }
+      },
       "MailFathom.Domain": {
         "type": "Project"
       },

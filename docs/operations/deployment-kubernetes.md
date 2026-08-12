@@ -193,6 +193,14 @@ helm install mailfathom deploy/helm/mailfathom --namespace mailfathom --values v
 An unpackaged directory states no `appVersion`, because it is not a release of anything, so the version-drift check
 below stands down for it.
 
+The notes an install prints carry the documentation for the version they installed, as a `Docs:` line naming that
+version's own directory on the documentation site — `https://krzysztof318.github.io/MailFathom/v<version>/`, or
+`latest` on the nightly channel, which is what a nightly actually carries. It is an address rather than a repository
+path because somebody reading `helm install` output has no checkout to resolve one against, which is why the notes'
+pointer to [applying the schema](database-schema.md) is an address as well. The unpackaged directory states no version
+to name a directory from, so it prints no `Docs:` line and its schema pointer is the site's version-agnostic address
+instead.
+
 A digest is preferred over a tag: it is the only reference a registry cannot repoint, so a rollback goes back to the
 same bytes. `values.schema.json` rejects `latest` and the other moving tags outright.
 

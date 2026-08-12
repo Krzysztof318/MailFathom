@@ -61,6 +61,13 @@ All of them come from the same declaration. The runtime paths read the assembly'
 literal restated in code, and unit tests assert that by deriving their expectation from that metadata; a reporting path
 that regressed to a hardcoded string fails them rather than staying plausible while being wrong.
 
+Four of those surfaces go one step further and say what the version *means for the reader*: where to read about it. The
+image's `org.opencontainers.image.documentation` label, the chart's install notes, `mfctl status`, and the instructions
+an MCP session carries each name the documentation site's directory for the version in front of them — one derivation,
+applied by whichever of them is speaking, with no configuration key anywhere in it. [The addresses that outlive a
+release](documentation-site.md#the-addresses-that-outlive-a-release) is where that convention and its one exception for
+a prerelease are stated.
+
 The native process deployment needs nothing further: `dotnet publish` writes the stamped assemblies, so the artifact on
 disk carries its own version and revision without being started.
 

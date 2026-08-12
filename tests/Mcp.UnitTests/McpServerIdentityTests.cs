@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Common;
 using MailFathom.Mcp.UnitTests.TestDoubles;
 using MailFathom.Versioning;
 using Xunit;
@@ -14,6 +15,13 @@ namespace MailFathom.Mcp.UnitTests;
 /// </summary>
 public sealed class McpServerIdentityTests
 {
+    /// <summary>
+    /// How long a hint naming one address can honestly be. The bound is what would catch documentation content being
+    /// moved into the handshake — the pages belong on the site, and instructions a client may put in front of a model
+    /// are the wrong place to serve them from.
+    /// </summary>
+    private const int OneSentenceAndAnAddress = 200;
+
     [Fact]
     public void ServerInfo_ComposedSurface_NamesTheProductRatherThanTheHostAssembly()
     {
@@ -42,6 +50,44 @@ public sealed class McpServerIdentityTests
         // Assert
         Assert.NotNull(serverInfo);
         Assert.Equal(stamped.Version, serverInfo.Version);
+    }
+
+    /// <summary>
+    /// A client that connected over MCP may be the only way its user meets MailFathom, so the handshake is where an
+    /// agent learns where to read about the deployment it is talking to. The address is derived from the version the
+    /// same handshake reports, which is what keeps the pages named here describing the build in front of the client.
+    /// </summary>
+    [Fact]
+    public void ServerInstructions_ComposedSurface_NameTheDocumentationForTheVersionItReports()
+    {
+        // Arrange
+        var stamped = StampedAssemblyVersion.ReadFrom(typeof(McpServiceCollectionExtensions).Assembly);
+        var expectedAddress = DocumentationAddress.ForVersion(stamped.Version);
+
+        // Act
+        var instructions = RegisteredMcpToolSurface.ServerInstructions();
+
+        // Assert
+        Assert.NotNull(expectedAddress);
+        Assert.NotNull(instructions);
+        Assert.Contains(expectedAddress, instructions, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Instructions are a hint a client may put in front of a model, so what belongs in them is where to read rather
+    /// than what to read: the pages themselves stay on the site, and this surface serves mail.
+    /// </summary>
+    [Fact]
+    public void ServerInstructions_ComposedSurface_CarryOneSentenceAndNoDocumentationOfTheirOwn()
+    {
+        // Act
+        var instructions = RegisteredMcpToolSurface.ServerInstructions();
+
+        // Assert
+        Assert.NotNull(instructions);
+        Assert.EndsWith(".", instructions, StringComparison.Ordinal);
+        Assert.DoesNotContain('\n', instructions);
+        Assert.InRange(instructions.Length, 1, OneSentenceAndAnAddress);
     }
 
     /// <summary>

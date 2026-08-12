@@ -683,6 +683,7 @@
         "type": "Project",
         "dependencies": {
           "MailFathom.Application": "[0.6.0, )",
+          "MailFathom.Common": "[0.6.0, )",
           "MailFathom.Domain": "[0.6.0, )",
           "ModelContextProtocol.AspNetCore": "[2.0.0, )"
         }

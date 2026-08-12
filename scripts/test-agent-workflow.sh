@@ -3580,6 +3580,8 @@ run_publish_reference_step() {
   local image_tags="$1"
   local output_file="$2"
   local step_output_file="$3"
+  local image_channel="${4:-release}"
+  local image_version="${5:-0.1.0}"
   local step_script="$test_directory/publish-reference-step.sh"
 
   extract_publish_reference_step "$step_script"
@@ -3588,6 +3590,8 @@ run_publish_reference_step() {
   (
     export REPOSITORY='Krzysztof318/MailFathom'
     export IMAGE_TAGS="$image_tags"
+    export IMAGE_CHANNEL="$image_channel"
+    export IMAGE_VERSION="$image_version"
     export GITHUB_OUTPUT="$step_output_file"
     cd "$repository_root"
     bash "$step_script"
@@ -3659,6 +3663,38 @@ publish_qualifies_the_release_tags_and_ignores_a_blank_line() {
   assert_file_content \
     $'ghcr.io/krzysztof318/mailfathom:0.1.0\nghcr.io/krzysztof318/mailfathom:latest\ndocker.io/krzysztof318/mailfathom:0.1.0\ndocker.io/krzysztof318/mailfathom:latest' \
     "$references_file"
+}
+
+# The same step decides which directory of the documentation site the image's
+# `org.opencontainers.image.documentation` label sends a reader to, because a Dockerfile cannot read a
+# channel and the label is the one an operator follows without asking anybody. A release is documented
+# under its own version.
+publish_sends_a_release_to_its_own_documentation_directory() {
+  local output_file="$test_directory/publish-reference-documentation-release-output"
+  local step_output_file="$test_directory/publish-reference-documentation-release-step-output"
+
+  if ! run_publish_reference_step $'0.1.0\nlatest\n' "$output_file" "$step_output_file" 'release' '0.1.0'; then
+    printf 'The publish workflow failed to resolve a release documentation directory\n' >&2
+    return 1
+  fi
+
+  assert_contains 'documentation-version=v0.1.0' "$step_output_file"
+}
+
+# A nightly is named after a release the site publishes nothing for yet, and what it carries is `main`.
+# Labelling it with its own version would hand every reader of a nightly image an address that 404s.
+publish_sends_a_nightly_to_the_default_branch_documentation() {
+  local output_file="$test_directory/publish-reference-documentation-nightly-output"
+  local step_output_file="$test_directory/publish-reference-documentation-nightly-step-output"
+
+  if ! run_publish_reference_step \
+    $'0.1.0-nightly.12-616d0a6\nnightly\n' "$output_file" "$step_output_file" \
+    'nightly' '0.1.0-nightly.12-616d0a6'; then
+    printf 'The publish workflow failed to resolve a nightly documentation directory\n' >&2
+    return 1
+  fi
+
+  assert_contains 'documentation-version=latest' "$step_output_file"
 }
 
 # A tag list that is empty once blank lines are dropped would otherwise push `ghcr.io/<repository>:`,
@@ -4741,6 +4777,8 @@ run_test obligation_index_leaves_migrations_out
 run_test publish_qualifies_every_nightly_tag_with_the_repository_it_resolves
 run_test publish_qualifies_the_release_tags_and_ignores_a_blank_line
 run_test publish_folds_the_owner_login_into_the_docker_hub_namespace
+run_test publish_sends_a_release_to_its_own_documentation_directory
+run_test publish_sends_a_nightly_to_the_default_branch_documentation
 run_test publish_refuses_a_tag_list_with_nothing_to_publish
 run_test release_tag_assertion_accepts_a_tag_that_matches_its_commit
 run_test release_tag_assertion_refuses_a_prerelease_tag

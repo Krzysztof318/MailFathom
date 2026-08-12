@@ -6,6 +6,11 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Application\Application.csproj" />
+    <!-- Where a version's documentation is published is the same answer here as it is to the administrative command,
+         and Common is the only place both boundaries can read one answer from. It carries no capability this project
+         is kept away from: Domain is its whole reference set, so the structural proof in McpDependencyBoundaryTests
+         still holds with it on the list. -->
+    <ProjectReference Include="..\Common\Common.csproj" />
     <ProjectReference Include="..\Domain\Domain.csproj" />
   </ItemGroup>
 

@@ -51,6 +51,15 @@ internal static class RegisteredMcpToolSurface
         return provider.GetRequiredService<IOptions<McpServerOptions>>().Value.ServerInfo;
     }
 
+    /// <summary>Gets the instructions the registration sends a client during the initialization handshake.</summary>
+    /// <returns>The advertised instructions, or <see langword="null" /> when the registration advertises none.</returns>
+    public static string? ServerInstructions()
+    {
+        using var provider = Compose();
+
+        return provider.GetRequiredService<IOptions<McpServerOptions>>().Value.ServerInstructions;
+    }
+
     /// <summary>Gets the descriptor one tool is advertised with.</summary>
     /// <param name="toolName">The protocol name of the tool.</param>
     /// <returns>The advertised descriptor.</returns>
