@@ -17,10 +17,12 @@ namespace MailFathom.Application.Folders;
 /// run that starts its new generation, so no work is ever committed under a binding that has not been recorded.
 /// </para>
 /// <para>
-/// It is also where a folder a mapping asked to have created comes into existence, which is one rule covering both the
-/// folder that is mirrored and the folder that is only a destination rather than two triggers to keep in step. Nothing
-/// is created by reading configuration and nothing is created for a mapping nothing ever resolves; after the first
-/// creation the server advertises the folder, so a later run matches it and issues no second creation.
+/// It is also where a folder a mapping asked to have created comes into existence. Placing the creation at resolution
+/// rather than at a call site means every path that resolves an alias creates the folder that alias names, without a
+/// second trigger to keep in step with this one; the synchronization run is that path, so a mapping no run resolves has
+/// nothing created for it. Nothing is created by reading configuration and nothing is created for a mapping nothing ever
+/// resolves; after the first creation the server advertises the folder, so a later run matches it and issues no second
+/// creation.
 /// </para>
 /// </remarks>
 public sealed class MailFolderResolver

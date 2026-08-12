@@ -681,10 +681,14 @@ folder that already exists from something MailFathom does locally; this one auth
 So a mapping that says nothing behaves exactly as it did before creation existed, and a mistyped `RemotePath` stays the
 unresolved alias above rather than becoming a folder on your server named after the mistake.
 
-Creation happens **where the alias is resolved** — before the run of a mirrored folder, and on demand for a folder that
-is only a destination — which is one rule covering both rather than two triggers to keep in step. Nothing is created by
-reading configuration, and nothing is created for a mapping nothing ever resolves. After the first creation the server
-advertises the folder, so resolution finds it and no further `CREATE` is issued.
+Creation happens **where the alias is resolved**, which is before the run of a folder MailFathom mirrors. Nothing is
+created by reading configuration, and nothing is created for a mapping nothing ever resolves. After the first creation
+the server advertises the folder, so resolution finds it and no further `CREATE` is issued.
+
+A run resolves the folders it mirrors and no others, so `CreateIfMissing` on a `Synchronize: false` mapping creates
+nothing: such a folder is a destination for what is already bound to it rather than something a run reaches. A folder to
+be created is therefore one the account mirrors, and a mapping that only files mail into a folder needs that folder to
+be there.
 
 What the creation does with the awkward parts of IMAP is fixed rather than left to the server that was tested against:
 

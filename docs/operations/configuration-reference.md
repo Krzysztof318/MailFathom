@@ -181,8 +181,10 @@ readers there are.
 existing folder from something MailFathom does locally, which is why it defaults to `false` while the other three
 default to `true`: a mapping that says nothing keeps a mistyped `RemotePath` reporting itself as an alias that resolves
 to nothing, instead of turning the mistake into a folder named after it. Startup refuses it beside a `SpecialUse`
-mapping, naming the alias, because a folder that does not exist advertises no role. Renaming, deleting, and
-unsubscribing from a folder stay refused outright, and no folder MailFathom did not create is ever subscribed to.
+mapping, naming the alias, because a folder that does not exist advertises no role. It is issued where the alias is
+resolved, and a run resolves the folders it mirrors and no others, so the switch creates nothing on a mapping that also
+carries `Synchronize: false`. Renaming, deleting, and unsubscribing from a folder stay refused outright, and no folder
+MailFathom did not create is ever subscribed to.
 [A folder the mapping asked for is created](../features/imap-synchronization.md#a-folder-the-mapping-asked-for-is-created)
 states when the creation happens, what it does with a folder that already exists and with a hierarchical path, and what
 a server's refusal reports.
