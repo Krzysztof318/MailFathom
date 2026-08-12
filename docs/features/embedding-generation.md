@@ -353,8 +353,9 @@ rather than a row the database rejects later with no provider in sight.
   redirects — a moved endpoint answering with one would carry the key or the bearer token to whatever host it named.
 - **A sensitive-content guard, where one is switched on.** Every passage is scanned and redacted before the request is
   sent, once for the whole chain rather than once per endpoint it falls through, and a scanner that cannot answer
-  refuses the call. The vector that comes back is therefore computed from the guarded passage while the chunk it was
-  cut from is stored as it was extracted, which is the one place the two are derived from different text. It applies to
+  refuses the call. The passage it scans was already redacted on its way into the chunk store, so the guard ordinarily
+  finds nothing left to replace and the vector answers for the same text the chunk holds; what it still guarantees is
+  that a passage cut before the switch was on cannot reach a provider unscanned. It applies to
   every declared endpoint, a model server inside the deployment included: nothing in a declaration distinguishes a local
   address from a hosted one, and text leaving the process is text leaving the process.
   The deterministic in-process generator sends nothing and is the one path with no guard on it. Both switches are off by

@@ -86,6 +86,9 @@ internal sealed class PresidioContentScanner : ISensitiveContentScanner
     public SensitiveContentScannerKind Scanner => SensitiveContentScannerKind.Pii;
 
     /// <inheritdoc />
+    public SensitiveContentDetector Detector => this.profile.Detector;
+
+    /// <inheritdoc />
     public async Task<IReadOnlyList<SensitiveContentFinding>> ScanAsync(
         string text,
         CancellationToken cancellationToken)

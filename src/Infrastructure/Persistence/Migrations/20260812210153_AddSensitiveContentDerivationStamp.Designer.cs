@@ -3,6 +3,7 @@ using System;
 using MailFathom.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using NpgsqlTypes;
@@ -13,9 +14,11 @@ using Pgvector;
 namespace MailFathom.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(MailFathomDbContext))]
-    partial class MailFathomDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260812210153_AddSensitiveContentDerivationStamp")]
+    partial class AddSensitiveContentDerivationStamp
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -241,11 +244,6 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                     b.Property<DateTimeOffset>("EvaluatedAt")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<string>("Profile")
-                        .HasMaxLength(12)
-                        .HasColumnType("character(12)")
-                        .IsFixedLength();
-
                     b.Property<double?>("Score")
                         .HasColumnType("double precision");
 
@@ -397,69 +395,6 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                     b.HasKey("PeriodStartsAt");
 
                     b.ToTable("embedding_spend_periods", (string)null);
-                });
-
-            modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.JobEntity", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .HasColumnType("uuid");
-
-                    b.Property<int>("AttemptCount")
-                        .HasColumnType("integer");
-
-                    b.Property<DateTimeOffset>("AvailableAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateTimeOffset>("EnqueuedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("IdempotencyKey")
-                        .IsRequired()
-                        .HasMaxLength(256)
-                        .HasColumnType("character varying(256)");
-
-                    b.Property<string>("JobType")
-                        .IsRequired()
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)");
-
-                    b.Property<DateTimeOffset?>("LeaseExpiresAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("LeaseOwner")
-                        .HasMaxLength(128)
-                        .HasColumnType("character varying(128)");
-
-                    b.Property<string>("MailboxAccountId")
-                        .HasMaxLength(128)
-                        .HasColumnType("character varying(128)");
-
-                    b.Property<string>("Payload")
-                        .IsRequired()
-                        .HasColumnType("jsonb");
-
-                    b.Property<string>("State")
-                        .IsRequired()
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)");
-
-                    b.Property<DateTimeOffset>("StateChangedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("JobType", "AvailableAt")
-                        .HasDatabaseName("ix_jobs_claimable")
-                        .HasFilter("\"State\" <> 'Succeeded'");
-
-                    b.HasIndex("JobType", "IdempotencyKey")
-                        .IsUnique()
-                        .HasDatabaseName("ix_jobs_identity");
-
-                    b.HasIndex("MailboxAccountId", "EnqueuedAt")
-                        .HasDatabaseName("ix_jobs_account");
-
-                    b.ToTable("jobs", (string)null);
                 });
 
             modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.MailAnsweringAuditEntryEntity", b =>
@@ -953,72 +888,6 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                     b.ToTable("mailbox_refresh_tokens", (string)null);
                 });
 
-            modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.SpamClassificationRunEntity", b =>
-                {
-                    b.Property<string>("MailboxAccountId")
-                        .HasMaxLength(128)
-                        .HasColumnType("character varying(128)");
-
-                    b.Property<int>("ActedEmailCount")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("ClassifiedEmailCount")
-                        .HasColumnType("integer");
-
-                    b.Property<uint>("ConcurrencyVersion")
-                        .IsConcurrencyToken()
-                        .ValueGeneratedOnAddOrUpdate()
-                        .HasColumnType("xid")
-                        .HasColumnName("xmin");
-
-                    b.Property<DateTimeOffset?>("EndedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("Ending")
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)");
-
-                    b.PrimitiveCollection<string[]>("FolderAliases")
-                        .IsRequired()
-                        .HasColumnType("text[]");
-
-                    b.Property<Guid?>("Position")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("Posture")
-                        .IsRequired()
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)");
-
-                    b.Property<string>("Profile")
-                        .HasMaxLength(12)
-                        .HasColumnType("character(12)")
-                        .IsFixedLength();
-
-                    b.Property<DateTimeOffset>("RequestedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<bool>("Rescores")
-                        .HasColumnType("boolean");
-
-                    b.Property<int>("SkippedEmailCount")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("SpamEmailCount")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("UnclassifiableEmailCount")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("UndeterminedEmailCount")
-                        .HasColumnType("integer");
-
-                    b.HasKey("MailboxAccountId")
-                        .HasName("pk_spam_classification_runs");
-
-                    b.ToTable("spam_classification_runs", (string)null);
-                });
-
             modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.StoredEmailEntity", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1313,16 +1182,6 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                         .HasConstraintName("fk_email_spam_classification_signals_classifications");
 
                     b.Navigation("Classification");
-                });
-
-            modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.JobEntity", b =>
-                {
-                    b.HasOne("MailFathom.Infrastructure.Persistence.Entities.MailboxAccountEntity", "MailboxAccount")
-                        .WithMany()
-                        .HasForeignKey("MailboxAccountId")
-                        .OnDelete(DeleteBehavior.Cascade);
-
-                    b.Navigation("MailboxAccount");
                 });
 
             modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.MailAnsweringAuditedEmailEntity", b =>

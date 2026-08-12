@@ -5,6 +5,7 @@
 using MailFathom.Application.Emails.Chunking;
 using MailFathom.Application.Emails.Embeddings;
 using MailFathom.Application.Jobs;
+using MailFathom.Application.SensitiveContent.Derivation;
 using MailFathom.CodeCoverage;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Mutations;
@@ -57,6 +58,17 @@ internal sealed class MailFathomDbContext : DbContext
     internal const string StoredEmailReplyToAddressesIndexName = "ix_stored_emails_reply_to_addresses";
 
     internal const string EmailSearchDocumentVectorIndexName = "ix_email_search_documents_search_vector";
+
+    /// <summary>The index over the sensitive-content stamp, which is what makes the staleness question cheap to ask.</summary>
+    /// <remarks>
+    /// Both queries that read the column select rows whose stamp is not the current one, and on a deployment that has
+    /// finished a rebuild that predicate matches almost nothing — which is exactly where a sequential scan of a table
+    /// holding every message's body text is worth avoiding. A plain B-tree serves it: the comparison is equality against
+    /// one value, and the null the column takes for a document derived with no scanner on is a value this index carries
+    /// like any other.
+    /// </remarks>
+    internal const string EmailSearchDocumentSensitiveContentStampIndexName =
+        "ix_email_search_documents_sensitive_content_stamp";
 
     internal const string EmailChunkOrdinalUniqueIndexName = "ix_email_chunks_email_ordinal";
 
@@ -455,6 +467,9 @@ internal sealed class MailFathomDbContext : DbContext
             entity.ToTable("backfill_positions");
             entity.HasKey(position => position.Name);
             entity.Property(position => position.Name).HasMaxLength(BackfillPositionEntity.MaximumNameLength);
+            entity.Property(position => position.SensitiveContentStamp)
+                .HasMaxLength(SensitiveContentDerivationStamp.Length)
+                .IsFixedLength();
         });
 
         modelBuilder.Entity<SynchronizationCheckpointEntity>(entity =>
@@ -939,6 +954,12 @@ internal sealed class MailFathomDbContext : DbContext
             // Stored as text for the reason the content-availability reason is: the source stays readable in an audit
             // query and survives any later reordering of the enum.
             entity.Property(document => document.TextSource).HasConversion<string>().HasMaxLength(64).IsRequired();
+
+            entity.Property(document => document.SensitiveContentStamp)
+                .HasMaxLength(SensitiveContentDerivationStamp.Length)
+                .IsFixedLength();
+            entity.HasIndex(document => document.SensitiveContentStamp)
+                .HasDatabaseName(EmailSearchDocumentSensitiveContentStampIndexName);
 
             entity.HasOne(document => document.StoredEmail)
                 .WithOne(email => email.SearchDocument)

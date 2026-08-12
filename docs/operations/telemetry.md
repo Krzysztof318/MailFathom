@@ -303,6 +303,27 @@ which would put the credential in the telemetry written to prove it never left.
 [Sensitive-content scanning](../features/sensitive-content-scanning.md#the-guarded-egress-points) names the points
 themselves and what a refusal does to each.
 
+### What redacting a derived write publishes
+
+The derived path publishes five instruments of its own, under `mailfathom.sensitive_content.derivation.*`. They carry
+no egress point, because a derived write crosses nothing — the text is redacted on its way into this deployment's own
+store — so what separates these series from the guarded ones is their names.
+
+| Instrument | What it answers |
+| --- | --- |
+| `mailfathom.sensitive_content.derivation.redacted` | How many texts were scanned before they were stored, chunked, and embedded |
+| `mailfathom.sensitive_content.derivation.findings` | How many detections were replaced in them, split by `mailfathom.sensitive_content.category` |
+| `mailfathom.sensitive_content.derivation.omitted` | How many characters the analyzed ceiling dropped rather than store unscanned |
+| `mailfathom.sensitive_content.derivation.refusals` | How many extractions a scanner that could not answer refused, by `mailfathom.sensitive_content.scanner` |
+| `mailfathom.sensitive_content.derivation.duration` | What scanning added to deriving one message |
+
+The duration is the measurement the feature is judged on: it is paid once per message rather than once per request, and
+it lands on synchronization and on the extraction backfill, which is where a mailbox being indexed for the first time or
+[re-derived after a switch](../features/sensitive-content-scanning.md#what-a-late-switch-does-and-what-it-costs-to-fix)
+either keeps up or does not. The refusals are how much of a mailbox is being left underived, and every refused message
+is retried on a later run rather than lost. All five read zero on a deployment with both switches off, which constructs
+no detector on this path at all.
+
 What such a signal may carry is bounded by the same rule that governs the log lines, and it is a cardinality rule as
 much as a privacy one. Counts, sizes, durations, outcomes, error codes, and MailFathom's own configured account and
 folder aliases are permitted. Mail content, an address, a subject, a remote folder path, a message identifier, a UID, a

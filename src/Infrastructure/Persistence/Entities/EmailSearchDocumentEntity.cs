@@ -70,6 +70,26 @@ internal sealed class EmailSearchDocumentEntity
     /// <summary>Gets or sets when this document was derived, which is what tells a re-derivation from an original extraction apart.</summary>
     public DateTimeOffset ExtractedAt { get; set; }
 
+    /// <summary>
+    /// Gets or sets the sensitive-content configuration this document's text was written under, or
+    /// <see langword="null" /> when it was derived with no scanner switched on.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The column covers everything derived from this message's body, not only the two text columns beside it: the
+    /// passages are cut from this text and the vectors are built from those passages, so a row's stamp is the honest
+    /// statement about the whole tree below it. That is why the stamp is here rather than repeated on each chunk, and
+    /// why re-deriving is what moves it.
+    /// </para>
+    /// <para>
+    /// A value that is not the configuration the deployment currently runs — including the absent value, which is a
+    /// document derived before a scanner was switched on — marks this message's derived data stale in the same sense an
+    /// embedding profile already uses. Nothing rewrites it in place; the way back is a re-derivation from the raw MIME,
+    /// which the extraction backfill performs when an operator asks for one.
+    /// </para>
+    /// </remarks>
+    public string? SensitiveContentStamp { get; set; }
+
     /// <summary>Gets or sets the search vector PostgreSQL generates from the columns above.</summary>
     /// <remarks>
     /// Never assigned by MailFathom. The column is <c>GENERATED ALWAYS ... STORED</c>, so PostgreSQL recomputes it from

@@ -28,9 +28,6 @@ internal sealed class MarkerSensitiveContentScanner : ISensitiveContentScanner
 
     private static readonly SensitiveContentRule Rule = SensitiveContentRule.Create(Category, "marker");
 
-    private static readonly SensitiveContentDetector Detector =
-        SensitiveContentDetector.Create("marker", "2026.08.12");
-
     private readonly string marker;
     private readonly TimeProvider timeProvider;
 
@@ -55,6 +52,9 @@ internal sealed class MarkerSensitiveContentScanner : ISensitiveContentScanner
 
     /// <inheritdoc />
     public SensitiveContentScannerKind Scanner { get; }
+
+    /// <inheritdoc />
+    public SensitiveContentDetector Detector { get; } = SensitiveContentDetector.Create("marker", "2026.08.12");
 
     /// <summary>Gets or sets the failure raised instead of findings, or <see langword="null" /> to answer.</summary>
     /// <remarks>Set to make the scanner the one thing a fail-closed test needs: a detector that cannot say what a text carries.</remarks>
@@ -89,7 +89,7 @@ internal sealed class MarkerSensitiveContentScanner : ISensitiveContentScanner
                 Rule,
                 SensitiveContentSpan.Create(at, this.marker.Length),
                 confidence: 1,
-                Detector,
+                this.Detector,
                 detectedAt));
         }
 

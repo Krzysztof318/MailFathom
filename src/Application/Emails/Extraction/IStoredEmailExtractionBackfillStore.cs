@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.Persistence;
+using MailFathom.Application.SensitiveContent.Derivation;
 using MailFathom.Domain.Emails;
 
 namespace MailFathom.Application.Emails.Extraction;
@@ -70,5 +71,25 @@ public interface IStoredEmailExtractionBackfillStore
     Task SaveResumePositionAsync(
         IPersistenceSession session,
         StoredEmailId position,
+        CancellationToken cancellationToken);
+
+    /// <summary>Counts the stored emails whose derived text was written under a different sensitive-content configuration.</summary>
+    /// <param name="current">The configuration a derived row written now would carry.</param>
+    /// <param name="cancellationToken">Propagates caller cancellation.</param>
+    /// <returns>How many stored emails a rebuild towards <paramref name="current" /> would re-derive.</returns>
+    /// <remarks>
+    /// <para>
+    /// Answered by the walk's own store rather than by a reader of its own, so the number an operator is shown and the
+    /// work a rebuild would actually perform come from one predicate. A count taken separately would drift the first
+    /// time either learned something about tombstones or about missing content.
+    /// </para>
+    /// <para>
+    /// It counts whether or not the rebuild is switched on, because that is the question it exists to answer: an
+    /// operator who has just enabled a scanner needs to know how much of their mailbox the switch does not reach before
+    /// they decide whether to spend the re-derivation.
+    /// </para>
+    /// </remarks>
+    Task<int> CountEmailsWithStaleDerivedDataAsync(
+        SensitiveContentDerivationStamp current,
         CancellationToken cancellationToken);
 }

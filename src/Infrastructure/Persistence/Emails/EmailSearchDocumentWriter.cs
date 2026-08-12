@@ -4,6 +4,7 @@
 
 using System.Linq.Expressions;
 using MailFathom.Application.Emails.Extraction;
+using MailFathom.Application.SensitiveContent.Derivation;
 using MailFathom.CodeCoverage;
 using MailFathom.Domain.Emails;
 using MailFathom.Infrastructure.Persistence.Entities;
@@ -25,6 +26,7 @@ internal static class EmailSearchDocumentWriter
     /// <param name="storedEmail">The email the document belongs to, tracked or already persisted.</param>
     /// <param name="metadata">What the MIME reader extracted.</param>
     /// <param name="extractedAt">When the extraction ran.</param>
+    /// <param name="stamp">The sensitive-content configuration the text was redacted under, or <see langword="null" /> where nothing is scanned.</param>
     /// <param name="cancellationToken">Propagates caller cancellation.</param>
     /// <returns>A task that completes when the write has been issued or staged.</returns>
     /// <exception cref="ArgumentNullException">Thrown when any reference argument is <see langword="null" />.</exception>
@@ -33,6 +35,7 @@ internal static class EmailSearchDocumentWriter
         StoredEmailEntity storedEmail,
         ExtractedEmailMetadata metadata,
         DateTimeOffset extractedAt,
+        SensitiveContentDerivationStamp? stamp,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(dbContext);
@@ -46,7 +49,8 @@ internal static class EmailSearchDocumentWriter
             text.TrimmedText,
             text.OriginalText,
             text.Source,
-            extractedAt);
+            extractedAt,
+            stamp?.Value);
 
         // The change-tracker pass comes first for the reason the content store's does: a document staged earlier in
         // this same uncommitted session is not visible to a set-based update, and updating it twice would insert twice.
@@ -69,7 +73,8 @@ internal static class EmailSearchDocumentWriter
                     .SetProperty(candidate => candidate.BodyText, document.BodyText)
                     .SetProperty(candidate => candidate.BodyTextBeforeTrimming, document.BodyTextBeforeTrimming)
                     .SetProperty(candidate => candidate.TextSource, document.TextSource)
-                    .SetProperty(candidate => candidate.ExtractedAt, document.ExtractedAt),
+                    .SetProperty(candidate => candidate.ExtractedAt, document.ExtractedAt)
+                    .SetProperty(candidate => candidate.SensitiveContentStamp, document.SensitiveContentStamp),
                 cancellationToken);
 
         if (updatedRowCount == 0)
@@ -83,6 +88,7 @@ internal static class EmailSearchDocumentWriter
     /// <param name="storedEmail">The email the document belongs to, tracked or already persisted.</param>
     /// <param name="subject">The subject the server's envelope reported.</param>
     /// <param name="recordedAt">When the occurrence was recorded.</param>
+    /// <param name="stamp">The sensitive-content configuration in force, or <see langword="null" /> where nothing is scanned.</param>
     /// <param name="cancellationToken">Propagates caller cancellation.</param>
     /// <returns>A task that completes when the write has been issued or staged.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="dbContext" /> or <paramref name="storedEmail" /> is <see langword="null" />.</exception>
@@ -103,6 +109,7 @@ internal static class EmailSearchDocumentWriter
         StoredEmailEntity storedEmail,
         string? subject,
         DateTimeOffset recordedAt,
+        SensitiveContentDerivationStamp? stamp,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(dbContext);
@@ -129,7 +136,8 @@ internal static class EmailSearchDocumentWriter
                 BodyText: null,
                 BodyTextBeforeTrimming: null,
                 ExtractedEmailTextSource.BodyNotExtracted,
-                recordedAt));
+                recordedAt,
+                stamp?.Value));
     }
 
     private static Expression<Func<EmailSearchDocumentEntity, bool>> MatchesStoredEmail(Guid storedEmailId) =>
@@ -161,6 +169,7 @@ internal static class EmailSearchDocumentWriter
         entity.BodyTextBeforeTrimming = document.BodyTextBeforeTrimming;
         entity.TextSource = document.TextSource;
         entity.ExtractedAt = document.ExtractedAt;
+        entity.SensitiveContentStamp = document.SensitiveContentStamp;
     }
 
     /// <summary>Bounds the subject copy the index covers, keeping the stored email's own subject untouched.</summary>
@@ -203,11 +212,17 @@ internal static class EmailSearchDocumentWriter
     }
 
     /// <summary>The values one search document holds, whichever path derived them.</summary>
+    /// <remarks>
+    /// The stamp is one of them rather than a value only the text-bearing path writes. A message whose body could not be
+    /// read carries no text to redact and is still a row this configuration produced, so stamping it is what keeps the
+    /// staleness question answerable by one predicate instead of one predicate and a list of exceptions to it.
+    /// </remarks>
     private sealed record DerivedDocument(
         string? SubjectText,
         string? ParticipantAddresses,
         string? BodyText,
         string? BodyTextBeforeTrimming,
         ExtractedEmailTextSource TextSource,
-        DateTimeOffset ExtractedAt);
+        DateTimeOffset ExtractedAt,
+        string? SensitiveContentStamp);
 }

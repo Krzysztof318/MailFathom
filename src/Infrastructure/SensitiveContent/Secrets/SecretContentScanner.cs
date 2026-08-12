@@ -90,6 +90,9 @@ internal sealed class SecretContentScanner : ISensitiveContentScanner
     public SensitiveContentScannerKind Scanner => SensitiveContentScannerKind.Secrets;
 
     /// <inheritdoc />
+    public SensitiveContentDetector Detector => SecretRuleCorpus.Detector;
+
+    /// <inheritdoc />
     public Task<IReadOnlyList<SensitiveContentFinding>> ScanAsync(string text, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(text);

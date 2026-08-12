@@ -55,6 +55,24 @@ internal sealed class SensitiveContentOptions : IValidatableObject
     [Range(1, 256)]
     public int MaximumConcurrentScans { get; set; } = SensitiveContentScanBounds.Default.MaximumConcurrentScans;
 
+    /// <summary>Gets or sets whether the extraction backfill re-derives what was written under an older configuration.</summary>
+    /// <remarks>
+    /// <para>
+    /// Off by default, and deliberately not implied by switching a scanner on. A scanner protects what is derived from
+    /// now on; the chunks and vectors of mail that was indexed earlier were built from unredacted text and stay that way
+    /// until somebody re-derives them, which costs a pass over every stored message's raw MIME and, where an embedding
+    /// profile is active, a re-embedding of every passage whose text changed. Spending that over a whole mailbox is the
+    /// operator's decision rather than a consequence of editing a category list.
+    /// </para>
+    /// <para>
+    /// It is here rather than beside the walk that performs it because it answers a question about this section: an
+    /// operator who has just switched a scanner on is reading these keys, and what they need to know next is that the
+    /// mail already stored is not covered. The rebuild rides the extraction backfill, so a deployment that switched
+    /// <c>Mail:ExtractionBackfill:Enabled</c> off performs none.
+    /// </para>
+    /// </remarks>
+    public bool RebuildStaleDerivedData { get; set; }
+
     /// <summary>Gets whether this deployment scans anything at all.</summary>
     /// <remarks>
     /// This is what the composition root registers on. With both switches off no plan is composed, no redactor exists,

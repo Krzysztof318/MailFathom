@@ -4,6 +4,7 @@
 
 using MailFathom.Application.Emails.Extraction;
 using MailFathom.Application.Persistence;
+using MailFathom.Application.SensitiveContent.Derivation;
 using MailFathom.Application.Synchronization;
 using MailFathom.CodeCoverage;
 using MailFathom.Domain.Emails;
@@ -16,7 +17,10 @@ namespace MailFathom.Infrastructure.Persistence.Emails;
 
 /// <summary>EF Core implementation for email metadata persistence.</summary>
 [RequiresIntegrationCoverage]
-internal sealed class StoredEmailMetadataRepository(TimeProvider timeProvider, EmailChunkWriter chunkWriter)
+internal sealed class StoredEmailMetadataRepository(
+    TimeProvider timeProvider,
+    EmailChunkWriter chunkWriter,
+    SensitiveContentDerivationGuard derivationGuard)
     : IEmailMetadataRepository
 {
     /// <inheritdoc />
@@ -60,12 +64,14 @@ internal sealed class StoredEmailMetadataRepository(TimeProvider timeProvider, E
             StoredEmailMetadataMapping.ApplyExtractedMetadata(entity, extractedMetadata);
 
             // The search document is written from the same extraction in the same session, so an email's indexed text
-            // can never describe a different reading of its MIME than its own metadata columns do.
+            // can never describe a different reading of its MIME than its own metadata columns do. The stamp is written
+            // with it, because the reading arrived here already redacted and the row has to say under what.
             await EmailSearchDocumentWriter.SaveAsync(
                 dbContext,
                 entity,
                 extractedMetadata,
                 timeProvider.GetUtcNow(),
+                derivationGuard.Stamp,
                 cancellationToken);
 
             // Cut in the same session as the text it derives from, so a committed message is never one whose passages
@@ -83,6 +89,7 @@ internal sealed class StoredEmailMetadataRepository(TimeProvider timeProvider, E
                 entity,
                 metadata.Subject,
                 timeProvider.GetUtcNow(),
+                derivationGuard.Stamp,
                 cancellationToken);
         }
 

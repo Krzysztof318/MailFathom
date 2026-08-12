@@ -344,6 +344,17 @@ nowhere to ask **fails startup** rather than running unprotected.
 | `SensitiveContent:MaximumAnalyzedCharacters` | int | `200000` | 1 – 10000000; text beyond it is dropped from the result rather than handed on unscanned | restart |
 | `SensitiveContent:ScanTimeout` | TimeSpan | `00:00:05` | One second to two minutes, per call to one scanner | restart |
 | `SensitiveContent:MaximumConcurrentScans` | int | `4` | 1 – 256, across the process | restart |
+| `SensitiveContent:RebuildStaleDerivedData` | bool | `false` | Read only while a scanner is on; re-derives every message whose derived text predates the current configuration | restart |
+
+**The rebuild switch spends a whole mailbox.** Switching a scanner on, or widening what it looks for, protects what is
+derived from that moment onward and reaches nothing already extracted, chunked, or embedded — the host reports how many
+messages that leaves behind every time it starts. This key is what re-derives them, and it costs one full re-indexing of
+the affected messages: each is read, extracted, scanned, re-chunked, and re-embedded, so a deployment with a hosted
+embedding endpoint pays that provider again for every one. It rides the extraction backfill rather than a worker of its
+own, so `MailExtractionBackfill:Enabled` has to be on for it to perform anything, and
+[`MailExtractionBackfill`](#mailextractionbackfill)'s interval and batch size are what pace the spend. Switch it back off
+once the count reaches zero. [Derived data](../features/sensitive-content-scanning.md#derived-data-is-written-redacted-and-stamped)
+records what is stamped, what makes a row stale, and why nothing rewrites stored text in place.
 
 A category name is matched against what the scanner declares, ignoring capitalization, and the declared spelling is what
 survives the match — so a placeholder in redacted text does not depend on how the name was written here. A name that
