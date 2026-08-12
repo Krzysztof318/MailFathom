@@ -9,6 +9,7 @@ using MailFathom.Application.Emails.Mailboxes;
 using MailFathom.Application.Emails.Search;
 using MailFathom.Application.Emails.SearchEmails;
 using MailFathom.Application.Emails.Summaries;
+using MailFathom.Application.SensitiveContent.Egress;
 using MailFathom.Application.Synchronization.Checkpoints;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
@@ -569,7 +570,8 @@ public sealed class SearchEmailsToolTests
         StubEmailSearchIndexReader index,
         StubSynchronizationFreshnessReader? freshness = null,
         EmailSearchSnippetBounds? snippetBounds = null,
-        StubJunkMailFolderCatalog? junkFolders = null)
+        StubJunkMailFolderCatalog? junkFolders = null,
+        SensitiveContentEgressGuard? egressGuard = null)
     {
         // One instance for both, as the host composes them: the use case asks the index to cut extracts by these bounds
         // and the boundary publishes what came back under the same ones.
@@ -585,7 +587,8 @@ public sealed class SearchEmailsToolTests
                     StubMailFolderParticipation.Everything,
                     junkFolders ?? StubJunkMailFolderCatalog.None,
                     StubMailFolderMappings.ResolvingNothing),
-                bounds),
+                bounds,
+                egressGuard ?? SensitiveContentEgressGuards.Inactive()),
             bounds,
             new StubMailAccountCatalog(ServedAccountId));
     }

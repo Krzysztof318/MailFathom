@@ -13,6 +13,8 @@ using MailFathom.AI.UnitTests.TestDoubles;
 using MailFathom.Application.AiProviders;
 using MailFathom.Application.Emails.Embeddings;
 using MailFathom.Application.Resilience;
+using MailFathom.Application.SensitiveContent.Detection;
+using MailFathom.Application.SensitiveContent.Egress;
 using MailFathom.Domain.Failures;
 using MailFathom.TestSupport;
 using Microsoft.Extensions.AI;
@@ -26,6 +28,9 @@ namespace MailFathom.AI.UnitTests.ProviderAdapters;
 public sealed class ProviderTextEmbeddingGeneratorTests
 {
     private const int Dimension = EmbeddingDeclarations.Dimension;
+
+    /// <summary>The literal the scanner in the guarded-egress tests reports, standing in for a credential in mail.</summary>
+    private const string Marker = "AKIAEXAMPLEKEY";
 
     [Fact]
     public async Task GenerateAsync_AProviderAnsweringInTheDeclaredSpace_ReturnsOneVectorPerPassage()
@@ -271,6 +276,59 @@ public sealed class ProviderTextEmbeddingGeneratorTests
         Assert.Equal(0, provider.RequestCount);
     }
 
+    /// <summary>A passage reaching a hosted endpoint leaves the deployment, so every one of a batch is scanned first.</summary>
+    [Fact]
+    public async Task GenerateAsync_ASwitchedOnScanner_RedactsEveryPassageBeforeTheRequestIsSent()
+    {
+        // Arrange
+        using var egress = ScanningSensitiveContentEgress.Finding(Marker, TimeProvider.System);
+        using var provider = ScriptedProvider.Answering(VectorsOfWidth(Dimension, 2));
+        var generator = provider.GeneratorOver(EmbeddingDeclarations.Plan(), egressGuard: egress.Guard);
+
+        // Act
+        await generator.GenerateAsync(
+            [$"the key is {Marker}", "nothing here"],
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        var sent = provider.LastRequestBody();
+
+        Assert.DoesNotContain(Marker, sent, StringComparison.Ordinal);
+        Assert.Contains("[redacted:CloudKey]", sent, StringComparison.Ordinal);
+    }
+
+    /// <summary>Embedding a passage nothing could scan would leave the deployment carrying whatever it held.</summary>
+    [Fact]
+    public async Task GenerateAsync_ADetectorThatCannotAnswer_RefusesTheCallWithoutReachingTheProvider()
+    {
+        // Arrange
+        using var egress = ScanningSensitiveContentEgress.Unavailable(TimeProvider.System);
+        using var provider = ScriptedProvider.Answering(VectorsOfWidth(Dimension, 1));
+        var generator = provider.GeneratorOver(EmbeddingDeclarations.Plan(), egressGuard: egress.Guard);
+
+        // Act
+        await Assert.ThrowsAsync<SensitiveContentScannerUnavailableException>(() =>
+            generator.GenerateAsync(["first"], TestContext.Current.CancellationToken));
+
+        // Assert
+        Assert.Equal(0, provider.RequestCount);
+    }
+
+    /// <summary>An opt-in nobody took must not appear on this path at all.</summary>
+    [Fact]
+    public async Task GenerateAsync_ADeploymentThatScansNothing_SendsEveryPassageAsItWasComposed()
+    {
+        // Arrange
+        using var provider = ScriptedProvider.Answering(VectorsOfWidth(Dimension, 1));
+        var generator = provider.GeneratorOver(EmbeddingDeclarations.Plan());
+
+        // Act
+        await generator.GenerateAsync([$"the key is {Marker}"], TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Contains(Marker, provider.LastRequestBody(), StringComparison.Ordinal);
+    }
+
     private static double Length(EmbeddingVector vector) =>
         Math.Sqrt(vector.Components.ToArray().Sum(component => (double)component * component));
 
@@ -370,7 +428,8 @@ public sealed class ProviderTextEmbeddingGeneratorTests
         /// </remarks>
         public ProviderTextEmbeddingGenerator GeneratorOver(
             EmbeddingGenerationPlan plan,
-            IReadOnlyCollection<string>? declinedInstances = null)
+            IReadOnlyCollection<string>? declinedInstances = null,
+            SensitiveContentEgressGuard? egressGuard = null)
         {
             var transportFactory = Substitute.For<IHttpClientFactory>();
             transportFactory
@@ -414,6 +473,7 @@ public sealed class ProviderTextEmbeddingGeneratorTests
                 transportFactory,
                 operationRunner,
                 this.HealthRecorder,
+                egressGuard ?? SensitiveContentEgressGuards.Inactive(),
                 NullLogger<ProviderTextEmbeddingGenerator>.Instance);
         }
 

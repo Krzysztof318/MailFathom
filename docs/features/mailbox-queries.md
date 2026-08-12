@@ -197,6 +197,13 @@ it summarizes.
 `Cc` and `Reply-To` are stored and filterable but not listed. A listing exists to let a reader recognize a message; the
 full participant set belongs to reading it.
 
+The subject is the one thing a summary carries that a message's author wrote, so it is the one thing a switched-on
+sensitive-content scanner redacts before a listing is served; the identifiers, addresses, timestamps, and flags beside
+it are what a caller acts on, and are protected by who may reach this deployment rather than by redaction. A scanner
+that cannot answer refuses the listing. Both switches are off by default, and nothing on this path is scanned then.
+[Sensitive-content scanning § the guarded egress
+points](sensitive-content-scanning.md#the-guarded-egress-points) holds the contract.
+
 ### The remote flag snapshot
 
 `RemoteEmailFlagSnapshot` reports the flags a server last showed, together with when they were read. The timestamp is

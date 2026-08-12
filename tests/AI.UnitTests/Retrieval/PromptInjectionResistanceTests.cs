@@ -163,7 +163,8 @@ public sealed class PromptInjectionResistanceTests
             new ScopedMailKnowledgeRetrieval(
                 knowledgeSearch,
                 OnePrimaryAccount,
-                new MailAnsweringRunLedger(MailAnsweringRunBounds.Default)),
+                new MailAnsweringRunLedger(MailAnsweringRunBounds.Default),
+                SensitiveContentEgressGuards.Inactive()),
             NullLoggerFactory.Instance);
 
     private static IReadOnlyList<XElement> MessagesIn(string envelope) =>

@@ -351,6 +351,13 @@ rather than a row the database rejects later with no provider in sight.
   rather than add.
 - **A bounded response.** The transport refuses a body larger than the declared geometry could fill, and refuses
   redirects — a moved endpoint answering with one would carry the key or the bearer token to whatever host it named.
+- **A sensitive-content guard, where one is switched on.** Every passage is scanned and redacted before the request is
+  sent, once for the whole chain rather than once per endpoint it falls through, and a scanner that cannot answer
+  refuses the call. It applies to every declared endpoint, a model server inside the deployment included: nothing in a
+  declaration distinguishes a local address from a hosted one, and text leaving the process is text leaving the process.
+  The deterministic in-process generator sends nothing and is the one path with no guard on it. Both switches are off by
+  default, and nothing is scanned then. [Sensitive-content scanning § the guarded egress
+  points](sensitive-content-scanning.md#the-guarded-egress-points) holds the contract.
 
 ## What an instance is willing to spend
 

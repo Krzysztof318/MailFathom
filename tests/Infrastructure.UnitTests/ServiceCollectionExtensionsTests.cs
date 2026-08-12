@@ -10,6 +10,8 @@ using MailFathom.Application.Retrieval;
 using MailFathom.Application.Retrieval.AskMail;
 using MailFathom.Application.SensitiveContent;
 using MailFathom.Application.SensitiveContent.Detection;
+using MailFathom.Application.SensitiveContent.Egress;
+using MailFathom.Application.SensitiveContent.Redaction;
 using MailFathom.Infrastructure.Persistence;
 using MailFathom.Infrastructure.Persistence.Connections;
 using MailFathom.Infrastructure.Secrets.Resolution;
@@ -258,6 +260,60 @@ public sealed class ServiceCollectionExtensionsTests
         // The answering agent belongs to the AI boundary and arrives only where a chat endpoint was declared, which is
         // what the capability above resolves optionally rather than requires.
         Assert.DoesNotContain(services, descriptor => descriptor.ServiceType == typeof(IMailQuestionAnswerer));
+    }
+
+    /// <summary>
+    /// The guard every egress point calls is registered whatever a deployment configured, so no consumer of it carries
+    /// a null check or a second code path. With both scanner switches off there is no redactor to resolve, and the
+    /// guard has to come back inert rather than fail to compose the readers that take it.
+    /// </summary>
+    [Fact]
+    public void AddInfrastructure_WithoutAScanner_StillResolvesAnEgressGuardThatScansNothing()
+    {
+        // Arrange
+        var services = new ServiceCollection();
+        services.AddSingleton(TimeProvider.System);
+
+        // Act
+        services.AddInfrastructure(
+            _ => new PostgresConnectionSettings("Host=localhost;Database=mailfathom", null, null),
+            PostgresTextSearchConfiguration.Default,
+            MailAnsweringBudget.Default);
+
+        // Assert
+        using var provider = services.BuildServiceProvider();
+
+        Assert.False(provider.GetRequiredService<SensitiveContentEgressGuard>().IsActive);
+    }
+
+    /// <summary>The other half: a deployment that switched a scanner on gets a guard that redacts through it.</summary>
+    [Fact]
+    public void AddInfrastructure_WithARedactor_ResolvesAnEgressGuardThatScansThroughIt()
+    {
+        // Arrange
+        var services = new ServiceCollection();
+        services.AddSingleton(TimeProvider.System);
+        services.AddSingleton(SensitiveContentPlan.Create(
+            SensitiveContentScanBounds.Default,
+            [
+                SensitiveContentScannerPlan.Create(
+                    SensitiveContentScannerKind.Secrets,
+                    [SensitiveContentCategory.Create("ProviderToken")],
+                    []),
+            ])!);
+        services.AddSingleton<SensitiveContentRedactor>();
+        services.AddSecretContentScanning();
+
+        // Act
+        services.AddInfrastructure(
+            _ => new PostgresConnectionSettings("Host=localhost;Database=mailfathom", null, null),
+            PostgresTextSearchConfiguration.Default,
+            MailAnsweringBudget.Default);
+
+        // Assert
+        using var provider = services.BuildServiceProvider();
+
+        Assert.True(provider.GetRequiredService<SensitiveContentEgressGuard>().IsActive);
     }
 
     /// <summary>

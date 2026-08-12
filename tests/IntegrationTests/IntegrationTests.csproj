@@ -30,6 +30,11 @@
     <Compile Include="..\shared\TestCertificates.cs" Link="TestCertificates.cs" />
     <Compile Include="..\shared\SyntheticServedAccount.cs" Link="SyntheticServedAccount.cs" />
     <Compile Include="..\shared\StubMailFolderMappings.cs" Link="StubMailFolderMappings.cs" />
+    <!-- The provider contract tests compose the adapters by hand, so they build the guard those adapters take. -->
+    <Compile Include="..\shared\MarkerSensitiveContentScanner.cs" Link="MarkerSensitiveContentScanner.cs" />
+    <Compile Include="..\shared\RecordingSensitiveContentEgressTelemetry.cs" Link="RecordingSensitiveContentEgressTelemetry.cs" />
+    <Compile Include="..\shared\SensitiveContentEgressGuards.cs" Link="SensitiveContentEgressGuards.cs" />
+    <Compile Include="..\shared\ScanningSensitiveContentEgress.cs" Link="ScanningSensitiveContentEgress.cs" />
   </ItemGroup>
 
   <ItemGroup>

@@ -11,6 +11,7 @@ using MailFathom.Application.Chat;
 using MailFathom.Application.Resilience;
 using MailFathom.Application.Retrieval;
 using MailFathom.Application.Retrieval.AskMail;
+using MailFathom.Application.SensitiveContent.Egress;
 using MailFathom.Domain.Answering.Audit;
 using Microsoft.Extensions.Logging;
 
@@ -28,6 +29,13 @@ namespace MailFathom.AI.Orchestration;
 /// same lifetime the single-request chat adapter uses and for the same reasons: a rotated key is picked up by the next
 /// question rather than at the next restart, and one caller's retrieved mail cannot outlive the call that retrieved it.
 /// </para>
+/// <para>
+/// A prompt this run sends is composed from three things and no others: the instruction, which is a constant of this
+/// build; the question, which is guarded here; and the extracts a lookup returns, which are guarded where the retrieval
+/// writes them. Guarding the composed conversation instead would rescan every earlier turn on every turn, and would
+/// leave the guarantee resting on which content kinds a framework release happens to publish rather than on where mail
+/// enters the run.
+/// </para>
 /// </remarks>
 internal sealed class MailAnsweringAgent : IMailQuestionAnswerer
 {
@@ -40,6 +48,7 @@ internal sealed class MailAnsweringAgent : IMailQuestionAnswerer
     private readonly IOutboundOperationRunner operationRunner;
     private readonly IAiProviderHealthRecorder healthRecorder;
     private readonly IMailAnsweringSpendLedger spendLedger;
+    private readonly SensitiveContentEgressGuard egressGuard;
     private readonly ILoggerFactory loggerFactory;
     private readonly ILogger<MailAnsweringAgent> logger;
 
@@ -53,6 +62,7 @@ internal sealed class MailAnsweringAgent : IMailQuestionAnswerer
     /// <param name="operationRunner">Applies the provider resilience budget to every call the run makes.</param>
     /// <param name="healthRecorder">Records what each call established about the provider.</param>
     /// <param name="spendLedger">Counts what every call of this run added to the current period.</param>
+    /// <param name="egressGuard">Scans the question and every retrieved extract before either reaches the provider.</param>
     /// <param name="loggerFactory">Creates the loggers the framework's own components record through.</param>
     /// <param name="logger">Records the outcome without recording any question, answer, or passage.</param>
     /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
@@ -66,6 +76,7 @@ internal sealed class MailAnsweringAgent : IMailQuestionAnswerer
         IOutboundOperationRunner operationRunner,
         IAiProviderHealthRecorder healthRecorder,
         IMailAnsweringSpendLedger spendLedger,
+        SensitiveContentEgressGuard egressGuard,
         ILoggerFactory loggerFactory,
         ILogger<MailAnsweringAgent> logger)
     {
@@ -78,6 +89,7 @@ internal sealed class MailAnsweringAgent : IMailQuestionAnswerer
         ArgumentNullException.ThrowIfNull(operationRunner);
         ArgumentNullException.ThrowIfNull(healthRecorder);
         ArgumentNullException.ThrowIfNull(spendLedger);
+        ArgumentNullException.ThrowIfNull(egressGuard);
         ArgumentNullException.ThrowIfNull(loggerFactory);
         ArgumentNullException.ThrowIfNull(logger);
 
@@ -90,6 +102,7 @@ internal sealed class MailAnsweringAgent : IMailQuestionAnswerer
         this.operationRunner = operationRunner;
         this.healthRecorder = healthRecorder;
         this.spendLedger = spendLedger;
+        this.egressGuard = egressGuard;
         this.loggerFactory = loggerFactory;
         this.logger = logger;
     }
@@ -118,7 +131,11 @@ internal sealed class MailAnsweringAgent : IMailQuestionAnswerer
             this.plan.MaximumRequestCharacters);
 
         var runLedger = new MailAnsweringRunLedger(this.runBounds);
-        var retrieval = new ScopedMailKnowledgeRetrieval(this.knowledgeSearch, question.Scope, runLedger);
+        var retrieval = new ScopedMailKnowledgeRetrieval(
+            this.knowledgeSearch,
+            question.Scope,
+            runLedger,
+            this.egressGuard);
 
         try
         {
@@ -159,8 +176,16 @@ internal sealed class MailAnsweringAgent : IMailQuestionAnswerer
         // reaches the endpoint's circuit, its concurrency budget, or its health record.
         using var chatClient = new BudgetedChatClient(resilientClient, runLedger, this.spendLedger);
 
+        // The question is the one turn of the prompt a person wrote, so it is guarded like every other text that leaves
+        // this deployment: somebody asking what to do about the key a colleague sent them has put that key into the
+        // request. Guarded here rather than where the run is admitted, so a question refused by a ceiling costs no scan.
+        var questionText = await this.egressGuard.GuardAsync(
+            SensitiveContentEgressPoint.ChatPrompt,
+            question.Text.Value,
+            cancellationToken);
+
         var agent = MailAnsweringAgentComposition.Compose(chatClient, this.plan, retrieval, this.loggerFactory);
-        var response = await agent.RunAsync(question.Text.Value, session: null, options: null, cancellationToken);
+        var response = await agent.RunAsync(questionText, session: null, options: null, cancellationToken);
         var report = retrieval.Report;
 
         if (string.IsNullOrWhiteSpace(response.Text))

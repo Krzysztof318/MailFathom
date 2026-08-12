@@ -40,9 +40,46 @@ entirely rather than accept the second.
 All four combinations are supported configurations. With both off nothing is scanned, nothing is constructed, and no
 cost lands on any path.
 
-> Both scanners have a detector behind them and both are described below. **No consumer redacts through the contract
-> yet**: none of the rows in the table above redacts today, so each states the path the contract is written for rather
-> than one that is covered. The consumers arrive with their own changes, and this note narrows as they do.
+> **Egress redacts through the contract; derived data does not yet.** The second row of the table above is covered at
+> the points the next section names, with one exception: the mail body an MCP client asks for by identity is served as
+> it was stored. The first row states the path the contract is written for rather than one that is covered — a chunk and
+> its vector are still built from unredacted text. The rest arrive with their own changes, and this note narrows as they
+> do.
+
+## The guarded egress points
+
+Every place text leaves this deployment goes through one guard, and the guard is told which place it is. There are
+three, and the register is closed: a fourth is a code change rather than a configuration one, which is what makes the
+list below answerable by reading it.
+
+| Egress point | What crosses it |
+| --- | --- |
+| `chat_prompt` | Everything a model is sent: the question a client asked, and the subjects and passages of the mail retrieved to answer it |
+| `hosted_embedding_input` | Every passage sent to a hosted embedding endpoint |
+| `mcp_snippet` | The mail text an MCP tool answers with: the subjects of a listing, the subjects and extracts of a search, and an answer with its citations |
+
+**A value is guarded, never a composed document.** A snippet, a subject, and a question are each scanned on their own
+and the result is composed afterwards. Scanning the composed thing instead would let one detection cover the end of one
+field and the beginning of the next, and replacing that region would take the boundary between them with it — an XML
+envelope handed to a model would stop being one.
+
+**The guard sits above the retry boundary**, so one call costs one scan whatever the provider does, and a scanner that
+cannot answer surfaces as its own refusal rather than being reclassified as a provider fault and retried. What it never
+sits above is the identifiers beside the text: an account, a folder alias, an address, a stored identity, and a cursor
+are what a caller acts on rather than text to read, and redacting the address a reply has to go to would remove a
+result's whole use while protecting nothing the message body did not already carry. Those are protected by who may
+reach this deployment.
+
+**Three paths carry no guard because they carry no mail.** A log line and an audit record hold identifiers, aliases,
+counts, and outcomes and never message text, which is the rule the [telemetry](../operations/telemetry.md) and audit
+contracts already hold rather than something redaction would enforce. MailFathom sends no webhook at all. The
+deterministic in-process embedding generator is exempt for a different reason: nothing leaves the process, so there is
+nothing for a guard to sit in front of.
+
+A refusal at any of the three fails the operation it guards, as [failing closed](#failing-closed) describes — the
+question is not answered, the passages are not embedded, the listing is not served. What each guarded call found,
+refused, and cost is published; [telemetry § what guarding an egress point
+publishes](../operations/telemetry.md#what-guarding-an-egress-point-publishes) names the instruments.
 
 ## A finding names a position, never a value
 

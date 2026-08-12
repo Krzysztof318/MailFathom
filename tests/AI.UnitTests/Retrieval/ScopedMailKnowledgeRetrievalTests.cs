@@ -11,8 +11,10 @@ using MailFathom.Application.Emails.Mailboxes;
 using MailFathom.Application.Emails.Search;
 using MailFathom.Application.Retrieval;
 using MailFathom.Application.Retrieval.AskMail;
+using MailFathom.Application.SensitiveContent.Detection;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Folders;
+using MailFathom.TestSupport;
 using Microsoft.Extensions.AI;
 using Xunit;
 
@@ -27,6 +29,9 @@ namespace MailFathom.AI.UnitTests.Retrieval;
 public sealed class ScopedMailKnowledgeRetrievalTests
 {
     private const string Query = "what did the insurer agree to pay";
+
+    /// <summary>The literal the scanner in the guarded-egress tests reports, standing in for a credential in mail.</summary>
+    private const string Marker = "AKIAEXAMPLEKEY";
 
     private static readonly MailboxScope OnePrimaryAccount = MailboxScope.Create(
         [MailAccountId.Create("primary")],
@@ -166,7 +171,8 @@ public sealed class ScopedMailKnowledgeRetrievalTests
         var retrieval = new ScopedMailKnowledgeRetrieval(
             knowledgeSearch,
             OnePrimaryAccount,
-            new MailAnsweringRunLedger(MailAnsweringRunBounds.Default));
+            new MailAnsweringRunLedger(MailAnsweringRunBounds.Default),
+            SensitiveContentEgressGuards.Inactive());
 
         // Act
         await InvokeAsync(retrieval.CreateSearchTool(), OneQuery);
@@ -193,7 +199,8 @@ public sealed class ScopedMailKnowledgeRetrievalTests
             new MailAnsweringRunLedger(MailAnsweringRunBounds.Create(
                 maximumRetrievedCharacters: 60,
                 maximumProviderCalls: 8,
-                maximumTokens: 80_000)));
+                maximumTokens: 80_000)),
+            SensitiveContentEgressGuards.Inactive());
 
         // Act
         var envelope = await InvokeAsync(retrieval.CreateSearchTool(), OneQuery);
@@ -218,7 +225,8 @@ public sealed class ScopedMailKnowledgeRetrievalTests
         var retrieval = new ScopedMailKnowledgeRetrieval(
             knowledgeSearch,
             OnePrimaryAccount,
-            new MailAnsweringRunLedger(MailAnsweringRunBounds.Default));
+            new MailAnsweringRunLedger(MailAnsweringRunBounds.Default),
+            SensitiveContentEgressGuards.Inactive());
         var tool = retrieval.CreateSearchTool();
 
         // Act
@@ -234,6 +242,99 @@ public sealed class ScopedMailKnowledgeRetrievalTests
         Assert.Equal(2, report.CandidateCount);
     }
 
+    /// <summary>The extracts are where mail reaches a chat provider, so they are scanned before the envelope is written.</summary>
+    [Fact]
+    public async Task SearchTool_ASwitchedOnScanner_RedactsTheExtractAndTheSubjectBeforeTheyReachTheModel()
+    {
+        // Arrange
+        using var egress = ScanningSensitiveContentEgress.Finding(Marker, TimeProvider.System);
+        var knowledgeSearch = new RecordingEmailKnowledgeSearch().Returning(
+            Query,
+            KnowledgePassages.Create($"sign in with {Marker} today", subject: $"re: {Marker}"));
+        var retrieval = new ScopedMailKnowledgeRetrieval(
+            knowledgeSearch,
+            OnePrimaryAccount,
+            new MailAnsweringRunLedger(MailAnsweringRunBounds.Default),
+            egress.Guard);
+
+        // Act
+        var envelope = await InvokeAsync(retrieval.CreateSearchTool(), OneQuery);
+
+        // Assert
+        var message = Assert.Single(
+            RootOf(envelope).Elements(RetrievedMailContextFormatter.MessageElementName));
+
+        Assert.Equal(
+            "sign in with [redacted:CloudKey] today",
+            message.Element(RetrievedMailContextFormatter.ExtractElementName)?.Value);
+        Assert.Equal(
+            "re: [redacted:CloudKey]",
+            message.Element(RetrievedMailContextFormatter.SubjectElementName)?.Value);
+    }
+
+    /// <summary>Handing a model mail a scanner could not read would be the leak the switch was turned on to prevent.</summary>
+    [Fact]
+    public async Task SearchTool_ADetectorThatCannotAnswer_RefusesTheLookupRatherThanSendingItUnscanned()
+    {
+        // Arrange
+        using var egress = ScanningSensitiveContentEgress.Unavailable(TimeProvider.System);
+        var knowledgeSearch = new RecordingEmailKnowledgeSearch().Returning(
+            Query,
+            KnowledgePassages.Create("an ordinary extract"));
+        var retrieval = new ScopedMailKnowledgeRetrieval(
+            knowledgeSearch,
+            OnePrimaryAccount,
+            new MailAnsweringRunLedger(MailAnsweringRunBounds.Default),
+            egress.Guard);
+        var tool = retrieval.CreateSearchTool();
+
+        // Act, Assert
+        await Assert.ThrowsAsync<SensitiveContentScannerUnavailableException>(() => InvokeAsync(tool, OneQuery));
+    }
+
+    /// <summary>What a run reports having retrieved is read inside this process, so redacting it would guard nothing.</summary>
+    [Fact]
+    public async Task SearchTool_ASwitchedOnScanner_LeavesWhatTheRunRecordsAsItWasFound()
+    {
+        // Arrange
+        using var egress = ScanningSensitiveContentEgress.Finding(Marker, TimeProvider.System);
+        var knowledgeSearch = new RecordingEmailKnowledgeSearch().Returning(
+            Query,
+            KnowledgePassages.Create($"sign in with {Marker} today"));
+        var retrieval = new ScopedMailKnowledgeRetrieval(
+            knowledgeSearch,
+            OnePrimaryAccount,
+            new MailAnsweringRunLedger(MailAnsweringRunBounds.Default),
+            egress.Guard);
+
+        // Act
+        await InvokeAsync(retrieval.CreateSearchTool(), OneQuery);
+
+        // Assert
+        Assert.Equal($"sign in with {Marker} today", Assert.Single(retrieval.Report.Passages).Text);
+    }
+
+    /// <summary>An opt-in nobody took must not appear on this path at all.</summary>
+    [Fact]
+    public async Task SearchTool_ADeploymentThatScansNothing_WritesTheExtractUntouched()
+    {
+        // Arrange
+        var knowledgeSearch = new RecordingEmailKnowledgeSearch().Returning(
+            Query,
+            KnowledgePassages.Create($"sign in with {Marker} today"));
+
+        // Act
+        var envelope = await InvokeAsync(ToolOver(knowledgeSearch), OneQuery);
+
+        // Assert
+        Assert.Equal(
+            $"sign in with {Marker} today",
+            RootOf(envelope)
+                .Elements(RetrievedMailContextFormatter.MessageElementName)
+                .Single()
+                .Element(RetrievedMailContextFormatter.ExtractElementName)?.Value);
+    }
+
     private static Dictionary<string, object?> OneQuery =>
         new() { [ScopedMailKnowledgeRetrieval.QueryArgumentName] = Query };
 
@@ -241,7 +342,8 @@ public sealed class ScopedMailKnowledgeRetrievalTests
         new ScopedMailKnowledgeRetrieval(
             knowledgeSearch,
             OnePrimaryAccount,
-            new MailAnsweringRunLedger(MailAnsweringRunBounds.Default)).CreateSearchTool();
+            new MailAnsweringRunLedger(MailAnsweringRunBounds.Default),
+            SensitiveContentEgressGuards.Inactive()).CreateSearchTool();
 
     /// <summary>Calls the tool the way the framework's tool loop does, and reads the document it answered with.</summary>
     /// <remarks>

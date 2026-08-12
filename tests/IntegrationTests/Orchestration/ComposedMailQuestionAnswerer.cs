@@ -8,6 +8,7 @@ using MailFathom.AI.Retrieval;
 using MailFathom.Application.Chat;
 using MailFathom.Application.Retrieval;
 using MailFathom.Application.Retrieval.AskMail;
+using MailFathom.TestSupport;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -46,7 +47,11 @@ internal sealed class ComposedMailQuestionAnswerer(
         observation.RecordComposition(plan.Endpoint.Alias, MailAnsweringInstructions.Version);
 
         var runLedger = new MailAnsweringRunLedger(runBounds);
-        var retrieval = new ScopedMailKnowledgeRetrieval(knowledgeSearch, question.Scope, runLedger);
+        var retrieval = new ScopedMailKnowledgeRetrieval(
+            knowledgeSearch,
+            question.Scope,
+            runLedger,
+            SensitiveContentEgressGuards.Inactive());
 
         try
         {

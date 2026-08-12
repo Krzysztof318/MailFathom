@@ -36,6 +36,8 @@ using MailFathom.Application.Rules.Evaluation;
 using MailFathom.Application.Rules.History;
 using MailFathom.Application.SensitiveContent;
 using MailFathom.Application.SensitiveContent.Detection;
+using MailFathom.Application.SensitiveContent.Egress;
+using MailFathom.Application.SensitiveContent.Redaction;
 using MailFathom.Application.Spam;
 using MailFathom.Application.Spam.Scanning;
 using MailFathom.Application.Spam.Signals;
@@ -385,6 +387,16 @@ public static class ServiceCollectionExtensions
         services.AddScoped<StoredEmailExtractionBackfill>();
         services.AddScoped<MailboxScopeResolver>();
         services.AddScoped<MailAccountDirectoryReader>();
+        // The guard every egress point calls, registered for every deployment rather than only where a scanner is
+        // switched on. What is conditional is the redaction behind it: with both switches off the provider hands over
+        // no redactor, no detector is constructed, and every call returns its argument. Registering it conditionally
+        // instead would put a null check and a second code path into each consumer, which is how two of them end up
+        // disagreeing about what an unguarded egress looks like.
+        services.AddSingleton<ISensitiveContentEgressTelemetry, SensitiveContentEgressTelemetry>();
+        services.AddSingleton(provider => new SensitiveContentEgressGuard(
+            provider.GetService<SensitiveContentRedactor>(),
+            provider.GetRequiredService<ISensitiveContentEgressTelemetry>(),
+            provider.GetRequiredService<TimeProvider>()));
         services.AddScoped<MailboxTimelineReader>();
         services.AddScoped<EmailContentReader>();
         services.AddScoped<EmailAttachmentDownloadReader>();

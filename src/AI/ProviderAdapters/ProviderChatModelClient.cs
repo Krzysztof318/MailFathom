@@ -7,6 +7,7 @@ using MailFathom.AI.Providers;
 using MailFathom.Application.AiProviders;
 using MailFathom.Application.Chat;
 using MailFathom.Application.Resilience;
+using MailFathom.Application.SensitiveContent.Egress;
 using MailFathom.Domain.Failures;
 using Microsoft.Extensions.Logging;
 
@@ -21,8 +22,8 @@ namespace MailFathom.AI.ProviderAdapters;
 /// </para>
 /// <para>
 /// It composes nothing. The conversation arrives built, the model and its parameters arrive validated in the plan, and
-/// what this adds is the deadline, the resilience budget, the classification of a failure, and the refusal to let any
-/// prompt or answer reach a log.
+/// what this adds is the deadline, the resilience budget, the classification of a failure, the sensitive-content guard
+/// every turn passes through, and the refusal to let any prompt or answer reach a log.
 /// </para>
 /// <para>
 /// The client library's namespace is written out at every use rather than imported, because it publishes a
@@ -47,6 +48,7 @@ internal sealed class ProviderChatModelClient : IChatModelClient
     private readonly IHttpClientFactory transportFactory;
     private readonly IOutboundOperationRunner operationRunner;
     private readonly IAiProviderHealthRecorder healthRecorder;
+    private readonly SensitiveContentEgressGuard egressGuard;
     private readonly ILogger<ProviderChatModelClient> logger;
 
     /// <summary>Initializes a client over the declared endpoint, its credentials, its transport, and its resilience budget.</summary>
@@ -56,6 +58,7 @@ internal sealed class ProviderChatModelClient : IChatModelClient
     /// <param name="transportFactory">Opens the transport a request is sent over, one per attempt.</param>
     /// <param name="operationRunner">Applies the provider resilience budget.</param>
     /// <param name="healthRecorder">Records what each call established about the provider.</param>
+    /// <param name="egressGuard">Scans every turn before it is sent, where this deployment scans anything.</param>
     /// <param name="logger">Records the outcome without recording any prompt, answer, or credential.</param>
     /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
     public ProviderChatModelClient(
@@ -65,6 +68,7 @@ internal sealed class ProviderChatModelClient : IChatModelClient
         IHttpClientFactory transportFactory,
         IOutboundOperationRunner operationRunner,
         IAiProviderHealthRecorder healthRecorder,
+        SensitiveContentEgressGuard egressGuard,
         ILogger<ProviderChatModelClient> logger)
     {
         ArgumentNullException.ThrowIfNull(plan);
@@ -73,6 +77,7 @@ internal sealed class ProviderChatModelClient : IChatModelClient
         ArgumentNullException.ThrowIfNull(transportFactory);
         ArgumentNullException.ThrowIfNull(operationRunner);
         ArgumentNullException.ThrowIfNull(healthRecorder);
+        ArgumentNullException.ThrowIfNull(egressGuard);
         ArgumentNullException.ThrowIfNull(logger);
 
         this.plan = plan;
@@ -81,6 +86,7 @@ internal sealed class ProviderChatModelClient : IChatModelClient
         this.transportFactory = transportFactory;
         this.operationRunner = operationRunner;
         this.healthRecorder = healthRecorder;
+        this.egressGuard = egressGuard;
         this.logger = logger;
     }
 
@@ -94,9 +100,11 @@ internal sealed class ProviderChatModelClient : IChatModelClient
             this.plan.MaximumMessagesPerRequest,
             this.plan.MaximumRequestCharacters);
 
+        var guarded = await this.GuardedAsync(conversation, cancellationToken);
+
         try
         {
-            var answer = await this.RequestAnswerAsync(conversation, cancellationToken);
+            var answer = await this.RequestAnswerAsync(guarded, cancellationToken);
 
             this.healthRecorder.RecordServed(AiProviderRole.Chat);
 
@@ -110,6 +118,51 @@ internal sealed class ProviderChatModelClient : IChatModelClient
 
             throw;
         }
+    }
+
+    /// <summary>Scans every turn of a conversation before any of it is sent to a third party.</summary>
+    /// <remarks>
+    /// <para>
+    /// Applied here rather than inside the send, so one scan covers one call however many attempts the resilience
+    /// pipeline makes of it, and so a scanner that cannot answer refuses the call as itself instead of arriving at the
+    /// pipeline as a fault of the provider's.
+    /// </para>
+    /// <para>
+    /// Every turn is scanned rather than only the ones a caller composed from mail, because a conversation reaching
+    /// this port is already built and nothing here can tell which turn a mailbox reached. That includes the one a
+    /// person typed: a question is text somebody wrote into a client, and it leaves this deployment as completely as an
+    /// extract does.
+    /// </para>
+    /// <para>
+    /// The bounds above run first and are checked against what the caller composed. Redaction can only make a turn
+    /// longer — a placeholder is wider than most of what it replaces — so a conversation admitted at the boundary may
+    /// be sent slightly wider than the boundary allows; cutting it afterwards would drop text a scan had just made
+    /// safe, which is the wrong thing to lose.
+    /// </para>
+    /// </remarks>
+    private async Task<IReadOnlyList<ChatMessage>> GuardedAsync(
+        IReadOnlyList<ChatMessage> conversation,
+        CancellationToken cancellationToken)
+    {
+        if (!this.egressGuard.IsActive)
+        {
+            return conversation;
+        }
+
+        var guarded = new List<ChatMessage>(conversation.Count);
+
+        foreach (var turn in conversation)
+        {
+            guarded.Add(turn with
+            {
+                Text = await this.egressGuard.GuardAsync(
+                    SensitiveContentEgressPoint.ChatPrompt,
+                    turn.Text,
+                    cancellationToken),
+            });
+        }
+
+        return guarded;
     }
 
     private async Task<ChatAnswer> RequestAnswerAsync(

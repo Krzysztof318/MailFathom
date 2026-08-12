@@ -14,6 +14,12 @@
     <Compile Include="..\shared\StubJunkMailFolderCatalog.cs" Link="StubJunkMailFolderCatalog.cs" />
     <Compile Include="..\shared\StubMailFolderMappings.cs" Link="StubMailFolderMappings.cs" />
     <Compile Include="..\shared\SyntheticServedAccount.cs" Link="SyntheticServedAccount.cs" />
+    <!-- Every boundary holding a guarded egress point asserts the same three states of the guard, so the three are
+         built once and linked into each suite that has one. -->
+    <Compile Include="..\shared\MarkerSensitiveContentScanner.cs" Link="MarkerSensitiveContentScanner.cs" />
+    <Compile Include="..\shared\RecordingSensitiveContentEgressTelemetry.cs" Link="RecordingSensitiveContentEgressTelemetry.cs" />
+    <Compile Include="..\shared\SensitiveContentEgressGuards.cs" Link="SensitiveContentEgressGuards.cs" />
+    <Compile Include="..\shared\ScanningSensitiveContentEgress.cs" Link="ScanningSensitiveContentEgress.cs" />
   </ItemGroup>
 
   <ItemGroup>

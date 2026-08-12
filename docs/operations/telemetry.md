@@ -275,6 +275,34 @@ and the history of what it read is missing, which is exactly the gap an audit ca
 because writing an entry may never fail the answer it describes, so swallowing the failure is only defensible while it
 is counted.
 
+### What guarding an egress point publishes
+
+Sensitive-content scanning publishes five instruments, all of them tagged with
+`mailfathom.sensitive_content.egress_point` — `chat_prompt`, `hosted_embedding_input`, or `mcp_snippet`. The egress
+point is on every one of them because it is what an operator acts on: "something was redacted" says nothing, while a
+scanner finding credentials in retrieved extracts and nothing in subjects, or adding two seconds to a listing and
+nothing to an embedding call, is where a category list or a bound gets changed.
+
+| Instrument | What it answers |
+| --- | --- |
+| `mailfathom.sensitive_content.guarded` | How many texts were scanned before they crossed out of the deployment |
+| `mailfathom.sensitive_content.findings` | How many detections were replaced, split by `mailfathom.sensitive_content.category` |
+| `mailfathom.sensitive_content.omitted` | How many characters the analyzed ceiling dropped rather than hand on unscanned |
+| `mailfathom.sensitive_content.refusals` | How many operations a scanner that could not answer refused, by `mailfathom.sensitive_content.scanner` |
+| `mailfathom.sensitive_content.scan.duration` | What scanning added to one guarded operation |
+
+The findings are split by category rather than totalled because which kind of material a mailbox is producing is what
+decides whether a category list is right, and a total says only that the feature is switched on. The omitted count is
+recorded only when the ceiling actually cut something: a zero on every guarded text would make the series say the
+ceiling is in play on ordinary mail, which is the one question that instrument exists to answer. All five read zero on a
+deployment with both switches off, because nothing is constructed there.
+
+Nothing published here is mail or derived from it. The three tags are MailFathom's own closed sets, and the values are
+counts and durations — never a rule's match, a position, a message identity, or any part of what was found, each of
+which would put the credential in the telemetry written to prove it never left.
+[Sensitive-content scanning](../features/sensitive-content-scanning.md#the-guarded-egress-points) names the points
+themselves and what a refusal does to each.
+
 What such a signal may carry is bounded by the same rule that governs the log lines, and it is a cardinality rule as
 much as a privacy one. Counts, sizes, durations, outcomes, error codes, and MailFathom's own configured account and
 folder aliases are permitted. Mail content, an address, a subject, a remote folder path, a message identifier, a UID, a

@@ -7,6 +7,7 @@ using MailFathom.Application.Emails.ListEmails;
 using MailFathom.Application.Emails.Mailboxes;
 using MailFathom.Application.Emails.Summaries;
 using MailFathom.Application.Folders;
+using MailFathom.Application.SensitiveContent.Egress;
 using MailFathom.Application.Synchronization.Checkpoints;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
@@ -629,14 +630,16 @@ public sealed class ListEmailsToolTests
     private static ListEmailsTool ToolOver(
         StubStoredEmailTimelineReader timeline,
         StubSynchronizationFreshnessReader? freshness = null,
-        StubJunkMailFolderCatalog? junkFolders = null) =>
-        ToolMapping(StubMailFolderMappings.Nothing, timeline, freshness, junkFolders);
+        StubJunkMailFolderCatalog? junkFolders = null,
+        SensitiveContentEgressGuard? egressGuard = null) =>
+        ToolMapping(StubMailFolderMappings.Nothing, timeline, freshness, junkFolders, egressGuard);
 
     private static ListEmailsTool ToolMapping(
         StubMailFolderMappings folderMappings,
         StubStoredEmailTimelineReader timeline,
         StubSynchronizationFreshnessReader? freshness = null,
-        StubJunkMailFolderCatalog? junkFolders = null) => new(
+        StubJunkMailFolderCatalog? junkFolders = null,
+        SensitiveContentEgressGuard? egressGuard = null) => new(
         new MailboxTimelineReader(
             timeline,
             freshness ?? new StubSynchronizationFreshnessReader(),
@@ -644,6 +647,7 @@ public sealed class ListEmailsToolTests
                 new StubMailAccountCatalog(ServedAccountId),
                 StubMailFolderParticipation.Everything,
                 junkFolders ?? StubJunkMailFolderCatalog.None,
-                folderMappings.Resolver)),
+                folderMappings.Resolver),
+            egressGuard ?? SensitiveContentEgressGuards.Inactive()),
         new StubMailAccountCatalog(ServedAccountId));
 }
