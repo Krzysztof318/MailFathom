@@ -65,7 +65,7 @@ public sealed class AskMailInjectionResistanceTests
         Assert.Equal(
             [MailAccountId.Create(AnsweringDeployment.ServedAccountId)],
             answerer.LastQuestion.Scope.AccountIds);
-        Assert.Empty(answerer.LastQuestion.Scope.FolderAliases);
+        Assert.Empty(answerer.LastQuestion.Scope.SelectedFolders);
     }
 
     /// <summary>The scope a caller did name is what a run gets, and a demand in the question does not add to it either.</summary>
@@ -83,7 +83,7 @@ public sealed class AskMailInjectionResistanceTests
         await tool.AskMailAsync(
             demand,
             accounts: [AnsweringDeployment.ServedAccountId],
-            folderAliases: ["inbox"],
+            folders: ["inbox"],
             cancellationToken: TestContext.Current.CancellationToken);
 
         // Assert
@@ -91,7 +91,9 @@ public sealed class AskMailInjectionResistanceTests
         Assert.Equal(
             [MailAccountId.Create(AnsweringDeployment.ServedAccountId)],
             answerer.LastQuestion.Scope.AccountIds);
-        Assert.Equal([MailFolderAlias.Create("INBOX")], answerer.LastQuestion.Scope.FolderAliases);
+        Assert.Equal(
+            [new MailFolderIdentity(MailAccountId.Create(AnsweringDeployment.ServedAccountId), MailFolderAlias.Create("INBOX"))],
+            answerer.LastQuestion.Scope.SelectedFolders);
     }
 
     /// <summary>

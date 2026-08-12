@@ -533,11 +533,137 @@ public sealed class MailSynchronizationOptionsTests
         Assert.Contains(messages, message => message!.Contains("Configured folder aliases must be unique", StringComparison.Ordinal));
     }
 
+    /// <summary>A role is how something asks for this account's junk folder, so two folders claiming one would give that question two answers.</summary>
+    [Fact]
+    public void ValidateForSynchronization_TwoFoldersOfOneAccountNamingOneRole_ReportsBothAliasesAndTheRole()
+    {
+        // Arrange
+        var account = CreateAccount("primary");
+        account.Folders =
+        [
+            new MailFolderMappingOptions { Alias = "spam", RemotePath = "INBOX.Spam", SpecialUse = "Junk" },
+            new MailFolderMappingOptions { Alias = "junk", SpecialUse = "junk" },
+        ];
+        var options = new MailSynchronizationOptions { Accounts = [account] };
+
+        // Act
+        var messages = options.ValidateForSynchronization().Select(result => result.ErrorMessage).ToArray();
+
+        // Assert
+        var collision = Assert.Single(messages, message => message!.Contains("at most one folder per role", StringComparison.Ordinal));
+        Assert.Contains("'spam'", collision, StringComparison.Ordinal);
+        Assert.Contains("'junk'", collision, StringComparison.Ordinal);
+        Assert.Contains("'Junk'", collision, StringComparison.Ordinal);
+    }
+
+    /// <summary>The rule is one folder per role, not one role per folder, so an account naming several different roles binds.</summary>
+    [Fact]
+    public void ValidateForSynchronization_FoldersNamingDifferentRolesOrNoRoleAtAll_ReportsNothing()
+    {
+        // Arrange
+        var account = CreateAccount("primary");
+        account.Folders =
+        [
+            new MailFolderMappingOptions { Alias = "inbox", SpecialUse = "Inbox" },
+            new MailFolderMappingOptions { Alias = "spam", RemotePath = "INBOX.Spam", SpecialUse = "Junk" },
+            new MailFolderMappingOptions { Alias = "projects", RemotePath = "INBOX.Projects" },
+            new MailFolderMappingOptions { Alias = "notes", RemotePath = "INBOX.Notes" },
+        ];
+        var options = new MailSynchronizationOptions { Accounts = [account] };
+
+        // Act
+        var messages = options.ValidateForSynchronization().Select(result => result.ErrorMessage).ToArray();
+
+        // Assert
+        Assert.DoesNotContain(messages, message => message!.Contains("at most one folder per role", StringComparison.Ordinal));
+        Assert.DoesNotContain(messages, message => message!.Contains("Folder alias", StringComparison.Ordinal));
+    }
+
+    /// <summary>An alias spelled like a role would be a folder nothing could name, because every caller writing it would reach the role.</summary>
+    [Theory]
+    [InlineData("role:Junk")]
+    [InlineData("ROLE:archive")]
+    [InlineData("  role:whatever  ")]
+    public void ValidateForSynchronization_AnAliasBeginningWithTheRoleScheme_IsRefused(string alias)
+    {
+        // Arrange
+        var account = CreateAccount("primary");
+        account.Folders = [new MailFolderMappingOptions { Alias = alias, RemotePath = "INBOX.Spam" }];
+        var options = new MailSynchronizationOptions { Accounts = [account] };
+
+        // Act
+        var messages = options.ValidateForSynchronization().Select(result => result.ErrorMessage).ToArray();
+
+        // Assert
+        Assert.Contains(messages, message => message!.Contains("role:", StringComparison.Ordinal)
+            && message.Contains("by the role it plays", StringComparison.Ordinal));
+    }
+
+    /// <summary>A comma-separated list is combined by bitwise OR, so accepting one would bind two roles an operator wrote onto a third.</summary>
+    [Theory]
+    [InlineData("Archive,Drafts")]
+    [InlineData("4")]
+    public void ValidateForSynchronization_ARoleSpelledAsSomethingOtherThanItsName_IsRefused(string specialUse)
+    {
+        // Arrange
+        var account = CreateAccount("primary");
+        account.Folders = [new MailFolderMappingOptions { Alias = "spam", SpecialUse = specialUse }];
+        var options = new MailSynchronizationOptions { Accounts = [account] };
+
+        // Act
+        var messages = options.ValidateForSynchronization().Select(result => result.ErrorMessage).ToArray();
+
+        // Assert
+        Assert.Contains(messages, message => message!.Contains("which is not supported", StringComparison.Ordinal));
+    }
+
+    /// <summary>Two accounts are two mailboxes, so each one having its own junk folder is the ordinary case.</summary>
+    [Fact]
+    public void ValidateForSynchronization_TwoAccountsNamingTheSameRole_ReportsNothing()
+    {
+        // Arrange
+        var first = CreateAccount("primary");
+        first.Folders = [new MailFolderMappingOptions { Alias = "spam", RemotePath = "INBOX.Spam", SpecialUse = "Junk" }];
+        var second = CreateAccount("secondary");
+        second.Folders = [new MailFolderMappingOptions { Alias = "junk", SpecialUse = "Junk" }];
+        var options = new MailSynchronizationOptions { Accounts = [first, second] };
+
+        // Act
+        var messages = options.ValidateForSynchronization().Select(result => result.ErrorMessage).ToArray();
+
+        // Assert
+        Assert.DoesNotContain(messages, message => message!.Contains("at most one folder per role", StringComparison.Ordinal));
+    }
+
+    /// <summary>A folder labelled with a role names the path it would be created at, so the objection to creating a role mapping does not reach it.</summary>
+    [Fact]
+    public void ValidateForSynchronization_CreationAskedBesideAPathAndARole_ReportsNothing()
+    {
+        // Arrange
+        var account = CreateAccount("primary");
+        account.Folders =
+        [
+            new MailFolderMappingOptions
+            {
+                Alias = "spam",
+                RemotePath = "INBOX.Spam",
+                SpecialUse = "Junk",
+                CreateIfMissing = true,
+            },
+        ];
+        var options = new MailSynchronizationOptions { Accounts = [account] };
+
+        // Act
+        var messages = options.ValidateForSynchronization().Select(result => result.ErrorMessage).ToArray();
+
+        // Assert
+        Assert.DoesNotContain(messages, message => message!.Contains("Folder alias 'spam'", StringComparison.Ordinal));
+    }
+
     [Theory]
     [InlineData(null, null)]
-    [InlineData("INBOX", "Inbox")]
     [InlineData(null, "NotARole")]
-    public void ValidateForSynchronization_FolderNamingNeitherOrBothTargets_ReportsIt(string? remotePath, string? specialUse)
+    public void ValidateForSynchronization_FolderNamingNeitherTargetOrAnUnknownRole_ReportsIt(string? remotePath, string? specialUse)
     {
         // Arrange
         var account = CreateAccount("primary");

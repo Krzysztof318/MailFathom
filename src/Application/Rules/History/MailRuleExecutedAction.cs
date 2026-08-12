@@ -3,7 +3,6 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.Rules.Actions;
-using MailFathom.Domain.Folders;
 using MailFathom.Domain.Mutations;
 
 namespace MailFathom.Application.Rules.History;
@@ -12,7 +11,7 @@ namespace MailFathom.Application.Rules.History;
 /// <param name="Position">Where the action sits in the order the rule declares its changes, counted from zero.</param>
 /// <param name="Mutation">The change asked for, which is the same word a log line, a counter, and the mutation trail use.</param>
 /// <param name="Outcome">What became of it.</param>
-/// <param name="DestinationAlias">The folder the action named, and <see langword="null" /> for an action naming none.</param>
+/// <param name="Destination">The folder the action named, and <see langword="null" /> for an action naming none.</param>
 /// <param name="FailureReason">Why nothing was recorded, which is present exactly when the outcome is <see cref="MailRuleExecutedActionOutcome.Refused" />.</param>
 /// <param name="MutationRecordId">The record carrying the request, which is present exactly when the outcome is <see cref="MailRuleExecutedActionOutcome.Requested" />.</param>
 /// <remarks>
@@ -20,6 +19,12 @@ namespace MailFathom.Application.Rules.History;
 /// Every value here is MailFathom's own name for something: a mutation name, a configured folder alias, a bounded
 /// reason, and two identifiers. Nothing is derived from the message, which is what lets an operator be told what a rule
 /// did to a mailbox without the record becoming a second copy of it.
+/// </para>
+/// <para>
+/// The destination is text rather than an alias because the two outcomes can answer it to different depths. An action
+/// the pass requested names the alias its destination resolved to, which is the folder mail was actually filed into. An
+/// action that never got that far names what the rule wrote — an alias, or <c>role:Junk</c> — because a role that
+/// reached no folder has no alias to name and the rule's own words are what an operator has to correct.
 /// </para>
 /// <para>
 /// The record identifier is a pointer rather than a copy. What happened on the server — attempted, converged, given up
@@ -31,6 +36,6 @@ public sealed record MailRuleExecutedAction(
     int Position,
     MailboxMutation Mutation,
     MailRuleExecutedActionOutcome Outcome,
-    MailFolderAlias? DestinationAlias = null,
+    string? Destination = null,
     MailRuleActionFailureReason? FailureReason = null,
     MailboxMutationRecordId? MutationRecordId = null);

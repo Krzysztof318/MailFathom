@@ -43,8 +43,9 @@ public sealed class PromptInjectionResistanceTests
 {
     private const string Query = "what did the insurer agree to pay";
 
-    private static readonly MailboxScope OnePrimaryAccount =
-        MailboxScope.Create([MailAccountId.Create("primary")], [MailFolderAlias.Create("INBOX")]);
+    private static readonly MailboxScope OnePrimaryAccount = MailboxScope.Create(
+        [MailAccountId.Create("primary")],
+        [new MailFolderIdentity(MailAccountId.Create("primary"), MailFolderAlias.Create("INBOX"))]);
 
     /// <summary>Gets one case per attack the corpus knows, so a property stated once covers every one of them.</summary>
     public static TheoryData<string> EveryAdversary => AdversarialMailCorpus.EveryName;

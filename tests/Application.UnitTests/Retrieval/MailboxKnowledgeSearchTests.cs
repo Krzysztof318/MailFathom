@@ -36,6 +36,13 @@ public sealed class MailboxKnowledgeSearchTests
         MailAccountId.Create("secondary"),
     ];
 
+    /// <summary>The scope a question carrying no narrowing of its own arrives with, which is every served account.</summary>
+    /// <remarks>
+    /// Never <see cref="MailboxScope.Unrestricted" />: this retrieval is handed a scope somebody already resolved, and
+    /// the unrestricted one is what a deployment serving no account at all resolves to.
+    /// </remarks>
+    private static readonly MailboxScope EveryAccount = MailboxScope.Create(EveryServedAccount, selectedFolders: null);
+
     [Fact]
     public async Task FindPassagesAsync_MailMatchingTheQuery_ReturnsOnePassagePerMessageMostRelevantFirst()
     {
@@ -49,7 +56,7 @@ public sealed class MailboxKnowledgeSearchTests
 
         // Act
         var passages = (await search.FindPassagesAsync(
-            MailboxScope.Unrestricted,
+            EveryAccount,
             EmailKnowledgeQuery.ForText("invoice"),
             TestContext.Current.CancellationToken)).Passages;
 
@@ -74,7 +81,7 @@ public sealed class MailboxKnowledgeSearchTests
 
         // Act
         var passages = (await search.FindPassagesAsync(
-            MailboxScope.Unrestricted,
+            EveryAccount,
             EmailKnowledgeQuery.ForText("invoice"),
             TestContext.Current.CancellationToken)).Passages;
 
@@ -104,7 +111,7 @@ public sealed class MailboxKnowledgeSearchTests
 
         // Act
         var passages = (await search.FindPassagesAsync(
-            MailboxScope.Unrestricted,
+            EveryAccount,
             EmailKnowledgeQuery.ForText("invoice"),
             TestContext.Current.CancellationToken)).Passages;
 
@@ -123,7 +130,7 @@ public sealed class MailboxKnowledgeSearchTests
 
         // Act
         var passages = (await search.FindPassagesAsync(
-            MailboxScope.Unrestricted,
+            EveryAccount,
             EmailKnowledgeQuery.ForText("invoice"),
             TestContext.Current.CancellationToken)).Passages;
 
@@ -145,7 +152,7 @@ public sealed class MailboxKnowledgeSearchTests
 
         // Act
         var passages = (await search.FindPassagesAsync(
-            MailboxScope.Unrestricted,
+            EveryAccount,
             EmailKnowledgeQuery.ForText("invoice"),
             TestContext.Current.CancellationToken)).Passages;
 
@@ -172,7 +179,7 @@ public sealed class MailboxKnowledgeSearchTests
 
         // Act
         var passages = (await search.FindPassagesAsync(
-            MailboxScope.Unrestricted,
+            EveryAccount,
             EmailKnowledgeQuery.ForText("invoice"),
             TestContext.Current.CancellationToken)).Passages;
 
@@ -199,7 +206,7 @@ public sealed class MailboxKnowledgeSearchTests
 
         // Act, Assert
         await Assert.ThrowsAsync<MailboxQueryFilterInvalidException>(() => search.FindPassagesAsync(
-            MailboxScope.Unrestricted,
+            EveryAccount,
             EmailKnowledgeQuery.ForText(queryText),
             TestContext.Current.CancellationToken));
 
@@ -216,7 +223,7 @@ public sealed class MailboxKnowledgeSearchTests
 
         // Act, Assert
         await Assert.ThrowsAsync<MailboxQueryFilterInvalidException>(() => search.FindPassagesAsync(
-            MailboxScope.Unrestricted,
+            EveryAccount,
             EmailKnowledgeQuery.ForText(new string('a', EmailSearchQueryText.MaximumLength + 1)),
             TestContext.Current.CancellationToken));
 
@@ -249,7 +256,7 @@ public sealed class MailboxKnowledgeSearchTests
 
         // Act
         var passages = (await search.FindPassagesAsync(
-            MailboxScope.Unrestricted,
+            EveryAccount,
             query,
             TestContext.Current.CancellationToken)).Passages;
 
@@ -278,7 +285,7 @@ public sealed class MailboxKnowledgeSearchTests
         };
 
         // Act
-        await search.FindPassagesAsync(MailboxScope.Unrestricted, query, TestContext.Current.CancellationToken);
+        await search.FindPassagesAsync(EveryAccount, query, TestContext.Current.CancellationToken);
 
         // Assert
         var selection = Assert.Single(index.RankedCandidatesCalls).Selection;
@@ -319,7 +326,7 @@ public sealed class MailboxKnowledgeSearchTests
 
         // Act
         var refusal = await Assert.ThrowsAsync<MailboxQueryFilterInvalidException>(() => search.FindPassagesAsync(
-            MailboxScope.Unrestricted,
+            EveryAccount,
             query,
             TestContext.Current.CancellationToken));
 
@@ -338,7 +345,7 @@ public sealed class MailboxKnowledgeSearchTests
 
         // Act
         var lookup = await search.FindPassagesAsync(
-            MailboxScope.Unrestricted,
+            EveryAccount,
             EmailKnowledgeQuery.ForText("invoice"),
             TestContext.Current.CancellationToken);
 
@@ -379,7 +386,13 @@ public sealed class MailboxKnowledgeSearchTests
             .With(SyntheticEmailSummaries.Create(FirstJuly), snippets: "an inbox mention")
             .With(inArchive, snippets: "an archived mention");
         var search = SearchOver(index);
-        var scope = MailboxScope.Create([], [MailFolderAlias.Create("ARCHIVE")]);
+        var scope = MailboxScope.Create(
+            EveryServedAccount,
+            [
+                new MailFolderIdentity(
+                    MailAccountId.Create(SyntheticEmailSummaries.DefaultAccountId),
+                    MailFolderAlias.Create("ARCHIVE")),
+            ]);
 
         // Act
         var passages = (await search.FindPassagesAsync(
@@ -398,7 +411,11 @@ public sealed class MailboxKnowledgeSearchTests
             index,
             LexicalOnlySemanticSearch(),
             FreshnessReaderReturningNothing(),
-            new MailboxScopeResolver(CatalogServing(EveryServedAccount), StubMailFolderParticipation.Everything, StubJunkMailFolderCatalog.None),
+            new MailboxScopeResolver(
+                CatalogServing(EveryServedAccount),
+                StubMailFolderParticipation.Everything,
+                StubJunkMailFolderCatalog.None,
+                StubMailFolderMappings.ResolvingNothing),
             EmailSearchSnippetBounds.Default),
         bounds ?? EmailKnowledgeBounds.Default);
 

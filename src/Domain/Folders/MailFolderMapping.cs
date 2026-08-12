@@ -4,10 +4,18 @@
 
 namespace MailFathom.Domain.Folders;
 
-/// <summary>Expresses how an operator wants one alias to find its remote folder.</summary>
+/// <summary>Expresses what an operator says about one folder: where it is, what it is for, and what it takes part in.</summary>
 /// <remarks>
+/// <para>
 /// A mapping is the whole of what configuration says about a folder. Which remote folder it currently names is
 /// discovery's answer, not the operator's, which is why nothing here carries a generation or a resolved path.
+/// </para>
+/// <para>
+/// Where the folder is and what it is for are separate answers. <see cref="Target" /> says which of them locates the
+/// folder, and <see cref="SpecialUse" /> says which role the folder plays whichever way it was located — so a folder
+/// found by path can still be labelled as this account's junk folder, and a folder found by role is labelled with the
+/// role that found it.
+/// </para>
 /// </remarks>
 public sealed record MailFolderMapping
 {
@@ -36,7 +44,20 @@ public sealed record MailFolderMapping
     /// <summary>Gets the configured remote path, which is present exactly when <see cref="Target" /> is <see cref="MailFolderMappingTarget.RemotePath" />.</summary>
     public RemoteFolderPath? RemotePath { get; }
 
-    /// <summary>Gets the configured special-use role, which is present exactly when <see cref="Target" /> is <see cref="MailFolderMappingTarget.SpecialUse" />.</summary>
+    /// <summary>Gets the role the folder plays for its account, and <see langword="null" /> for a folder configuration gives none.</summary>
+    /// <remarks>
+    /// <para>
+    /// It is a property of the folder rather than a way of finding it. A mapping naming a role alone carries it for both
+    /// purposes, which is what such a mapping has always meant; a mapping naming a path may carry one as well, which is
+    /// how a folder whose server advertises no attribute for it — <c>INBOX.Spam</c> on a server that never says
+    /// <c>\Junk</c> — is still the folder a feature asking for this account's junk mail is given.
+    /// </para>
+    /// <para>
+    /// A role is unique within an account, so at most one mapping of an account carries any given value. Nothing here
+    /// enforces that, because one mapping cannot see its siblings: it is refused where the account's folders are read
+    /// together, which is when configuration binds.
+    /// </para>
+    /// </remarks>
     public MailFolderSpecialUse? SpecialUse { get; }
 
     /// <summary>Gets how far into MailFathom the mapped folder is admitted.</summary>
@@ -69,25 +90,38 @@ public sealed record MailFolderMapping
     /// <param name="remotePath">The remote path the alias names.</param>
     /// <param name="participation">How far the folder is admitted, or <see langword="null" /> for a folder that takes part in everything.</param>
     /// <param name="mayCreateMissingFolder">Whether the folder may be created when the server advertises none at that path.</param>
+    /// <param name="specialUse">The role the folder plays, or <see langword="null" /> for a folder configuration labels with none.</param>
     /// <returns>A mapping resolved by matching the advertised path.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="specialUse" /> is not a defined role.</exception>
+    /// <remarks>
+    /// The role is a label here rather than the way the folder is found, which is why it may be given to a folder whose
+    /// server advertises no attribute for it at all. Discovery still matches the configured path, so labelling a folder
+    /// never changes which remote folder the alias binds to.
+    /// </remarks>
     public static MailFolderMapping ToRemotePath(
         MailFolderAlias alias,
         RemoteFolderPath remotePath,
         MailFolderParticipation? participation = null,
-        bool mayCreateMissingFolder = false) => new(
+        bool mayCreateMissingFolder = false,
+        MailFolderSpecialUse? specialUse = null) => new(
             alias,
             MailFolderMappingTarget.RemotePath,
             remotePath,
-            specialUse: null,
+            DefinedRoleOrNull(specialUse),
             participation ?? MailFolderParticipation.Full,
             mayCreateMissingFolder);
 
     /// <summary>Maps an alias onto a special-use role, so the server's own naming stays out of configuration.</summary>
     /// <param name="alias">The operator-facing folder name.</param>
-    /// <param name="specialUse">The role the remote folder must carry.</param>
+    /// <param name="specialUse">The role the remote folder must carry, which the folder then also plays.</param>
     /// <param name="participation">How far the folder is admitted, or <see langword="null" /> for a folder that takes part in everything.</param>
     /// <returns>A mapping resolved by matching the role.</returns>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="specialUse" /> is not a defined role.</exception>
+    /// <remarks>
+    /// The role locates the folder and labels it, which is what a mapping naming a role has always meant. There is no
+    /// way to say one role and mean another, because a second role beside this one would be a mapping whose two halves
+    /// could disagree.
+    /// </remarks>
     public static MailFolderMapping ToSpecialUse(
         MailFolderAlias alias,
         MailFolderSpecialUse specialUse,
@@ -108,5 +142,24 @@ public sealed record MailFolderMapping
             specialUse,
             participation ?? MailFolderParticipation.Full,
             mayCreateMissingFolder: false);
+    }
+
+    /// <summary>Reports whether this folder plays a role, which is how a feature asking for one recognizes it.</summary>
+    /// <param name="role">The role the caller is looking for.</param>
+    /// <returns><see langword="true" /> when configuration labelled this folder with that role.</returns>
+    public bool Plays(MailFolderSpecialUse role) => this.SpecialUse == role;
+
+    /// <summary>Refuses a role that names nothing, and passes an absent one through as the folder having none.</summary>
+    private static MailFolderSpecialUse? DefinedRoleOrNull(MailFolderSpecialUse? specialUse)
+    {
+        if (specialUse is { } role && !Enum.IsDefined(role))
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(specialUse),
+                specialUse,
+                "A folder mapping cannot name a special-use role that does not exist.");
+        }
+
+        return specialUse;
     }
 }

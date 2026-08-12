@@ -10,7 +10,6 @@ using MailFathom.Application.Rules.Facts;
 using MailFathom.Application.Rules.History;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
-using MailFathom.Domain.Folders;
 using MailFathom.Domain.Mutations;
 using MailFathom.Infrastructure.Persistence.Entities;
 
@@ -47,7 +46,7 @@ internal static class MailRuleExecutionMapping
                 Position = action.Position,
                 Mutation = action.Mutation.Name,
                 Outcome = action.Outcome.ToString(),
-                DestinationAlias = action.DestinationAlias?.Value,
+                Destination = action.Destination,
                 FailureReason = action.FailureReason?.ToString(),
                 MutationRecordId = action.MutationRecordId?.Value,
             });
@@ -203,7 +202,7 @@ internal static class MailRuleExecutionMapping
             entity.Position,
             mutation,
             outcome,
-            entity.DestinationAlias is { } alias ? MailFolderAlias.Create(alias) : null,
+            entity.Destination,
             failureReason,
             entity.MutationRecordId is { } recordId ? MailboxMutationRecordId.Create(recordId) : null);
 

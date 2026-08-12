@@ -26,7 +26,7 @@ divergence neither copy would look wrong for on its own.
 | Field | Meaning | Absent means |
 |---|---|---|
 | `Accounts` | The accounts to list from, each named by its identifier or by its display name | every account this deployment serves |
-| `FolderAliases` | The folder aliases to list from | every folder of those accounts |
+| `Folders` | The folders to list from, each named by its alias or by the role it plays | every folder of those accounts |
 | `SenderAddress` | The address the sender must carry, in any case | any sender |
 | `RecipientAddress` | The address a `To` or `Cc` recipient must carry | any recipient |
 | `SubjectFragment` | Text the subject must contain, compared without regard to case | any subject |
@@ -42,6 +42,13 @@ divergence neither copy would look wrong for on its own.
 Accounts and folders are named by their domain identities rather than as text, so an adapter converts a caller's strings
 once at its own boundary. A folder alias is MailFathom's own name for a folder and is normalized to upper case, which is why
 naming `archive` and `ARCHIVE` is naming one folder.
+
+A folder may instead be named by the [role it plays](imap-synchronization.md#what-a-role-says-beside-how-a-folder-is-found),
+written `role:Junk`, and the role becomes an alias here rather than at the boundary above: a role means a different
+folder on each account, so it is expanded once the accounts in scope are settled and contributes each of their own
+folders. A role no account in scope maps is refused with `53003 MailFolderRoleUnmapped`, unlike an alias nothing maps,
+which selects nothing — an alias is already a name the caller chose to use, while a role that reached no folder anywhere
+would leave a caller reading an empty page as an empty folder.
 
 A listing that names no folder reads every folder, so a message that exists in two of them — because it was copied, by
 the mailbox owner or by MailFathom — is two entries, one per folder. Nothing collapses them, because a stored row is one
@@ -75,7 +82,7 @@ and its result would read as an answer about the mailbox.
   bound, so naming either one excludes undated mail. Each bound names an instant, so it may be written at any UTC offset
   and the offset chosen changes neither what is selected nor which walk a cursor belongs to: `2026-07-01T10:00:00+02:00`
   and `2026-07-01T08:00:00Z` are one range asked for twice.
-- **The scope** accepts at most 64 accounts and 64 folder aliases, counting what a request names rather than what is left
+- **The scope** accepts at most 64 accounts and 64 folders, counting what a request names rather than what is left
   after deduplication — that is what lets the limit be enforced while the caller's list is read instead of after it has
   been materialized. Both lists are then deduplicated and ordered, so two spellings of one scope are one query with one
   cursor.
@@ -83,6 +90,11 @@ and its result would read as an answer about the mailbox.
   covers both "no such account" and "not yours", and an empty page is deliberately not the answer: it would confirm the
   name and turn a listing into a way to enumerate accounts. Text matching neither an identifier nor a display name meets
   that same failure, so a caller cannot learn from it which of the two spellings it was holding.
+- **A role nothing carries** is refused with `53003 MailFolderRoleUnmapped`, once the accounts in scope are settled and
+  before anything is read. One account of several lacking the folder is not the case: that account contributes nothing
+  and the read narrows to the others, so the refusal means no account in scope maps it at all. It names the role and no
+  account, because a request naming several accounts asked about all of them and naming one would say the refusal was
+  about that one.
 
 ### Naming an account
 
@@ -119,7 +131,7 @@ set it named no longer exists.
 ### Folders withheld from tools
 
 A folder mapped with `VisibleToTools: false` is outside every read a tool performs, whatever the request named. It is not
-listed, not searched, not answered from, and not readable by identifier: naming its alias in `FolderAliases` narrows the
+listed, not searched, not answered from, and not readable by identifier: naming its alias in `Folders` narrows the
 listing to a folder that is then excluded, so the page is empty rather than refused, and asking for one of its emails by
 identifier reports the email as not found rather than as withheld. An attachment link minted before the switch was set
 stops serving for the same reason, because the question is asked where the download is served rather than where the link

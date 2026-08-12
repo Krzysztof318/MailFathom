@@ -211,7 +211,7 @@ public sealed class MailboxSearchReaderTests
         var result = await reader.SearchEmailsAsync(
             RequestFor("invoice") with
             {
-                FolderAliases = [MailFolderAlias.Create("ARCHIVE")],
+                Folders = [MailFolderReference.ToAlias(MailFolderAlias.Create("ARCHIVE"))],
                 SenderAddress = "Anna@Example.test",
                 HasAttachments = true,
             },
@@ -527,7 +527,8 @@ public sealed class MailboxSearchReaderTests
         new MailboxScopeResolver(
             accountCatalog ?? CatalogServing(EveryAccountTheSyntheticIndexUses),
             StubMailFolderParticipation.Everything,
-            StubJunkMailFolderCatalog.None),
+            StubJunkMailFolderCatalog.None,
+            StubMailFolderMappings.ResolvingNothing),
         snippetBounds ?? EmailSearchSnippetBounds.Default);
 
     /// <summary>Builds the semantic half of a deployment that configured no embedding provider and activated nothing.</summary>

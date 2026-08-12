@@ -65,10 +65,10 @@ public sealed class EmailTimelineFilterTests
         // Arrange
         var accountsInOneOrder = MailboxScope.Create(
             [MailAccountId.Create("primary"), MailAccountId.Create("secondary")],
-            folderAliases: null);
+            selectedFolders: null);
         var accountsInTheOther = MailboxScope.Create(
             [MailAccountId.Create("secondary"), MailAccountId.Create("primary"), MailAccountId.Create("primary")],
-            folderAliases: null);
+            selectedFolders: null);
 
         // Act
         var first = FilterWith(scope: accountsInOneOrder, subjectFragment: "Invoice");
@@ -85,10 +85,10 @@ public sealed class EmailTimelineFilterTests
         // Arrange
         var oneAliasCarryingTheSeparator = MailboxScope.Create(
             accountIds: null,
-            [MailFolderAlias.Create("ARCHIVE,SENT"), MailFolderAlias.Create("TRASH")]);
+            [Folder("ARCHIVE,SENT"), Folder("TRASH")]);
         var theSameNamesSplitDifferently = MailboxScope.Create(
             accountIds: null,
-            [MailFolderAlias.Create("ARCHIVE"), MailFolderAlias.Create("SENT,TRASH")]);
+            [Folder("ARCHIVE"), Folder("SENT,TRASH")]);
 
         // Act
         var first = FilterWith(scope: oneAliasCarryingTheSeparator);
@@ -117,8 +117,8 @@ public sealed class EmailTimelineFilterTests
         var unfiltered = FilterWith();
         var variants = new[]
         {
-            FilterWith(scope: MailboxScope.Create([MailAccountId.Create("primary")], folderAliases: null)),
-            FilterWith(scope: MailboxScope.Create(null, [MailFolderAlias.Create("ARCHIVE")])),
+            FilterWith(scope: MailboxScope.Create([MailAccountId.Create("primary")], selectedFolders: null)),
+            FilterWith(scope: MailboxScope.Create(null, [Folder("ARCHIVE")])),
             FilterWith(senderAddress: "anna@example.test"),
             FilterWith(recipientAddress: "anna@example.test"),
             FilterWith(subjectFragment: "invoice"),
@@ -136,6 +136,10 @@ public sealed class EmailTimelineFilterTests
         // Assert
         Assert.Equal(fingerprints.Length, fingerprints.Distinct(StringComparer.Ordinal).Count());
     }
+
+    /// <summary>Names one folder of the account these fingerprints are all written about.</summary>
+    private static MailFolderIdentity Folder(string alias) =>
+        new(MailAccountId.Create("primary"), MailFolderAlias.Create(alias));
 
     private static EmailTimelineFilter FilterWith(
         MailboxScope? scope = null,

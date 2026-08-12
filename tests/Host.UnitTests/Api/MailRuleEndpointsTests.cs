@@ -96,7 +96,7 @@ public sealed class MailRuleEndpointsTests
             MailRule.Create(
                 "file-invoices",
                 ConditionReading(MailRuleFact.SenderDomain),
-                MailRuleActionSet.Create([MailRuleAction.Relocate(Archive)]),
+                MailRuleActionSet.Create([MailRuleAction.Relocate(MailFolderReference.ToAlias(Archive))]),
                 stopWhenMatched: true),
             MailRule.Create("mark-newsletters", ConditionReading(MailRuleFact.Subject)));
         await using var settings = CreateSettings();
@@ -113,7 +113,7 @@ public sealed class MailRuleEndpointsTests
         var action = Assert.Single(result.Value.Rules[0].Actions);
         Assert.Equal(
             (0, MailboxMutation.Relocate.Name, Archive.Value),
-            (action.Position, action.Mutation, action.DestinationAlias));
+            (action.Position, action.Mutation, action.Destination));
     }
 
     /// <summary>A deployment nobody has edited says its configuration is the one the running set was read from.</summary>
@@ -288,7 +288,7 @@ public sealed class MailRuleEndpointsTests
                     0,
                     MailboxMutation.Relocate,
                     MailRuleExecutedActionOutcome.Requested,
-                    Archive,
+                    Archive.Value,
                     MutationRecordId: MailboxMutationRecordId.Create(recordId)),
             ],
             EvaluatedAt = Now,

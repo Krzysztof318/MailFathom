@@ -64,7 +64,7 @@ public sealed class ListEmailsToolMetadataTests
         string[] expectedProperties =
         [
             "accounts",
-            "folderAliases",
+            "folders",
             "senderAddress",
             "recipientAddress",
             "subjectFragment",

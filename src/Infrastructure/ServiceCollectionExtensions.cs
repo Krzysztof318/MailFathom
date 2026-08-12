@@ -377,6 +377,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IMailFolderMappingChangeAuditor, LoggedMailFolderMappingChangeAuditor>();
         services.AddScoped<OptimisticConcurrencyRetryPolicy>();
         services.AddScoped<MailFolderResolver>();
+        services.AddScoped<MailFolderReferenceResolver>();
         services.AddScoped<UnmirroredMailFolderEraser>();
         services.AddScoped<MailboxSynchronizer>();
         services.AddScoped<MailboxReconciler>();

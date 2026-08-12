@@ -40,13 +40,26 @@ internal sealed class MailSynchronizationOptions
         IMailAnsweringAuditSettingsReader,
         IMailAccountCatalog,
         IMailFolderParticipationReader,
-        IJunkMailFolderCatalog
+        IJunkMailFolderCatalog,
+        IMailFolderMappingReader
 {
     /// <summary>The shutdown budget the .NET Generic Host applies when nothing configures one.</summary>
     private static readonly TimeSpan DefaultHostShutdownTimeout = TimeSpan.FromSeconds(30);
 
     /// <summary>What the shutdown budget keeps for the hosted services that stop beside a synchronization drain.</summary>
     private static readonly TimeSpan HostShutdownMargin = TimeSpan.FromSeconds(5);
+
+    private readonly Lazy<IReadOnlyDictionary<string, IReadOnlyList<MailFolderMapping>>> mappingsByAccount;
+
+    /// <summary>Initializes the options the binder is about to write into.</summary>
+    /// <remarks>
+    /// The mapping cache is deferred rather than built here, because nothing is bound yet when this runs. What forces
+    /// it is the first folder lookup, which happens long after binding and after validation, and a reload binds a new
+    /// instance rather than rewriting this one — so the built dictionary can never describe superseded configuration.
+    /// </remarks>
+    public MailSynchronizationOptions() => this.mappingsByAccount = new(
+        this.ReadMappingsByAccount,
+        LazyThreadSafetyMode.ExecutionAndPublication);
 
     /// <summary>Gets or sets whether periodic synchronization is enabled.</summary>
     public bool Enabled { get; set; }
@@ -510,6 +523,75 @@ internal sealed class MailSynchronizationOptions
             ?.Participation
         ?? MailFolderParticipation.Full;
 
+    /// <inheritdoc />
+    public MailFolderMapping? FindFolderPlayingRole(MailAccountId accountId, MailFolderSpecialUse role) =>
+        this.MappingsOf(accountId).FirstOrDefault(mapping => mapping.Plays(role));
+
+    /// <inheritdoc />
+    public MailFolderMapping? FindFolderNamed(MailAccountId accountId, MailFolderAlias folderAlias) =>
+        this.MappingsOf(accountId).FirstOrDefault(mapping => mapping.Alias == folderAlias);
+
+    /// <summary>Reads one account's folders as the mappings the folder port answers with.</summary>
+    /// <remarks>
+    /// Answered from the cache below rather than rebuilt, because the two lookups above are asked once per rule
+    /// evaluated against every email of a run, and each rebuild walks the account's folders and constructs a domain
+    /// value per entry.
+    /// </remarks>
+    private IReadOnlyList<MailFolderMapping> MappingsOf(MailAccountId accountId) =>
+        this.mappingsByAccount.Value.TryGetValue(accountId.Value, out var mappings) ? mappings : [];
+
+    /// <summary>Builds every account's mappings once, keyed by the account identifier the lookups arrive with.</summary>
+    /// <remarks>
+    /// It walks <see cref="MailSynchronizationAccountOptions.EffectiveFolders" /> for the reason
+    /// <see cref="ConfiguredFolders" /> does, so an account that configures no folder answers for the inbox mapping it
+    /// is actually run with. An entry whose names are unusable is skipped rather than raised over: startup validation
+    /// refuses that configuration, and a reload being rejected must not make a lookup throw. Two accounts configured
+    /// under one identifier is the same refusal, so the first is kept here rather than the build failing over what
+    /// validation already reports.
+    /// </remarks>
+    private Dictionary<string, IReadOnlyList<MailFolderMapping>> ReadMappingsByAccount() => (this.Accounts ?? [])
+        .Select(static account => (Id: TryReadAccountId(account.AccountId), account.EffectiveFolders))
+        .Where(static account => account.Id is not null)
+        .GroupBy(static account => account.Id!, StringComparer.Ordinal)
+        .ToDictionary(
+            static account => account.Key,
+            static account => MappingsIn(account.First().EffectiveFolders),
+            StringComparer.Ordinal);
+
+    /// <summary>Reads one account's configured folders as the mappings the port answers with, dropping the unusable ones.</summary>
+    private static IReadOnlyList<MailFolderMapping> MappingsIn(IReadOnlyList<MailFolderMappingOptions> folders) =>
+    [
+        .. folders.Select(static folder => TryCreateMapping(folder)).OfType<MailFolderMapping>(),
+    ];
+
+    /// <summary>Normalizes a configured account identifier the way every lookup arrives already normalized, or reports it unusable.</summary>
+    private static string? TryReadAccountId(string? configuredAccountId)
+    {
+        try
+        {
+            return string.IsNullOrWhiteSpace(configuredAccountId)
+                ? null
+                : MailAccountId.Create(configuredAccountId).Value;
+        }
+        catch (ArgumentException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>Builds one configured folder's mapping, or nothing when its configured names are not values this system issues.</summary>
+    private static MailFolderMapping? TryCreateMapping(MailFolderMappingOptions folder)
+    {
+        try
+        {
+            return folder.CreateMapping();
+        }
+        catch (Exception exception) when (exception is ArgumentException or InvalidOperationException)
+        {
+            return null;
+        }
+    }
+
     /// <summary>Reads every account's folders as the pair of identity and participation the port answers with.</summary>
     /// <remarks>
     /// It walks <see cref="MailSynchronizationAccountOptions.EffectiveFolders" /> rather than the configured list, so an
@@ -940,6 +1022,11 @@ internal sealed class MailSynchronizationAccountOptions : IValidatableObject
             yield return new ValidationResult("Configured folder aliases must be unique after normalization.", [nameof(this.Folders)]);
         }
 
+        foreach (var result in this.FindRoleCollisions())
+        {
+            yield return result;
+        }
+
         if (synchronizationEnabled)
         {
             if (string.IsNullOrWhiteSpace(this.AccountId))
@@ -968,6 +1055,22 @@ internal sealed class MailSynchronizationAccountOptions : IValidatableObject
             }
         }
     }
+
+    /// <summary>Reports every special-use role this account gives to more than one folder.</summary>
+    /// <returns>One result per shared role, naming every alias that claims it, empty when each role names one folder.</returns>
+    /// <remarks>
+    /// A role is how something asks for <em>this account's junk folder</em>, so two folders carrying one role would give
+    /// that question two answers and let whichever mapping happened to be read first decide where mail is filed.
+    /// Refusing it when the configuration binds is what keeps a copy-paste mistake an error an operator reads once. An
+    /// account naming no role at all is untouched by this, and so is one naming several different roles.
+    /// </remarks>
+    private IEnumerable<ValidationResult> FindRoleCollisions() => this.Folders
+        .Where(folder => !string.IsNullOrWhiteSpace(folder.Alias) && folder.DeclaredRole is not null)
+        .GroupBy(folder => folder.DeclaredRole!.Value)
+        .Where(group => group.Count() > 1)
+        .Select(group => new ValidationResult(
+            $"Account '{this.AccountId}': the folder aliases {string.Join(", ", group.Select(folder => $"'{folder.Alias.Trim()}'"))} all name the special-use role '{group.Key}', and an account has at most one folder per role.",
+            [nameof(this.Folders)]));
 
     /// <summary>Reports a credential shape that does not match the mechanisms the account's policy permits.</summary>
     /// <remarks>

@@ -298,7 +298,11 @@ public sealed class EmailAttachmentDownloadEndpointTests
             contentStore,
             contentReader,
             Substitute.For<IEmailContentRepairRequestStore>(),
-            new MailboxScopeResolver(accountCatalog, StubMailFolderParticipation.Everything, StubJunkMailFolderCatalog.None));
+            new MailboxScopeResolver(
+                accountCatalog,
+                StubMailFolderParticipation.Everything,
+                StubJunkMailFolderCatalog.None,
+                StubMailFolderMappings.ResolvingNothing));
     }
 
     private static EmailSummary SummaryOf() => new()

@@ -91,8 +91,11 @@ per provider here:
   turned off at all. A server with a private certificate authority is reached by trusting that authority.
   [IMAP synchronization § transport security](../features/imap-synchronization.md#transport-security) records the rules.
 - **Folders are named by role rather than by path.** `SpecialUse` lets discovery find a folder whatever the server calls
-  it, which matters more here than it looks: the same role carries a different path at almost every service below.
-  [Folder aliases and discovery](../features/imap-synchronization.md#folder-aliases-and-discovery) covers the matching.
+  it, which matters more here than it looks: the same role carries a different path at almost every service below. A
+  service that advertises no role for a folder loses none of this — name the path and the role together, and everything
+  that asks for `role:Junk` still reaches it.
+  [Folder aliases and discovery](../features/imap-synchronization.md#folder-aliases-and-discovery) covers the matching,
+  and [what a role says](../features/imap-synchronization.md#what-a-role-says-beside-how-a-folder-is-found) the rest.
 - **Reading never marks mail read.** MailFathom does not set the remote `\Seen` flag while synchronizing, reconciling,
   fetching content, or answering a tool call — the sessions those run on hold no operation capable of writing a flag.
   If mail is turning up read at your service, it is another client or a rule at the service, not this one.

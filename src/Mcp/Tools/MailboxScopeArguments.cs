@@ -42,12 +42,17 @@ internal static class MailboxScopeArguments
     public static IReadOnlyList<MailAccountSelector> Accounts(string[]? accounts) =>
         Parse(accounts, MailAccountSelector.Create, MailboxScope.MaximumAccountIds, "accounts");
 
-    /// <summary>Turns the folder aliases a caller supplied into domain values.</summary>
-    /// <param name="folderAliases">The aliases the caller named, or <see langword="null" /> when it named none.</param>
+    /// <summary>Turns the folders a caller supplied into domain values.</summary>
+    /// <param name="folders">The folders the caller named, or <see langword="null" /> when it named none.</param>
     /// <returns>The named folders, empty when the caller named none.</returns>
-    /// <exception cref="MailboxQueryFilterInvalidException">Thrown when more than the accepted number are named, or one of them is not an alias this system issues.</exception>
-    public static IReadOnlyList<MailFolderAlias> FolderAliases(string[]? folderAliases) =>
-        Parse(folderAliases, MailFolderAlias.Create, MailboxScope.MaximumFolderAliases, "folder aliases");
+    /// <exception cref="MailboxQueryFilterInvalidException">Thrown when more than the accepted number are named, or one of them names neither an alias this system issues nor a role it knows.</exception>
+    /// <remarks>
+    /// Which folder of which account a role names is deliberately not settled here, exactly as which account a name
+    /// selects is not: that answer belongs to the account in scope, so it is given inside the use case and text naming
+    /// no folder of any of them meets the same refusal wherever it came from.
+    /// </remarks>
+    public static IReadOnlyList<MailFolderReference> Folders(string[]? folders) =>
+        Parse(folders, MailFolderReference.Create, MailboxScope.MaximumFolderAliases, "folder aliases");
 
     /// <summary>Converts one list of caller-supplied text into the domain identity it names.</summary>
     /// <remarks>

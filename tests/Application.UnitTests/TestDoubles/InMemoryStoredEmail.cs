@@ -5,6 +5,7 @@
 using MailFathom.Application.Emails.Mailboxes;
 using MailFathom.Application.Emails.Summaries;
 using MailFathom.Domain.Emails;
+using MailFathom.Domain.Folders;
 
 namespace MailFathom.Application.UnitTests.TestDoubles;
 
@@ -29,10 +30,12 @@ internal sealed record InMemoryStoredEmail(EmailSummary Summary, IReadOnlyList<s
         selection.SubjectFragment is not { } fragment
         || (subject is not null && subject.Contains(fragment, StringComparison.OrdinalIgnoreCase));
 
+    /// <summary>Narrows by the account and the alias together, the way the PostgreSQL predicate this stands in for does.</summary>
     private bool MatchesScope(MailboxEmailSelection selection) =>
         (selection.Scope.AccountIds.Count is 0 || selection.Scope.AccountIds.Contains(this.Summary.AccountId))
-        && (selection.Scope.FolderAliases.Count is 0
-            || selection.Scope.FolderAliases.Contains(this.Summary.FolderAlias));
+        && (selection.Scope.SelectedFolders.Count is 0
+            || selection.Scope.SelectedFolders.Contains(
+                new MailFolderIdentity(this.Summary.AccountId, this.Summary.FolderAlias)));
 
     private bool MatchesParticipants(MailboxEmailSelection selection) =>
         (selection.SenderNormalizedAddress is not { } sender || this.SenderMatches(sender))

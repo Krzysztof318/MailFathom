@@ -245,7 +245,7 @@ public sealed class MailRuleSetMappingTests
         Assert.Equal(
             [MailboxMutation.SetSeen, MailboxMutation.Relocate],
             actions.Select(action => action.Mutation));
-        Assert.Equal(MailFolderAlias.Create("archive"), actions[1].DestinationAlias);
+        Assert.Equal(MailFolderReference.ToAlias(MailFolderAlias.Create("archive")), actions[1].Destination);
         Assert.True(actions[0].DesiredSeenState);
     }
 

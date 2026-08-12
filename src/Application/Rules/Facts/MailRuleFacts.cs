@@ -3,6 +3,9 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.Collections.Frozen;
+using MailFathom.Application.Folders;
+using MailFathom.Domain.Accounts;
+using MailFathom.Domain.Folders;
 
 namespace MailFathom.Application.Rules.Facts;
 
@@ -12,7 +15,9 @@ namespace MailFathom.Application.Rules.Facts;
 /// This is where the cost bound the fact surface promises is actually kept. A condition reaches a fact by name, so a
 /// fact no condition names is never asked for; a fact several conditions name is asked for once, because the answer is
 /// remembered for the whole rule set rather than for one rule. Only <see cref="MailRuleFact.BodyText" /> costs anything
-/// to resolve, and it is the fact those two properties exist for.
+/// to resolve, and it is the fact those two properties exist for. <see cref="MailRuleFact.FolderRole" /> costs a look at
+/// configuration instead of a read of stored content, which is cheap but is still not paid by a rule set that never
+/// asks what a folder is for.
 /// </para>
 /// <para>
 /// The evaluation instant is taken once, when this is constructed, rather than read per rule. Otherwise
@@ -39,6 +44,7 @@ public sealed class MailRuleFacts
         {
             [MailRuleFact.Account] = facts => facts.email.Account,
             [MailRuleFact.Folder] = facts => facts.email.Folder,
+            [MailRuleFact.FolderRole] = facts => facts.ReadFolderRole(),
             [MailRuleFact.Subject] = facts => facts.email.Subject,
             [MailRuleFact.SenderAddress] = facts => facts.email.SenderAddress,
             [MailRuleFact.SenderDomain] = facts => facts.email.SenderDomain,
@@ -63,22 +69,30 @@ public sealed class MailRuleFacts
 
     private readonly MailRuleEmailFacts email;
     private readonly IMailRuleBodyTextReader bodyTextReader;
+    private readonly IMailFolderMappingReader folderMappings;
     private readonly DateTimeOffset evaluatedAt;
     private readonly Dictionary<MailRuleFact, object?> resolvedValues = [];
     private readonly List<MailRuleFact> factsReadSinceLastTaken = [];
 
     /// <summary>Initializes the fact surface for one email at one instant.</summary>
-    /// <param name="email">The metadata every fact but the body text is read from.</param>
+    /// <param name="email">The metadata every fact but the body text and the folder's role is read from.</param>
     /// <param name="bodyTextReader">Reads the extracted body text, and is called only when a condition names it.</param>
+    /// <param name="folderMappings">Answers what the folder the email is in is configured for, and is read only when a condition names the role.</param>
     /// <param name="evaluatedAt">The instant the whole rule set is evaluated at, which every age is measured against.</param>
     /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
-    public MailRuleFacts(MailRuleEmailFacts email, IMailRuleBodyTextReader bodyTextReader, DateTimeOffset evaluatedAt)
+    public MailRuleFacts(
+        MailRuleEmailFacts email,
+        IMailRuleBodyTextReader bodyTextReader,
+        IMailFolderMappingReader folderMappings,
+        DateTimeOffset evaluatedAt)
     {
         ArgumentNullException.ThrowIfNull(email);
         ArgumentNullException.ThrowIfNull(bodyTextReader);
+        ArgumentNullException.ThrowIfNull(folderMappings);
 
         this.email = email;
         this.bodyTextReader = bodyTextReader;
+        this.folderMappings = folderMappings;
         this.evaluatedAt = evaluatedAt;
     }
 
@@ -156,6 +170,19 @@ public sealed class MailRuleFacts
             this.factsReadSinceLastTaken.Add(fact);
         }
     }
+
+    /// <summary>Reads the role configuration gives the folder this email is in.</summary>
+    /// <returns>The role's name, or <see langword="null" /> when the folder plays none or is no longer mapped.</returns>
+    /// <remarks>
+    /// The name is the one an operator writes, so a condition comparing against <c>'Junk'</c> reads the same word the
+    /// folder's configuration and a rule's <c>role:Junk</c> destination do. A folder configuration has stopped naming
+    /// answers absent rather than raising: a reload can withdraw a mapping while a pass over that account's mail is
+    /// running, and a condition asking what the folder is for is honestly answered by nothing.
+    /// </remarks>
+    private string? ReadFolderRole() => this.folderMappings
+        .FindFolderNamed(MailAccountId.Create(this.email.Account), MailFolderAlias.Create(this.email.Folder))
+        ?.SpecialUse
+        ?.ToString();
 
     private static Func<MailRuleFacts, object?> ReadMetadata(MailRuleFact fact) =>
         MetadataReaders.TryGetValue(fact, out var reader)

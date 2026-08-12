@@ -338,7 +338,14 @@ answers.
 
 The history is held for [`MailRules:HistoryRetention`](configuration-reference.md#mailrules) and is erased with the mail
 it describes, whichever comes first. Nothing any of these four routes answers with is mail: rule names, folder aliases,
-mutation names, fact names, counts, instants, and identifiers are the whole of it.
+special-use roles, mutation names, fact names, counts, instants, and identifiers are the whole of it.
+
+Both views call the folder `destination`, and each answers it to the depth its own reader can use. A **declared**
+rule's action carries the text the rule wrote — an alias, or a role as `role:Junk` — because that view answers *what
+does this deployment's configuration say*. A **history** entry carries the alias the run resolved to, because that view
+answers *what happened to this message*. An action the run never requested — refused, or withheld because another rule
+had already settled the message — carries what the rule wrote instead, since a role that reached no folder has no alias
+to name and the rule's own words are what an operator has to correct.
 
 ## Rate limiting
 

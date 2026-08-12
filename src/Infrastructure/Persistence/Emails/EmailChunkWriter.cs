@@ -136,7 +136,7 @@ internal sealed class EmailChunkWriter(
                 .Select(folder => folder.Alias)
                 .SingleAsync(cancellationToken);
 
-        return !ExcludedMailFolders.Contains(excluded, storedEmail.MailboxAccountId, folderAlias);
+        return !AccountScopedMailFolders.Contains(excluded, storedEmail.MailboxAccountId, folderAlias);
     }
 
     private static EmailChunkEntity[] FindStaged(MailFathomDbContext dbContext, Guid storedEmailId) =>

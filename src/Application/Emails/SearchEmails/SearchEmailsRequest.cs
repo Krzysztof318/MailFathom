@@ -33,13 +33,14 @@ public sealed record SearchEmailsRequest
     /// <remarks>An account may be named by its configured identifier or by the display name it is published under, and the use case settles which against the accounts it serves.</remarks>
     public IReadOnlyList<MailAccountSelector> Accounts { get; init; } = [];
 
-    /// <summary>Gets the folder aliases to search, or empty for every folder of the named accounts.</summary>
-    public IReadOnlyList<MailFolderAlias> FolderAliases { get; init; } = [];
+    /// <summary>Gets the folders to search, or empty for every folder of the named accounts.</summary>
+    /// <remarks>A folder may be named by its alias or by the role it plays, and the use case settles which folder of which account each one means.</remarks>
+    public IReadOnlyList<MailFolderReference> Folders { get; init; } = [];
 
     /// <summary>Gets whether the account's junk folder is searched too, which it is not unless the caller asks.</summary>
     /// <remarks>
-    /// Naming the junk folder in <see cref="FolderAliases" /> is not asking, for the reason a listing states: the alias
-    /// list narrows the readable folders and this decides which are readable at all.
+    /// Naming the junk folder in <see cref="Folders" /> is not asking, for the reason a listing states: the folder list
+    /// narrows the readable folders and this decides which are readable at all.
     /// </remarks>
     public bool IncludeJunkMail { get; init; }
 
@@ -64,6 +65,17 @@ public sealed record SearchEmailsRequest
 
     /// <summary>Gets whether attachments are required, or <see langword="null" /> for either.</summary>
     public bool? HasAttachments { get; init; }
+
+    /// <summary>Gets the scope a caller has already resolved, which is read instead of <see cref="Accounts" /> and <see cref="Folders" />.</summary>
+    /// <remarks>
+    /// Internal because resolving a scope is what refuses an account this deployment does not serve and withholds a
+    /// folder no tool may read, so a protocol adapter must never be able to hand one in ready-made. The one caller that
+    /// may is a use case that resolved its own scope through <see cref="MailboxScopeResolver" /> and then searches with
+    /// it: an answering run resolves once and searches several times. Re-resolving there would be wrong rather than
+    /// merely repeated, because a folder named by role resolves to a different alias on each account and re-reading
+    /// those aliases would mean whichever account carries the name.
+    /// </remarks>
+    internal MailboxScope? ResolvedScope { get; init; }
 
     /// <summary>Gets how many ranked results to return, or <see langword="null" /> to take the default.</summary>
     /// <remarks>An absent count takes <see cref="EmailSearchResultLimit.DefaultValue" />; a named one outside the accepted range is refused rather than clamped.</remarks>

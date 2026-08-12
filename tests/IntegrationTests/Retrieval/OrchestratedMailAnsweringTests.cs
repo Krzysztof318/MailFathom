@@ -392,7 +392,7 @@ public sealed class OrchestratedMailAnsweringTests(MailFathomOrchestrationFixtur
                 {
                     QuestionText = question,
                     Accounts = [MailAccountSelector.For(SyntheticMailAccount.AccountId)],
-                    FolderAliases = [MailFolderAlias.Create(FolderAlias)],
+                    Folders = [MailFolderReference.ToAlias(MailFolderAlias.Create(FolderAlias))],
                 },
                 token),
             cancellationToken);
@@ -410,7 +410,7 @@ public sealed class OrchestratedMailAnsweringTests(MailFathomOrchestrationFixtur
                     {
                         QueryText = queryText,
                         Accounts = [MailAccountSelector.For(SyntheticMailAccount.AccountId)],
-                        FolderAliases = [MailFolderAlias.Create(folderAlias)],
+                        Folders = [MailFolderReference.ToAlias(MailFolderAlias.Create(folderAlias))],
                     },
                     token);
 

@@ -16,7 +16,7 @@ namespace MailFathom.Infrastructure.UnitTests.Persistence.Emails;
 /// rather than what SQL it becomes. That distinction is the whole point of the account-and-alias pair: a predicate
 /// written over the alias alone would translate perfectly and withhold another account's mail.
 /// </remarks>
-public sealed class ExcludedMailFoldersTests
+public sealed class AccountScopedMailFoldersTests
 {
     private static readonly MailFolderIdentity WorkPrivate = new(
         MailAccountId.Create("work"),
@@ -30,7 +30,7 @@ public sealed class ExcludedMailFoldersTests
         var emails = Emails(("work", "PRIVATE"), ("work", "INBOX"), ("home", "PRIVATE"));
 
         // Act
-        var readable = ExcludedMailFolders.Excluding(emails, [WorkPrivate]);
+        var readable = AccountScopedMailFolders.Excluding(emails, [WorkPrivate]);
 
         // Assert
         Assert.Equal(
@@ -46,7 +46,7 @@ public sealed class ExcludedMailFoldersTests
         var emails = Emails(("work", "PRIVATE"), ("home", "INBOX"));
 
         // Act
-        var readable = ExcludedMailFolders.Excluding(emails, []);
+        var readable = AccountScopedMailFolders.Excluding(emails, []);
 
         // Assert
         Assert.Same(emails, readable);
@@ -65,7 +65,7 @@ public sealed class ExcludedMailFoldersTests
         };
 
         // Act
-        var readable = ExcludedMailFolders.Excluding(emails, excluded);
+        var readable = AccountScopedMailFolders.Excluding(emails, excluded);
 
         // Assert
         Assert.Equal(["INBOX"], readable.Select(email => email.MailFolder.Alias));
@@ -84,12 +84,111 @@ public sealed class ExcludedMailFoldersTests
         }.AsQueryable();
 
         // Act
-        var readable = ExcludedMailFolders.Excluding(folders, [WorkPrivate]);
+        var readable = AccountScopedMailFolders.Excluding(folders, [WorkPrivate]);
 
         // Assert
         Assert.Equal(
             [("work", "INBOX"), ("home", "PRIVATE")],
             readable.AsEnumerable().Select(folder => (folder.MailboxAccountId, folder.Alias)));
+    }
+
+    /// <summary>A role selects each account's own folder, so the alias one account answered with may not admit another's.</summary>
+    [Fact]
+    public void Selecting_OneAccountsFolder_LeavesOutAnotherAccountsFolderOfTheSameName()
+    {
+        // Arrange
+        var emails = Emails(("work", "SPAM"), ("home", "SPAM"), ("home", "JUNK"));
+        var selected = new[]
+        {
+            new MailFolderIdentity(MailAccountId.Create("work"), MailFolderAlias.Create("SPAM")),
+            new MailFolderIdentity(MailAccountId.Create("home"), MailFolderAlias.Create("JUNK")),
+        };
+
+        // Act
+        var selectedEmails = AccountScopedMailFolders.Selecting(emails, selected);
+
+        // Assert
+        Assert.Equal(
+            [("work", "SPAM"), ("home", "JUNK")],
+            selectedEmails.AsEnumerable().Select(email => (email.MailboxAccountId, email.MailFolder.Alias)));
+    }
+
+    /// <summary>An account mapping no folder for the role contributes nothing, rather than contributing all of its mail.</summary>
+    [Fact]
+    public void Selecting_AnAccountInScopeThatSelectedNoFolder_AdmitsNothingFromIt()
+    {
+        // Arrange
+        var emails = Emails(("work", "ARCHIVE"), ("home", "ARCHIVE"), ("home", "INBOX"));
+        var selected = new[]
+        {
+            new MailFolderIdentity(MailAccountId.Create("work"), MailFolderAlias.Create("ARCHIVE")),
+        };
+
+        // Act
+        var selectedEmails = AccountScopedMailFolders.Selecting(emails, selected);
+
+        // Assert
+        Assert.Equal(
+            [("work", "ARCHIVE")],
+            selectedEmails.AsEnumerable().Select(email => (email.MailboxAccountId, email.MailFolder.Alias)));
+    }
+
+    /// <summary>The narrowing rests on the selected pairs alone, so it holds wherever the account filter is applied.</summary>
+    [Fact]
+    public void Selecting_AnAccountThatSelectedNothing_IsNarrowedAwayWithoutAnAccountFilter()
+    {
+        // Arrange
+        var emails = Emails(("work", "ARCHIVE"), ("home", "ARCHIVE"));
+        var selected = new[]
+        {
+            new MailFolderIdentity(MailAccountId.Create("work"), MailFolderAlias.Create("ARCHIVE")),
+        };
+
+        // Act
+        var selectedEmails = AccountScopedMailFolders.Selecting(emails, selected);
+
+        // Assert
+        Assert.Equal(["work"], selectedEmails.AsEnumerable().Select(email => email.MailboxAccountId));
+    }
+
+    /// <summary>A request naming no folder reads every folder of its accounts, and pays for no clause doing it.</summary>
+    [Fact]
+    public void Selecting_NoFolderSelected_LeavesTheQueryAsItWas()
+    {
+        // Arrange
+        var emails = Emails(("work", "ARCHIVE"), ("home", "INBOX"));
+
+        // Act
+        var selectedEmails = AccountScopedMailFolders.Selecting(emails, []);
+
+        // Assert
+        Assert.Same(emails, selectedEmails);
+    }
+
+    /// <summary>The freshness a tool reports is read from the bindings, so a role narrows those to the same pairs.</summary>
+    [Fact]
+    public void Selecting_FolderBindings_KeepsTheSelectedPairsOnly()
+    {
+        // Arrange
+        var folders = new[]
+        {
+            Folder("work", "SPAM"),
+            Folder("home", "SPAM"),
+            Folder("home", "JUNK"),
+        }.AsQueryable();
+        var selected = new[]
+        {
+            new MailFolderIdentity(MailAccountId.Create("work"), MailFolderAlias.Create("SPAM")),
+            new MailFolderIdentity(MailAccountId.Create("home"), MailFolderAlias.Create("JUNK")),
+        };
+
+        // Act
+        var selectedFolders = AccountScopedMailFolders.Selecting(folders, selected);
+
+        // Assert
+        Assert.Equal(
+            [("work", "SPAM"), ("home", "JUNK")],
+            selectedFolders.AsEnumerable().Select(folder => (folder.MailboxAccountId, folder.Alias)));
     }
 
     /// <summary>A read that has already found one email asks about that pair, and an alias alone would answer for two accounts.</summary>
@@ -100,7 +199,7 @@ public sealed class ExcludedMailFoldersTests
     public void Contains_APair_AnswersForThatAccountAndAliasTogether(string accountId, string alias, bool excluded)
     {
         // Arrange, Act
-        var isExcluded = ExcludedMailFolders.Contains([WorkPrivate], accountId, alias);
+        var isExcluded = AccountScopedMailFolders.Contains([WorkPrivate], accountId, alias);
 
         // Assert
         Assert.Equal(excluded, isExcluded);

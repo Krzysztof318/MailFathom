@@ -545,7 +545,7 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                     b.Property<int>("Position")
                         .HasColumnType("integer");
 
-                    b.Property<string>("DestinationAlias")
+                    b.Property<string>("Destination")
                         .HasMaxLength(128)
                         .HasColumnType("character varying(128)");
 

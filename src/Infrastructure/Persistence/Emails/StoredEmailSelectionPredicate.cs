@@ -59,17 +59,13 @@ internal static class StoredEmailSelectionPredicate
             emails = emails.Where(email => accountIds.Contains(email.MailboxAccountId));
         }
 
-        if (selection.Scope.FolderAliases.Count > 0)
-        {
-            var folderAliases = selection.Scope.FolderAliases.Select(static alias => alias.Value).ToArray();
-            emails = emails.Where(email => folderAliases.Contains(email.MailFolder.Alias));
-        }
+        emails = AccountScopedMailFolders.Selecting(emails, selection.Scope.SelectedFolders);
 
         // Withheld after the requested narrowing rather than before it, because the two are different statements: the
         // filters above are what the caller asked for, and this is what the scope withholds whatever they asked for.
         // Which folders those are was settled before the selection was built — an operator's hidden folders, which no
         // caller can turn off, together with the junk folder unless the caller asked for it — so nothing here decides it.
-        emails = ExcludedMailFolders.Excluding(emails, selection.Scope.WithheldFolders);
+        emails = AccountScopedMailFolders.Excluding(emails, selection.Scope.WithheldFolders);
 
         if (selection.SenderNormalizedAddress is { } senderAddress)
         {

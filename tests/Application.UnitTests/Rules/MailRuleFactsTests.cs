@@ -3,6 +3,8 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.Rules.Facts;
+using MailFathom.Domain.Accounts;
+using MailFathom.Domain.Folders;
 using MailFathom.TestSupport;
 using Xunit;
 
@@ -140,6 +142,7 @@ public sealed class MailRuleFactsTests
                 ReceivedAt = new DateTimeOffset(2026, 3, 1, 11, 30, 0, TimeSpan.FromHours(2)),
             },
             new RecordingMailRuleBodyTextReader(),
+            StubMailFolderMappings.Nothing,
             EvaluatedAt);
 
         // Act
@@ -156,6 +159,7 @@ public sealed class MailRuleFactsTests
         var facts = new MailRuleFacts(
             new MailRuleEmailFacts { Account = "work", Folder = "inbox" },
             new RecordingMailRuleBodyTextReader(),
+            StubMailFolderMappings.Nothing,
             EvaluatedAt);
 
         // Act
@@ -198,6 +202,57 @@ public sealed class MailRuleFactsTests
         Assert.Equal(0, bodyTextReader.ReadCount);
     }
 
+    /// <summary>A condition asks what the folder is for rather than what this deployment called it, which is the whole point of the role.</summary>
+    [Fact]
+    public async Task ResolveAsync_FolderRole_AnswersWithTheRoleTheFoldersMappingCarries()
+    {
+        // Arrange
+        var facts = CreateFacts(folderMappings: StubMailFolderMappings.Nothing.With(
+            MailAccountId.Create("work"),
+            MailFolderMapping.ToRemotePath(
+                MailFolderAlias.Create("inbox"),
+                RemoteFolderPath.Create("INBOX"),
+                specialUse: MailFolderSpecialUse.Inbox)));
+
+        // Act
+        var value = await facts.ResolveAsync(MailRuleFact.FolderRole, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal("Inbox", Assert.IsType<string>(value));
+    }
+
+    /// <summary>Naming no role is what most folders do, so the condition sees absence rather than a role somebody invented for it.</summary>
+    [Fact]
+    public async Task ResolveAsync_FolderRoleOfAFolderCarryingNone_AnswersWithAbsence()
+    {
+        // Arrange
+        var facts = CreateFacts(folderMappings: StubMailFolderMappings.Nothing.With(
+            MailAccountId.Create("work"),
+            MailFolderMapping.ToRemotePath(MailFolderAlias.Create("inbox"), RemoteFolderPath.Create("INBOX"))));
+
+        // Act
+        var value = await facts.ResolveAsync(MailRuleFact.FolderRole, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Null(value);
+    }
+
+    /// <summary>The folder the email was read from is the one asked about, so another account's folder of that name decides nothing.</summary>
+    [Fact]
+    public async Task ResolveAsync_FolderRoleMappedOnAnotherAccount_AnswersWithAbsence()
+    {
+        // Arrange
+        var facts = CreateFacts(folderMappings: StubMailFolderMappings.Nothing.With(
+            MailAccountId.Create("private"),
+            MailFolderMapping.ToSpecialUse(MailFolderAlias.Create("inbox"), MailFolderSpecialUse.Inbox)));
+
+        // Act
+        var value = await facts.ResolveAsync(MailRuleFact.FolderRole, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Null(value);
+    }
+
     [Fact]
     public async Task ResolveAsync_UnspecifiedFact_IsRefused()
     {
@@ -206,7 +261,9 @@ public sealed class MailRuleFactsTests
             () => CreateFacts().ResolveAsync(default, TestContext.Current.CancellationToken));
     }
 
-    private static MailRuleFacts CreateFacts(RecordingMailRuleBodyTextReader? bodyTextReader = null) =>
+    private static MailRuleFacts CreateFacts(
+        RecordingMailRuleBodyTextReader? bodyTextReader = null,
+        StubMailFolderMappings? folderMappings = null) =>
         new(
             new MailRuleEmailFacts
             {
@@ -223,5 +280,6 @@ public sealed class MailRuleFactsTests
                 HasExtractedContent = true,
             },
             bodyTextReader ?? new RecordingMailRuleBodyTextReader("Amount due on receipt."),
+            folderMappings ?? StubMailFolderMappings.Nothing,
             EvaluatedAt);
 }

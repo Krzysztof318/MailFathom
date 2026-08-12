@@ -218,6 +218,7 @@ The codes a user meets in practice:
 | `52001` / `52002` | A cursor this system did not issue, or one reused after the filters changed | Restart the walk from the first page |
 | `53001` | The named account is not served here | Call `list_accounts` and use an `accountId` or `displayName` it returns |
 | `53002` | No such email in the local copy | The identifier is stale, or the mail was removed; list again |
+| `53003` | A folder was named by a role no folder in scope carries | Name the folder's alias instead, or ask the operator to map the role on that account |
 | `55001` | The email exists but its stored content is currently unreadable; a repair has been queued | Retry later — this is a local-consistency state, not a mail-server problem |
 | `56001` | This deployment cannot answer questions about mail, either at all or for now | Nothing about the question caused it; the message says which, and only the operator can change it |
 | `57001` | Answering would cost more than this deployment allows | The message says which ceiling: a spent period is worth asking again once it turns over, while a question that reached what one question may cost needs to be narrower |

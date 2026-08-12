@@ -232,7 +232,7 @@ public sealed class MailRuleSetEvaluatorTests
     public async Task EvaluateAsync_RuleThatFailedBesideOneThatMatched_PlansOnlyTheMatchingRulesActions()
     {
         // Arrange
-        var filing = MailRuleActionSet.Create([MailRuleAction.Relocate(MailFolderAlias.Create("archive"))]);
+        var filing = MailRuleActionSet.Create([MailRuleAction.Relocate(MailFolderReference.ToAlias(MailFolderAlias.Create("archive")))]);
         var ruleSet = CreateRuleSet(
         [
             MailRule.Create(
@@ -289,6 +289,7 @@ public sealed class MailRuleSetEvaluatorTests
         new(
             new MailRuleEmailFacts { Account = "work", Folder = "inbox" },
             new RecordingMailRuleBodyTextReader(),
+            StubMailFolderMappings.Nothing,
             EvaluatedAt);
 
     private MailRuleSetEvaluator CreateEvaluator() => new(this.timeProvider);

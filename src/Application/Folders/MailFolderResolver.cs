@@ -149,9 +149,16 @@ public sealed class MailFolderResolver
 
     /// <summary>Finds every advertised folder a mapping names, so an alias that names more than one is answerable.</summary>
     /// <remarks>
+    /// <para>
     /// Every match is collected rather than the first one taken, because IMAP <c>LIST</c> ordering is a response
     /// order and not an identity contract. Picking the first of several would let a reordered response repoint the
     /// alias, start a generation, and resynchronize a different folder with no configuration having changed.
+    /// </para>
+    /// <para>
+    /// It is the mapping's target that selects the arm, not whichever of the two values happens to be present. A folder
+    /// found by path may carry a role as a label, and matching that role instead would bind the alias to whatever the
+    /// server advertises rather than to the path the operator wrote.
+    /// </para>
     /// </remarks>
     private static IReadOnlyList<RemoteFolder> FindAdvertisedMatches(
         MailFolderMapping mapping,
@@ -162,7 +169,8 @@ public sealed class MailFolderResolver
             // delimiter included, so a later run compares the same value against the same binding.
             { Target: MailFolderMappingTarget.RemotePath, RemotePath: { } configuredPath } =>
                 [.. advertisedFolders.Where(folder => folder.Path.Value == configuredPath.Value)],
-            { SpecialUse: { } role } => FindFoldersCarryingRole(role, advertisedFolders),
+            { Target: MailFolderMappingTarget.SpecialUse, SpecialUse: { } role } =>
+                FindFoldersCarryingRole(role, advertisedFolders),
             _ => [],
         };
 

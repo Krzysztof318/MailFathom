@@ -14,6 +14,7 @@ using MailFathom.Application.UnitTests.TestDoubles;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Folders;
 using MailFathom.Domain.Mutations;
+using MailFathom.TestSupport;
 using Microsoft.Extensions.Time.Testing;
 using NSubstitute;
 using Xunit;
@@ -524,7 +525,7 @@ public sealed class MailRuleEvaluationPassTests
         // Assert
         var action = Assert.Single(Assert.Single(this.history.Executions).Actions);
         Assert.Equal(MailRuleExecutedActionOutcome.Requested, action.Outcome);
-        Assert.Equal(Archive, action.DestinationAlias);
+        Assert.Equal(Archive.Value, action.Destination);
         Assert.Equal(this.mutations.OpenedRequests[0].Mutation, action.Mutation);
         Assert.NotNull(action.MutationRecordId);
     }
@@ -554,7 +555,7 @@ public sealed class MailRuleEvaluationPassTests
     private static MailRule FilingRule(string name, MailFolderAlias? destination = null) => MailRule.Create(
         name,
         ScriptedMailRuleCondition.Answering(matches: true),
-        MailRuleActionSet.Create([MailRuleAction.Relocate(destination ?? Archive)]));
+        MailRuleActionSet.Create([MailRuleAction.Relocate(MailFolderReference.ToAlias(destination ?? Archive))]));
 
     private static MailRuleEvaluationRun RequestedRun() => new()
     {
@@ -584,8 +585,14 @@ public sealed class MailRuleEvaluationPassTests
             new MailRuleSetEvaluator(this.timeProvider),
             this.store,
             this.runStore,
-            new MailRuleActionRecorder(this.mutations, this.folders, this.deleteDispositions, this.permissions),
+            new MailRuleActionRecorder(
+                this.mutations,
+                this.folders,
+                StubMailFolderMappings.ResolvingNothing,
+                this.deleteDispositions,
+                this.permissions),
             this.history,
+            StubMailFolderMappings.Nothing,
             new OptimisticConcurrencyRetryPolicy(
                 sessionFactory,
                 new PersistenceConcurrencyOptions(),

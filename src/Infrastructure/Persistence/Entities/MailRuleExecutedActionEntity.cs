@@ -33,7 +33,11 @@ internal sealed class MailRuleExecutedActionEntity
     public required string Outcome { get; set; }
 
     /// <summary>Gets or sets the folder the action named, absent for an action naming none.</summary>
-    public string? DestinationAlias { get; set; }
+    /// <remarks>
+    /// An alias where the pass resolved the destination, and the text the rule wrote where it did not, which is why the
+    /// column is not named for an alias. The domain record states why the two differ.
+    /// </remarks>
+    public string? Destination { get; set; }
 
     /// <summary>Gets or sets why nothing was recorded, present exactly for an action the recorder refused.</summary>
     public string? FailureReason { get; set; }

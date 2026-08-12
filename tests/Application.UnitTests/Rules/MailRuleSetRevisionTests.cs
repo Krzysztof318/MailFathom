@@ -13,12 +13,12 @@ namespace MailFathom.Application.UnitTests.Rules;
 public sealed class MailRuleSetRevisionTests
 {
     private static readonly MailRuleAction FileIntoArchive =
-        MailRuleAction.Relocate(MailFolderAlias.Create("archive"));
+        MailRuleAction.Relocate(MailFolderReference.ToAlias(MailFolderAlias.Create("archive")));
 
     public static TheoryData<string, MailRuleAction[]> ActionEdits => new()
     {
-        { "a different destination", [MailRuleAction.Relocate(MailFolderAlias.Create("backup"))] },
-        { "a different mutation", [MailRuleAction.Copy(MailFolderAlias.Create("archive"))] },
+        { "a different destination", [MailRuleAction.Relocate(MailFolderReference.ToAlias(MailFolderAlias.Create("backup")))] },
+        { "a different mutation", [MailRuleAction.Copy(MailFolderReference.ToAlias(MailFolderAlias.Create("archive")))] },
         { "one more action", [FileIntoArchive, MailRuleAction.SetSeen(isSeen: true)] },
         { "no action at all", [] },
     };
@@ -93,7 +93,7 @@ public sealed class MailRuleSetRevisionTests
         var twoActions = MailRuleSetRevision.Create(
             [FileInvoices with { Actions = [MailRuleAction.SetSeen(isSeen: true), FileIntoArchive] }]);
         var oneAction = MailRuleSetRevision.Create(
-            [FileInvoices with { Actions = [MailRuleAction.Relocate(MailFolderAlias.Create("set-seen=truerelocate=archive"))] }]);
+            [FileInvoices with { Actions = [MailRuleAction.Relocate(MailFolderReference.ToAlias(MailFolderAlias.Create("set-seen=truerelocate=archive")))] }]);
 
         // Assert
         Assert.NotEqual(twoActions, oneAction);

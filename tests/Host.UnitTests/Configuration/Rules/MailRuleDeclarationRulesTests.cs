@@ -599,6 +599,74 @@ public sealed class MailRuleDeclarationRulesTests
             error => error.Contains("MailRules:Rules:0:Actions", StringComparison.Ordinal));
     }
 
+    /// <summary>A rule written for several deployments names what the folder is for, and the account's own alias for it stays configuration.</summary>
+    [Fact]
+    public void FindDeclarationErrors_ADestinationNamedByARoleTheAccountMaps_IsAccepted()
+    {
+        // Arrange
+        var candidate = new MailRulesOptions
+        {
+            Rules =
+            [
+                CreateRule("file-invoices", "isSeen", actions: new MailRuleActionOptions { MoveTo = "role:Archive" }),
+            ],
+        };
+
+        // Act
+        var errors = MailRuleDeclarationRules.FindDeclarationErrors(candidate, this.compiler, DeclaredAccounts);
+
+        // Assert
+        Assert.Empty(errors);
+    }
+
+    /// <summary>A role nothing carries is refused at binding, exactly as an alias nothing mirrors is, so neither reaches a mailbox.</summary>
+    [Fact]
+    public void FindDeclarationErrors_ADestinationNamedByARoleNoFolderPlays_IsRefusedForThatAccount()
+    {
+        // Arrange
+        var candidate = new MailRulesOptions
+        {
+            Rules =
+            [
+                CreateRule(
+                    "file-spam",
+                    "isSeen",
+                    accounts: ["primary"],
+                    actions: new MailRuleActionOptions { MoveTo = "role:Junk" }),
+            ],
+        };
+
+        // Act
+        var errors = MailRuleDeclarationRules.FindDeclarationErrors(candidate, this.compiler, DeclaredAccounts);
+
+        // Assert
+        var error = Assert.Single(errors);
+        Assert.Contains("role:Junk", error, StringComparison.Ordinal);
+        Assert.Contains("primary", error, StringComparison.Ordinal);
+    }
+
+    /// <summary>A role misspelled is a rule that would file nowhere, and the refusal says which spellings exist.</summary>
+    [Fact]
+    public void FindDeclarationErrors_ADestinationNamingARoleThatDoesNotExist_IsRefusedNamingTheRolesThatDo()
+    {
+        // Arrange
+        var candidate = new MailRulesOptions
+        {
+            Rules =
+            [
+                CreateRule("file-invoices", "isSeen", actions: new MailRuleActionOptions { MoveTo = "role:Spam" }),
+            ],
+        };
+
+        // Act
+        var errors = MailRuleDeclarationRules.FindDeclarationErrors(candidate, this.compiler, DeclaredAccounts);
+
+        // Assert
+        var error = Assert.Single(errors);
+        Assert.Contains("role:", error, StringComparison.Ordinal);
+        Assert.Contains(nameof(MailFolderSpecialUse.Junk), error, StringComparison.Ordinal);
+    }
+
     /// <summary>The identity is a digest over the declarations, so a destination carrying a separator could blur two rule sets into one.</summary>
     [Fact]
     public void FindDeclarationErrors_ADestinationCarryingADigestSeparator_IsRefused()
@@ -648,7 +716,7 @@ public sealed class MailRuleDeclarationRulesTests
         MailRuleActionPermissions? permissions = null) =>
         new(
             accountId,
-            [MailFolderAlias.Create("archive")],
+            [new DeclaredMailFolder(MailFolderAlias.Create("archive"), MailFolderSpecialUse.Archive)],
             permissions ?? MailRuleActionPermissions.Default);
 
     /// <summary>One declared account mirroring nothing a rule could file into.</summary>

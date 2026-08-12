@@ -8,11 +8,19 @@ using MailFathom.Domain.Folders;
 
 namespace MailFathom.Host.Configuration.Mail;
 
-/// <summary>Configures how one folder alias finds its remote folder.</summary>
+/// <summary>Configures one folder: where it is, what it is for, and what it takes part in.</summary>
 /// <remarks>
+/// <para>
 /// Configuration names folders by alias only. Either the operator writes the server's own path, or — preferably —
 /// names a special-use role and lets discovery find whichever folder carries it, which is what makes an account on a
 /// server with non-English folder names work with no configuration of its own.
+/// </para>
+/// <para>
+/// <see cref="SpecialUse" /> is one key doing both jobs. Written alone it finds the folder and labels it; written
+/// beside a <see cref="RemotePath" /> it only labels, which is how a folder on a server that advertises no attribute
+/// for it is still the folder a feature asking for this account's junk mail is given. One key rather than two, because
+/// two keys that both spell <c>Junk</c> would eventually be written disagreeing.
+/// </para>
 /// </remarks>
 [SuppressMessage("Performance", "CA1812:Avoid uninstantiated internal classes", Justification = "The options framework materializes this type during configuration binding.")]
 internal sealed class MailFolderMappingOptions : IValidatableObject
@@ -21,10 +29,14 @@ internal sealed class MailFolderMappingOptions : IValidatableObject
     [Required]
     public string Alias { get; set; } = string.Empty;
 
-    /// <summary>Gets or sets the server-advertised path the alias names, which is mutually exclusive with <see cref="SpecialUse" />.</summary>
+    /// <summary>Gets or sets the server-advertised path the alias names, which the folder is found by when it is written.</summary>
     public string? RemotePath { get; set; }
 
-    /// <summary>Gets or sets the special-use role the alias names, which is mutually exclusive with <see cref="RemotePath" />.</summary>
+    /// <summary>Gets or sets the role the folder plays, which also finds the folder when no <see cref="RemotePath" /> is written.</summary>
+    /// <remarks>
+    /// A role is unique within an account, so two folders of one account naming the same role fail startup. Naming none
+    /// is ordinary: a folder needs a role only when something is going to ask for it by one.
+    /// </remarks>
     public string? SpecialUse { get; set; }
 
     /// <summary>Gets or sets whether the folder's mail is mirrored locally, which every mapped folder does unless it is turned off.</summary>
@@ -67,10 +79,11 @@ internal sealed class MailFolderMappingOptions : IValidatableObject
 
     /// <summary>Builds the domain mapping this configured folder expresses.</summary>
     /// <returns>The mapping folder resolution reads.</returns>
-    /// <exception cref="InvalidOperationException">Thrown when configuration that passed startup validation no longer expresses exactly one target.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when configuration that passed startup validation names neither a remote path nor a supported special-use role.</exception>
     internal MailFolderMapping CreateMapping()
     {
         var alias = MailFolderAlias.Create(this.Alias);
+        var namesRole = TryParseSpecialUse(this.SpecialUse, out var specialUse);
 
         if (!string.IsNullOrWhiteSpace(this.RemotePath))
         {
@@ -78,10 +91,11 @@ internal sealed class MailFolderMappingOptions : IValidatableObject
                 alias,
                 RemoteFolderPath.Create(this.RemotePath),
                 this.Participation,
-                this.CreateIfMissing ?? false);
+                this.CreateIfMissing ?? false,
+                namesRole ? specialUse : null);
         }
 
-        if (TryParseSpecialUse(this.SpecialUse, out var specialUse))
+        if (namesRole)
         {
             return MailFolderMapping.ToSpecialUse(alias, specialUse, this.Participation);
         }
@@ -90,6 +104,15 @@ internal sealed class MailFolderMappingOptions : IValidatableObject
             $"Folder alias '{this.Alias}' names neither a remote path nor a supported special-use role.");
     }
 
+    /// <summary>Gets the role this folder plays, or <see langword="null" /> when it names none this system supports.</summary>
+    /// <remarks>
+    /// Read without raising, so the rule that refuses two folders of one account sharing a role can group by it while a
+    /// misspelled role is still being reported against the entry that wrote it.
+    /// </remarks>
+    internal MailFolderSpecialUse? DeclaredRole => TryParseSpecialUse(this.SpecialUse, out var specialUse)
+        ? specialUse
+        : null;
+
     internal IEnumerable<ValidationResult> ValidateForSynchronization()
     {
         if (string.IsNullOrWhiteSpace(this.Alias))
@@ -97,13 +120,27 @@ internal sealed class MailFolderMappingOptions : IValidatableObject
             yield return new ValidationResult("Configured folder aliases must be non-empty.", [nameof(this.Alias)]);
         }
 
+        // An alias is written wherever a folder is named, and a role is written there too behind this prefix. An alias
+        // carrying it would therefore be a folder nothing could name: every caller writing it would reach the role
+        // instead, and the role would answer for whichever folder actually plays it.
+        if (this.Alias?.TrimStart().StartsWith(MailFolderReference.RoleScheme, StringComparison.OrdinalIgnoreCase)
+            is true)
+        {
+            yield return new ValidationResult(
+                $"Folder alias '{this.Alias}' begins with '{MailFolderReference.RoleScheme}', which is how a folder is named by the role it plays rather than by its alias. Choose an alias that does not begin with it.",
+                [nameof(this.Alias)]);
+        }
+
         var namesRemotePath = !string.IsNullOrWhiteSpace(this.RemotePath);
         var namesSpecialUse = !string.IsNullOrWhiteSpace(this.SpecialUse);
 
-        if (namesRemotePath == namesSpecialUse)
+        // At least one rather than exactly one: the two answer different questions once a role is a property of the
+        // folder, so writing both is a folder found by path and labelled with a role. Writing neither still leaves
+        // nothing that could find the folder at all.
+        if (!namesRemotePath && !namesSpecialUse)
         {
             yield return new ValidationResult(
-                $"Folder alias '{this.Alias}' must name exactly one of RemotePath and SpecialUse.",
+                $"Folder alias '{this.Alias}' must name at least one of RemotePath and SpecialUse.",
                 [nameof(this.RemotePath), nameof(this.SpecialUse)]);
 
             yield break;
@@ -116,10 +153,13 @@ internal sealed class MailFolderMappingOptions : IValidatableObject
                 [nameof(this.SpecialUse)]);
         }
 
-        if (namesSpecialUse && this.CreateIfMissing is true)
+        // Only a role-only mapping is refused. A folder found by path and labelled with a role names the path the
+        // folder would be created at, so the objection — that a folder which does not exist advertises no role — does
+        // not apply to it.
+        if (!namesRemotePath && namesSpecialUse && this.CreateIfMissing is true)
         {
             yield return new ValidationResult(
-                $"Folder alias '{this.Alias}' asks for its folder to be created while naming a special-use role, and a folder that does not exist advertises no role. Name the path the folder is to be created at in 'RemotePath'.",
+                $"Folder alias '{this.Alias}' asks for its folder to be created while being found by a special-use role, and a folder that does not exist advertises no role. Name the path the folder is to be created at in 'RemotePath'.",
                 [nameof(this.CreateIfMissing)]);
         }
 
@@ -166,15 +206,27 @@ internal sealed class MailFolderMappingOptions : IValidatableObject
     /// <inheritdoc />
     public IEnumerable<ValidationResult> Validate(ValidationContext validationContext) => this.ValidateForSynchronization();
 
-    /// <summary>Parses a configured role name, rejecting the numeric form a configuration value can otherwise bind to.</summary>
-    private static bool TryParseSpecialUse(string? configuredRole, out MailFolderSpecialUse specialUse)
+    /// <summary>Reads a configured role name, accepting only the declared names themselves.</summary>
+    /// <param name="configuredRole">The text an operator wrote, or <see langword="null" /> when they wrote none.</param>
+    /// <param name="specialUse">The role when the text names one; otherwise the default.</param>
+    /// <returns><see langword="true" /> when the text names a supported role.</returns>
+    /// <remarks>
+    /// Matched against the declared names rather than parsed, for the reason
+    /// <see cref="MailFolderReference.TryCreate" /> gives at length: <see cref="Enum.TryParse{TEnum}(string, bool, out TEnum)" />
+    /// accepts a number and a comma-separated list, the second of which combines its members by bitwise OR and so turns
+    /// two roles an operator wrote into a third they did not. The two readings have to agree on what counts as a role,
+    /// which is also why this is internal: the rule section reads the same key straight from configuration, before
+    /// anything is bound, and a rule set startup accepted would otherwise be refused by the reload that read the same
+    /// text through the other parser.
+    /// </remarks>
+    internal static bool TryParseSpecialUse(string? configuredRole, out MailFolderSpecialUse specialUse)
     {
         specialUse = default;
 
         return !string.IsNullOrWhiteSpace(configuredRole)
-            && !configuredRole.Trim().Any(char.IsDigit)
-            && Enum.TryParse(configuredRole.Trim(), ignoreCase: true, out specialUse)
-            && Enum.IsDefined(specialUse);
+            && Enum.GetNames<MailFolderSpecialUse>()
+                .Any(declared => string.Equals(declared, configuredRole.Trim(), StringComparison.OrdinalIgnoreCase))
+            && Enum.TryParse(configuredRole.Trim(), ignoreCase: true, out specialUse);
     }
 
     /// <summary>Re-checks the alias and path against the domain rules, so an unusable value fails startup rather than the first run.</summary>

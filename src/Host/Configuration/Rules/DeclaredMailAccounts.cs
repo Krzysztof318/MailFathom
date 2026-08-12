@@ -26,6 +26,12 @@ namespace MailFathom.Host.Configuration.Rules;
 /// A folder alias that is not a value this system issues is dropped for the same reason, and so is an unmirrored
 /// folder — the second deliberately, because a rule may only file into a folder whose mail this account mirrors.
 /// </para>
+/// <para>
+/// Each folder is read with the role it plays beside its alias, because a rule may name its destination either way and
+/// judging the two against different readings of the same section is how a rule set startup accepted would be refused
+/// on a reload. A role this system does not support is read as no role at all: the synchronization section reports it
+/// against the key that wrote it, and naming it again here would blame the rule for somebody else's typo.
+/// </para>
 /// </remarks>
 internal static class DeclaredMailAccounts
 {
@@ -64,18 +70,18 @@ internal static class DeclaredMailAccounts
                 .Where(account => !string.IsNullOrWhiteSpace(account.AccountId))
                 .Select(account => new DeclaredMailAccount(
                     account.AccountId.Trim(),
-                    ReadMirroredAliases(account),
+                    ReadMirroredFolders(account),
                     (account.RuleActions ?? new MailRuleActionPermissionOptions()).ToPermissions())),
         ];
     }
 
-    /// <summary>Reads one account's mirrored folder aliases from the bound folders it is actually run with.</summary>
-    private static IReadOnlyCollection<MailFolderAlias> ReadMirroredAliases(MailSynchronizationAccountOptions account) =>
+    /// <summary>Reads one account's mirrored folders from the bound folders it is actually run with.</summary>
+    private static IReadOnlyCollection<DeclaredMailFolder> ReadMirroredFolders(MailSynchronizationAccountOptions account) =>
     [
         .. account.EffectiveFolders
             .Where(folder => folder.Participation.IsSynchronized)
-            .Select(folder => TryReadAlias(folder.Alias))
-            .OfType<MailFolderAlias>(),
+            .Select(folder => TryReadFolder(folder.Alias, folder.DeclaredRole))
+            .OfType<DeclaredMailFolder>(),
     ];
 
     /// <summary>Reads one account's keys, which is the shape available before anything has been bound.</summary>
@@ -99,16 +105,20 @@ internal static class DeclaredMailAccounts
             .GetChildren()
             .ToArray();
 
-        var mirroredAliases = folders.Length == 0
-            ? [TryReadAlias(nameof(MailFolderSpecialUse.Inbox))]
+        var mirroredFolders = folders.Length == 0
+            ? [TryReadFolder(nameof(MailFolderSpecialUse.Inbox), MailFolderSpecialUse.Inbox)]
             : folders
                 .Where(folder => !IsDeclaredFalse(folder[nameof(MailFolderMappingOptions.Synchronize)]))
-                .Select(folder => TryReadAlias(folder[nameof(MailFolderMappingOptions.Alias)]))
+                .Select(folder => TryReadFolder(
+                    folder[nameof(MailFolderMappingOptions.Alias)],
+                    MailFolderMappingOptions.TryParseSpecialUse(folder[nameof(MailFolderMappingOptions.SpecialUse)], out var role)
+                        ? role
+                        : null))
                 .ToArray();
 
         return new DeclaredMailAccount(
             accountId,
-            [.. mirroredAliases.OfType<MailFolderAlias>()],
+            [.. mirroredFolders.OfType<DeclaredMailFolder>()],
             ReadPermissions(account.GetSection(nameof(MailSynchronizationAccountOptions.RuleActions))));
     }
 
@@ -130,6 +140,8 @@ internal static class DeclaredMailAccounts
 
     private static bool IsDeclaredTrue(string? value) => bool.TryParse(value, out var declared) && declared;
 
-    private static MailFolderAlias? TryReadAlias(string? alias) =>
-        MailRuleActionOptions.TryReadAlias(alias, out var readAlias) ? readAlias : null;
+    private static DeclaredMailFolder? TryReadFolder(string? alias, MailFolderSpecialUse? role) =>
+        MailRuleActionOptions.TryReadAlias(alias, out var readAlias)
+            ? new DeclaredMailFolder(readAlias, role)
+            : null;
 }

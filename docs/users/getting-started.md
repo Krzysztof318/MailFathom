@@ -86,7 +86,11 @@ Points worth knowing before you adapt it:
   share one, and none may take another account's identifier, so a name always names one mailbox.
 - **Folders are best named by role.** `SpecialUse` lets discovery find the folder whatever the server calls it —
   a German server's `Gesendet` is still `Sent` — and configuring no folder at all synchronizes the inbox. Naming an
-  exact server path is the alternative for folders with no role.
+  exact server path is the alternative for folders with no role, and you may name both: the path finds the folder and
+  the role says what it is for, so a rule or a tool can go on asking for `role:Junk` on a server that advertises
+  nothing. One role belongs to one folder per account.
+  [What a role says, beside how a folder is found](../features/imap-synchronization.md#what-a-role-says-beside-how-a-folder-is-found)
+  states what naming a role buys you everywhere else.
 - **A mapped folder is mirrored, embedded, and readable by tools** unless you say otherwise. `Synchronize`,
   `GenerateEmbeddings`, and `VisibleToTools` each default to `true` on a folder entry, and switching one off is how a
   folder stays nameable while its mail stays out of the local copy, out of an embedding provider, or out of everything

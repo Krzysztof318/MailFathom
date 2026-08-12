@@ -77,14 +77,14 @@ internal sealed record MailRuleExecution(
 /// <param name="Position">Where the change sits in the order the rule declares its changes, counted from zero.</param>
 /// <param name="Mutation">The change asked for.</param>
 /// <param name="Outcome">What became of it.</param>
-/// <param name="DestinationAlias">The folder the change named, absent for a change naming none.</param>
+/// <param name="Destination">The folder the change named, absent for a change naming none.</param>
 /// <param name="FailureReason">Why nothing was recorded, present exactly for a change the deployment refused.</param>
 /// <param name="MutationRecord">The record carrying the request, present exactly for a change that opened one.</param>
 internal sealed record MailRuleExecutedAction(
     [property: JsonPropertyName("position")] int Position,
     [property: JsonPropertyName("mutation")] string? Mutation,
     [property: JsonPropertyName("outcome")] string? Outcome,
-    [property: JsonPropertyName("destinationAlias")] string? DestinationAlias,
+    [property: JsonPropertyName("destination")] string? Destination,
     [property: JsonPropertyName("failureReason")] string? FailureReason,
     [property: JsonPropertyName("mutationRecord")] Guid? MutationRecord)
 {
@@ -96,7 +96,7 @@ internal sealed record MailRuleExecutedAction(
     /// </remarks>
     internal string Describe()
     {
-        var target = this.DestinationAlias is { Length: > 0 } alias ? $" → {alias}" : string.Empty;
+        var target = this.Destination is { Length: > 0 } folder ? $" → {folder}" : string.Empty;
         var reason = this.FailureReason is { Length: > 0 } failure ? $" ({failure})" : string.Empty;
 
         return $"{this.Mutation}{target}: {this.Outcome}{reason}";

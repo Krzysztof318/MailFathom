@@ -60,19 +60,19 @@ internal sealed record LoadedRule(
 /// <summary>One change a rule declares.</summary>
 /// <param name="Position">Where the change sits in the order the rule declares its changes, counted from zero.</param>
 /// <param name="Mutation">The change, named as the mutation it will be requested through.</param>
-/// <param name="DestinationAlias">The folder a relocation or a copy names, absent for every other change.</param>
+/// <param name="Destination">How a relocation or a copy names its folder — an alias, or a role as <c>role:Junk</c> — absent for every other change.</param>
 /// <param name="DesiredSeenState">Which way a <c>\Seen</c> change was asked for, absent for every other change.</param>
 internal sealed record LoadedRuleAction(
     [property: JsonPropertyName("position")] int Position,
     [property: JsonPropertyName("mutation")] string? Mutation,
-    [property: JsonPropertyName("destinationAlias")] string? DestinationAlias,
+    [property: JsonPropertyName("destination")] string? Destination,
     [property: JsonPropertyName("desiredSeenState")] bool? DesiredSeenState)
 {
     /// <summary>Describes the change and the parameter it carries, where it carries one.</summary>
     /// <returns>One phrase, such as <c>Relocate → archive</c>.</returns>
     internal string Describe() => this switch
     {
-        { DestinationAlias: { Length: > 0 } alias } => $"{this.Mutation} → {alias}",
+        { Destination: { Length: > 0 } destination } => $"{this.Mutation} → {destination}",
         { DesiredSeenState: { } isSeen } => $"{this.Mutation} → {(isSeen ? "read" : "unread")}",
         _ => this.Mutation ?? "an unreported change",
     };

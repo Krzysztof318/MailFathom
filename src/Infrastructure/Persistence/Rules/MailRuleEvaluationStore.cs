@@ -19,9 +19,10 @@ namespace MailFathom.Infrastructure.Persistence.Rules;
 /// <summary>EF Core state for the rule passes that run inside an account's synchronization run.</summary>
 /// <remarks>
 /// Both walks project straight into the fact surface rather than loading rows, because a condition reads twenty of its
-/// twenty-one facts from metadata and none of them is the raw MIME sitting beside it in the same aggregate. The
-/// twenty-first is read one email at a time and only when a condition names it, which is what keeps a rule set that
-/// mentions no body text free of a content read.
+/// twenty-two facts from metadata and none of them is the raw MIME sitting beside it in the same aggregate. Of the
+/// other two, <c>folderRole</c> is read from configuration rather than from any row, and <c>bodyText</c> is read one
+/// email at a time and only when a condition names it, which is what keeps a rule set that mentions no body text free
+/// of a content read.
 /// </remarks>
 [RequiresIntegrationCoverage]
 internal sealed class MailRuleEvaluationStore(MailFathomDbContext dbContext) : IMailRuleEvaluationStore

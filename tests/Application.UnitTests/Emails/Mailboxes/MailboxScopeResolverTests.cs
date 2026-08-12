@@ -112,11 +112,19 @@ public sealed class MailboxScopeResolverTests
         var resolver = ResolverServing(Private, Work);
 
         // Act
-        var scope = resolver.ReadableScope([], [MailFolderAlias.Create("INBOX")], JunkMailInclusion.Excluded);
+        var scope = resolver.ReadableScope(
+            [],
+            [MailFolderReference.ToAlias(MailFolderAlias.Create("INBOX"))],
+            JunkMailInclusion.Excluded);
 
         // Assert
         Assert.Equal([Work.Id, Private.Id], scope.AccountIds);
-        Assert.Equal([MailFolderAlias.Create("INBOX")], scope.FolderAliases);
+        Assert.Equal(
+            [
+                new MailFolderIdentity(Work.Id, MailFolderAlias.Create("INBOX")),
+                new MailFolderIdentity(Private.Id, MailFolderAlias.Create("INBOX")),
+            ],
+            scope.SelectedFolders);
     }
 
     /// <summary>A deployment serving nothing resolves to an empty scope rather than to an unrestricted one.</summary>
@@ -145,7 +153,8 @@ public sealed class MailboxScopeResolverTests
             .ToArray();
 
         // Act, Assert
-        Assert.Throws<MailboxQueryFilterInvalidException>(() => resolver.ReadableScope(tooMany, [], JunkMailInclusion.Excluded));
+        Assert.Throws<MailboxQueryFilterInvalidException>(
+            () => resolver.ReadableScope(tooMany, [], JunkMailInclusion.Excluded));
     }
 
     /// <summary>A withheld folder reaches every read model through the scope, which is what makes one decision cover four tools.</summary>
@@ -157,11 +166,14 @@ public sealed class MailboxScopeResolverTests
         var resolver = ResolverServing(StubMailFolderParticipation.Hiding(privateFolder), Work, Private);
 
         // Act
-        var scope = resolver.ReadableScope([], [MailFolderAlias.Create("PRIVATE")], JunkMailInclusion.Excluded);
+        var scope = resolver.ReadableScope(
+            [],
+            [MailFolderReference.ToAlias(MailFolderAlias.Create("PRIVATE"))],
+            JunkMailInclusion.Excluded);
 
         // Assert
         Assert.Equal([privateFolder], scope.HiddenFolders);
-        Assert.Equal([MailFolderAlias.Create("PRIVATE")], scope.FolderAliases);
+        Assert.Contains(privateFolder, scope.SelectedFolders);
     }
 
     /// <summary>Configuration that withholds nothing leaves the scope exactly as it was, so nothing pays for a switch it never set.</summary>
@@ -376,22 +388,142 @@ public sealed class MailboxScopeResolverTests
             resolver.ReadableScope([], [], (JunkMailInclusion)7));
     }
 
+    /// <summary>A role names a different folder in each account, so a read across two of them narrows to both rather than to one name.</summary>
+    [Fact]
+    public void ReadableScope_AFolderNamedByItsRole_ResolvesToEachAccountsOwnFolder()
+    {
+        // Arrange
+        var resolver = ResolverMapping(
+            StubMailFolderMappings.Nothing
+                .With(Work.Id, MailFolderMapping.ToRemotePath(
+                    MailFolderAlias.Create("spam"),
+                    RemoteFolderPath.Create("INBOX.Spam"),
+                    specialUse: MailFolderSpecialUse.Junk))
+                .With(Private.Id, MailFolderMapping.ToSpecialUse(
+                    MailFolderAlias.Create("junk"),
+                    MailFolderSpecialUse.Junk)),
+            Work,
+            Private);
+
+        // Act
+        var scope = resolver.ReadableScope(
+            [],
+            [MailFolderReference.ToRole(MailFolderSpecialUse.Junk)],
+            JunkMailInclusion.Excluded);
+
+        // Assert
+        Assert.Equal(
+            [
+                new MailFolderIdentity(Work.Id, MailFolderAlias.Create("SPAM")),
+                new MailFolderIdentity(Private.Id, MailFolderAlias.Create("JUNK")),
+            ],
+            scope.SelectedFolders);
+    }
+
+    /// <summary>An account without the folder contributes nothing rather than refusing the read for the accounts that have it.</summary>
+    [Fact]
+    public void ReadableScope_ARoleOnlyOneAccountInScopeMaps_ResolvesToThatAccountsFolderAlone()
+    {
+        // Arrange
+        var resolver = ResolverMapping(
+            StubMailFolderMappings.Nothing.With(Work.Id, MailFolderMapping.ToSpecialUse(
+                MailFolderAlias.Create("archive"),
+                MailFolderSpecialUse.Archive)),
+            Work,
+            Private);
+
+        // Act
+        var scope = resolver.ReadableScope(
+            [],
+            [MailFolderReference.ToRole(MailFolderSpecialUse.Archive)],
+            JunkMailInclusion.Excluded);
+
+        // Assert
+        Assert.Equal(
+            [new MailFolderIdentity(Work.Id, MailFolderAlias.Create("ARCHIVE"))],
+            scope.SelectedFolders);
+    }
+
+    /// <summary>A role naming no folder anywhere in scope is a request nothing could satisfy, so it is refused rather than read as no filter.</summary>
+    [Fact]
+    public void ReadableScope_ARoleNoAccountInScopeMaps_IsRefusedNamingTheRole()
+    {
+        // Arrange
+        var resolver = ResolverServing(Work, Private);
+
+        // Act
+        var failure = Assert.Throws<MailFolderRoleUnmappedException>(
+            () => resolver.ReadableScope(
+                [],
+                [MailFolderReference.ToRole(MailFolderSpecialUse.Junk)],
+                JunkMailInclusion.Excluded));
+
+        // Assert
+        Assert.Equal(MailFolderSpecialUse.Junk, failure.Role);
+        Assert.Null(failure.AccountId);
+        Assert.Contains("Junk", failure.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>The ceiling counts what the caller wrote, so expanding one role over many accounts can never trip it.</summary>
+    [Fact]
+    public void ReadableScope_MoreFoldersNamedThanTheLimitPermits_IsRefusedAsAFilter()
+    {
+        // Arrange
+        var resolver = ResolverServing(Work);
+        var tooMany = Enumerable
+            .Range(0, MailboxScope.MaximumFolderAliases + 1)
+            .Select(position => MailFolderReference.ToAlias(MailFolderAlias.Create($"folder-{position}")))
+            .ToArray();
+
+        // Act, Assert
+        Assert.Throws<MailboxQueryFilterInvalidException>(
+            () => resolver.ReadableScope([], tooMany, JunkMailInclusion.Excluded));
+    }
+
     private static MailboxScopeResolver ResolverServing(params ServedMailAccount[] servedAccounts) =>
-        ResolverServing(StubMailFolderParticipation.Everything, StubJunkMailFolderCatalog.None, servedAccounts);
+        Resolver(
+            StubMailFolderParticipation.Everything,
+            StubJunkMailFolderCatalog.None,
+            StubMailFolderMappings.Nothing,
+            servedAccounts);
 
     private static MailboxScopeResolver ResolverServing(
         IMailFolderParticipationReader folderParticipation,
         params ServedMailAccount[] servedAccounts) =>
-        ResolverServing(folderParticipation, StubJunkMailFolderCatalog.None, servedAccounts);
+        Resolver(
+            folderParticipation,
+            StubJunkMailFolderCatalog.None,
+            StubMailFolderMappings.Nothing,
+            servedAccounts);
 
     private static MailboxScopeResolver ResolverServing(
         IJunkMailFolderCatalog junkFolders,
         params ServedMailAccount[] servedAccounts) =>
-        ResolverServing(StubMailFolderParticipation.Everything, junkFolders, servedAccounts);
+        Resolver(
+            StubMailFolderParticipation.Everything,
+            junkFolders,
+            StubMailFolderMappings.Nothing,
+            servedAccounts);
 
     private static MailboxScopeResolver ResolverServing(
         IMailFolderParticipationReader folderParticipation,
         IJunkMailFolderCatalog junkFolders,
+        params ServedMailAccount[] servedAccounts) =>
+        Resolver(folderParticipation, junkFolders, StubMailFolderMappings.Nothing, servedAccounts);
+
+    private static MailboxScopeResolver ResolverMapping(
+        StubMailFolderMappings folderMappings,
+        params ServedMailAccount[] servedAccounts) =>
+        Resolver(
+            StubMailFolderParticipation.Everything,
+            StubJunkMailFolderCatalog.None,
+            folderMappings,
+            servedAccounts);
+
+    private static MailboxScopeResolver Resolver(
+        IMailFolderParticipationReader folderParticipation,
+        IJunkMailFolderCatalog junkFolders,
+        StubMailFolderMappings folderMappings,
         params ServedMailAccount[] servedAccounts)
     {
         var catalog = Substitute.For<IMailAccountCatalog>();
@@ -400,6 +532,6 @@ public sealed class MailboxScopeResolverTests
             .. servedAccounts.OrderBy(account => account.Id.Value, StringComparer.Ordinal),
         ]);
 
-        return new MailboxScopeResolver(catalog, folderParticipation, junkFolders);
+        return new MailboxScopeResolver(catalog, folderParticipation, junkFolders, folderMappings.Resolver);
     }
 }

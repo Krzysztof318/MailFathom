@@ -213,6 +213,17 @@ public readonly record struct MailFathomErrorCode
     /// <summary>Gets subcategory 3, access: a request named an email the local mailbox copy holds no row for.</summary>
     public static MailFathomErrorCode StoredEmailNotFound { get; } = new(53002);
 
+    /// <summary>Gets subcategory 3, access: a request named a folder by a role no folder in scope is mapped with.</summary>
+    /// <remarks>
+    /// It is allocated here, beside the account a deployment does not serve, because this is the only boundary the
+    /// refusal escapes to: a rule's destination is judged against the same question while configuration binds and
+    /// reports it as a declaration error, and a rule whose destination stops resolving at run time records the reason
+    /// against the action instead. A caller that named a role can act on the answer — name the alias, or map the role —
+    /// which is what this category means, and collapsing it into an undiagnosed failure would leave a client unable to
+    /// tell a folder it may not name from a call that went wrong.
+    /// </remarks>
+    public static MailFathomErrorCode MailFolderRoleUnmapped { get; } = new(53003);
+
     /// <summary>Gets subcategory 4, undiagnosed failure: a tool call failed for a reason the boundary deliberately does not describe.</summary>
     /// <remarks>
     /// This is the one code every failure that is not already an allocated one collapses into, so a client learns that
@@ -361,6 +372,7 @@ public readonly record struct MailFathomErrorCode
         MailboxQueryCursorFilterMismatch,
         MailAccountNotAccessible,
         StoredEmailNotFound,
+        MailFolderRoleUnmapped,
         McpToolFailedUnexpectedly,
         EmailContentUnavailable,
         MailAnsweringUnavailable,

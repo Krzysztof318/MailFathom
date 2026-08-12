@@ -9,18 +9,21 @@ using Xunit;
 
 namespace MailFathom.Application.UnitTests.Emails.Mailboxes;
 
-/// <summary>Covers how a query scope is normalized and where it refuses to grow.</summary>
+/// <summary>Covers how a query scope normalizes what resolution handed it.</summary>
 public sealed class MailboxScopeTests
 {
+    private static readonly MailAccountId Primary = MailAccountId.Create("primary");
+    private static readonly MailAccountId Secondary = MailAccountId.Create("secondary");
+
     [Fact]
     public void Create_NoAccountsAndNoFolders_RestrictsNothing()
     {
         // Act
-        var scope = MailboxScope.Create(accountIds: null, folderAliases: null);
+        var scope = MailboxScope.Create(accountIds: null, selectedFolders: null);
 
         // Assert
         Assert.Empty(scope.AccountIds);
-        Assert.Empty(scope.FolderAliases);
+        Assert.Empty(scope.SelectedFolders);
         Assert.Same(MailboxScope.Unrestricted, scope);
     }
 
@@ -40,91 +43,69 @@ public sealed class MailboxScopeTests
     {
         // Act
         var scope = MailboxScope.Create(
-            [MailAccountId.Create("secondary"), MailAccountId.Create("primary"), MailAccountId.Create("secondary")],
-            [MailFolderAlias.Create("SENT"), MailFolderAlias.Create("ARCHIVE"), MailFolderAlias.Create("archive")]);
+            [Secondary, Primary, Secondary],
+            [
+                Folder(Secondary, "SENT"),
+                Folder(Primary, "ARCHIVE"),
+                Folder(Primary, "ARCHIVE"),
+            ]);
 
         // Assert
-        Assert.Equal([MailAccountId.Create("primary"), MailAccountId.Create("secondary")], scope.AccountIds);
-        Assert.Equal([MailFolderAlias.Create("ARCHIVE"), MailFolderAlias.Create("SENT")], scope.FolderAliases);
+        Assert.Equal([Primary, Secondary], scope.AccountIds);
+        Assert.Equal([Folder(Primary, "ARCHIVE"), Folder(Secondary, "SENT")], scope.SelectedFolders);
+    }
+
+    /// <summary>One alias on two accounts is two folders, which is what keeps a role's two answers apart.</summary>
+    [Fact]
+    public void Create_OneAliasOnTwoAccounts_KeepsBothPairs()
+    {
+        // Act
+        var scope = MailboxScope.Create([Primary, Secondary], [Folder(Secondary, "JUNK"), Folder(Primary, "JUNK")]);
+
+        // Assert
+        Assert.Equal([Folder(Primary, "JUNK"), Folder(Secondary, "JUNK")], scope.SelectedFolders);
     }
 
     [Fact]
     public void Create_NamingOnlyFolders_IsStillARestrictedScope()
     {
         // Act
-        var scope = MailboxScope.Create(accountIds: null, [MailFolderAlias.Create("INBOX")]);
+        var scope = MailboxScope.Create(accountIds: null, [Folder(Primary, "INBOX")]);
 
         // Assert
         Assert.NotSame(MailboxScope.Unrestricted, scope);
         Assert.Empty(scope.AccountIds);
     }
 
+    /// <summary>An account that named no folder stays in scope, which is what a role only one account maps produces.</summary>
     [Fact]
-    public void Create_MoreAccountsThanAQueryMayName_IsRejected()
+    public void Create_AnAccountNoSelectedFolderNames_StaysInScope()
+    {
+        // Act
+        var scope = MailboxScope.Create([Primary, Secondary], [Folder(Primary, "ARCHIVE")]);
+
+        // Assert
+        Assert.Equal([Primary, Secondary], scope.AccountIds);
+        Assert.Equal([Folder(Primary, "ARCHIVE")], scope.SelectedFolders);
+    }
+
+    /// <summary>No ceiling applies to a resolved list, because one role a request named can reach every served account.</summary>
+    [Fact]
+    public void Create_MoreFoldersThanARequestMayName_IsAccepted()
     {
         // Arrange
-        var accountIds = Enumerable.Range(0, MailboxScope.MaximumAccountIds + 1)
-            .Select(index => MailAccountId.Create($"account-{index}"))
+        var folders = Enumerable
+            .Range(0, MailboxScope.MaximumFolderAliases + 1)
+            .Select(position => Folder(Primary, $"folder-{position}"))
             .ToArray();
 
         // Act
-        var failure = Assert.Throws<MailboxQueryFilterInvalidException>(() =>
-            MailboxScope.Create(accountIds, folderAliases: null));
+        var scope = MailboxScope.Create([Primary], folders);
 
         // Assert
-        Assert.Equal("accounts", failure.FilterName);
+        Assert.Equal(folders.Length, scope.SelectedFolders.Count);
     }
 
-    [Fact]
-    public void Create_MoreFolderAliasesThanAQueryMayName_IsRejected()
-    {
-        // Arrange
-        var folderAliases = Enumerable.Range(0, MailboxScope.MaximumFolderAliases + 1)
-            .Select(index => MailFolderAlias.Create($"folder-{index}"))
-            .ToArray();
-
-        // Act
-        var failure = Assert.Throws<MailboxQueryFilterInvalidException>(() =>
-            MailboxScope.Create(accountIds: null, folderAliases));
-
-        // Assert
-        Assert.Equal("folder aliases", failure.FilterName);
-    }
-
-    /// <summary>The limit counts the values a request names, so repeating one account is not a way past it.</summary>
-    [Fact]
-    public void Create_TheSameAccountRepeatedPastTheLimit_IsRejected()
-    {
-        // Arrange
-        var accountIds = Enumerable.Repeat(MailAccountId.Create("primary"), MailboxScope.MaximumAccountIds + 1);
-
-        // Act
-        var failure = Assert.Throws<MailboxQueryFilterInvalidException>(() =>
-            MailboxScope.Create(accountIds, folderAliases: null));
-
-        // Assert
-        Assert.Equal("accounts", failure.FilterName);
-    }
-
-    /// <summary>Refused while the caller's sequence is read, so an over-long list is never materialized to be counted.</summary>
-    [Fact]
-    public void Create_MoreAccountsThanAQueryMayName_StopsReadingAtTheValueThatCrossesTheLimit()
-    {
-        // Arrange
-        var readCount = 0;
-        var accountIds = Enumerable.Range(0, MailboxScope.MaximumAccountIds + 100)
-            .Select(index =>
-            {
-                readCount++;
-
-                return MailAccountId.Create($"account-{index}");
-            });
-
-        // Act
-        Assert.Throws<MailboxQueryFilterInvalidException>(() =>
-            MailboxScope.Create(accountIds, folderAliases: null));
-
-        // Assert
-        Assert.Equal(MailboxScope.MaximumAccountIds + 1, readCount);
-    }
+    private static MailFolderIdentity Folder(MailAccountId accountId, string alias) =>
+        new(accountId, MailFolderAlias.Create(alias));
 }

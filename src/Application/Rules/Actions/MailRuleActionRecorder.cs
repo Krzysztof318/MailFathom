@@ -33,38 +33,45 @@ namespace MailFathom.Application.Rules.Actions;
 /// same identity.
 /// </para>
 /// <para>
-/// A destination alias is resolved to a remote folder once per pass and remembered, because a batch of two hundred
-/// emails matching one filing rule would otherwise re-read one binding two hundred times. The binding a pass began with
-/// is the one it finishes with, which is the same contract the rule set itself is read under.
+/// A destination is resolved to a remote folder once per pass and remembered, because a batch of two hundred emails
+/// matching one filing rule would otherwise re-read one binding two hundred times. The binding a pass began with is the
+/// one it finishes with, which is the same contract the rule set itself is read under. A destination named by role is
+/// turned into a folder through the resolution every caller naming a folder shares, so a role the account has stopped
+/// mapping fails here exactly as an alias whose binding went missing does.
 /// </para>
 /// </remarks>
 public sealed class MailRuleActionRecorder
 {
     private readonly IMailboxMutationRecordStore records;
     private readonly IMailFolderResolutionStore folderResolutions;
+    private readonly MailFolderReferenceResolver folderReferences;
     private readonly IAuthoredDeleteEmailDispositionReader deleteDispositions;
     private readonly IMailRuleActionPermissionReader permissions;
-    private readonly Dictionary<(MailAccountId Account, MailFolderAlias Alias), RemoteFolderPath?> destinations = [];
+    private readonly Dictionary<(MailAccountId Account, MailFolderReference Destination), ResolvedDestination?> destinations = [];
 
     /// <summary>Initializes the recorder from the record it writes and the decisions it has to read.</summary>
     /// <param name="records">Opens the durable record one action is carried by.</param>
     /// <param name="folderResolutions">Resolves a destination alias to the remote folder it currently names.</param>
+    /// <param name="folderReferences">Turns the alias or the role a rule named into the folder of the account it means.</param>
     /// <param name="deleteDispositions">Answers what the account keeps locally of an email a rule deletes.</param>
     /// <param name="permissions">Answers which changes the account currently permits a rule to make.</param>
     /// <exception cref="ArgumentNullException">Thrown when a collaborator is <see langword="null" />.</exception>
     public MailRuleActionRecorder(
         IMailboxMutationRecordStore records,
         IMailFolderResolutionStore folderResolutions,
+        MailFolderReferenceResolver folderReferences,
         IAuthoredDeleteEmailDispositionReader deleteDispositions,
         IMailRuleActionPermissionReader permissions)
     {
         ArgumentNullException.ThrowIfNull(records);
         ArgumentNullException.ThrowIfNull(folderResolutions);
+        ArgumentNullException.ThrowIfNull(folderReferences);
         ArgumentNullException.ThrowIfNull(deleteDispositions);
         ArgumentNullException.ThrowIfNull(permissions);
 
         this.records = records;
         this.folderResolutions = folderResolutions;
+        this.folderReferences = folderReferences;
         this.deleteDispositions = deleteDispositions;
         this.permissions = permissions;
     }
@@ -121,7 +128,7 @@ public sealed class MailRuleActionRecorder
                     planned.Position,
                     planned.Action.Mutation,
                     MailRuleActionFailureReason.ActionNoLongerPermitted,
-                    planned.Action.DestinationAlias));
+                    planned.Action.Destination));
 
                 continue;
             }
@@ -146,7 +153,7 @@ public sealed class MailRuleActionRecorder
                 planned.Position,
                 planned.Action.Mutation,
                 record.Id,
-                planned.Action.DestinationAlias));
+                this.RecordedDestinationAlias(occurrence.AccountId, planned.Action.Destination)));
         }
 
         return new MailRuleActionRecording(recorded, failures);
@@ -173,7 +180,7 @@ public sealed class MailRuleActionRecorder
             planned.Position,
             planned.Action.Mutation,
             MailRuleActionFailureReason.AccountNoLongerConfigured,
-            planned.Action.DestinationAlias)),
+            planned.Action.Destination)),
     ];
 
     /// <summary>Turns one planned action into the request that carries it, or records why it has none.</summary>
@@ -193,21 +200,21 @@ public sealed class MailRuleActionRecorder
             return MailboxMutationRequest.SetSeen(storedEmailId, occurrence, requester, isSeen);
         }
 
-        if (action.DestinationAlias is { } destinationAlias)
+        if (action.Destination is { } destination)
         {
-            var destinationPath = await this.ResolveDestinationAsync(
+            var resolved = await this.ResolveDestinationAsync(
                 occurrence.AccountId,
-                destinationAlias,
+                destination,
                 cancellationToken);
 
-            if (destinationPath is not { } path)
+            if (resolved is not { Path: var path })
             {
                 failures.Add(new MailRuleActionFailure(
                     planned.RuleName,
                     planned.Position,
                     action.Mutation,
                     MailRuleActionFailureReason.DestinationFolderUnresolved,
-                    destinationAlias));
+                    destination));
 
                 return null;
             }
@@ -256,16 +263,58 @@ public sealed class MailRuleActionRecorder
         return MailboxMutationRequest.Delete(storedEmailId, occurrence, requester, disposition);
     }
 
-    private async Task<RemoteFolderPath?> ResolveDestinationAsync(
+    /// <summary>Finds the folder a destination currently names, remembering the answer for the rest of the pass.</summary>
+    /// <returns>The folder, or <see langword="null" /> when the account maps no such folder or nothing has bound one yet.</returns>
+    private async Task<ResolvedDestination?> ResolveDestinationAsync(
         MailAccountId accountId,
-        MailFolderAlias destinationAlias,
+        MailFolderReference destination,
         CancellationToken cancellationToken)
     {
-        // Keyed by the account as well as the alias, because one alias names a different folder on each account and
-        // nothing in this type's contract says a scope holds one account's pass.
-        if (this.destinations.TryGetValue((accountId, destinationAlias), out var remembered))
+        // Keyed by the account as well as the destination, because one name means a different folder on each account
+        // and nothing in this type's contract says a scope holds one account's pass.
+        if (this.destinations.TryGetValue((accountId, destination), out var remembered))
         {
             return remembered;
+        }
+
+        var resolved = await this.ReadCurrentDestinationAsync(accountId, destination, cancellationToken);
+
+        this.destinations[(accountId, destination)] = resolved;
+
+        return resolved;
+    }
+
+    /// <summary>Reads the alias a recorded action names its folder by, which is what this pass resolved the destination to.</summary>
+    /// <remarks>
+    /// It reads the answer this pass already has rather than resolving again, and it is asked only after the request was
+    /// built — so an action that reaches the history names the folder mail was actually filed into, whether the rule
+    /// wrote that folder's alias or the role it plays.
+    /// </remarks>
+    private MailFolderAlias? RecordedDestinationAlias(MailAccountId accountId, MailFolderReference? destination) =>
+        destination is { } named && this.destinations.TryGetValue((accountId, named), out var resolved)
+            ? resolved?.Alias
+            : null;
+
+    /// <summary>Turns a destination into the folder it currently names, in the two steps a name goes through.</summary>
+    /// <remarks>
+    /// A role the account no longer maps is caught rather than propagated, because it says the same thing to this pass
+    /// as an alias whose binding is missing: the rule has nowhere to file, the action is reported as failed, and the
+    /// rest of the batch keeps moving. Letting it out would stop every other rule over one rule's destination.
+    /// </remarks>
+    private async Task<ResolvedDestination?> ReadCurrentDestinationAsync(
+        MailAccountId accountId,
+        MailFolderReference destination,
+        CancellationToken cancellationToken)
+    {
+        MailFolderAlias destinationAlias;
+
+        try
+        {
+            destinationAlias = this.folderReferences.ResolveAlias(accountId, destination);
+        }
+        catch (MailFolderRoleUnmappedException)
+        {
+            return null;
         }
 
         var resolution = await this.folderResolutions.GetCurrentResolutionAsync(
@@ -273,10 +322,16 @@ public sealed class MailRuleActionRecorder
             destinationAlias,
             cancellationToken);
 
-        var destinationPath = resolution?.RemotePath;
-
-        this.destinations[(accountId, destinationAlias)] = destinationPath;
-
-        return destinationPath;
+        return resolution is { RemotePath: var remotePath }
+            ? new ResolvedDestination(destinationAlias, remotePath)
+            : null;
     }
+
+    /// <summary>One destination as this pass resolved it: the alias it names the folder by, and where that folder is.</summary>
+    /// <remarks>
+    /// Both halves are kept because two different things need them. The request carries the path, which is what a
+    /// mailbox command is issued against; the history names the alias, which is MailFathom's own name for the folder and
+    /// the one a rule written against a role never spelled out.
+    /// </remarks>
+    private sealed record ResolvedDestination(MailFolderAlias Alias, RemoteFolderPath Path);
 }

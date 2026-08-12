@@ -57,7 +57,7 @@ internal sealed class SearchEmailsTool(
     /// <summary>Searches the local mailbox copy for text and returns one bounded ranked window.</summary>
     /// <param name="queryText">The text to search for.</param>
     /// <param name="accounts">The accounts to search, named by identifier or display name, or none to search every account this deployment serves.</param>
-    /// <param name="folderAliases">The folder aliases to search, or none to search every folder of those accounts.</param>
+    /// <param name="folders">The folders to search, each named by alias or by role, or none to search every folder of those accounts.</param>
     /// <param name="senderAddress">The address the sender must carry.</param>
     /// <param name="recipientAddress">The address a <c>To</c> or <c>Cc</c> recipient must carry.</param>
     /// <param name="subjectFragment">Text the subject must contain.</param>
@@ -99,8 +99,8 @@ internal sealed class SearchEmailsTool(
         string queryText,
         [Description("MailFathom accounts to search, each named by its configured account identifier or by the display name it is published under. Omit to search every account this deployment serves; call list_accounts to see what they are. At most 64 may be named, and a name this deployment does not serve is refused rather than answered with an empty window.")]
         string[]? accounts = null,
-        [Description("MailFathom folder aliases to search, such as INBOX. Omit to search every folder of the accounts in scope. At most 64 may be named. An alias is MailFathom's own name for a folder and is matched without regard to case.")]
-        string[]? folderAliases = null,
+        [Description("MailFathom folders to search, each named by its alias, such as INBOX, or by the role it plays, written as role:Junk. Roles are Inbox, Archive, Drafts, Sent, Junk, Trash, All, Flagged, and Important; naming one searches whichever folder each account in scope maps with that role, whatever it is called there. Omit to search every folder of the accounts in scope. At most 64 may be named. An alias is MailFathom's own name for a folder and is matched without regard to case.")]
+        string[]? folders = null,
         [Description("Return only emails sent from this mail address. Matched as a whole address rather than as a fragment, without regard to case; a non-empty value that is not a usable mail address is refused. Omit to match any sender, which an empty string does too.")]
         string? senderAddress = null,
         [Description("Return only emails addressed to this mail address in their To or Cc header. Matched as a whole address rather than as a fragment; Reply-To is not searched. Omit to match any recipient, which an empty string does too.")]
@@ -125,7 +125,7 @@ internal sealed class SearchEmailsTool(
         {
             QueryText = queryText,
             Accounts = MailboxScopeArguments.Accounts(accounts),
-            FolderAliases = MailboxScopeArguments.FolderAliases(folderAliases),
+            Folders = MailboxScopeArguments.Folders(folders),
             SenderAddress = senderAddress,
             RecipientAddress = recipientAddress,
             SubjectFragment = subjectFragment,

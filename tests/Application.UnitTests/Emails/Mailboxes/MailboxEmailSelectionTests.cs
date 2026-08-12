@@ -251,7 +251,8 @@ public sealed class MailboxEmailSelectionTests
             catalog,
             StubMailFolderParticipation.Everything,
             junkFolders ?? StubJunkMailFolderCatalog.Naming(
-                new MailFolderIdentity(Account, MailFolderAlias.Create("JUNK"))));
+                new MailFolderIdentity(Account, MailFolderAlias.Create("JUNK"))),
+            StubMailFolderMappings.ResolvingNothing);
     }
 
     private static MailboxEmailSelection SelectionWith(

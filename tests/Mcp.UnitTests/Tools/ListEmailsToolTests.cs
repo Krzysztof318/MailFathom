@@ -6,6 +6,7 @@ using MailFathom.Application.Accounts;
 using MailFathom.Application.Emails.ListEmails;
 using MailFathom.Application.Emails.Mailboxes;
 using MailFathom.Application.Emails.Summaries;
+using MailFathom.Application.Folders;
 using MailFathom.Application.Synchronization.Checkpoints;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
@@ -51,7 +52,7 @@ public sealed class ListEmailsToolTests
         Assert.NotNull(timeline.LastFilter);
         var filter = timeline.LastFilter;
         Assert.Equal([MailAccountId.Create(ServedAccountId)], filter.Selection.Scope.AccountIds);
-        Assert.Empty(filter.Selection.Scope.FolderAliases);
+        Assert.Empty(filter.Selection.Scope.SelectedFolders);
         Assert.Equal(EmailTimelineDirection.NewestFirst, filter.Direction);
         Assert.Null(timeline.LastContinueAfter);
 
@@ -71,7 +72,7 @@ public sealed class ListEmailsToolTests
         // Act
         await tool.ListEmailsAsync(
             accounts: [ServedAccountId],
-            folderAliases: ["archive"],
+            folders: ["archive"],
             senderAddress: "sender@example.test",
             recipientAddress: "recipient@example.test",
             subjectFragment: "invoice",
@@ -87,7 +88,9 @@ public sealed class ListEmailsToolTests
         Assert.NotNull(timeline.LastFilter);
         var filter = timeline.LastFilter;
         Assert.Equal([MailAccountId.Create(ServedAccountId)], filter.Selection.Scope.AccountIds);
-        Assert.Equal([MailFolderAlias.Create("ARCHIVE")], filter.Selection.Scope.FolderAliases);
+        Assert.Equal(
+            [new MailFolderIdentity(MailAccountId.Create(ServedAccountId), MailFolderAlias.Create("ARCHIVE"))],
+            filter.Selection.Scope.SelectedFolders);
         Assert.Equal("invoice", filter.Selection.SubjectFragment);
         Assert.Equal(rangeStart, filter.Selection.ReceivedOnOrAfter);
         Assert.Equal(rangeEnd, filter.Selection.ReceivedBefore);
@@ -107,12 +110,54 @@ public sealed class ListEmailsToolTests
 
         // Act
         await tool.ListEmailsAsync(
-            folderAliases: ["inbox", "INBOX", " Inbox "],
+            folders: ["inbox", "INBOX", " Inbox "],
             cancellationToken: TestContext.Current.CancellationToken);
 
         // Assert
         Assert.NotNull(timeline.LastFilter);
-        Assert.Equal([MailFolderAlias.Create("INBOX")], timeline.LastFilter.Selection.Scope.FolderAliases);
+        Assert.Equal(
+            [new MailFolderIdentity(MailAccountId.Create(ServedAccountId), MailFolderAlias.Create("INBOX"))],
+            timeline.LastFilter.Selection.Scope.SelectedFolders);
+    }
+
+    /// <summary>A caller that knows the role but not the deployment's own name for the folder names the role instead.</summary>
+    [Fact]
+    public async Task ListEmailsAsync_AFolderNamedByItsRole_ReadsTheFolderPlayingIt()
+    {
+        // Arrange
+        var timeline = new StubStoredEmailTimelineReader();
+        var tool = ToolMapping(
+            StubMailFolderMappings.Nothing.With(
+                MailAccountId.Create(ServedAccountId),
+                MailFolderMapping.ToRemotePath(
+                    MailFolderAlias.Create("spam"),
+                    RemoteFolderPath.Create("INBOX.Spam"),
+                    specialUse: MailFolderSpecialUse.Junk)),
+            timeline);
+
+        // Act
+        await tool.ListEmailsAsync(folders: ["role:Junk"], cancellationToken: TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.NotNull(timeline.LastFilter);
+        Assert.Equal(
+            [new MailFolderIdentity(MailAccountId.Create(ServedAccountId), MailFolderAlias.Create("SPAM"))],
+            timeline.LastFilter.Selection.Scope.SelectedFolders);
+    }
+
+    /// <summary>A role nothing carries is refused once, in the place every caller names a folder through, rather than answered with an empty page.</summary>
+    [Fact]
+    public async Task ListEmailsAsync_ARoleNoFolderPlays_IsRefusedNamingTheRole()
+    {
+        // Arrange
+        var tool = ToolOver(new StubStoredEmailTimelineReader());
+
+        // Act
+        var failure = await Assert.ThrowsAsync<MailFolderRoleUnmappedException>(
+            () => tool.ListEmailsAsync(folders: ["role:Junk"], cancellationToken: TestContext.Current.CancellationToken));
+
+        // Assert
+        Assert.Equal(MailFolderSpecialUse.Junk, failure.Role);
     }
 
     [Theory]
@@ -147,7 +192,7 @@ public sealed class ListEmailsToolTests
 
         // Act
         var failure = await Assert.ThrowsAsync<MailboxQueryFilterInvalidException>(
-            () => tool.ListEmailsAsync(folderAliases: [unusable], cancellationToken: TestContext.Current.CancellationToken));
+            () => tool.ListEmailsAsync(folders: [unusable], cancellationToken: TestContext.Current.CancellationToken));
 
         // Assert
         Assert.Equal(MailFathomErrorCode.MailboxQueryFilterInvalid, failure.ErrorCode);
@@ -189,7 +234,7 @@ public sealed class ListEmailsToolTests
 
         // Act
         var failure = await Assert.ThrowsAsync<MailboxQueryFilterInvalidException>(
-            () => tool.ListEmailsAsync(folderAliases: namedFolders, cancellationToken: TestContext.Current.CancellationToken));
+            () => tool.ListEmailsAsync(folders: namedFolders, cancellationToken: TestContext.Current.CancellationToken));
 
         // Assert
         Assert.Equal("folder aliases", failure.FilterName);
@@ -245,7 +290,7 @@ public sealed class ListEmailsToolTests
         // Act
         var failure = await Assert.ThrowsAsync<MailboxQueryFilterInvalidException>(
             () => tool.ListEmailsAsync(
-                folderAliases: [$"{PersonalData}\u0001"],
+                folders: [$"{PersonalData}\u0001"],
                 cancellationToken: TestContext.Current.CancellationToken));
 
         // Assert
@@ -584,6 +629,13 @@ public sealed class ListEmailsToolTests
     private static ListEmailsTool ToolOver(
         StubStoredEmailTimelineReader timeline,
         StubSynchronizationFreshnessReader? freshness = null,
+        StubJunkMailFolderCatalog? junkFolders = null) =>
+        ToolMapping(StubMailFolderMappings.Nothing, timeline, freshness, junkFolders);
+
+    private static ListEmailsTool ToolMapping(
+        StubMailFolderMappings folderMappings,
+        StubStoredEmailTimelineReader timeline,
+        StubSynchronizationFreshnessReader? freshness = null,
         StubJunkMailFolderCatalog? junkFolders = null) => new(
         new MailboxTimelineReader(
             timeline,
@@ -591,6 +643,7 @@ public sealed class ListEmailsToolTests
             new MailboxScopeResolver(
                 new StubMailAccountCatalog(ServedAccountId),
                 StubMailFolderParticipation.Everything,
-                junkFolders ?? StubJunkMailFolderCatalog.None)),
+                junkFolders ?? StubJunkMailFolderCatalog.None,
+                folderMappings.Resolver)),
         new StubMailAccountCatalog(ServedAccountId));
 }

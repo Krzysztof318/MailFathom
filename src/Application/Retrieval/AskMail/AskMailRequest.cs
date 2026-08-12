@@ -30,6 +30,7 @@ public sealed record AskMailRequest
     /// <remarks>An account may be named by its configured identifier or by the display name it is published under, and the use case settles which against the accounts it serves.</remarks>
     public IReadOnlyList<MailAccountSelector> Accounts { get; init; } = [];
 
-    /// <summary>Gets the folder aliases the answer may be drawn from, or empty for every folder of the named accounts.</summary>
-    public IReadOnlyList<MailFolderAlias> FolderAliases { get; init; } = [];
+    /// <summary>Gets the folders the answer may be drawn from, or empty for every folder of the named accounts.</summary>
+    /// <remarks>A folder may be named by its alias or by the role it plays, and the use case settles which folder of which account each one means.</remarks>
+    public IReadOnlyList<MailFolderReference> Folders { get; init; } = [];
 }

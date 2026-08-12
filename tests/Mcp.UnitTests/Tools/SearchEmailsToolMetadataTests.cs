@@ -66,7 +66,7 @@ public sealed class SearchEmailsToolMetadataTests
         [
             "queryText",
             "accounts",
-            "folderAliases",
+            "folders",
             "senderAddress",
             "recipientAddress",
             "subjectFragment",

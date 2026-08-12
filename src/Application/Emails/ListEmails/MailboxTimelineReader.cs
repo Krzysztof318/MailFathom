@@ -101,7 +101,7 @@ public sealed class MailboxTimelineReader
     private EmailTimelineFilter ReadableFilter(ListEmailsRequest request) => EmailTimelineFilter.Create(
         this.scopeResolver.ReadableScope(
             request.Accounts,
-            request.FolderAliases,
+            request.Folders,
             request.IncludeJunkMail ? JunkMailInclusion.Included : JunkMailInclusion.Excluded),
         request.SenderAddress,
         request.RecipientAddress,
