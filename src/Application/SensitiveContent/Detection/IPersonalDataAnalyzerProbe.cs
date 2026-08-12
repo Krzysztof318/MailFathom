@@ -14,9 +14,9 @@ namespace MailFathom.Application.SensitiveContent.Detection;
 /// </para>
 /// <para>
 /// It is a port of its own rather than a member of <see cref="ISensitiveContentScanner" /> because the two ask different
-/// questions of the same analyzer. A scan asks what a text carries and must never name the analyzer in its failure; this
-/// asks whether the analyzer is there at all, and its failure exists precisely to name the address and the configuration
-/// key an operator has to fix.
+/// questions of the same analyzer. A scan asks what a text carries and says nothing an operator can act on; this asks
+/// whether the analyzer is there at all, and its failure exists precisely to name the configuration key an operator has to
+/// fix. Neither one puts the analyzer's address in a message: this one carries it on the failure's own property instead.
 /// </para>
 /// <para>
 /// Nothing registers an implementation unless the switch is on, so a deployment that never opted in never probes

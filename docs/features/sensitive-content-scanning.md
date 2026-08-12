@@ -201,8 +201,8 @@ the Compose deployment leaves its analyzer service behind a profile that is not 
 analyzer unit is a file an operator never copies. An opt-in nobody took pulls no image, holds no memory, and adds no
 listener.
 
-Switching it on without a reachable analyzer **fails startup** and names the address that could not be reached. So does
-an analyzer that answers but recognises nothing for one of the switched-on categories — a narrower registry than the
+Switching it on without a reachable analyzer **fails startup** and names `SensitiveContent:PersonalDataAnalyzer:Endpoint`,
+the key to correct. So does an analyzer that answers but recognises nothing for one of the switched-on categories — a narrower registry than the
 shipped image, or a language it has no model for. Both are refusals rather than warnings, because the alternative is a
 deployment whose configuration reads as protection in force while every scan finds nothing, and nothing finding anything
 is indistinguishable from a clean message.

@@ -22,7 +22,7 @@ namespace MailFathom.Infrastructure.UnitTests.SensitiveContent.PersonalData;
 /// Everything here is settled by a scripted handler and belongs in this suite for that reason: which entities are asked
 /// about, which category an answer is reported under, where a finding lands, and what happens when the analyzer does not
 /// answer. What a substitute cannot settle — that the image the deployment pulls answers the request this class builds, in
-/// a shape it maps — is <c>PersonalDataAnalyzerContractTests</c> in the integration suite.
+/// a shape it maps — is <c>OrchestratedPersonalDataAnalyzerTests</c> in the integration suite.
 /// </remarks>
 public sealed class PresidioContentScannerTests
 {

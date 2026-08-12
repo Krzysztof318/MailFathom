@@ -100,10 +100,11 @@ Environment=Persistence__Password__SecretReference=systemd-credential:mailfathom
 # Personal-data scanning, off because these four lines are commented out — which is the product's default and what makes
 # it cost nothing. Uncomment them together with the two ordering lines at the top of this file, and install
 # mailfathom-presidio.container beside it; enabling the switch with no analyzer to reach fails startup and names the
-# address, which is the intended behaviour rather than a misconfiguration to avoid. The address is the analyzer unit's
-# container name on the internal network — replace it with your own analyzer's if you operate one, keeping it inside your
-# own network, and then install no analyzer unit at all. docs/features/sensitive-content-scanning.md states what each
-# category hides and what pointing the endpoint outside the deployment gives up.
+# Endpoint setting below as the one to correct, which is the intended behaviour rather than a misconfiguration to avoid.
+# The address is the analyzer unit's container name on the internal network — replace it with your own analyzer's if you
+# operate one, keeping it inside your own network, and then install no analyzer unit at all.
+# docs/features/sensitive-content-scanning.md states what each category hides and what pointing the endpoint outside the
+# deployment gives up.
 #Environment=SensitiveContent__Pii__Enabled=true
 #Environment=SensitiveContent__PersonalDataAnalyzer__Endpoint=http://mailfathom-presidio:3000
 #Environment=SensitiveContent__PersonalDataAnalyzer__Language=en

@@ -319,7 +319,8 @@ public readonly record struct MailFathomErrorCode
     /// A second code inside the same subcategory rather than a reuse of the one above, because the two are answered
     /// differently. A scan that could not run refuses one operation and says nothing an operator can act on; an analyzer
     /// that is absent while the host is coming up is a deployment that would run every guarded path into the failure
-    /// above, so it stops the process and names the address and the configuration key that would fix it.
+    /// above, so it stops the process and names the configuration key that would fix it. The resolved address is on the
+    /// failure's own property rather than in its message, because a message reaches a log and a host name never does.
     /// </remarks>
     public static MailFathomErrorCode PersonalDataAnalyzerUnavailable { get; } = new(81002);
 

@@ -121,11 +121,13 @@ internal sealed class SensitiveContentOptions : IValidatableObject
             yield break;
         }
 
+        // The value it was given is deliberately not echoed. A missing scheme is the commonest way to reach this branch, so
+        // what would be quoted is the analyzer's own host name, and this message goes to a startup log like any other.
         if (!Uri.TryCreate(this.PersonalDataAnalyzer.Endpoint, UriKind.Absolute, out var endpoint)
             || (endpoint.Scheme != Uri.UriSchemeHttp && endpoint.Scheme != Uri.UriSchemeHttps))
         {
             yield return new ValidationResult(
-                $"{analyzerKey}:Endpoint is '{this.PersonalDataAnalyzer.Endpoint}', which is not an absolute http or https address, so no request could be composed from it.",
+                $"{analyzerKey}:Endpoint is not an absolute http or https address, so no request could be composed from it. State one such as http://presidio-analyzer:3000, or switch the scanner off.",
                 [nameof(this.PersonalDataAnalyzer)]);
         }
 

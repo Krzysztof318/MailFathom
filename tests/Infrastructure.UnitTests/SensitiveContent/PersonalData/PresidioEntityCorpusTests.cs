@@ -32,7 +32,7 @@ public sealed class PresidioEntityCorpusTests
         Assert.Equal(expected, requested.Keys.Order(StringComparer.Ordinal));
     }
 
-    /// <summary>A category left out of a configured list is asked about at all, which is what makes it redact nothing.</summary>
+    /// <summary>A category left out of a configured list is not asked about at all, which is what makes it redact nothing.</summary>
     [Fact]
     public void RequestedRules_CategoryLeftOutOfTheConfiguredList_AsksForNoneOfItsEntities()
     {
