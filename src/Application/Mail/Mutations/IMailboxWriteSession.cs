@@ -21,7 +21,9 @@ namespace MailFathom.Application.Mail.Mutations;
 /// The surface is closed to exactly the four mutations MailFathom is permitted to perform. There is no method that
 /// sends, replies, or forwards, none that creates, renames, deletes, or subscribes to a folder, and none that writes
 /// any flag other than the <c>\Seen</c> one operation exists for and the <c>\Deleted</c> that removing a message is
-/// made of. Permitting one of those later is a decision to reopen rather than a method to append.
+/// made of. Permitting one of those later is a decision to reopen rather than a method to append, and the one
+/// reopening there has been is why folder creation is a port of its own instead of a fifth method here: a caller able
+/// to file a message into a folder is deliberately unable to create one, and the reverse.
 /// </para>
 /// <para>
 /// Every operation names what the caller asked for and never how the server was made to do it. Which protocol

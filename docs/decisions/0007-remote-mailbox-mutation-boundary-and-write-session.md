@@ -19,6 +19,8 @@ Issue 446 asked which mutations MailFathom may perform, in what order they becom
 
 Recorded on issue 447, which is the gate for feature 452. No numbered specification under `specs/` backs it; draft section 11.1 states the invariant this narrows and is amended in the same change set.
 
+**Issue 713 reopened this record**, which is what its refusal of folder management said a request for a refused tier would do. Issue 709 makes a folder mapping the only way MailFathom knows a folder exists at all, and the case it is written for is a rule filing mail into a folder the operator has decided on rather than one the server already has — an archive folder for one sender's mail, a junk folder on a server that ships none. Under the refusal as first written, such a mapping resolves to nothing and the mutation is refused, correctly and by design, which leaves the operator creating the folder by hand in a mail client before MailFathom can file anything into it. Axes E and F below are that reopening. The record's status is still `proposed`, so it is amended here rather than superseded, and the four axes it already decided are untouched by it.
+
 ## Decision Drivers
 
 - **The guarantee has to survive every later change, not just this one.** A rule saying reconciliation must not write flags is a rule somebody has to notice during review. A refactor cannot accidentally give reconciliation the ability to write if reconciliation never holds a type that has it.
@@ -28,10 +30,11 @@ Recorded on issue 447, which is the gate for feature 452. No numbered specificat
 - **A connection is a resource the mail server counts, not a free abstraction.** An account already holds one long-lived connection for `NOTIFY` and IDLE plus `MaxConcurrentFoldersPerAccount` synchronization connections. A provider limit or Dovecot's `mail_max_userip_connections` is reached as a refused login, which surfaces as synchronization failing rather than as the write that caused it.
 - **An operator reads an operation, not a command sequence.** What a support question costs is set by whether the record names what was asked for.
 - **Irreversible acts driven by attacker-influenced input are the thing to refuse.** Mail content, tool arguments, and model output are untrusted, and a mutation surface wide enough to send is a surface wide enough to be steered into sending.
+- **A mapping that resolves to nothing is how a mistyped path reports itself.** `RemotePath` is free text an operator writes, and the unresolved alias is the only thing that ever tells them they wrote it wrong. Whatever MailFathom becomes able to create, that report has to survive: a typo turning into a folder on somebody's mail server named after the mistake is a defect they cannot read.
 
 ## Considered Options
 
-The decision has four independent axes. An option on one constrains no option on another, which is why they are listed apart rather than as four bundled proposals.
+The decision has six axes. The first four are independent — an option on one constrains no option on another, which is why they are listed apart rather than as bundled proposals. The last two arrived with the reopening on issue 713, and only they are ordered: F is read at all only where E permits a creation to exist.
 
 **A — which mutations are permitted:**
 
@@ -58,9 +61,21 @@ The decision has four independent axes. An option on one constrains no option on
 2. One write connection per mutation.
 3. No new connection: take the notification session out of IDLE to carry a write.
 
+**E — whether MailFathom may create a folder it is configured to use:**
+
+1. It may not; folder management stays refused whole.
+2. It may, for any mapping, whenever the alias resolves to no advertised folder.
+3. It may, and only where the mapping asks for it through a switch of its own.
+
+**F — when a permitted creation is issued:**
+
+1. When configuration binds, so every mapping is made real as it is read.
+2. On the first use of the alias as the destination of a mutation.
+3. Wherever the alias is resolved, which is before a run for a mirrored folder and on demand for one that is only a destination.
+
 ## Decision Outcome
 
-Chosen options: **A3**, **B1**, **C1**, and **D1**.
+Chosen options: **A3**, **B1**, **C1**, **D1**, **E3**, and **F3**.
 
 ### MailFathom writes, and exactly four mutations exist
 
@@ -70,9 +85,9 @@ Refused, and not by configuration:
 
 - **Sending anything.** Send, reply, forward, or any other message the owner did not write themselves. The SMTP outbox owns that surface and its own authorization review, and nothing under feature 452 acquires it.
 - **Every flag other than `\Seen`** and the `\Deleted` that is part of a delete or a fallback move. `\Flagged`, `\Answered`, `\Draft`, and keywords stay unwritten.
-- **Folder management**: creating, renaming, deleting, or subscribing to a folder.
+- **Folder management, other than creating a folder**: renaming one, deleting one, unsubscribing from one, and subscribing to one MailFathom did not itself create.
 
-Naming the refused tiers is part of the decision rather than a note beside it. A later request for one of them reopens this record; it does not read a gap as permission.
+Naming the refused tiers is part of the decision rather than a note beside it. A later request for one of them reopens this record; it does not read a gap as permission. That has now happened once. Creating a folder was refused above as well until issue 713 reopened the record, and [a folder the operator configured may be created](#a-folder-the-operator-configured-may-be-created-and-only-that-one) is what replaced that refusal: reviewed against the driver that produced it, narrowed to the case the request was actually about, and leaving the rest of the tier refused in the bullet above. It is also the one permitted act here that configuration decides, which is the exception the heading above needs stated: the four mutations carry out a change the mailbox owner already authored, while a creation is an act MailFathom takes on its own initiative and therefore has to be authorized before it can be reached at all.
 
 ### The read path is incapable of writing, as a property of the types
 
@@ -104,15 +119,51 @@ It counts against the same per-account budget as the `MaxConcurrentFoldersPerAcc
 
 Capability detection, timeouts, cancellation, and failure classification follow the existing IMAP session conventions and the account's resilience pipelines. The account's existing circuit therefore gates writes as well as reads, and that is deliberate: a mail server that is failing reads is not a server to start changing mail on, and the two share an establishment budget because they share the credential that a repeated rejection would lock out. What writes do **not** share is repetition — a mutation is issued exactly once, because a `COPY` issued twice is a second message rather than a repeat of the first.
 
+### A folder the operator configured may be created, and only that one
+
+MailFathom creates a folder a mapping names when the account's server advertises none at that path, and only where the mapping asked for it. `CreateIfMissing` is the switch, it sits on the folder entry beside the three that decide what the folder takes part in, and it defaults to `false`. The asymmetry with those three, which default to `true`, is the decision rather than an oversight: they withdraw a folder that already exists from something MailFathom does locally, while this one authorizes an act against somebody's mail server. So a mapping that says nothing behaves exactly as it did before this reopening, and a mistyped `RemotePath` stays the unresolved alias issue 709 refuses rather than becoming a folder named after the mistake.
+
+A creation is issued **where the alias is resolved**, which is one rule covering both cases rather than two triggers to keep in step. A mirrored folder resolves before its run, so its folder is created on the first run after the mapping appears; a folder that is only a destination is resolved on demand when a mutation names it — issue 716 — so its folder is created then. Nothing is created by reading configuration, and nothing is created for a mapping nothing ever resolves. After the first creation the server advertises the folder, so resolution finds it and no further `CREATE` is issued: the write happens once, at the point the folder is genuinely missing, rather than on every process start.
+
+**Only an explicit `RemotePath` may be created.** `CreateIfMissing: true` beside a `SpecialUse` mapping is refused when the configuration binds, naming the alias, exactly as an explicit `GenerateEmbeddings: true` beside `Synchronize: false` already is. A role is how a folder the server has already marked is *found*, and a folder that does not exist advertises no role, so creating one from a role means either RFC 6154's `CREATE ... (USE (\Junk))`, whose support is uneven and which a server unable to set the attribute is required to refuse, or MailFathom inventing a name in somebody's own mailbox and leaving it there for good. Neither is a choice to make on the operator's behalf when writing the path they wanted is one line of configuration.
+
+**Subscription follows a creation and nothing else.** A folder MailFathom created is subscribed to as part of creating it, so it appears in a mail client that lists `LSUB` and the operator can find the mail a rule filed there — a folder they cannot see is most of the way back to the problem creation exists to solve. That is the whole of the subscription tier that reopens: no folder MailFathom did not create is ever subscribed to, and nothing is ever unsubscribed. A server that refuses the `SUBSCRIBE` does not fail the creation, because the folder exists and that is what was asked for; the refusal is logged as a warning naming the alias.
+
+**What IMAP makes awkward is settled here rather than left to the implementation**, because each of these is a defect if it is decided by whichever server was tested against:
+
+- A `CREATE` the server refuses is followed by one re-listing of the account's folders. A folder now advertised at the path means another client, or another MailFathom process, created it between the listing and the attempt, and the creation reads as success; anything else is a failure. That is a listing rather than the destination search this record refuses for a relocation, and the difference is what each one asks: the listing answers exactly the question that was put — does this folder exist — while the search would substitute a guess for an identity the server should have given.
+- A hierarchical path is split with the delimiter the server reports through `LIST` or `NAMESPACE`, never an assumed `/`. The configured text is the server's own path and is never rewritten, so the delimiter is read to find the path's segments and used for nothing else.
+- The ancestors the configured path names are created first, in order, each one skipped where it is already advertised. Every one of them is a name the operator wrote, so none of them is a folder nobody named; RFC 3501 leaves implicit parent creation to the server's discretion, and walking the path is one behaviour rather than a branch on which discretion a given server exercises.
+- A name the server holds as a `\NoSelect` or `\NonExistent` node is a refusal rather than a creation. Discovery leaves both out of the catalog, so the alias resolves to nothing while the name is already taken, and what the operator needs is a different path rather than an act MailFathom can take for them.
+
+**A created folder is bound exactly as a discovered one.** Creation happens before resolution completes, so what follows is an ordinary first binding under a new generation and the mapping-change auditor records it as it records any other. The creation itself is recorded through that same auditor, which is what keeps this record's sentence about remote paths true: a folder path is written outside the database in exactly one place. A refused creation fails as itself, under an error code of its own in category 2 so it is distinguishable from a destination that resolves to nothing, and its message names the alias alone — a remote folder path is not something an exception message may carry, and the path belongs to the audit record and the debug detail.
+
+**Creating a folder is not a fifth mutation.** `IMailboxWriteSession` stays closed at exactly four methods, because appending one is extending the session, which is what this record said a reopening does not do. Creation arrives as a port of its own — `IRemoteFolderCreator`, reached through its own factory and issuing over the account's single write connection — and the separation buys what option B1 bought: a component that can file a message into a folder cannot create one, and a component that can create one cannot relocate, delete, flag, or copy a message. The name states the port's whole surface, so a rename or a delete would need a different type rather than a further method on this one. No second connection is opened, and the read paths reach neither port; an account still holds at most one connection able to change its mailbox.
+
+**Creation is decided here and built by issue 714.** Until that change lands, a mapping whose folder the server does not advertise is refused exactly as issue 709 states.
+
+### The authorization review folder creation required
+
+A reopened tier owes an authorization review against the driver that refused it, and the driver here is that irreversible acts driven by attacker-influenced input are the thing to refuse. Creating a folder is neither half of that.
+
+**The input class is the operator's own configuration file.** A path reaches a creation from `RemotePath` on a mapping the operator wrote, and from nowhere else. Mail content names no folder. A rule names a destination *alias*, and an alias resolves only to a mapping in that same file, so a message crafted to be matched by a rule can direct mail into a folder the operator already configured and can conjure no other. An MCP tool argument and a model output reach no part of this path at all: no tool creates a folder, and nothing derives a mapping from anything a model produced. Somebody able to write that file already holds the mail credentials it carries, so creation widens nothing they could not already do.
+
+**The act destroys nothing and is bounded by the file.** A `CREATE` adds a name to the operator's own mailbox: it removes no mail, moves none, and changes no flag, and the operator undoes it in their own client with the same gesture they would have used to create the folder by hand. How many folders can be created is bounded by the mappings written down and the segments of their paths — a bounded list read from configuration — rather than by anything that happens per message, so no volume of mail and no rate of rule firings produces a second folder.
+
+**That is what separates it from the tiers that stay refused.** Renaming and deleting a folder displace or destroy mail the operator did not name in the act, and a rename additionally breaks every binding pointing at the old path. Sending is a surface an attacker steers by supplying content, which is the driver in its plainest form. Not one of those steps reads across to creating a folder from a path in a file, which is why this tier reopened and they did not.
+
 ### Consequences
 
 - Good, because the never-marks-mail-read guarantee stops depending on a reviewer noticing and starts depending on which type a component holds.
 - Good, because a server without RFC 6851 behaves identically to one with it from every layer above the session, and an operator's choice of provider is not a feature difference.
 - Good, because the mutations that exist are a closed set with the refused tiers named, so widening it is a decision somebody takes rather than a gap somebody fills.
+- Good, because a rule can file mail into a folder the operator decided on, and setting that up is one configuration file rather than a file plus a detour through a mail client.
 - Neutral, because an account that is being written to holds one more connection than before, bounded and given back a configured period after the last change.
+- Neutral, because MailFathom now issues a command that changes a mailbox's structure rather than only its messages. It is bounded to the folders a mapping asked for, recorded through the auditor a binding already uses, and reached through a port no path that moves mail can obtain.
 - Neutral, because a relocation and a delete are not atomic on a server without `MOVE`, and nothing here makes them so. A caller records its intent durably before it calls; that mechanism is issue 448 and this decision deliberately does not anticipate it.
 - Bad, because a server advertising neither `MOVE` nor `UIDPLUS` cannot relocate or delete at all under MailFathom, where another mail client would expunge the folder and mostly get away with it.
 - Bad, because `\Seen` now has an authored writer as well as an observed one, so the simplest reading of the never-marks-mail-read guarantee — *nothing here ever sets that flag* — is no longer the accurate one and has to be stated as the scoped version instead.
+- Bad, because `CreateIfMissing` is a key an operator has to know exists. A mapping that meant to have its folder created and did not say so reports the same unresolved alias a typo reports, and telling the two apart is reading the file. That is the price of the typo staying readable, and it is the right way round to pay it.
 
 ## Validation
 
@@ -121,6 +172,7 @@ Capability detection, timeouts, cancellation, and failure classification follow 
 - A regression test requires the remote `\Seen` flag to be untouched by a relocation, a delete, and a copy, which is the write-side counterpart of the read-side invariant test.
 - The integration suite proves both protocol paths against the orchestrated GreenMail server, which advertises `MOVE` and `UIDPLUS`: the native path end to end, the fallback with the capability masked, and a message-scoped expunge that spares a neighbour another client flagged `\Deleted`.
 - The connection bound is verified through the scripted connection sequence, which fails on an establishment a test did not intend, so a second login is a failure rather than a number that grew.
+- Folder creation is built by issue 714, and what it has to establish is stated here rather than there: a mapping without `CreateIfMissing` still refuses, tested beside one that creates so the refusal cannot quietly become a creation; `CreateIfMissing` on a `SpecialUse` mapping fails configuration binding; a `CREATE` against a folder that already exists reads as success, including where another client won the race between the listing and the attempt; a server reporting a delimiter other than `/` builds the same hierarchy from the same configured text; a refused `SUBSCRIBE` leaves the creation successful; and the integration suite creates a folder and files a message into it against a live server, which is where a real `CREATE` and the write connection meet.
 
 ## Pros and Cons of the Options
 
@@ -157,9 +209,31 @@ Capability detection, timeouts, cancellation, and failure classification follow 
 - Bad, because a connection in IDLE cannot issue a command until it leaves, so every write would drop the subscription and resubscribe with a `NOTIFY SET` that replaces the server's default again.
 - Bad, because it would give a session the read paths hold the ability to write, which is option B2 by another route.
 
+### E1 — folder management stays refused whole
+
+- Good, because it changes nothing and the refusal keeps its simplest form: MailFathom writes messages and never touches the shape of a mailbox.
+- Bad, because the case it refuses is the ordinary one. A rule filing mail into a folder the operator decided on cannot be set up from configuration at all, and the remedy left to them — opening a mail client and making the folder by hand — is a step MailFathom could take from a path it has already been given.
+
+### E2 — create a folder for any mapping that resolves to nothing
+
+- Good, because it needs no configuration key and every mapping simply works.
+- Bad, because it turns a typo into a folder. A mapping resolving to nothing is the only report a mistyped `RemotePath` ever produces, and creating the folder makes the mistake succeed, leaves a folder named after it on somebody's mail server, and files mail into it.
+
+### F1 — create when configuration binds
+
+- Good, because a mapping is made real at a predictable moment and a server that refuses the creation says so at startup rather than during a rule.
+- Bad, because reading configuration would then write to a mail server, including for a mapping nothing ever uses.
+- Bad, because a folder that is only a destination is resolved on demand rather than before a run, so this would have to be two triggers with two chances to disagree about which mappings each one covers.
+
+### F2 — create on the first use as a destination
+
+- Good, because nothing is created until a message actually goes somewhere, which is the narrowest trigger available.
+- Bad, because a mirrored folder whose mapping asked to have it created would never be created at all, since such a folder is never a destination. The alias would go on reporting itself unresolved on every run, with the operator having already asked for the folder.
+
 ## More Information
 
 - Issue 446 asked the question and carries the decision comment this record is written from; issue 447 is the change that implements it; issue 452 is the feature all of it belongs to.
+- Issue 713 reopened the record for folder creation and carries that request; issue 714 is the change that implements what axes E and F decided; issue 709 is the mapping contract whose refusal of a destination that resolves to nothing the creation lifts, and only where a mapping asked.
 - [ADR 0003](0003-first-party-exception-hierarchy-and-stable-error-codes.md) governs `MailboxMutationUnsupported` (25001), which is category 2 subcategory 5 — a subcategory of its own because it says the opposite of an unavailable mailbox about repeating the work.
 - Draft section 11.1 carries the amended invariant, and draft section 21.5 carries the action tiers this narrows.
-- Revisit when a request arrives for one of the refused tiers — sending, a flag other than `\Seen`, or folder management. Each reopens this record with its own authorization review rather than extending the session.
+- Revisit when a request arrives for one of the tiers that remain refused — sending, a flag other than `\Seen`, or renaming, deleting, or unsubscribing a folder. Each reopens this record with its own authorization review, as folder creation did on issue 713, rather than extending the session.
