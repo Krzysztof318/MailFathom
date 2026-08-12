@@ -56,6 +56,14 @@ internal static class AdminEndpointRoutes
     /// <summary>Where a deployment reports what classification concluded about an account's mail.</summary>
     internal const string SpamClassificationsPath = $"{Prefix}/spam/classifications";
 
+    /// <summary>Where a deployment is asked to erase one bounded pass of a folder's stored mail.</summary>
+    /// <remarks>
+    /// One pass per request, so the command repeats it until the folder is empty. That is what makes an erasure the
+    /// operator interrupted resumable: what a pass committed stays committed, and the next invocation continues from
+    /// there rather than starting a folder over.
+    /// </remarks>
+    internal const string FolderErasurePath = $"{Prefix}/folders/erasure";
+
     /// <summary>Where a deployment publishes the document naming its authorization servers, resource, and required scopes.</summary>
     /// <remarks>
     /// Composed rather than discovered from a challenge, because a client that knows which routes it is about to call

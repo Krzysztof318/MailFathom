@@ -8,6 +8,7 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Serialization.Metadata;
 using MailFathom.Cli.Administration.Embeddings;
+using MailFathom.Cli.Administration.Folders;
 using MailFathom.Cli.Administration.Rules;
 using MailFathom.Cli.Administration.Spam;
 using MailFathom.Cli.Transport;
@@ -379,6 +380,39 @@ internal sealed class AdminApiClient
             token,
             CliJsonContext.Default.SpamClassificationPage,
             cancellationToken);
+    }
+
+    /// <summary>Asks the deployment to erase one bounded pass of a folder's stored mail.</summary>
+    /// <param name="token">The bearer credential to present.</param>
+    /// <param name="account">The account the folder belongs to, as the deployment's configuration names it.</param>
+    /// <param name="folder">MailFathom's own alias for the folder.</param>
+    /// <param name="cancellationToken">Cancels the request.</param>
+    /// <returns>What the pass erased, and whether the folder still holds stored mail.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
+    /// <exception cref="CliFailure">Thrown when the deployment refused the request or the credential, could not be reached, or answered with something that is not an erasure.</exception>
+    /// <remarks>
+    /// One pass per request, and the command sends as many as the folder needs. The work is a local transaction rather
+    /// than anything on a mail server, so the answer arrives when the pass has committed and what it reports is what
+    /// the deployment has already disposed of.
+    /// </remarks>
+    internal Task<MailFolderErasure> EraseFolderMirrorAsync(
+        string token,
+        string account,
+        string folder,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(account);
+        ArgumentNullException.ThrowIfNull(folder);
+
+        return this.RequestAsync(
+            HttpMethod.Post,
+            AdminEndpointRoutes.FolderErasurePath,
+            token,
+            CliJsonContext.Default.MailFolderErasure,
+            cancellationToken,
+            JsonContent.Create(
+                new MailFolderErasureRequest(account, folder),
+                CliJsonContext.Default.MailFolderErasureRequest));
     }
 
     /// <summary>Sends one credentialed request and reads the answer, or turns the refusal into a sentence.</summary>

@@ -33,6 +33,41 @@ public sealed class MailFolderTests
         Assert.Throws<ArgumentException>(() => MailFolderAlias.Create(configured));
     }
 
+    /// <summary>
+    /// The boundary form of the same rule. An administrative route reading an alias out of a request body owes a
+    /// stated refusal rather than a failure the process reports as its own, and both factories have to admit exactly
+    /// the same text or the refusal would be about which one the caller happened to reach.
+    /// </summary>
+    [Theory]
+    [InlineData("inbox", "INBOX")]
+    [InlineData("  Archive/2026  ", "ARCHIVE/2026")]
+    [InlineData("\tarchive\n", "ARCHIVE")]
+    public void TryCreate_AliasCreateWouldAccept_ReadsTheSameValue(string written, string expected)
+    {
+        // Arrange, Act
+        var read = MailFolderAlias.TryCreate(written, out var alias);
+
+        // Assert
+        Assert.True(read);
+        Assert.Equal(expected, alias.Value);
+        Assert.Equal(MailFolderAlias.Create(written), alias);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    [InlineData("in\tbox")]
+    public void TryCreate_TextCreateWouldRefuse_ReportsNoAliasWithoutRaising(string? written)
+    {
+        // Arrange, Act
+        var read = MailFolderAlias.TryCreate(written, out var alias);
+
+        // Assert
+        Assert.False(read);
+        Assert.Equal(default, alias);
+    }
+
     /// <summary>RFC 3501 makes the inbox the one folder name a server may spell in any case.</summary>
     [Theory]
     [InlineData("INBOX")]

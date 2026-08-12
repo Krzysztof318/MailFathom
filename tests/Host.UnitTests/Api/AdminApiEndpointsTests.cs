@@ -112,6 +112,7 @@ public sealed class AdminApiEndpointsTests
                 $"{AdminEndpointOptions.RoutePrefix}{EmbeddingProfileEndpoints.ActivationRoute}",
                 $"{AdminEndpointOptions.RoutePrefix}{EmbeddingProfileEndpoints.ActivationRoute}",
                 $"{AdminEndpointOptions.RoutePrefix}{EmbeddingProfileEndpoints.ReindexCancellationRoute}",
+                $"{AdminEndpointOptions.RoutePrefix}{MailFolderErasureEndpoint.ErasureRoute}",
                 $"{AdminEndpointOptions.RoutePrefix}{MailboxMutationAuditEndpoint.Route}",
                 $"{AdminEndpointOptions.RoutePrefix}{MailboxRefreshTokenEndpoint.Route}",
                 $"{AdminEndpointOptions.RoutePrefix}{MailRuleEndpoints.RulesRoute}",

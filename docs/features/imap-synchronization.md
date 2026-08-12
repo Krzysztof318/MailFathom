@@ -836,7 +836,9 @@ configuration value changed, so the rows are kept and read by nothing — nothin
 them, nothing cuts them into passages or embeds them, no rule pass walks them, and no alias of theirs resolves as a
 destination. Mapping the folder again is what makes them readable again, and a folder that was mirrored once keeps its
 checkpoint, so mapping it back is the resumption the section below describes rather than a remirror. What it costs
-meanwhile is storage.
+meanwhile is storage, and [`mfctl folder
+erase`](../operations/admin-endpoint.md#erasing-a-folder-you-have-stopped-mirroring) is how an operator who wants that
+storage back asks for it — an alias no mapping names is exactly what that command accepts.
 
 That distinction is the reason to switch synchronization off rather than delete the mapping. The alias still resolves,
 by remote path or by special-use role, so the folder stays a **destination**: a relocation or a copy files a message
@@ -882,11 +884,19 @@ other two switches from this one, so no tool lists, searches, reads, or answers 
 no rule pass reaches it. Erasing them would charge an operator a whole remirror for a switch they may flip back the
 same week, so nothing in MailFathom takes local mail away because a configuration value changed.
 
+**Getting the storage back is a command rather than a setting.** [`mfctl folder
+erase`](../operations/admin-endpoint.md#erasing-a-folder-you-have-stopped-mirroring) is the one operation that removes
+a folder's local copy, and it exists precisely so that no configuration value has to: it erases in bounded passes
+through the deletion path an erasing disposition already uses, refuses a folder the account still mirrors, accepts an
+alias no mapping names, and clears the folder's checkpoint in the pass that empties it. The binding itself stays, which
+is what keeps the alias resolving as a destination.
+
 **Switching the folder back on is an ordinary mirror**, whichever state the folder is in. A folder that never stored
-anything is scheduled, discovered, bound, and backfilled exactly as one mapped mirrored from the start; a folder that
-stored something before resumes from its retained checkpoint, so the run fetches what arrived while it was off and
-nothing else, and the backward pass converges the retained rows — flags that changed, messages that left, and messages
-the server removed during the gap are observed exactly as they are for a folder that simply went unread for a while. A
+anything — or whose erasure took its checkpoint with the mail — is scheduled, discovered, bound, and backfilled exactly
+as one mapped mirrored from the start; a folder that stored something before resumes from its retained checkpoint, so
+the run fetches what arrived while it was off and nothing else, and the backward pass converges the retained rows —
+flags that changed, messages that left, and messages the server removed during the gap are observed exactly as they are
+for a folder that simply went unread for a while. A
 `UIDVALIDITY` the server changed meanwhile invalidates the checkpoint on that first run like any other, and
 reconciliation resolves what the invalidation leaves behind. There is no branch anywhere that tells a re-enabled folder
 from a newly mapped one.

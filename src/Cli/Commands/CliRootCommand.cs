@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.CommandLine;
+using MailFathom.Cli.Commands.Folders;
 using MailFathom.Cli.Commands.Rules;
 using MailFathom.Cli.Commands.Spam;
 using MailFathom.Versioning;
@@ -72,6 +73,14 @@ internal static class CliRootCommand
             ClassificationsCommand.Create(context),
         };
 
+        // The one group that disposes of mail. A folder's local copy outlives both the switch that stopped mirroring it
+        // and the mapping that named it, deliberately, so that no configuration edit can take somebody's mail away —
+        // and this is where an operator who means it says so.
+        Command folderCommand = new("folder", "Administer what a deployment stores for one of an account's folders.")
+        {
+            EraseFolderCommand.Create(context),
+        };
+
         return new RootCommand($"MailFathom administration tool ({version.Version}).")
         {
             LoginCommand.Create(context),
@@ -83,6 +92,7 @@ internal static class CliRootCommand
             embeddingCommand,
             rulesCommand,
             spamCommand,
+            folderCommand,
         };
     }
 }
