@@ -33,8 +33,12 @@ namespace MailFathom.Infrastructure.Mail.MailKit;
 /// <see cref="ForWriting" /> is the one path that selects otherwise, and only the write session reaches it.
 /// </para>
 /// <para>
-/// A connection may also be opened for no folder at all, which is what folder discovery uses: an IMAP <c>LIST</c>
-/// selects nothing, so there is no folder to pin and no message whose flags could change.
+/// A connection may also be opened for no folder at all, which two paths use. Folder discovery issues an IMAP
+/// <c>LIST</c>, which selects nothing, so there is no folder to pin and no message whose flags could change; folder
+/// creation issues a <c>CREATE</c>, which names its mailbox in the command and could not pin one, since the folder
+/// being created does not exist yet. <see cref="ForFolderManagement" /> is the second of those and the only connection
+/// <see cref="ExecuteFolderManagementAsync" /> runs on, so the permission to change a mailbox's shape and the
+/// permission to change the emails in a folder never sit on the same connection.
 /// </para>
 /// <para>
 /// Establishment and retrieval run under different dependency classes, because a rejected credential must never be
@@ -161,6 +165,40 @@ internal sealed class MailKitImapConnection : IAsyncDisposable
             transientFailureClassifier,
             accountId,
             folder,
+            FolderAccess.ReadWrite,
+            transportSecurityPolicy);
+
+    /// <summary>Creates a connection that selects no folder and may still change the mailbox, which folder creation needs.</summary>
+    /// <param name="clientFactory">Creates one IMAP client per establishment attempt.</param>
+    /// <param name="settingsProvider">Resolves the endpoint and the credential material of the account, per attempt.</param>
+    /// <param name="accessTokenSource">Supplies the access token when the account's policy authenticates with one.</param>
+    /// <param name="operationExecutor">Runs establishment and the creation under their configured pipelines.</param>
+    /// <param name="transientFailureClassifier">Decides whether a failure left the connection worth keeping.</param>
+    /// <param name="accountId">The account this connection belongs to, which also isolates its pipeline state.</param>
+    /// <param name="transportSecurityPolicy">The connection and authentication policy each attempt must obey.</param>
+    /// <returns>A connection that has not been established yet.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when a required collaborator is <see langword="null" />.</exception>
+    /// <remarks>
+    /// An IMAP <c>CREATE</c> names its mailbox in the command and selects nothing, so there is no folder to pin — and
+    /// pinning one would be wrong rather than merely unnecessary, since the folder being created cannot be selected
+    /// until it exists. What this shares with <see cref="ForWriting" /> is only the permission: both are created able to
+    /// change the mailbox, and only <see cref="ExecuteFolderManagementAsync" /> runs on this one.
+    /// </remarks>
+    internal static MailKitImapConnection ForFolderManagement(
+        Func<IImapClient> clientFactory,
+        IImapAccountSettingsProvider settingsProvider,
+        IMailAccessTokenSource accessTokenSource,
+        OutboundOperationExecutor operationExecutor,
+        ITransientFailureClassifier transientFailureClassifier,
+        MailAccountId accountId,
+        MailTransportSecurityPolicy transportSecurityPolicy) => new(
+            clientFactory,
+            settingsProvider,
+            accessTokenSource,
+            operationExecutor,
+            transientFailureClassifier,
+            accountId,
+            folder: null,
             FolderAccess.ReadWrite,
             transportSecurityPolicy);
 
@@ -307,7 +345,6 @@ internal sealed class MailKitImapConnection : IAsyncDisposable
     /// connection is discarded, so the next call starts from a session it established itself.
     /// </para>
     /// </remarks>
-    [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "Every failure is inspected for whether it left the connection usable and is then rethrown, translated only where a mail-library type would otherwise cross an application port.")]
     internal async Task<TResult> ExecuteUnrepeatedFolderOperationAsync<TResult>(
         Func<IImapClient, IMailFolder, CancellationToken, Task<TResult>> operation,
         CancellationToken cancellationToken)
@@ -317,9 +354,56 @@ internal sealed class MailKitImapConnection : IAsyncDisposable
         var authenticatedClient = await this.EnsureAuthenticatedClientAsync(cancellationToken);
         var openFolder = await this.EnsureOpenFolderAsync(cancellationToken);
 
+        return await this.AttemptUnrepeatedOperationAsync(
+            () => operation(authenticatedClient, openFolder, cancellationToken));
+    }
+
+    /// <summary>Runs one operation that changes the shape of the mailbox rather than a message in it, exactly once.</summary>
+    /// <typeparam name="TResult">The result the operation produces.</typeparam>
+    /// <param name="folderManagement">The change, which is issued exactly once.</param>
+    /// <param name="cancellationToken">Cancels establishing the session and the operation itself.</param>
+    /// <returns>The result of the single attempt.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="folderManagement" /> is <see langword="null" />.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when the connection was not created by <see cref="ForFolderManagement" />.</exception>
+    /// <exception cref="MailboxUnavailableException">Thrown when establishment stopped at a configured limit, or when the operation failed on something transient.</exception>
+    /// <remarks>
+    /// <para>
+    /// The guard is the point of the method, exactly as it is on <see cref="ExecuteMutationAsync" />, and it is the
+    /// stricter of the two: a connection pinned to a folder is the one that moves messages, and asking it to change the
+    /// mailbox's shape fails here rather than reaching a server. The two permissions are therefore not one — no
+    /// connection in this process can both file a message into a folder and create one.
+    /// </para>
+    /// <para>
+    /// Nothing is repeated. An IMAP <c>CREATE</c> against a folder that already exists is answered as an error rather
+    /// than as success, so a repeat would report the previous attempt's own work as a refusal; whether the folder is
+    /// there afterwards is the caller's question to put to the server rather than this method's to guess at.
+    /// </para>
+    /// </remarks>
+    internal async Task<TResult> ExecuteFolderManagementAsync<TResult>(
+        Func<IImapClient, CancellationToken, Task<TResult>> folderManagement,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(folderManagement);
+
+        if (this.folderAccess is not FolderAccess.ReadWrite || this.folder is not null)
+        {
+            throw new InvalidOperationException(
+                "This connection was not created to manage folders and cannot change the shape of the mailbox.");
+        }
+
+        var authenticatedClient = await this.EnsureAuthenticatedClientAsync(cancellationToken);
+
+        return await this.AttemptUnrepeatedOperationAsync(
+            () => folderManagement(authenticatedClient, cancellationToken));
+    }
+
+    /// <summary>Runs one attempt that is never repeated, keeping the connection only where the failure proves it survived.</summary>
+    [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "Every failure is inspected for whether it left the connection usable and is then rethrown, translated only where a mail-library type would otherwise cross an application port.")]
+    private async Task<TResult> AttemptUnrepeatedOperationAsync<TResult>(Func<Task<TResult>> operation)
+    {
         try
         {
-            return await operation(authenticatedClient, openFolder, cancellationToken);
+            return await operation();
         }
         catch (Exception failure) when (this.IsRepeatableFailure(OutboundDependency.MailboxDataRetrieval, failure))
         {
@@ -369,6 +453,12 @@ internal sealed class MailKitImapConnection : IAsyncDisposable
         {
             throw new InvalidOperationException(
                 "This connection selects its folder read-only and cannot change the mailbox.");
+        }
+
+        if (this.folder is null)
+        {
+            throw new InvalidOperationException(
+                "This connection selects no folder and cannot change the emails in one.");
         }
 
         return this.ExecuteUnrepeatedFolderOperationAsync(mutation, cancellationToken);

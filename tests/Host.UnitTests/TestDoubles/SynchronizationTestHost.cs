@@ -123,6 +123,10 @@ internal static class SynchronizationTestHost
         services.AddSingleton(remoteFolderCatalog ?? catalog);
         services.AddSingleton(resolutionStore);
         services.AddSingleton(Substitute.For<IMailFolderMappingChangeAuditor>());
+        // Registered so a resolver can be composed at all, and never configured to answer: no mapping these tests build
+        // asks for its folder to be created, so a call reaching it would mean resolution had started creating folders
+        // for a mapping that never asked.
+        services.AddSingleton(Substitute.For<IRemoteFolderCreator>());
         services.AddScoped<MailFolderResolver>();
         services.AddScoped<OptimisticConcurrencyRetryPolicy>();
         services.AddScoped<MailboxSynchronizer>();

@@ -95,6 +95,9 @@ internal sealed class FakeImapClient
     /// <summary>Gets or sets the folder the server answers as its inbox.</summary>
     internal IMailFolder? InboxFolder { get; set; }
 
+    /// <summary>Gets or sets the folder the server answers for the root of a namespace, which is the parent a top-level folder is created under.</summary>
+    internal IMailFolder? NamespaceRootFolder { get; set; }
+
     internal IReadOnlyList<string> MechanismsWhenAuthenticated { get; private set; } = [];
 
     internal bool AuthenticateCalled { get; private set; }
@@ -287,6 +290,10 @@ internal sealed class FakeImapClient
         this.Client.PersonalNamespaces.Returns(_ => ToNamespaceCollection(this.PersonalNamespaces));
         this.Client.OtherNamespaces.Returns(_ => ToNamespaceCollection(this.OtherNamespaces));
         this.Client.SharedNamespaces.Returns(_ => ToNamespaceCollection(this.SharedNamespaces));
+        this.Client
+            .GetFolder(Arg.Any<FolderNamespace>())
+            .Returns(_ => this.NamespaceRootFolder
+                ?? throw new InvalidOperationException("No test namespace root folder configured."));
         this.Client
             .GetFoldersAsync(Arg.Any<FolderNamespace>(), Arg.Any<bool>(), Arg.Any<CancellationToken>())
             .Returns(call =>

@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Application.Folders;
 using MailFathom.Application.Mail.Mutations;
 using MailFathom.Domain.Folders;
 using MailFathom.Infrastructure.Mail.MailKit.Writes;
@@ -30,10 +31,16 @@ internal sealed class MailboxWriteHarness : IAsyncDisposable
         this.RecordedLogs = recordedLogs;
         this.ScopeDisposals = scopeDisposals;
         this.Factory = new MailKitImapWriteSessionFactory(pool, telemetry);
+        this.FolderCreator = new MailKitRemoteFolderCreator(
+            pool,
+            new MailKitImapWriteSessionTestContext.RecordingCategoryLogger<MailKitRemoteFolderCreator>(recordedLogs));
     }
 
     /// <summary>Gets the factory under test, which produces sessions over the pool below.</summary>
     internal IMailboxWriteSessionFactory Factory { get; }
+
+    /// <summary>Gets the creator under test, which leases the same one connection per account the sessions do.</summary>
+    internal IRemoteFolderCreator FolderCreator { get; }
 
     /// <summary>Gets the pool the factory leases from, so a test can assert on connection reuse and expiry.</summary>
     internal MailboxWriteConnectionPool Pool { get; }
@@ -52,6 +59,15 @@ internal sealed class MailboxWriteHarness : IAsyncDisposable
         this.Factory.OpenForWritingAsync(
             PrimaryAccount,
             folder,
+            TlsOnConnectWithPlainPolicy,
+            CancellationToken.None);
+
+    /// <summary>Creates the folder one configured alias names, over the same account connection the sessions lease.</summary>
+    internal Task<RemoteFolderPath> CreateFolderAsync(MailFolderAlias alias, string configuredPath) =>
+        this.FolderCreator.CreateFolderAsync(
+            PrimaryAccount,
+            alias,
+            RemoteFolderPath.Create(configuredPath),
             TlsOnConnectWithPlainPolicy,
             CancellationToken.None);
 

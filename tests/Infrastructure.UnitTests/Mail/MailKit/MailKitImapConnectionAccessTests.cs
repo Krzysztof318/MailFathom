@@ -80,4 +80,90 @@ public sealed class MailKitImapConnectionAccessTests
         Assert.Equal(7U, read);
         Assert.Equal(1, client.ConnectCount);
     }
+
+    /// <summary>
+    /// The two write permissions are separate connections rather than one. A connection that selects a folder is the
+    /// one that moves messages in it, and asking it to change the mailbox's own shape fails here rather than reaching
+    /// a server — which is what keeps a component able to file a message unable to create a folder.
+    /// </summary>
+    [Fact]
+    public async Task ExecuteFolderManagementAsync_OnAConnectionThatSelectedAFolder_IsRefusedWithoutReachingTheServer()
+    {
+        // Arrange
+        using var resilience = CreateSingleAttemptResilience();
+        var client = new FakeImapClient { Folder = CreateSelectedFolder() };
+        client.AuthenticationMechanisms.Add("PLAIN");
+        await using var connection = MailKitImapConnection.ForWriting(
+            () => client.Client,
+            CreateSettingsProvider(),
+            new UnusedMailAccessTokenSource(),
+            resilience.Executor,
+            resilience.TransientFailureClassifier,
+            PrimaryAccount,
+            InboxFolder,
+            TlsOnConnectWithPlainPolicy);
+
+        // Act
+        var refusal = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => connection.ExecuteFolderManagementAsync((_, _) => Task.FromResult(true), CancellationToken.None));
+
+        // Assert
+        Assert.Contains("manage folders", refusal.Message, StringComparison.Ordinal);
+        Assert.Equal(0, client.ConnectCount);
+    }
+
+    /// <summary>And the reverse, which is the half that keeps a component able to create a folder unable to touch a message in one.</summary>
+    [Fact]
+    public async Task ExecuteMutationAsync_OnAConnectionOpenedToManageFolders_IsRefusedWithoutReachingTheServer()
+    {
+        // Arrange
+        using var resilience = CreateSingleAttemptResilience();
+        var client = new FakeImapClient { Folder = CreateSelectedFolder() };
+        client.AuthenticationMechanisms.Add("PLAIN");
+        await using var connection = MailKitImapConnection.ForFolderManagement(
+            () => client.Client,
+            CreateSettingsProvider(),
+            new UnusedMailAccessTokenSource(),
+            resilience.Executor,
+            resilience.TransientFailureClassifier,
+            PrimaryAccount,
+            TlsOnConnectWithPlainPolicy);
+
+        // Act
+        var refusal = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => connection.ExecuteMutationAsync((_, _, _) => Task.FromResult(true), CancellationToken.None));
+
+        // Assert
+        Assert.Contains("selects no folder", refusal.Message, StringComparison.Ordinal);
+        Assert.Equal(0, client.ConnectCount);
+    }
+
+    /// <summary>A connection opened to manage folders authenticates and selects nothing, which is what a <c>CREATE</c> needs and all it needs.</summary>
+    [Fact]
+    public async Task ExecuteFolderManagementAsync_OnAConnectionOpenedToManageFolders_RunsWithoutSelectingAFolder()
+    {
+        // Arrange
+        using var resilience = CreateSingleAttemptResilience();
+        var openFolder = CreateSelectedFolder();
+        var client = new FakeImapClient { Folder = openFolder };
+        client.AuthenticationMechanisms.Add("PLAIN");
+        await using var connection = MailKitImapConnection.ForFolderManagement(
+            () => client.Client,
+            CreateSettingsProvider(),
+            new UnusedMailAccessTokenSource(),
+            resilience.Executor,
+            resilience.TransientFailureClassifier,
+            PrimaryAccount,
+            TlsOnConnectWithPlainPolicy);
+
+        // Act
+        var managed = await connection.ExecuteFolderManagementAsync(
+            (managedClient, _) => Task.FromResult(managedClient.IsConnected),
+            CancellationToken.None);
+
+        // Assert
+        Assert.True(managed);
+        Assert.Equal(1, client.ConnectCount);
+        await openFolder.DidNotReceive().OpenAsync(Arg.Any<FolderAccess>(), Arg.Any<CancellationToken>());
+    }
 }

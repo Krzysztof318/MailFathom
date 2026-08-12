@@ -35,7 +35,9 @@ namespace MailFathom.Infrastructure.Mail.MailKit.Writes;
 /// <para>
 /// A connection is pinned to the folder it selected, because that is what an IMAP selection is. A session for a
 /// different folder of the same account therefore replaces the connection rather than joining it, which keeps the
-/// one-per-account bound exact instead of turning it into one per folder.
+/// one-per-account bound exact instead of turning it into one per folder. A folder creation is the same rule with no
+/// folder on one side of it: it selects nothing — the folder being created cannot be selected until it exists — so it
+/// replaces a connection pinned to a folder and is replaced by the next session that needs one.
 /// </para>
 /// <para>
 /// Each live connection owns a dependency-injection scope of its own, disposed with it. The collaborators it needs to
@@ -100,9 +102,34 @@ internal sealed partial class MailboxWriteConnectionPool : IAsyncDisposable
     /// <param name="cancellationToken">Cancels waiting for the connection, connecting, authenticating, and selecting.</param>
     /// <returns>The lease, which the caller must dispose to give the connection back.</returns>
     /// <exception cref="ObjectDisposedException">Thrown when the pool has been disposed with the host.</exception>
-    internal async Task<MailboxWriteConnectionLease> LeaseAsync(
+    internal Task<MailboxWriteConnectionLease> LeaseAsync(
         MailAccountId accountId,
         MailFolderResolution folder,
+        MailTransportSecurityPolicy transportSecurityPolicy,
+        CancellationToken cancellationToken) =>
+        this.LeaseConnectionAsync(accountId, folder, transportSecurityPolicy, cancellationToken);
+
+    /// <summary>Takes the account's write connection for a change to the mailbox's own shape, which selects no folder.</summary>
+    /// <param name="accountId">The account whose mailbox is to gain a folder.</param>
+    /// <param name="transportSecurityPolicy">The connection and authentication policy every attempt must obey.</param>
+    /// <param name="cancellationToken">Cancels waiting for the connection, connecting, and authenticating.</param>
+    /// <returns>The lease, which the caller must dispose to give the connection back.</returns>
+    /// <exception cref="ObjectDisposedException">Thrown when the pool has been disposed with the host.</exception>
+    /// <remarks>
+    /// It is the same one-per-account connection the mutations run over, which is what keeps a creation from being a
+    /// second login. A connection currently pinned to a folder is replaced rather than joined, for the same reason a
+    /// session for a different folder replaces it: an IMAP selection is a property of the connection, and the folder
+    /// being created cannot be selected at all.
+    /// </remarks>
+    internal Task<MailboxWriteConnectionLease> LeaseForFolderManagementAsync(
+        MailAccountId accountId,
+        MailTransportSecurityPolicy transportSecurityPolicy,
+        CancellationToken cancellationToken) =>
+        this.LeaseConnectionAsync(accountId, folder: null, transportSecurityPolicy, cancellationToken);
+
+    private async Task<MailboxWriteConnectionLease> LeaseConnectionAsync(
+        MailAccountId accountId,
+        MailFolderResolution? folder,
         MailTransportSecurityPolicy transportSecurityPolicy,
         CancellationToken cancellationToken)
     {
@@ -161,6 +188,11 @@ internal sealed partial class MailboxWriteConnectionPool : IAsyncDisposable
 
     [LoggerMessage(
         Level = LogLevel.Debug,
+        Message = "Opened the write connection for account {AccountId}, selecting no folder so the mailbox's own folders can be managed.")]
+    private partial void LogFolderManagementConnectionOpened(string accountId);
+
+    [LoggerMessage(
+        Level = LogLevel.Debug,
         Message = "Closed the write connection for account {AccountId}.")]
     private partial void LogWriteConnectionClosed(string accountId);
 
@@ -189,7 +221,7 @@ internal sealed partial class MailboxWriteConnectionPool : IAsyncDisposable
         private volatile Task pendingEviction = Task.CompletedTask;
 
         internal async Task<MailboxWriteConnectionLease> LeaseAsync(
-            MailFolderResolution folder,
+            MailFolderResolution? folder,
             MailTransportSecurityPolicy transportSecurityPolicy,
             CancellationToken cancellationToken)
         {
@@ -207,14 +239,26 @@ internal sealed partial class MailboxWriteConnectionPool : IAsyncDisposable
                 // Nothing may expire the connection while a caller holds it; the clock starts again on release.
                 this.idleTimer?.Change(Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
 
-                if (this.selectedFolderId is { } heldFolderId && heldFolderId != folder.Id)
+                // A held connection whose selection is not the one this caller needs is replaced rather than reselected,
+                // because what a connection selects is fixed when it is created. That covers a second folder and it
+                // covers a folder creation, which selects nothing at all and so can share a connection with neither.
+                if (this.connection is not null && this.selectedFolderId != folder?.Id)
                 {
                     await this.CloseHeldConnectionAsync();
                 }
 
                 this.connection ??= this.OpenConnection(folder, transportSecurityPolicy);
-                await this.connection.EnsureOpenFolderAsync(cancellationToken);
-                this.selectedFolderId = folder.Id;
+
+                if (folder is null)
+                {
+                    await this.connection.EnsureAuthenticatedClientAsync(cancellationToken);
+                }
+                else
+                {
+                    await this.connection.EnsureOpenFolderAsync(cancellationToken);
+                }
+
+                this.selectedFolderId = folder?.Id;
 
                 return new MailboxWriteConnectionLease(accountId, this.connection, this.ReleaseAsync);
             }
@@ -263,25 +307,45 @@ internal sealed partial class MailboxWriteConnectionPool : IAsyncDisposable
         }
 
         private MailKitImapConnection OpenConnection(
-            MailFolderResolution folder,
+            MailFolderResolution? folder,
             MailTransportSecurityPolicy transportSecurityPolicy)
         {
             var scope = pool.scopeFactory.CreateScope();
 
             try
             {
-                var establishedConnection = MailKitImapConnection.ForWriting(
-                    pool.clientFactory,
-                    scope.ServiceProvider.GetRequiredService<IImapAccountSettingsProvider>(),
-                    scope.ServiceProvider.GetRequiredService<IMailAccessTokenSource>(),
-                    pool.operationExecutor,
-                    pool.transientFailureClassifier,
-                    accountId,
-                    folder,
-                    transportSecurityPolicy);
+                var settingsProvider = scope.ServiceProvider.GetRequiredService<IImapAccountSettingsProvider>();
+                var accessTokenSource = scope.ServiceProvider.GetRequiredService<IMailAccessTokenSource>();
+
+                var establishedConnection = folder is { } selectedFolder
+                    ? MailKitImapConnection.ForWriting(
+                        pool.clientFactory,
+                        settingsProvider,
+                        accessTokenSource,
+                        pool.operationExecutor,
+                        pool.transientFailureClassifier,
+                        accountId,
+                        selectedFolder,
+                        transportSecurityPolicy)
+                    : MailKitImapConnection.ForFolderManagement(
+                        pool.clientFactory,
+                        settingsProvider,
+                        accessTokenSource,
+                        pool.operationExecutor,
+                        pool.transientFailureClassifier,
+                        accountId,
+                        transportSecurityPolicy);
 
                 this.connectionScope = scope;
-                pool.LogWriteConnectionOpened(accountId.Value, folder.Alias.Value);
+
+                if (folder is { } openedFolder)
+                {
+                    pool.LogWriteConnectionOpened(accountId.Value, openedFolder.Alias.Value);
+                }
+                else
+                {
+                    pool.LogFolderManagementConnectionOpened(accountId.Value);
+                }
 
                 return establishedConnection;
             }

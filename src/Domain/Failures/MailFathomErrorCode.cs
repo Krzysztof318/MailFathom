@@ -114,6 +114,17 @@ public readonly record struct MailFathomErrorCode
     /// </remarks>
     public static MailFathomErrorCode MailboxMutationDestinationMissing { get; } = new(25005);
 
+    /// <summary>Gets subcategory 6, folder creation: a mail server refused to create the folder a mapping asked for.</summary>
+    /// <remarks>
+    /// It is a subcategory of its own rather than one more mutation failure, because creating a folder is not one of the
+    /// four mutations at all: it changes the shape of a mailbox rather than a message in one, and it is reached through a
+    /// port no path that moves mail can obtain. Keeping it apart is also what makes it readable beside
+    /// <see cref="MailboxMutationDestinationMissing" />, which is the code an alias that resolves to nothing produces —
+    /// a quota, a namespace that forbids the name, or a name the server will not accept says something different from a
+    /// folder nobody has.
+    /// </remarks>
+    public static MailFathomErrorCode RemoteFolderCreationRefused { get; } = new(26001);
+
     #endregion
 
     #region Category 3 — Persistence
@@ -323,6 +334,7 @@ public readonly record struct MailFathomErrorCode
         MailboxMutationAttemptsExhausted,
         MailboxMutationFailedUnexpectedly,
         MailboxMutationDestinationMissing,
+        RemoteFolderCreationRefused,
         PersistenceConcurrencyConflict,
         DatabaseSchemaOutOfDate,
         DatabaseSchemaStateUnreadable,

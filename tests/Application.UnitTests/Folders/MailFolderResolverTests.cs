@@ -270,10 +270,132 @@ public sealed class MailFolderResolverTests
         await context.MappingChangeAuditor.DidNotReceive().RecordMappingChangeAsync(Arg.Any<MailFolderMappingChange>(), Arg.Any<CancellationToken>());
     }
 
+    /// <summary>
+    /// The two halves of the reopened decision, asserted side by side so the refusal cannot quietly become a creation.
+    /// A mapping that says nothing about creation keeps reporting the unresolved alias a mistyped path produces, and
+    /// only the mapping that asked for it reaches the mail server at all.
+    /// </summary>
+    [Fact]
+    public async Task ResolveAsync_NothingAdvertisedAtTheConfiguredPath_CreatesTheFolderOnlyForTheMappingThatAskedFor()
+    {
+        // Arrange
+        var context = new ResolverContext(new RemoteFolder(RemoteFolderPath.Create("INBOX", '/'), [MailFolderSpecialUse.Inbox]));
+        var silentMapping = MailFolderMapping.ToRemotePath(
+            MailFolderAlias.Create("archief"),
+            RemoteFolderPath.Create("Archief"));
+        var creatingMapping = MailFolderMapping.ToRemotePath(
+            MailFolderAlias.Create("archive"),
+            RemoteFolderPath.Create("Archive/2026"),
+            participation: null,
+            mayCreateMissingFolder: true);
+
+        // Act
+        var silentResult = await context.Resolver.ResolveAsync(PrimaryAccount, silentMapping, RequiredTlsPolicy, CancellationToken.None);
+        var creatingResult = await context.Resolver.ResolveAsync(PrimaryAccount, creatingMapping, RequiredTlsPolicy, CancellationToken.None);
+
+        // Assert
+        Assert.Equal(MailFolderResolutionOutcome.NoAdvertisedFolderMatched, silentResult.Outcome);
+        Assert.Equal(MailFolderResolutionOutcome.Resolved, creatingResult.Outcome);
+        Assert.Equal(["Archive/2026"], context.CreatedPaths.Select(path => path.Value));
+    }
+
+    /// <summary>A created folder is bound exactly as a discovered one, which is what keeps everything downstream of resolution indifferent to how the folder came to exist.</summary>
+    [Fact]
+    public async Task ResolveAsync_FolderWasCreated_BindsItAndAuditsTheChangeAsAnOrdinaryFirstBinding()
+    {
+        // Arrange
+        var context = new ResolverContext(new RemoteFolder(RemoteFolderPath.Create("INBOX", '/'), [MailFolderSpecialUse.Inbox]));
+        var mapping = MailFolderMapping.ToRemotePath(
+            MailFolderAlias.Create("archive"),
+            RemoteFolderPath.Create("Archive/2026"),
+            participation: null,
+            mayCreateMissingFolder: true);
+
+        // Act
+        var result = await context.Resolver.ResolveAsync(PrimaryAccount, mapping, RequiredTlsPolicy, CancellationToken.None);
+
+        // Assert
+        Assert.Equal(RemoteFolderPath.Create("Archive/2026", '/'), result.Resolution!.RemotePath);
+        Assert.Equal(1, result.Resolution.Generation.Value);
+
+        var change = Assert.Single(context.RecordedChanges);
+        Assert.Null(change.PreviousRemotePath);
+        Assert.Equal("Archive/2026", change.NewRemotePath.Value);
+        Assert.Equal(ResolverContext.ResolvedAt, change.OccurredAt);
+    }
+
+    /// <summary>
+    /// The created folder binds under the delimiter the server reports rather than the configured spelling, which is
+    /// what stops the run after the creating one from reading its own binding as a repointed alias and starting a
+    /// second generation over a folder nothing changed.
+    /// </summary>
+    [Fact]
+    public async Task ResolveAsync_RunAfterTheOneThatCreatedTheFolder_ReturnsTheSameBindingWithoutWritingAgain()
+    {
+        // Arrange
+        var createdPath = RemoteFolderPath.Create("Archive/2026", '/');
+        var context = new ResolverContext(new RemoteFolder(createdPath, []));
+        var mapping = MailFolderMapping.ToRemotePath(
+            MailFolderAlias.Create("archive"),
+            RemoteFolderPath.Create("Archive/2026"),
+            participation: null,
+            mayCreateMissingFolder: true);
+        context.BindAliasTo(MailFolderResolution.FirstBindingOf(mapping.Alias, createdPath));
+
+        // Act
+        var result = await context.Resolver.ResolveAsync(PrimaryAccount, mapping, RequiredTlsPolicy, CancellationToken.None);
+
+        // Assert
+        Assert.Equal(1, result.Resolution!.Generation.Value);
+        Assert.Empty(context.CreatedPaths);
+        await context.MappingChangeAuditor.DidNotReceive().RecordMappingChangeAsync(Arg.Any<MailFolderMappingChange>(), Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>A folder that does not exist advertises no role, so a role mapping can never be the thing that creates one.</summary>
+    [Fact]
+    public async Task ResolveAsync_RoleMappingMatchesNothingAdvertised_ReachesNoCreationAtAll()
+    {
+        // Arrange
+        var context = new ResolverContext(new RemoteFolder(RemoteFolderPath.Create("INBOX", '/'), [MailFolderSpecialUse.Inbox]));
+        var mapping = MailFolderMapping.ToSpecialUse(MailFolderAlias.Create("archive"), MailFolderSpecialUse.Archive);
+
+        // Act
+        var result = await context.Resolver.ResolveAsync(PrimaryAccount, mapping, RequiredTlsPolicy, CancellationToken.None);
+
+        // Assert
+        Assert.Equal(MailFolderResolutionOutcome.NoAdvertisedFolderMatched, result.Outcome);
+        Assert.Empty(context.CreatedPaths);
+    }
+
+    /// <summary>A refused creation stays what it is rather than becoming the message a mistyped path gets, and nothing is bound behind it.</summary>
+    [Fact]
+    public async Task ResolveAsync_MailServerRefusedTheCreation_ReportsTheRefusalAndRecordsNoBinding()
+    {
+        // Arrange
+        var context = new ResolverContext(new RemoteFolder(RemoteFolderPath.Create("INBOX", '/'), [MailFolderSpecialUse.Inbox]));
+        var mapping = MailFolderMapping.ToRemotePath(
+            MailFolderAlias.Create("archive"),
+            RemoteFolderPath.Create("Archive/2026"),
+            participation: null,
+            mayCreateMissingFolder: true);
+        context.RefuseCreationOf(mapping.Alias);
+
+        // Act, Assert
+        var refusal = await Assert.ThrowsAsync<RemoteFolderCreationRefusedException>(
+            () => context.Resolver.ResolveAsync(PrimaryAccount, mapping, RequiredTlsPolicy, CancellationToken.None));
+
+        Assert.Equal("ARCHIVE", refusal.FolderAlias.Value);
+        Assert.DoesNotContain("Archive/2026", refusal.Message, StringComparison.Ordinal);
+        await context.PersistenceSessionFactory.DidNotReceive().BeginSessionAsync(Arg.Any<CancellationToken>());
+    }
+
     /// <summary>Builds a resolver over a server that advertises exactly the folders a test names.</summary>
     private sealed class ResolverContext
     {
         internal static readonly DateTimeOffset ResolvedAt = new(2026, 7, 28, 9, 0, 0, TimeSpan.Zero);
+
+        /// <summary>The delimiter the modelled server reports for every folder it advertises or creates.</summary>
+        internal const char AdvertisedDelimiter = '/';
 
         private readonly Dictionary<string, MailFolderResolution> bindingsByAlias = new(StringComparer.Ordinal);
 
@@ -305,8 +427,27 @@ public sealed class MailFolderResolverTests
                     return Task.CompletedTask;
                 });
 
+            this.FolderCreator = Substitute.For<IRemoteFolderCreator>();
+            this.FolderCreator
+                .CreateFolderAsync(
+                    Arg.Any<MailAccountId>(),
+                    Arg.Any<MailFolderAlias>(),
+                    Arg.Any<RemoteFolderPath>(),
+                    Arg.Any<MailTransportSecurityPolicy>(),
+                    Arg.Any<CancellationToken>())
+                .Returns(call =>
+                {
+                    var configuredPath = call.Arg<RemoteFolderPath>();
+                    this.CreatedPaths.Add(configuredPath);
+
+                    // A server answers with the folder as it advertises it, delimiter included, which is exactly what a
+                    // later listing would report for the same folder.
+                    return Task.FromResult(RemoteFolderPath.Create(configuredPath.Value, AdvertisedDelimiter));
+                });
+
             this.Resolver = new MailFolderResolver(
                 remoteFolderCatalog,
+                this.FolderCreator,
                 this.ResolutionStore,
                 this.MappingChangeAuditor,
                 this.PersistenceSessionFactory,
@@ -314,6 +455,10 @@ public sealed class MailFolderResolverTests
         }
 
         internal MailFolderResolver Resolver { get; }
+
+        internal IRemoteFolderCreator FolderCreator { get; }
+
+        internal List<RemoteFolderPath> CreatedPaths { get; } = [];
 
         internal IMailFolderResolutionStore ResolutionStore { get; }
 
@@ -327,5 +472,17 @@ public sealed class MailFolderResolverTests
 
         internal void BindAliasTo(MailFolderResolution resolution) =>
             this.bindingsByAlias[resolution.Alias.Value] = resolution;
+
+        /// <summary>Models a mail server that answers the creation of one alias's folder by refusing it.</summary>
+        internal void RefuseCreationOf(MailFolderAlias alias) =>
+            this.FolderCreator
+                .CreateFolderAsync(
+                    Arg.Any<MailAccountId>(),
+                    alias,
+                    Arg.Any<RemoteFolderPath>(),
+                    Arg.Any<MailTransportSecurityPolicy>(),
+                    Arg.Any<CancellationToken>())
+                .Returns<Task<RemoteFolderPath>>(_ =>
+                    throw new RemoteFolderCreationRefusedException(PrimaryAccount, alias));
     }
 }
