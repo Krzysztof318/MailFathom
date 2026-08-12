@@ -5,19 +5,19 @@
 
 # Print the issue numbers a pull request body refers to, one per line, each number once.
 #
-# This is the superset of `collect-closing-references.sh`, and the two exist side by side because
-# they answer different questions. That one asks *what does merging this complete*, so a bare `#123`
-# is a mention rather than a contract and is deliberately left out. This one asks *what is this
-# change about*, and a mention answers it: a pull request that says "part of #123" or "the ceiling
-# #124 asked for" is a change somebody would want read in the light of that issue whether or not
-# merging closes it. Labelling reads this one; the reviewer's collection reads the other, because
-# what it holds a change to is still only what the merge closes.
+# This is the superset of `collect-closing-issues.sh`, and the two exist side by side because they
+# answer different questions. That one asks *what does merging this complete*, and it asks GitHub,
+# because the answer is the list a merge will act on. This one asks *what is this change about*, and
+# a mention answers it: a pull request that says "part of #123" or "the ceiling #124 asked for" is a
+# change somebody would want read in the light of that issue whether or not merging closes it. There
+# is no resolved answer to ask GitHub for, which is why this one is a reading of the body and the
+# other is not. Labelling reads this one; the reviewer's collection and every board write read the
+# other, because what they act on is only what the merge closes.
 #
-# Both spellings are matched, for the reason the other script gives: `#123` and the full URL to an
-# issue in this repository are one thing to GitHub. A cross-repository `owner/repo#123` is
-# deliberately neither — the number belongs to another project's namespace, and reading the `#123`
-# out of it would resolve to whichever local issue happens to hold that number, which is a label
-# earned from an issue nobody named.
+# Both spellings are matched: `#123` and the full URL to an issue in this repository are one thing to
+# GitHub. A cross-repository `owner/repo#123` is deliberately neither — the number belongs to another
+# project's namespace, and reading the `#123` out of it would resolve to whichever local issue
+# happens to hold that number, which is a label earned from an issue nobody named.
 #
 # Every keyword is matched too, by construction: `Closes #123` contains `#123`, so nothing has to
 # know which keywords GitHub acts on to see the issue behind one.

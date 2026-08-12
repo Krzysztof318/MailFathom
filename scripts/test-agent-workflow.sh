@@ -37,6 +37,7 @@ settle_bin_directory="$test_directory/fathom-review-settle-bin"
 collect_bin_directory="$test_directory/fathom-review-collect-bin"
 submit_bin_directory="$test_directory/fathom-review-submit-bin"
 board_bin_directory="$test_directory/fathom-review-board-bin"
+rules_board_bin_directory="$test_directory/pull-request-rules-board-bin"
 invocation_log="$test_directory/dotnet-invocations.log"
 workflow_invocation_log="$test_directory/workflow-invocations.log"
 fixture_branch='agent/workflow-fixture'
@@ -1568,7 +1569,16 @@ done
 
 case "$endpoint" in
   graphql)
-    response='{"data":{"repository":{"pullRequest":{"reviewThreads":{"nodes":[]}}}}}'
+    # Two queries reach this endpoint, told apart by the field they ask for. The closing issues are
+    # the ones GitHub resolved rather than the ones the body spells, which is why the answer here is
+    # a list rather than a body for something else to parse.
+    if [[ "$*" == *closingIssuesReferences* ]]; then
+      response='{"data":{"repository":{"pullRequest":{"closingIssuesReferences":{"nodes":[
+        {"number":11,"repository":{"nameWithOwner":"Krzysztof318/MailFathom"}},
+        {"number":12,"repository":{"nameWithOwner":"Krzysztof318/MailFathom"}}]}}}}}'
+    else
+      response='{"data":{"repository":{"pullRequest":{"reviewThreads":{"nodes":[]}}}}}'
+    fi
     ;;
   */issues/*/labels)
     # The one write these steps make, recorded rather than sent so a contract can read what would
@@ -1727,8 +1737,8 @@ run_fathom_review_collect() {
     export REPOSITORY='Krzysztof318/MailFathom'
     export PULL_REQUEST_NUMBER='1'
     export REVIEW_DIRECTORY="$collect_review_directory"
-    # The step runs the real `collect-closing-references.sh` out of the workspace, which on the
-    # runner holds the base commit and here holds the checkout the suite is testing.
+    # The step runs the real `collect-closing-issues.sh` out of the workspace, which on the runner
+    # holds the base commit and here holds the checkout the suite is testing.
     export GITHUB_WORKSPACE="$source_repository_root"
     export GITHUB_OUTPUT="$step_output_file"
     export FAKE_UNFETCHABLE_ISSUES='12'
@@ -1792,7 +1802,7 @@ run_fathom_review_model() {
     export MODEL='claude-sonnet-5'
     export SECURITY_MODEL='claude-opus-5'
     export SECURITY_LABEL='security'
-    export LABELLING_WORKFLOW='apply-pull-request-labels.yml'
+    export LABELLING_WORKFLOW='apply-pull-request-rules.yml'
     # Seconds rather than minutes, for the reason the settle contracts run on short windows: what is
     # asserted is the decision the loop takes, never the values the workflow declares.
     export LABELLING_LIMIT_SECONDS="$limit_seconds"
@@ -1879,9 +1889,9 @@ run_select_labels() {
     export FAKE_ISSUE_LABELS="$issue_labels"
     export FAKE_UNFETCHABLE_ISSUES="$unfetchable_issues"
     export FAKE_SECURITY_ISSUES="$security_issues"
-    bash "$source_repository_root/.github/pull-request-labels/select-labels.sh" \
+    bash "$source_repository_root/.github/pull-request/select-labels.sh" \
       'Krzysztof318/MailFathom' '1' \
-      "$source_repository_root/.github/pull-request-labels/collect-referenced-issues.sh" '10'
+      "$source_repository_root/.github/pull-request/collect-referenced-issues.sh" '10'
     # Standard output is the label list and standard error is what the client and the ceiling had to
     # say, so the two are kept apart here exactly as the caller keeps them apart. Folding them
     # together would make an issue the run could not fetch look like a label it earned.
@@ -1938,10 +1948,10 @@ run_apply_pull_request_labels() {
   local label_fails="$2"
   local output_file="$3"
   local request_file="$4"
-  local step_script="$test_directory/apply-pull-request-labels.sh"
+  local step_script="$test_directory/apply-pull-request-rules.sh"
 
   extract_workflow_step \
-    "$source_repository_root/.github/workflows/apply-pull-request-labels.yml" \
+    "$source_repository_root/.github/workflows/apply-pull-request-rules.yml" \
     'label' "$step_script"
   rm -f "$request_file"
 
@@ -1951,8 +1961,8 @@ run_apply_pull_request_labels() {
     export GH_TOKEN='fake-token'
     export REPOSITORY='Krzysztof318/MailFathom'
     export PULL_REQUEST_NUMBER='1'
-    export SELECT_LABELS_SCRIPT="$source_repository_root/.github/pull-request-labels/select-labels.sh"
-    export REFERENCED_ISSUES_SCRIPT="$source_repository_root/.github/pull-request-labels/collect-referenced-issues.sh"
+    export SELECT_LABELS_SCRIPT="$source_repository_root/.github/pull-request/select-labels.sh"
+    export REFERENCED_ISSUES_SCRIPT="$source_repository_root/.github/pull-request/collect-referenced-issues.sh"
     export REFERENCE_LIMIT='10'
     export FAKE_ISSUE_LABELS="$issue_labels"
     export FAKE_LABEL_REQUEST="$request_file"
@@ -2187,8 +2197,8 @@ arguments="$*"
 
 # The mutation is matched before the item query, because the reply to one names the field the other
 # reads and a looser order would answer the wrong call.
-if [[ "$arguments" == *'/pulls/'* ]]; then
-  cat "$FAKE_BOARD_DIRECTORY/body.txt"
+if [[ "$arguments" == *'closingIssuesReferences'* ]]; then
+  cat "$FAKE_BOARD_DIRECTORY/closing-issues.json"
 elif [[ "$arguments" == *'updateProjectV2ItemFieldValue'* ]]; then
   printf '%s\n' "$arguments" >> "$FAKE_BOARD_DIRECTORY/mutations.txt"
   echo '{"data":{"updateProjectV2ItemFieldValue":{"projectV2Item":{"id":"PVTI_item"}}}}'
@@ -2203,10 +2213,10 @@ fi
 FAKE_GH
 chmod +x "$board_bin_directory/gh"
 
-# The board the two writing steps see: one pull request body, one field carrying every option the
-# real board carries, and one item at the status the contract is about.
+# The board every writing step sees: the issues GitHub says the merge will close, one field carrying
+# every option the real board carries, and one item at the status the contract is about.
 prepare_fathom_review_board_state() {
-  local body="$1"
+  local closing_issues="$1"
   local current_status="$2"
 
   board_directory="$test_directory/fathom-review-board-state"
@@ -2214,14 +2224,23 @@ prepare_fathom_review_board_state() {
 
   rm -rf "$board_directory"
   mkdir -p "$board_directory"
-  printf '%s' "$body" > "$board_directory/body.txt"
   : > "$board_mutations_file"
+
+  jq -n --arg issues "$closing_issues" \
+    '{data: {repository: {pullRequest: {closingIssuesReferences: {nodes: (
+       $issues
+       | split(",")
+       | map(select(. != ""))
+       | map({number: (. | tonumber),
+              repository: {nameWithOwner: "Krzysztof318/MailFathom"}})
+     )}}}}}' > "$board_directory/closing-issues.json"
 
   cat > "$board_directory/field.json" <<'BOARD_FIELD'
 {"data":{"user":{"projectV2":{"id":"PVT_board","field":{"id":"PVTSSF_status","options":[
   {"id":"option-todo","name":"Todo"},
   {"id":"option-review","name":"In review"},
   {"id":"option-changes","name":"Changes requested"},
+  {"id":"option-conflicts","name":"Conflicts"},
   {"id":"option-ready","name":"Ready to merge"},
   {"id":"option-done","name":"Done"}
 ]}}}}}
@@ -2247,15 +2266,15 @@ export_fathom_review_board_environment() {
   export BOARD_OWNER='Krzysztof318'
   export BOARD_NUMBER='4'
   export STATUS_FIELD='Status'
-  export CLOSING_REFERENCES_SCRIPT="$source_repository_root/.github/fathom-review/collect-closing-references.sh"
-  export CLOSING_REFERENCE_LIMIT='5'
-  export BOARD_STATUS_SCRIPT="$source_repository_root/.github/fathom-review/write-board-status.sh"
+  export CLOSING_ISSUES_SCRIPT="$source_repository_root/.github/pull-request/collect-closing-issues.sh"
+  export CLOSING_ISSUE_LIMIT='5'
+  export BOARD_STATUS_SCRIPT="$source_repository_root/.github/pull-request/write-board-status.sh"
   export FAKE_BOARD_DIRECTORY="$board_directory"
 }
 
 run_fathom_review_board() {
   local verdict="$1"
-  local body="$2"
+  local closing_issues="$2"
   local current_status="$3"
   local output_file="$4"
   # The ordinary case is a configured board; the contract about an unconfigured one names the empty
@@ -2264,7 +2283,7 @@ run_fathom_review_board() {
   local step_script="$test_directory/fathom-review-board.sh"
 
   extract_fathom_review_step 'board' "$step_script"
-  prepare_fathom_review_board_state "$body" "$current_status"
+  prepare_fathom_review_board_state "$closing_issues" "$current_status"
 
   set +e
   (
@@ -2280,14 +2299,14 @@ run_fathom_review_board() {
 }
 
 run_fathom_review_announcement() {
-  local body="$1"
+  local closing_issues="$1"
   local current_status="$2"
   local output_file="$3"
   local board_token="${4-classic-token-that-is-not-real}"
   local step_script="$test_directory/fathom-review-announce.sh"
 
   extract_fathom_review_step 'in-review' "$step_script"
-  prepare_fathom_review_board_state "$body" "$current_status"
+  prepare_fathom_review_board_state "$closing_issues" "$current_status"
 
   set +e
   (
@@ -2303,7 +2322,7 @@ run_fathom_review_announcement() {
 fathom_review_moves_an_approved_pull_request_to_ready_to_merge() {
   local output_file="$test_directory/fathom-review-board-approved-output"
 
-  run_fathom_review_board 'approved' 'Closes #12' 'In progress' "$output_file"
+  run_fathom_review_board 'approved' '12' 'In progress' "$output_file"
 
   ((board_status == 0))
   assert_contains 'option=option-ready' "$board_mutations_file"
@@ -2313,7 +2332,7 @@ fathom_review_moves_an_approved_pull_request_to_ready_to_merge() {
 fathom_review_records_findings_as_changes_requested() {
   local output_file="$test_directory/fathom-review-board-changes-output"
 
-  run_fathom_review_board 'changes_requested' 'Fixes #12' 'In progress' "$output_file"
+  run_fathom_review_board 'changes_requested' '12' 'In progress' "$output_file"
 
   ((board_status == 0))
   assert_contains 'option=option-changes' "$board_mutations_file"
@@ -2326,29 +2345,30 @@ fathom_review_records_findings_as_changes_requested() {
 fathom_review_leaves_a_finished_item_alone() {
   local output_file="$test_directory/fathom-review-board-done-output"
 
-  run_fathom_review_board 'approved' 'Closes #12' 'Done' "$output_file"
+  run_fathom_review_board 'approved' '12' 'Done' "$output_file"
 
   ((board_status == 0))
   [[ ! -s "$board_mutations_file" ]]
-  assert_contains 'which a review does not overwrite' "$output_file"
+  assert_contains 'which this write does not overwrite' "$output_file"
 }
 
 fathom_review_leaves_a_blocked_item_alone() {
   local output_file="$test_directory/fathom-review-board-blocked-output"
 
-  run_fathom_review_board 'changes_requested' 'Closes #12' 'Blocked' "$output_file"
+  run_fathom_review_board 'changes_requested' '12' 'Blocked' "$output_file"
 
   ((board_status == 0))
   [[ ! -s "$board_mutations_file" ]]
   assert_contains 'Issue 12 is Blocked' "$output_file"
 }
 
-# A bare mention is not a contract, and GitHub closes nothing on one, so neither does this. The
-# reviewer's own collection reads the same script, which is what keeps the two readings identical.
+# A pull request GitHub resolved no closing reference on moves nothing. The reviewer's own
+# collection reads the same script, which is what keeps the contract it holds the change to and the
+# items this moves as one list.
 fathom_review_moves_nothing_for_a_pull_request_that_closes_no_issue() {
   local output_file="$test_directory/fathom-review-board-unlinked-output"
 
-  run_fathom_review_board 'approved' 'Follows #12 and refactors the loop.' 'Todo' "$output_file"
+  run_fathom_review_board 'approved' '' 'Todo' "$output_file"
 
   ((board_status == 0))
   [[ ! -s "$board_mutations_file" ]]
@@ -2363,7 +2383,7 @@ fathom_review_moves_nothing_for_a_pull_request_that_closes_no_issue() {
 fathom_review_announces_a_started_review() {
   local output_file="$test_directory/fathom-review-announce-output"
 
-  run_fathom_review_announcement 'Closes #12' 'In progress' "$output_file"
+  run_fathom_review_announcement '12' 'In progress' "$output_file"
 
   ((board_status == 0))
   assert_contains 'option=option-review' "$board_mutations_file"
@@ -2380,7 +2400,7 @@ fathom_review_announces_nothing_over_a_finished_or_blocked_item() {
   for previous_status in Done Blocked; do
     output_file="$test_directory/fathom-review-announce-over-${previous_status}-output"
 
-    run_fathom_review_announcement 'Closes #12' "$previous_status" "$output_file"
+    run_fathom_review_announcement '12' "$previous_status" "$output_file"
 
     ((board_status == 0))
     [[ ! -s "$board_mutations_file" ]]
@@ -2397,7 +2417,7 @@ fathom_review_announces_over_every_other_status() {
   for previous_status in Todo 'Ready to merge' '' ; do
     output_file="$test_directory/fathom-review-announce-over-${previous_status:-none}-output"
 
-    run_fathom_review_announcement 'Closes #12' "$previous_status" "$output_file"
+    run_fathom_review_announcement '12' "$previous_status" "$output_file"
 
     ((board_status == 0))
     assert_contains 'option=option-review' "$board_mutations_file"
@@ -2407,11 +2427,265 @@ fathom_review_announces_over_every_other_status() {
 fathom_review_writes_no_status_without_the_board_token() {
   local output_file="$test_directory/fathom-review-board-untokened-output"
 
-  run_fathom_review_board 'approved' 'Closes #12' 'In progress' "$output_file" ''
+  run_fathom_review_board 'approved' '12' 'In progress' "$output_file" ''
 
   ((board_status == 0))
   [[ ! -s "$board_mutations_file" ]]
   assert_contains 'BOARD_PROJECT_TOKEN is not set' "$output_file"
+}
+
+# The other direction of the same question. A caller that names the statuses it may act on has said
+# what it is entitled to move, and the write refuses everything else — including the statuses no
+# preserved list mentions, which is what lets a rule about an approved change stay silent about every
+# item that is not one.
+run_board_status_write() {
+  local status="$1"
+  local required_statuses="$2"
+  local current_status="$3"
+  local output_file="$4"
+
+  prepare_fathom_review_board_state '12' "$current_status"
+
+  set +e
+  (
+    export_fathom_review_board_environment 'classic-token-that-is-not-real'
+    bash "$source_repository_root/.github/pull-request/write-board-status.sh" \
+      "$status" '' "$required_statuses"
+  ) > "$output_file" 2>&1
+  board_status=$?
+  set -e
+}
+
+board_status_moves_an_item_a_rule_is_entitled_to_move() {
+  local output_file="$test_directory/board-status-required-match-output"
+
+  run_board_status_write 'Conflicts' 'Ready to merge' 'Ready to merge' "$output_file"
+
+  ((board_status == 0))
+  assert_contains 'option=option-conflicts' "$board_mutations_file"
+  assert_contains 'Issue 12 moved from Ready to merge to Conflicts' "$output_file"
+}
+
+# Every other status, including the two a preserved list would have named and the item carrying no
+# status at all. A conflict rule that moved those would be reporting the same conflict on every push
+# to the base branch for as long as it went unresolved.
+board_status_leaves_an_item_outside_the_required_statuses() {
+  local output_file
+  local current_status
+
+  for current_status in 'In progress' 'Changes requested' 'Blocked' 'Done' '' ; do
+    output_file="$test_directory/board-status-required-${current_status:-none}-output"
+
+    run_board_status_write 'Conflicts' 'Ready to merge' "$current_status" "$output_file"
+
+    ((board_status == 0))
+    [[ ! -s "$board_mutations_file" ]]
+    assert_contains 'so it is left where it stands' "$output_file"
+  done
+}
+
+# Every condition a pull request's state earns lives in one script, so a rule is an edit there rather
+# than a workflow of its own. What these assert is the rule and the authority it declares with it:
+# the caller passes both through unread, so a rule that forgot to bound itself would move an item
+# from anywhere.
+run_select_board_status() {
+  local mergeable="$1"
+  local output_file="$2"
+
+  jq -n --arg mergeable "$mergeable" \
+    '{number: 1, mergeable: $mergeable, isDraft: false, state: "OPEN", labels: []}' \
+    > "$test_directory/select-board-status-pull-request.json"
+
+  bash "$source_repository_root/.github/pull-request/select-board-status.sh" \
+    "$test_directory/select-board-status-pull-request.json" > "$output_file" 2>&1
+}
+
+select_board_status_earns_conflicts_from_ready_to_merge_alone() {
+  local output_file="$test_directory/select-board-status-conflicting"
+
+  run_select_board_status 'CONFLICTING' "$output_file"
+
+  assert_file_content $'Conflicts\tReady to merge\t' "$output_file"
+}
+
+# `UNKNOWN` is the answer GitHub gives while it is still computing one, which is the state every open
+# pull request is in for the seconds after a merge — exactly when this pipeline runs. Reading it as a
+# conflict would move an item on every merge.
+select_board_status_earns_nothing_until_github_has_decided() {
+  local output_file
+  local mergeable
+
+  for mergeable in MERGEABLE UNKNOWN; do
+    output_file="$test_directory/select-board-status-${mergeable}"
+
+    run_select_board_status "$mergeable" "$output_file"
+
+    assert_file_content '' "$output_file"
+  done
+}
+
+# The sweep itself, extracted from the workflow and run against a fake `gh` the way the reviewer's
+# own steps are. What it exercises is the part no script holds: reading every open pull request at
+# once, waiting for GitHub to decide mergeability, and passing each rule's own authority through to
+# the write without inspecting it.
+mkdir -p "$rules_board_bin_directory"
+cat > "$rules_board_bin_directory/gh" <<'FAKE_GH'
+#!/usr/bin/env bash
+set -euo pipefail
+
+: "${FAKE_BOARD_DIRECTORY:?FAKE_BOARD_DIRECTORY must identify where the board state is recorded}"
+
+filter=''
+reading_filter='false'
+
+for argument in "$@"; do
+  if [[ "$reading_filter" == 'true' ]]; then
+    filter="$argument"
+    reading_filter='false'
+    continue
+  fi
+
+  [[ "$argument" == '--jq' ]] && reading_filter='true'
+done
+
+arguments="$*"
+
+if [[ "$arguments" == *'pullRequests(states: OPEN'* ]]; then
+  # A countdown of `UNKNOWN` answers before the settled one, which is what GitHub does after a merge:
+  # it computes mergeability when asked and reports `UNKNOWN` until it has. A fake that answered at
+  # once would pass whether or not the step waited at all.
+  remaining="$(cat "$FAKE_BOARD_DIRECTORY/mergeability-countdown" 2>/dev/null || printf '0')"
+
+  if ((remaining > 0)); then
+    printf '%s' "$((remaining - 1))" > "$FAKE_BOARD_DIRECTORY/mergeability-countdown"
+    mergeable='UNKNOWN'
+  else
+    mergeable="$(cat "$FAKE_BOARD_DIRECTORY/mergeable")"
+  fi
+
+  response="$(
+    jq -nc --arg mergeable "$mergeable" \
+      --argjson total "$(cat "$FAKE_BOARD_DIRECTORY/open-pull-requests" 2>/dev/null || printf '1')" \
+      '{data: {repository: {pullRequests: {totalCount: $total, nodes: [
+         {number: 1, mergeable: $mergeable, isDraft: false, state: "OPEN",
+          labels: {nodes: []}}]}}}}'
+  )"
+elif [[ "$arguments" == *'closingIssuesReferences'* ]]; then
+  response="$(cat "$FAKE_BOARD_DIRECTORY/closing-issues.json")"
+elif [[ "$arguments" == *'updateProjectV2ItemFieldValue'* ]]; then
+  printf '%s\n' "$arguments" >> "$FAKE_BOARD_DIRECTORY/mutations.txt"
+  response='{"data":{"updateProjectV2ItemFieldValue":{"projectV2Item":{"id":"PVTI_item"}}}}'
+elif [[ "$arguments" == *'projectItems'* ]]; then
+  response="$(cat "$FAKE_BOARD_DIRECTORY/item.json")"
+elif [[ "$arguments" == *'ProjectV2SingleSelectField'* ]]; then
+  response="$(cat "$FAKE_BOARD_DIRECTORY/field.json")"
+else
+  echo "The sweep made a call these contracts do not answer: $arguments" >&2
+  exit 1
+fi
+
+if [[ -n "$filter" ]]; then
+  printf '%s' "$response" | jq -rc "$filter"
+else
+  printf '%s' "$response"
+fi
+FAKE_GH
+chmod +x "$rules_board_bin_directory/gh"
+
+run_pull_request_rules_board() {
+  local mergeable="$1"
+  local current_status="$2"
+  local unknown_answers="$3"
+  local output_file="$4"
+  local limit_seconds="${5:-5}"
+  local step_script="$test_directory/pull-request-rules-board.sh"
+
+  extract_workflow_step \
+    "$source_repository_root/.github/workflows/apply-pull-request-rules.yml" \
+    'board' "$step_script"
+
+  prepare_fathom_review_board_state '12' "$current_status"
+  printf '%s' "$mergeable" > "$board_directory/mergeable"
+  printf '%s' "$unknown_answers" > "$board_directory/mergeability-countdown"
+  printf '%s' "${open_pull_requests:-1}" > "$board_directory/open-pull-requests"
+
+  set +e
+  (
+    export PATH="$rules_board_bin_directory:$PATH"
+    export GH_TOKEN='ghs_workflowtokenthatisnotreal'
+    export BOARD_TOKEN='classic-token-that-is-not-real'
+    export REPOSITORY='Krzysztof318/MailFathom'
+    export BOARD_OWNER='Krzysztof318'
+    export BOARD_NUMBER='4'
+    export STATUS_FIELD='Status'
+    export BASE_BRANCH='main'
+    export SELECT_BOARD_STATUS_SCRIPT="$source_repository_root/.github/pull-request/select-board-status.sh"
+    export CLOSING_ISSUES_SCRIPT="$source_repository_root/.github/pull-request/collect-closing-issues.sh"
+    export BOARD_STATUS_SCRIPT="$source_repository_root/.github/pull-request/write-board-status.sh"
+    export CLOSING_ISSUE_LIMIT='5'
+    export PULL_REQUEST_LIMIT='50'
+    export MERGEABILITY_LIMIT_SECONDS="$limit_seconds"
+    export MERGEABILITY_POLL_SECONDS='1'
+    export FAKE_BOARD_DIRECTORY="$board_directory"
+    bash "$step_script"
+  ) > "$output_file" 2>&1
+  board_status=$?
+  set -e
+}
+
+pull_request_rules_move_a_pull_request_that_stopped_merging() {
+  local output_file="$test_directory/pull-request-rules-conflicting-output"
+
+  run_pull_request_rules_board 'CONFLICTING' 'Ready to merge' '0' "$output_file"
+
+  ((board_status == 0))
+  assert_contains 'option=option-conflicts' "$board_mutations_file"
+  assert_contains 'Issue 12 moved from Ready to merge to Conflicts' "$output_file"
+}
+
+pull_request_rules_move_nothing_for_a_pull_request_that_still_merges() {
+  local output_file="$test_directory/pull-request-rules-mergeable-output"
+
+  run_pull_request_rules_board 'MERGEABLE' 'Ready to merge' '0' "$output_file"
+
+  ((board_status == 0))
+  [[ ! -s "$board_mutations_file" ]]
+}
+
+# The wait is the whole difference between a sweep that reports conflicts and one that reports the
+# seconds after a merge. Every open pull request reads `UNKNOWN` then, and a step that acted on the
+# first answer would move nothing on the merge that caused the conflict and everything on the next.
+pull_request_rules_wait_for_github_to_decide_mergeability() {
+  local output_file="$test_directory/pull-request-rules-waited-output"
+
+  run_pull_request_rules_board 'CONFLICTING' 'Ready to merge' '2' "$output_file"
+
+  ((board_status == 0))
+  assert_contains 'option=option-conflicts' "$board_mutations_file"
+}
+
+# The ceiling on how many open pull requests one sweep reads reports what it cut, for the reason
+# every ceiling here does: a pull request nobody was told about is a board item silently left behind.
+pull_request_rules_report_the_pull_requests_the_ceiling_cut() {
+  local output_file="$test_directory/pull-request-rules-ceiling-output"
+  local open_pull_requests='80'
+
+  run_pull_request_rules_board 'MERGEABLE' 'Ready to merge' '0' "$output_file"
+
+  ((board_status == 0))
+  assert_contains '80 pull requests are open against main and this run read the 1' "$output_file"
+}
+
+# What the window did not cover is named rather than guessed at, because the pull request GitHub
+# never answered for is the one this run did not decide — and the next push to `main` decides it.
+pull_request_rules_report_a_pull_request_github_never_decided() {
+  local output_file="$test_directory/pull-request-rules-undecided-output"
+
+  run_pull_request_rules_board 'CONFLICTING' 'Ready to merge' '99' "$output_file" 2
+
+  ((board_status == 0))
+  [[ ! -s "$board_mutations_file" ]]
+  assert_contains 'had not decided whether #1 still merges' "$output_file"
 }
 
 # The `describes:` marker is what tells a reviewer which pages a change to the code obliges, and it is
@@ -2976,16 +3250,45 @@ obligation_index_caps_the_tests_it_lists_for_one_type() {
 }
 
 # Which issues a pull request closes is its stated contract, and merging closes every one of them.
-# A reviewer given fewer than GitHub acts on can approve a change that finishes one and leaves
-# another closed unread, so which keywords and which spellings count is pinned here rather than left
-# to a grep nobody rereads.
-run_closing_references() {
-  local body="$1" output_file="$2"
+# The answer comes from GitHub rather than from a reading of the body, so what is pinned here is what
+# the script does with that answer: which of the returned issues it acts on, and what it says about
+# the ones a ceiling cut.
+closing_issues_bin_directory="$test_directory/closing-issues-bin"
+mkdir -p "$closing_issues_bin_directory"
 
-  printf '%s\n' "$body" > "$test_directory/closing-body.md"
+cat > "$closing_issues_bin_directory/gh" <<'FAKE_GH'
+#!/usr/bin/env bash
+set -euo pipefail
 
-  bash "$source_repository_root/.github/fathom-review/collect-closing-references.sh" \
-    "$test_directory/closing-body.md" 'Krzysztof318/MailFathom' > "$output_file" 2>&1
+: "${FAKE_CLOSING_ISSUES_FILE:?FAKE_CLOSING_ISSUES_FILE must name the answer to return}"
+
+cat "$FAKE_CLOSING_ISSUES_FILE"
+FAKE_GH
+chmod +x "$closing_issues_bin_directory/gh"
+
+# The nodes GitHub returns, written as the query shapes them. A repository is stated per node because
+# a closing reference can name an issue in another project, which this script drops and the rest of
+# the pipeline must never be handed.
+prepare_closing_issues_answer() {
+  local nodes="$1"
+
+  jq -n --argjson nodes "$nodes" \
+    '{data: {repository: {pullRequest: {closingIssuesReferences: {nodes: $nodes}}}}}' \
+    > "$test_directory/closing-issues-answer.json"
+}
+
+run_closing_issues() {
+  local nodes="$1" output_file="$2" note_file="${3:-/dev/null}" limit="${4:-0}"
+
+  prepare_closing_issues_answer "$nodes"
+
+  (
+    export PATH="$closing_issues_bin_directory:$PATH"
+    export FAKE_CLOSING_ISSUES_FILE="$test_directory/closing-issues-answer.json"
+
+    bash "$source_repository_root/.github/pull-request/collect-closing-issues.sh" \
+      'Krzysztof318/MailFathom' '1' "$limit"
+  ) > "$output_file" 2> "$note_file"
 }
 
 # The superset the labelling pipeline reads, and the reason the two scripts stand side by side: a
@@ -2997,7 +3300,7 @@ run_referenced_issues() {
 
   printf '%s\n' "$body" > "$test_directory/referenced-body.md"
 
-  bash "$source_repository_root/.github/pull-request-labels/collect-referenced-issues.sh" \
+  bash "$source_repository_root/.github/pull-request/collect-referenced-issues.sh" \
     "$test_directory/referenced-body.md" 'Krzysztof318/MailFathom' "$limit" > "$output_file" 2>&1
 }
 
@@ -3053,7 +3356,7 @@ referenced_issues_report_what_the_ceiling_cut() {
 
   # The two streams are kept apart here for the reason the caller keeps them apart: the list is what
   # decides the labels, and the note is what a reader is told about the part that did not fit.
-  bash "$source_repository_root/.github/pull-request-labels/collect-referenced-issues.sh" \
+  bash "$source_repository_root/.github/pull-request/collect-referenced-issues.sh" \
     "$test_directory/referenced-body.md" 'Krzysztof318/MailFathom' 2 \
     > "$output_file" 2> "$note_file"
 
@@ -3061,95 +3364,87 @@ referenced_issues_report_what_the_ceiling_cut() {
   assert_contains 'refers to 3 issues and this covers the first 2' "$note_file"
 }
 
-closing_references_collect_every_issue_the_body_closes() {
-  local output_file="$test_directory/closing-references-all"
+closing_issues_collect_every_issue_the_merge_will_close() {
+  local output_file="$test_directory/closing-issues-all"
 
-  run_closing_references \
-    $'Closes #265\n\nThis also Fixed #266 and resolves: #270.' \
+  run_closing_issues \
+    '[{"number": 265, "repository": {"nameWithOwner": "Krzysztof318/MailFathom"}},
+      {"number": 266, "repository": {"nameWithOwner": "Krzysztof318/MailFathom"}},
+      {"number": 270, "repository": {"nameWithOwner": "Krzysztof318/MailFathom"}}]' \
     "$output_file"
 
   assert_file_content $'265\n266\n270' "$output_file"
 }
 
-# GitHub acts on nine spellings, not the three a body usually uses. One this script missed would
-# close its issue on merge with nothing having read what it asked for.
-closing_references_match_every_keyword_github_acts_on() {
-  local output_file="$test_directory/closing-references-keywords"
+# A pull request that closes nothing is the ordinary shape of a release's changelog half, and every
+# caller reads the empty stream as *nothing to act on*. A single blank line would be one issue number
+# to each of them.
+closing_issues_print_nothing_when_the_merge_closes_nothing() {
+  local output_file="$test_directory/closing-issues-none"
 
-  run_closing_references \
-    $'close #1\ncloses #2\nclosed #3\nfix #4\nfixes #5\nfixed #6\nresolve #7\nresolves #8\nresolved #9' \
-    "$output_file"
+  run_closing_issues '[]' "$output_file"
 
-  assert_file_content $'1\n2\n3\n4\n5\n6\n7\n8\n9' "$output_file"
+  assert_file_content '' "$output_file"
 }
 
-# A keyword has to stand as its own word. Unanchored, `resolve[sd]?` matches the tail of
-# `unresolved` and `fix(e[sd])?` the tail of `prefixes`, so ordinary prose would be read as a closing
-# reference the author never wrote — and over-collecting is worse here than missing one, because the
-# reviewer then judges the change against an acceptance list nothing obliged it to meet and reports
-# it failing a contract that does not exist.
-closing_references_ignore_a_keyword_inside_another_word() {
-  local output_file="$test_directory/closing-references-word-boundary"
+# GitHub resolves a closing reference to an issue in another repository too, and this is the one
+# place the script narrows what it returns: every caller acts within this repository, so an issue
+# somewhere else is neither a contract this review can fetch nor an item on this board.
+closing_issues_ignore_another_repository() {
+  local output_file="$test_directory/closing-issues-cross-repository"
 
-  run_closing_references \
-    $'Something unresolved #125 in the design.\nThe pattern prefixes #124 with docs/.\nCloses #200' \
-    "$output_file"
-
-  assert_file_content '200' "$output_file"
-}
-
-# A bare reference is a mention rather than a contract — GitHub closes nothing on it — and a link to
-# another project's issue is one this reviewer cannot fetch and must not hold the change to.
-closing_references_ignore_a_mention_and_another_repository() {
-  local output_file="$test_directory/closing-references-mentions"
-
-  run_closing_references \
-    $'Depends on #123, as #124 describes.\nFixes https://github.com/SomebodyElse/Other/issues/999\nCloses https://github.com/Krzysztof318/MailFathom/issues/271' \
+  run_closing_issues \
+    '[{"number": 999, "repository": {"nameWithOwner": "SomebodyElse/Other"}},
+      {"number": 271, "repository": {"nameWithOwner": "Krzysztof318/MailFathom"}}]' \
     "$output_file"
 
   assert_file_content '271' "$output_file"
 }
 
 # The ceiling reports what it cut, because the step that applies it promises exactly that of every
-# ceiling it defines. A reference nobody was told about is an issue that closes on merge with its
-# acceptance list unread, which is the failure the whole collection exists to prevent.
-closing_references_report_what_the_ceiling_cut() {
-  local output_file="$test_directory/closing-references-ceiling"
-  local note_file="$test_directory/closing-references-ceiling-note"
+# ceiling it defines. An issue nobody was told about is one that closes on merge with its acceptance
+# list unread and its board item left behind, which is the failure the ceiling's report exists to
+# prevent.
+closing_issues_report_what_the_ceiling_cut() {
+  local output_file="$test_directory/closing-issues-ceiling"
+  local note_file="$test_directory/closing-issues-ceiling-note"
 
-  printf '%s\n' 'Closes #1 closes #2 fixes #3 resolved #4 close #5 fixed #6 resolves #7' \
-    > "$test_directory/closing-body.md"
-
-  bash "$source_repository_root/.github/fathom-review/collect-closing-references.sh" \
-    "$test_directory/closing-body.md" 'Krzysztof318/MailFathom' 5 \
-    > "$output_file" 2> "$note_file"
+  run_closing_issues \
+    '[{"number": 1, "repository": {"nameWithOwner": "Krzysztof318/MailFathom"}},
+      {"number": 2, "repository": {"nameWithOwner": "Krzysztof318/MailFathom"}},
+      {"number": 3, "repository": {"nameWithOwner": "Krzysztof318/MailFathom"}},
+      {"number": 4, "repository": {"nameWithOwner": "Krzysztof318/MailFathom"}},
+      {"number": 5, "repository": {"nameWithOwner": "Krzysztof318/MailFathom"}},
+      {"number": 6, "repository": {"nameWithOwner": "Krzysztof318/MailFathom"}},
+      {"number": 7, "repository": {"nameWithOwner": "Krzysztof318/MailFathom"}}]' \
+    "$output_file" "$note_file" 5
 
   assert_file_content $'1\n2\n3\n4\n5' "$output_file"
-  assert_contains 'closes 7 issues and this review covers the first 5' "$note_file"
+  assert_contains 'closes 7 issues and this run covers the first 5' "$note_file"
 }
 
-# The note is a report of a cut rather than a line the collection always writes, so a body under the
-# ceiling produces none. A truncation file that always had content would put a sentence about
+# The note is a report of a cut rather than a line the collection always writes, so an answer under
+# the ceiling produces none. A truncation file that always had content would put a sentence about
 # completeness into every review body it appears in.
-closing_references_report_nothing_when_the_ceiling_is_not_reached() {
-  local output_file="$test_directory/closing-references-under-ceiling"
-  local note_file="$test_directory/closing-references-under-ceiling-note"
+closing_issues_report_nothing_when_the_ceiling_is_not_reached() {
+  local output_file="$test_directory/closing-issues-under-ceiling"
+  local note_file="$test_directory/closing-issues-under-ceiling-note"
 
-  printf '%s\n' 'Closes #1 and closes #2' > "$test_directory/closing-body.md"
-
-  bash "$source_repository_root/.github/fathom-review/collect-closing-references.sh" \
-    "$test_directory/closing-body.md" 'Krzysztof318/MailFathom' 5 \
-    > "$output_file" 2> "$note_file"
+  run_closing_issues \
+    '[{"number": 1, "repository": {"nameWithOwner": "Krzysztof318/MailFathom"}},
+      {"number": 2, "repository": {"nameWithOwner": "Krzysztof318/MailFathom"}}]' \
+    "$output_file" "$note_file" 5
 
   assert_file_content $'1\n2' "$output_file"
   assert_file_content '' "$note_file"
 }
 
-closing_references_report_each_issue_once() {
-  local output_file="$test_directory/closing-references-duplicates"
+closing_issues_report_each_issue_once() {
+  local output_file="$test_directory/closing-issues-duplicates"
 
-  run_closing_references \
-    $'Closes #265\n\nAnd again, closes #265.' \
+  run_closing_issues \
+    '[{"number": 265, "repository": {"nameWithOwner": "Krzysztof318/MailFathom"}},
+      {"number": 265, "repository": {"nameWithOwner": "Krzysztof318/MailFathom"}}]' \
     "$output_file"
 
   assert_file_content '265' "$output_file"
@@ -3784,7 +4079,7 @@ every_write_scope_is_one_the_policy_records() {
 
   recorded_scopes="$(
     printf '%s\n' \
-      'apply-pull-request-labels.yml pull-requests: write' \
+      'apply-pull-request-rules.yml pull-requests: write' \
       'codeql.yml security-events: write' \
       'nightly.yml attestations: write' \
       'nightly.yml id-token: write' \
@@ -4159,10 +4454,10 @@ workflow_scripts_use_flat_manual_layout() {
   # `Fathom review` invokes this one directly rather than through `bash`, so the mode git records is
   # part of the contract. The tests above run it through `bash` and would pass without it.
   [[ -x "$source_repository_root/.github/fathom-review/index-obligations.sh" ]]
-  [[ -x "$source_repository_root/.github/fathom-review/collect-closing-references.sh" ]]
-  [[ -x "$source_repository_root/.github/fathom-review/write-board-status.sh" ]]
-  [[ -x "$source_repository_root/.github/pull-request-labels/select-labels.sh" ]]
-  [[ -x "$source_repository_root/.github/pull-request-labels/collect-referenced-issues.sh" ]]
+  [[ -x "$source_repository_root/.github/pull-request/collect-closing-issues.sh" ]]
+  [[ -x "$source_repository_root/.github/pull-request/write-board-status.sh" ]]
+  [[ -x "$source_repository_root/.github/pull-request/select-labels.sh" ]]
+  [[ -x "$source_repository_root/.github/pull-request/collect-referenced-issues.sh" ]]
 }
 
 # The per-file licensing mark, everywhere the analyzer that applies it cannot reach. IDE0073 reads
@@ -4401,6 +4696,15 @@ run_test fathom_review_announces_a_started_review
 run_test fathom_review_announces_nothing_over_a_finished_or_blocked_item
 run_test fathom_review_announces_over_every_other_status
 run_test fathom_review_writes_no_status_without_the_board_token
+run_test board_status_moves_an_item_a_rule_is_entitled_to_move
+run_test board_status_leaves_an_item_outside_the_required_statuses
+run_test select_board_status_earns_conflicts_from_ready_to_merge_alone
+run_test select_board_status_earns_nothing_until_github_has_decided
+run_test pull_request_rules_move_a_pull_request_that_stopped_merging
+run_test pull_request_rules_move_nothing_for_a_pull_request_that_still_merges
+run_test pull_request_rules_wait_for_github_to_decide_mergeability
+run_test pull_request_rules_report_the_pull_requests_the_ceiling_cut
+run_test pull_request_rules_report_a_pull_request_github_never_decided
 run_test every_documentation_page_declares_what_it_describes
 run_test every_describes_pattern_matches_something_that_exists
 run_test no_documentation_page_carries_the_third_party_notice_twice
@@ -4415,13 +4719,12 @@ run_test referenced_issues_collect_a_link_to_an_issue_in_this_repository
 run_test referenced_issues_ignore_another_repository
 run_test referenced_issues_report_each_issue_once
 run_test referenced_issues_report_what_the_ceiling_cut
-run_test closing_references_collect_every_issue_the_body_closes
-run_test closing_references_match_every_keyword_github_acts_on
-run_test closing_references_ignore_a_keyword_inside_another_word
-run_test closing_references_ignore_a_mention_and_another_repository
-run_test closing_references_report_what_the_ceiling_cut
-run_test closing_references_report_nothing_when_the_ceiling_is_not_reached
-run_test closing_references_report_each_issue_once
+run_test closing_issues_collect_every_issue_the_merge_will_close
+run_test closing_issues_print_nothing_when_the_merge_closes_nothing
+run_test closing_issues_ignore_another_repository
+run_test closing_issues_report_what_the_ceiling_cut
+run_test closing_issues_report_nothing_when_the_ceiling_is_not_reached
+run_test closing_issues_report_each_issue_once
 run_test obligation_index_reports_a_changed_source_no_test_reaches
 run_test obligation_index_credits_a_test_the_change_adds
 run_test obligation_index_names_a_test_the_change_left_alone

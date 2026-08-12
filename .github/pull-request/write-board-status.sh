@@ -3,64 +3,70 @@
 # Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 # Project repository: https://github.com/Krzysztof318/MailFathom
 
-# Write one `Status` value on the roadmap board, on every issue a pull request's body closes.
+# Write one `Status` value on the roadmap board, on every issue merging a pull request will close.
 #
-# `Fathom review` writes the board twice — once when the review starts and once when it concludes —
-# and the two writes differ in exactly one thing: which value they write. Everything else is the
-# same walk: read the body, collect what it closes, resolve the field and its option by name, find
-# the item on *this* board, and mutate it. That is why it lives here rather than twice in the
-# workflow, where the second copy would be the one that stops matching the first.
+# Three writes share this walk today: `Fathom review` announcing that a review is running and
+# recording its verdict, and `Apply pull request rules` moving an item whose pull request stopped
+# merging. They differ in which value they write and in which statuses they may write it over;
+# everything else is the same — collect what the pull request closes, resolve the field and its
+# option by name, find the item on *this* board, and mutate it. That is why the walk lives here
+# rather than once per caller, where the second copy is the one that stops matching the first.
 #
-# The value and the preserved list are arguments because they are the caller's decision, even where
-# both callers currently decide the same thing: `Done` is the merge and the close and `Blocked` is
-# the one status a hand writes, and neither is a statement a review gets to erase from either end
-# of itself.
+# Both lists of statuses are arguments, because which statuses a write may act on is the caller's
+# statement about its own authority rather than a property of writing. They are the two directions
+# of one question and a caller uses whichever one says what it means:
 #
-# Failures are graded the way the workflow they run in is: it gates nothing, so a red run over a
-# board a hand can correct is noise. A missing field or a renamed option is loud, because it is a
-# configuration defect that leaves the column empty while the run reports success; a single issue
-# that could not be read or moved is a warning naming that issue.
+# - The preserved list is what a write refuses to overwrite. `Done` is the merge and the close and
+#   `Blocked` is the one status a hand writes, and neither is a statement a review gets to erase
+#   from either end of itself.
+# - The required list is what a write may act on and nothing else. A rule that says *an approved
+#   change stopped merging* is only true of an item that is currently approved, so it names the one
+#   status it is entitled to move and leaves every other item alone rather than enumerating the
+#   statuses it would otherwise trample.
 #
-# Usage: write-board-status.sh <status> [preserved-statuses]
+# Failures are graded the way the workflows they run in are: neither gates anything, so a red run
+# over a board a hand can correct is noise. A missing field or a renamed option is loud, because it
+# is a configuration defect that leaves the column empty while the run reports success; a single
+# issue that could not be read or moved is a warning naming that issue.
+#
+# Usage: write-board-status.sh <status> [preserved-statuses] [required-statuses]
 #
 # Environment:
-#   GH_TOKEN                   the workflow token, which reads the pull request body
-#   BOARD_TOKEN                a classic token carrying the `project` scope, used for the project
-#                              calls and nothing else; empty means the board is left alone
-#   REPOSITORY                 owner/name of the repository the pull request belongs to
-#   PULL_REQUEST_NUMBER        the pull request whose body states the contract
-#   BOARD_OWNER                the login the project belongs to
-#   BOARD_NUMBER               the project number in that login's namespace
-#   STATUS_FIELD               the single-select field to write
-#   CLOSING_REFERENCES_SCRIPT  path to `collect-closing-references.sh`
-#   CLOSING_REFERENCE_LIMIT    how many closing references to act on
+#   GH_TOKEN                the workflow token, which reads the pull request
+#   BOARD_TOKEN             a classic token carrying the `project` scope, used for the project calls
+#                           and nothing else; empty means the board is left alone
+#   REPOSITORY              owner/name of the repository the pull request belongs to
+#   PULL_REQUEST_NUMBER     the pull request whose closing references state the contract
+#   BOARD_OWNER             the login the project belongs to
+#   BOARD_NUMBER            the project number in that login's namespace
+#   STATUS_FIELD            the single-select field to write
+#   CLOSING_ISSUES_SCRIPT   path to `collect-closing-issues.sh`
+#   CLOSING_ISSUE_LIMIT     how many closing issues to act on
 
 set -euo pipefail
 
 status="${1:?the status to write is required}"
 preserved_statuses="${2:-}"
+required_statuses="${3:-}"
 
 : "${BOARD_OWNER:?BOARD_OWNER must name the login the project belongs to}"
 : "${BOARD_NUMBER:?BOARD_NUMBER must name the project}"
 : "${STATUS_FIELD:?STATUS_FIELD must name the field to write}"
 : "${REPOSITORY:?REPOSITORY must name the repository}"
 : "${PULL_REQUEST_NUMBER:?PULL_REQUEST_NUMBER must name the pull request}"
-: "${CLOSING_REFERENCES_SCRIPT:?CLOSING_REFERENCES_SCRIPT must point at collect-closing-references.sh}"
+: "${CLOSING_ISSUES_SCRIPT:?CLOSING_ISSUES_SCRIPT must point at collect-closing-issues.sh}"
 
 if [[ -z "${BOARD_TOKEN:-}" ]]; then
   echo '::notice::BOARD_PROJECT_TOKEN is not set, so no board status was written.'
   exit 0
 fi
 
-body_file="$(mktemp)"
 issues_file="$(mktemp)"
-
-gh api "repos/${REPOSITORY}/pulls/${PULL_REQUEST_NUMBER}" --jq '.body // ""' > "$body_file"
 
 # A pull request that closes nothing moves nothing, which is the ordinary shape of a release's
 # changelog half and of any change opened without a contract. The reviewer says so about the
 # contract it could not read; this says so about the board and ends green.
-"$CLOSING_REFERENCES_SCRIPT" "$body_file" "$REPOSITORY" "${CLOSING_REFERENCE_LIMIT:-0}" \
+"$CLOSING_ISSUES_SCRIPT" "$REPOSITORY" "$PULL_REQUEST_NUMBER" "${CLOSING_ISSUE_LIMIT:-0}" \
   > "$issues_file"
 
 if [[ ! -s "$issues_file" ]]; then
@@ -162,8 +168,17 @@ while IFS= read -r issue_number; do
   item_id="${entry%% *}"
   current_status="${entry#* }"
 
+  # The allowlist is asked first, because a caller that states one has said what it is entitled to
+  # move and everything outside that list is outside its authority — including the statuses the
+  # blocklist names, which is why a caller passing a required list need not repeat them.
+  if [[ -n "$required_statuses" && ",${required_statuses}," != *",${current_status},"* ]]; then
+    printf '::notice::Issue %s is %s rather than %s, so it is left where it stands.\n' \
+      "$issue_number" "${current_status:-in no status}" "$required_statuses"
+    continue
+  fi
+
   if [[ -n "$preserved_statuses" && ",${preserved_statuses}," == *",${current_status},"* ]]; then
-    printf '::notice::Issue %s is %s, which a review does not overwrite.\n' \
+    printf '::notice::Issue %s is %s, which this write does not overwrite.\n' \
       "$issue_number" "$current_status"
     continue
   fi
