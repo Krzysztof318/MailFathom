@@ -11,6 +11,8 @@ using MailFathom.Application.Emails.Search;
 using MailFathom.Application.Retrieval;
 using MailFathom.Application.Retrieval.AskMail;
 using MailFathom.Application.Retrieval.AskMail.Audit;
+using MailFathom.Application.SensitiveContent.Detection;
+using MailFathom.Application.SensitiveContent.Egress;
 using MailFathom.Application.UnitTests.TestDoubles;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Answering.Audit;
@@ -32,6 +34,9 @@ namespace MailFathom.Application.UnitTests.Retrieval.AskMail;
 public sealed class MailboxQuestionReaderTests
 {
     private const string ServedAccountId = "personal";
+
+    /// <summary>The literal the scanner in the guarded-egress tests reports, standing in for a credential in mail.</summary>
+    private const string Marker = "AKIAEXAMPLEKEY";
 
     private static readonly DateTimeOffset Now = new(2026, 8, 8, 12, 0, 0, TimeSpan.Zero);
 
@@ -522,6 +527,90 @@ public sealed class MailboxQuestionReaderTests
         Assert.Empty(auditTrail.Runs);
     }
 
+    /// <summary>An answer is mail content restated, and it is the one text of a run nothing else has looked at.</summary>
+    [Fact]
+    public async Task AnswerQuestionAsync_ASwitchedOnScanner_RedactsTheAnswerBeforeItIsPublished()
+    {
+        // Arrange
+        using var egress = ScanningSensitiveContentEgress.Finding(Marker, TimeProvider.System);
+        var answerer = new RecordingMailQuestionAnswerer().Answering($"they sent the key {Marker} on Tuesday");
+        var reader = ReaderOver(answerer, egressGuard: egress.Guard);
+
+        // Act
+        var result = await AnswerAsync(reader, new AskMailRequest { QuestionText = "what key did they send" });
+
+        // Assert
+        Assert.Equal("they sent the key [redacted:CloudKey] on Tuesday", result.AnswerText);
+    }
+
+    /// <summary>A citation carries one text of the message it names, and it is published to the caller like any other.</summary>
+    [Fact]
+    public async Task AnswerQuestionAsync_ASwitchedOnScanner_RedactsTheSubjectEveryCitationCarries()
+    {
+        // Arrange
+        using var egress = ScanningSensitiveContentEgress.Finding(Marker, TimeProvider.System);
+        var answerer = new RecordingMailQuestionAnswerer().Answering(
+            "an answer",
+            PassageOf(1, "the extract") with { Subject = $"re: {Marker}" });
+        var reader = ReaderOver(answerer, egressGuard: egress.Guard);
+
+        // Act
+        var result = await AnswerAsync(reader, new AskMailRequest { QuestionText = "what key did they send" });
+
+        // Assert
+        Assert.Equal("re: [redacted:CloudKey]", Assert.Single(result.Citations).Subject);
+    }
+
+    /// <summary>A subject no response will publish is a scan nobody needs, and under the analyzer it is a round trip too.</summary>
+    [Fact]
+    public async Task AnswerQuestionAsync_MoreCitationsThanOneResponseNames_ScansOnlyTheOnesItPublishes()
+    {
+        // Arrange
+        using var egress = ScanningSensitiveContentEgress.Finding(Marker, TimeProvider.System);
+        var answerer = new RecordingMailQuestionAnswerer().Answering(
+            "an answer",
+            [.. Enumerable.Range(1, 4).Select(position =>
+                PassageOf(position, "an extract") with { Subject = $"re: {position}" })]);
+        var reader = ReaderOver(answerer, bounds: MailAnswerBounds.Create(20_000, 2), egressGuard: egress.Guard);
+
+        // Act
+        var result = await AnswerAsync(reader, new AskMailRequest { QuestionText = "what was agreed" });
+
+        // Assert
+        Assert.Equal(2, result.Citations.Count);
+        Assert.True(result.CitationsWereTruncated);
+        Assert.Equal(["an answer", "re: 1", "re: 2"], egress.Scanner.ScannedTexts);
+    }
+
+    /// <summary>Serving an answer a scanner could not read would be the leak the switch was turned on to prevent.</summary>
+    [Fact]
+    public async Task AnswerQuestionAsync_ADetectorThatCannotAnswer_RefusesTheResponseRatherThanServingItUnscanned()
+    {
+        // Arrange
+        using var egress = ScanningSensitiveContentEgress.Unavailable(TimeProvider.System);
+        var answerer = new RecordingMailQuestionAnswerer().Answering("an ordinary answer");
+        var reader = ReaderOver(answerer, egressGuard: egress.Guard);
+
+        // Act, Assert
+        await Assert.ThrowsAsync<SensitiveContentScannerUnavailableException>(() =>
+            AnswerAsync(reader, new AskMailRequest { QuestionText = "what was agreed" }));
+    }
+
+    /// <summary>An opt-in nobody took must not appear on this path at all.</summary>
+    [Fact]
+    public async Task AnswerQuestionAsync_ADeploymentThatScansNothing_PublishesTheAnswerUntouched()
+    {
+        // Arrange
+        var answerer = new RecordingMailQuestionAnswerer().Answering($"they sent the key {Marker} on Tuesday");
+        var reader = ReaderOver(answerer);
+
+        // Act
+        var result = await AnswerAsync(reader, new AskMailRequest { QuestionText = "what key did they send" });
+
+        // Assert
+        Assert.Equal($"they sent the key {Marker} on Tuesday", result.AnswerText);
+    }
+
     private static Task<AskMailResult> AnswerAsync(MailboxQuestionReader reader, AskMailRequest request) =>
         reader.AnswerQuestionAsync(request, TestContext.Current.CancellationToken);
 
@@ -544,7 +633,8 @@ public sealed class MailboxQuestionReaderTests
         MailAnswerBounds? bounds = null,
         IMailAnsweringSpendLedger? spendLedger = null,
         IMailAnsweringRunTelemetry? runTelemetry = null,
-        IMailAnsweringAuditTrail? auditTrail = null)
+        IMailAnsweringAuditTrail? auditTrail = null,
+        SensitiveContentEgressGuard? egressGuard = null)
     {
         var healthReader = Substitute.For<IAiProviderHealthReader>();
         healthReader.Read(AiProviderRole.Embedding)
@@ -586,7 +676,8 @@ public sealed class MailboxQuestionReaderTests
             bounds ?? MailAnswerBounds.Default,
             runTelemetry ?? new RecordingMailAnsweringRunTelemetry(),
             auditTrail ?? new RecordingMailAnsweringAuditTrail(),
-            timeProvider);
+            timeProvider,
+            egressGuard ?? SensitiveContentEgressGuards.Inactive());
     }
 
     /// <summary>A ledger with an allowance for whatever a test asks it.</summary>

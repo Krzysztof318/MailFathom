@@ -7,6 +7,7 @@ using MailFathom.AI.Orchestration;
 using MailFathom.Application.Emails.Mailboxes;
 using MailFathom.Application.Retrieval;
 using MailFathom.Application.Retrieval.AskMail;
+using MailFathom.Application.SensitiveContent.Egress;
 using MailFathom.Domain.Answering.Audit;
 using Microsoft.Extensions.AI;
 
@@ -85,6 +86,7 @@ internal sealed class ScopedMailKnowledgeRetrieval
     private readonly IEmailKnowledgeSearch knowledgeSearch;
     private readonly MailboxScope scope;
     private readonly MailAnsweringRunLedger runLedger;
+    private readonly SensitiveContentEgressGuard egressGuard;
     private readonly Lock gate = new();
     private readonly List<EmailKnowledgePassage> retrieved = [];
     private int candidateCount;
@@ -95,19 +97,23 @@ internal sealed class ScopedMailKnowledgeRetrieval
     /// <param name="knowledgeSearch">Finds the mail relevant to a query.</param>
     /// <param name="scope">The accounts and folders every retrieval of this run is answered from.</param>
     /// <param name="runLedger">Decides how much of what a lookup found this run may still send.</param>
+    /// <param name="egressGuard">Scans every extract before it is written into the envelope a model reads.</param>
     /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
     internal ScopedMailKnowledgeRetrieval(
         IEmailKnowledgeSearch knowledgeSearch,
         MailboxScope scope,
-        MailAnsweringRunLedger runLedger)
+        MailAnsweringRunLedger runLedger,
+        SensitiveContentEgressGuard egressGuard)
     {
         ArgumentNullException.ThrowIfNull(knowledgeSearch);
         ArgumentNullException.ThrowIfNull(scope);
         ArgumentNullException.ThrowIfNull(runLedger);
+        ArgumentNullException.ThrowIfNull(egressGuard);
 
         this.knowledgeSearch = knowledgeSearch;
         this.scope = scope;
         this.runLedger = runLedger;
+        this.egressGuard = egressGuard;
     }
 
     /// <summary>Gets what this run's retrieval has reached so far, across every lookup it has made.</summary>
@@ -224,7 +230,58 @@ internal sealed class ScopedMailKnowledgeRetrieval
             this.relevanceFilterFellBack |= found.RelevanceFilterFellBack;
         }
 
-        return RetrievedMailContextFormatter.Format(admitted, found.RetrievalMode, this.WasTruncated);
+        return RetrievedMailContextFormatter.Format(
+            await this.GuardedAsync(admitted, cancellationToken),
+            found.RetrievalMode,
+            this.WasTruncated);
+    }
+
+    /// <summary>Scans every extract this lookup is about to hand to a model.</summary>
+    /// <remarks>
+    /// <para>
+    /// This is where mail reaches a chat provider. The instruction the run carries is a constant of the build and the
+    /// question is guarded where the run begins, so the extracts are the remaining half of what a prompt is composed
+    /// from — and a tool this agent gains later is a new egress point that takes a guard of its own rather than
+    /// inheriting this one.
+    /// </para>
+    /// <para>
+    /// The extract and the subject are guarded, and the envelope is written afterwards from the guarded values. Guarding
+    /// the written envelope instead would let one detection cover the end of an extract and the element that closes it,
+    /// and replacing that region would take the document's structure with it.
+    /// </para>
+    /// <para>
+    /// What the run reports having retrieved is left as it was found. The report is read in this process — by the record
+    /// of what the run read, and by the citations the answer publishes, which are guarded where they are published — so
+    /// redacting it here would guard nothing and would make one message read two ways inside one run.
+    /// </para>
+    /// </remarks>
+    private async Task<IReadOnlyList<EmailKnowledgePassage>> GuardedAsync(
+        IReadOnlyList<EmailKnowledgePassage> passages,
+        CancellationToken cancellationToken)
+    {
+        if (!this.egressGuard.IsActive)
+        {
+            return passages;
+        }
+
+        var guarded = new List<EmailKnowledgePassage>(passages.Count);
+
+        foreach (var passage in passages)
+        {
+            guarded.Add(passage with
+            {
+                Subject = await this.egressGuard.GuardOptionalAsync(
+                    SensitiveContentEgressPoint.ChatPrompt,
+                    passage.Subject,
+                    cancellationToken),
+                Text = await this.egressGuard.GuardAsync(
+                    SensitiveContentEgressPoint.ChatPrompt,
+                    passage.Text,
+                    cancellationToken),
+            });
+        }
+
+        return guarded;
     }
 
     /// <summary>Names the ways this run read less of the mailbox than an undegraded run of the same question would.</summary>

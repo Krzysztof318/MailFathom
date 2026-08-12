@@ -5,6 +5,8 @@
 using MailFathom.Application.Accounts;
 using MailFathom.Application.Emails.Mailboxes;
 using MailFathom.Application.Emails.Summaries;
+using MailFathom.Application.SensitiveContent.Detection;
+using MailFathom.Application.SensitiveContent.Egress;
 using MailFathom.Application.Synchronization.Checkpoints;
 using MailFathom.Domain.Emails;
 
@@ -22,30 +24,40 @@ namespace MailFathom.Application.Emails.ListEmails;
 /// It reaches no mail server. A listing answers from what synchronization has already stored, which is what keeps an
 /// MCP read independent of IMAP availability, and it reports how current that copy is instead of pretending it is live.
 /// </para>
+/// <para>
+/// A page is one of the points mail content leaves this deployment, so where a sensitive-content scanner is switched on
+/// the subject of every summary is scanned before the page is returned, and a scanner that cannot answer refuses the
+/// listing rather than serving it unscanned.
+/// </para>
 /// </remarks>
 public sealed class MailboxTimelineReader
 {
     private readonly IStoredEmailTimelineReader timelineReader;
     private readonly ISynchronizationFreshnessReader freshnessReader;
     private readonly MailboxScopeResolver scopeResolver;
+    private readonly SensitiveContentEgressGuard egressGuard;
 
     /// <summary>Initializes the use case.</summary>
     /// <param name="timelineReader">Reads bounded pages of stored email summaries.</param>
     /// <param name="freshnessReader">Reads how current the local copy of each folder is.</param>
     /// <param name="scopeResolver">Decides which accounts and folders the listing runs against.</param>
+    /// <param name="egressGuard">Scans what the page is about to publish, where this deployment scans anything.</param>
     /// <exception cref="ArgumentNullException">Thrown when any argument is <see langword="null" />.</exception>
     public MailboxTimelineReader(
         IStoredEmailTimelineReader timelineReader,
         ISynchronizationFreshnessReader freshnessReader,
-        MailboxScopeResolver scopeResolver)
+        MailboxScopeResolver scopeResolver,
+        SensitiveContentEgressGuard egressGuard)
     {
         ArgumentNullException.ThrowIfNull(timelineReader);
         ArgumentNullException.ThrowIfNull(freshnessReader);
         ArgumentNullException.ThrowIfNull(scopeResolver);
+        ArgumentNullException.ThrowIfNull(egressGuard);
 
         this.timelineReader = timelineReader;
         this.freshnessReader = freshnessReader;
         this.scopeResolver = scopeResolver;
+        this.egressGuard = egressGuard;
     }
 
     /// <summary>Lists one page of emails.</summary>
@@ -58,6 +70,7 @@ public sealed class MailboxTimelineReader
     /// <exception cref="MailboxQueryPageSizeOutOfRangeException">Thrown when the request names a page size outside the accepted range.</exception>
     /// <exception cref="MailboxQueryCursorMalformedException">Thrown when the request carries a cursor this system did not issue.</exception>
     /// <exception cref="MailboxQueryCursorFilterMismatchException">Thrown when the cursor was issued for different filters than the request carries.</exception>
+    /// <exception cref="SensitiveContentScannerUnavailableException">Thrown when a switched-on scanner could not establish what the page carries, which refuses the listing rather than serving it unscanned.</exception>
     /// <remarks>
     /// Nothing here writes, and the operation is therefore safe to repeat. It also never sets the remote <c>\Seen</c>
     /// flag or any other remote state, because it speaks to no mail server at all.
@@ -94,7 +107,58 @@ public sealed class MailboxTimelineReader
         // operation at a time, so starting them together would fault instead of overlapping.
         var folderFreshness = await this.freshnessReader.ReadAsync(filter.Selection.Scope, cancellationToken);
 
-        return new ListEmailsResult(page, nextCursor, folderFreshness, filter.Selection.Scope.IncludesJunkMail);
+        // Guarded after the cursor is issued rather than before it. The cursor names a position in the timeline, which
+        // is the received instant and the stored identity, and redaction touches neither — issuing it from the guarded
+        // page would be the same value arrived at through more work.
+        return new ListEmailsResult(
+            await this.GuardedAsync(page, cancellationToken),
+            nextCursor,
+            folderFreshness,
+            filter.Selection.Scope.IncludesJunkMail);
+    }
+
+    /// <summary>Scans the two things a summary carries that a message's author wrote.</summary>
+    /// <remarks>
+    /// <para>
+    /// A listing publishes no body, so the subject and the sender's display name are the whole of its mail content and
+    /// the whole of what is scanned. The display name is beside the subject rather than beside the address it
+    /// accompanies: an address is a routing identity a server issued, while the name in front of it is free text the
+    /// sending side wrote, and a header reading <c>"&lt;a credential&gt; &lt;someone@example.test&gt;"</c> would
+    /// otherwise be served whole while the subject beside it was redacted.
+    /// </para>
+    /// <para>
+    /// Everything else on a summary is what a caller acts on — the identity a later request names, the folder alias,
+    /// the addresses a reply goes to, the sizes and the flags — and those are protected by who may reach this
+    /// deployment rather than by redaction, which would leave a listing nobody could act on.
+    /// </para>
+    /// </remarks>
+    private async Task<IReadOnlyList<EmailSummary>> GuardedAsync(
+        IReadOnlyList<EmailSummary> page,
+        CancellationToken cancellationToken)
+    {
+        if (!this.egressGuard.IsActive)
+        {
+            return page;
+        }
+
+        var guarded = new List<EmailSummary>(page.Count);
+
+        foreach (var summary in page)
+        {
+            guarded.Add(summary with
+            {
+                Subject = await this.egressGuard.GuardOptionalAsync(
+                    SensitiveContentEgressPoint.McpSnippet,
+                    summary.Subject,
+                    cancellationToken),
+                SenderDisplayName = await this.egressGuard.GuardOptionalAsync(
+                    SensitiveContentEgressPoint.McpSnippet,
+                    summary.SenderDisplayName,
+                    cancellationToken),
+            });
+        }
+
+        return guarded;
     }
 
     /// <summary>Validates the request's filters and restricts the query to the accounts this deployment serves.</summary>

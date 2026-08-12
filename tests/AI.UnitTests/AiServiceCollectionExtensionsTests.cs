@@ -14,6 +14,7 @@ using MailFathom.Application.Emails.Embeddings;
 using MailFathom.Application.Resilience;
 using MailFathom.Application.Retrieval;
 using MailFathom.Application.Retrieval.AskMail;
+using MailFathom.TestSupport;
 using Microsoft.Extensions.DependencyInjection;
 using NSubstitute;
 using Xunit;
@@ -106,6 +107,7 @@ public sealed class AiServiceCollectionExtensionsTests
         services.AddSingleton(Substitute.For<IProviderEndpointCredentialSource>());
         services.AddSingleton(Substitute.For<IOutboundOperationRunner>());
         services.AddSingleton(Substitute.For<IAiProviderHealthRecorder>());
+        services.AddSingleton(SensitiveContentEgressGuards.Inactive());
 
         // Act
         services.AddEmbeddingProviderAdapter();
@@ -146,6 +148,7 @@ public sealed class AiServiceCollectionExtensionsTests
         services.AddSingleton(Substitute.For<IProviderEndpointCredentialSource>());
         services.AddSingleton(Substitute.For<IOutboundOperationRunner>());
         services.AddSingleton(Substitute.For<IAiProviderHealthRecorder>());
+        services.AddSingleton(SensitiveContentEgressGuards.Inactive());
 
         // Act
         services.AddChatProviderAdapter();
@@ -182,6 +185,7 @@ public sealed class AiServiceCollectionExtensionsTests
         services.AddSingleton(Substitute.For<IProviderEndpointCredentialSource>());
         services.AddSingleton(Substitute.For<IOutboundOperationRunner>());
         services.AddSingleton(Substitute.For<IAiProviderHealthRecorder>());
+        services.AddSingleton(SensitiveContentEgressGuards.Inactive());
 
         // Act
         services.AddChatProviderAdapter();
@@ -213,6 +217,7 @@ public sealed class AiServiceCollectionExtensionsTests
         services.AddSingleton(Substitute.For<IProviderEndpointCredentialSource>());
         services.AddSingleton(Substitute.For<IOutboundOperationRunner>());
         services.AddSingleton(Substitute.For<IAiProviderHealthRecorder>());
+        services.AddSingleton(SensitiveContentEgressGuards.Inactive());
 
         // Act
         services.AddEmbeddingProviderAdapter();
@@ -251,6 +256,7 @@ public sealed class AiServiceCollectionExtensionsTests
         services.AddSingleton(Substitute.For<IProviderEndpointCredentialSource>());
         services.AddSingleton(Substitute.For<IOutboundOperationRunner>());
         services.AddSingleton(Substitute.For<IAiProviderHealthRecorder>());
+        services.AddSingleton(SensitiveContentEgressGuards.Inactive());
         services.AddSingleton(Substitute.For<IMailAnsweringSpendLedger>());
         services.AddScoped<IEmailKnowledgeSearch, RecordingEmailKnowledgeSearch>();
 

@@ -12,6 +12,8 @@ using MailFathom.AI.UnitTests.TestDoubles;
 using MailFathom.Application.AiProviders;
 using MailFathom.Application.Chat;
 using MailFathom.Application.Resilience;
+using MailFathom.Application.SensitiveContent.Detection;
+using MailFathom.Application.SensitiveContent.Egress;
 using MailFathom.Domain.Failures;
 using MailFathom.TestSupport;
 using Microsoft.Extensions.Logging;
@@ -30,6 +32,9 @@ namespace MailFathom.AI.UnitTests.ProviderAdapters;
 /// </remarks>
 public sealed class ProviderChatModelClientTests
 {
+    /// <summary>The literal the scanner in the guarded-egress tests reports, standing in for a credential in mail.</summary>
+    private const string Marker = "AKIAEXAMPLEKEY";
+
     private static readonly IReadOnlyList<ChatMessage> Conversation = [new(ChatRole.User, "what did they say")];
 
     /// <summary>The distinguishing text of each turn the ordering test sends, in the order it sends them.</summary>
@@ -300,6 +305,64 @@ public sealed class ProviderChatModelClientTests
 
         // Assert
         Assert.Equal(0, provider.RequestCount);
+    }
+
+    /// <summary>A conversation reaching this port is already built, so every turn of it is scanned before any is sent.</summary>
+    [Fact]
+    public async Task AnswerAsync_ASwitchedOnScanner_RedactsEveryTurnBeforeTheRequestIsSent()
+    {
+        // Arrange
+        using var egress = ScanningSensitiveContentEgress.Finding(Marker, TimeProvider.System);
+        using var provider = ScriptedProvider.Answering(Completion("an answer", "stop"));
+        var client = provider.ClientOver(ChatDeclarations.Plan(), egressGuard: egress.Guard);
+
+        // Act
+        await client.AnswerAsync(
+            [
+                new(ChatRole.System, "answer briefly"),
+                new(ChatRole.User, $"is {Marker} still valid"),
+            ],
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        var sent = provider.LastRequestBody;
+
+        Assert.DoesNotContain(Marker, sent, StringComparison.Ordinal);
+        Assert.Contains("[redacted:CloudKey]", sent, StringComparison.Ordinal);
+    }
+
+    /// <summary>Sending a prompt a scanner could not read would be the leak the switch was turned on to prevent.</summary>
+    [Fact]
+    public async Task AnswerAsync_ADetectorThatCannotAnswer_RefusesTheCallWithoutReachingTheProvider()
+    {
+        // Arrange
+        using var egress = ScanningSensitiveContentEgress.Unavailable(TimeProvider.System);
+        using var provider = ScriptedProvider.Answering(Completion("never reached", "stop"));
+        var client = provider.ClientOver(ChatDeclarations.Plan(), egressGuard: egress.Guard);
+
+        // Act
+        await Assert.ThrowsAsync<SensitiveContentScannerUnavailableException>(() =>
+            client.AnswerAsync(Conversation, TestContext.Current.CancellationToken));
+
+        // Assert
+        Assert.Equal(0, provider.RequestCount);
+    }
+
+    /// <summary>An opt-in nobody took must not appear on this path at all.</summary>
+    [Fact]
+    public async Task AnswerAsync_ADeploymentThatScansNothing_SendsEveryTurnAsItWasComposed()
+    {
+        // Arrange
+        using var provider = ScriptedProvider.Answering(Completion("an answer", "stop"));
+        var client = provider.ClientOver(ChatDeclarations.Plan());
+
+        // Act
+        await client.AnswerAsync(
+            [new(ChatRole.User, $"is {Marker} still valid")],
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Contains(Marker, provider.LastRequestBody, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -751,7 +814,8 @@ public sealed class ProviderChatModelClientTests
         public ProviderChatModelClient ClientOver(
             ChatGenerationPlan plan,
             bool declineTheCall = false,
-            ILogger? logger = null)
+            ILogger? logger = null,
+            SensitiveContentEgressGuard? egressGuard = null)
         {
             var transportFactory = Substitute.For<IHttpClientFactory>();
             transportFactory
@@ -792,6 +856,7 @@ public sealed class ProviderChatModelClientTests
                 transportFactory,
                 operationRunner,
                 this.HealthRecorder,
+                egressGuard ?? SensitiveContentEgressGuards.Inactive(),
                 // Wrapped rather than required, because only the no-log test reads what was written and every other
                 // test would otherwise carry a recorder it never asserts on.
                 logger is null

@@ -417,6 +417,15 @@ An answer with no text at all is a failure rather than an empty answer, classifi
 generation is. [Chat generation § What a failing call is classified
 as](chat-generation.md#what-a-failing-call-is-classified-as) holds the table.
 
+Where a sensitive-content scanner is switched on, the answer and each citation's subject pass it before they are
+published, and the extracts pass it on their way to the model — two egress points rather than one, because text sent to
+a provider and text returned to a caller leave this deployment in different directions. The answer is guarded before
+what one response carries is cut, so it is bounded after every placeholder is in it, and a scanner that cannot answer
+refuses the question rather than serving a response nothing scanned.
+[Sensitive-content scanning § the guarded egress
+points](sensitive-content-scanning.md#the-guarded-egress-points) holds the contract, and it applies to nothing on a
+deployment with both switches off, which is the default.
+
 ## What a caller may ask, and what one response publishes
 
 The use case between a caller and the run owns three things the composition does not: what a question may be, whether

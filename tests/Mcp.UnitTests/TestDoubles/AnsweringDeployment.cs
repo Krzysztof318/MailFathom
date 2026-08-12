@@ -10,6 +10,7 @@ using MailFathom.Application.Emails.Search;
 using MailFathom.Application.Retrieval;
 using MailFathom.Application.Retrieval.AskMail;
 using MailFathom.Application.Retrieval.AskMail.Audit;
+using MailFathom.Application.SensitiveContent.Egress;
 using MailFathom.TestSupport;
 using Microsoft.Extensions.Time.Testing;
 using NSubstitute;
@@ -67,11 +68,13 @@ internal static class AnsweringDeployment
     /// <param name="answerer">The answering port, or <see langword="null" /> for a deployment that declared no chat endpoint.</param>
     /// <param name="bounds">How much of one run's outcome a single answer publishes.</param>
     /// <param name="spendLedger">What the current period may still spend, or <see langword="null" /> for one that admits every question.</param>
+    /// <param name="egressGuard">The guard the answer passes through, or <see langword="null" /> for a deployment that scans nothing.</param>
     /// <returns>The use case.</returns>
     public static MailboxQuestionReader QuestionReader(
         IMailQuestionAnswerer? answerer,
         MailAnswerBounds? bounds = null,
-        IMailAnsweringSpendLedger? spendLedger = null)
+        IMailAnsweringSpendLedger? spendLedger = null,
+        SensitiveContentEgressGuard? egressGuard = null)
     {
         return new MailboxQuestionReader(
             Capability(answerer),
@@ -87,7 +90,8 @@ internal static class AnsweringDeployment
             // and what it records are the use case's own contract, asserted where that contract lives.
             Substitute.For<IMailAnsweringRunTelemetry>(),
             Substitute.For<IMailAnsweringAuditTrail>(),
-            new FakeTimeProvider(Now));
+            new FakeTimeProvider(Now),
+            egressGuard ?? SensitiveContentEgressGuards.Inactive());
     }
 
     /// <summary>Builds a ledger with an allowance for whatever a test asks it.</summary>

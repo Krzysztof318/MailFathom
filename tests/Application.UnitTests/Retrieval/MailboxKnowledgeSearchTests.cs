@@ -9,6 +9,7 @@ using MailFathom.Application.Emails.Mailboxes;
 using MailFathom.Application.Emails.Search;
 using MailFathom.Application.Emails.SearchEmails;
 using MailFathom.Application.Retrieval;
+using MailFathom.Application.SensitiveContent.Egress;
 using MailFathom.Application.Synchronization.Checkpoints;
 using MailFathom.Application.UnitTests.TestDoubles;
 using MailFathom.Domain.Accounts;
@@ -25,6 +26,10 @@ public sealed class MailboxKnowledgeSearchTests
 {
     /// <summary>Stands for a filter the selection carries no value for, so a null never reads as a failed comparison.</summary>
     private const string Absent = "-";
+
+    /// <summary>The literal the scanner in the guarded-egress tests reports, standing in for a credential in mail.</summary>
+    private const string Marker = "AKIAEXAMPLEKEY";
+
 
     private static readonly DateTimeOffset FirstJuly = new(2026, 7, 1, 8, 0, 0, TimeSpan.Zero);
 
@@ -404,9 +409,37 @@ public sealed class MailboxKnowledgeSearchTests
         Assert.Equal(inArchive.StoredEmailId, Assert.Single(passages).StoredEmailId);
     }
 
+    /// <summary>
+    /// This lookup answers an agent rather than an MCP caller, so the window it reads is deliberately unguarded: the
+    /// retrieval that sends these extracts to a model scans them there, under the egress point they actually cross.
+    /// Scanning here as well would cost a second scan of every extract and would count text against a series no MCP
+    /// caller ever sees.
+    /// </summary>
+    [Fact]
+    public async Task FindPassagesAsync_AScannerSwitchedOn_LeavesTheWindowToBeGuardedWhereItReachesAModel()
+    {
+        // Arrange
+        using var egress = ScanningSensitiveContentEgress.Finding(Marker, new FakeTimeProvider(SearchedAt));
+        var matched = SyntheticEmailSummaries.Create(FirstJuly, subject: $"the key {Marker}");
+        var index = new InMemoryEmailSearchIndex().With(matched, snippets: $"the key is {Marker}");
+        var search = SearchOver(index, egressGuard: egress.Guard);
+
+        // Act
+        var passage = Assert.Single((await search.FindPassagesAsync(
+            EveryAccount,
+            EmailKnowledgeQuery.ForText("key"),
+            TestContext.Current.CancellationToken)).Passages);
+
+        // Assert
+        Assert.Contains(Marker, passage.Text, StringComparison.Ordinal);
+        Assert.Empty(egress.Telemetry.Guarded);
+        Assert.Empty(egress.Scanner.ScannedTexts);
+    }
+
     private static MailboxKnowledgeSearch SearchOver(
         InMemoryEmailSearchIndex index,
-        EmailKnowledgeBounds? bounds = null) => new(
+        EmailKnowledgeBounds? bounds = null,
+        SensitiveContentEgressGuard? egressGuard = null) => new(
         new MailboxSearchReader(
             index,
             LexicalOnlySemanticSearch(),
@@ -416,7 +449,8 @@ public sealed class MailboxKnowledgeSearchTests
                 StubMailFolderParticipation.Everything,
                 StubJunkMailFolderCatalog.None,
                 StubMailFolderMappings.ResolvingNothing),
-            EmailSearchSnippetBounds.Default),
+            EmailSearchSnippetBounds.Default,
+            egressGuard ?? SensitiveContentEgressGuards.Inactive()),
         bounds ?? EmailKnowledgeBounds.Default);
 
     /// <summary>Builds the semantic half of a deployment that configured no embedding provider and activated nothing.</summary>

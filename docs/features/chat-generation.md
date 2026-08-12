@@ -265,6 +265,11 @@ classifies this group as reloadable for new operations and states the rules a re
   is a registration of its own rather than a second consumer of the embedding client's, because an answer's size follows
   the output budget while an embedding response's is fixed by the declared geometry, and one client would have to take
   the larger ceiling and would then bound neither.
+- **A sensitive-content guard, where one is switched on.** Every turn is scanned and redacted before the request is
+  sent, above the retry layer, so one call costs one scan whatever the pipeline does and a scanner that cannot answer
+  refuses the call as itself rather than arriving as a fault of the provider's. Both switches are off by default, and
+  nothing is scanned then. [Sensitive-content scanning § the guarded egress
+  points](sensitive-content-scanning.md#the-guarded-egress-points) holds the contract.
 
 ## An answer that was cut short is still an answer
 

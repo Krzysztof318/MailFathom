@@ -5,6 +5,8 @@
 using MailFathom.Application.Accounts;
 using MailFathom.Application.Emails.Mailboxes;
 using MailFathom.Application.Emails.Search;
+using MailFathom.Application.SensitiveContent.Detection;
+using MailFathom.Application.SensitiveContent.Egress;
 using MailFathom.Application.Synchronization.Checkpoints;
 
 namespace MailFathom.Application.Emails.SearchEmails;
@@ -37,6 +39,12 @@ namespace MailFathom.Application.Emails.SearchEmails;
 /// here. That is a deliberate limit of text extraction rather than something this use case works
 /// around, and the feature documentation states it so the behavior is not surprising.
 /// </para>
+/// <para>
+/// A window is one of the points mail content leaves this deployment, so where a sensitive-content scanner is switched
+/// on the content of a result is scanned before the result is returned, and a scanner that cannot answer refuses the
+/// search rather than serving it unscanned. The guard is here rather than at the protocol boundary for the reason the
+/// authorization above it is: a second entrypoint over this use case inherits it instead of repeating it.
+/// </para>
 /// </remarks>
 public sealed class MailboxSearchReader
 {
@@ -62,6 +70,7 @@ public sealed class MailboxSearchReader
     private readonly ISynchronizationFreshnessReader freshnessReader;
     private readonly MailboxScopeResolver scopeResolver;
     private readonly EmailSearchSnippetBounds snippetBounds;
+    private readonly SensitiveContentEgressGuard egressGuard;
 
     /// <summary>Initializes the use case.</summary>
     /// <param name="searchIndexReader">Ranks mail against the query text and reads the window a ranking selected.</param>
@@ -69,28 +78,55 @@ public sealed class MailboxSearchReader
     /// <param name="freshnessReader">Reads how current the local copy of each folder is.</param>
     /// <param name="scopeResolver">Decides which accounts and folders the search runs against.</param>
     /// <param name="snippetBounds">How much of a message's body one result may show.</param>
+    /// <param name="egressGuard">Scans what the window is about to publish, where this deployment scans anything.</param>
     /// <exception cref="ArgumentNullException">Thrown when any argument is <see langword="null" />.</exception>
     public MailboxSearchReader(
         IEmailSearchIndexReader searchIndexReader,
         SemanticEmailSearch semanticSearch,
         ISynchronizationFreshnessReader freshnessReader,
         MailboxScopeResolver scopeResolver,
-        EmailSearchSnippetBounds snippetBounds)
+        EmailSearchSnippetBounds snippetBounds,
+        SensitiveContentEgressGuard egressGuard)
     {
         ArgumentNullException.ThrowIfNull(searchIndexReader);
         ArgumentNullException.ThrowIfNull(semanticSearch);
         ArgumentNullException.ThrowIfNull(freshnessReader);
         ArgumentNullException.ThrowIfNull(scopeResolver);
         ArgumentNullException.ThrowIfNull(snippetBounds);
+        ArgumentNullException.ThrowIfNull(egressGuard);
 
         this.searchIndexReader = searchIndexReader;
         this.semanticSearch = semanticSearch;
         this.freshnessReader = freshnessReader;
         this.scopeResolver = scopeResolver;
         this.snippetBounds = snippetBounds;
+        this.egressGuard = egressGuard;
     }
 
-    /// <summary>Searches for one window of ranked emails.</summary>
+    /// <summary>Searches for one window of ranked emails and publishes it to a caller outside this process.</summary>
+    /// <param name="request">What the caller asked for.</param>
+    /// <param name="cancellationToken">Propagates caller cancellation.</param>
+    /// <returns>The ranked window, how it was ranked, and the scope's synchronization freshness.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="request" /> is <see langword="null" />.</exception>
+    /// <exception cref="MailboxQueryFilterInvalidException">Thrown when the query text is blank or unusable, or a structured filter carries a value, a count, or a length the query does not accept.</exception>
+    /// <exception cref="MailAccountNotAccessibleException">Thrown when the request names an account this deployment does not serve.</exception>
+    /// <exception cref="EmailSearchResultLimitOutOfRangeException">Thrown when the request names a result count outside the accepted range.</exception>
+    /// <exception cref="SensitiveContentScannerUnavailableException">Thrown when a switched-on scanner could not establish what the window carries, which refuses the search rather than serving it unscanned.</exception>
+    /// <remarks>
+    /// The guard belongs to publishing rather than to searching, which is why it is here and not in
+    /// <see cref="SearchWindowAsync" />: this window becomes an MCP tool's answer, while the one that method returns is
+    /// read inside the process by something that guards it at its own egress point.
+    /// </remarks>
+    public async Task<SearchEmailsResult> SearchEmailsAsync(
+        SearchEmailsRequest request,
+        CancellationToken cancellationToken)
+    {
+        var window = await this.SearchWindowAsync(request, cancellationToken);
+
+        return window with { Matches = await this.GuardedAsync(window.Matches, cancellationToken) };
+    }
+
+    /// <summary>Searches for one window of ranked emails, for a reader inside this process.</summary>
     /// <param name="request">What the caller asked for.</param>
     /// <param name="cancellationToken">Propagates caller cancellation.</param>
     /// <returns>The ranked window, how it was ranked, and the scope's synchronization freshness.</returns>
@@ -99,12 +135,21 @@ public sealed class MailboxSearchReader
     /// <exception cref="MailAccountNotAccessibleException">Thrown when the request names an account this deployment does not serve.</exception>
     /// <exception cref="EmailSearchResultLimitOutOfRangeException">Thrown when the request names a result count outside the accepted range.</exception>
     /// <remarks>
+    /// <para>
+    /// The window comes back as it was found, with no sensitive-content guard on it, because nothing has left this
+    /// deployment yet. Its one caller is the retrieval an answering run makes, which sends the extracts to a model and
+    /// guards them there under the egress point they actually cross. Guarding here as well would scan every extract
+    /// twice — a remote round trip apiece under the personal-data scanner — and would count text against an MCP series
+    /// no MCP caller ever sees.
+    /// </para>
+    /// <para>
     /// Nothing here writes, and the operation is therefore safe to repeat. It also never sets the remote <c>\Seen</c>
     /// flag or any other remote state, because it speaks to no mail server at all. A query that matches nothing returns
     /// an empty window rather than a failure, so a search cannot be used to establish that a folder or an account holds
     /// mail the caller was not already entitled to see.
+    /// </para>
     /// </remarks>
-    public async Task<SearchEmailsResult> SearchEmailsAsync(
+    internal async Task<SearchEmailsResult> SearchWindowAsync(
         SearchEmailsRequest request,
         CancellationToken cancellationToken)
     {
@@ -151,6 +196,58 @@ public sealed class MailboxSearchReader
             semanticSearchCapability,
             folderFreshness,
             selection.Scope.IncludesJunkMail);
+    }
+
+    /// <summary>Scans the mail content of a window before the window becomes somebody else's.</summary>
+    /// <remarks>
+    /// <para>
+    /// A snippet, a subject, and the sender's display name are what a result carries that a message's author wrote, so
+    /// they are what is scanned. The display name is scanned rather than treated as part of the address it accompanies:
+    /// an address is a routing identity a server issued, while the name in front of it is free text the sending side
+    /// wrote. The identifiers beside them — the account, the folder alias, the addresses, the stored identity — are
+    /// what a caller acts on rather than text to read, and redacting the address a reply has to go to would remove the
+    /// result's whole use while protecting nothing the message body did not already carry.
+    /// </para>
+    /// <para>
+    /// Each value is scanned on its own and the window is composed afterwards. Scanning the composed result instead
+    /// would let one detection cover the end of a snippet and the beginning of the next field, and replacing that
+    /// region would take the boundary between them with it.
+    /// </para>
+    /// </remarks>
+    private async Task<IReadOnlyList<EmailSearchMatch>> GuardedAsync(
+        IReadOnlyList<EmailSearchMatch> matches,
+        CancellationToken cancellationToken)
+    {
+        if (!this.egressGuard.IsActive)
+        {
+            return matches;
+        }
+
+        var guarded = new List<EmailSearchMatch>(matches.Count);
+
+        foreach (var match in matches)
+        {
+            var subject = await this.egressGuard.GuardOptionalAsync(
+                SensitiveContentEgressPoint.McpSnippet,
+                match.Summary.Subject,
+                cancellationToken);
+            var senderDisplayName = await this.egressGuard.GuardOptionalAsync(
+                SensitiveContentEgressPoint.McpSnippet,
+                match.Summary.SenderDisplayName,
+                cancellationToken);
+            var snippets = await this.egressGuard.GuardAllAsync(
+                SensitiveContentEgressPoint.McpSnippet,
+                match.Snippets,
+                cancellationToken);
+
+            guarded.Add(match with
+            {
+                Summary = match.Summary with { Subject = subject, SenderDisplayName = senderDisplayName },
+                Snippets = snippets,
+            });
+        }
+
+        return guarded;
     }
 
     /// <summary>Ranks the eligible mail by whichever method this instance can apply to this query.</summary>

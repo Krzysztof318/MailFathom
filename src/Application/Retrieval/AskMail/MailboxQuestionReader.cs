@@ -7,6 +7,8 @@ using MailFathom.Application.Accounts;
 using MailFathom.Application.Chat;
 using MailFathom.Application.Emails.Mailboxes;
 using MailFathom.Application.Retrieval.AskMail.Audit;
+using MailFathom.Application.SensitiveContent.Detection;
+using MailFathom.Application.SensitiveContent.Egress;
 using MailFathom.Domain.Answering.Audit;
 
 namespace MailFathom.Application.Retrieval.AskMail;
@@ -41,6 +43,12 @@ namespace MailFathom.Application.Retrieval.AskMail;
 /// Neither the question nor the answer nor a citation's subject is written to a log, a span, or the record by anything on
 /// this path. A question is personal data of a particularly revealing kind, and an answer is mail content restated.
 /// </para>
+/// <para>
+/// An answer and its citations are the last point at which a run's mail content leaves this deployment, so where a
+/// sensitive-content scanner is switched on both are scanned before they are published, and a scanner that cannot
+/// answer refuses the response rather than serving it unscanned. What reached the model on the way there was scanned as
+/// it was retrieved, which is a different egress point with a guard of its own.
+/// </para>
 /// </remarks>
 public sealed class MailboxQuestionReader
 {
@@ -51,6 +59,7 @@ public sealed class MailboxQuestionReader
     private readonly IMailAnsweringRunTelemetry runTelemetry;
     private readonly IMailAnsweringAuditTrail auditTrail;
     private readonly TimeProvider timeProvider;
+    private readonly SensitiveContentEgressGuard egressGuard;
 
     /// <summary>Initializes the use case.</summary>
     /// <param name="capability">Decides whether a question may run, and hands over what runs it.</param>
@@ -60,6 +69,7 @@ public sealed class MailboxQuestionReader
     /// <param name="runTelemetry">Publishes the run beside the request it happened inside.</param>
     /// <param name="auditTrail">Keeps the durable record of what the run read, for the accounts that asked for one.</param>
     /// <param name="timeProvider">Stamps when the run began and when it ended.</param>
+    /// <param name="egressGuard">Scans what the answer is about to publish, where this deployment scans anything.</param>
     /// <exception cref="ArgumentNullException">Thrown when any argument is <see langword="null" />.</exception>
     public MailboxQuestionReader(
         MailAnsweringCapability capability,
@@ -68,7 +78,8 @@ public sealed class MailboxQuestionReader
         MailAnswerBounds answerBounds,
         IMailAnsweringRunTelemetry runTelemetry,
         IMailAnsweringAuditTrail auditTrail,
-        TimeProvider timeProvider)
+        TimeProvider timeProvider,
+        SensitiveContentEgressGuard egressGuard)
     {
         ArgumentNullException.ThrowIfNull(capability);
         ArgumentNullException.ThrowIfNull(scopeResolver);
@@ -77,6 +88,7 @@ public sealed class MailboxQuestionReader
         ArgumentNullException.ThrowIfNull(runTelemetry);
         ArgumentNullException.ThrowIfNull(auditTrail);
         ArgumentNullException.ThrowIfNull(timeProvider);
+        ArgumentNullException.ThrowIfNull(egressGuard);
 
         this.capability = capability;
         this.scopeResolver = scopeResolver;
@@ -85,6 +97,7 @@ public sealed class MailboxQuestionReader
         this.runTelemetry = runTelemetry;
         this.auditTrail = auditTrail;
         this.timeProvider = timeProvider;
+        this.egressGuard = egressGuard;
     }
 
     /// <summary>Answers one question from the mail within its scope.</summary>
@@ -97,6 +110,7 @@ public sealed class MailboxQuestionReader
     /// <exception cref="MailAnsweringUnavailableException">Thrown when this deployment answers no questions, or answers them and currently cannot.</exception>
     /// <exception cref="MailAnsweringBudgetExhaustedException">Thrown when the current period has spent what this deployment allows answering to cost, or when the run reached what one question may spend.</exception>
     /// <exception cref="ChatGenerationFailedException">Thrown when the run produced no answer, naming which kind of failure ended it.</exception>
+    /// <exception cref="SensitiveContentScannerUnavailableException">Thrown when a switched-on scanner could not establish what the answer carries, which refuses the response rather than serving it unscanned.</exception>
     /// <remarks>
     /// <para>
     /// The request is validated before the capability is read, so a deployment that answers questions and one that does
@@ -183,7 +197,7 @@ public sealed class MailboxQuestionReader
         try
         {
             var answer = await answerer.AnswerAsync(question, observation, cancellationToken);
-            var published = this.Published(answer, observation.Retrieval);
+            var published = await this.PublishedAsync(answer, observation.Retrieval, cancellationToken);
 
             observation.RecordOutcome(
                 MailAnsweringRunOutcome.Answered,
@@ -227,37 +241,78 @@ public sealed class MailboxQuestionReader
         observation.RecordOutcome(outcome, [], this.timeProvider.GetUtcNow());
 
     /// <summary>Cuts one run's outcome down to what a single answer publishes, and says what it cut.</summary>
-    private AskMailResult Published(MailAnswer answer, MailAnsweringRetrievalReport retrieval)
+    /// <remarks>
+    /// <para>
+    /// An answer is the last point at which a run's mail content leaves this deployment, and it is scanned here even
+    /// though the extracts it was written from were scanned on their way to the model. A model restates what it read,
+    /// and an answer is the one text in a run that nothing else has looked at.
+    /// </para>
+    /// <para>
+    /// Scanning happens before the answer is cut to what one response carries, so the published text is bounded after
+    /// every placeholder is in it. Cutting first would bound a text that is not the one published.
+    /// </para>
+    /// </remarks>
+    private async Task<AskMailResult> PublishedAsync(
+        MailAnswer answer,
+        MailAnsweringRetrievalReport retrieval,
+        CancellationToken cancellationToken)
     {
-        var citations = Cited(retrieval.Passages);
         var maximumCitations = this.answerBounds.MaximumCitations;
         var maximumAnswerCharacters = this.answerBounds.MaximumAnswerCharacters;
 
+        var answerText = await this.egressGuard.GuardAsync(
+            SensitiveContentEgressPoint.McpSnippet,
+            answer.Text,
+            cancellationToken);
+
+        // Collapsed and counted before anything is scanned, because the count decides the truncation flag while only
+        // the citations that survive the bound are published — and a subject nobody will read is a scan nobody needs.
+        EmailKnowledgePassage[] citable = [.. retrieval.Passages.DistinctBy(static passage => passage.StoredEmailId)];
+        var citations = await this.CitedAsync(citable.Take(maximumCitations), cancellationToken);
+
         return new AskMailResult(
-            Bounded(answer.Text, maximumAnswerCharacters),
-            [.. citations.Take(maximumCitations)],
-            answer.Text.Length > maximumAnswerCharacters,
-            citations.Count > maximumCitations,
+            Bounded(answerText, maximumAnswerCharacters),
+            citations,
+            answerText.Length > maximumAnswerCharacters,
+            citable.Length > maximumCitations,
             retrieval.Degradation.HasFlag(MailAnsweringRunDegradation.RetrievalCeilingReached));
     }
 
-    /// <summary>Reads the passages a run retrieved into one citation per email.</summary>
+    /// <summary>Reads the passages one answer cites into citations, with the one text a citation carries scanned.</summary>
     /// <remarks>
-    /// A run makes several lookups and one message can answer more than one of them, so the passages are collapsed by
-    /// the identity they are traced through. The first occurrence is kept, which leaves the citations in the order the
-    /// run first reached each message rather than in an order nothing produced.
+    /// <para>
+    /// The passages arrive collapsed by the identity they are traced through and cut to what one response carries, so
+    /// this scans exactly what is published: a message reached by three lookups costs one scan, and a message the bound
+    /// dropped costs none. The order is the one the run first reached each message in, rather than one nothing produced.
+    /// </para>
+    /// <para>
+    /// The subject is the whole of a citation's mail content: the identity, the account, the folder alias, and the
+    /// received instant are what a reader opens the message by. The scan is here rather than left to the retrieval
+    /// because a citation is published to the caller while an extract is sent to a model, which are two egress points
+    /// that happen to share a value.
+    /// </para>
     /// </remarks>
-    private static IReadOnlyList<MailAnswerCitation> Cited(IReadOnlyList<EmailKnowledgePassage> passages) =>
-    [
-        .. passages
-            .DistinctBy(static passage => passage.StoredEmailId)
-            .Select(static passage => new MailAnswerCitation(
+    private async Task<IReadOnlyList<MailAnswerCitation>> CitedAsync(
+        IEnumerable<EmailKnowledgePassage> passages,
+        CancellationToken cancellationToken)
+    {
+        var cited = new List<MailAnswerCitation>();
+
+        foreach (var passage in passages)
+        {
+            cited.Add(new MailAnswerCitation(
                 passage.StoredEmailId,
                 passage.AccountId,
                 passage.FolderAlias,
-                passage.Subject,
-                passage.ReceivedAt)),
-    ];
+                await this.egressGuard.GuardOptionalAsync(
+                    SensitiveContentEgressPoint.McpSnippet,
+                    passage.Subject,
+                    cancellationToken),
+                passage.ReceivedAt));
+        }
+
+        return cited;
+    }
 
     /// <summary>Cuts an answer longer than one response carries.</summary>
     /// <remarks>

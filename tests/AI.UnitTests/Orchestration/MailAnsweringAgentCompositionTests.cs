@@ -227,7 +227,8 @@ public sealed class MailAnsweringAgentCompositionTests
         var retrieval = new ScopedMailKnowledgeRetrieval(
             knowledgeSearch,
             OnePrimaryAccount,
-            new MailAnsweringRunLedger(MailAnsweringRunBounds.Default));
+            new MailAnsweringRunLedger(MailAnsweringRunBounds.Default),
+            SensitiveContentEgressGuards.Inactive());
         var agent = MailAnsweringAgentComposition.Compose(
             chatClient,
             plan,
@@ -313,7 +314,8 @@ public sealed class MailAnsweringAgentCompositionTests
         var retrieval = new ScopedMailKnowledgeRetrieval(
             knowledgeSearch,
             OnePrimaryAccount,
-            new MailAnsweringRunLedger(MailAnsweringRunBounds.Default));
+            new MailAnsweringRunLedger(MailAnsweringRunBounds.Default),
+            SensitiveContentEgressGuards.Inactive());
         var agent = MailAnsweringAgentComposition.Compose(
             chatClient,
             plan,
@@ -475,7 +477,8 @@ public sealed class MailAnsweringAgentCompositionTests
         var retrieval = new ScopedMailKnowledgeRetrieval(
             knowledgeSearch,
             OnePrimaryAccount,
-            new MailAnsweringRunLedger(MailAnsweringRunBounds.Create(100, 8, 80_000)));
+            new MailAnsweringRunLedger(MailAnsweringRunBounds.Create(100, 8, 80_000)),
+            SensitiveContentEgressGuards.Inactive());
         var agent = MailAnsweringAgentComposition.Compose(
             chatClient,
             ChatDeclarations.Plan(),
@@ -522,7 +525,8 @@ public sealed class MailAnsweringAgentCompositionTests
         retrieval = new ScopedMailKnowledgeRetrieval(
             knowledgeSearch,
             scope,
-            new MailAnsweringRunLedger(MailAnsweringRunBounds.Default));
+            new MailAnsweringRunLedger(MailAnsweringRunBounds.Default),
+            SensitiveContentEgressGuards.Inactive());
 
         return MailAnsweringAgentComposition.Compose(
             chatClient,

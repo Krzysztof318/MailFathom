@@ -83,7 +83,9 @@ public sealed class MailboxKnowledgeSearch : IEmailKnowledgeSearch
             ResultLimit = this.bounds.MaximumPassages,
         };
 
-        var result = await this.searchReader.SearchEmailsAsync(request, cancellationToken);
+        // Deliberately the unguarded window: an extract reaches a model rather than an MCP caller, and the retrieval
+        // that sends it guards it there, under the egress point it actually crosses.
+        var result = await this.searchReader.SearchWindowAsync(request, cancellationToken);
 
         return EmailKnowledgeLookup.Unfiltered(
             [

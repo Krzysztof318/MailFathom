@@ -8,6 +8,8 @@ using MailFathom.Application.Accounts;
 using MailFathom.Application.Emails.ListEmails;
 using MailFathom.Application.Emails.Mailboxes;
 using MailFathom.Application.Emails.Summaries;
+using MailFathom.Application.SensitiveContent.Detection;
+using MailFathom.Application.SensitiveContent.Egress;
 using MailFathom.Application.Synchronization.Checkpoints;
 using MailFathom.Application.UnitTests.TestDoubles;
 using MailFathom.Domain.Accounts;
@@ -22,6 +24,9 @@ namespace MailFathom.Application.UnitTests.Emails.ListEmails;
 /// <summary>Covers the mailbox listing use case: its filters, its bounds, and the keyset walk it issues cursors for.</summary>
 public sealed class MailboxTimelineReaderTests
 {
+    /// <summary>The literal the scanner in the guarded-egress tests reports, standing in for a credential in mail.</summary>
+    private const string Marker = "AKIAEXAMPLEKEY";
+
     private static readonly DateTimeOffset FirstJuly = new(2026, 7, 1, 8, 0, 0, TimeSpan.Zero);
 
     /// <summary>What the default catalog serves, so an unscoped request reaches every email a test arranged.</summary>
@@ -708,17 +713,103 @@ public sealed class MailboxTimelineReaderTests
         return visited;
     }
 
+    /// <summary>A page is one of the points mail content leaves the deployment, so the one text it carries is scanned first.</summary>
+    [Fact]
+    public async Task ListEmailsAsync_ASwitchedOnScanner_RedactsEverySubjectBeforeThePageIsPublished()
+    {
+        // Arrange
+        using var egress = ScanningSensitiveContentEgress.Finding(Marker, TimeProvider.System);
+        var timeline = new InMemoryStoredEmailTimeline().WithAll(
+        [
+            SyntheticEmailSummaries.Create(FirstJuly, subject: $"the key is {Marker}"),
+            SyntheticEmailSummaries.Create(FirstJuly.AddDays(1), subject: "an ordinary subject"),
+        ]);
+        var reader = ReaderOver(timeline, egressGuard: egress.Guard);
+
+        // Act
+        var result = await reader.ListEmailsAsync(new ListEmailsRequest(), TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(
+            ["an ordinary subject", "the key is [redacted:CloudKey]"],
+            result.Emails.Select(summary => summary.Subject));
+    }
+
+    /// <summary>
+    /// The name in front of an address is free text whoever sent the message chose, so it is scanned like the subject.
+    /// The address beside it is a routing identity a server issued and is left alone, because a reply has to reach it.
+    /// </summary>
+    [Fact]
+    public async Task ListEmailsAsync_ASwitchedOnScanner_RedactsTheSenderDisplayNameAndLeavesTheAddress()
+    {
+        // Arrange
+        using var egress = ScanningSensitiveContentEgress.Finding(Marker, TimeProvider.System);
+        var timeline = new InMemoryStoredEmailTimeline().WithAll(
+        [
+            SyntheticEmailSummaries.Create(
+                FirstJuly,
+                subject: "an ordinary subject",
+                senderAddress: "sender@example.test") with
+            {
+                SenderDisplayName = $"deploy bot {Marker}",
+            },
+        ]);
+        var reader = ReaderOver(timeline, egressGuard: egress.Guard);
+
+        // Act
+        var result = await reader.ListEmailsAsync(new ListEmailsRequest(), TestContext.Current.CancellationToken);
+
+        // Assert
+        var published = Assert.Single(result.Emails);
+
+        Assert.Equal("deploy bot [redacted:CloudKey]", published.SenderDisplayName);
+        Assert.Equal("sender@example.test", published.SenderAddress);
+    }
+
+    /// <summary>Serving a page a scanner could not read would be the leak the switch was turned on to prevent.</summary>
+    [Fact]
+    public async Task ListEmailsAsync_ADetectorThatCannotAnswer_RefusesTheListingRatherThanServingItUnscanned()
+    {
+        // Arrange
+        using var egress = ScanningSensitiveContentEgress.Unavailable(TimeProvider.System);
+        var timeline = new InMemoryStoredEmailTimeline().WithAll(
+            [SyntheticEmailSummaries.Create(FirstJuly, subject: "an ordinary subject")]);
+        var reader = ReaderOver(timeline, egressGuard: egress.Guard);
+
+        // Act, Assert
+        await Assert.ThrowsAsync<SensitiveContentScannerUnavailableException>(() =>
+            reader.ListEmailsAsync(new ListEmailsRequest(), TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>An opt-in nobody took must not appear on this path at all.</summary>
+    [Fact]
+    public async Task ListEmailsAsync_ADeploymentThatScansNothing_PublishesThePageUntouched()
+    {
+        // Arrange
+        var timeline = new InMemoryStoredEmailTimeline().WithAll(
+            [SyntheticEmailSummaries.Create(FirstJuly, subject: $"the key is {Marker}")]);
+        var reader = ReaderOver(timeline);
+
+        // Act
+        var result = await reader.ListEmailsAsync(new ListEmailsRequest(), TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal($"the key is {Marker}", Assert.Single(result.Emails).Subject);
+    }
+
     private static MailboxTimelineReader ReaderOver(
         InMemoryStoredEmailTimeline timeline,
         IMailAccountCatalog? accountCatalog = null,
-        ISynchronizationFreshnessReader? freshnessReader = null) => new(
+        ISynchronizationFreshnessReader? freshnessReader = null,
+        SensitiveContentEgressGuard? egressGuard = null) => new(
         timeline,
         freshnessReader ?? FreshnessReaderReturning(InboxFreshness),
         new MailboxScopeResolver(
             accountCatalog ?? CatalogServing(EveryAccountTheSyntheticTimelineUses),
             StubMailFolderParticipation.Everything,
             StubJunkMailFolderCatalog.None,
-            StubMailFolderMappings.ResolvingNothing));
+            StubMailFolderMappings.ResolvingNothing),
+        egressGuard ?? SensitiveContentEgressGuards.Inactive());
 
     /// <summary>Builds a catalog that serves exactly the accounts named, in the order the port promises.</summary>
     private static IMailAccountCatalog CatalogServing(params MailAccountId[] servedAccountIds)

@@ -16,6 +16,8 @@ using MailFathom.Application.Emails.Mailboxes;
 using MailFathom.Application.Resilience;
 using MailFathom.Application.Retrieval;
 using MailFathom.Application.Retrieval.AskMail;
+using MailFathom.Application.SensitiveContent.Detection;
+using MailFathom.Application.SensitiveContent.Egress;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Answering.Audit;
 using MailFathom.TestSupport;
@@ -36,6 +38,9 @@ public sealed class MailAnsweringAgentTests
     private static readonly MailQuestion Question = new(
         MailQuestionText.Create("was the invoice attached"),
         MailboxScope.Create([MailAccountId.Create("primary")], []));
+
+    /// <summary>The literal the scanner in the guarded-egress tests reports, standing in for a credential in mail.</summary>
+    private const string Marker = "AKIAEXAMPLEKEY";
 
     private static readonly DateTimeOffset RunStartedAt = new(2026, 8, 8, 12, 0, 0, TimeSpan.Zero);
 
@@ -134,6 +139,63 @@ public sealed class MailAnsweringAgentTests
         Assert.Equal(0, provider.RequestCount);
     }
 
+    /// <summary>A question is text somebody typed into a client, and it leaves this deployment as completely as an extract does.</summary>
+    [Fact]
+    public async Task AnswerAsync_ASwitchedOnScanner_RedactsTheQuestionBeforeItReachesTheProvider()
+    {
+        // Arrange
+        using var egress = ScanningSensitiveContentEgress.Finding(Marker, TimeProvider.System);
+        using var provider = ScriptedTransport.Answering(Completion("It is rotated now."));
+        var agent = provider.AgentOver(new RecordingEmailKnowledgeSearch(), egressGuard: egress.Guard);
+
+        // Act
+        await agent.AnswerAsync(
+            Question with { Text = MailQuestionText.Create($"is the key {Marker} still valid") },
+            Observation(),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        var body = Assert.Single(provider.RequestBodies);
+
+        Assert.DoesNotContain(Marker, body, StringComparison.Ordinal);
+        Assert.Contains("[redacted:CloudKey]", body, StringComparison.Ordinal);
+    }
+
+    /// <summary>Sending a prompt a scanner could not read would be the leak the switch was turned on to prevent.</summary>
+    [Fact]
+    public async Task AnswerAsync_ADetectorThatCannotAnswer_RefusesTheRunWithoutReachingTheProvider()
+    {
+        // Arrange
+        using var egress = ScanningSensitiveContentEgress.Unavailable(TimeProvider.System);
+        using var provider = ScriptedTransport.Answering(Completion("never reached"));
+        var agent = provider.AgentOver(new RecordingEmailKnowledgeSearch(), egressGuard: egress.Guard);
+
+        // Act
+        await Assert.ThrowsAsync<SensitiveContentScannerUnavailableException>(() =>
+            agent.AnswerAsync(Question, Observation(), TestContext.Current.CancellationToken));
+
+        // Assert
+        Assert.Equal(0, provider.RequestCount);
+    }
+
+    /// <summary>An opt-in nobody took must not appear on this path at all.</summary>
+    [Fact]
+    public async Task AnswerAsync_ADeploymentThatScansNothing_SendsTheQuestionAsItWasAsked()
+    {
+        // Arrange
+        using var provider = ScriptedTransport.Answering(Completion("It is rotated now."));
+        var agent = provider.AgentOver(new RecordingEmailKnowledgeSearch());
+
+        // Act
+        await agent.AnswerAsync(
+            Question with { Text = MailQuestionText.Create($"is the key {Marker} still valid") },
+            Observation(),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Contains(Marker, Assert.Single(provider.RequestBodies), StringComparison.Ordinal);
+    }
+
     /// <summary>Opens the record of one run, over the same scope every question here carries.</summary>
     private static MailAnsweringRunObservation Observation() => new(
         MailAnsweringRunId.Create(Guid.CreateVersion7()),
@@ -151,17 +213,21 @@ public sealed class MailAnsweringAgentTests
     private sealed class ScriptedTransport : IDisposable
     {
         private readonly FakeHttpMessageHandler handler;
+        private readonly List<string> requestBodies = [];
         private string payload = string.Empty;
 
         private ScriptedTransport() =>
-            this.handler = new FakeHttpMessageHandler((_, _) =>
+            this.handler = new FakeHttpMessageHandler(async (request, cancellationToken) =>
             {
                 this.RequestCount++;
+                this.requestBodies.Add(request.Content is null
+                    ? string.Empty
+                    : await request.Content.ReadAsStringAsync(cancellationToken));
 
-                return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+                return new HttpResponseMessage(HttpStatusCode.OK)
                 {
                     Content = new StringContent(this.payload, Encoding.UTF8, "application/json"),
-                });
+                };
             });
 
         /// <summary>The health state every call this provider serves reports into, so a test can read what the run established.</summary>
@@ -172,12 +238,16 @@ public sealed class MailAnsweringAgentTests
 
         public int RequestCount { get; private set; }
 
+        /// <summary>What the provider was actually sent, which is where a test reads whether anything left unredacted.</summary>
+        public IReadOnlyList<string> RequestBodies => this.requestBodies;
+
         public static ScriptedTransport Answering(string payload) => new() { payload = payload };
 
         public MailAnsweringAgent AgentOver(
             IEmailKnowledgeSearch knowledgeSearch,
             ChatGenerationPlan? plan = null,
-            MailAnsweringRunBounds? runBounds = null)
+            MailAnsweringRunBounds? runBounds = null,
+            SensitiveContentEgressGuard? egressGuard = null)
         {
             var transportFactory = Substitute.For<IHttpClientFactory>();
             transportFactory
@@ -216,6 +286,7 @@ public sealed class MailAnsweringAgentTests
                 operationRunner,
                 this.HealthRecorder,
                 this.SpendLedger,
+                egressGuard ?? SensitiveContentEgressGuards.Inactive(),
                 NullLoggerFactory.Instance,
                 NullLogger<MailAnsweringAgent>.Instance);
         }

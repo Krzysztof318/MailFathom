@@ -9,6 +9,7 @@ using MailFathom.Application.AiProviders;
 using MailFathom.Application.Chat;
 using MailFathom.Application.Resilience;
 using MailFathom.Infrastructure.Observability;
+using MailFathom.TestSupport;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -172,6 +173,7 @@ public sealed class ChatProviderContractTests
             composition.GetRequiredService<IHttpClientFactory>(),
             new PassThroughOutboundOperationRunner(),
             composition.GetRequiredService<IAiProviderHealthRecorder>(),
+            SensitiveContentEgressGuards.Inactive(),
             NullLogger<ProviderChatModelClient>.Instance);
 
     private sealed class FixedChatCredentialSource(string apiKey) : IProviderEndpointCredentialSource

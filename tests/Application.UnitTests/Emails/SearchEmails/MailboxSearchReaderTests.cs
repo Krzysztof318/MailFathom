@@ -8,6 +8,8 @@ using MailFathom.Application.Emails.Embeddings;
 using MailFathom.Application.Emails.Mailboxes;
 using MailFathom.Application.Emails.Search;
 using MailFathom.Application.Emails.SearchEmails;
+using MailFathom.Application.SensitiveContent.Detection;
+using MailFathom.Application.SensitiveContent.Egress;
 using MailFathom.Application.Synchronization.Checkpoints;
 using MailFathom.Application.UnitTests.TestDoubles;
 using MailFathom.Domain.Accounts;
@@ -22,6 +24,9 @@ namespace MailFathom.Application.UnitTests.Emails.SearchEmails;
 /// <summary>Covers the search use case: what it validates, how it ranks, how it orders, and what it bounds.</summary>
 public sealed class MailboxSearchReaderTests
 {
+    /// <summary>The literal the scanner in the guarded-egress tests reports, standing in for a credential in mail.</summary>
+    private const string Marker = "AKIAEXAMPLEKEY";
+
     private static readonly DateTimeOffset FirstJuly = new(2026, 7, 1, 8, 0, 0, TimeSpan.Zero);
 
     private static readonly DateTimeOffset SearchedAt = new(2026, 8, 8, 12, 0, 0, TimeSpan.Zero);
@@ -514,13 +519,95 @@ public sealed class MailboxSearchReaderTests
         Assert.Equal(SemanticSearchCapability.Available, result.SemanticSearch);
     }
 
+    /// <summary>A window is one of the points mail content leaves the deployment, so what it publishes is scanned first.</summary>
+    [Fact]
+    public async Task SearchEmailsAsync_ASwitchedOnScanner_RedactsTheSubjectAndTheSnippetsBeforeTheyArePublished()
+    {
+        // Arrange
+        using var egress = ScanningSensitiveContentEgress.Finding(Marker, TimeProvider.System);
+        var matched = SyntheticEmailSummaries.Create(FirstJuly, subject: $"the key is {Marker}");
+        var index = new InMemoryEmailSearchIndex().With(matched, 0.9f, "invoice", $"use {Marker} to sign in");
+        var reader = ReaderOver(index, egressGuard: egress.Guard);
+
+        // Act
+        var result = await reader.SearchEmailsAsync(RequestFor("invoice"), TestContext.Current.CancellationToken);
+
+        // Assert
+        var match = Assert.Single(result.Matches);
+        Assert.Equal("the key is [redacted:CloudKey]", match.Summary.Subject);
+        Assert.Equal(["use [redacted:CloudKey] to sign in"], match.Snippets);
+    }
+
+    /// <summary>
+    /// The name in front of an address is free text whoever sent the message chose, so it is scanned like the subject.
+    /// The address beside it is a routing identity a server issued and is left alone, because a reply has to reach it.
+    /// </summary>
+    [Fact]
+    public async Task SearchEmailsAsync_ASwitchedOnScanner_RedactsTheSenderDisplayNameAndLeavesTheAddress()
+    {
+        // Arrange
+        using var egress = ScanningSensitiveContentEgress.Finding(Marker, TimeProvider.System);
+        var matched = SyntheticEmailSummaries.Create(
+            FirstJuly,
+            subject: "an ordinary subject",
+            senderAddress: "sender@example.test") with
+        {
+            SenderDisplayName = $"deploy bot {Marker}",
+        };
+        var index = new InMemoryEmailSearchIndex().With(matched, 0.9f, "invoice", "an ordinary extract");
+        var reader = ReaderOver(index, egressGuard: egress.Guard);
+
+        // Act
+        var result = await reader.SearchEmailsAsync(RequestFor("invoice"), TestContext.Current.CancellationToken);
+
+        // Assert
+        var published = Assert.Single(result.Matches).Summary;
+
+        Assert.Equal("deploy bot [redacted:CloudKey]", published.SenderDisplayName);
+        Assert.Equal("sender@example.test", published.SenderAddress);
+    }
+
+    /// <summary>Serving a window a scanner could not read would be the leak the switch was turned on to prevent.</summary>
+    [Fact]
+    public async Task SearchEmailsAsync_ADetectorThatCannotAnswer_RefusesTheSearchRatherThanServingItUnscanned()
+    {
+        // Arrange
+        using var egress = ScanningSensitiveContentEgress.Unavailable(TimeProvider.System);
+        var index = new InMemoryEmailSearchIndex()
+            .With(SyntheticEmailSummaries.Create(FirstJuly, subject: "an ordinary subject"), 0.9f, "invoice");
+        var reader = ReaderOver(index, egressGuard: egress.Guard);
+
+        // Act, Assert
+        await Assert.ThrowsAsync<SensitiveContentScannerUnavailableException>(() =>
+            reader.SearchEmailsAsync(RequestFor("invoice"), TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>An opt-in nobody took must not appear on this path at all.</summary>
+    [Fact]
+    public async Task SearchEmailsAsync_ADeploymentThatScansNothing_PublishesTheWindowUntouched()
+    {
+        // Arrange
+        var matched = SyntheticEmailSummaries.Create(FirstJuly, subject: $"the key is {Marker}");
+        var index = new InMemoryEmailSearchIndex().With(matched, 0.9f, "invoice", $"use {Marker} to sign in");
+        var reader = ReaderOver(index);
+
+        // Act
+        var result = await reader.SearchEmailsAsync(RequestFor("invoice"), TestContext.Current.CancellationToken);
+
+        // Assert
+        var match = Assert.Single(result.Matches);
+        Assert.Equal($"the key is {Marker}", match.Summary.Subject);
+        Assert.Equal([$"use {Marker} to sign in"], match.Snippets);
+    }
+
     private static SearchEmailsRequest RequestFor(string? queryText) => new() { QueryText = queryText };
 
     private static MailboxSearchReader ReaderOver(
         InMemoryEmailSearchIndex index,
         IMailAccountCatalog? accountCatalog = null,
         EmailSearchSnippetBounds? snippetBounds = null,
-        SemanticEmailSearch? semanticSearch = null) => new(
+        SemanticEmailSearch? semanticSearch = null,
+        SensitiveContentEgressGuard? egressGuard = null) => new(
         index,
         semanticSearch ?? LexicalOnlySemanticSearch(),
         FreshnessReaderReturning(InboxFreshness),
@@ -529,7 +616,8 @@ public sealed class MailboxSearchReaderTests
             StubMailFolderParticipation.Everything,
             StubJunkMailFolderCatalog.None,
             StubMailFolderMappings.ResolvingNothing),
-        snippetBounds ?? EmailSearchSnippetBounds.Default);
+        snippetBounds ?? EmailSearchSnippetBounds.Default,
+        egressGuard ?? SensitiveContentEgressGuards.Inactive());
 
     /// <summary>Builds the semantic half of a deployment that configured no embedding provider and activated nothing.</summary>
     private static SemanticEmailSearch LexicalOnlySemanticSearch() => new(

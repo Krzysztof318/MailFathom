@@ -7,6 +7,7 @@ using MailFathom.AI.Providers;
 using MailFathom.Application.AiProviders;
 using MailFathom.Application.Emails.Embeddings;
 using MailFathom.Application.Resilience;
+using MailFathom.Application.SensitiveContent.Egress;
 using MailFathom.Domain.Failures;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
@@ -26,6 +27,13 @@ namespace MailFathom.AI.ProviderAdapters;
 /// them, and no read path has to know which endpoint produced which. See
 /// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0006-embedding-profile-identity-lifecycle-and-activation-cost.md">ADR 0006</see>.
 /// </para>
+/// <para>
+/// Every passage is scanned before it is sent, where this deployment scans anything, and a scanner that cannot answer
+/// refuses the call rather than letting it go unscanned. The guard applies to every declared endpoint: an address
+/// inside the deployment is still a configured endpoint reached over HTTP, nothing in the declaration distinguishes a
+/// local provider from a hosted one, and text leaving the process is text leaving the process. The one embedding
+/// generator that is exempt is the deterministic one, which computes a vector in this process and sends nothing.
+/// </para>
 /// </remarks>
 internal sealed class ProviderTextEmbeddingGenerator : ITextEmbeddingGenerator
 {
@@ -44,6 +52,7 @@ internal sealed class ProviderTextEmbeddingGenerator : ITextEmbeddingGenerator
     private readonly IHttpClientFactory transportFactory;
     private readonly IOutboundOperationRunner operationRunner;
     private readonly IAiProviderHealthRecorder healthRecorder;
+    private readonly SensitiveContentEgressGuard egressGuard;
     private readonly ILogger<ProviderTextEmbeddingGenerator> logger;
 
     /// <summary>Initializes a generator over the declared chain, its credentials, its transport, and its resilience budget.</summary>
@@ -53,6 +62,7 @@ internal sealed class ProviderTextEmbeddingGenerator : ITextEmbeddingGenerator
     /// <param name="transportFactory">Opens the transport a request is sent over, one per attempt.</param>
     /// <param name="operationRunner">Applies the provider resilience budget.</param>
     /// <param name="healthRecorder">Records what each call established about the embedding provider.</param>
+    /// <param name="egressGuard">Scans every passage before it is sent, where this deployment scans anything.</param>
     /// <param name="logger">Records the outcome without recording any passage, vector, or credential.</param>
     /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
     public ProviderTextEmbeddingGenerator(
@@ -62,6 +72,7 @@ internal sealed class ProviderTextEmbeddingGenerator : ITextEmbeddingGenerator
         IHttpClientFactory transportFactory,
         IOutboundOperationRunner operationRunner,
         IAiProviderHealthRecorder healthRecorder,
+        SensitiveContentEgressGuard egressGuard,
         ILogger<ProviderTextEmbeddingGenerator> logger)
     {
         ArgumentNullException.ThrowIfNull(plan);
@@ -70,6 +81,7 @@ internal sealed class ProviderTextEmbeddingGenerator : ITextEmbeddingGenerator
         ArgumentNullException.ThrowIfNull(transportFactory);
         ArgumentNullException.ThrowIfNull(operationRunner);
         ArgumentNullException.ThrowIfNull(healthRecorder);
+        ArgumentNullException.ThrowIfNull(egressGuard);
         ArgumentNullException.ThrowIfNull(logger);
 
         this.plan = plan;
@@ -78,6 +90,7 @@ internal sealed class ProviderTextEmbeddingGenerator : ITextEmbeddingGenerator
         this.transportFactory = transportFactory;
         this.operationRunner = operationRunner;
         this.healthRecorder = healthRecorder;
+        this.egressGuard = egressGuard;
         this.logger = logger;
     }
 
@@ -94,9 +107,18 @@ internal sealed class ProviderTextEmbeddingGenerator : ITextEmbeddingGenerator
     {
         EmbeddingRequestBounds.Require(passages, this.plan.MaximumPassagesPerCall);
 
+        // Scanned before the chain rather than before each endpoint, so one call costs one scan however many endpoints
+        // it falls through and however many attempts the resilience pipeline makes at each. A scanner that cannot
+        // answer refuses the call here, where the refusal is still itself rather than a fault attributed to a provider
+        // that was never reached.
+        var guarded = await this.egressGuard.GuardAllAsync(
+            SensitiveContentEgressPoint.HostedEmbeddingInput,
+            passages,
+            cancellationToken);
+
         try
         {
-            var vectors = await this.GenerateAcrossChainAsync(passages, cancellationToken);
+            var vectors = await this.GenerateAcrossChainAsync(guarded, cancellationToken);
 
             // Recorded once the chain has produced vectors, not once an endpoint has: an endpoint that fell through to
             // a working fallback is a chain that served, and reporting the fall-through as ill health would describe
