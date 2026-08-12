@@ -158,21 +158,77 @@ llama.cpp serves the embeddings route only for a model loaded with a pooling typ
 roles from it runs two servers with two declarations rather than one — which the chain and the separate `Chat` section
 already express.
 
+## A cloud platform whose own API is something else
+
+AWS Bedrock and Google Vertex AI are the two entries an operator most often expects to be absent, because neither
+platform's native API is this protocol: Bedrock's own is `InvokeModel` and `Converse` under SigV4, and Vertex's is
+`generateContent`. Both nonetheless publish an OpenAI-compatible surface beside it, and on both of them the credential
+that surface accepts is a bearer token — which is exactly what an `ApiKey` declaration presents. So each is an ordinary
+entry with one operational condition attached rather than a platform out of reach.
+
+| Service | Roles | `Address` | Credential | `SupportsRequestedDimension` | Evidence |
+| --- | --- | --- | --- | --- | --- |
+| [AWS Bedrock](https://docs.aws.amazon.com/bedrock/latest/userguide/inference-chat-completions-mantle.html) | **chat only** | `https://bedrock-mantle.<region>.api.aws/v1` | `ApiKey` | n/a | Documented, 2026-08-12 |
+| [Google Vertex AI](https://docs.cloud.google.com/vertex-ai/generative-ai/docs/migrate/openai/overview) | chat; embeddings unestablished | `https://<location>-aiplatform.googleapis.com/v1/projects/<project>/locations/<location>/endpoints/openapi` | `ApiKey` | unestablished | Documented, 2026-08-12 |
+
+**The credential on both of these expires, and that is the condition.** Bedrock issues a short-term key lasting at most
+twelve hours, which is the kind AWS recommends for production, and a long-term key lasting until a configured expiry,
+which its own documentation marks for exploration only. A Vertex bearer is a Google Cloud access token, which for a
+service account lasts an hour by default. MailFathom holds either as an ordinary secret reference and resolves it per
+request, so a process beside the deployment that mints a fresh token and rewrites the file is picked up on the next
+call — no restart, no configuration reload, nothing to invalidate. A `systemd` timer or a Kubernetes `CronJob` writing
+the same path is the whole arrangement.
+
+What it costs is worth reading before either entry is declared. A window in which the file holds an expired token is a
+*credential rejected*, which is deliberately not retried, and a refresher that dies silently takes the AI features down
+until somebody notices — mail synchronization is unaffected, which bounds it but does not remove it. Give the interval
+real margin against the lifetime rather than matching it, and treat the refresher as a component of the deployment.
+
+Bedrock's address is the part most likely to be written wrong, because AWS documents two endpoints and its own pages
+show more than one base path. `bedrock-mantle` is the one AWS recommends and the only one serving the responses API;
+`bedrock-runtime` serves chat completions as well, at a base path its current examples write as `/v1` and its guardrails
+example and legacy reference write as `/openai/v1`. Which models each endpoint carries differs too, so the region, the
+endpoint, and the routed model identifier are one choice rather than three — take the address from the endpoint the
+model is actually on rather than from this row.
+
+**Neither platform is reachable for what its compatible surface does not serve**, and for Bedrock that is embeddings
+entirely. Titan Text Embeddings, Titan G1, Cohere Embed, Nova Multimodal Embeddings, and Marengo each answer through
+Bedrock's own invocation APIs and through neither OpenAI-compatible route, so a deployment taking chat from Bedrock
+declares its embedding chain against one of the entries above — which costs nothing, because the two were always
+separate declarations. An operator who specifically needs a Bedrock-hosted embedding model runs a gateway that speaks
+this protocol outward and `InvokeModel` inward, and MailFathom reaches the gateway as an ordinary entry. That gateway
+sees every passage of mail text on its way past, which makes it a component to secure rather than a translation layer
+to forget about.
+
+Vertex's embeddings answer is genuinely open rather than negative, and the distinction is the reason this row says
+`unestablished` instead of `chat only`. Google's REST reference does publish an `openapi.embeddings` method beside
+`chat.completions`, but it documents that method around a model the operator deployed to an endpoint of their own with
+`invokeRoutePrefix` set, while every page written about reaching Google's *managed* models through the OpenAI libraries
+is written about chat completions. Whether a managed embedding model answers at `.../endpoints/openapi/embeddings` is
+therefore something a call would settle and reading has not.
+
+[ADR 0011](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0011-reaching-a-provider-outside-the-openai-wire-protocol.md)
+records why MailFathom writes neither a Bedrock adapter nor a credential shape that mints Google tokens for itself, and
+what would change either answer.
+
 ## What has no embeddings route at all
 
-Groq, xAI, and the Hugging Face router each serve chat and no OpenAI-compatible embeddings route. That is a fact about
-the service rather than a failure, and it costs nothing structurally: the chat endpoint and the embedding chain are
-separate declarations with separate aliases and separate credentials, so a deployment may take chat from one of these
-and embeddings from an entry above. What it must not do is declare one of them under `Embeddings:Endpoints` and wait
-for the first call to say so.
+Groq, xAI, the Hugging Face router, and AWS Bedrock each serve chat and no OpenAI-compatible embeddings route. That is a
+fact about the service rather than a failure, and it costs nothing structurally: the chat endpoint and the embedding
+chain are separate declarations with separate aliases and separate credentials, so a deployment may take chat from one
+of these and embeddings from an entry above. What it must not do is declare one of them under `Embeddings:Endpoints` and
+wait for the first call to say so.
 
 ## Which chat API an entry serves
 
 `Chat:Api` defaults to `ChatCompletions`, which every chat-serving entry on this page documents. A `Responses` path is
 documented by OpenAI, Azure OpenAI, xAI, Groq (in beta), Ollama, llama.cpp, LM Studio, and vLLM. The Gemini, Mistral,
-and Cohere compatibility layers document none, and a deployment stating `Responses` against one of those is answered
-*request refused*. Every other entry above was checked for the embeddings route rather than for this path, so its
-answer here is unestablished in the same sense the width column uses.
+Cohere, and Vertex AI compatibility layers document none, and a deployment stating `Responses` against one of those is
+answered *request refused*. Every other entry above was checked for the embeddings route rather than for this path, so
+its answer here is unestablished in the same sense the width column uses.
+
+Bedrock is the entry where the two APIs are two addresses. `bedrock-mantle` documents both paths and `bedrock-runtime`
+documents only chat completions, so `Chat:Api` and `Address` are one decision there rather than two independent keys.
 
 Serving the path is not the whole of it. MailFathom conducts every responses call statelessly and asks for the
 reasoning content it will hand back on the next turn, for the reasons [chat generation § the responses API is used
@@ -218,7 +274,9 @@ register, and the dates on the rows exist precisely because nothing renews them 
 
 **Anything that does not speak this protocol.** A service reachable only through its own SDK or its own wire format is
 out of the mechanism's reach entirely, and pointing a deployment at one is not a configuration entry. Adding a second
-protocol is an architectural decision rather than an addition to this table.
+protocol is an architectural decision rather than an addition to this table, and
+[ADR 0011](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0011-reaching-a-provider-outside-the-openai-wire-protocol.md)
+is where that decision was taken and what would reopen it.
 
 **A verdict on quality.** Which model retrieves or answers better is not what any of this establishes. Every entry says
 only that the protocol, the route, the credential, and the width behaved as recorded.

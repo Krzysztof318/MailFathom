@@ -31,3 +31,4 @@ For background on ADRs, see <https://adr.github.io/>.
 - [0008: Store a copied message as a second local email, and leave the occurrence the only identity a stored row carries](0008-copied-message-local-identity.md)
 - [0009: Keep the job store in MailFathom's own schema, claim a row with `FOR UPDATE SKIP LOCKED`, and let the enqueuer compose the one key that identifies an execution](0009-durable-job-store-and-execution-identity.md)
 - [0010: Author a rule in the configuration the deployment already carries, and write its condition as one NCalc expression](0010-rule-authoring-in-configuration-and-ncalc-conditions.md)
+- [0011: Reach a cloud platform over its own OpenAI-compatible surface with a bearer credential the deployment is handed, and write neither a second wire protocol nor a token-minting credential shape](0011-reaching-a-provider-outside-the-openai-wire-protocol.md)
