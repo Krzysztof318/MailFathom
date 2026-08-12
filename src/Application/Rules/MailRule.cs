@@ -21,13 +21,15 @@ public sealed class MailRule
         IMailRuleCondition condition,
         MailRuleActionSet actions,
         bool stopWhenMatched,
-        FrozenSet<string> accounts)
+        FrozenSet<string> accounts,
+        FrozenSet<MailRuleTrigger> triggers)
     {
         this.Name = name;
         this.Condition = condition;
         this.Actions = actions;
         this.StopWhenMatched = stopWhenMatched;
         this.Accounts = accounts;
+        this.Triggers = triggers;
     }
 
     /// <summary>Gets the name the rule is declared and reported under.</summary>
@@ -54,21 +56,38 @@ public sealed class MailRule
     /// </remarks>
     public IReadOnlySet<string> Accounts { get; }
 
+    /// <summary>Gets the automatic triggers this rule takes part in, empty for a rule only a requested walk runs.</summary>
+    /// <remarks>
+    /// Empty means no automatic occasion rather than every one, which is the opposite reading to <see cref="Accounts" />
+    /// and is deliberate: a rule reaching no account is a rule nobody would write, while a rule nothing fires by itself
+    /// is exactly what periodic housekeeping wants. The rule stays in the set, is validated like every other, and runs
+    /// when somebody asks for a walk of the whole mailbox.
+    /// </remarks>
+    public IReadOnlySet<MailRuleTrigger> Triggers { get; }
+
     /// <summary>Creates a rule from a condition that has already been proven usable.</summary>
     /// <param name="name">The name the rule is declared and reported under.</param>
     /// <param name="condition">The compiled condition.</param>
     /// <param name="actions">What a match does to the matching email, or nothing for a rule that changes nothing.</param>
     /// <param name="stopWhenMatched">Whether a match ends the pass.</param>
     /// <param name="accounts">The accounts the rule applies to, or nothing for a rule that applies to every account.</param>
+    /// <param name="triggers">
+    /// The automatic triggers the rule takes part in, empty for a rule only a requested walk runs, and
+    /// <see langword="null" /> for a rule that declares none — which is <see cref="MailRuleTrigger.WhenNoneDeclared" />
+    /// rather than nothing, for the reason that value states.
+    /// </param>
     /// <returns>The rule.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="condition" /> is <see langword="null" />.</exception>
-    /// <exception cref="ArgumentException">Thrown when <paramref name="name" /> is empty or whitespace, or an account is.</exception>
+    /// <exception cref="ArgumentException">
+    /// Thrown when <paramref name="name" /> is empty or whitespace, an account is, or a trigger is unspecified.
+    /// </exception>
     public static MailRule Create(
         string name,
         IMailRuleCondition condition,
         MailRuleActionSet? actions = null,
         bool stopWhenMatched = false,
-        IReadOnlyList<string>? accounts = null)
+        IReadOnlyList<string>? accounts = null,
+        IReadOnlyList<MailRuleTrigger>? triggers = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
         ArgumentNullException.ThrowIfNull(condition);
@@ -78,12 +97,18 @@ public sealed class MailRule
             throw new ArgumentException("A rule cannot be scoped to an account with no identifier.", nameof(accounts));
         }
 
+        if (triggers?.Any(trigger => !trigger.IsSpecified) == true)
+        {
+            throw new ArgumentException("A rule cannot declare a trigger that is unspecified.", nameof(triggers));
+        }
+
         return new MailRule(
             name,
             condition,
             actions ?? MailRuleActionSet.Empty,
             stopWhenMatched,
-            accounts is null ? FrozenSet<string>.Empty : accounts.Select(account => account.Trim()).ToFrozenSet(StringComparer.Ordinal));
+            accounts is null ? FrozenSet<string>.Empty : accounts.Select(account => account.Trim()).ToFrozenSet(StringComparer.Ordinal),
+            (triggers ?? MailRuleTrigger.WhenNoneDeclared).ToFrozenSet());
     }
 
     /// <summary>Reports whether this rule is one of the rules the given account's mail is passed through.</summary>
@@ -101,4 +126,14 @@ public sealed class MailRule
 
         return this.Accounts.Count == 0 || this.Accounts.Contains(account.Trim());
     }
+
+    /// <summary>Reports whether this rule is one an automatic trigger runs.</summary>
+    /// <param name="trigger">The trigger the walk in progress was started by.</param>
+    /// <returns><see langword="true" /> when the rule declares this trigger.</returns>
+    /// <remarks>
+    /// A rule the trigger does not reach is passed over rather than evaluated and leaves no evaluation behind, exactly
+    /// as a rule scoped to another account does: it did not decline to match, it was not one of this walk's rules. It
+    /// follows that such a rule cannot end the pass either, whatever it declares.
+    /// </remarks>
+    public bool RunsOn(MailRuleTrigger trigger) => this.Triggers.Contains(trigger);
 }

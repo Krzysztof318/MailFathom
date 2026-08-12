@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Application.Rules;
 using MailFathom.Domain.Folders;
 using MailFathom.Domain.Mutations;
 using MailFathom.Host.Configuration.Rules;
@@ -284,13 +285,86 @@ public sealed class MailRuleSetMappingTests
         Assert.NotEqual(beforeEdit.Revision, afterEdit.Revision);
     }
 
+    /// <summary>An absent key leaves a rule set meaning what it meant, which is what makes the key an addition.</summary>
+    [Fact]
+    public void Map_RuleDeclaringNoTrigger_TakesPartInArrivalAlone()
+    {
+        // Arrange
+        var settings = new MailRulesOptions { Rules = [CreateRule("says-nothing", "isSeen")] };
+
+        // Act
+        var ruleSet = MailRuleSetMapper.Map(settings, this.compiler);
+
+        // Assert
+        Assert.Equal([MailRuleTrigger.Arrival], ruleSet.Rules[0].Triggers);
+        Assert.True(ruleSet.Rules[0].RunsOn(MailRuleTrigger.Arrival));
+    }
+
+    /// <summary>An empty list is a rule in the set that nothing fires, which is a different thing from a rule switched off.</summary>
+    [Fact]
+    public void Map_RuleDeclaringAnEmptyTriggerList_StaysInTheSetAndTakesPartInNoTrigger()
+    {
+        // Arrange
+        var settings = new MailRulesOptions { Rules = [CreateRule("housekeeping", "ageInDays > 90", triggers: [])] };
+
+        // Act
+        var ruleSet = MailRuleSetMapper.Map(settings, this.compiler);
+
+        // Assert
+        Assert.Equal(["housekeeping"], ruleSet.Rules.Select(rule => rule.Name));
+        Assert.Empty(ruleSet.Rules[0].Triggers);
+        Assert.False(ruleSet.Rules[0].RunsOn(MailRuleTrigger.Arrival));
+    }
+
+    /// <summary>Withdrawing a rule from every trigger changes what the rule set does, so it changes what it is called.</summary>
+    [Fact]
+    public void Map_WithdrawingARuleFromEveryTrigger_MovesTheRevision()
+    {
+        // Arrange
+        var onArrival = new MailRulesOptions { Rules = [CreateRule("housekeeping", "isSeen")] };
+        var manualOnly = new MailRulesOptions { Rules = [CreateRule("housekeeping", "isSeen", triggers: [])] };
+
+        // Act
+        var mapped = MailRuleSetMapper.Map(manualOnly, this.compiler);
+
+        // Assert
+        Assert.NotEqual(MailRuleSetMapper.Map(onArrival, this.compiler).Revision, mapped.Revision);
+    }
+
+    /// <summary>Writing the default out says what leaving the key out says, so the two are one rule set.</summary>
+    [Fact]
+    public void Map_TheDefaultTriggerWrittenOut_ProducesTheSameRevisionAsDeclaringNone()
+    {
+        // Arrange
+        var writtenOut = new MailRulesOptions { Rules = [CreateRule("says-it", "isSeen", triggers: ["arrival"])] };
+        var declaringNone = new MailRulesOptions { Rules = [CreateRule("says-it", "isSeen")] };
+
+        // Act
+        var mapped = MailRuleSetMapper.Map(writtenOut, this.compiler);
+
+        // Assert
+        Assert.Equal(MailRuleSetMapper.Map(declaringNone, this.compiler).Revision, mapped.Revision);
+    }
+
+    /// <summary>A dropped name would turn an automatic rule into a manual one, which is the one outcome a typo must not have.</summary>
+    [Fact]
+    public void Map_RuleDeclaringATriggerNothingRecognizes_IsRefusedRatherThanMappedAsManualOnly()
+    {
+        // Arrange
+        var settings = new MailRulesOptions { Rules = [CreateRule("mistyped", "isSeen", triggers: ["Arival"])] };
+
+        // Act, Assert
+        Assert.Throws<InvalidOperationException>(() => MailRuleSetMapper.Map(settings, this.compiler));
+    }
+
     private static MailRuleOptions CreateRule(
         string name,
         string conditionText,
         bool stopWhenMatched = false,
         bool enabled = true,
         string[]? accounts = null,
-        MailRuleActionOptions? actions = null) =>
+        MailRuleActionOptions? actions = null,
+        string[]? triggers = null) =>
         new()
         {
             Name = name,
@@ -299,5 +373,6 @@ public sealed class MailRuleSetMappingTests
             Enabled = enabled,
             Accounts = accounts ?? [],
             Actions = actions ?? new MailRuleActionOptions(),
+            Triggers = triggers,
         };
 }

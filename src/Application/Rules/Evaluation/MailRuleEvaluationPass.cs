@@ -27,10 +27,12 @@ namespace MailFathom.Application.Rules.Evaluation;
 /// an MCP read does waits on a rule.
 /// </para>
 /// <para>
-/// The two walks are the two triggers. The arrival walk reaches mail no pass has evaluated, and recording an evaluation
-/// is what takes an email out of it, which is what makes a rule apply to mail arriving from now on. The requested walk
-/// is the only way mail already evaluated is evaluated again: reprocessing under a newer rule set is something an owner
-/// asks for, never something an edit sets off.
+/// The two walks reach different mail and different rules. The arrival walk reaches mail no pass has evaluated, and
+/// recording an evaluation is what takes an email out of it, which is what makes a rule apply to mail arriving from now
+/// on; it runs the rules declaring the <see cref="MailRuleTrigger.Arrival" /> trigger and passes over the rest. The
+/// requested walk is the only way mail already evaluated is evaluated again — reprocessing under a newer rule set is
+/// something an owner asks for, never something an edit sets off — and it runs every rule of the set, because asking
+/// for a run is the request itself rather than an occasion a rule opts into.
 /// </para>
 /// <para>
 /// Both walks are bounded per batch and commit each batch with the position it reached, so an interrupted pass resumes
@@ -129,27 +131,19 @@ public sealed class MailRuleEvaluationPass
     public async Task<MailRuleEvaluationReport> RunAsync(MailAccountId accountId, CancellationToken cancellationToken)
     {
         var ruleSet = this.ruleSetSource.Current;
-        var requiresExtractedBodyText = RequiresExtractedBodyText(ruleSet, accountId);
 
-        var arrivals = await this.WalkArrivalsAsync(accountId, ruleSet, requiresExtractedBodyText, cancellationToken);
+        var arrivals = await this.WalkArrivalsAsync(
+            accountId,
+            BoundRuleSet.For(ruleSet, accountId, MailRuleExecutionTrigger.Arrival),
+            cancellationToken);
+
         var requestedRun = await this.WalkRequestedRunAsync(
             accountId,
-            ruleSet,
-            requiresExtractedBodyText,
+            BoundRuleSet.For(ruleSet, accountId, MailRuleExecutionTrigger.RequestedRun),
             cancellationToken);
 
         return new MailRuleEvaluationReport(ruleSet.Revision, arrivals, requestedRun.Walk, requestedRun.Ending);
     }
-
-    /// <summary>Reports whether any rule this account's mail reaches names the one fact that costs a stored-content read.</summary>
-    /// <remarks>
-    /// Answered for the whole pass rather than per email, because it is a property of the rule set and the account
-    /// filter. It is what decides whether an email still awaiting extraction is a message to wait for or one to evaluate
-    /// now with the fact absent: a rule set that never names the body text has nothing to wait for.
-    /// </remarks>
-    private static bool RequiresExtractedBodyText(MailRuleSet ruleSet, MailAccountId accountId) => ruleSet.Rules
-        .Where(rule => rule.AppliesTo(accountId.Value))
-        .Any(rule => rule.Condition.ReferencedFacts.Contains(MailRuleFact.BodyText));
 
     /// <summary>Walks the mail no pass has evaluated, in identity order, until the queue or the batch budget runs out.</summary>
     /// <remarks>
@@ -159,8 +153,7 @@ public sealed class MailRuleEvaluationPass
     /// </remarks>
     private async Task<MailRuleEvaluationWalk> WalkArrivalsAsync(
         MailAccountId accountId,
-        MailRuleSet ruleSet,
-        bool requiresExtractedBodyText,
+        BoundRuleSet boundRuleSet,
         CancellationToken cancellationToken)
     {
         var tally = new EvaluationTally();
@@ -182,11 +175,7 @@ public sealed class MailRuleEvaluationPass
                 break;
             }
 
-            var outcome = await this.EvaluateBatchAsync(
-                ruleSet,
-                requiresExtractedBodyText,
-                batch,
-                cancellationToken);
+            var outcome = await this.EvaluateBatchAsync(boundRuleSet, batch, cancellationToken);
 
             if (outcome.EvaluatedEmailIds.Count > 0)
             {
@@ -203,9 +192,9 @@ public sealed class MailRuleEvaluationPass
 
                         await this.RecordDecisionsAsync(
                             session,
-                            ruleSet.Revision,
+                            boundRuleSet.RuleSet.Revision,
                             outcome,
-                            MailRuleExecutionTrigger.Arrival,
+                            boundRuleSet.Trigger,
                             attemptCancellationToken);
                     },
                     cancellationToken);
@@ -232,8 +221,7 @@ public sealed class MailRuleEvaluationPass
     /// </remarks>
     private async Task<RequestedRunOutcome> WalkRequestedRunAsync(
         MailAccountId accountId,
-        MailRuleSet ruleSet,
-        bool requiresExtractedBodyText,
+        BoundRuleSet boundRuleSet,
         CancellationToken cancellationToken)
     {
         var run = await this.runStore.FindOutstandingAsync(accountId, cancellationToken);
@@ -243,7 +231,7 @@ public sealed class MailRuleEvaluationPass
             return new RequestedRunOutcome(Walk: null, Ending: null);
         }
 
-        if (run.Revision.IsSpecified && run.Revision != ruleSet.Revision)
+        if (run.Revision.IsSpecified && run.Revision != boundRuleSet.RuleSet.Revision)
         {
             await this.CommitRunAsync(
                 run with
@@ -258,14 +246,14 @@ public sealed class MailRuleEvaluationPass
 
         if (!run.Revision.IsSpecified)
         {
-            run = run with { Revision = ruleSet.Revision };
+            run = run with { Revision = boundRuleSet.RuleSet.Revision };
         }
 
         var tally = new EvaluationTally();
 
         for (var batchNumber = 1; batchNumber <= this.options.MaxBatchesPerPass && run.IsOutstanding; batchNumber++)
         {
-            run = await this.CarryRunBatchAsync(run, ruleSet, requiresExtractedBodyText, tally, cancellationToken);
+            run = await this.CarryRunBatchAsync(run, boundRuleSet, tally, cancellationToken);
         }
 
         return new RequestedRunOutcome(tally.ToWalk(run.IsOutstanding), run.Ending);
@@ -274,8 +262,7 @@ public sealed class MailRuleEvaluationPass
     /// <summary>Evaluates one batch of the requested run and commits it together with the position it reached.</summary>
     private async Task<MailRuleEvaluationRun> CarryRunBatchAsync(
         MailRuleEvaluationRun run,
-        MailRuleSet ruleSet,
-        bool requiresExtractedBodyText,
+        BoundRuleSet boundRuleSet,
         EvaluationTally tally,
         CancellationToken cancellationToken)
     {
@@ -298,7 +285,7 @@ public sealed class MailRuleEvaluationPass
             return finished;
         }
 
-        var outcome = await this.EvaluateBatchAsync(ruleSet, requiresExtractedBodyText, batch, cancellationToken);
+        var outcome = await this.EvaluateBatchAsync(boundRuleSet, batch, cancellationToken);
         var reachedTheEnd = batch.Count < this.options.BatchSize;
         var recordedAt = this.timeProvider.GetUtcNow();
 
@@ -323,9 +310,9 @@ public sealed class MailRuleEvaluationPass
 
                 await this.RecordDecisionsAsync(
                     session,
-                    ruleSet.Revision,
+                    boundRuleSet.RuleSet.Revision,
                     outcome,
-                    MailRuleExecutionTrigger.RequestedRun,
+                    boundRuleSet.Trigger,
                     attemptCancellationToken);
 
                 await this.runStore.SaveAsync(session, carried, attemptCancellationToken);
@@ -399,8 +386,7 @@ public sealed class MailRuleEvaluationPass
     /// time it reaches this tally and the emails behind it are unaffected.
     /// </remarks>
     private async Task<MailRuleEvaluationBatch> EvaluateBatchAsync(
-        MailRuleSet ruleSet,
-        bool requiresExtractedBodyText,
+        BoundRuleSet boundRuleSet,
         IReadOnlyList<StoredEmailAwaitingRuleEvaluation> batch,
         CancellationToken cancellationToken)
     {
@@ -414,7 +400,7 @@ public sealed class MailRuleEvaluationPass
             // would answer absent and then never be reconsidered. One whose content will never yield text is evaluated
             // now, because waiting for it would stall this account's queue behind a message that can never become
             // eligible.
-            if (requiresExtractedBodyText && candidate.AwaitsExtraction)
+            if (boundRuleSet.RequiresExtractedBodyText && candidate.AwaitsExtraction)
             {
                 outcome.Skipped();
 
@@ -428,12 +414,70 @@ public sealed class MailRuleEvaluationPass
                 this.folderMappings,
                 evaluatedAt);
 
-            var evaluation = await this.evaluator.EvaluateAsync(ruleSet, facts, cancellationToken);
+            var evaluation = await this.evaluator.EvaluateAsync(
+                boundRuleSet.RuleSet,
+                facts,
+                boundRuleSet.Reach,
+                cancellationToken);
 
             outcome.Evaluated(candidate, evaluation, evaluatedAt);
         }
 
         return outcome;
+    }
+
+    /// <summary>The rule set one walk runs, the rules it reaches, and whether any of them needs extracted body text.</summary>
+    /// <param name="RuleSet">The set the walk was bound to when it began, which a reload cannot change under it.</param>
+    /// <param name="Trigger">Which walk this is, which is both what an execution records and what decides the reach.</param>
+    /// <param name="Reach">Which of its rules the walk runs, derived from the walk rather than chosen beside it.</param>
+    /// <param name="RequiresExtractedBodyText">Whether any rule the walk runs for this account names the body text.</param>
+    private sealed record BoundRuleSet(
+        MailRuleSet RuleSet,
+        MailRuleExecutionTrigger Trigger,
+        MailRuleReach Reach,
+        bool RequiresExtractedBodyText)
+    {
+        /// <summary>Binds a rule set to one walk, answering what the walk needs to know before it reads an email.</summary>
+        /// <remarks>
+        /// The walk is named once and everything else about it is derived, because the trigger an execution is recorded
+        /// under and the rules the walk runs are two readings of one fact: a value chosen twice could disagree, and a
+        /// history recording an arrival for a walk that ran every rule would be wrong about what it was.
+        /// The body-text question is answered per walk rather than per pass, because it is a property of the rules the
+        /// walk actually runs. It decides whether an email still awaiting extraction is one to wait for or one to
+        /// evaluate now with the fact absent, so answering it over rules this walk never reaches would hold arriving
+        /// mail behind a manual-only rule that was never going to be asked about it.
+        /// </remarks>
+        internal static BoundRuleSet For(
+            MailRuleSet ruleSet,
+            MailAccountId accountId,
+            MailRuleExecutionTrigger trigger)
+        {
+            var reach = ReachOf(trigger);
+
+            return new BoundRuleSet(
+                ruleSet,
+                trigger,
+                reach,
+                ruleSet.Rules
+                    .Where(rule => rule.AppliesTo(accountId.Value) && reach.Reaches(rule))
+                    .Any(rule => rule.Condition.ReferencedFacts.Contains(MailRuleFact.BodyText)));
+        }
+
+        /// <summary>Reads which rules one walk runs from which walk it is.</summary>
+        /// <remarks>
+        /// An automatic walk runs the rules that declared its trigger; a run somebody asked for runs every rule of the
+        /// set, because asking for one is the request itself rather than an occasion a rule opts into. An unrecognized
+        /// walk is refused rather than defaulted, so a trigger added later has to say which rules it reaches.
+        /// </remarks>
+        private static MailRuleReach ReachOf(MailRuleExecutionTrigger trigger) => trigger switch
+        {
+            MailRuleExecutionTrigger.Arrival => MailRuleReach.TriggeredBy(MailRuleTrigger.Arrival),
+            MailRuleExecutionTrigger.RequestedRun => MailRuleReach.EveryRule,
+            _ => throw new ArgumentOutOfRangeException(
+                nameof(trigger),
+                trigger,
+                "The walk names no trigger this pass knows which rules to run for."),
+        };
     }
 
     /// <summary>What one batch's evaluations produced, before any of them were committed.</summary>

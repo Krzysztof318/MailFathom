@@ -85,6 +85,7 @@ internal static class MailRuleDeclarationRules
     [
         .. FindRuleErrors(rule, position),
         .. FindScopeErrors(rule, position, declaredAccounts),
+        .. FindTriggerErrors(rule, position),
         .. FindActionErrors(rule, position, declaredAccounts),
         .. FindIdentityErrors(rule, position),
     ];
@@ -167,6 +168,52 @@ internal static class MailRuleDeclarationRules
                 $"{opening} — no account named '{unknown}' is declared under MailSynchronization:Accounts, so this rule would reach no mail.";
         }
     }
+
+    /// <summary>Judges the automatic triggers a rule declares, which is the one part of it that decides when it runs.</summary>
+    /// <remarks>
+    /// An unreadable name is refused rather than dropped, which is the whole point of the check: a list whose only entry
+    /// was mistyped would otherwise arrive as an empty one and silently turn an automatic rule into a manual one, and a
+    /// rule that never fires is indistinguishable from a rule nothing matched. A repeated name is refused because the
+    /// value is a set, so writing one twice says nothing the rule does not already say and is a mistake rather than an
+    /// intent. An absent key is not judged at all: it is a rule that declares none, which has a meaning of its own.
+    /// </remarks>
+    private static IEnumerable<string> FindTriggerErrors(MailRuleOptions rule, int position)
+    {
+        if (rule.Triggers is null)
+        {
+            yield break;
+        }
+
+        var opening =
+            $"{MailRulesOptions.SectionName}:{nameof(MailRulesOptions.Rules)}:{position}:{nameof(MailRuleOptions.Triggers)}";
+        var declared = rule.Triggers.Select(trigger => trigger?.Trim() ?? string.Empty).ToArray();
+
+        if (declared.Any(string.IsNullOrEmpty))
+        {
+            yield return $"{opening} — a trigger this rule declares is named by nothing.";
+
+            yield break;
+        }
+
+        var repeated = declared
+            .GroupBy(trigger => trigger, StringComparer.OrdinalIgnoreCase)
+            .FirstOrDefault(group => group.Count() > 1);
+
+        if (repeated is not null)
+        {
+            yield return $"{opening} — the trigger '{repeated.Key}' is named more than once, and the value is a set.";
+        }
+
+        foreach (var unknown in declared.Where(trigger => !MailRuleTrigger.TryParseName(trigger, out _)))
+        {
+            yield return
+                $"{opening} — no trigger is named '{unknown}'. A rule may declare {DescribeDeclarableTriggers()}, and declaring none of them is a rule only a whole-mailbox run applies.";
+        }
+    }
+
+    /// <summary>Names the triggers a rule may declare, so a refusal says what to write instead of only what not to.</summary>
+    private static string DescribeDeclarableTriggers() =>
+        string.Join(", ", MailRuleTrigger.All.Select(trigger => $"'{trigger.Name}'"));
 
     /// <summary>Judges what a rule does to the mail it selects, against the rule itself and against every account it reaches.</summary>
     /// <remarks>

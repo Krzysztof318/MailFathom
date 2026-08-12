@@ -20,6 +20,8 @@ namespace MailFathom.Application.Rules;
 /// A rule scoped to accounts this email does not belong to is passed over rather than evaluated, and leaves no
 /// evaluation behind: it did not decline to match, it was not one of this account's rules. That also means it cannot end
 /// the pass, whatever it declares, so narrowing a stopping rule to one account is a statement about that account alone.
+/// A rule the walk's reach does not hold is passed over on exactly the same terms, so the history stays a record of
+/// decisions rather than of rules that were never asked.
 /// </para>
 /// <para>
 /// The one place totality is applied. The expression evaluator underneath raises failures rather than returning them,
@@ -55,6 +57,7 @@ public sealed class MailRuleSetEvaluator
     /// <summary>Evaluates every rule of the set against one email until a matching rule ends the pass.</summary>
     /// <param name="ruleSet">The bound rule set, whose declared order is the order the rules are reached in.</param>
     /// <param name="facts">The fact surface for the email, which resolves each fact at most once for the whole pass.</param>
+    /// <param name="reach">Which rules this walk runs: the ones its trigger reaches, or every rule somebody asked for.</param>
     /// <param name="cancellationToken">Cancels the pass, which is reported as cancellation rather than as a failed rule.</param>
     /// <returns>What each rule the pass reached concluded, under the rule set's revision.</returns>
     /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
@@ -62,10 +65,12 @@ public sealed class MailRuleSetEvaluator
     public async Task<MailRuleSetEvaluation> EvaluateAsync(
         MailRuleSet ruleSet,
         MailRuleFacts facts,
+        MailRuleReach reach,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(ruleSet);
         ArgumentNullException.ThrowIfNull(facts);
+        ArgumentNullException.ThrowIfNull(reach);
 
         var evaluations = new List<MailRuleEvaluation>(ruleSet.Rules.Count);
         var matchedRules = new List<MailRule>();
@@ -73,7 +78,7 @@ public sealed class MailRuleSetEvaluator
 
         foreach (var rule in ruleSet.Rules)
         {
-            if (!rule.AppliesTo(facts.Account))
+            if (!rule.AppliesTo(facts.Account) || !reach.Reaches(rule))
             {
                 continue;
             }

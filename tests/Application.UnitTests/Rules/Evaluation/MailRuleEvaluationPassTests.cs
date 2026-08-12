@@ -253,6 +253,50 @@ public sealed class MailRuleEvaluationPassTests
         Assert.Null(await this.runStore.FindOutstandingAsync(Account, TestContext.Current.CancellationToken));
     }
 
+    /// <summary>A manual-only rule is the whole point of the key: nothing fires it, and asking for a run does.</summary>
+    [Fact]
+    public async Task RunAsync_ManualOnlyRule_RunsInTheRequestedWalkAndNotInTheArrivalOne()
+    {
+        // Arrange
+        var housekeeping = ScriptedMailRuleCondition.Answering(matches: true);
+        var ruleSet = RuleSetOf(MailRule.Create("housekeeping", housekeeping, triggers: []));
+        this.store.Add(FactsFor(Account));
+
+        // Act
+        var arrivalOnly = await this.CreatePass(ruleSet).RunAsync(Account, TestContext.Current.CancellationToken);
+
+        this.runStore.Arrange(RequestedRun());
+
+        var requested = await this.CreatePass(ruleSet).RunAsync(Account, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(1, arrivalOnly.Arrivals.EvaluatedEmailCount);
+        Assert.Empty(arrivalOnly.Arrivals.MatchedRuleNames);
+        Assert.Equal(["housekeeping"], requested.RequestedRun?.MatchedRuleNames);
+    }
+
+    /// <summary>The body-text question is asked of the rules a walk runs, so a manual-only rule holds nothing up.</summary>
+    [Fact]
+    public async Task RunAsync_ManualOnlyRuleNamingTheBodyText_LeavesArrivingMailAwaitingExtractionEvaluated()
+    {
+        // Arrange
+        var ruleSet = RuleSetOf(
+            MailRule.Create(
+                "housekeeping",
+                ScriptedMailRuleCondition.Answering(matches: true, MailRuleFact.BodyText),
+                triggers: []),
+            MailRule.Create("on-arrival", ScriptedMailRuleCondition.Answering(matches: true)));
+        var awaiting = this.store.Add(FactsFor(Account), awaitsExtraction: true);
+
+        // Act
+        var report = await this.CreatePass(ruleSet).RunAsync(Account, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal([awaiting], this.store.Evaluated);
+        Assert.Equal(0, report.Arrivals.SkippedEmailCount);
+        Assert.Equal(["on-arrival"], report.Arrivals.MatchedRuleNames);
+    }
+
     [Fact]
     public async Task RunAsync_RequestedRunPickedUp_BindsTheRevisionItStartedUnder()
     {
@@ -566,7 +610,7 @@ public sealed class MailRuleEvaluationPassTests
     private static MailRuleSet RuleSetOf(params MailRule[] rules) => MailRuleSet.Create(
         rules,
         MailRuleSetRevision.Create(
-            [.. rules.Select(rule => new MailRuleDeclaration(rule.Name, "isSeen", [.. rule.Actions.Actions], rule.StopWhenMatched, [.. rule.Accounts]))]),
+            [.. rules.Select(rule => new MailRuleDeclaration(rule.Name, "isSeen", [.. rule.Actions.Actions], rule.StopWhenMatched, [.. rule.Accounts], [.. rule.Triggers]))]),
         MailRuleConditionBounds.Default);
 
     private MailRuleEvaluationPass CreatePass(

@@ -41,7 +41,8 @@ internal static class MailRuleSetMapper
                 rule.Condition,
                 (rule.Actions ?? new MailRuleActionOptions()).ToActions(),
                 rule.StopWhenMatched,
-                [.. rule.Accounts.Select(account => account.Trim())]))
+                [.. rule.Accounts.Select(account => account.Trim())],
+                ReadTriggers(rule)))
             .ToArray();
 
         var rules = declarations
@@ -50,10 +51,28 @@ internal static class MailRuleSetMapper
                 Compile(compiler, declaration, bounds),
                 MailRuleActionSet.Create(declaration.Actions),
                 declaration.StopWhenMatched,
-                declaration.Accounts))
+                declaration.Accounts,
+                declaration.Triggers))
             .ToArray();
 
         return MailRuleSet.Create(rules, MailRuleSetRevision.Create(declarations), bounds);
+    }
+
+    /// <summary>Reads the triggers a rule declares, refusing a name validation would already have reported.</summary>
+    /// <remarks>
+    /// A dropped name would leave a shorter list, and a rule whose only declared trigger was mistyped would become a
+    /// rule nothing runs automatically — the one outcome a typo must never produce quietly. Reaching this means a rule
+    /// set was mapped without having been proven usable, which is a defect in the composition rather than in what an
+    /// operator wrote.
+    /// </remarks>
+    private static IReadOnlyList<MailRuleTrigger> ReadTriggers(MailRuleOptions rule)
+    {
+        var triggers = rule.ToTriggers();
+
+        return rule.Triggers is null || triggers.Count == rule.Triggers.Length
+            ? triggers
+            : throw new InvalidOperationException(
+                $"A mail rule set was mapped before it was validated. Rule '{rule.Name}' declares a trigger this system does not recognize.");
     }
 
     private static IMailRuleCondition Compile(

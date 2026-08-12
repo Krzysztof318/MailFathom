@@ -12,6 +12,7 @@ namespace MailFathom.Application.Rules;
 /// <param name="Actions">What a match does to the matching email, in the order the changes are applied.</param>
 /// <param name="StopWhenMatched">Whether a match ends the pass rather than continuing to the rules below.</param>
 /// <param name="Accounts">The accounts the rule was scoped to, in declared order, empty for a rule that applies to every account.</param>
+/// <param name="Triggers">The automatic triggers the rule takes part in, in declared order, empty for a rule only a requested walk runs.</param>
 /// <remarks>
 /// <para>
 /// Deliberately separate from <see cref="MailRule" />, which carries a compiled condition and no authored text. A
@@ -24,10 +25,16 @@ namespace MailFathom.Application.Rules;
 /// is part of what the rule set means, so editing an action moves the revision and the edited rule asks the mailbox
 /// afresh instead of being read as the request it already performed.
 /// </para>
+/// <para>
+/// The triggers are the resolved set rather than what the file did or did not say, so a rule that leaves the key out
+/// and a rule that writes the default explicitly are one rule set rather than two: they mean the same thing, and a
+/// revision that told them apart would supersede a run over an edit that changed nothing.
+/// </para>
 /// </remarks>
 public sealed record MailRuleDeclaration(
     string Name,
     string ConditionText,
     IReadOnlyList<MailRuleAction> Actions,
     bool StopWhenMatched,
-    IReadOnlyList<string> Accounts);
+    IReadOnlyList<string> Accounts,
+    IReadOnlyList<MailRuleTrigger> Triggers);
