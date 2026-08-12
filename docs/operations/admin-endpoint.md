@@ -278,9 +278,11 @@ Configuration: accepted. What is running is what the file says.
 
 file-invoices
   Applies to: work
+  Runs on:    Arrival
   A match:    relocate → archive; ends the pass
-mark-newsletters
+retire-old-newsletters
   Applies to: every account
+  Runs on:    nothing automatically; 'mfctl rules run' applies it
   A match:    setSeen → read
 ```
 
@@ -288,6 +290,12 @@ The order is the answer as much as the rules are: which rule reaches a message f
 rule above another that ends the pass is why the one below it never runs. `mfctl rules show <name>` reports one rule in
 full, including the facts its condition can read. Neither prints the condition an operator wrote — a compiled rule
 carries no text, which is what keeps an address somebody typed into a condition out of every record naming the rule.
+
+`Runs on:` is the [triggers](../features/mail-rules.md#which-triggers-run-a-rule) the rule declares, and the second
+line above is what a rule written with `"Triggers": []` reads as. Such a rule is bound, validated, and applied by a
+whole-mailbox run like any other, and no arriving message reaches it — so the wording says what does run it rather than
+reporting an empty list, because a rule nothing fires by itself and a rule that never matches look identical in a
+history that records neither.
 
 **`mfctl rules run --account <id>` applies the rules to mail that arrived before them.** It returns as soon as the
 deployment has written the request down and never waits for the walk; the pass is a step of the account's

@@ -116,6 +116,30 @@ public sealed class MailRuleEndpointsTests
             (action.Position, action.Mutation, action.Destination));
     }
 
+    /// <summary>
+    /// What runs a rule is part of what the rule is, and a rule nothing fires by itself is the one an operator asks
+    /// about, so the answer distinguishes it rather than leaving both looking like a rule that never matched.
+    /// </summary>
+    [Fact]
+    public async Task ReadRules_ARuleOnlyARequestedRunApplies_ReportsItAsTakingPartInNoTrigger()
+    {
+        // Arrange
+        var ruleSet = RuleSetOf(
+            MailRule.Create("file-invoices", ConditionReading(MailRuleFact.SenderDomain)),
+            MailRule.Create(
+                "retire-old-newsletters",
+                ConditionReading(MailRuleFact.Subject),
+                triggers: []));
+        await using var settings = CreateSettings();
+
+        // Act
+        var result = MailRuleEndpoints.ReadRules(SourceOf(ruleSet), settings);
+
+        // Assert
+        Assert.Equal(["Arrival"], result.Value!.Rules[0].Triggers);
+        Assert.Empty(result.Value.Rules[1].Triggers);
+    }
+
     /// <summary>A deployment nobody has edited says its configuration is the one the running set was read from.</summary>
     [Fact]
     public async Task ReadRules_ConfigurationNothingHasRefused_ReportsTheSetAsCurrent()
@@ -479,7 +503,8 @@ public sealed class MailRuleEndpointsTests
                 "isSeen",
                 [.. rule.Actions.Actions],
                 rule.StopWhenMatched,
-                [.. rule.Accounts])),
+                [.. rule.Accounts],
+                [.. rule.Triggers])),
         ]),
         MailRuleConditionBounds.Default);
 

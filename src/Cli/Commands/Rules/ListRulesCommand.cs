@@ -74,6 +74,7 @@ internal static class ListRulesCommand
         {
             context.Console.WriteLine($"{rule.Name}");
             context.Console.WriteLine($"  Applies to: {rule.DescribeScope()}");
+            context.Console.WriteLine($"  Runs on:    {rule.DescribeTriggers()}");
             context.Console.WriteLine($"  A match:    {rule.DescribeActions()}");
         }
     }

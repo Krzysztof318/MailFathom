@@ -38,14 +38,16 @@ public sealed class RuleCommandTests : IDisposable
               "accounts": ["work"],
               "readableFacts": ["senderDomain", "subject"],
               "actions": [{"position":0,"mutation":"relocate","destination":"archive","desiredSeenState":null}],
-              "stopWhenMatched": true
+              "stopWhenMatched": true,
+              "triggers": ["Arrival"]
             },
             {
               "name": "mark-newsletters",
               "accounts": [],
               "readableFacts": ["senderDomain"],
               "actions": [{"position":0,"mutation":"setSeen","destination":null,"desiredSeenState":true}],
-              "stopWhenMatched": false
+              "stopWhenMatched": false,
+              "triggers": []
             }
           ]
         }
@@ -78,6 +80,26 @@ public sealed class RuleCommandTests : IDisposable
                 || line.StartsWith("mark-", StringComparison.Ordinal)));
         Assert.Contains(this.console.Lines, line => line.Contains("relocate → archive", StringComparison.Ordinal));
         Assert.Contains(this.console.Lines, line => line.Contains("ends the pass", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// A rule nothing fires by itself reads exactly like a rule that never matched, so the listing says what does run
+    /// it rather than reporting an empty list beside the rules that name a trigger.
+    /// </summary>
+    [Fact]
+    public async Task List_ARuleOnlyARequestedRunApplies_SaysWhatRunsItRatherThanNothing()
+    {
+        // Arrange
+        using var deployment = FakeRuleDeployment.Answering(rules: LoadedRules);
+
+        // Act
+        var exitCode = await this.RunAsync(deployment, "rules", "list", "--endpoint", Endpoint);
+
+        // Assert
+        Assert.Equal(CliExitCode.Success, exitCode);
+        Assert.Equal(
+            ["  Runs on:    Arrival", "  Runs on:    nothing automatically; 'mfctl rules run' applies it"],
+            this.console.Lines.Where(line => line.Contains("Runs on:", StringComparison.Ordinal)));
     }
 
     /// <summary>
@@ -133,6 +155,7 @@ public sealed class RuleCommandTests : IDisposable
         // Assert
         Assert.Equal(CliExitCode.Success, exitCode);
         Assert.Contains(this.console.Lines, line => line.Contains("senderDomain, subject", StringComparison.Ordinal));
+        Assert.Contains(this.console.Lines, line => line.Contains("Runs on:     Arrival", StringComparison.Ordinal));
         Assert.Contains(this.console.Lines, line => line.Contains("MailRules", StringComparison.Ordinal));
     }
 

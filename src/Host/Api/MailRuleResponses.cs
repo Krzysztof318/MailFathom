@@ -51,6 +51,7 @@ internal sealed record MailRuleSetResponse(
 /// <param name="ReadableFacts">The facts its condition names, which is every fact it can cause to be resolved.</param>
 /// <param name="Actions">What a match asks the mailbox for, in the order the rule declares the changes.</param>
 /// <param name="StopWhenMatched">Whether a match ends the pass rather than continuing to the rules below.</param>
+/// <param name="Triggers">The automatic triggers it takes part in, empty for a rule only a requested run applies.</param>
 /// <remarks>
 /// The authored condition is deliberately absent. A compiled rule carries no text — which is what keeps an address the
 /// operator typed into a condition out of every record naming the rule — so what this reports of a condition is the
@@ -61,7 +62,8 @@ internal sealed record MailRuleResponse(
     IReadOnlyList<string> Accounts,
     IReadOnlyList<string> ReadableFacts,
     IReadOnlyList<MailRuleActionResponse> Actions,
-    bool StopWhenMatched)
+    bool StopWhenMatched,
+    IReadOnlyList<string> Triggers)
 {
     /// <summary>Describes one rule for the wire.</summary>
     /// <param name="rule">The bound rule.</param>
@@ -76,7 +78,8 @@ internal sealed record MailRuleResponse(
             [.. rule.Accounts.Order(StringComparer.Ordinal)],
             [.. rule.Condition.ReferencedFacts.Select(fact => fact.Name)],
             [.. rule.Actions.Actions.Select((action, position) => MailRuleActionResponse.For(action, position))],
-            rule.StopWhenMatched);
+            rule.StopWhenMatched,
+            [.. MailRuleTrigger.All.Where(rule.RunsOn).Select(trigger => trigger.Name)]);
     }
 }
 
