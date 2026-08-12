@@ -20,6 +20,8 @@ public sealed class MailRuleSetEvaluatorTests
 {
     private static readonly DateTimeOffset EvaluatedAt = new(2026, 3, 31, 9, 30, 0, TimeSpan.Zero);
 
+    private static readonly MailRuleReach OnArrival = MailRuleReach.TriggeredBy(MailRuleTrigger.Arrival);
+
     private readonly FakeTimeProvider timeProvider = new(EvaluatedAt);
 
     [Fact]
@@ -31,12 +33,13 @@ public sealed class MailRuleSetEvaluatorTests
             .Select(position => ScriptedMailRuleCondition.Answering(position == 1))
             .ToArray();
         var ruleSet = CreateRuleSet(conditions.Select((condition, position) =>
-            MailRule.Create($"rule-{position}", condition, stopWhenMatched: false)));
+            ArrivalRule($"rule-{position}", condition, stopWhenMatched: false)));
 
         // Act
         var evaluation = await this.CreateEvaluator().EvaluateAsync(
             ruleSet,
             CreateFacts(),
+            OnArrival,
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -58,14 +61,15 @@ public sealed class MailRuleSetEvaluatorTests
         var below = ScriptedMailRuleCondition.Answering(matches: true);
         var ruleSet = CreateRuleSet(
         [
-            MailRule.Create("stopping", stopping, stopWhenMatched: true),
-            MailRule.Create("below", below, stopWhenMatched: false),
+            ArrivalRule("stopping", stopping, stopWhenMatched: true),
+            ArrivalRule("below", below, stopWhenMatched: false),
         ]);
 
         // Act
         var evaluation = await this.CreateEvaluator().EvaluateAsync(
             ruleSet,
             CreateFacts(),
+            OnArrival,
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -80,14 +84,15 @@ public sealed class MailRuleSetEvaluatorTests
         // Arrange
         var ruleSet = CreateRuleSet(
         [
-            MailRule.Create("stopping", ScriptedMailRuleCondition.Answering(matches: false), stopWhenMatched: true),
-            MailRule.Create("below", ScriptedMailRuleCondition.Answering(matches: true), stopWhenMatched: false),
+            ArrivalRule("stopping", ScriptedMailRuleCondition.Answering(matches: false), stopWhenMatched: true),
+            ArrivalRule("below", ScriptedMailRuleCondition.Answering(matches: true), stopWhenMatched: false),
         ]);
 
         // Act
         var evaluation = await this.CreateEvaluator().EvaluateAsync(
             ruleSet,
             CreateFacts(),
+            OnArrival,
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -102,17 +107,18 @@ public sealed class MailRuleSetEvaluatorTests
         // Arrange
         var ruleSet = CreateRuleSet(
         [
-            MailRule.Create(
+            ArrivalRule(
                 "raising",
                 ScriptedMailRuleCondition.Raising(new InvalidOperationException("unusable operand")),
                 stopWhenMatched: true),
-            MailRule.Create("below", ScriptedMailRuleCondition.Answering(matches: true), stopWhenMatched: false),
+            ArrivalRule("below", ScriptedMailRuleCondition.Answering(matches: true), stopWhenMatched: false),
         ]);
 
         // Act
         var evaluation = await this.CreateEvaluator().EvaluateAsync(
             ruleSet,
             CreateFacts(),
+            OnArrival,
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -129,11 +135,11 @@ public sealed class MailRuleSetEvaluatorTests
     {
         // Arrange
         var stalling = ScriptedMailRuleCondition.NeverAnswering();
-        var ruleSet = CreateRuleSet([MailRule.Create("stalling", stalling, stopWhenMatched: false)]);
+        var ruleSet = CreateRuleSet([ArrivalRule("stalling", stalling, stopWhenMatched: false)]);
         var evaluator = this.CreateEvaluator();
 
         // Act
-        var pass = evaluator.EvaluateAsync(ruleSet, CreateFacts(), TestContext.Current.CancellationToken);
+        var pass = evaluator.EvaluateAsync(ruleSet, CreateFacts(), OnArrival, TestContext.Current.CancellationToken);
 
         await stalling.Started;
         this.timeProvider.Advance(MailRuleConditionBounds.Default.EvaluationTimeout);
@@ -152,13 +158,13 @@ public sealed class MailRuleSetEvaluatorTests
     {
         // Arrange
         var ruleSet = CreateRuleSet(
-            [MailRule.Create("stalling", ScriptedMailRuleCondition.NeverAnswering(), stopWhenMatched: false)]);
+            [ArrivalRule("stalling", ScriptedMailRuleCondition.NeverAnswering(), stopWhenMatched: false)]);
         using var cancellation = new CancellationTokenSource();
         await cancellation.CancelAsync();
 
         // Act, Assert
         await Assert.ThrowsAnyAsync<OperationCanceledException>(
-            () => this.CreateEvaluator().EvaluateAsync(ruleSet, CreateFacts(), cancellation.Token));
+            () => this.CreateEvaluator().EvaluateAsync(ruleSet, CreateFacts(), OnArrival, cancellation.Token));
     }
 
     /// <summary>A rule scoped elsewhere is not this account's rule, so it is passed over rather than recorded as unmatched.</summary>
@@ -169,15 +175,16 @@ public sealed class MailRuleSetEvaluatorTests
         var elsewhere = ScriptedMailRuleCondition.Answering(matches: true);
         var ruleSet = CreateRuleSet(
         [
-            MailRule.Create("other-account", elsewhere, stopWhenMatched: false, accounts: ["primary"]),
-            MailRule.Create("this-account", ScriptedMailRuleCondition.Answering(matches: true), stopWhenMatched: false, accounts: ["work"]),
-            MailRule.Create("every-account", ScriptedMailRuleCondition.Answering(matches: true), stopWhenMatched: false),
+            ArrivalRule("other-account", elsewhere, stopWhenMatched: false, accounts: ["primary"]),
+            ArrivalRule("this-account", ScriptedMailRuleCondition.Answering(matches: true), stopWhenMatched: false, accounts: ["work"]),
+            ArrivalRule("every-account", ScriptedMailRuleCondition.Answering(matches: true), stopWhenMatched: false),
         ]);
 
         // Act
         var evaluation = await this.CreateEvaluator().EvaluateAsync(
             ruleSet,
             CreateFacts(),
+            OnArrival,
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -194,14 +201,15 @@ public sealed class MailRuleSetEvaluatorTests
         // Arrange
         var ruleSet = CreateRuleSet(
         [
-            MailRule.Create("stopping-elsewhere", ScriptedMailRuleCondition.Answering(matches: true), stopWhenMatched: true, accounts: ["primary"]),
-            MailRule.Create("below", ScriptedMailRuleCondition.Answering(matches: true), stopWhenMatched: false),
+            ArrivalRule("stopping-elsewhere", ScriptedMailRuleCondition.Answering(matches: true), stopWhenMatched: true, accounts: ["primary"]),
+            ArrivalRule("below", ScriptedMailRuleCondition.Answering(matches: true), stopWhenMatched: false),
         ]);
 
         // Act
         var evaluation = await this.CreateEvaluator().EvaluateAsync(
             ruleSet,
             CreateFacts(),
+            OnArrival,
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -215,16 +223,84 @@ public sealed class MailRuleSetEvaluatorTests
     {
         // Arrange
         var ruleSet = CreateRuleSet(
-            [MailRule.Create("mistyped", ScriptedMailRuleCondition.Answering(matches: true), stopWhenMatched: false, accounts: ["Work"])]);
+            [ArrivalRule("mistyped", ScriptedMailRuleCondition.Answering(matches: true), stopWhenMatched: false, accounts: ["Work"])]);
 
         // Act
         var evaluation = await this.CreateEvaluator().EvaluateAsync(
             ruleSet,
             CreateFacts(),
+            OnArrival,
             TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Empty(evaluation.Evaluations);
+    }
+
+    /// <summary>A rule the trigger does not reach is not this walk's rule, so it leaves no record of having declined.</summary>
+    [Fact]
+    public async Task EvaluateAsync_ManualOnlyRuleOnAnArrivalWalk_IsNotReachedAtAll()
+    {
+        // Arrange
+        var manualOnly = ScriptedMailRuleCondition.Answering(matches: true);
+        var ruleSet = CreateRuleSet(
+        [
+            MailRule.Create("housekeeping", manualOnly, stopWhenMatched: true, triggers: []),
+            ArrivalRule("on-arrival", ScriptedMailRuleCondition.Answering(matches: true)),
+        ]);
+
+        // Act
+        var evaluation = await this.CreateEvaluator().EvaluateAsync(
+            ruleSet,
+            CreateFacts(),
+            OnArrival,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(["on-arrival"], evaluation.Evaluations.Select(result => result.RuleName));
+        Assert.Equal(0, manualOnly.EvaluationCount);
+        Assert.False(evaluation.StoppedEarly);
+    }
+
+    /// <summary>Asking for a run is the request itself, so the walk it starts applies every rule the set declares.</summary>
+    [Fact]
+    public async Task EvaluateAsync_ManualOnlyRuleOnARequestedWalk_IsReachedLikeEveryOtherRule()
+    {
+        // Arrange
+        var ruleSet = CreateRuleSet(
+        [
+            MailRule.Create("housekeeping", ScriptedMailRuleCondition.Answering(matches: true), triggers: []),
+            ArrivalRule("on-arrival", ScriptedMailRuleCondition.Answering(matches: true)),
+        ]);
+
+        // Act
+        var evaluation = await this.CreateEvaluator().EvaluateAsync(
+            ruleSet,
+            CreateFacts(),
+            MailRuleReach.EveryRule,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(["housekeeping", "on-arrival"], evaluation.MatchedRuleNames);
+    }
+
+    /// <summary>A rule takes part in the occasions it names, so one that names none is reached by no arrival.</summary>
+    [Fact]
+    public async Task EvaluateAsync_RuleDeclaringNoTrigger_IsNotReachedOnArrival()
+    {
+        // Arrange
+        var ruleSet = CreateRuleSet(
+            [MailRule.Create("says-nothing", ScriptedMailRuleCondition.Answering(matches: true))]);
+
+        // Act
+        var evaluation = await this.CreateEvaluator().EvaluateAsync(
+            ruleSet,
+            CreateFacts(),
+            OnArrival,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Empty(evaluation.Evaluations);
+        Assert.Empty(evaluation.MatchedRuleNames);
     }
 
     /// <summary>A rule that could not answer did not match, so what it declared is not something the mailbox is asked for.</summary>
@@ -235,17 +311,18 @@ public sealed class MailRuleSetEvaluatorTests
         var filing = MailRuleActionSet.Create([MailRuleAction.Relocate(MailFolderReference.ToAlias(MailFolderAlias.Create("archive")))]);
         var ruleSet = CreateRuleSet(
         [
-            MailRule.Create(
+            ArrivalRule(
                 "raising",
                 ScriptedMailRuleCondition.Raising(new InvalidOperationException("unusable operand")),
                 MailRuleActionSet.Create([MailRuleAction.Delete()])),
-            MailRule.Create("below", ScriptedMailRuleCondition.Answering(matches: true), filing),
+            ArrivalRule("below", ScriptedMailRuleCondition.Answering(matches: true), filing),
         ]);
 
         // Act
         var evaluation = await this.CreateEvaluator().EvaluateAsync(
             ruleSet,
             CreateFacts(),
+            OnArrival,
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -265,6 +342,7 @@ public sealed class MailRuleSetEvaluatorTests
         var evaluation = await this.CreateEvaluator().EvaluateAsync(
             ruleSet,
             CreateFacts(),
+            OnArrival,
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -274,6 +352,19 @@ public sealed class MailRuleSetEvaluatorTests
         Assert.Equal(ruleSet.Revision, evaluation.Revision);
     }
 
+    /// <summary>A rule as an operator writes one for arriving mail, which is the walk most of these tests take.</summary>
+    /// <remarks>
+    /// A rule takes part in the occasions it names and in no others, so a rule meant to reach an arrival says so. The
+    /// tests about a rule nothing fires by itself declare their triggers where they stand, because that is their subject.
+    /// </remarks>
+    private static MailRule ArrivalRule(
+        string name,
+        IMailRuleCondition condition,
+        MailRuleActionSet? actions = null,
+        bool stopWhenMatched = false,
+        IReadOnlyList<string>? accounts = null) =>
+        MailRule.Create(name, condition, actions, stopWhenMatched, accounts, [MailRuleTrigger.Arrival]);
+
     private static MailRuleSet CreateRuleSet(IEnumerable<MailRule> rules)
     {
         var materialized = rules.ToArray();
@@ -281,7 +372,7 @@ public sealed class MailRuleSetEvaluatorTests
         return MailRuleSet.Create(
             materialized,
             MailRuleSetRevision.Create(
-                [.. materialized.Select(rule => new MailRuleDeclaration(rule.Name, "isSeen", [.. rule.Actions.Actions], rule.StopWhenMatched, [.. rule.Accounts]))]),
+                [.. materialized.Select(rule => new MailRuleDeclaration(rule.Name, "isSeen", [.. rule.Actions.Actions], rule.StopWhenMatched, [.. rule.Accounts], [.. rule.Triggers]))]),
             MailRuleConditionBounds.Default);
     }
 

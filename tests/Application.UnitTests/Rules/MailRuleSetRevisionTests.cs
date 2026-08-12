@@ -24,10 +24,10 @@ public sealed class MailRuleSetRevisionTests
     };
 
     private static readonly MailRuleDeclaration FileInvoices =
-        new("file-invoices", "senderDomain == 'supplier.test'", Actions: [], StopWhenMatched: true, Accounts: []);
+        new("file-invoices", "senderDomain == 'supplier.test'", Actions: [], StopWhenMatched: true, Accounts: [], Triggers: [MailRuleTrigger.Arrival]);
 
     private static readonly MailRuleDeclaration ArchiveOld =
-        new("archive-old", "ageInDays > 365", Actions: [], StopWhenMatched: false, Accounts: []);
+        new("archive-old", "ageInDays > 365", Actions: [], StopWhenMatched: false, Accounts: [], Triggers: [MailRuleTrigger.Arrival]);
 
     [Fact]
     public void Create_SameRulesInSameOrder_ProducesTheSameIdentity()
@@ -66,10 +66,29 @@ public sealed class MailRuleSetRevisionTests
     {
         // Act
         var changed = MailRuleSetRevision.Create(
-            [new MailRuleDeclaration(name, conditionText, FileInvoices.Actions, stopWhenMatched, accounts)]);
+        [
+            new MailRuleDeclaration(
+                name,
+                conditionText,
+                FileInvoices.Actions,
+                stopWhenMatched,
+                accounts,
+                FileInvoices.Triggers),
+        ]);
 
         // Assert
         Assert.NotEqual(MailRuleSetRevision.Create([FileInvoices]), changed);
+    }
+
+    /// <summary>Which occasions run a rule is part of what the rule set means, so withdrawing one is a different set.</summary>
+    [Fact]
+    public void Create_ARuleWithdrawnFromEveryAutomaticTrigger_ProducesADifferentIdentity()
+    {
+        // Act
+        var manualOnly = MailRuleSetRevision.Create([FileInvoices with { Triggers = [] }]);
+
+        // Assert
+        Assert.NotEqual(MailRuleSetRevision.Create([FileInvoices]), manualOnly);
     }
 
     /// <summary>A request's identity carries the revision, so an edited action has to ask afresh rather than be answered by the old record.</summary>
@@ -106,13 +125,13 @@ public sealed class MailRuleSetRevisionTests
         // Act
         var first = MailRuleSetRevision.Create(
         [
-            new MailRuleDeclaration("a", "isSeen", Actions: [], StopWhenMatched: false, Accounts: []),
-            new MailRuleDeclaration("b", "isDraft", Actions: [], StopWhenMatched: false, Accounts: []),
+            new MailRuleDeclaration("a", "isSeen", Actions: [], StopWhenMatched: false, Accounts: [], Triggers: [MailRuleTrigger.Arrival]),
+            new MailRuleDeclaration("b", "isDraft", Actions: [], StopWhenMatched: false, Accounts: [], Triggers: [MailRuleTrigger.Arrival]),
         ]);
         var second = MailRuleSetRevision.Create(
         [
-            new MailRuleDeclaration("a", "isSeen", Actions: [], StopWhenMatched: false, Accounts: []),
-            new MailRuleDeclaration("bisDraft", "continue", Actions: [], StopWhenMatched: false, Accounts: []),
+            new MailRuleDeclaration("a", "isSeen", Actions: [], StopWhenMatched: false, Accounts: [], Triggers: [MailRuleTrigger.Arrival]),
+            new MailRuleDeclaration("bisDraft", "continue", Actions: [], StopWhenMatched: false, Accounts: [], Triggers: [MailRuleTrigger.Arrival]),
         ]);
 
         // Assert
@@ -125,9 +144,9 @@ public sealed class MailRuleSetRevisionTests
     {
         // Act
         var twoAccounts = MailRuleSetRevision.Create(
-            [new MailRuleDeclaration("a", "isSeen", Actions: [], StopWhenMatched: false, Accounts: ["primary", "work"])]);
+            [new MailRuleDeclaration("a", "isSeen", Actions: [], StopWhenMatched: false, Accounts: ["primary", "work"], Triggers: [MailRuleTrigger.Arrival])]);
         var oneAccount = MailRuleSetRevision.Create(
-            [new MailRuleDeclaration("a", "isSeen", Actions: [], StopWhenMatched: false, Accounts: ["primarywork"])]);
+            [new MailRuleDeclaration("a", "isSeen", Actions: [], StopWhenMatched: false, Accounts: ["primarywork"], Triggers: [MailRuleTrigger.Arrival])]);
 
         // Assert
         Assert.NotEqual(twoAccounts, oneAccount);

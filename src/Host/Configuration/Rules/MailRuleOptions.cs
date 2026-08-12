@@ -4,6 +4,7 @@
 
 using System.ComponentModel.DataAnnotations;
 using System.Diagnostics.CodeAnalysis;
+using MailFathom.Application.Rules;
 
 namespace MailFathom.Host.Configuration.Rules;
 
@@ -60,4 +61,36 @@ internal sealed class MailRuleOptions
     /// deleted and rewritten from memory later.
     /// </remarks>
     public bool Enabled { get; set; } = true;
+
+    /// <summary>Gets or sets the automatic triggers that may run this rule.</summary>
+    /// <remarks>
+    /// <para>
+    /// A rule takes part in the occasions it names here and in no others, so leaving the key out and writing an empty
+    /// list say the same thing: a rule nothing fires by itself. Such a rule stays in the bound set, is validated like
+    /// every other, and a whole-mailbox run is what applies it. That is a different statement from
+    /// <see cref="Enabled" />, which leaves a rule out of the set altogether and makes it unrunnable. A rule that
+    /// should run over arriving mail writes <c>Arrival</c>, which is the whole vocabulary today.
+    /// </para>
+    /// <para>
+    /// The elements are text rather than the trigger itself, for the reason the actions are one key each: the binder
+    /// drops an element it cannot convert, so a mistyped name in a bound list of triggers would arrive as a shorter
+    /// list — and a list whose only entry was mistyped would arrive as the empty one, silently turning an automatic
+    /// rule into a manual one. Read as text, every name reaches validation and an unreadable one is refused there.
+    /// </para>
+    /// </remarks>
+    public IList<string> Triggers { get; set; } = [];
+
+    /// <summary>Reads the declared triggers, leaving out a name this system cannot read.</summary>
+    /// <returns>The triggers, empty for a rule only a requested walk runs.</returns>
+    /// <remarks>
+    /// A name this system cannot read is left out rather than thrown over, because it is reported by validation against
+    /// the key an operator edits and reading it here would raise instead. <see cref="MailRuleSetMapper" /> refuses a set
+    /// that reaches it with one, so the dropped name cannot become a rule nothing runs.
+    /// </remarks>
+    internal IReadOnlyList<MailRuleTrigger> ToTriggers() =>
+    [
+        .. this.Triggers
+            .Select(name => MailRuleTrigger.TryParseName(name, out var trigger) ? trigger : default)
+            .Where(trigger => trigger.IsSpecified),
+    ];
 }

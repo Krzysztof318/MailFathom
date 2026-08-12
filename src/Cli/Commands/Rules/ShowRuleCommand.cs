@@ -87,6 +87,7 @@ internal static class ShowRuleCommand
         context.Console.WriteLine($"{rule.Name}");
         context.Console.WriteLine($"Rule set:    {ruleSet.Revision ?? "unreported"}");
         context.Console.WriteLine($"Applies to:  {rule.DescribeScope()}");
+        context.Console.WriteLine($"Runs on:     {rule.DescribeTriggers()}");
         context.Console.WriteLine($"Reads facts: {DescribeReadableFacts(rule)}");
         context.Console.WriteLine($"A match:     {rule.DescribeActions()}");
         context.Console.WriteLine(

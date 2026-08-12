@@ -695,12 +695,121 @@ public sealed class MailRuleDeclarationRulesTests
             error => error.Contains("MailRules:Rules:0:Actions", StringComparison.Ordinal));
     }
 
+    /// <summary>The name is read the way the binder reads every other closed vocabulary this configuration declares.</summary>
+    [Fact]
+    public void FindDeclarationErrors_TheTriggerNamedInEitherSpelling_ReportsNothing()
+    {
+        // Arrange
+        var candidate = new MailRulesOptions
+        {
+            Rules =
+            [
+                CreateRule("as-documented", "isSeen", triggers: ["Arrival"]),
+                CreateRule("in-another-case", "isDraft", triggers: ["arrival"]),
+            ],
+        };
+
+        // Act
+        var errors = MailRuleDeclarationRules.FindDeclarationErrors(candidate, this.compiler, DeclaredAccounts);
+
+        // Assert
+        Assert.Empty(errors);
+    }
+
+    /// <summary>An empty list is a usable declaration rather than a rule that forgot to say something.</summary>
+    [Fact]
+    public void FindDeclarationErrors_ARuleDeclaringNoTriggerAtAll_ReportsNothing()
+    {
+        // Arrange
+        var candidate = new MailRulesOptions { Rules = [CreateRule("housekeeping", "isSeen", triggers: [])] };
+
+        // Act
+        var errors = MailRuleDeclarationRules.FindDeclarationErrors(candidate, this.compiler, DeclaredAccounts);
+
+        // Assert
+        Assert.Empty(errors);
+    }
+
+    /// <summary>A mistyped name dropped in silence would turn an automatic rule into one only a requested run applies.</summary>
+    [Fact]
+    public void FindDeclarationErrors_ATriggerNothingDeclares_IsRefusedNamingTheRuleAndTheValue()
+    {
+        // Arrange
+        var candidate = new MailRulesOptions { Rules = [CreateRule("housekeeping", "isSeen", triggers: ["Schedule"])] };
+
+        // Act
+        var errors = MailRuleDeclarationRules.FindDeclarationErrors(candidate, this.compiler, DeclaredAccounts);
+
+        // Assert
+        var error = Assert.Single(errors);
+        Assert.Contains("MailRules:Rules:0:Triggers", error, StringComparison.Ordinal);
+        Assert.Contains("Schedule", error, StringComparison.Ordinal);
+        Assert.Contains("'Arrival'", error, StringComparison.Ordinal);
+    }
+
+    /// <summary>The value is a set, so naming one trigger twice says nothing the rule does not already say.</summary>
+    [Fact]
+    public void FindDeclarationErrors_ATriggerNamedTwice_IsRefused()
+    {
+        // Arrange
+        var candidate = new MailRulesOptions
+        {
+            Rules = [CreateRule("housekeeping", "isSeen", triggers: ["Arrival", "arrival"])],
+        };
+
+        // Act
+        var errors = MailRuleDeclarationRules.FindDeclarationErrors(candidate, this.compiler, DeclaredAccounts);
+
+        // Assert
+        var error = Assert.Single(errors);
+        Assert.Contains("MailRules:Rules:0:Triggers", error, StringComparison.Ordinal);
+        Assert.Contains("more than once", error, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    public void FindDeclarationErrors_ATriggerNamedByNothing_IsRefused(string trigger)
+    {
+        // Arrange
+        var candidate = new MailRulesOptions
+        {
+            Rules = [CreateRule("housekeeping", "isSeen", triggers: ["Arrival", trigger])],
+        };
+
+        // Act
+        var errors = MailRuleDeclarationRules.FindDeclarationErrors(candidate, this.compiler, DeclaredAccounts);
+
+        // Assert
+        var error = Assert.Single(errors);
+        Assert.Contains("MailRules:Rules:0:Triggers", error, StringComparison.Ordinal);
+        Assert.Contains("named by nothing", error, StringComparison.Ordinal);
+    }
+
+    /// <summary>A rule switched off is judged like any other, exactly as its scope and its actions already are.</summary>
+    [Fact]
+    public void FindDeclarationErrors_ADisabledRuleDeclaringAnUnknownTrigger_IsStillRefused()
+    {
+        // Arrange
+        var candidate = new MailRulesOptions
+        {
+            Rules = [CreateRule("switched-off", "isSeen", enabled: false, triggers: ["Whenever"])],
+        };
+
+        // Act
+        var errors = MailRuleDeclarationRules.FindDeclarationErrors(candidate, this.compiler, DeclaredAccounts);
+
+        // Assert
+        Assert.Contains(errors, error => error.Contains("MailRules:Rules:0:Triggers", StringComparison.Ordinal));
+    }
+
     private static MailRuleOptions CreateRule(
         string name,
         string conditionText,
         bool enabled = true,
         string[]? accounts = null,
-        MailRuleActionOptions? actions = null) =>
+        MailRuleActionOptions? actions = null,
+        string[]? triggers = null) =>
         new()
         {
             Name = name,
@@ -708,6 +817,7 @@ public sealed class MailRuleDeclarationRulesTests
             Enabled = enabled,
             Accounts = accounts ?? [],
             Actions = actions ?? new MailRuleActionOptions(),
+            Triggers = triggers ?? [],
         };
 
     /// <summary>One declared account, mirroring an archive folder and permitting whatever the caller says it does.</summary>

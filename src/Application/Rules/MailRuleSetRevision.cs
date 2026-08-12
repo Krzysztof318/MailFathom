@@ -21,9 +21,10 @@ namespace MailFathom.Application.Rules;
 /// configuration key leaves it alone, and so does reformatting the file or reordering the keys within one rule.
 /// Reordering the rules themselves does move it, because declared order is part of what a rule set means. So is the
 /// scope: narrowing a rule to one account changes which mail it reaches, which is a different rule set rather than the
-/// same one applied differently. So are the actions, for the reason the revision is part of a request's identity at all
-/// — a rule now filing into a different folder must ask afresh rather than be answered by the record of the filing it
-/// asked for before the edit.
+/// same one applied differently. So are the triggers, for the same reason — a rule withdrawn from firing on arrival
+/// reaches different mail from the one that fires on it. So are the actions, for the reason the revision is part of a
+/// request's identity at all — a rule now filing into a different folder must ask afresh rather than be answered by the
+/// record of the filing it asked for before the edit.
 /// </para>
 /// <para>
 /// It carries none of the authored text and no ordering. A record naming a revision therefore holds nothing personal
@@ -49,10 +50,10 @@ public readonly record struct MailRuleSetRevision
     private const char FieldSeparator = '\u001F';
     private const char RuleSeparator = '\u001E';
 
-    /// <summary>Separates the values inside a field holding several of them: the scope, and the declared actions.</summary>
+    /// <summary>Separates the values inside a field holding several: the scope, the actions, and the triggers.</summary>
     /// <remarks>
     /// A third separator rather than a reused one, so that a scope of two accounts cannot render as the same text as a
-    /// rule whose next field begins where the second account would have. Both multi-valued fields use this one, which
+    /// rule whose next field begins where the second account would have. Every multi-valued field uses this one, which
     /// stays unambiguous because a field separator ends each of them.
     /// </remarks>
     private const char ListSeparator = '\u001D';
@@ -109,6 +110,8 @@ public readonly record struct MailRuleSetRevision
                 .Append(declaration.StopWhenMatched ? "stop" : "continue")
                 .Append(FieldSeparator)
                 .AppendJoin(ListSeparator, declaration.Accounts)
+                .Append(FieldSeparator)
+                .AppendJoin(ListSeparator, declaration.Triggers.Select(trigger => trigger.Name))
                 .Append(RuleSeparator);
         }
 

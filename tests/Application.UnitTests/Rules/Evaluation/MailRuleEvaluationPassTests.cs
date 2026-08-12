@@ -54,7 +54,7 @@ public sealed class MailRuleEvaluationPassTests
         // Arrange
         var matching = ScriptedMailRuleCondition.Answering(matches: true);
         var arrived = this.store.Add(FactsFor(Account));
-        var pass = this.CreatePass(RuleSetOf(MailRule.Create("file-it", matching, stopWhenMatched: false)));
+        var pass = this.CreatePass(RuleSetOf(ArrivalRule("file-it", matching, stopWhenMatched: false)));
 
         // Act
         var report = await pass.RunAsync(Account, TestContext.Current.CancellationToken);
@@ -151,7 +151,7 @@ public sealed class MailRuleEvaluationPassTests
         // Arrange
         this.store.Add(FactsFor(Account));
         var pass = this.CreatePass(
-            RuleSetOf(MailRule.Create("select-only", ScriptedMailRuleCondition.Answering(matches: true))));
+            RuleSetOf(ArrivalRule("select-only", ScriptedMailRuleCondition.Answering(matches: true))));
 
         // Act
         var report = await pass.RunAsync(Account, TestContext.Current.CancellationToken);
@@ -168,7 +168,7 @@ public sealed class MailRuleEvaluationPassTests
         // Arrange
         var condition = ScriptedMailRuleCondition.Answering(matches: true);
         this.store.Add(FactsFor(Account), evaluatedAt: EvaluatedAt.AddDays(-1));
-        var pass = this.CreatePass(RuleSetOf(MailRule.Create("new-rule", condition, stopWhenMatched: false)));
+        var pass = this.CreatePass(RuleSetOf(ArrivalRule("new-rule", condition, stopWhenMatched: false)));
 
         // Act
         var report = await pass.RunAsync(Account, TestContext.Current.CancellationToken);
@@ -186,7 +186,7 @@ public sealed class MailRuleEvaluationPassTests
         var condition = ScriptedMailRuleCondition.Answering(matches: true);
         var arrived = this.store.Add(FactsFor(Account));
         var pass = this.CreatePass(
-            RuleSetOf(MailRule.Create("other-account", condition, stopWhenMatched: false, accounts: [OtherAccount.Value])));
+            RuleSetOf(ArrivalRule("other-account", condition, stopWhenMatched: false, accounts: [OtherAccount.Value])));
 
         // Act
         await pass.RunAsync(Account, TestContext.Current.CancellationToken);
@@ -202,7 +202,7 @@ public sealed class MailRuleEvaluationPassTests
         // Arrange
         var elsewhere = this.store.Add(FactsFor(OtherAccount));
         var pass = this.CreatePass(RuleSetOf(
-            MailRule.Create("everywhere", ScriptedMailRuleCondition.Answering(matches: true), stopWhenMatched: false)));
+            ArrivalRule("everywhere", ScriptedMailRuleCondition.Answering(matches: true), stopWhenMatched: false)));
 
         // Act
         await pass.RunAsync(Account, TestContext.Current.CancellationToken);
@@ -220,7 +220,7 @@ public sealed class MailRuleEvaluationPassTests
             .Select(_ => this.store.Add(FactsFor(Account)))
             .ToArray();
         var pass = this.CreatePass(
-            RuleSetOf(MailRule.Create("all", ScriptedMailRuleCondition.Answering(matches: false), stopWhenMatched: false)),
+            RuleSetOf(ArrivalRule("all", ScriptedMailRuleCondition.Answering(matches: false), stopWhenMatched: false)),
             batchSize: 1,
             maxBatchesPerPass: 2);
 
@@ -240,7 +240,7 @@ public sealed class MailRuleEvaluationPassTests
         var already = this.store.Add(FactsFor(Account), evaluatedAt: EvaluatedAt.AddDays(-1));
         this.runStore.Arrange(RequestedRun());
         var pass = this.CreatePass(RuleSetOf(
-            MailRule.Create("re-run", ScriptedMailRuleCondition.Answering(matches: true), stopWhenMatched: false)));
+            ArrivalRule("re-run", ScriptedMailRuleCondition.Answering(matches: true), stopWhenMatched: false)));
 
         // Act
         var report = await pass.RunAsync(Account, TestContext.Current.CancellationToken);
@@ -253,12 +253,56 @@ public sealed class MailRuleEvaluationPassTests
         Assert.Null(await this.runStore.FindOutstandingAsync(Account, TestContext.Current.CancellationToken));
     }
 
+    /// <summary>A manual-only rule is the whole point of the key: nothing fires it, and asking for a run does.</summary>
+    [Fact]
+    public async Task RunAsync_ManualOnlyRule_RunsInTheRequestedWalkAndNotInTheArrivalOne()
+    {
+        // Arrange
+        var housekeeping = ScriptedMailRuleCondition.Answering(matches: true);
+        var ruleSet = RuleSetOf(MailRule.Create("housekeeping", housekeeping, triggers: []));
+        this.store.Add(FactsFor(Account));
+
+        // Act
+        var arrivalOnly = await this.CreatePass(ruleSet).RunAsync(Account, TestContext.Current.CancellationToken);
+
+        this.runStore.Arrange(RequestedRun());
+
+        var requested = await this.CreatePass(ruleSet).RunAsync(Account, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(1, arrivalOnly.Arrivals.EvaluatedEmailCount);
+        Assert.Empty(arrivalOnly.Arrivals.MatchedRuleNames);
+        Assert.Equal(["housekeeping"], requested.RequestedRun?.MatchedRuleNames);
+    }
+
+    /// <summary>The body-text question is asked of the rules a walk runs, so a manual-only rule holds nothing up.</summary>
+    [Fact]
+    public async Task RunAsync_ManualOnlyRuleNamingTheBodyText_LeavesArrivingMailAwaitingExtractionEvaluated()
+    {
+        // Arrange
+        var ruleSet = RuleSetOf(
+            MailRule.Create(
+                "housekeeping",
+                ScriptedMailRuleCondition.Answering(matches: true, MailRuleFact.BodyText),
+                triggers: []),
+            ArrivalRule("on-arrival", ScriptedMailRuleCondition.Answering(matches: true)));
+        var awaiting = this.store.Add(FactsFor(Account), awaitsExtraction: true);
+
+        // Act
+        var report = await this.CreatePass(ruleSet).RunAsync(Account, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal([awaiting], this.store.Evaluated);
+        Assert.Equal(0, report.Arrivals.SkippedEmailCount);
+        Assert.Equal(["on-arrival"], report.Arrivals.MatchedRuleNames);
+    }
+
     [Fact]
     public async Task RunAsync_RequestedRunPickedUp_BindsTheRevisionItStartedUnder()
     {
         // Arrange
         var ruleSet = RuleSetOf(
-            MailRule.Create("re-run", ScriptedMailRuleCondition.Answering(matches: false), stopWhenMatched: false));
+            ArrivalRule("re-run", ScriptedMailRuleCondition.Answering(matches: false), stopWhenMatched: false));
         this.store.Add(FactsFor(Account), evaluatedAt: EvaluatedAt.AddDays(-1));
         this.runStore.Arrange(RequestedRun());
 
@@ -274,7 +318,7 @@ public sealed class MailRuleEvaluationPassTests
     {
         // Arrange
         var ruleSet = RuleSetOf(
-            MailRule.Create("re-run", ScriptedMailRuleCondition.Answering(matches: false), stopWhenMatched: false));
+            ArrivalRule("re-run", ScriptedMailRuleCondition.Answering(matches: false), stopWhenMatched: false));
         var mail = Enumerable
             .Range(0, 3)
             .Select(_ => this.store.Add(FactsFor(Account), evaluatedAt: EvaluatedAt.AddDays(-1)))
@@ -304,12 +348,12 @@ public sealed class MailRuleEvaluationPassTests
         this.store.Add(FactsFor(Account), evaluatedAt: EvaluatedAt.AddDays(-1));
         this.runStore.Arrange(RequestedRun() with
         {
-            Revision = RuleSetOf(MailRule.Create(
+            Revision = RuleSetOf(ArrivalRule(
                 "the-old-one",
                 ScriptedMailRuleCondition.Answering(matches: false),
                 stopWhenMatched: false)).Revision,
         });
-        var pass = this.CreatePass(RuleSetOf(MailRule.Create("the-new-one", condition, stopWhenMatched: false)));
+        var pass = this.CreatePass(RuleSetOf(ArrivalRule("the-new-one", condition, stopWhenMatched: false)));
 
         // Act
         var report = await pass.RunAsync(Account, TestContext.Current.CancellationToken);
@@ -326,7 +370,7 @@ public sealed class MailRuleEvaluationPassTests
     {
         // Arrange
         var awaiting = this.store.Add(FactsFor(Account), awaitsExtraction: true);
-        var pass = this.CreatePass(RuleSetOf(MailRule.Create(
+        var pass = this.CreatePass(RuleSetOf(ArrivalRule(
             "reads-the-body",
             ScriptedMailRuleCondition.Answering(matches: true, MailRuleFact.BodyText),
             stopWhenMatched: false)));
@@ -346,7 +390,7 @@ public sealed class MailRuleEvaluationPassTests
     {
         // Arrange
         var awaiting = this.store.Add(FactsFor(Account), awaitsExtraction: true);
-        var pass = this.CreatePass(RuleSetOf(MailRule.Create(
+        var pass = this.CreatePass(RuleSetOf(ArrivalRule(
             "reads-the-body",
             ScriptedMailRuleCondition.Answering(matches: true, MailRuleFact.BodyText),
             stopWhenMatched: false)));
@@ -369,7 +413,7 @@ public sealed class MailRuleEvaluationPassTests
     {
         // Arrange
         var withoutText = this.store.Add(FactsFor(Account), awaitsExtraction: false);
-        var pass = this.CreatePass(RuleSetOf(MailRule.Create(
+        var pass = this.CreatePass(RuleSetOf(ArrivalRule(
             "reads-the-body",
             ScriptedMailRuleCondition.Answering(matches: false, MailRuleFact.BodyText),
             stopWhenMatched: false)));
@@ -389,11 +433,11 @@ public sealed class MailRuleEvaluationPassTests
         var unlucky = this.store.Add(FactsFor(Account));
         var next = this.store.Add(FactsFor(Account));
         var pass = this.CreatePass(RuleSetOf(
-            MailRule.Create(
+            ArrivalRule(
                 "raises",
                 ScriptedMailRuleCondition.Raising(new InvalidOperationException("no answer")),
                 stopWhenMatched: false),
-            MailRule.Create("answers", ScriptedMailRuleCondition.Answering(matches: true), stopWhenMatched: false)));
+            ArrivalRule("answers", ScriptedMailRuleCondition.Answering(matches: true), stopWhenMatched: false)));
 
         // Act
         var report = await pass.RunAsync(Account, TestContext.Current.CancellationToken);
@@ -414,7 +458,7 @@ public sealed class MailRuleEvaluationPassTests
         var first = this.store.Add(FactsFor(Account));
         var second = this.store.Add(FactsFor(Account));
         var pass = this.CreatePass(
-            RuleSetOf(MailRule.Create("withdraws", new CancellingCondition(cancellation), stopWhenMatched: false)),
+            RuleSetOf(ArrivalRule("withdraws", new CancellingCondition(cancellation), stopWhenMatched: false)),
             batchSize: 1);
 
         // Act
@@ -432,8 +476,8 @@ public sealed class MailRuleEvaluationPassTests
         // Arrange
         var arrived = this.store.Add(FactsFor(Account));
         var ruleSet = RuleSetOf(
-            MailRule.Create("file-invoices", ScriptedMailRuleCondition.Answering(matches: false)),
-            MailRule.Create(
+            ArrivalRule("file-invoices", ScriptedMailRuleCondition.Answering(matches: false)),
+            ArrivalRule(
                 "mark-newsletters",
                 ScriptedMailRuleCondition.Answering(matches: true, MailRuleFact.SenderDomain)));
 
@@ -462,7 +506,7 @@ public sealed class MailRuleEvaluationPassTests
         this.store.Add(FactsFor(Account), evaluatedAt: EvaluatedAt.AddDays(-1));
         this.runStore.Arrange(RequestedRun());
         var pass = this.CreatePass(RuleSetOf(
-            MailRule.Create("re-run", ScriptedMailRuleCondition.Answering(matches: true))));
+            ArrivalRule("re-run", ScriptedMailRuleCondition.Answering(matches: true))));
 
         // Act
         await pass.RunAsync(Account, TestContext.Current.CancellationToken);
@@ -480,8 +524,8 @@ public sealed class MailRuleEvaluationPassTests
         // Arrange
         this.store.Add(FactsFor(Account));
         var pass = this.CreatePass(RuleSetOf(
-            MailRule.Create("ends-it", ScriptedMailRuleCondition.Answering(matches: true), stopWhenMatched: true),
-            MailRule.Create("never-reached", ScriptedMailRuleCondition.Answering(matches: true))));
+            ArrivalRule("ends-it", ScriptedMailRuleCondition.Answering(matches: true), stopWhenMatched: true),
+            ArrivalRule("never-reached", ScriptedMailRuleCondition.Answering(matches: true))));
 
         // Act
         await pass.RunAsync(Account, TestContext.Current.CancellationToken);
@@ -497,7 +541,7 @@ public sealed class MailRuleEvaluationPassTests
     {
         // Arrange
         this.store.Add(FactsFor(Account));
-        var pass = this.CreatePass(RuleSetOf(MailRule.Create(
+        var pass = this.CreatePass(RuleSetOf(ArrivalRule(
             "raises",
             ScriptedMailRuleCondition.Raising(new InvalidOperationException("no answer")))));
 
@@ -552,7 +596,20 @@ public sealed class MailRuleEvaluationPassTests
         new() { Account = accountId.Value, Folder = "inbox" };
 
     /// <summary>A rule that matches everything and files it, which is the shape every action assertion here needs.</summary>
-    private static MailRule FilingRule(string name, MailFolderAlias? destination = null) => MailRule.Create(
+    /// <summary>A rule as an operator writes one for arriving mail, which is the walk most of these tests take.</summary>
+    /// <remarks>
+    /// A rule takes part in the occasions it names and in no others, so a rule meant to reach an arrival says so. The
+    /// tests about a rule nothing fires by itself declare their triggers where they stand, because that is their subject.
+    /// </remarks>
+    private static MailRule ArrivalRule(
+        string name,
+        IMailRuleCondition condition,
+        MailRuleActionSet? actions = null,
+        bool stopWhenMatched = false,
+        IReadOnlyList<string>? accounts = null) =>
+        MailRule.Create(name, condition, actions, stopWhenMatched, accounts, [MailRuleTrigger.Arrival]);
+
+    private static MailRule FilingRule(string name, MailFolderAlias? destination = null) => ArrivalRule(
         name,
         ScriptedMailRuleCondition.Answering(matches: true),
         MailRuleActionSet.Create([MailRuleAction.Relocate(MailFolderReference.ToAlias(destination ?? Archive))]));
@@ -566,7 +623,7 @@ public sealed class MailRuleEvaluationPassTests
     private static MailRuleSet RuleSetOf(params MailRule[] rules) => MailRuleSet.Create(
         rules,
         MailRuleSetRevision.Create(
-            [.. rules.Select(rule => new MailRuleDeclaration(rule.Name, "isSeen", [.. rule.Actions.Actions], rule.StopWhenMatched, [.. rule.Accounts]))]),
+            [.. rules.Select(rule => new MailRuleDeclaration(rule.Name, "isSeen", [.. rule.Actions.Actions], rule.StopWhenMatched, [.. rule.Accounts], [.. rule.Triggers]))]),
         MailRuleConditionBounds.Default);
 
     private MailRuleEvaluationPass CreatePass(

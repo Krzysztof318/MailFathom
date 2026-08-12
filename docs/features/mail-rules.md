@@ -2,8 +2,9 @@
 
 <!-- describes: src/Application/Rules/**, src/Infrastructure/Rules/**, src/Infrastructure/Persistence/Rules/**, src/Host/Configuration/Rules/** -->
 
-A mail rule selects mail and changes it. It is a name, a condition, the accounts it applies to, what a match leads to,
-and whether a match ends the pass, and an owner writes it in the configuration their deployment already carries. This
+A mail rule selects mail and changes it. It is a name, a condition, the accounts it applies to, the occasions that run
+it, what a match leads to, and whether a match ends the pass, and an owner writes it in the configuration their
+deployment already carries. This
 page documents both halves: every fact a condition can read, every function and operator available to it, the limits it
 is read and run under, the order a set of rules is evaluated in, and the four changes a matching rule can ask for.
 
@@ -22,6 +23,7 @@ MCP, not the administrative endpoint. An owner who wants to change what their in
         "Name": "supplier-invoices",
         "Accounts": [ "work" ],
         "Condition": "senderDomain == 'supplier.test' and attachmentCount > 0",
+        "Triggers": [ "Arrival" ],
         "Actions": { "MoveTo": "invoices", "MarkAsRead": true },
         "StopWhenMatched": true
       },
@@ -41,6 +43,11 @@ part that can be promised to carry no such thing when it reaches a log line.
 
 `Enabled` defaults to `true`. A rule switched off is left out of the bound set entirely, so it costs nothing and
 changes the set's revision exactly as deleting it would.
+
+`Triggers` is what decides when a rule runs, and it defaults to nothing: a rule that should run over arriving mail says
+`[ "Arrival" ]`, and a rule that says nothing is one a whole-mailbox run applies. [The section
+below](#which-triggers-run-a-rule) states what each way of writing it means, and why it is a different statement from
+`Enabled`.
 
 ## Which accounts a rule applies to
 
@@ -65,6 +72,59 @@ that applies to several.
 
 [Configuration reference](../operations/configuration-reference.md#mailrules) lists every key of the section with its
 type, default, and constraint.
+
+## Which triggers run a rule
+
+`Triggers` is the list of automatic occasions a rule takes part in. It governs automatic firing and nothing else, so it
+decides *when* a rule is reached rather than which mail it matches once it is.
+
+| Written | What the rule takes part in |
+| --- | --- |
+| `[ "Arrival" ]` | Every message the account's synchronization run commits |
+| `[]` | No automatic occasion at all: nothing fires the rule, and a whole-mailbox run is what applies it |
+| the key left out | The same as `[]` — a rule takes part in the occasions it names and in no others |
+
+**`Arrival` is a message the account's synchronization run has just committed.** It is named after the moment rather
+than after the transport, because `Push` already names a folder's
+[synchronization mode](imap-synchronization.md#choosing-the-mode-per-folder) and a rule is unaffected by which one its
+account uses: mail a polled run commits reaches this trigger exactly as mail a watched one commits does.
+
+**A rule that names no trigger runs on no arriving message.** Leaving the key out is a statement rather than an
+omission, and it is the same statement as writing `[]`: the rule is bound, validated, and reported, and a whole-mailbox
+run is what applies it. So a rule meant to file mail as it arrives writes `Arrival` — there is no occasion a rule joins
+without naming it.
+
+**Such a rule is one you run rather than one that runs**, which is what periodic housekeeping wants — file everything
+older than a quarter, delete what a mailing list left behind — where firing on each arriving message is either useless
+or exactly what the owner is afraid of. [A whole-mailbox
+run](#running-the-rules-over-mail-you-already-have) is what applies it.
+
+**A rule a trigger does not reach is not evaluated and records no outcome**, exactly as a rule scoped to another
+account is not: it did not decline to match, it was not one of that pass's rules. It follows that such a rule cannot end
+a pass either, whatever `StopWhenMatched` says.
+
+**A whole-mailbox run is never a member of the list**, and it applies the whole rule set including the manual-only
+rules. Somebody asking for a run is the request itself, so a rule declining to run because it had not agreed to be asked
+would be surprising in the one place surprise is least affordable. No run selects rules by name either: what a run
+applies is the set the configuration declares.
+
+**A name this system does not recognize is refused when the configuration is read**, naming the rule and the value, and
+so is the same trigger written twice, because the value is a set. Neither is dropped: a list whose only entry was
+mistyped would otherwise arrive as an empty one, which would silently turn an automatic rule into a manual one — and a
+rule that never fires is indistinguishable from a rule nothing matched. The name is read the way the binder reads every
+other closed vocabulary this configuration declares, so `arrival` and `Arrival` are one trigger.
+
+### `Triggers: []` and `Enabled: false` say different things
+
+The two keys sound alike and are not:
+
+| | `Triggers: []` | `Enabled: false` |
+| --- | --- | --- |
+| In the bound rule set | Yes | No |
+| Validated when the configuration is read | Yes | Yes, apart from its condition |
+| Run when mail arrives | No | No |
+| Run by a whole-mailbox run | Yes | No |
+| What it is for | A rule an owner applies deliberately | A rule taken out of service without deleting the condition |
 
 ## What a matching rule does
 
@@ -341,7 +401,8 @@ each is refused with a message naming the rule, what was wrong, and where:
   as truthy, so what a rule means never depends on a coercion nobody wrote down.
 
 The rule's `Accounts` filter is checked beside those four: every identifier names a declared account, none is blank, and
-none is repeated.
+none is repeated. Its `Triggers` list is checked the same way: every name is one this system declares, none is blank,
+and none is repeated.
 
 So is its `Actions` block, against the rule itself and against every account the rule reaches:
 
@@ -367,8 +428,8 @@ would otherwise get an instance still acting under the rules their file no longe
 
 ## Order, and stopping
 
-Rules are evaluated in the order they are written, skipping the ones scoped to other accounts. That order is the whole
-of the contract — nothing sorts, groups, or reorders a set — so two rules that both match one email produce the same
+Rules are evaluated in the order they are written, skipping the ones scoped to other accounts and the ones the walk's
+trigger does not reach. That order is the whole of the contract — nothing sorts, groups, or reorders a set — so two rules that both match one email produce the same
 outcome on every run and on every instance.
 
 `StopWhenMatched` on a rule that matches ends the pass, and the rules below it are not reached. It defaults to `false`.
@@ -400,7 +461,8 @@ before it has already stored, so a provider redelivering a message or a synchron
 processing boundary than a clean run. And nothing an MCP tool does waits on a rule: reads are served from what is
 already stored, and a pass neither blocks one nor is blocked by one.
 
-**A rule applies to mail that arrives after the rule exists.** Each message is evaluated once, and the record of that
+**A rule declaring `Arrival` applies to mail that arrives after the rule exists.** Each message is evaluated once, and
+the record of that
 evaluation is what takes it out of the queue the next pass reads — so editing a rule changes what happens to the mail
 that arrives from then on and does nothing to the mail already in the mailbox. Mail an instance stored before it had
 rule evaluation at all is recorded as evaluated when the schema is applied, for the same reason: an upgrade must not
@@ -413,8 +475,10 @@ evaluated drains over as many runs as its size needs instead of holding up the r
 commits its evaluations together with the position they account for, so a restart resumes at the message nobody read
 rather than replaying a batch or stepping over one.
 
-**A message whose body text has not been extracted yet is skipped and stays eligible.** It applies only where the
-account's rules actually name `bodyText`: such a message is left in the queue and evaluated once its text has been
+**A message whose body text has not been extracted yet is skipped and stays eligible.** It applies only where the rules
+that walk actually runs for the account name `bodyText`, which is decided per walk — so a rule only a whole-mailbox run
+applies holds nothing up on arrival, and a rule declaring `Arrival` does: such a message is left in the queue and
+evaluated once its text has been
 derived, rather than evaluated against a fact that would answer absent and then never reconsidered. Mail whose payload
 local storage has not had headroom for is waited on the same way, because a later run fetches it as soon as the ceiling
 permits. A message whose content will never yield text — one above the size limit, which every later run refuses for
@@ -428,8 +492,9 @@ so fetching the account's mail less often would answer a local problem by slowin
 with it. The next section lists the two reasons.
 
 **Nothing scans on a timer.** The account run recurs already, so anything a scan would find on arrival is found by the
-first trigger; a rule whose condition only becomes true with the passage of time — mail older than some age — fires when
-the owner asks for a whole-mailbox run.
+`Arrival` trigger; a rule whose condition only becomes true with the passage of time — mail older than some age — fires
+when the owner asks for a whole-mailbox run. Such a rule is what [`Triggers: []`](#which-triggers-run-a-rule) is for:
+declaring no automatic trigger keeps it out of every arrival pass without taking it out of the set.
 
 ## Running the rules over mail you already have
 
@@ -442,6 +507,8 @@ now in force.
 - **It runs where every other pass runs.** The request records that the run is wanted and nothing more; the work happens
   as a step of the account's synchronization run, bounded by the same two settings. Whoever asked is not what keeps it
   alive, so closing a terminal does not cancel a walk of a mailbox.
+- **It applies the whole rule set.** Every rule the configuration declares for the account is run, including the ones
+  that declare no automatic trigger, and nothing selects a subset of them for one run.
 - **It is bound to one rule set.** The revision in force when the run starts is recorded with it, so a reload cannot
   change what the run is doing halfway through. If the rules do change while a run is outstanding, the run ends as
   **superseded** and says so, because MailFathom keeps only the rule set its configuration currently declares and
@@ -513,8 +580,11 @@ and two instances reading the same file name the same revision.
 
 What moves it and what does not:
 
-- Changing a rule's name, its condition, its actions, its `StopWhenMatched`, or the accounts it applies to moves it.
+- Changing a rule's name, its condition, its actions, its `StopWhenMatched`, the accounts it applies to, or the
+  triggers it takes part in moves it.
 - Adding, removing, or switching off a rule moves it.
+- Writing a rule's default triggers out in full leaves it alone, because a rule that says nothing and a rule that says
+  `[ "Arrival" ]` are the same rule.
 - Reordering the rules moves it, because declared order is part of what a rule set means.
 - Reformatting the file, reordering the keys within one rule, and changing an unrelated configuration section all leave
   it alone.
@@ -538,7 +608,7 @@ senderAddress == 'billing@supplier.test'
 One account's mail only, which is the `Accounts` filter beside the condition rather than anything in it:
 
 ```json
-{ "Name": "work-invoices", "Accounts": [ "work" ], "Condition": "contains(subject, 'invoice')" }
+{ "Name": "work-invoices", "Accounts": [ "work" ], "Condition": "contains(subject, 'invoice')", "Triggers": [ "Arrival" ] }
 ```
 
 Anything from a domain, in one of two folders:
@@ -594,6 +664,7 @@ Filing supplier invoices and marking them read, on one account, so that the rule
   "Name": "supplier-invoices",
   "Accounts": [ "work" ],
   "Condition": "senderDomain == 'supplier.test' and attachmentCount > 0",
+  "Triggers": [ "Arrival" ],
   "Actions": { "MoveTo": "invoices", "MarkAsRead": true },
   "StopWhenMatched": true
 }
@@ -606,6 +677,7 @@ read:
 {
   "Name": "regulator-copies",
   "Condition": "senderDomain == 'regulator.example'",
+  "Triggers": [ "Arrival" ],
   "Actions": { "CopyTo": "compliance" }
 }
 ```
@@ -616,6 +688,7 @@ Putting automated notices back in front of somebody by clearing the flag, and no
 {
   "Name": "unread-alerts",
   "Condition": "contains(subject, 'alert') and isSeen",
+  "Triggers": [ "Arrival" ],
   "Actions": { "MarkAsRead": false }
 }
 ```
@@ -628,7 +701,19 @@ Deleting mail nobody needs — which the account has to permit under
   "Name": "drop-build-notifications",
   "Accounts": [ "work" ],
   "Condition": "senderAddress == 'builds@ci.example' and ageInDays > 7",
+  "Triggers": [ "Arrival" ],
   "Actions": { "Delete": true }
+}
+```
+
+Quarterly housekeeping nothing fires by itself, which the owner applies by asking for a whole-mailbox run:
+
+```json
+{
+  "Name": "retire-old-newsletters",
+  "Condition": "contains(subject, 'newsletter') and ageInDays > 90",
+  "Actions": { "MoveTo": "archive" },
+  "Triggers": []
 }
 ```
 
@@ -638,6 +723,7 @@ Selecting mail and changing nothing, which is what a rule owning a message ahead
 {
   "Name": "leave-family-mail-alone",
   "Condition": "senderDomain == 'family.example'",
+  "Triggers": [ "Arrival" ],
   "StopWhenMatched": true
 }
 ```
