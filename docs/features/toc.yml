@@ -2,34 +2,50 @@
 # Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 # Project repository: https://github.com/Krzysztof318/MailFathom
 
-# What the product does, from the mail arriving to the tool call answering.
+# What the product does, from the mail arriving to the tool call answering. The `description` beside a page is the
+# line the published map carries for it; `docs/toc.yml` records why it lives here.
 - name: The scope of the first release
   href: initial-scope.md
+  description: What the first release implements, slice by slice, and what is deliberately still pending.
 - name: IMAP synchronization
   href: imap-synchronization.md
+  description: How a mailbox is reconciled read-only — what starts a pass, how folder identity survives a rename, and what a remote deletion does locally.
 - name: Mailbox queries
   href: mailbox-queries.md
+  description: What a listing filters on, how a page is bounded and continued, and how it reports the freshness of the local copy it answers from.
 - name: Email search
   href: email-search.md
+  description: What a search matches, how results are ranked and bounded, and what each hit carries back beside the summary.
 - name: Email content
   href: email-content.md
+  description: What the content of a named message returns — normalized headers, body, attachments — and the limits every part of it is bounded by.
 - name: Message chunks
   href: message-chunks.md
+  description: Why a message is cut into overlapping passages, how a chunk is identified, and what is stored beside it.
 - name: Embedding generation
   href: embedding-generation.md
+  description: What a deployment declares to turn a passage into a vector, what one call may spend, and how a failing call is classified.
 - name: Automatic embedding
   href: automatic-embedding.md
+  description: What decides that a passage is embedded, when it happens, and what an operator sees when it falls behind.
 - name: Embedding backfill
   href: embedding-backfill.md
+  description: How mail stored before a profile existed is embedded afterwards, and what a backfill reports while it runs.
 - name: Chat generation
   href: chat-generation.md
+  description: What a deployment declares to make a chat call, what one call is allowed to spend, and how an operator sees whether the provider is working.
 - name: Mail answering
   href: mail-answering.md
+  description: How a question about the mailbox is answered from mail the model looks up while answering, and how much of it leaves the process.
 - name: Sensitive-content scanning
   href: sensitive-content-scanning.md
+  description: How a credential that arrived in a mailbox is kept out of a provider's context window, a retrieval snippet, and a log line.
 - name: Spam classification
   href: spam-classification.md
+  description: How mail written to deceive a reader is recognized from what the receiving server already decided, and what that changes downstream.
 - name: Mail rules
   href: mail-rules.md
+  description: How a rule selects mail and what a match may change, written in the configuration a deployment already carries.
 - name: MCP tools
   href: mcp-tools.md
+  description: The conventions every tool follows, the contract of each tool that exists, and what a client reads when a call fails.

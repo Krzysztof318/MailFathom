@@ -32,6 +32,14 @@ pages for somebody reading them in the repository.
 | Follow the boundaries the code is built on | [Architecture](architecture/solution-structure.md) |
 | Look up a type or a member | [API reference](api/index.md) |
 
+## If you are an AI agent
+
+[`llms.txt`](llms.txt) is this version's map of the documentation: every published page, its title, and one line
+saying what it answers. Load it in full, then fetch the one page that owns the contract in question — each page is
+served as Markdown beside its rendered form, at the same address with a `.md` extension. Where the question is a whole
+path rather than a page of it, [the operator path](llms-operator.txt) and
+[the mailbox user path](llms-mailbox-user.txt) each carry one reader's whole way through the user guide in one file.
+
 ## Which version you are reading
 
 **The site opens on the current release.** The selector in the header moves between the releases that are still

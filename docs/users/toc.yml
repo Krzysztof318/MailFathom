@@ -2,20 +2,29 @@
 # Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 # Project repository: https://github.com/Krzysztof318/MailFathom
 
-# The guided path, in the order somebody arriving at MailFathom walks it.
+# The guided path, in the order somebody arriving at MailFathom walks it. The `description` beside an entry is the
+# line the published map carries for that page; `docs/toc.yml` records why it lives here.
 - name: What MailFathom is
   href: README.md
+  description: What MailFathom is, and the two properties that hold everywhere — reading is local, and synchronization never marks mail read.
 - name: Choosing an installation
   href: installation.md
+  description: The deployment shapes a release publishes, what each one assumes and is good for, and which guide carries its commands.
 - name: Getting started
   href: getting-started.md
+  description: From an installed instance to a synchronized mailbox and a first successful tool call, secrets and the schema step included.
 - name: Configuring a mailbox at your provider
   href: mailbox-providers.md
+  description: The address, port, and credential kind each popular mail service publishes, and what each one does differently once synchronization runs.
 - name: Connecting the chat client you already use
   href: mcp-clients.md
+  description: Where the connection dialog is in each popular client, which address kind it needs, and which of them cannot present an API key at all.
 - name: Using the tools
   href: usage.md
+  description: What list_emails, search_emails, get_email_content, and ask_mail return, what they deliberately bound, and how to read a failure.
 - name: Administering your deployment
   href: administering.md
+  description: The mfctl command — what it is for, signing in to a running deployment from your own machine, and what it cannot do yet.
 - name: Configuration reference
   href: ../operations/configuration-reference.md
+  description: Every user-settable option in one place, with its type, default, constraint, and whether changing it needs a restart.

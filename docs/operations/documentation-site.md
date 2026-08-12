@@ -1,6 +1,6 @@
 # The documentation site
 
-<!-- describes: docfx/**, docs/toc.yml, docs/*/toc.yml, docs/index.md, docs/api/index.md, scripts/build-docs-site.sh, scripts/compose-docs-site.sh, scripts/list-documented-versions.sh, .github/workflows/publish-documentation.yml -->
+<!-- describes: docfx/**, docs/toc.yml, docs/*/toc.yml, docs/index.md, docs/api/index.md, scripts/build-docs-site.sh, scripts/compose-docs-site.sh, scripts/list-documented-versions.sh, scripts/write-docs-agent-artifacts.sh, scripts/rebase-markdown-links.sh, .github/workflows/publish-documentation.yml -->
 
 The pages under `docs/` are published as a browsable site at
 <https://krzysztof318.github.io/MailFathom/>. The site is generated from this repository by
@@ -41,6 +41,62 @@ Four kinds of file under `docs/` are deliberately not published:
 The architecture draft under `specs/` is not published either, and is not under `docs/` to begin with: the draft
 states intent, and every page on this site states fact.
 
+## What an agent reads
+
+The same documentation is published a second time, in the form an AI agent uses. A rendered page is a template around
+the text; an agent wants the text, and it wants to know which page to fetch before it fetches anything. Three
+artifacts answer that, and `scripts/write-docs-agent-artifacts.sh` writes all three into every version the site
+carries, `latest` included:
+
+| Artifact | What it is |
+| --- | --- |
+| `llms.txt` at the version's root | The map: every published page, its title, and one line saying what it answers, in the order the navigation puts it. It follows the [llms.txt convention](https://llmstxt.org/) — a heading, a summary, and one `##` section per part of the documentation |
+| `<page>.md` beside each rendered page | The page's Markdown source, at the same address with a `.md` extension, so a link from the map fetches text rather than a template |
+| `llms-operator.txt` and `llms-mailbox-user.txt` | The user guide's two reading paths, each page of one path concatenated into one file: installing, starting, configuring a mailbox and administering for the first; connecting a client and using the tools for the second |
+
+**The map is the navigation.** A page's title and its place in the map are the `name:` and the position it already has
+in a `toc.yml`, and the line saying what it answers is a `description:` beside them — so a page joins the map by
+joining the navigation of its section, which is one file to write rather than two. That is also what stops the map
+from rotting: an entry cannot be forgotten, because there is no second list to forget it in.
+
+Both halves of that agreement are checked, and the build refuses either way round. A published page the map does not
+list fails `scripts/build-docs-site.sh`, and so does a map entry the version carries no page for; a table-of-contents
+entry naming a page with no `description:` fails the same way, because a map of titles is the search over fragments
+the map exists to replace. `scripts/test-agent-workflow.sh` asserts each of those on every pull request, so the
+failure arrives before a publish rather than during one.
+
+The map and the bundles are written by this repository rather than copied from it, so each one ends with the same
+three lines every file here carries — the copyright, the grant, and the repository URL — as prose rather than as a
+comment, because that is the form whatever reads them parses. A page's mirrored source carries none, for the reason
+the page itself carries none: a copy states what the original states.
+
+Two things are deliberately not published here:
+
+- **No bundle of the whole of `docs/`.** It is roughly 1.8 MB of Markdown. Nothing loads that, so it would be an
+  artifact to keep correct that no reader ever benefits from — the map exists precisely so that a whole-set fetch is
+  never the way to an answer.
+- **No Markdown for the API reference.** It is generated from XML documentation comments into a thousand pages named
+  after types, and the map links its introduction like any other page. The types themselves are read from `src/`.
+
+A link inside these artifacts follows the rule the rest of this page states, resolved for where the artifact sits. A
+page's Markdown source keeps its links exactly as written, because the sources mirror the tree the pages came from. A
+bundle sits at the version's root rather than in `users/`, so `scripts/rebase-markdown-links.sh` resolves each
+relative link for that move — `../operations/mcp-endpoint.md` in a page of the user guide becomes
+`operations/mcp-endpoint.md` — and leaves every absolute URL alone.
+
+`scripts/compose-docs-site.sh` copies the default version's map to the site root, rebased into that version's
+directory, so an agent that asks for `llms.txt` without naming a version gets the release the site opens on. That copy
+names a version inside itself, unlike the [stable addresses](#the-addresses-that-outlive-a-release) beside it, and it
+can: it is rewritten by every publish rather than written once into somebody else's page. A release built before these
+artifacts existed carries no map, and the site opens on the newest release — so the root map arrives with the first
+release that carries one, and the composition says so instead of failing a publish over a commit that could not have
+written it.
+
+The version's own landing page links the map, which is what makes the artifacts reachable from the address every
+surface prints. docfx cannot resolve that link — the map is written into the build's output after docfx has finished —
+so `scripts/build-docs-site.sh` exempts exactly those targets from the link gate, and the artifact script's own check
+that every entry names a page the version carries is what covers them instead.
+
 ## Which versions are published, and which one opens
 
 The site holds one directory per version and a landing page that sends a reader into one of them:
@@ -74,6 +130,11 @@ that no table of contents lists and an entry that names no page.
 
 The href in a `toc.yml` is resolved against the file's own directory in `docs/`, not against the site — which is why
 these files live beside the pages they order rather than in `docfx/`.
+
+**Every entry naming a page or a section carries a `description:` as well**, which is the line
+[the map an agent reads](#what-an-agent-reads) carries for it. It says what the page answers rather than what it is
+about, in one sentence, because the agent reading it is deciding whether this is the page to fetch. A group heading
+inside a section names no page and carries none: what it groups is the pages under it.
 
 ## Links
 
@@ -127,7 +188,9 @@ dotnet docfx serve artifacts/docs-site     # http://localhost:8080
 
 The build restores the solution, because generating the API reference loads every project through MSBuild, and then
 runs docfx once. Expect a few minutes the first time. While a page is being written,
-`dotnet docfx docfx/docfx.json --serve` rebuilds and serves in one step instead.
+`dotnet docfx docfx/docfx.json --serve` rebuilds and serves in one step instead — that shorter loop runs docfx alone,
+so the artifacts an agent reads are absent from what it serves; `scripts/write-docs-agent-artifacts.sh <directory>`
+writes them into an already-built version in a second, without rebuilding anything.
 
 docfx is pinned in `.config/dotnet-tools.json` and restored by `dotnet tool restore` like the other command-line
 tools, so no global install is involved. A locally built site carries no version selector: the selector reads a

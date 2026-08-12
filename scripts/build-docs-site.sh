@@ -11,10 +11,11 @@ set -euo pipefail
 #   scripts/build-docs-site.sh <output-directory>
 #
 # The output is one version of the published site: the pages under `docs/`, the API reference generated from the XML
-# comments in `src/`, and the search index over both. It is self-contained apart from the version selector, which reads
-# a manifest the site root carries — `scripts/compose-docs-site.sh` writes that, and this script knows nothing about
-# the other versions. docs/operations/documentation-site.md describes how the two fit together and what the workflow
-# adds around them.
+# comments in `src/`, the search index over both, and the artifacts an AI agent reads instead of the rendered pages —
+# `scripts/write-docs-agent-artifacts.sh` writes those last and states what they are. It is self-contained apart from
+# the version selector, which reads a manifest the site root carries — `scripts/compose-docs-site.sh` writes that, and
+# this script knows nothing about the other versions. docs/operations/documentation-site.md describes how the two fit
+# together and what the workflow adds around them.
 #
 # Serving the result locally is `dotnet docfx serve <output-directory>`; `dotnet docfx docfx/docfx.json --serve` rebuilds
 # and serves in one step while a page is being written.
@@ -41,7 +42,14 @@ readonly unresolved_link_codes='InvalidFileLink|InvalidBookmark|InvalidExternalB
 # nothing else — it is a statement about a release rather than about a change — so a link in it is fixed by the next
 # release rather than by whoever notices it. Failing every documentation build until then would stop the site from
 # publishing over a file the build is not allowed to touch.
-readonly link_gate_exemption='"file": ?"\.\./CHANGELOG\.md"'
+readonly changelog_link_exemption='"file": ?"\.\./CHANGELOG\.md"'
+# The link targets docfx cannot see and the published version carries anyway: the map and the bundles are written into
+# this build's own output, below, after docfx has finished. The landing page links them because that page is the
+# address every surface prints, and an agent arriving there has to reach the artifacts written for it in one step. The
+# exemption is those targets rather than the page linking them, so a link to anything else still fails wherever it is
+# written — and a link to an artifact this build did not write is caught by
+# `scripts/write-docs-agent-artifacts.sh` instead, which checks its own map against what the version carries.
+readonly agent_artifact_link_exemption='"message": ?"Invalid file link:\(~[^)]*/llms(-[a-z-]+)?\.txt\)\."'
 
 if ! repository_root="$(git rev-parse --show-toplevel 2>/dev/null)"; then
   printf 'build-docs-site.sh must run inside a Git worktree.\n' >&2
@@ -84,7 +92,7 @@ dotnet docfx "$configuration_file" --output "$output_directory" --log "$build_lo
 # and a message match would fail a build over a link docfx resolved and merely commented on.
 if unresolved_links="$(
   grep --extended-regexp "\"code\": ?\"($unresolved_link_codes)\"" "$build_log" |
-    grep --invert-match --extended-regexp "$link_gate_exemption"
+    grep --invert-match --extended-regexp "$changelog_link_exemption|$agent_artifact_link_exemption"
 )"; then
   printf '\nThe build resolved no target for these links, so publishing it would put a 404 behind each one:\n\n' >&2
   printf '%s\n' "$unresolved_links" >&2
@@ -93,6 +101,12 @@ if unresolved_links="$(
   printf 'absolute https://github.com/Krzysztof318/MailFathom URL so that it works in both renderings.\n' >&2
   exit 1
 fi
+
+
+# The rendered pages are one of the two things this version publishes. The other is what an agent reads — the map,
+# each page's Markdown source beside the page itself, and the bundles — and it is written last because it is written
+# beside the build rather than by it: docfx renders a page and this puts the source of that page next to it.
+bash scripts/write-docs-agent-artifacts.sh "$output_directory"
 
 printf '\nThe documentation site is in %s. Serve it with:\n  dotnet docfx serve %s\n' \
   "$output_directory" "$output_directory"

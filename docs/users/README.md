@@ -43,6 +43,24 @@ says so and names the release, rather than describing it as though you could alr
 7. **[Configuration reference](../operations/configuration-reference.md)** — every user-settable option in one place,
    with its type, default, constraints, and whether changing it needs a restart.
 
+## Handing this guide to your own agent
+
+If you are working with an AI assistant beside you, give it the documentation rather than a search over it. The
+published site carries three artifacts written for exactly that, under whichever version you are running:
+
+- **`llms.txt`** at the version's root maps every published page with one line saying what it answers, and links each
+  page's Markdown source. An agent loads it in full and then fetches only the page that owns your question.
+- **`llms-operator.txt`** is this guide's operator path — choosing an installation, getting started, configuring a
+  mailbox at your provider, and administering the deployment — in one file, for when the question is the path rather
+  than a page of it.
+- **`llms-mailbox-user.txt`** is the other path in one file: connecting the chat client you already use, and what each
+  tool returns and bounds.
+
+The version-agnostic address `https://krzysztof318.github.io/MailFathom/llms.txt` is the map of the release the site
+opens on; the same file sits under each version's own directory. [The documentation
+site](../operations/documentation-site.md#what-an-agent-reads) records how they are produced and what they
+deliberately leave out.
+
 ## Once it is running
 
 | Question | Page |

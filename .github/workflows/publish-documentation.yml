@@ -54,6 +54,8 @@ on:
       - 'scripts/build-docs-site.sh'
       - 'scripts/compose-docs-site.sh'
       - 'scripts/list-documented-versions.sh'
+      - 'scripts/write-docs-agent-artifacts.sh'
+      - 'scripts/rebase-markdown-links.sh'
       - '.github/workflows/publish-documentation.yml'
   workflow_dispatch:
 
