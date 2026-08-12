@@ -82,7 +82,7 @@ internal static class SynchronizationTestHost
     /// <param name="notificationSessionFactory">Stands in for the server's push mechanism; a server that advertises none is the default.</param>
     /// <param name="remoteFolderCatalog">Replaces the catalog that advertises exactly the configured folders.</param>
     /// <param name="mutationRecordStore">Replaces the record store that reports nothing outstanding to converge.</param>
-    /// <param name="folderMirrorStore">Replaces the store a run erases an unmirrored folder's local copy through.</param>
+    /// <param name="folderMirrorStore">Replaces the store an unmirrored folder's local copy would be erased through, which no run reaches.</param>
     /// <param name="ruleEvaluationStore">Replaces the store a rule pass reads its candidates from; one with nothing to evaluate is the default.</param>
     /// <param name="unadvertisedAliases">Aliases the modelled server does not advertise.</param>
     /// <returns>A provider whose scopes resolve a synchronizer over substituted infrastructure.</returns>
@@ -154,8 +154,10 @@ internal static class SynchronizationTestHost
         services.AddScoped<IMailboxMutationAuditSettingsReader>(provider => provider.GetRequiredService<MailSynchronizationOptions>());
         services.AddScoped<MailboxMutationAuditTrailRetention>();
 
-        // A run also takes away what is stored for a folder the account has stopped mirroring, and resolves the eraser
-        // from its own scope. The store below records which folders it was asked about and erases nothing.
+        // No run erases what a folder the account has stopped mirroring stored, and both of these are registered so
+        // that assertion can fail rather than pass by accident: a run that reached for the eraser again would compose,
+        // resolve, and record into the store below instead of throwing into the supervisor's own catch and being
+        // logged as an unexpected failure nobody asserted on.
         services.AddSingleton(folderMirrorStore ?? new RecordingMailFolderMirrorStore());
         services.AddScoped<UnmirroredMailFolderEraser>();
 

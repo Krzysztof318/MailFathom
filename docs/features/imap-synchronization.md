@@ -810,7 +810,7 @@ readable by tools:
 
 | Switch | With it `false` |
 | --- | --- |
-| `Synchronize` | No run schedules the folder, so no connection is opened for it and nothing of it is stored. |
+| `Synchronize` | No run schedules the folder, so no connection is opened for it and nothing further of it is stored. |
 | `GenerateEmbeddings` | What is stored is never cut into passages and never reaches an embedding provider. |
 | `VisibleToTools` | No MCP tool lists, searches, reads, or answers from the folder. |
 
@@ -838,7 +838,8 @@ mirrors, so nothing would ever bind its alias; instead the alias is resolved the
 destination, against the folders the server advertises, and the binding and the mapping-change audit record that a
 mirrored folder produces are the same ones produced here. What is resolved is then reused rather than looked up per
 message, and a server that has since renamed the folder is followed exactly as it is for a mirrored folder — the binding
-is replaced by its next generation, with no checkpoint to invalidate, because a folder nothing mirrors has none.
+is replaced by its next generation. A folder that was mirrored once keeps the checkpoint its own runs left, which is what
+makes switching it back on a resumption; a folder that never was has none to keep.
 
 Four things can go wrong, and each is reported against the one change rather than ending the pass. A name **no mapping
 of the account declares** is refused, naming what was asked for. A mapping the server advertises **no folder for**, and a
@@ -861,14 +862,21 @@ from tools — binds as well, and it is worth naming what it costs: the passages
 for, and no reader reaches them today, since the tools are the only readers there are. It is a mapping to write when the
 folder is expected to become visible, not one to leave in place indefinitely.
 
-**Mail already stored for a folder whose synchronization is switched off is erased**, in bounded passes on the account's
-own runs, through the deletion path an erasing disposition already uses: the row goes and PostgreSQL removes the raw
-MIME, the search document, the passages, their vectors, and any outstanding repair request with it, and the folder's
-checkpoint is cleared once nothing of it is left. That is deliberate rather than tidiness — a folder nothing reads is a
-folder nothing refreshes, so leaving the rows would leave mail answering searches with the flags it had on the day the
-switch was flipped, and never learning that the server had moved or removed it. The binding itself stays, which is what
-keeps the alias resolving as a destination. A pass that fails is logged and repeated by the next run rather than putting
-the account into backoff, since nothing about it is a mail-server failure.
+**Mail already stored for a folder whose synchronization is switched off is kept.** Nothing is removed, no pass runs
+over the folder, and the checkpoint stays exactly where the last run left it. Rows nobody may read are not stale in a
+way anybody observes: an unsynchronized folder is withdrawn from every reader there is, because the mapping derives the
+other two switches from this one, so no tool lists, searches, reads, or answers from it, nothing of it is embedded, and
+no rule pass reaches it. Erasing them would charge an operator a whole remirror for a switch they may flip back the
+same week, so nothing in MailFathom takes local mail away because a configuration value changed.
+
+**Switching the folder back on is an ordinary mirror**, whichever state the folder is in. A folder that never stored
+anything is scheduled, discovered, bound, and backfilled exactly as one mapped mirrored from the start; a folder that
+stored something before resumes from its retained checkpoint, so the run fetches what arrived while it was off and
+nothing else, and the backward pass converges the retained rows — flags that changed, messages that left, and messages
+the server removed during the gap are observed exactly as they are for a folder that simply went unread for a while. A
+`UIDVALIDITY` the server changed meanwhile invalidates the checkpoint on that first run like any other, and
+reconciliation resolves what the invalidation leaves behind. There is no branch anywhere that tells a re-enabled folder
+from a newly mapped one.
 
 The tool switch is applied in exactly one place. `MailboxScopeResolver` resolves the scope every read model is expressed
 in, attaches the withheld folders to it, and answers the same question for the two reads that name an email by its

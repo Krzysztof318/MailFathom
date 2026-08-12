@@ -490,6 +490,10 @@ internal sealed class MailSynchronizationOptions
         [.. this.ConfiguredFolders().Where(static folder => !folder.Participation.GeneratesEmbeddings).Select(static folder => folder.Identity)];
 
     /// <inheritdoc />
+    public IReadOnlyList<MailFolderIdentity> FoldersNotMirrored =>
+        [.. this.ConfiguredFolders().Where(static folder => !folder.Participation.IsSynchronized).Select(static folder => folder.Identity)];
+
+    /// <inheritdoc />
     /// <remarks>
     /// Read from the configured role rather than from what a server advertised, for the reason
     /// <see cref="MailFolderMappingOptions.ConfiguredSpecialUse" /> gives. A deployment that maps no junk folder answers

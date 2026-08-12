@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Application.Folders;
 using MailFathom.Application.Persistence;
 using MailFathom.Application.Rules.Evaluation;
 using MailFathom.Application.Rules.Facts;
@@ -18,14 +19,24 @@ namespace MailFathom.Infrastructure.Persistence.Rules;
 
 /// <summary>EF Core state for the rule passes that run inside an account's synchronization run.</summary>
 /// <remarks>
+/// <para>
 /// Both walks project straight into the fact surface rather than loading rows, because a condition reads twenty of its
 /// twenty-two facts from metadata and none of them is the raw MIME sitting beside it in the same aggregate. Of the
 /// other two, <c>folderRole</c> is read from configuration rather than from any row, and <c>bodyText</c> is read one
 /// email at a time and only when a condition names it, which is what keeps a rule set that mentions no body text free
 /// of a content read.
+/// </para>
+/// <para>
+/// Both walks also leave out the folders no run mirrors, and it is the walk rather than the pass that leaves them out.
+/// Such a folder keeps the mail it stored before its synchronization was switched off, so the rows are there to be
+/// read; dropping them after the batch came back would leave every one of them at the head of the arrival queue
+/// forever, since what takes an email out of that queue is a pass having evaluated it.
+/// </para>
 /// </remarks>
 [RequiresIntegrationCoverage]
-internal sealed class MailRuleEvaluationStore(MailFathomDbContext dbContext) : IMailRuleEvaluationStore
+internal sealed class MailRuleEvaluationStore(
+    MailFathomDbContext dbContext,
+    IMailFolderParticipationReader folderParticipation) : IMailRuleEvaluationStore
 {
     /// <inheritdoc />
     /// <remarks>
@@ -126,8 +137,8 @@ internal sealed class MailRuleEvaluationStore(MailFathomDbContext dbContext) : I
         var mailboxAccountId = accountId.Value;
         var resumeAfterId = resumeAfter?.Value;
 
-        var candidates = await emails
-            .AsNoTracking()
+        var candidates = await AccountScopedMailFolders
+            .Excluding(emails.AsNoTracking(), folderParticipation.FoldersNotMirrored)
             .Where(StoredEmailTombstone.IsNotTombstoned)
             .Where(email => email.MailboxAccountId == mailboxAccountId
                 && (resumeAfterId == null || email.Id > resumeAfterId))

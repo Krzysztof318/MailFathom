@@ -116,7 +116,7 @@ read rather than left without an account predicate. The two are not the same: re
 leaves its stored rows in place, so an absent predicate would keep publishing mail from an account MailFathom no longer
 serves. Switching `MailSynchronization:Enabled` off is a different matter and hides nothing — it stops runs from fetching
 mail, and the copy already stored stays readable. Switching a single folder's `Synchronize` off is a third thing again:
-that folder's stored mail is erased rather than hidden, which
+that folder's stored mail is kept and withheld from every reader rather than erased, which
 [what a mapping decides beyond where the folder is](imap-synchronization.md#what-a-mapping-decides-beyond-where-the-folder-is)
 states.
 

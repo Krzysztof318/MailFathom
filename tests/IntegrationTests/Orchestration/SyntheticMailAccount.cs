@@ -44,7 +44,8 @@ internal sealed class SyntheticMailAccount(
     bool auditTrailEnabled = false,
     bool answeringAuditTrailEnabled = false,
     IReadOnlyList<MailFolderIdentity>? foldersWithoutEmbeddings = null,
-    IReadOnlyList<MailFolderIdentity>? foldersHiddenFromTools = null)
+    IReadOnlyList<MailFolderIdentity>? foldersHiddenFromTools = null,
+    IReadOnlyList<MailFolderIdentity>? foldersNotMirrored = null)
     : IImapAccountSettingsProvider,
     IMailTransportSecurityPolicyReader,
     IMailSynchronizationWindowReader,
@@ -97,6 +98,13 @@ internal sealed class SyntheticMailAccount(
     /// because whether a message is cut into passages at all is settled by the rows a real transaction leaves behind.
     /// </remarks>
     public IReadOnlyList<MailFolderIdentity> FoldersWithoutEmbeddings => foldersWithoutEmbeddings ?? [];
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Empty unless a test asks otherwise, for the reason above. The class that does ask names a folder it has already
+    /// stored mail into, because keeping that mail out of a walk is only worth asserting where the rows exist.
+    /// </remarks>
+    public IReadOnlyList<MailFolderIdentity> FoldersNotMirrored => foldersNotMirrored ?? [];
 
     /// <inheritdoc />
     /// <remarks>

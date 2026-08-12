@@ -150,37 +150,74 @@ public sealed class AccountSynchronizationSupervisorTests
             new TaskCompletionSource(),
             expectedFolderCount: 1,
             _ => new InvalidOperationException("connect failed"));
-        var mirrorStore = new RecordingMailFolderMirrorStore();
+        var localStepsReached = new TaskCompletionSource();
         using var harness = CreateHarness(
             CreateOptionsWithArchiveUnmirrored(),
             sessionFactory,
-            folderMirrorStore: mirrorStore);
+            ruleEvaluationStore: CreateRuleStoreReporting(localStepsReached));
 
-        // Act, waiting on the pass that follows every folder the run scheduled.
-        await harness.SuperviseUntilAsync(mirrorStore.FirstErasureReached);
+        // Act, waiting on the last local step, which follows every folder the run scheduled.
+        await harness.SuperviseUntilAsync(localStepsReached.Task);
 
         // Assert
         Assert.Equal(["INBOX"], attemptedFolders);
     }
 
-    /// <summary>Stored mail no run will ever refresh again is taken away rather than left answering with the flags it had.</summary>
+    /// <summary>
+    /// Mail a folder stored before its synchronization was switched off is kept, so turning the folder back on next
+    /// month costs the mail that arrived meanwhile rather than the whole folder again.
+    /// </summary>
     [Fact]
-    public async Task RunAsync_AFolderTheAccountNoLongerMirrors_ErasesWhatIsStoredForIt()
+    public async Task RunAsync_AFolderTheAccountNoLongerMirrors_ErasesNothingOfWhatItStored()
     {
         // Arrange
         var mirrorStore = new RecordingMailFolderMirrorStore();
+        var localStepsReached = new TaskCompletionSource();
         using var harness = CreateHarness(
             CreateOptionsWithArchiveUnmirrored(),
             Substitute.For<IMailboxSessionFactory>(),
-            folderMirrorStore: mirrorStore);
+            folderMirrorStore: mirrorStore,
+            ruleEvaluationStore: CreateRuleStoreReporting(localStepsReached));
 
-        // Act
-        await harness.SuperviseUntilAsync(mirrorStore.FirstErasureReached);
+        // Act, waiting on the last of the run's local steps, which is past where an erasure pass would have run.
+        await harness.SuperviseUntilAsync(localStepsReached.Task);
 
         // Assert
-        Assert.Equal(
-            [new MailFolderIdentity(MailAccountId.Create("primary"), MailFolderAlias.Create("ARCHIVE"))],
-            mirrorStore.ErasedFolders);
+        Assert.Empty(mirrorStore.ErasedFolders);
+    }
+
+    /// <summary>
+    /// No configuration value erases stored mail, which is what makes the erasure machinery something an operator
+    /// reaches for rather than something a switch reaches for on their behalf.
+    /// </summary>
+    [Theory]
+    [InlineData(true, true, true)]
+    [InlineData(false, false, false)]
+    [InlineData(true, false, true)]
+    [InlineData(true, true, false)]
+    public async Task RunAsync_WhicheverWayTheFolderSwitchesAreSet_ErasesNothing(
+        bool synchronize,
+        bool generateEmbeddings,
+        bool visibleToTools)
+    {
+        // Arrange
+        var options = SynchronizationTestHost.CreateSingleAccountOptions(enabled: true, "INBOX", "Archive");
+        options.Accounts[0].Folders[1].Synchronize = synchronize;
+        options.Accounts[0].Folders[1].GenerateEmbeddings = generateEmbeddings;
+        options.Accounts[0].Folders[1].VisibleToTools = visibleToTools;
+        var mirrorStore = new RecordingMailFolderMirrorStore();
+        var localStepsReached = new TaskCompletionSource();
+        using var harness = CreateHarness(
+            options,
+            Substitute.For<IMailboxSessionFactory>(),
+            folderMirrorStore: mirrorStore,
+            ruleEvaluationStore: CreateRuleStoreReporting(localStepsReached));
+
+        // Act
+        await harness.SuperviseUntilAsync(localStepsReached.Task);
+
+        // Assert
+        Assert.Empty(mirrorStore.ErasedFolders);
     }
 
     /// <summary>An ambiguous role and an alias that matches nothing need different remedies, so they are logged as different things.</summary>
@@ -599,6 +636,65 @@ public sealed class AccountSynchronizationSupervisorTests
             message => message.Contains("Mail server reported a change in primary/INBOX", StringComparison.Ordinal));
     }
 
+    /// <summary>
+    /// Switching a folder back on is an ordinary mirror: the next run schedules it exactly as it schedules a folder
+    /// that was mapped mirrored from the start, with no branch that tells the two apart. What the folder kept while it
+    /// was off is what makes that run a resumption rather than a remirror.
+    /// </summary>
+    [Fact]
+    public async Task RunAsync_AFolderSwitchedBackOn_IsScheduledByTheNextRunLikeAnyOther()
+    {
+        // Arrange
+        var attemptedFolders = new List<string>();
+        var archiveAttempted = new TaskCompletionSource();
+        var sessionFactory = Substitute.For<IMailboxSessionFactory>();
+        sessionFactory
+            .OpenReadOnlyAsync(
+                Arg.Any<MailAccountId>(),
+                Arg.Any<MailFolderResolution>(),
+                Arg.Any<MailTransportSecurityPolicy>(),
+                Arg.Any<CancellationToken>())
+            .Throws(call =>
+            {
+                var folderAlias = call.Arg<MailFolderResolution>()!.Alias.Value;
+
+                lock (attemptedFolders)
+                {
+                    attemptedFolders.Add(folderAlias);
+                }
+
+                if (string.Equals(folderAlias, "ARCHIVE", StringComparison.Ordinal))
+                {
+                    archiveAttempted.TrySetResult();
+                }
+
+                return new InvalidOperationException("connect failed");
+            });
+        var firstRunReached = new TaskCompletionSource();
+        using var harness = CreateHarness(
+            CreateOptionsWithArchiveUnmirrored(),
+            sessionFactory,
+            ruleEvaluationStore: CreateRuleStoreReporting(firstRunReached));
+        var supervision = harness.StartSupervision();
+
+        // Act
+        await firstRunReached.Task.WaitAsync(DeadlockGuard, TestContext.Current.CancellationToken);
+        harness.Settings.Current = SynchronizationTestHost.CreateSingleAccountOptions(
+            enabled: true,
+            "INBOX",
+            "Archive");
+        await SynchronizationTestHost.AdvanceUntilAsync(
+            harness.Clock,
+            archiveAttempted.Task,
+            AdvanceStep,
+            DeadlockGuard);
+        await harness.StopSchedulingAsync();
+        await supervision;
+
+        // Assert
+        Assert.Contains("ARCHIVE", attemptedFolders);
+    }
+
     /// <summary>Configures one mirrored folder beside one the operator has switched synchronization off for.</summary>
     private static MailSynchronizationOptions CreateOptionsWithArchiveUnmirrored()
     {
@@ -689,6 +785,29 @@ public sealed class AccountSynchronizationSupervisorTests
         Assert.DoesNotContain(
             harness.Logger.Messages,
             message => message.Contains("runs in a row", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// Reports that a run has reached its last local step, which is the signal a test waits on when what it asserts is
+    /// that something did not happen: everything an account run does locally is behind it by then.
+    /// </summary>
+    private static IMailRuleEvaluationStore CreateRuleStoreReporting(TaskCompletionSource localStepsReached)
+    {
+        var ruleStore = Substitute.For<IMailRuleEvaluationStore>();
+        ruleStore
+            .GetEmailsAwaitingFirstEvaluationAsync(
+                Arg.Any<MailAccountId>(),
+                Arg.Any<StoredEmailId?>(),
+                Arg.Any<int>(),
+                Arg.Any<CancellationToken>())
+            .Returns(_ =>
+            {
+                localStepsReached.TrySetResult();
+
+                return Task.FromResult<IReadOnlyList<StoredEmailAwaitingRuleEvaluation>>([]);
+            });
+
+        return ruleStore;
     }
 
     private static IMailboxSessionFactory CreateFailingSessionFactory(

@@ -16,16 +16,14 @@ namespace MailFathom.TestSupport;
 /// </remarks>
 internal sealed class StubMailFolderParticipation : IMailFolderParticipationReader
 {
-    private readonly IReadOnlyList<MailFolderIdentity> unsynchronized;
-
     private StubMailFolderParticipation(
         IReadOnlyList<MailFolderIdentity> hiddenFromTools,
         IReadOnlyList<MailFolderIdentity> withoutEmbeddings,
-        IReadOnlyList<MailFolderIdentity> unsynchronized)
+        IReadOnlyList<MailFolderIdentity> notMirrored)
     {
         this.FoldersHiddenFromTools = hiddenFromTools;
         this.FoldersWithoutEmbeddings = withoutEmbeddings;
-        this.unsynchronized = unsynchronized;
+        this.FoldersNotMirrored = notMirrored;
     }
 
     /// <summary>Gets a reader that withholds nothing, which is what a deployment configuring no switch reads like.</summary>
@@ -36,6 +34,9 @@ internal sealed class StubMailFolderParticipation : IMailFolderParticipationRead
 
     /// <inheritdoc />
     public IReadOnlyList<MailFolderIdentity> FoldersWithoutEmbeddings { get; }
+
+    /// <inheritdoc />
+    public IReadOnlyList<MailFolderIdentity> FoldersNotMirrored { get; }
 
     /// <summary>Builds a reader that hides the named folders from every tool.</summary>
     /// <param name="folders">The folders to hide.</param>
@@ -60,7 +61,7 @@ internal sealed class StubMailFolderParticipation : IMailFolderParticipationRead
         var folder = new MailFolderIdentity(accountId, folderAlias);
 
         return MailFolderParticipation.Create(
-            !this.unsynchronized.Contains(folder),
+            !this.FoldersNotMirrored.Contains(folder),
             !this.FoldersWithoutEmbeddings.Contains(folder),
             !this.FoldersHiddenFromTools.Contains(folder));
     }
