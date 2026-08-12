@@ -293,6 +293,10 @@ curl -fsS http://127.0.0.1:8081/alive      # is the process still running
 `MAILFATHOM_HEALTH_BIND` and `MAILFATHOM_HEALTH_PORT` move the published address, the way `MAILFATHOM_HTTP_BIND` and
 `MAILFATHOM_HTTP_PORT` do for the MCP endpoint. Keep it on loopback unless the machine asking is not this one.
 
+[The Podman Quadlet deployment](deployment-quadlet.md) publishes the same two ports to the same address, through a
+`PublishPort=` line in the unit rather than through a variable, so moving one is an edit to the unit followed by
+`systemctl --user daemon-reload`.
+
 The container declares no Docker `HEALTHCHECK`. Docker and Podman run one as a command *inside* the container, and the
 image is chiseled: it carries no shell and no HTTP client for one to be written in. Adding either so the container could
 ask an endpoint that is already reachable from outside would grow its attack surface for nothing. See

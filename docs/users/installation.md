@@ -2,7 +2,7 @@
 
 <!-- describes: deploy/** -->
 
-MailFathom runs in three shapes, and each has one authoritative guide. This page is the decision: what each shape
+MailFathom runs in four shapes, and each has one authoritative guide. This page is the decision: what each shape
 assumes, what it is good for, and what every shape shares. Follow the linked guide for the commands; the guides do not
 repeat each other and neither does this page.
 
@@ -21,8 +21,9 @@ rather than tracking `latest`: an immutable tag is what makes a deployment repro
 which matters here because a new release can require a schema step before it will serve.
 
 **There is no binary artifact for the service itself**, so the native shape below is published from a checkout, and so
-is the Compose deployment, whose `compose.yaml` lives here and is versioned with the code that reads it. `mfctl` is the
-exception, and it is a client rather than the service: it runs on the machine you administer *from*.
+are the Compose deployment and the Quadlet units, whose files live here and are versioned with the code that reads
+them. `mfctl` is the exception, and it is a client rather than the service: it runs on the machine you administer
+*from*.
 
 Beside the release runs the nightly channel: `ghcr.io/krzysztof318/mailfathom:nightly` — or
 `docker.io/krzysztof318/mailfathom:nightly`, which is the same digest in the other registry — and the
@@ -41,12 +42,19 @@ cd MailFathom
 | Shape | Choose it when | Guide |
 | --- | --- | --- |
 | **Docker Compose** | You self-host on one machine and want the database, the network boundary, and the secret mounts arranged for you | [Deploying with Docker Compose](../operations/deployment-compose.md) |
+| **Podman Quadlet** | You self-host on one machine, run Podman rootless, and want the container's secrets to be encrypted systemd credentials rather than plaintext files | [Deploying with Podman Quadlet](../operations/deployment-quadlet.md) |
 | **Kubernetes with Helm** | You operate a cluster and bring your own Secret management | [Deploying to Kubernetes](../operations/deployment-kubernetes.md) |
 | **Native process** | You run services under systemd without a container runtime, and want secrets delivered as systemd credentials | [Below](#native-process), then [secret provisioning](../operations/secret-provisioning.md#native-systemd-service) |
 
 Docker Compose is the recommended first installation. It provisions PostgreSQL for you — `compose.yaml` creates the
 role, the database, and the `vector` extension on first start — and its defaults publish both ports on loopback, so
 nothing is reachable from another machine until you decide it should be.
+
+The Podman Quadlet is that same stack expressed as systemd units, and it provisions PostgreSQL the same way. What it
+buys is the one thing no Compose file can reach: a `.container` file is a systemd unit source, so the deployment's
+secrets are `LoadCredentialEncrypted=` credentials — ciphertext at rest, bound to the machine, decrypted only as the
+unit starts. What it asks in return is Podman rather than Docker, a rootless user, systemd 258 or later, and a decision
+about SELinux that its guide states before the first command.
 
 The Helm chart provisions one too, as a StatefulSet on a persistent claim, and turns it off for a deployment that has a
 server of its own. It creates no Secret, deliberately, so it needs an image reference and a Secret carrying the
@@ -64,8 +72,8 @@ The native process is the shape that brings no database at all.
   there, nothing in this repository is verified against it, and a defect that reproduces only on Windows is not one
   this project can act on today.
 - **PostgreSQL with the `vector` extension.** The synchronized mail, its indexes, and the raw message content all live
-  there. The Compose deployment and the Helm chart bring their own (`pgvector/pgvector`, PostgreSQL 18); a native
-  process expects yours, and the chart uses yours when you ask it to.
+  there. The Compose deployment, the Quadlet units, and the Helm chart bring their own (`pgvector/pgvector`,
+  PostgreSQL 18); a native process expects yours, and the chart uses yours when you ask it to.
 - **An IMAP account to synchronize** and its password or app password, provisioned as a
   [secret reference](../operations/secret-provisioning.md) rather than written into configuration.
 - **A data-encryption key, if any mailbox authenticates with OAuth.** MailFathom seals the refresh tokens it stores

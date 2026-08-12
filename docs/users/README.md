@@ -48,7 +48,7 @@ says so and names the release, rather than describing it as though you could alr
 | How do I reach a running deployment from my own machine? | [Administering your deployment](administering.md), [the administrative endpoint](../operations/admin-endpoint.md) |
 | How do I provision and rotate credentials? | [Secret provisioning](../operations/secret-provisioning.md), [secret rotation](../operations/secret-rotation.md) |
 | How do I protect the MCP endpoint — keys, OAuth, TLS, client certificates, rate limits? | [The MCP endpoint](../operations/mcp-endpoint.md) |
-| How do I upgrade, back up, restore, or remove it? | [Docker Compose](../operations/deployment-compose.md), [Kubernetes](../operations/deployment-kubernetes.md) |
+| How do I upgrade, back up, restore, or remove it? | [Docker Compose](../operations/deployment-compose.md), [Podman Quadlet](../operations/deployment-quadlet.md), [Kubernetes](../operations/deployment-kubernetes.md) |
 | It refuses to start, saying a migration is pending. What now? | [Applying the database schema](../operations/database-schema.md) |
 | Where does configuration come from, and what reloads without a restart? | [Configuration sources](../operations/configuration-sources.md), [configuration reference](../operations/configuration-reference.md) |
 | What does it record about itself, and where do the records go? | [Telemetry](../operations/telemetry.md), [host startup telemetry](../operations/host-startup-telemetry.md) |

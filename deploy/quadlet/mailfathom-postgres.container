@@ -1,0 +1,128 @@
+# Copyright © 2026 Krzysztof Kasprowicz
+# Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
+# Project repository: https://github.com/Krzysztof318/MailFathom
+
+# PostgreSQL for the Podman Quadlet deployment. Copy this file, the other four beside it, and the configuration example
+# under config/ as docs/operations/deployment-quadlet.md describes; nothing here is read from the repository at run
+# time.
+#
+# These units are rootless: they are installed under ~/.config/containers/systemd/ and run by the per-user service
+# manager. `UserNS=keep-id` below is not supported for a root container at all, so this is a property of the files
+# rather than a recommendation attached to them.
+
+[Unit]
+Description=PostgreSQL for MailFathom
+Wants=network-online.target
+After=network-online.target
+
+# The initialization script itself, named rather than the directory holding it, because the directory is created by a
+# separate step of the setup and passes an existence check while still holding nothing. Without the script this
+# container initializes a database with no `mailfathom` role, no `mailfathom` database, and no `vector` extension, and
+# then reports healthy — the health check below verifies the server rather than its contents — so the failure surfaces
+# as `mailfathom.service` unable to connect as a role that was never created. The assertion fails this unit instead,
+# before the data directory is written and while it is still empty enough to fix.
+#
+# `IsExecutable` rather than `Exists`, because the mode is load-bearing: the image's entrypoint executes a script in
+# docker-entrypoint-initdb.d that carries the bit and *sources* one that does not, and this script sets `errexit` and
+# `pipefail`, which sourcing would impose on the entrypoint's own shell.
+AssertFileIsExecutable=%h/.config/mailfathom/postgres-init/10-create-mailfathom-database.sh
+
+[Container]
+# pgvector rather than plain postgres: the schema declares the `vector` extension and the stock image cannot create it.
+# This is the same pin the Compose deployment and the local Aspire orchestration use, so a schema reviewed against one
+# is reviewed against all three.
+Image=docker.io/pgvector/pgvector:0.8.6-pg18
+ContainerName=mailfathom-postgres
+
+# Only the internal network. PostgreSQL needs no route out of the host and publishes no port, so it is reachable from
+# MailFathom and from whatever else is attached to that network — a schema step, a backup container — and from nothing
+# else.
+Network=mailfathom-backend.network
+
+# The parent rather than the data directory itself. PostgreSQL 18 moved this image's PGDATA into a version-specific
+# subdirectory and moved the declared volume up to /var/lib/postgresql with it, so mounting the old path would leave
+# the database in the container's writable layer and lose it with the container.
+Volume=mailfathom-postgres.volume:/var/lib/postgresql
+
+# Runs once, on an empty data directory, from the image's own initialization hook. It creates the unprivileged role and
+# the database MailFathom connects as, and installs the `vector` extension while a superuser is still connected. The
+# script is deploy/compose/postgres/10-create-mailfathom-database.sh — the file the Compose deployment already uses,
+# copied here rather than forked, which is why the credentials below arrive at /run/secrets: that is the path the
+# script reads and this shape meets it instead of carrying a second copy that reads another one.
+Volume=%h/.config/mailfathom/postgres-init:/docker-entrypoint-initdb.d:ro,Z
+
+# The credentials systemd decrypted for this unit, mounted where the initialization script and the image's own
+# POSTGRES_PASSWORD_FILE expect a secret file. `%d` is $CREDENTIALS_DIRECTORY, which exists only because the [Service]
+# section below asked for credentials; the `Z` is what gives the files an SELinux label a container may read, and
+# docs/operations/deployment-quadlet.md states what happens on a host where that relabel is refused.
+Volume=%d:/run/secrets:ro,Z
+
+# The credentials directory is readable by the unit's own user and by nobody else — mode 0400 under a 0700 directory,
+# which is the whole of its access control and is not something to loosen. Under the default rootless mapping the
+# container's uid 999 would be a subordinate uid belonging to no one on the host and the read would fail, so the
+# mapping is stated instead: the invoking user *is* uid 999 inside this container. 999 is not arbitrary — the Debian
+# PostgreSQL image creates its `postgres` account with that uid, and `initdb` refuses to run as a uid it cannot find
+# in /etc/passwd.
+UserNS=keep-id:uid=999,gid=999
+
+# The superuser of this container, used by initdb and by nothing else afterwards. The role MailFathom connects as is
+# created by the initialization script and is deliberately not this one.
+Environment=POSTGRES_USER=postgres
+Environment=POSTGRES_PASSWORD_FILE=/run/secrets/postgres-superuser-password
+Environment=POSTGRES_DB=postgres
+Environment=MAILFATHOM_DATABASE=mailfathom
+Environment=MAILFATHOM_DATABASE_ROLE=mailfathom
+
+# Over TCP on purpose. The image's entrypoint runs docker-entrypoint-initdb.d against a temporary server listening on a
+# Unix socket only, so a socket check can report ready while the initialization script has not yet created the role,
+# the database, or the extension. Naming a host forces the check onto the final, TCP-listening server. The database
+# name is given for readability rather than for enforcement: pg_isready reports the server's state and verifies
+# neither it nor the user.
+HealthCmd=pg_isready --quiet --host 127.0.0.1 --port 5432 --username postgres --dbname mailfathom
+HealthInterval=10s
+HealthTimeout=5s
+HealthRetries=12
+HealthStartPeriod=30s
+
+# What makes the dependency in mailfathom.container real rather than an approximation of one: the unit is not
+# considered started until the health check above passes, so `After=` there waits for a database that answers instead
+# of for a container that exists.
+Notify=healthy
+
+LogDriver=journald
+
+# Core dumps off inside the container as well as around it. docs/operations/secret-provisioning.md names this as the
+# operational control for material a process holds in memory; the [Service] LimitCORE= below bounds the podman process
+# and this bounds what podman starts.
+Ulimit=core=0
+
+# No AutoUpdate=. The image is pinned to an exact tag and an upgrade here is a decision with a database migration
+# attached to it, so nothing in this deployment moves an image on its own.
+
+[Service]
+# Decrypted by systemd as the unit starts, from files that are ciphertext at rest and bound to this machine. They are
+# encrypted with `systemd-creds --user encrypt`, which per-user service managers can decrypt only since systemd 258;
+# docs/operations/deployment-quadlet.md states what an older systemd leaves available.
+#
+# Both credentials are named with an absolute path rather than by name alone. A bare name would be looked up in the
+# credential store and a miss would not be fatal, which would start PostgreSQL with no password where the operator
+# expected one; an absolute path that does not exist fails the unit instead.
+LoadCredentialEncrypted=postgres-superuser-password:%h/.config/credstore.encrypted/postgres-superuser-password
+LoadCredentialEncrypted=mailfathom-database-password:%h/.config/credstore.encrypted/mailfathom-database-password
+
+# Bound the in-memory exposure that no code-level measure addresses, for the process that holds both passwords while it
+# hands them to the container.
+LimitCORE=0
+
+# The unit-level bounds this shape has and the Compose deployment approximates with `deploy.resources`. They are
+# systemd's own, so they apply to everything in the unit's cgroup rather than to one container inside it.
+MemoryMax=1G
+CPUQuota=200%
+
+Restart=always
+# Long enough for the health check to pass on a first start, which initializes the data directory before the server
+# answers on TCP: HealthStartPeriod plus HealthRetries times HealthInterval, with room to spare.
+TimeoutStartSec=300
+
+[Install]
+WantedBy=default.target

@@ -1,0 +1,86 @@
+// Copy to ~/.config/mailfathom/config/10-mailfathom.json and edit — this file stays in the repository and is never the
+// one the container reads. The extension matters: MailFathom layers in `*.json` only, so an example or a `.bak` left in
+// that directory is ignored. Files are layered in file-name order, so `20-…` overrides `10-…`.
+//
+// Nothing here is a secret. Every credential is a *reference* to material systemd decrypted for the unit and placed in
+// the directory mailfathom.container mounts at /etc/mailfathom/credentials, which is what the container's
+// CREDENTIALS_DIRECTORY points at. Every name below therefore has to match, in three places that are one decision: the
+// `--name=` given to `systemd-creds --user encrypt`, the credential id on the `LoadCredentialEncrypted=` line in
+// mailfathom.container, and the reference here. See docs/operations/secret-provisioning.md for the reference grammar
+// and docs/operations/deployment-quadlet.md for the commands that produce the files.
+//
+// This is the one thing that differs from the Compose deployment's example, and it is the reason this shape exists: a
+// `file:` reference names material sitting in plaintext on the host, and a `systemd-credential:` reference names
+// material that is ciphertext at rest and is decrypted into unswappable memory the moment the unit starts.
+//
+// The database is configured by mailfathom.container through the environment block, which outranks this file, so it is
+// deliberately absent here.
+{
+  // Uncomment this block when an account below authenticates with OAuth rather than with a password, and uncomment the
+  // matching LoadCredentialEncrypted= line in mailfathom.container with it. MailFathom seals the refresh token that
+  // account's authorization server rotates, and the key it seals under is provisioned like any other credential. The
+  // mailbox configured below uses a password, so a deployment copied from this file seals nothing and needs no key at
+  // all: an absent section is a valid configuration rather than an omission, and MailFathom starts without one.
+  //
+  // The material is base64 decoding to exactly 32 bytes — `openssl rand -base64 32`, never the `-base64 33` that
+  // generates the database passwords. `KeyId` is written beside every value this key seals, so it is chosen once and
+  // never edited afterwards; a date reads well because it says when the key entered service.
+  //
+  // **Back the key's own base64 up with the database, and never the `.cred` file instead.** `systemd-creds` seals that
+  // file against this machine, so it opens nowhere else — see
+  // docs/operations/secret-provisioning.md#what-an-encrypted-credential-is-bound-to.
+  //
+  // "DataEncryption": {
+  //   "ActiveKeyId": "2026-08",
+  //   "Keys": [
+  //     {
+  //       "KeyId": "2026-08",
+  //       "Material": {
+  //         "Name": "mailfathom-data-key",
+  //         "SecretReference": "systemd-credential:mailfathom-data-key"
+  //       }
+  //     }
+  //   ]
+  // },
+
+  "MailSynchronization": {
+    "Enabled": true,
+    "Interval": "00:05:00",
+    "Accounts": [
+      {
+        "AccountId": "primary",
+        "DisplayName": "Personal mail",
+        "Host": "imap.example.test",
+        "Port": 993,
+        "UserName": "you@example.test",
+        "Secrets": {
+          "Password": {
+            "Name": "imap-primary-password",
+            "SecretReference": "systemd-credential:imap-primary-password"
+          }
+        },
+        "TransportSecurity": {
+          "ConnectionSecurity": "TlsOnConnect"
+        },
+        "Folders": [
+          { "Alias": "inbox", "SpecialUse": "Inbox" }
+        ]
+      }
+    ]
+  },
+  "McpEndpoint": {
+    "Enabled": true,
+    "Authentication": [
+      {
+        "ApiKey": {
+          "Name": "workstation",
+          "SecretReference": "systemd-credential:mcp-workstation-key",
+          "Lifetime": "NoLimit"
+        }
+      }
+    ],
+    "Cors": {
+      "AllowedOrigins": []
+    }
+  }
+}

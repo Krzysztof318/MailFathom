@@ -23,6 +23,8 @@
       href: container-image.md
     - name: Docker Compose
       href: deployment-compose.md
+    - name: Podman Quadlet
+      href: deployment-quadlet.md
     - name: Kubernetes
       href: deployment-kubernetes.md
     - name: Applying the database schema

@@ -113,8 +113,12 @@ Podman does not change that: Compose starts no per-service systemd unit under ei
 reference resolves to nothing here. These files are protected by the host they sit on and by the `0700` on `secrets/`
 above, which the page already names as the whole of the access control.
 [What an encrypted credential is bound to](secret-provisioning.md#what-an-encrypted-credential-is-bound-to) states the
-binding, and [Docker or Podman Compose](secret-provisioning.md#docker-or-podman-compose) which container shape does
-reach the path.
+binding, and [Docker or Podman Compose](secret-provisioning.md#docker-or-podman-compose) why a container started this
+way is on the far side of it.
+
+What does reach the path is [the Podman Quadlet deployment](deployment-quadlet.md), where a `.container` file is a
+systemd unit source and the credentials arrive as they do for a native service. It is an alternative to this file
+rather than a successor to it — nothing here changes, and that page states what it asks of the host in return.
 
 **The data-encryption key is `-base64 32`, not the `-base64 33` on every other line here.** It is the one credential
 generated to a length rather than to a strength: the material has to decode to exactly 32 bytes, and startup refuses
@@ -370,6 +374,7 @@ unset variable and the documented value mean the same thing.
 - [Applying the database schema](database-schema.md) — the release artifact, the privileges it needs, and the three
   startup failures it answers
 - [The container image](container-image.md) — what is inside it, how it runs, and why it carries no schema tool
+- [Podman Quadlet](deployment-quadlet.md) — the same stack as rootless systemd units, for encrypted systemd credentials
 - [Kubernetes and Helm](deployment-kubernetes.md) — the same contract in the other shape
 - [The platform TLS policy](platform-tls-policy.md) — for a mail server whose handshake the container's own OpenSSL
   refuses; the file has to be mounted into the container and named in the service's `environment:` block
