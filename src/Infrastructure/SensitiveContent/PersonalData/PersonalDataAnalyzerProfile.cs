@@ -24,11 +24,11 @@ namespace MailFathom.Infrastructure.SensitiveContent.PersonalData;
 /// languages is two results, and a consumer that stored one has to be able to say which.
 /// </para>
 /// <para>
-/// The confidence floor is <b>not</b> part of that revision, and the line between the two is which question a value
-/// answers. The revision names how detection is performed — which mapping this build ships and which model the analyzer
-/// loads — while the floor names which of the results this deployment wants, alongside the categories and the
-/// suppressions in the plan, neither of which is in the revision either. Two deployments on the same revision may
-/// therefore redact differently; what the revision promises is that they asked the same detector the same question.
+/// The confidence floor is part of that revision too, and the line between what belongs in it and what does not is
+/// which side of the boundary applies the value. The floor travels on the request and the analyzer enforces it, so a
+/// finding below it never crosses the boundary and two deployments differing only there were not asked the same
+/// question. The categories and the suppressions are what stay out: the plan applies those here, over an answer both
+/// deployments received in full.
 /// </para>
 /// </remarks>
 public sealed partial record PersonalDataAnalyzerProfile

@@ -72,7 +72,7 @@ public sealed class OrchestratedStaleDerivedDataTests(MailFathomOrchestrationFix
         var cancellationToken = TestContext.Current.CancellationToken;
         await using var services = await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken);
         var binding = await OrchestratedFolderBinding.CommitAsync(services, FolderAlias, cancellationToken);
-        var stored = await InsertDocumentedEmailsAsync(services, binding, cancellationToken);
+        var stored = await InsertDocumentedEmailsAsync(services, binding, firstUid: 3000, cancellationToken);
 
         // Act
         var rebuilding = await this.SelectAsync(services, rebuildsStaleDerivedData: true, cancellationToken);
@@ -104,7 +104,7 @@ public sealed class OrchestratedStaleDerivedDataTests(MailFathomOrchestrationFix
         var cancellationToken = TestContext.Current.CancellationToken;
         await using var services = await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken);
         var binding = await OrchestratedFolderBinding.CommitAsync(services, FolderAlias, cancellationToken);
-        var stored = await InsertDocumentedEmailsAsync(services, binding, cancellationToken);
+        var stored = await InsertDocumentedEmailsAsync(services, binding, firstUid: 3010, cancellationToken);
 
         var commitResult = await services.CommitAsync(
             (scope, session, token) => this.StoreIn(scope, rebuildsStaleDerivedData: true)
@@ -141,7 +141,7 @@ public sealed class OrchestratedStaleDerivedDataTests(MailFathomOrchestrationFix
         var cancellationToken = TestContext.Current.CancellationToken;
         await using var services = await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken);
         var binding = await OrchestratedFolderBinding.CommitAsync(services, FolderAlias, cancellationToken);
-        var stored = await InsertDocumentedEmailsAsync(services, binding, cancellationToken);
+        var stored = await InsertDocumentedEmailsAsync(services, binding, firstUid: 3020, cancellationToken);
 
         var reachedByTheRebuild = await services.CommitAsync(
             (scope, session, token) => this.StoreIn(scope, rebuildsStaleDerivedData: true)
@@ -295,9 +295,16 @@ public sealed class OrchestratedStaleDerivedDataTests(MailFathomOrchestrationFix
     }
 
     /// <summary>Inserts three stored emails whose derived text was written under three different configurations.</summary>
+    /// <remarks>
+    /// The folder is the same one every test of this class commits, and committing it is idempotent, so the occurrence
+    /// identity each test writes has to differ in the UID alone. Every caller passes a block of its own; the suite shares
+    /// one database for its whole run and a repeated triple would violate <c>ix_stored_emails_occurrence</c> during the
+    /// arrangement of whichever test ran second.
+    /// </remarks>
     private static async Task<StoredDocuments> InsertDocumentedEmailsAsync(
         OrchestratedMailFathomServices services,
         MailFolderResolution binding,
+        uint firstUid,
         CancellationToken cancellationToken)
     {
         var alias = binding.Alias.Value;
@@ -324,7 +331,7 @@ public sealed class OrchestratedStaleDerivedDataTests(MailFathomOrchestrationFix
                         MailboxAccountId = folder.MailboxAccountId,
                         MailFolder = folder,
                         UidValidity = SyntheticEmail.UidValidity,
-                        Uid = (uint)(3000 + index),
+                        Uid = firstUid + (uint)index,
                         Subject = $"stale-derived-data-{index:D2}",
                         SizeOctets = 2048,
                         ContentAvailability = StoredEmailContentAvailability.Available,
