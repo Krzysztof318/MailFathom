@@ -72,9 +72,9 @@ public sealed class MailRule
     /// <param name="stopWhenMatched">Whether a match ends the pass.</param>
     /// <param name="accounts">The accounts the rule applies to, or nothing for a rule that applies to every account.</param>
     /// <param name="triggers">
-    /// The automatic triggers the rule takes part in, empty for a rule only a requested walk runs, and
-    /// <see langword="null" /> for a rule that declares none — which is <see cref="MailRuleTrigger.WhenNoneDeclared" />
-    /// rather than nothing, for the reason that value states.
+    /// The automatic triggers the rule takes part in, or nothing for a rule only a requested walk runs. An empty list
+    /// and <see langword="null" /> say the same thing, because a rule takes part in the occasions it names and in no
+    /// others.
     /// </param>
     /// <returns>The rule.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="condition" /> is <see langword="null" />.</exception>
@@ -108,7 +108,7 @@ public sealed class MailRule
             actions ?? MailRuleActionSet.Empty,
             stopWhenMatched,
             accounts is null ? FrozenSet<string>.Empty : accounts.Select(account => account.Trim()).ToFrozenSet(StringComparer.Ordinal),
-            (triggers ?? MailRuleTrigger.WhenNoneDeclared).ToFrozenSet());
+            triggers is null ? FrozenSet<MailRuleTrigger>.Empty : triggers.ToFrozenSet());
     }
 
     /// <summary>Reports whether this rule is one of the rules the given account's mail is passed through.</summary>

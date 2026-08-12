@@ -175,15 +175,11 @@ internal static class MailRuleDeclarationRules
     /// was mistyped would otherwise arrive as an empty one and silently turn an automatic rule into a manual one, and a
     /// rule that never fires is indistinguishable from a rule nothing matched. A repeated name is refused because the
     /// value is a set, so writing one twice says nothing the rule does not already say and is a mistake rather than an
-    /// intent. An absent key is not judged at all: it is a rule that declares none, which has a meaning of its own.
+    /// intent. A rule naming no trigger is not judged at all: it is a rule only a whole-mailbox run applies, which has
+    /// a meaning of its own.
     /// </remarks>
     private static IEnumerable<string> FindTriggerErrors(MailRuleOptions rule, int position)
     {
-        if (rule.Triggers is null)
-        {
-            yield break;
-        }
-
         var opening =
             $"{MailRulesOptions.SectionName}:{nameof(MailRulesOptions.Rules)}:{position}:{nameof(MailRuleOptions.Triggers)}";
         var declared = rule.Triggers.Select(trigger => trigger?.Trim() ?? string.Empty).ToArray();

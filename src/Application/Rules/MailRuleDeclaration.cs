@@ -26,9 +26,10 @@ namespace MailFathom.Application.Rules;
 /// afresh instead of being read as the request it already performed.
 /// </para>
 /// <para>
-/// The triggers are the resolved set rather than what the file did or did not say, so a rule that leaves the key out
-/// and a rule that writes the default explicitly are one rule set rather than two: they mean the same thing, and a
-/// revision that told them apart would supersede a run over an edit that changed nothing.
+/// The triggers are the resolved set rather than the text the file named them with, so a rule that leaves the key out
+/// and a rule that writes an empty list are one rule set rather than two, and so are two spellings of one trigger's
+/// name: they mean the same thing, and a revision that told them apart would supersede a run over an edit that changed
+/// nothing.
 /// </para>
 /// </remarks>
 public sealed record MailRuleDeclaration(

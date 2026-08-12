@@ -125,7 +125,10 @@ public sealed class MailRuleEndpointsTests
     {
         // Arrange
         var ruleSet = RuleSetOf(
-            MailRule.Create("file-invoices", ConditionReading(MailRuleFact.SenderDomain)),
+            MailRule.Create(
+                "file-invoices",
+                ConditionReading(MailRuleFact.SenderDomain),
+                triggers: [MailRuleTrigger.Arrival]),
             MailRule.Create(
                 "retire-old-newsletters",
                 ConditionReading(MailRuleFact.Subject),

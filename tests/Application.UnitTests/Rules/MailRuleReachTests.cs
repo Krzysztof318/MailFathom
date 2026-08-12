@@ -19,8 +19,8 @@ public sealed class MailRuleReachTests
 
         // Act, Assert
         Assert.True(reach.Reaches(CreateRule("on-arrival", [MailRuleTrigger.Arrival])));
-        Assert.True(reach.Reaches(CreateRule("says-nothing", triggers: null)));
         Assert.False(reach.Reaches(CreateRule("manual-only", [])));
+        Assert.False(reach.Reaches(CreateRule("says-nothing", triggers: null)));
     }
 
     /// <summary>Asking for a run is the request itself, so no rule can decline to take part in one.</summary>

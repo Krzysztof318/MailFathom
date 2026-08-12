@@ -244,9 +244,10 @@ already in the mailbox until you ask. That asking is a command, and so is findin
 `mfctl rules list` is the one to run after editing a rule file. A deployment refuses a reload whose rules do not
 validate and goes on running the previous set, which it reports to its log and nowhere else — so this is where you find
 out whether your edit took effect, rather than from mail that kept being filed the old way. Each rule it prints says
-what runs it, on a `Runs on:` line, which is how a rule written with [`"Triggers":
-[]`](../features/mail-rules.md#which-triggers-run-a-rule) is told apart from one that simply never matched: nothing
-fires such a rule by itself, and `mfctl rules run` is how it is run.
+what runs it, on a `Runs on:` line, which is how a rule naming [no
+trigger](../features/mail-rules.md#which-triggers-run-a-rule) is told apart from one that simply never matched: nothing
+fires such a rule by itself, and `mfctl rules run` is how it is run. It is also where a rule you meant to run over
+arriving mail shows that it never says `Arrival`.
 
 None of these writes a rule, and none ever will: rules are configuration, so you change one by editing the file your
 deployment reads. [Reading the rules, running them, and finding out what they

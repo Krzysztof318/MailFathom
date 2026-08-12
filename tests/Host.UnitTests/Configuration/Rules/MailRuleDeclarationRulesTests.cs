@@ -817,7 +817,7 @@ public sealed class MailRuleDeclarationRulesTests
             Enabled = enabled,
             Accounts = accounts ?? [],
             Actions = actions ?? new MailRuleActionOptions(),
-            Triggers = triggers,
+            Triggers = triggers ?? [],
         };
 
     /// <summary>One declared account, mirroring an archive folder and permitting whatever the caller says it does.</summary>

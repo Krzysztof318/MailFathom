@@ -69,7 +69,7 @@ internal static class MailRuleSetMapper
     {
         var triggers = rule.ToTriggers();
 
-        return rule.Triggers is null || triggers.Count == rule.Triggers.Length
+        return triggers.Count == rule.Triggers.Count
             ? triggers
             : throw new InvalidOperationException(
                 $"A mail rule set was mapped before it was validated. Rule '{rule.Name}' declares a trigger this system does not recognize.");

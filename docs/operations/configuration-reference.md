@@ -743,7 +743,7 @@ use — every fact, every function, every operator — and this section document
 | `MailRules:Rules:0:Condition` | string | required | One expression producing a boolean, within the two limits above | reload |
 | `MailRules:Rules:0:StopWhenMatched` | bool | `false` | A match ends the pass and the rules below it are not reached | reload |
 | `MailRules:Rules:0:Enabled` | bool | `true` | A rule switched off is left out of the set entirely | reload |
-| `MailRules:Rules:0:Triggers` | list | `[ "Arrival" ]` | The automatic occasions that run the rule; `Arrival` is the only one, an unknown or repeated name is refused, and an empty list is a rule nothing fires by itself that a whole-mailbox run applies | reload |
+| `MailRules:Rules:0:Triggers` | list | `[]` | The automatic occasions that run the rule; `Arrival` is the only one, an unknown or repeated name is refused, and naming none is a rule nothing fires by itself that a whole-mailbox run applies | reload |
 | `MailRules:Rules:0:Actions:MoveTo` | string | unset | The alias of the folder a match is filed into; the account must mirror it | reload |
 | `MailRules:Rules:0:Actions:CopyTo` | string | unset | The alias of the folder a copy of a match is placed in; the account must mirror it | reload |
 | `MailRules:Rules:0:Actions:Delete` | bool | unset | `true` removes a match from the folder it matched in; the account must permit deletion | reload |

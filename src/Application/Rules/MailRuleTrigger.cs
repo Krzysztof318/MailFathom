@@ -45,15 +45,6 @@ public readonly record struct MailRuleTrigger
     /// <remarks>Declared last so the members it lists are already initialized when this initializer runs.</remarks>
     public static IReadOnlyList<MailRuleTrigger> All { get; } = [Arrival];
 
-    /// <summary>Gets the triggers a rule that declares none takes part in.</summary>
-    /// <remarks>
-    /// Arrival, which is what every rule written before the key existed already did, so an absent key leaves a rule set
-    /// meaning what it meant. It is a value of its own rather than <see cref="All" /> because the two answer different
-    /// questions and would part company the moment a second trigger exists: a rule that says nothing would still run on
-    /// arrival alone, rather than joining every occasion added since it was written.
-    /// </remarks>
-    public static IReadOnlyList<MailRuleTrigger> WhenNoneDeclared { get; } = [Arrival];
-
     /// <summary>Gets whether this value names a trigger rather than the unusable struct default.</summary>
     public bool IsSpecified => this.name is not null;
 

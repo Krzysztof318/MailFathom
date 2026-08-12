@@ -43,14 +43,6 @@ public sealed class MailRuleTriggerTests
         Assert.Empty(unregistered);
     }
 
-    /// <summary>The default of a rule that says nothing is what every rule written before the key existed already did.</summary>
-    [Fact]
-    public void WhenNoneDeclared_IsArrivalAlone()
-    {
-        // Act, Assert
-        Assert.Equal([MailRuleTrigger.Arrival], MailRuleTrigger.WhenNoneDeclared);
-    }
-
     [Theory]
     [InlineData("Arrival")]
     [InlineData("arrival")]

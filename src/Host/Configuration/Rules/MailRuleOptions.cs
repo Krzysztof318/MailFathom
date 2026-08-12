@@ -65,17 +65,11 @@ internal sealed class MailRuleOptions
     /// <summary>Gets or sets the automatic triggers that may run this rule.</summary>
     /// <remarks>
     /// <para>
-    /// Leaving the key out is <see cref="MailRuleTrigger.WhenNoneDeclared" />, so a rule written before the key existed
-    /// keeps its behaviour. Writing an empty list is a rule nothing fires by itself: it stays in the bound set, it is
-    /// validated like every other rule, and a whole-mailbox run is what applies it. That is a different statement from
-    /// <see cref="Enabled" />, which leaves a rule out of the set altogether and makes it unrunnable.
-    /// </para>
-    /// <para>
-    /// An array rather than the <see cref="IList{T}" /> the scope uses, because it is the one shape the configuration
-    /// binder distinguishes an empty list with. A written <c>[]</c> reaches the binder as a key with an empty value and
-    /// no children, which leaves a list property holding whatever it already held — so an operator asking for a
-    /// manual-only rule and one saying nothing at all would arrive here identically. An array property is rebuilt from
-    /// the section instead, which is what keeps the two apart.
+    /// A rule takes part in the occasions it names here and in no others, so leaving the key out and writing an empty
+    /// list say the same thing: a rule nothing fires by itself. Such a rule stays in the bound set, is validated like
+    /// every other, and a whole-mailbox run is what applies it. That is a different statement from
+    /// <see cref="Enabled" />, which leaves a rule out of the set altogether and makes it unrunnable. A rule that
+    /// should run over arriving mail writes <c>Arrival</c>, which is the whole vocabulary today.
     /// </para>
     /// <para>
     /// The elements are text rather than the trigger itself, for the reason the actions are one key each: the binder
@@ -84,21 +78,19 @@ internal sealed class MailRuleOptions
     /// rule into a manual one. Read as text, every name reaches validation and an unreadable one is refused there.
     /// </para>
     /// </remarks>
-    public string[]? Triggers { get; set; }
+    public IList<string> Triggers { get; set; } = [];
 
-    /// <summary>Reads the declared triggers, resolving an absent key to what a rule declaring none takes part in.</summary>
+    /// <summary>Reads the declared triggers, leaving out a name this system cannot read.</summary>
     /// <returns>The triggers, empty for a rule only a requested walk runs.</returns>
     /// <remarks>
     /// A name this system cannot read is left out rather than thrown over, because it is reported by validation against
     /// the key an operator edits and reading it here would raise instead. <see cref="MailRuleSetMapper" /> refuses a set
     /// that reaches it with one, so the dropped name cannot become a rule nothing runs.
     /// </remarks>
-    internal IReadOnlyList<MailRuleTrigger> ToTriggers() => this.Triggers is null
-        ? MailRuleTrigger.WhenNoneDeclared
-        :
-        [
-            .. this.Triggers
-                .Select(name => MailRuleTrigger.TryParseName(name, out var trigger) ? trigger : default)
-                .Where(trigger => trigger.IsSpecified),
-        ];
+    internal IReadOnlyList<MailRuleTrigger> ToTriggers() =>
+    [
+        .. this.Triggers
+            .Select(name => MailRuleTrigger.TryParseName(name, out var trigger) ? trigger : default)
+            .Where(trigger => trigger.IsSpecified),
+    ];
 }

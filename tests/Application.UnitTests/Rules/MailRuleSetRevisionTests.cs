@@ -91,20 +91,6 @@ public sealed class MailRuleSetRevisionTests
         Assert.NotEqual(MailRuleSetRevision.Create([FileInvoices]), manualOnly);
     }
 
-    /// <summary>A rule that says nothing and one that writes the default mean the same, so they are one rule set.</summary>
-    [Fact]
-    public void Create_TheDefaultTriggerWrittenOut_ProducesTheSameIdentityAsDeclaringNone()
-    {
-        // Arrange
-        var declaringNone = FileInvoices with { Triggers = MailRuleTrigger.WhenNoneDeclared };
-
-        // Act
-        var writtenOut = MailRuleSetRevision.Create([FileInvoices with { Triggers = [MailRuleTrigger.Arrival] }]);
-
-        // Assert
-        Assert.Equal(MailRuleSetRevision.Create([declaringNone]), writtenOut);
-    }
-
     /// <summary>A request's identity carries the revision, so an edited action has to ask afresh rather than be answered by the old record.</summary>
     [Theory]
     [MemberData(nameof(ActionEdits))]
