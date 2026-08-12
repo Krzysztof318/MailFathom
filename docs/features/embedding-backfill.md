@@ -39,6 +39,11 @@ A message a tombstone hides is in neither group. Vectors nothing may retrieve ar
 message whose local copy was deliberately kept after MailFathom deleted it on the server is not that: nothing may
 retrieve it from the server any more, and everything may still retrieve it here, so the walk reaches it like any other.
 
+A message of a folder mapped with `GenerateEmbeddings: false` is in neither group either, and the exclusion is on the
+query rather than on what it does with a row: a folder whose passages are deliberately never cut would otherwise look
+like the first group on every run forever. What was embedded before the switch was set stays and is retrieved like any
+other vector.
+
 Once a message is selected, what happens to it is exactly what happens to a newly synchronized one — the same unit of
 work, described under [embedding one message](automatic-embedding.md#embedding-one-message). Nothing is remembered
 about it between runs, so what is outstanding is decided by asking the database rather than by trusting a record of

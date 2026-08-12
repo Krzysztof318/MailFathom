@@ -11,11 +11,14 @@ using MailFathom.Application.EmailContent.Repair;
 using MailFathom.Application.EmailContent.Storage;
 using MailFathom.Application.Emails.DownloadAttachment;
 using MailFathom.Application.Emails.Extraction;
+using MailFathom.Application.Emails.Mailboxes;
 using MailFathom.Application.Emails.Summaries;
+using MailFathom.Application.Folders;
 using MailFathom.Application.Synchronization.Sessions;
 using MailFathom.Application.UnitTests.TestDoubles;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
+using MailFathom.Domain.Folders;
 using MailFathom.TestSupport;
 using NSubstitute;
 using Xunit;
@@ -122,6 +125,29 @@ public sealed class EmailAttachmentDownloadReaderTests
     }
 
     /// <summary>
+    /// A ticket outlives the configuration it was minted under, so a folder withheld from tools after the link was
+    /// issued stops the download as well. It is refused exactly as an unserved account is, for the same reason.
+    /// </summary>
+    [Fact]
+    public async Task OpenAsync_EmailOfAFolderWithheldFromTools_Refuses()
+    {
+        // Arrange
+        var summary = SyntheticEmailSummaries.Create();
+        var reader = ReaderOver(
+            summary,
+            folderParticipation: StubMailFolderParticipation.Hiding(
+                new MailFolderIdentity(summary.AccountId, summary.FolderAlias)));
+
+        // Act
+        await using var attachment = await reader.OpenAsync(
+            new AttachmentDownloadTicket(summary.StoredEmailId, AttachmentPosition: 0),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Null(attachment);
+    }
+
+    /// <summary>
     /// A defect discovered through a link is the same defect a read would have found, so it is recorded rather than
     /// discarded because of the door the request came through.
     /// </summary>
@@ -209,12 +235,15 @@ public sealed class EmailAttachmentDownloadReaderTests
         IEmailContentStore? contentStore = null,
         IEmailAttachmentContentReader? contentReader = null,
         IEmailContentRepairRequestStore? repairRequestStore = null,
-        IMailAccountCatalog? accountCatalog = null) => new(
+        IMailAccountCatalog? accountCatalog = null,
+        IMailFolderParticipationReader? folderParticipation = null) => new(
         SummaryReaderReturning(summary),
         contentStore ?? ContentStoreReturning(IntactContent()),
         contentReader ?? ContentReaderOpening("invoice.pdf"),
         repairRequestStore ?? new RecordingEmailContentRepairRequestStore(),
-        accountCatalog ?? CatalogServing(MailAccountId.Create(summary?.AccountId.Value ?? ServedAccountId)));
+        new MailboxScopeResolver(
+            accountCatalog ?? CatalogServing(MailAccountId.Create(summary?.AccountId.Value ?? ServedAccountId)),
+            folderParticipation ?? StubMailFolderParticipation.Everything));
 
     private static IStoredEmailSummaryReader SummaryReaderReturning(EmailSummary? summary)
     {

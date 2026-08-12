@@ -76,6 +76,7 @@ internal static class SynchronizationTestHost
     /// <param name="notificationSessionFactory">Stands in for the server's push mechanism; a server that advertises none is the default.</param>
     /// <param name="remoteFolderCatalog">Replaces the catalog that advertises exactly the configured folders.</param>
     /// <param name="mutationRecordStore">Replaces the record store that reports nothing outstanding to converge.</param>
+    /// <param name="folderMirrorStore">Replaces the store a run erases an unmirrored folder's local copy through.</param>
     /// <param name="unadvertisedAliases">Aliases the modelled server does not advertise.</param>
     /// <returns>A provider whose scopes resolve a synchronizer over substituted infrastructure.</returns>
     internal static ServiceProvider BuildServiceProvider(
@@ -86,6 +87,7 @@ internal static class SynchronizationTestHost
         IMailboxNotificationSessionFactory? notificationSessionFactory = null,
         IRemoteFolderCatalog? remoteFolderCatalog = null,
         IMailboxMutationRecordStore? mutationRecordStore = null,
+        IStoredMailFolderMirrorStore? folderMirrorStore = null,
         params string[] unadvertisedAliases)
     {
         var services = new ServiceCollection();
@@ -139,6 +141,11 @@ internal static class SynchronizationTestHost
         services.AddSingleton(CreateAuditStoreWithNothingToErase());
         services.AddScoped<IMailboxMutationAuditSettingsReader>(provider => provider.GetRequiredService<MailSynchronizationOptions>());
         services.AddScoped<MailboxMutationAuditTrailRetention>();
+
+        // A run also takes away what is stored for a folder the account has stopped mirroring, and resolves the eraser
+        // from its own scope. The store below records which folders it was asked about and erases nothing.
+        services.AddSingleton(folderMirrorStore ?? new RecordingMailFolderMirrorStore());
+        services.AddScoped<UnmirroredMailFolderEraser>();
         services.AddLogging();
 
         // Each run hands its own snapshot to the scopes it opens, and every per-account reader answers from that

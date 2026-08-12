@@ -3,8 +3,9 @@
 <!-- describes: src/AI/Chunking/**, src/Application/Emails/Chunking/**, src/Infrastructure/Persistence/Emails/EmailChunkWriter.cs, src/Infrastructure/Persistence/Entities/EmailChunkEntity.cs -->
 
 A message is often too big to be the unit a search answers with. A forwarded thread can carry twenty exchanges, and the
-one paragraph that answers a question is somewhere inside it. MailFathom therefore cuts every message's extracted text
+one paragraph that answers a question is somewhere inside it. MailFathom therefore cuts a message's extracted text
 into overlapping passages — chunks — and stores each of them with the span it came from and a hash that identifies it.
+Every message is cut unless its folder is mapped with `GenerateEmbeddings: false`.
 
 Nothing retrieves chunks yet. They exist because the passage, not the message, is what a vector is produced
 for, and because deriving them is free: chunking reaches no provider, opens no connection, and costs an instance with no
@@ -21,6 +22,14 @@ extraction existed. A committed message is therefore never one whose passages so
 A message that yielded no text is cut into nothing. That covers a body that carried no words and a body that arrived
 encrypted: both keep the search document that makes them findable on their subject and participants, and neither gains a
 chunk.
+
+A message of a folder mapped with `GenerateEmbeddings: false` is cut into nothing either, on every path that would cut
+one, which is what keeps its content from reaching an embedding provider at all. Everything else about the folder is
+unchanged — it is mirrored, listed, searched lexically, and read like any other. Passages cut before the switch was set
+stay where they are; nothing removes them, and the embedding backfill stops selecting the folder rather than sweeping
+for the vectors it now never produces.
+[What a mapping decides beyond where the folder is](imap-synchronization.md#what-a-mapping-decides-beyond-where-the-folder-is)
+states the switch beside the other two.
 
 A run that could not read a message's body at all — because the raw MIME was never stored, or because nothing could parse
 it — leaves the passages alone rather than removing them. A remote message is immutable, so a run that failed this time is

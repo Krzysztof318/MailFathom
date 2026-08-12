@@ -147,6 +147,27 @@ A folder entry names `Alias` (required — your stable name for the folder) and 
 server's own path) or `SpecialUse` (a role discovery resolves: `Inbox`, `Archive`, `Drafts`, `Sent`, `Junk`, `Trash`,
 `All`, `Flagged`, `Important`). Configuring no folder synchronizes the inbox by role.
 
+The same entry decides what MailFathom does with the folder, through three switches that each default to `true`:
+
+| Key | Type | Default | Constraint | Change |
+| --- | --- | --- | --- | --- |
+| `…:Folders:<n>:Synchronize` | bool | `true` | With `false`, no run schedules the folder: no connection is opened for it and nothing of it is stored | reload; the next run stops scheduling it and begins erasing what is stored for it |
+| `…:Folders:<n>:GenerateEmbeddings` | bool | `true` | With `false`, stored mail of the folder is never cut into passages and never reaches an embedding provider; refused alongside `Synchronize: false` | reload; governs what is stored from then on, and passages already produced stay |
+| `…:Folders:<n>:VisibleToTools` | bool | `true` | With `false`, no MCP tool lists, searches, reads, or answers from the folder; refused alongside `Synchronize: false` | reload; the next request reads the new value |
+
+Startup refuses a folder that asks for embedding or tool visibility while `Synchronize` is `false`, naming the alias,
+because a folder that stores nothing has nothing to embed and nothing a tool could read. Leaving a switch out is not
+asking for it, so `Synchronize: false` on its own binds. Mirrored, embedded, and withheld from tools binds as well and
+costs what it says: the vectors are produced and paid for while no reader reaches them, since the tools are the only
+readers there are.
+
+Switching `Synchronize` off for a folder that was mirrored **erases what is stored for it**, in bounded passes on the
+account's own runs and through the deletion path an erasing disposition already uses. The mapping stays, so the alias
+goes on resolving and the folder remains a destination a rule may file mail into.
+[What a mapping decides beyond where the folder is](../features/imap-synchronization.md#what-a-mapping-decides-beyond-where-the-folder-is)
+states all three switches together, what an unmapped folder is instead, and what becomes of the local copy of a message
+relocated into a folder nothing mirrors.
+
 ### OAuth — `…:OAuth`
 
 Read only when the account's permitted mechanisms include `XOAUTH2` or `OAUTHBEARER`. An account that authenticates

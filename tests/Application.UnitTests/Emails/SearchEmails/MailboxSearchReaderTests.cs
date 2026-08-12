@@ -524,7 +524,9 @@ public sealed class MailboxSearchReaderTests
         index,
         semanticSearch ?? LexicalOnlySemanticSearch(),
         FreshnessReaderReturning(InboxFreshness),
-        new MailboxScopeResolver(accountCatalog ?? CatalogServing(EveryAccountTheSyntheticIndexUses)),
+        new MailboxScopeResolver(
+            accountCatalog ?? CatalogServing(EveryAccountTheSyntheticIndexUses),
+            StubMailFolderParticipation.Everything),
         snippetBounds ?? EmailSearchSnippetBounds.Default);
 
     /// <summary>Builds the semantic half of a deployment that configured no embedding provider and activated nothing.</summary>

@@ -56,6 +56,15 @@ public sealed record MailboxScope
     /// <summary>Gets the folder aliases the query is restricted to, deduplicated and ordered, or empty for every folder.</summary>
     public IReadOnlyList<MailFolderAlias> FolderAliases { get; }
 
+    /// <summary>Gets the folders no query built from this scope may return anything from, ordered, or empty when none is withheld.</summary>
+    /// <remarks>
+    /// It is the opposite kind of value from the two above: those are what a caller asked for, this is what configuration
+    /// withholds whatever the caller asked for. A request that names a hidden folder explicitly is therefore answered
+    /// with nothing from it rather than refused, which is the same answer a folder that holds no matching mail gives — a
+    /// refusal would tell the caller the folder is there.
+    /// </remarks>
+    public IReadOnlyList<MailFolderIdentity> HiddenFolders { get; private init; } = [];
+
     /// <summary>Creates a normalized scope from what a request named.</summary>
     /// <param name="accountIds">The accounts to restrict to, or <see langword="null" /> to name none.</param>
     /// <param name="folderAliases">The folder aliases to restrict to, or <see langword="null" /> to name none.</param>
@@ -99,6 +108,30 @@ public sealed record MailboxScope
                 .OrderBy(static accountId => accountId.Value, StringComparer.Ordinal),
         ],
         folderAliases);
+
+    /// <summary>Withholds the folders configuration says no tool may read from.</summary>
+    /// <param name="hiddenFolders">The folders to withhold, empty when none is.</param>
+    /// <returns>The same scope with the folders withheld, or this scope unchanged when none is.</returns>
+    /// <remarks>
+    /// Ordered and deduplicated so one configuration produces one predicate, whichever order the folders were read in.
+    /// It deliberately does not take part in a continuation cursor's fingerprint, unlike the two requested lists: those
+    /// are the caller's filters, and a walk resumed under different ones would return a page that does not follow the
+    /// previous one. Hiding a folder only removes rows from an unchanged ordering, so an outstanding cursor stays
+    /// consistent, and unhiding one adds rows the walk may already have passed — which is what a keyset walk over a
+    /// live mailbox does about newly arrived mail anyway.
+    /// </remarks>
+    internal MailboxScope Hiding(IReadOnlyList<MailFolderIdentity> hiddenFolders) => hiddenFolders.Count == 0
+        ? this
+        : this with
+        {
+            HiddenFolders =
+            [
+                .. hiddenFolders
+                    .DistinctBy(static folder => (folder.AccountId.Value, folder.Alias.Value))
+                    .OrderBy(static folder => folder.AccountId.Value, StringComparer.Ordinal)
+                    .ThenBy(static folder => folder.Alias.Value, StringComparer.Ordinal),
+            ],
+        };
 
     /// <summary>Deduplicates and orders one requested list, refusing it as soon as it names more values than the limit.</summary>
     /// <remarks>

@@ -18,6 +18,12 @@ records why the switch is an operation rather than a setting.
 That state is read per message rather than once at startup, so activating a profile takes effect on the next message
 without a restart.
 
+One thing narrows what an active profile reaches: mail of a folder mapped with `GenerateEmbeddings: false` is cut into
+no passages, so there is nothing to embed and nothing of it is ever sent to a provider.
+[What a mapping decides beyond where the folder is](imap-synchronization.md#what-a-mapping-decides-beyond-where-the-folder-is)
+states that switch beside the other two, and [message chunks](message-chunks.md#when-chunking-runs) what happens to
+passages cut before it was set.
+
 ## The backlog between synchronization and the provider
 
 A message is offered for embedding **after** it and its passages are committed, never inside the transaction that

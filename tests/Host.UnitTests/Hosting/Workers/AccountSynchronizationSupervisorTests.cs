@@ -138,6 +138,50 @@ public sealed class AccountSynchronizationSupervisorTests
             message => message.Contains("Folder alias primary/ARCHIVE matched no folder", StringComparison.Ordinal));
     }
 
+    /// <summary>A folder the operator stopped mirroring is not scheduled, which is what makes "no connection is opened for it" true.</summary>
+    [Fact]
+    public async Task RunAsync_AFolderTheAccountNoLongerMirrors_OpensNoSessionForIt()
+    {
+        // Arrange
+        var attemptedFolders = new List<string>();
+        var sessionFactory = CreateFailingSessionFactory(
+            attemptedFolders,
+            new TaskCompletionSource(),
+            expectedFolderCount: 1,
+            _ => new InvalidOperationException("connect failed"));
+        var mirrorStore = new RecordingMailFolderMirrorStore();
+        using var harness = CreateHarness(
+            CreateOptionsWithArchiveUnmirrored(),
+            sessionFactory,
+            folderMirrorStore: mirrorStore);
+
+        // Act, waiting on the pass that follows every folder the run scheduled.
+        await harness.SuperviseUntilAsync(mirrorStore.FirstErasureReached);
+
+        // Assert
+        Assert.Equal(["INBOX"], attemptedFolders);
+    }
+
+    /// <summary>Stored mail no run will ever refresh again is taken away rather than left answering with the flags it had.</summary>
+    [Fact]
+    public async Task RunAsync_AFolderTheAccountNoLongerMirrors_ErasesWhatIsStoredForIt()
+    {
+        // Arrange
+        var mirrorStore = new RecordingMailFolderMirrorStore();
+        using var harness = CreateHarness(
+            CreateOptionsWithArchiveUnmirrored(),
+            Substitute.For<IMailboxSessionFactory>(),
+            folderMirrorStore: mirrorStore);
+
+        // Act
+        await harness.SuperviseUntilAsync(mirrorStore.FirstErasureReached);
+
+        // Assert
+        Assert.Equal(
+            [new MailFolderIdentity(MailAccountId.Create("primary"), MailFolderAlias.Create("ARCHIVE"))],
+            mirrorStore.ErasedFolders);
+    }
+
     /// <summary>An ambiguous role and an alias that matches nothing need different remedies, so they are logged as different things.</summary>
     [Fact]
     public async Task RunAsync_AliasMatchesSeveralAdvertisedFolders_LogsTheAmbiguityAndTheRemedy()
@@ -554,6 +598,15 @@ public sealed class AccountSynchronizationSupervisorTests
             message => message.Contains("Mail server reported a change in primary/INBOX", StringComparison.Ordinal));
     }
 
+    /// <summary>Configures one mirrored folder beside one the operator has switched synchronization off for.</summary>
+    private static MailSynchronizationOptions CreateOptionsWithArchiveUnmirrored()
+    {
+        var options = SynchronizationTestHost.CreateSingleAccountOptions(enabled: true, "INBOX", "Archive");
+        options.Accounts[0].Folders[1].Synchronize = false;
+
+        return options;
+    }
+
     private static IMailboxSessionFactory CreateFailingSessionFactory(
         List<string> attemptedFolders,
         TaskCompletionSource runReached,
@@ -615,6 +668,7 @@ public sealed class AccountSynchronizationSupervisorTests
         FakeMailboxNotificationSessionFactory? notificationSessionFactory = null,
         IRemoteFolderCatalog? remoteFolderCatalog = null,
         IMailboxMutationRecordStore? mutationRecordStore = null,
+        IStoredMailFolderMirrorStore? folderMirrorStore = null,
         params string[] unadvertisedAliases)
     {
         var clock = new FakeTimeProvider();
@@ -627,6 +681,7 @@ public sealed class AccountSynchronizationSupervisorTests
             notificationSessionFactory,
             remoteFolderCatalog,
             mutationRecordStore,
+            folderMirrorStore,
             unadvertisedAliases);
 
         return new SupervisorHarness(

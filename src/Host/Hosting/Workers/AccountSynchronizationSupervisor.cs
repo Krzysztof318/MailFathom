@@ -4,6 +4,7 @@
 
 using System.Collections.Concurrent;
 using System.Diagnostics.CodeAnalysis;
+using MailFathom.Application.Folders;
 using MailFathom.Application.Mail.Mutations.Audit;
 using MailFathom.Application.Mail.Mutations.Convergence;
 using MailFathom.Application.Persistence;
@@ -180,7 +181,15 @@ internal sealed partial class AccountSynchronizationSupervisor
         CancellationToken schedulingToken,
         CancellationToken workUnitToken)
     {
-        var scheduledFolders = account.EffectiveFolders;
+        // A folder the operator stopped mirroring is not scheduled at all, which is what makes "no connection is opened
+        // for it" true rather than merely quiet: the mapping goes on naming the folder for anything that writes into it,
+        // and this run neither discovers nor selects it.
+        var scheduledFolders = account.EffectiveFolders
+            .Where(static folder => folder.Participation.IsSynchronized)
+            .ToArray();
+        var unmirroredFolders = account.EffectiveFolders
+            .Where(static folder => !folder.Participation.IsSynchronized)
+            .ToArray();
         var resolvedFolders = new ConcurrentBag<MailFolderResolution>();
         var failedFolderCount = 0;
         var convergenceFailed = false;
@@ -233,6 +242,7 @@ internal sealed partial class AccountSynchronizationSupervisor
 
             if (!schedulingToken.IsCancellationRequested)
             {
+                await this.EraseUnmirroredFolderContentAsync(runSettings, unmirroredFolders, workUnitToken);
                 await this.EraseExpiredAuditEntriesAsync(runSettings, workUnitToken);
             }
         }
@@ -245,7 +255,7 @@ internal sealed partial class AccountSynchronizationSupervisor
 
         this.LogAccountRunFinished(
             this.accountId.Value,
-            scheduledFolders.Count,
+            scheduledFolders.Length,
             failedFolderCount,
             runDuration);
 
@@ -295,6 +305,64 @@ internal sealed partial class AccountSynchronizationSupervisor
             this.LogMutationConvergenceFailed(exception, this.accountId.Value);
 
             return true;
+        }
+    }
+
+    /// <summary>Erases what is still stored for the folders this account has stopped mirroring.</summary>
+    /// <remarks>
+    /// <para>
+    /// It rides the account's own run for the reason audit retention does, and is bounded the same way: an operator who
+    /// turns a mirrored folder off gets it emptied over as many runs as its size needs rather than in one transaction.
+    /// A folder that was never mirrored costs one bounded query that finds nothing, which is what every run of every
+    /// account with such a folder does from then on.
+    /// </para>
+    /// <para>
+    /// A failure never fails the run. The rows are stale rather than wrong — no tool may read them, because a folder
+    /// nothing mirrors is a folder nothing shows — so putting the account into backoff over them would fetch its mail
+    /// less often to fix something that is not about the mail server at all.
+    /// </para>
+    /// </remarks>
+    [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "Erasing a folder nothing mirrors is not a mail operation; a pass that failed is logged and repeated by the next run rather than putting the account into backoff.")]
+    private async Task EraseUnmirroredFolderContentAsync(
+        MailSynchronizationOptions runSettings,
+        MailFolderMappingOptions[] unmirroredFolders,
+        CancellationToken cancellationToken)
+    {
+        if (unmirroredFolders.Length == 0)
+        {
+            return;
+        }
+
+        try
+        {
+            using var scope = this.scopeFactory.CreateScope();
+
+            scope.ServiceProvider.GetRequiredService<ScopedMailSynchronizationSettings>().UseRunSnapshot(runSettings);
+
+            var eraser = scope.ServiceProvider.GetRequiredService<UnmirroredMailFolderEraser>();
+
+            foreach (var folder in unmirroredFolders)
+            {
+                var alias = MailFolderAlias.Create(folder.Alias);
+                var erasure = await eraser.EraseAsync(this.accountId, alias, cancellationToken);
+
+                if (erasure.ErasedEmailCount > 0)
+                {
+                    this.LogUnmirroredFolderContentErased(
+                        this.accountId.Value,
+                        alias.Value,
+                        erasure.ErasedEmailCount,
+                        erasure.EmailsRemain);
+                }
+            }
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception exception)
+        {
+            this.LogUnmirroredFolderErasureFailed(exception, this.accountId.Value);
         }
     }
 
@@ -688,6 +756,21 @@ internal sealed partial class AccountSynchronizationSupervisor
         Level = LogLevel.Warning,
         Message = "Erasing the expired audit entries of account {AccountId} ended unexpectedly; the account is not backed off for it and its next run erases what this one did not.")]
     private partial void LogAuditRetentionFailed(Exception exception, string accountId);
+
+    /// <summary>Reported at warning level because it is local mail going away, which an operator must be able to find afterwards.</summary>
+    [LoggerMessage(
+        Level = LogLevel.Warning,
+        Message = "Account {AccountId} erased {ErasedCount} stored emails of folder {FolderAlias}, which its configuration no longer mirrors; emails remaining for a later run: {EmailsRemain}.")]
+    private partial void LogUnmirroredFolderContentErased(
+        string accountId,
+        string folderAlias,
+        int erasedCount,
+        bool emailsRemain);
+
+    [LoggerMessage(
+        Level = LogLevel.Warning,
+        Message = "Erasing the stored mail of the folders account {AccountId} no longer mirrors ended unexpectedly; the account is not backed off for it and its next run erases what this one did not.")]
+    private partial void LogUnmirroredFolderErasureFailed(Exception exception, string accountId);
 
     [LoggerMessage(
         Level = LogLevel.Warning,

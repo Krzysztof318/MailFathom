@@ -139,9 +139,12 @@ internal sealed class StoredEmailEntity
     /// the timestamp would otherwise take it out of.
     /// </para>
     /// <para>
-    /// Nothing but an authored delete sets it. A disappearance somebody else caused is answered by
-    /// <see cref="RemotelyDeletedEmailDisposition" />, which has no value that keeps the mail readable: MailFathom did
-    /// not cause that removal and cannot say the owner meant to keep a local copy of it.
+    /// Nothing but a change MailFathom itself authored sets it: a delete, or a relocation into a folder MailFathom does
+    /// not mirror, which is the same loss of the occurrence and is answered by the same setting. A disappearance somebody
+    /// else caused is answered by <see cref="RemotelyDeletedEmailDisposition" />, which has no value that keeps the mail
+    /// readable: MailFathom did not cause that removal and cannot say the owner meant to keep a local copy of it. The
+    /// name says "authored delete" because that is the setting's name and the case it was written for; a relocation out
+    /// of the mirrored mailbox joined it rather than earning a column of its own.
     /// </para>
     /// </remarks>
     public bool IsRetainedAfterAuthoredDelete { get; set; }

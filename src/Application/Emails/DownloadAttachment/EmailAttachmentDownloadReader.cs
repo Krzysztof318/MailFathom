@@ -2,10 +2,10 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-using MailFathom.Application.Accounts;
 using MailFathom.Application.EmailContent.Attachments;
 using MailFathom.Application.EmailContent.Repair;
 using MailFathom.Application.EmailContent.Storage;
+using MailFathom.Application.Emails.Mailboxes;
 using MailFathom.Application.Emails.Summaries;
 
 namespace MailFathom.Application.Emails.DownloadAttachment;
@@ -40,33 +40,33 @@ public sealed class EmailAttachmentDownloadReader
     private readonly IEmailContentStore contentStore;
     private readonly IEmailAttachmentContentReader attachmentContentReader;
     private readonly IEmailContentRepairRequestStore repairRequestStore;
-    private readonly IMailAccountCatalog accountCatalog;
+    private readonly MailboxScopeResolver scopeResolver;
 
     /// <summary>Initializes the use case.</summary>
     /// <param name="summaryReader">Reads one stored email's summary by its identity.</param>
     /// <param name="contentStore">Reads the raw MIME stored for an email, with what was recorded about it.</param>
     /// <param name="attachmentContentReader">Opens one attachment of that stored MIME by its position.</param>
     /// <param name="repairRequestStore">Records durably that a local copy has to be fetched or read again.</param>
-    /// <param name="accountCatalog">Answers which accounts this deployment serves.</param>
+    /// <param name="scopeResolver">Answers whether a tool may read the mailbox an email was stored from.</param>
     /// <exception cref="ArgumentNullException">Thrown when any argument is <see langword="null" />.</exception>
     public EmailAttachmentDownloadReader(
         IStoredEmailSummaryReader summaryReader,
         IEmailContentStore contentStore,
         IEmailAttachmentContentReader attachmentContentReader,
         IEmailContentRepairRequestStore repairRequestStore,
-        IMailAccountCatalog accountCatalog)
+        MailboxScopeResolver scopeResolver)
     {
         ArgumentNullException.ThrowIfNull(summaryReader);
         ArgumentNullException.ThrowIfNull(contentStore);
         ArgumentNullException.ThrowIfNull(attachmentContentReader);
         ArgumentNullException.ThrowIfNull(repairRequestStore);
-        ArgumentNullException.ThrowIfNull(accountCatalog);
+        ArgumentNullException.ThrowIfNull(scopeResolver);
 
         this.summaryReader = summaryReader;
         this.contentStore = contentStore;
         this.attachmentContentReader = attachmentContentReader;
         this.repairRequestStore = repairRequestStore;
-        this.accountCatalog = accountCatalog;
+        this.scopeResolver = scopeResolver;
     }
 
     /// <summary>Opens the attachment the ticket authorizes.</summary>
@@ -87,7 +87,10 @@ public sealed class EmailAttachmentDownloadReader
 
         var summary = await this.summaryReader.FindAsync(ticket.StoredEmailId, cancellationToken);
 
-        if (summary is null || !this.accountCatalog.ServedAccounts.Any(account => account.Id == summary.AccountId))
+        // A ticket outlives the configuration it was minted under, so what it authorizes is re-decided here: an account
+        // the deployment stopped serving and a folder an operator withheld from tools both answer with nothing, exactly
+        // as an email that is no longer stored does.
+        if (summary is null || !this.scopeResolver.IsReadableByTools(summary.AccountId, summary.FolderAlias))
         {
             return null;
         }

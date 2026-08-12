@@ -2,9 +2,11 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Application.Accounts;
 using MailFathom.Application.Emails.Extraction;
 using MailFathom.Application.Emails.Mailboxes;
 using MailFathom.Application.Emails.Summaries;
+using MailFathom.Application.Folders;
 using MailFathom.Application.Persistence;
 using MailFathom.Application.Synchronization;
 using MailFathom.Application.Synchronization.Checkpoints;
@@ -100,6 +102,46 @@ public sealed class OrchestratedStoredEmailTimelineReaderTests(MailFathomOrchest
         // the middle came back empty.
         Assert.All(pages.SkipLast(1), page => Assert.Equal(PageSize, page.Count));
         Assert.True(pages[^1].Count <= PageSize);
+    }
+
+    /// <summary>A folder withheld from tools is narrowed out by the server, whatever the request named.</summary>
+    /// <remarks>
+    /// The narrowing is composed per excluded account rather than written as a filter over one column, so whether it
+    /// translates at all is settled here and nowhere else: a predicate that does not is an exception at runtime. The
+    /// control is the same mail read through a scope that withholds nothing, so an empty answer reports the exclusion
+    /// rather than a folder nothing was seeded into.
+    /// </remarks>
+    [Fact]
+    public async Task ReadPageAsync_AFolderWithheldFromTools_IsNarrowedOutWhileItsMailStaysStored()
+    {
+        // Arrange
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var withheld = new MailFolderIdentity(SyntheticMailAccount.AccountId, MailFolderAlias.Create(FolderAlias));
+        await using var services = await OrchestratedMailFathomServices.StartAsync(
+            orchestration,
+            cancellationToken,
+            foldersHiddenFromTools: [withheld]);
+        var readableFilter = await SeededFilterAsync(services, EmailTimelineDirection.NewestFirst, cancellationToken);
+        var withheldFilter = EmailTimelineFilter.Create(
+            await ReadableScopeAsync(services, cancellationToken),
+            senderAddress: "sender@mailfathom.test",
+            recipientAddress: null,
+            subjectFragment: null,
+            receivedOnOrAfter: null,
+            receivedBefore: null,
+            isRemotelySeen: null,
+            hasAttachments: null,
+            EmailTimelineDirection.NewestFirst);
+
+        // Act
+        var throughTheWithheldScope = await ReadAllAsync(services, withheldFilter, cancellationToken);
+
+        // Assert
+        Assert.Empty(throughTheWithheldScope);
+        Assert.Equal([withheld], withheldFilter.Selection.Scope.HiddenFolders);
+
+        // The control: the same mail is there to be read through a scope that withholds nothing.
+        Assert.NotEmpty(await ReadAllAsync(services, readableFilter, cancellationToken));
     }
 
     /// <summary>Applies every filter the read model publishes, which is what proves each one translates and selects.</summary>
@@ -341,6 +383,17 @@ public sealed class OrchestratedStoredEmailTimelineReaderTests(MailFathomOrchest
                 isRemotelySeen,
                 hasAttachments,
                 EmailTimelineDirection.NewestFirst),
+            cancellationToken);
+
+    /// <summary>Resolves the scope a tool reads through, which is where a withheld folder is attached to it.</summary>
+    private static Task<MailboxScope> ReadableScopeAsync(
+        OrchestratedMailFathomServices services,
+        CancellationToken cancellationToken) => services.InScopeAsync(
+            (scope, _) => Task.FromResult(
+                new MailboxScopeResolver(
+                    scope.GetRequiredService<IMailAccountCatalog>(),
+                    scope.GetRequiredService<IMailFolderParticipationReader>())
+                    .ReadableScope([], [MailFolderAlias.Create(FolderAlias)])),
             cancellationToken);
 
     /// <summary>Ensures the seeded folder exists and returns the filter every test in this class reads it through.</summary>

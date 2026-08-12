@@ -32,6 +32,14 @@ re-states no limit of its own; [Mailbox queries](mailbox-queries.md) documents t
 the boundary owns is the one thing a use case cannot: turning a caller's text into an account identifier or a folder
 alias, and refusing text that names neither.
 
+Where a table below says a tool reads every folder of the accounts in scope, "every folder" means every folder the
+deployment lets tools read. A folder mapped with `VisibleToTools: false` is outside all four mailbox tools and is never
+mentioned by one — a request naming its alias comes back empty rather than refused, and an email of it reads as not
+found. The exclusion is applied once, where the scope a read is expressed in is resolved, so it holds for a tool added
+later without that tool doing anything;
+[folders withheld from tools](mailbox-queries.md#folders-withheld-from-tools) states what a caller sees and why nothing
+says the folder exists.
+
 Three properties hold for every tool and are proven by test rather than asserted here:
 
 - A call reads the local mailbox copy only. Nothing in a tool request reaches a mail server, so a request cannot wait on

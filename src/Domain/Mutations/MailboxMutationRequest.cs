@@ -17,9 +17,9 @@ namespace MailFathom.Domain.Mutations;
 /// </para>
 /// <para>
 /// The parameters a mutation takes are part of the request rather than a payload beside it, and which ones are present
-/// is an invariant rather than a convention: a relocation and a copy name a destination folder and nothing else, a
-/// delete names what becomes of the local copy, and a <c>\Seen</c> change names a direction. The factories are the only
-/// way to build one, so a request naming a destination for a delete cannot be constructed at all.
+/// is an invariant rather than a convention: a relocation and a copy name a destination folder, a delete names what
+/// becomes of the local copy and a relocation may, and a <c>\Seen</c> change names a direction. The factories are the
+/// only way to build one, so a request naming a destination for a delete cannot be constructed at all.
 /// </para>
 /// <para>
 /// Nothing here is mail content. A folder path, an account, a folder binding, a UID, and a requester identity are all
@@ -65,12 +65,20 @@ public sealed record MailboxMutationRequest
     /// <summary>Gets which way a <c>\Seen</c> change was asked for, and <see langword="null" /> for every other mutation.</summary>
     public bool? DesiredSeenState { get; }
 
-    /// <summary>Gets what becomes of the local copy once the delete has happened, and <see langword="null" /> for every other mutation.</summary>
+    /// <summary>Gets what becomes of the local copy once the change has happened, and <see langword="null" /> where nothing local is disposed of.</summary>
     /// <remarks>
+    /// <para>
     /// It is resolved from the account's configuration when the request is built and written down with the record, so a
-    /// setting changed while the delete is in flight cannot decide the outcome of work already begun. Only a delete
-    /// carries one: a relocation keeps the email and a copy adds an occurrence, so neither has a local copy to dispose
-    /// of.
+    /// setting changed while the change is in flight cannot decide the outcome of work already begun.
+    /// </para>
+    /// <para>
+    /// A delete always carries one, and a relocation carries one exactly when its destination is a folder MailFathom does
+    /// not mirror. Those are the two ways an occurrence leaves the mirrored mailbox for good: the message is somewhere
+    /// nothing here will look at again, so what becomes of the local copy is the same question in both cases and is
+    /// answered by the same setting rather than by a second one invented for the relocation. A relocation between
+    /// mirrored folders carries none, because the row is carried into the destination folder instead, and a copy carries
+    /// none because the source occurrence stays where it is.
+    /// </para>
     /// </remarks>
     public AuthoredDeleteEmailDisposition? LocalDisposition { get; }
 
@@ -79,20 +87,32 @@ public sealed record MailboxMutationRequest
     /// <param name="occurrence">Where the email is now.</param>
     /// <param name="requester">The authored act asking.</param>
     /// <param name="destinationPath">The folder to move it into.</param>
+    /// <param name="localDisposition">
+    /// What becomes of the local copy, supplied only when the destination is a folder MailFathom does not mirror, and
+    /// <see langword="null" /> for a destination it does.
+    /// </param>
     /// <returns>The request to write down.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="occurrence" /> or <paramref name="requester" /> is <see langword="null" />.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="localDisposition" /> names no declared disposition.</exception>
+    /// <remarks>
+    /// Nothing about the IMAP command changes with the disposition. The move is issued the same way into a folder
+    /// MailFathom mirrors and one it does not, because the server's folder is the same kind of thing either way; what the
+    /// disposition decides is only what synchronization does with the local row once the occurrence has been seen to
+    /// leave its source folder, which for an unmirrored destination is the last MailFathom will ever see of it.
+    /// </remarks>
     public static MailboxMutationRequest Relocate(
         StoredEmailId storedEmailId,
         EmailOccurrenceId occurrence,
         MailboxMutationRequester requester,
-        RemoteFolderPath destinationPath) => Create(
+        RemoteFolderPath destinationPath,
+        AuthoredDeleteEmailDisposition? localDisposition = null) => Create(
             storedEmailId,
             occurrence,
             MailboxMutation.Relocate,
             requester,
             destinationPath,
             desiredSeenState: null,
-            localDisposition: null);
+            localDisposition);
 
     /// <summary>Asks for one email to be removed from the folder it is in.</summary>
     /// <param name="storedEmailId">The local email being removed.</param>
@@ -215,7 +235,12 @@ public sealed record MailboxMutationRequest
     {
         var takesDestination = mutation == MailboxMutation.Relocate || mutation == MailboxMutation.Copy;
         var takesSeenState = mutation == MailboxMutation.SetSeen;
-        var takesLocalDisposition = mutation == MailboxMutation.Delete;
+
+        // A delete has to name one and a relocation may, which is why this is two checks rather than one equality: the
+        // relocation's disposition says its destination is unmirrored, and its absence says the destination is mirrored.
+        // Both are meaningful, so neither can be refused.
+        var requiresLocalDisposition = mutation == MailboxMutation.Delete;
+        var permitsLocalDisposition = requiresLocalDisposition || mutation == MailboxMutation.Relocate;
 
         if (takesDestination != destinationPath.HasValue)
         {
@@ -235,12 +260,17 @@ public sealed record MailboxMutationRequest
                 nameof(desiredSeenState));
         }
 
-        if (takesLocalDisposition != localDisposition.HasValue)
+        if (requiresLocalDisposition && !localDisposition.HasValue)
         {
             throw new ArgumentException(
-                takesLocalDisposition
-                    ? $"The {mutation.Name} mutation names a local disposition and none was supplied."
-                    : $"The {mutation.Name} mutation names no local disposition.",
+                $"The {mutation.Name} mutation names a local disposition and none was supplied.",
+                nameof(localDisposition));
+        }
+
+        if (!permitsLocalDisposition && localDisposition.HasValue)
+        {
+            throw new ArgumentException(
+                $"The {mutation.Name} mutation names no local disposition.",
                 nameof(localDisposition));
         }
 

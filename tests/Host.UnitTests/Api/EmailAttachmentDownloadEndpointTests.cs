@@ -10,6 +10,7 @@ using MailFathom.Application.EmailContent.Repair;
 using MailFathom.Application.EmailContent.Storage;
 using MailFathom.Application.Emails.DownloadAttachment;
 using MailFathom.Application.Emails.Extraction;
+using MailFathom.Application.Emails.Mailboxes;
 using MailFathom.Application.Emails.Summaries;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
@@ -297,7 +298,7 @@ public sealed class EmailAttachmentDownloadEndpointTests
             contentStore,
             contentReader,
             Substitute.For<IEmailContentRepairRequestStore>(),
-            accountCatalog);
+            new MailboxScopeResolver(accountCatalog, StubMailFolderParticipation.Everything));
     }
 
     private static EmailSummary SummaryOf() => new()

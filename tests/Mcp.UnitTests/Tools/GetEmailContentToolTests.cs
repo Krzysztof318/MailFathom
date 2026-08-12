@@ -22,6 +22,7 @@ using MailFathom.Mcp.Tools;
 using MailFathom.Mcp.Tools.Content;
 using MailFathom.Mcp.Tools.Results;
 using MailFathom.Mcp.UnitTests.TestDoubles;
+using MailFathom.TestSupport;
 using NSubstitute;
 using Xunit;
 
@@ -908,7 +909,9 @@ public sealed class GetEmailContentToolTests
             contentStore ?? new StubEmailContentStore(IntactContent()),
             renderer ?? new StubEmailContentRenderer(EmailContentRenderingResult.Rendered(RenderingOf())),
             repairRequestStore ?? Substitute.For<IEmailContentRepairRequestStore>(),
-            new StubMailAccountCatalog(ServedAccountId),
+            new MailboxScopeResolver(
+                new StubMailAccountCatalog(ServedAccountId),
+                StubMailFolderParticipation.Everything),
             linkIssuer ?? new StubAttachmentDownloadLinkIssuer(),
             new EmailContentReadOptions()));
 

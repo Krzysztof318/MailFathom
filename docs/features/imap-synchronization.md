@@ -1,6 +1,6 @@
 # IMAP synchronization
 
-<!-- describes: src/Application/Synchronization/**, src/Domain/Synchronization/**, src/Infrastructure/Mail/**, src/Application/Mail/Mutations/**, src/Domain/Mutations/** -->
+<!-- describes: src/Application/Synchronization/**, src/Domain/Synchronization/**, src/Domain/Folders/**, src/Application/Folders/**, src/Infrastructure/Mail/**, src/Application/Mail/Mutations/**, src/Domain/Mutations/** -->
 
 MailFathom synchronizes mailboxes read-only, on a bounded schedule, and — for an account that asks for it — the moment the mail server says something changed. Both mechanisms run the same synchronization pass over the same read-only session; what differs is only what starts one.
 
@@ -706,6 +706,59 @@ ones, because neither is a mailbox that can be opened and binding an alias to on
 later run then fails to select; and an entry that names no folder at all, such as a namespace root with an empty path.
 Each exclusion costs that entry rather than the account's whole listing, which would take every usable folder with it.
 
+### What a mapping decides beyond where the folder is
+
+A mapping also says what MailFathom does with the folder once it has found it. Three switches on the same entry answer
+that, and each one defaults to `true`, so a mapping that names none of them is a folder that is mirrored, embedded, and
+readable by tools:
+
+| Switch | With it `false` |
+| --- | --- |
+| `Synchronize` | No run schedules the folder, so no connection is opened for it and nothing of it is stored. |
+| `GenerateEmbeddings` | What is stored is never cut into passages and never reaches an embedding provider. |
+| `VisibleToTools` | No MCP tool lists, searches, reads, or answers from the folder. |
+
+None of them changes what an **unmapped** folder is. A folder no mapping names is not discovered into a binding, stores
+nothing, and has no alias anything can name it by — which is a different thing from `Synchronize: false`, where the
+mapping goes on naming the folder and the alias goes on resolving.
+
+That distinction is the reason to switch synchronization off rather than delete the mapping. The alias still resolves,
+by remote path or by special-use role, so the folder stays a **destination**: a relocation or a copy files a message
+into it over the account's existing write session, through the same commands and the same
+[recorded change](#every-change-is-written-down-before-it-is-issued) any other destination takes. Nothing new is opened,
+no capability is added, and what
+[ADR 0007](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0007-remote-mailbox-mutation-boundary-and-write-session.md)
+refuses is untouched — the destination is still never searched for the message afterwards.
+
+What differs is what becomes of the local copy. A relocation into a mirrored folder carries the row into that folder and
+decides nothing; a relocation into a folder nothing mirrors has taken the message out of the mirrored mailbox, so its
+record carries the account's `AuthoredDeleteEmailDisposition` and reconciliation applies it exactly as it does for a
+delete — the value resolved when the change was authored, not the one the account carries by the time the source
+occurrence is observed gone. There is no setting of its own for this case, and the mutation record still reads as the
+relocation it was rather than as a deletion. A **copy** into such a folder leaves the local store untouched, because the
+message it duplicates stayed where it was and the duplicate is in a folder nothing mirrors.
+
+**Configuration that asks for embedding or tool visibility on an unsynchronized folder is refused when it binds**, naming
+the alias, because a folder that stores nothing has nothing to embed and nothing a tool could read. Leaving a switch out
+is not asking for it, so `Synchronize: false` alone binds. The opposite combination — mirrored and embedded but withheld
+from tools — binds as well, and it is worth naming what it costs: the passages and their vectors are produced and paid
+for, and no reader reaches them today, since the tools are the only readers there are. It is a mapping to write when the
+folder is expected to become visible, not one to leave in place indefinitely.
+
+**Mail already stored for a folder whose synchronization is switched off is erased**, in bounded passes on the account's
+own runs, through the deletion path an erasing disposition already uses: the row goes and PostgreSQL removes the raw
+MIME, the search document, the passages, their vectors, and any outstanding repair request with it, and the folder's
+checkpoint is cleared once nothing of it is left. That is deliberate rather than tidiness — a folder nothing reads is a
+folder nothing refreshes, so leaving the rows would leave mail answering searches with the flags it had on the day the
+switch was flipped, and never learning that the server had moved or removed it. The binding itself stays, which is what
+keeps the alias resolving as a destination. A pass that fails is logged and repeated by the next run rather than putting
+the account into backoff, since nothing about it is a mail-server failure.
+
+The tool switch is applied in exactly one place. `MailboxScopeResolver` resolves the scope every read model is expressed
+in, attaches the withheld folders to it, and answers the same question for the two reads that name an email by its
+identifier, so a tool added later inherits the exclusion instead of having to remember it.
+[Mailbox queries](mailbox-queries.md#folders-withheld-from-tools) states what a caller sees.
+
 ## Session resilience
 
 Two dependency classes cover an IMAP session, and each one is resolved for the account it belongs to, so one
@@ -1070,7 +1123,10 @@ is what tells the two apart, and both halves are joined to it by a recorded fact
   of that answer.
 - **A disappearance** is matched against the source occurrence the record names, which was written down before the
   first IMAP command went out. A match is the relocation or the delete completing, so the disposition below is never
-  reached for it: the row keeps its place and only its position in the reconciliation queue moves.
+  reached for it: what happens locally is what the record itself decided. A relocation into a mirrored folder decided
+  nothing, and the row keeps its place while only its position in the reconciliation queue moves; a delete, and a
+  relocation whose destination nothing mirrors, carry the `AuthoredDeleteEmailDisposition` they were authored under and
+  [that setting](#what-becomes-of-a-message-mailfathom-deleted-itself) is applied here.
 - **A remote `\Seen` flag standing somewhere new** is matched against the `\Seen` stores issued against that occurrence,
   and the direction is compared as well: a store that asked for the flag to be set answers for the flag becoming set and
   never for it becoming clear. The stored snapshot still follows the server either way — what the match decides is whose
@@ -1176,6 +1232,14 @@ A deletion that never reaches the server changes nothing locally either. The dis
 observes the message gone from its folder, so a delete that was refused, abandoned, or is still in flight has left the
 local copy alone; and because all three values take the row out of the reconciliation queue, the disposition is applied
 once per delete however many windows pass over the folder afterwards.
+
+**One relocation is answered by this setting too.** A message moved into a folder MailFathom does not mirror has left the
+mirrored mailbox rather than moved inside it, so its record carries this value and reconciliation applies it to the
+source row exactly as it does above — under the same resolution rule, at the same moment, once. There is no setting of
+its own for that case, and the record goes on reading as the relocation it was rather than as a deletion. A relocation
+whose destination *is* mirrored reaches none of this, because its row is carried into the destination folder instead.
+[What a mapping decides beyond where the folder is](#what-a-mapping-decides-beyond-where-the-folder-is) states which
+destinations are which.
 
 ### What a message MailFathom copied becomes locally
 
