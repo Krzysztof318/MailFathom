@@ -132,11 +132,14 @@ at the ceiling, and here what is returned is what is stored — so a deployment 
 `SensitiveContent:MaximumAnalyzedCharacters` indexes every message derived afterwards with its body cut at that length,
 and raising it back has to leave those rows stale or the missing text is never restored by anything.
 
+**The personal-data confidence floor is part of it too**, through the analyzer profile's revision, which names the
+mapping, the language, and the floor together. The floor is sent to the analyzer rather than applied to its answer, so a
+finding below it never crosses the process boundary: two deployments differing only there did not ask the same question,
+and a mailbox indexed under a higher floor holds personal data the lower one replaces.
+
 What the stamp does leave out is the per-call timeout and the concurrency limit. Neither changes one character of what a
 scan that finished produced, so folding them in would mark a whole mailbox stale for tuning a deployment does against
-its own load. The personal-data confidence floor is out for the same reason the finding's own revision leaves it out: it
-names which of the analyzer's results this deployment wanted rather than how detection was performed. The analyzer's
-language is in, because it is part of that revision.
+its own load.
 
 **An absent stamp means the text predates any scanner.** It is a different value from every stamp, not a missing one,
 so a mailbox derived before the feature was switched on is counted and rebuilt exactly like one derived under an older
@@ -432,10 +435,11 @@ number and a bank routing number, so raising the floor at all stops two of the f
 The floor is sent to the analyzer rather than applied to its answer, so the weakest guesses never cross the process
 boundary at all, and it is compared inclusively — a finding scored exactly 0.4 survives a floor of 0.4.
 
-It is not part of the detector revision a finding carries, and neither is the category list. The revision names *how*
-detection was performed — which mapping this build ships, and which model the analyzer loaded — while both of those name
-which of the results a deployment wanted. Two deployments on one revision may redact differently; what the revision
-promises is that they asked the same detector the same question.
+It is part of the detector revision a finding carries, beside the mapping this build ships and the model the analyzer
+loaded, because the analyzer applies it rather than this process: a finding below the floor is never reported, so it is
+part of the question asked rather than a filter over the answer. The category list is not, because that is which of the
+results a deployment wanted. What the revision promises is that two deployments carrying it asked the same detector the
+same question — which is also what makes it safe for a derived row's stamp to be computed from it.
 
 ### Two things the offsets have to survive
 

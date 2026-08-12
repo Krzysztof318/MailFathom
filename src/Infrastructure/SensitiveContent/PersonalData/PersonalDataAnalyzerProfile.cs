@@ -69,6 +69,13 @@ public sealed partial record PersonalDataAnalyzerProfile
     public double MinimumConfidence { get; }
 
     /// <summary>Gets the identity and revision every finding this scanner produces carries.</summary>
+    /// <remarks>
+    /// The revision names the mapping this build ships, the language a model was loaded for, and the floor the request
+    /// states. The floor is in it because the analyzer applies it rather than this process: a finding below it never
+    /// crosses the boundary, so two deployments differing only there were not asked the same question and their answers
+    /// are not comparable. That matters beyond a finding — a derived row's stamp is computed from this revision, so a
+    /// lowered floor is what tells an already-indexed mailbox it was redacted under a weaker one.
+    /// </remarks>
     public SensitiveContentDetector Detector { get; }
 
     /// <summary>Composes the profile a configured analyzer is reached under.</summary>
@@ -121,9 +128,10 @@ public sealed partial record PersonalDataAnalyzerProfile
                 PresidioEntityCorpus.DetectorName,
                 string.Format(
                     CultureInfo.InvariantCulture,
-                    "presidio+entities.{0}+lang.{1}",
+                    "presidio+entities.{0}+lang.{1}+floor.{2:0.###}",
                     PresidioEntityCorpus.MappingRevision,
-                    language)));
+                    language,
+                    minimumConfidence)));
     }
 
     /// <inheritdoc />

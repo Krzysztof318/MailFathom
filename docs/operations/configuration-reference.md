@@ -340,7 +340,7 @@ nowhere to ask **fails startup** rather than running unprotected.
 | `SensitiveContent:Pii:Suppressions:<n>:Rule` | string | — | As above | restart |
 | `SensitiveContent:PersonalDataAnalyzer:Endpoint` | string | unset | Required once `Pii` is on, and an absolute `http` or `https` address; read by nothing while that switch is off | restart |
 | `SensitiveContent:PersonalDataAnalyzer:Language` | string | `en` | Two lowercase letters, naming a language the analyzer loads a model for | restart |
-| `SensitiveContent:PersonalDataAnalyzer:MinimumConfidence` | double | `0.4` | 0 – 1 inclusive, compared inclusively by the analyzer | restart |
+| `SensitiveContent:PersonalDataAnalyzer:MinimumConfidence` | double | `0.4` | 0 – 1 inclusive, compared inclusively by the analyzer. It decides which regions are replaced, so it is part of the derivation stamp and changing it marks earlier-derived rows stale | restart |
 | `SensitiveContent:MaximumAnalyzedCharacters` | int | `200000` | 1 – 10000000; text beyond it is dropped from the result rather than handed on unscanned. On the derived path that is what is *stored*, so lowering it truncates every message indexed afterwards and the value is part of the derivation stamp | restart |
 | `SensitiveContent:ScanTimeout` | TimeSpan | `00:00:05` | One second to two minutes, per call to one scanner | restart |
 | `SensitiveContent:MaximumConcurrentScans` | int | `4` | 1 – 256, across the process | restart |
