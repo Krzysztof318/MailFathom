@@ -191,7 +191,9 @@ is the layer rather than something MailFathom re-implements:
   mailbox token request's timeout sits below its enclosing budget: the bound an operator configured is the one that has to
   be reported, so the transport's is a backstop rather than a competitor. `HttpClient.Timeout` carries none of this and is
   left as the handler sets it, which is disabled — the timeout strategies bound a call, and a client property would cut
-  across the retries as a group. [Sensitive-content
+  across the retries as a group. `PersonalDataAnalyzerTransportTests` composes the service defaults around that
+  registration and asserts the outcome both calls exist for: the analyzer client is reached one handler's worth of
+  attempts rather than their square, which is what deleting the removal costs. [Sensitive-content
   scanning](../features/sensitive-content-scanning.md#failing-closed) states what each failure refuses.
 - **EF Core.** `EnableRetryOnFailure` is deliberately not configured. The obstacle is not the unit of work: with a
   retrying execution strategy each query and each `SaveChangesAsync` is already replayed as its own retriable unit. It

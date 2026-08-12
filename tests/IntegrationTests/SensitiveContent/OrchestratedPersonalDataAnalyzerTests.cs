@@ -287,10 +287,11 @@ public sealed class OrchestratedPersonalDataAnalyzerTests(MailFathomOrchestratio
         services.AddSingleton(plan);
         services.AddSingleton(PersonalDataAnalyzerProfile.Create(analyzer, "en", MinimumConfidence));
 
-        // The real registration rather than a client composed here, so what these tests exercise includes the bounds and
-        // the base-address handling a deployment gets. The standard resilience handler the host's service defaults add is
-        // absent, which is the one difference and the harmless one: it would repeat a refused call rather than change what
-        // the adapter reports.
+        // The real registration rather than a client composed here, so what these tests exercise includes the bounds, the
+        // base-address handling, and the resilience handler a deployment gets: the registration adds that handler itself,
+        // bounded by this plan's scan timeout, so the transport here matches a deployment's rather than differing from it.
+        // A refused connection is therefore repeated here too, which is what the unreachable-analyzer test spends its
+        // seconds on before either half of the contract reports anything.
         services.AddPersonalDataContentScanning();
 
         return services.BuildServiceProvider();

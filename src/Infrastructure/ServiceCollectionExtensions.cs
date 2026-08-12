@@ -615,12 +615,14 @@ public static class ServiceCollectionExtensions
                 // authorization server surfaces as itself rather than as a mailbox timeout.
                 client.Timeout = TimeSpan.FromSeconds(15));
 
-        // This call is the one place the single-layer rule is enforced for HTTP, so it is the one place it can be got
-        // wrong. MailOAuthAccessTokenSource already runs the exchange under the MailAuthorizationServerInvocation
-        // pipeline, and the host's service defaults add the standard resilience handler to every client the factory
-        // builds; leaving both would multiply three attempts by three into nine token requests against an authorization
-        // server that is already refusing. Removal is registered rather than the handler being withheld, because the
-        // defaults apply to a name this project never sees.
+        // This call is one of the two places the single-layer rule is enforced for HTTP, so it is one of the two places it
+        // can be got wrong; AddPersonalDataAnalyzerClient below is the other, and the more delicate one, because it adds a
+        // handler back rather than leaving none, so its own removal has to reach one handler and spare the other.
+        // MailOAuthAccessTokenSource already runs the exchange under the MailAuthorizationServerInvocation
+        // pipeline, and the host's service defaults add the standard resilience handler
+        // to every client the factory builds; leaving both would multiply three attempts by three into nine token requests
+        // against an authorization server that is already refusing. Removal is registered rather than the handler being
+        // withheld, because the defaults apply to a name this project never sees.
         //
         // It removes what is registered before it, so it depends on AddServiceDefaults having run first. Host's
         // composition root does, and MailOAuthTokenTransportTests fails if that ever stops being true.
@@ -677,7 +679,10 @@ public static class ServiceCollectionExtensions
         //
         // Removal is registered before the replacement because the build-time pass removes what the actions before it
         // added: the defaults' handler, which is registered against a client name this project never sees, and not the
-        // one added after.
+        // one added after. PersonalDataAnalyzerTransportTests asserts the outcome rather than the arrangement: it composes
+        // the service defaults around this call and fails if the analyzer client ever carries two handlers, which is what
+        // deleting the removal below does. Measured against that composition, the surviving handler is this call's own and
+        // the order the two registrations run in does not change it.
 #pragma warning disable EXTEXP0001 // RemoveAllResilienceHandlers is experimental, and is how the standard handler is opted out of.
         client.RemoveAllResilienceHandlers();
 #pragma warning restore EXTEXP0001
