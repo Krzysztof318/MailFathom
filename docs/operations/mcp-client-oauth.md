@@ -3,9 +3,10 @@
 <!-- describes: src/Host/Configuration/Access/**, src/Host/Security/Mcp/OAuthTokenValidation.cs, src/Host/Security/Mcp/OAuthAuthorizationServerMetadataRetriever.cs, src/Host/Security/Mcp/InsufficientScopeResultHandler.cs, src/Host/Security/Transport/ProtectedResourceMetadataAddress.cs, src/Common/OAuth/OAuthMetadataAddresses.cs -->
 
 You have MailFathom running and you want an MCP client signed in through the identity provider you already operate.
-This page is the order those steps happen in. It is the only page written from that side: the settings themselves belong
-to [the MCP endpoint](mcp-endpoint.md#oauth), which states what each one means and what a token has to prove, and this
-page links into it rather than restating any of it.
+This page is the order those steps happen in, and it is written from the **provider's** side. Two other pages own the
+rest: [the MCP endpoint](mcp-endpoint.md#oauth) is the reference for every setting named here and for what a token has to
+prove, and [connecting the chat client you already use](../users/mcp-clients.md) is where each popular client's own
+dialog, address kind, and accepted credentials are. This page links into both rather than restating either.
 
 Almost all of the work is outside MailFathom. Configuring MailFathom is one JSON block. What a first connection actually
 costs is a resource identifier chosen once, an application registered per client, a callback URL copied out of the
@@ -13,10 +14,12 @@ client rather than invented, a token-endpoint authentication method that has to 
 provider that makes the token's audience come out right, and knowing where to find a subject identifier. None of that is
 MailFathom's to own, and all of it decides whether MailFathom answers.
 
-> This page names other companies' products in order to describe interoperating with them. Those names belong to their
-> owners, MailFathom is affiliated with none of them, and nothing here is an endorsement in either direction. A
-> provider's or a client's own documentation is authoritative about its console; a dialog described here may have been
-> rearranged since.
+**Whether you need any of this** is decided by the client, not by MailFathom: two of the popular chat clients offer no
+field for a static header, so an [API key](mcp-endpoint.md#api-keys) cannot reach them and OAuth is the only shape left.
+The client page above says which ones, and reading it first is what tells you whether this page is optional.
+
+> A provider's or a client's own documentation is authoritative about its own console. A dialog described here may have
+> been rearranged since, and the field names below are an illustration of the sequence rather than a contract.
 
 ## What MailFathom is not
 
@@ -51,9 +54,8 @@ organization that you can see and revoke in your own console. Dynamic registrati
 cost of a fresh client registration per connection accumulating in the provider. A metadata document asks about as
 little and registers nothing, which is why a client that supports both usually prefers it.
 
-**A client may offer no alternative to OAuth.** Some connector dialogs take exactly two answers — no authentication, or
-OAuth — so where such a client is the one connecting, an [API key or a key pair](mcp-endpoint.md#api-keys) is not a
-fallback you can retreat to. Decide that before you start, because it changes whether this page is optional.
+Which shape a named client uses, and where its dialog asks for the client identifier, is on
+[the client page](../users/mcp-clients.md) rather than here.
 
 ## Which steps repeat and which do not
 
@@ -380,10 +382,9 @@ anything. Auth0 issues a `sub` of the form `auth0|…` for step 6.
 
 This page walks one provider on purpose. A per-vendor matrix would be a page that ages every time a console is
 rearranged, and the part worth writing down is the order — which is the same everywhere, because it comes from the
-protocol rather than from the vendor. Take the sequence, and read your provider's own documentation for the names.
-
-No screenshots either, for the same reason and one more: a picture of somebody else's console goes stale silently, while
-a named field and a path can be checked against their documentation.
+protocol rather than from the vendor. Take the sequence, and read your provider's own documentation for the names. That
+is also why the illustration is a named field and a menu path rather than a screenshot: a picture of somebody else's
+console goes stale without saying so, and a field name can be checked against that vendor's own documentation.
 
 ## Related
 
@@ -391,6 +392,20 @@ a named field and a path can be checked against their documentation.
   publishes. The reference for this page's whole subject.
 - [Signing in with OAuth](admin-endpoint.md#with-oauth) — the administrative endpoint takes the same entries and its own
   audience rule, which is a `Resource` ending in `/api/admin`. `mfctl` performs that sign-in for you.
+- [Connecting the chat client you already use](../users/mcp-clients.md) — the client-side half: each popular client's
+  dialog, where it runs, and which credentials it will accept, including the two that accept only OAuth.
 - [Mailbox OAuth](mailbox-oauth.md) — the other direction entirely: MailFathom authenticating *to* a mail provider. A
   different key ring, a different set of registrations, and nothing on this page applies to it.
 - [Getting started](../users/getting-started.md) — the guided path from an empty deployment to a first tool call.
+
+---
+
+**Trademarks.** The product, service, and company names on this page are their owners' trademarks and are used solely to
+identify the identity providers and client applications a MailFathom deployment can be connected through. Their use
+implies no affiliation with, sponsorship by, endorsement by, or certification from those owners, in either direction, and
+this page reproduces no third-party logo, icon, wordmark, or screenshot.
+
+Keycloak is a trademark of the Linux Foundation. Microsoft and Microsoft Entra ID are trademarks of the Microsoft group
+of companies. Auth0 and Okta are trademarks of Okta, Inc.
+[`THIRD_PARTY_LICENSES.md`](https://github.com/Krzysztof318/MailFathom/blob/main/THIRD_PARTY_LICENSES.md#trademark-and-brand-use)
+records the per-owner review this statement comes out of, and why it sits here rather than in `NOTICE`.

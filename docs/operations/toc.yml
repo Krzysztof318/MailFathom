@@ -35,8 +35,8 @@
   items:
     - name: The MCP endpoint
       href: mcp-endpoint.md
-    - name: Connecting an MCP client
-      href: connecting-an-mcp-client.md
+    - name: MCP client OAuth
+      href: mcp-client-oauth.md
     - name: The administrative endpoint
       href: admin-endpoint.md
     - name: Health endpoints

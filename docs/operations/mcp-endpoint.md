@@ -335,8 +335,8 @@ server signed and nothing else. It is **never** an authorization server: it stor
 authorization code, holds no refresh token, and has no login page.
 
 This section is the reference for every setting below and for what a token has to prove.
-[Connecting an MCP client](connecting-an-mcp-client.md) is the order those settings are arrived at in, including the half
-that happens in the identity provider and in the client — read that first if this is a deployment's first connection.
+[MCP client OAuth](mcp-client-oauth.md) is the order those settings are arrived at in, including the half that happens in
+the identity provider — read that first if this is a deployment's first OAuth connection.
 
 ```json
 {
@@ -517,9 +517,9 @@ yet implement Resource Indicators ([RFC 8707](https://www.rfc-editor.org/rfc/rfc
 audience mapping — Keycloak, for example, through a client scope carrying an audience mapper. **Do not answer such a server by
 relaxing audience validation**; there is no setting for it, deliberately.
 
-[Connecting an MCP client](connecting-an-mcp-client.md) walks that work in the order it happens, with one provider's field
-names, the callback URL a client generates rather than accepts, a verification recipe to run before a client is touched,
-and what each failed sign-in looks like.
+[MCP client OAuth](mcp-client-oauth.md) walks that work in the order it happens, with one provider's field names, the
+callback URL a client generates rather than accepts, a verification recipe to run before a client is touched, and what
+each failed sign-in looks like.
 
 ### Requiring no credential
 
