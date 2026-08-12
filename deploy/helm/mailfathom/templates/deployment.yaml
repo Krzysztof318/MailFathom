@@ -130,6 +130,29 @@ spec:
             - name: SensitiveContent__PersonalDataAnalyzer__MinimumConfidence
               value: {{ .Values.personalDataScanning.analyzer.minimumConfidence | quote }}
             {{- end }}
+            {{- if .Values.spamScanning.enabled }}
+            {{- /*
+              Both switches are written here rather than one of them being left to a config file, for the reason the
+              analyzer's are: MailFathom refuses to start with a scanner switched on and classification off, and it
+              refuses again with a scanner switched on and nowhere to ask — and both refusals would be about a file an
+              operator did not think they were editing. Which folders are classified and what threshold a score is
+              judged by stay in `config.files`, because they are decisions about mail rather than about deployment.
+            */}}
+            - name: SpamClassification__Enabled
+              value: "true"
+            - name: SpamClassification__UseScanner
+              value: "true"
+            - name: SpamClassification__Scanner__Host
+              value: {{ include "mailfathom.spamScannerHost" . | quote }}
+            - name: SpamClassification__Scanner__Port
+              value: {{ include "mailfathom.spamScannerPort" . | quote }}
+            - name: SpamClassification__Scanner__ScanTimeoutSeconds
+              value: {{ .Values.spamScanning.scanner.scanTimeoutSeconds | quote }}
+            - name: SpamClassification__Scanner__MaximumMessageBytes
+              value: {{ .Values.spamScanning.scanner.maximumMessageBytes | quote }}
+            - name: SpamClassification__Scanner__MaximumConcurrentScans
+              value: {{ .Values.spamScanning.scanner.maximumConcurrentScans | quote }}
+            {{- end }}
             {{- range $name, $value := .Values.config.extraEnvironment }}
             - name: {{ $name }}
               value: {{ $value | quote }}

@@ -73,6 +73,7 @@ using MailFathom.Infrastructure.Secrets.Sources;
 using MailFathom.Infrastructure.Security.OAuth;
 using MailFathom.Infrastructure.SensitiveContent.PersonalData;
 using MailFathom.Infrastructure.SensitiveContent.Secrets;
+using MailFathom.Infrastructure.Spam;
 using MailKit.Net.Imap;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
@@ -611,6 +612,45 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<ISensitiveContentScanner, PresidioContentScanner>();
         services.AddSingleton<IPersonalDataAnalyzerProbe, PresidioAnalyzerProbe>();
         AddPersonalDataAnalyzerClient(services);
+
+        return services;
+    }
+
+    /// <summary>Registers the spam scanner, which scores whole messages against a daemon deployed beside this service.</summary>
+    /// <param name="services">The service collection.</param>
+    /// <returns>The service collection, for chaining.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="services" /> is <see langword="null" />.</exception>
+    /// <remarks>
+    /// <para>
+    /// Called only where the scanner switch is on, which is what makes an opt-in nobody took cost nothing: with it off
+    /// none of these descriptors exists, no address is read, and <see cref="EmailSpamClassifier" />
+    /// resolves no scanner and classifies through the deterministic stage alone. The composed
+    /// <see cref="SpamAssassinScannerProfile" /> is the host's to register, because where the daemon is comes from
+    /// configuration this project does not bind.
+    /// </para>
+    /// <para>
+    /// The probe is registered beside the scanner rather than always, because startup refuses a switch that is on with
+    /// nothing behind it, and either one present without the other would turn that refusal into a deployment that scores
+    /// nothing and says so nowhere.
+    /// </para>
+    /// <para>
+    /// All three are singletons, and the conversation is the reason: it holds the concurrency permits that bound this
+    /// process against the daemon, and the corpus identity the startup probe establishes for every scan afterwards. Two
+    /// instances would be two of each, so the scanner and the probe are handed the same one.
+    /// </para>
+    /// <para>
+    /// No <c>IHttpClientFactory</c> registration appears here, unlike every other outbound dependency: the daemon speaks
+    /// its own line protocol on a TCP port rather than HTTP, so there is no handler chain to bound and the bounds live in
+    /// the profile the conversation reads.
+    /// </para>
+    /// </remarks>
+    public static IServiceCollection AddSpamAssassinScanning(this IServiceCollection services)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+
+        services.AddSingleton<SpamAssassinDaemon>();
+        services.AddSingleton<ISpamScanner, SpamAssassinScanner>();
+        services.AddSingleton<ISpamScannerProbe, SpamAssassinScannerProbe>();
 
         return services;
     }

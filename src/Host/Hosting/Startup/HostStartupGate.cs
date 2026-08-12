@@ -23,4 +23,8 @@ internal enum HostStartupGate
     /// <summary>The personal-data analyzer answers, in the configured language, for every category the scanner was switched on for.</summary>
     /// <remarks>The one gate a deployment may not run at all: it is expected only where the <c>Pii</c> switch is on, which is the only state in which anything asks the analyzer a question.</remarks>
     PersonalDataAnalyzer = 2,
+
+    /// <summary>The spam scanner answers and has named the corpus every classification will record.</summary>
+    /// <remarks>Expected only where the scanner switch is on, which is the only state in which anything asks a scanner for a score.</remarks>
+    SpamScanner = 3,
 }

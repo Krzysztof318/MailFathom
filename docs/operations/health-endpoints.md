@@ -77,7 +77,7 @@ Kestrel's own default address.
 
 | Probe | Path | Consults | A failure means |
 |---|---|---|---|
-| Startup | `/started` | The host's own startup gates: every secret reference resolved, the database schema verified, and — only where `SensitiveContent:Pii` is on — the personal-data analyzer answering for every configured category | The process has not finished coming up; the grace period continues |
+| Startup | `/started` | The host's own startup gates: every secret reference resolved, the database schema verified, and — each only where its own switch is on — the personal-data analyzer answering for every configured category and the spam scanner naming the corpus it scores under | The process has not finished coming up; the grace period continues |
 | Readiness | `/health` | The dependencies a request needs, the database included, and each declared AI provider | The instance stops receiving traffic; it is not restarted |
 | Liveness | `/alive` | Process-local state only | The container is restarted |
 

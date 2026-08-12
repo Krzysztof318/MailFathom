@@ -33,7 +33,12 @@ public sealed class SpamClassificationOptionsTests
     public void FindErrors_AScannerAskedForWhileClassificationIsOff_IsRefused()
     {
         // Arrange
-        var options = new SpamClassificationOptions { Enabled = false, UseScanner = true };
+        var options = new SpamClassificationOptions
+        {
+            Enabled = false,
+            UseScanner = true,
+            Scanner = ReachableScanner(),
+        };
 
         // Act
         var error = Assert.Single(options.FindErrors());
@@ -98,6 +103,7 @@ public sealed class SpamClassificationOptionsTests
         {
             Enabled = true,
             UseScanner = true,
+            Scanner = ReachableScanner(),
             ScannerThreshold = threshold,
         };
 
@@ -119,11 +125,30 @@ public sealed class SpamClassificationOptionsTests
         {
             Enabled = true,
             UseScanner = true,
+            Scanner = ReachableScanner(),
             ScannerThreshold = threshold,
         };
 
         // Act, Assert
         Assert.Empty(options.FindErrors());
+    }
+
+    /// <summary>The scanner block below the section is validated with it rather than on its own.</summary>
+    /// <remarks>
+    /// A scanner switched on with nowhere to ask is the block's own rule, and it reaches an operator through this
+    /// section because that is the section a deployment writes.
+    /// </remarks>
+    [Fact]
+    public void FindErrors_AScannerSwitchedOnWithNoAddressBelowIt_ReportsTheBlocksOwnRefusal()
+    {
+        // Arrange
+        var options = new SpamClassificationOptions { Enabled = true, UseScanner = true };
+
+        // Act
+        var error = Assert.Single(options.FindErrors());
+
+        // Assert
+        Assert.Equal([nameof(SpamScannerOptions.Host)], error.MemberNames);
     }
 
     /// <summary>Every rule is reported at once, so an operator repairs the section rather than one key per restart.</summary>
@@ -135,6 +160,7 @@ public sealed class SpamClassificationOptionsTests
         {
             Enabled = false,
             UseScanner = true,
+            Scanner = new SpamScannerOptions { Host = "mailfathom-spamassassin", Port = 0 },
             ScannedFolders = ["", "   "],
             ScannerThreshold = 0,
         };
@@ -143,6 +169,8 @@ public sealed class SpamClassificationOptionsTests
         var errors = options.FindErrors().ToArray();
 
         // Assert
-        Assert.Equal(4, errors.Length);
+        Assert.Equal(5, errors.Length);
     }
+
+    private static SpamScannerOptions ReachableScanner() => new() { Host = "mailfathom-spamassassin" };
 }

@@ -1,0 +1,98 @@
+{{- /*
+Copyright © 2026 Krzysztof Kasprowicz
+Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
+Project repository: https://github.com/Krzysztof318/MailFathom
+*/ -}}
+{{- if and .Values.spamScanning.enabled .Values.spamScanning.scanner.deploy }}
+{{- include "mailfathom.validate" . -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "mailfathom.spamScannerFullname" . }}
+  labels:
+    {{- include "mailfathom.spamScannerLabels" . | nindent 4 }}
+spec:
+  {{- /*
+    One replica, and no value to change it, exactly as for the analyzer. MailFathom's own bound on concurrent scans is
+    what limits the load, and a deployment that has raised that bound past what one daemon serves is sizing a dependency
+    rather than choosing a replica count. Turning `deploy` off and operating the daemon yourself is the supported answer.
+  */}}
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "mailfathom.spamScannerSelectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "mailfathom.spamScannerSelectorLabels" . | nindent 8 }}
+    spec:
+      {{- with .Values.spamScanning.scanner.image.pullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        {{- toYaml .Values.spamScanning.scanner.podSecurityContext | nindent 8 }}
+      {{- /*
+        The daemon reads whole messages and answers a score. It talks to nothing in the cluster, so it has no business
+        holding a token that can talk to the API server — and it is the second pod in this release that receives mail
+        content in the clear.
+      */}}
+      automountServiceAccountToken: false
+      {{- with .Values.spamScanning.scanner.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.spamScanning.scanner.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.spamScanning.scanner.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: spamassassin
+          image: {{ include "mailfathom.spamScannerImage" . | quote }}
+          imagePullPolicy: {{ .Values.spamScanning.scanner.image.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.spamScanning.scanner.containerSecurityContext | nindent 12 }}
+          env:
+            {{- /*
+              The DNS posture, stated by the deployment rather than inherited. Off, the daemon runs local rules only and
+              nothing derived from the owner's mail is resolved anywhere; on, its DNSBL and URIBL rules send sending
+              addresses and URI host names to third-party blocklists through whatever resolver this pod has.
+            */}}
+            - name: DNS_CHECKS
+              value: {{ ternary "1" "0" .Values.spamScanning.scanner.dnsChecks | quote }}
+          ports:
+            - name: spamd
+              containerPort: 783
+              protocol: TCP
+          {{- /*
+            A startup budget rather than a short liveness probe, because the container fetches its rule updates and
+            compiles the corpus before it listens, and how long that takes depends on the node and the network. The
+            probes open a TCP connection rather than speaking the protocol: the daemon answers a line protocol of its
+            own, which no probe type here can compose, and a listener that has bound the port is a daemon that has
+            finished starting.
+          */}}
+          startupProbe:
+            tcpSocket:
+              port: spamd
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 60
+          readinessProbe:
+            tcpSocket:
+              port: spamd
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          livenessProbe:
+            tcpSocket:
+              port: spamd
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 3
+          resources:
+            {{- toYaml .Values.spamScanning.scanner.resources | nindent 12 }}
+{{- end }}

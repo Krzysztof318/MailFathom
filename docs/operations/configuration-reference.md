@@ -398,15 +398,35 @@ classification. [Spam classification](../features/spam-classification.md) record
 facts the deterministic stage reads, and why a scanner never overturns a provider's own verdict.
 
 Every switch is off by default, and an absent section is that default rather than a startup failure. The deterministic
-stage is the whole of the working feature: **no scanner implementation ships**, so `UseScanner` states an intent that a
-deployment with none registered simply has nothing to consult.
+stage works alone and is the whole of the feature without a sidecar; `UseScanner` adds the Apache SpamAssassin daemon
+described below.
 
 | Key | Type | Default | Constraint | Change |
 | --- | --- | --- | --- | --- |
 | `SpamClassification:Enabled` | bool | `false` | | reload |
-| `SpamClassification:UseScanner` | bool | `false` | Asking for a scanner while `Enabled` is false fails startup, because a scanner is only consulted where classification runs | reload |
+| `SpamClassification:UseScanner` | bool | `false` | Asking for a scanner while `Enabled` is false fails startup, because a scanner is only consulted where classification runs | restart |
 | `SpamClassification:ScannedFolders:<n>` | string | unset | A usable folder alias; an absent list is every account's inbox mapping, and an explicitly empty list is no folder at all | reload |
 | `SpamClassification:ScannerThreshold` | double | unset | 0.1 – 1000; unset keeps the threshold the scanner itself answered with | reload |
+| `SpamClassification:Scanner:Host` | string | unset | Required once `UseScanner` is on, and a host name or IP address rather than a URL or an address with the port on it | restart |
+| `SpamClassification:Scanner:Port` | int | `783` | 1 – 65535 | restart |
+| `SpamClassification:Scanner:ScanTimeoutSeconds` | int | `30` | 1 – 120 | restart |
+| `SpamClassification:Scanner:MaximumMessageBytes` | int | `512000` | 32 000 – 33 554 432 | restart |
+| `SpamClassification:Scanner:MaximumConcurrentScans` | int | `5` | 1 – 64 | restart |
+
+`UseScanner` and the `Scanner` block are read once, at startup: whether a scanner exists at all decides what is
+constructed and whether the host refuses to start without a daemon, which a reload cannot revisit. Everything else in
+this section is read per classification.
+
+**A scanner switched on with no daemon answering fails startup**, with error code `81003` naming the key to repair
+rather than the address it tried. That is deliberate asymmetry with what one message gets, where a failed scan leaves
+the deterministic verdict standing: an instance whose sidecar never came up would classify everything from headers alone
+and look healthy doing it. The bounds are validated whether or not the scanner is switched on, so a value written wrong
+is reported before the run that first switches scanning on rather than during it.
+
+The daemon receives whole messages, so it belongs inside the deployment's own trust boundary; the feature page states
+what an address outside it gives up, and what the rule-update and DNS postures cost. The deployment assets carry the
+sidecar itself — [Kubernetes](deployment-kubernetes.md#spam-scanning),
+[Compose](deployment-compose.md#spam-scanning), and [Quadlet](deployment-quadlet.md#spam-scanning).
 
 The default scope follows the folder **role** rather than the text `INBOX`: it is whichever alias each account maps to
 `Inbox` in [`MailSynchronization`](#one-account--mailsynchronizationaccountsn), so a server presenting the inbox under

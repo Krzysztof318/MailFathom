@@ -260,6 +260,109 @@ personalDataScanning:
     tolerations: []
     affinity: {}
 
+### Spam classification with a scanner
+# `enabled` is off, and with it off the chart renders no scanner workload, no Service for one, and sets no configuration
+# key: an opt-in you did not take pulls no image and holds no memory.
+#
+# Turning it on switches classification on **and** points it at a scanner, because the two are one decision when made
+# here: `SpamClassification:Enabled` and `SpamClassification:UseScanner` are written together with the daemon's address,
+# so a values file cannot switch a scanner on and leave it pointing nowhere. Classification without a scanner is the
+# other half of the feature and needs nothing from this block — set `SpamClassification:Enabled` in `config.files` and
+# leave this off, and mail is classified from the headers it already carries.
+#
+# Which folders are classified and what threshold a score is judged by are ordinary configuration and belong in
+# `config.files`: they say what is classified rather than what is deployed, and the chart renders nothing from them.
+spamScanning:
+  enabled: false
+
+  scanner:
+    # Whether the chart runs the daemon, exactly as `personalDataScanning.analyzer.deploy` decides whether it runs the
+    # analyzer. On, the chart creates a Deployment and a Service for it and derives `host` below from the release name,
+    # which must then be left empty. Off, nothing of the sort is rendered and `host` is required.
+    deploy: true
+
+    # Where the daemon is, when the chart is not the thing running it. **Keep it inside your own network**: a scan sends
+    # the whole message, unredacted, to whatever answers here, so a daemon reached across the public internet hands the
+    # mail to a third party in order to find out whether it is spam. Nothing refuses it — one daemon serving several
+    # services inside a cluster is a legitimate arrangement — and docs/features/spam-classification.md states what is
+    # given up. A host name or address on its own, with no scheme and no path: this is a line protocol on a TCP port
+    # rather than HTTP.
+    host: ""
+
+    # The port that daemon listens on, when the chart is not the thing running it.
+    port: 783
+
+    # How long one scan may take before the message keeps the verdict its headers reached. A scan runs a whole rule
+    # corpus, so this is seconds rather than milliseconds; a message that exceeds it is not a failure, it is one
+    # classification without its second opinion.
+    scanTimeoutSeconds: 30
+
+    # The largest message that is sent to the daemon at all. The default is the size SpamAssassin's own client truncates
+    # at, which is the size its corpus was tuned against: rules read headers and the readable part of a body, and a
+    # megabyte of base64 attachment past that changes no score.
+    maximumMessageBytes: 512000
+
+    # How many scans MailFathom runs at once. The default matches the number of children the daemon spawns by default,
+    # because sending more at once does not scan more at once — it queues them inside the daemon, where MailFathom's own
+    # timeout cannot see the wait. Raise both together or neither.
+    maximumConcurrentScans: 5
+
+    # **Whether the daemon resolves DNS blocklists, and it is off.** SpamAssassin's DNSBL and URIBL rules send the
+    # sending addresses and the URI host names out of the owner's mail to third-party blocklists, which is the one thing
+    # scanning inside the trust boundary exists to avoid; the free tiers of those lists also answer a shared public
+    # resolver with a blocked marker rather than an answer, so the common arrangement leaks without contributing. Off,
+    # the daemon runs local rules only — header and body tests, HTML tests, and the corpus `sa-update` fetches. Turn it
+    # on if you operate a resolver of your own and accept what it sends; docs/features/spam-classification.md says what
+    # each choice costs.
+    dnsChecks: false
+
+    # A digest rather than a tag, because the image publishes no immutable version tag of its own — the digest is the
+    # only pin that names one artifact, and it is the same pin the Compose deployment and the integration suite use.
+    # The image runs Apache SpamAssassin 4.0.2 on Alpine and bundles no plugin that sends anything anywhere: no Razor2,
+    # no Pyzor, no DCC. THIRD_PARTY_LICENSES.md records what is in it.
+    image:
+      registry: docker.io
+      repository: axllent/spamassassin
+      digest: sha256:9bea393891c92a3531cb7081e9b2c478a654a048c9a6fa6f9d1df4300bf3ab8b
+      pullPolicy: IfNotPresent
+      pullSecrets: []
+
+    # Modest: the daemon holds its compiled rule corpus in memory and forks a child per scan. Below roughly 256Mi it is
+    # killed while compiling rules, which reaches MailFathom as a scanner that never answered.
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        cpu: "1"
+        memory: 512Mi
+
+    service:
+      port: 783
+
+    # **This pod starts as root and cannot be made not to**, which is the one place it differs from everything else this
+    # chart runs: the daemon binds its port and then calls `setuid` to run every scan as `nobody`, so it needs to begin
+    # with the privilege it drops. The mail is therefore parsed by an unprivileged process, but the pod will be refused
+    # by a namespace enforcing the `restricted` Pod Security Standard — deploy it into a `baseline` namespace, or run a
+    # daemon of your own and set `deploy: false`. Everything else is dropped: the two capabilities below are what
+    # `setuid` and `setgid` need and nothing more, and no privilege can be regained.
+    podSecurityContext:
+      seccompProfile:
+        type: RuntimeDefault
+
+    containerSecurityContext:
+      allowPrivilegeEscalation: false
+      capabilities:
+        drop:
+          - ALL
+        add:
+          - SETUID
+          - SETGID
+
+    nodeSelector: {}
+    tolerations: []
+    affinity: {}
+
 ### Networking
 service:
   type: ClusterIP
@@ -337,8 +440,9 @@ probes:
   # reporting dependency state is exposed by which network its port is on, and by nothing else.
   port: 8081
   # Startup reports whether MailFathom has finished coming up — every secret reference resolved, the database schema
-  # verified, and, only with personalDataScanning.enabled, the analyzer answering for every configured category. Its
-  # budget is what a slow first start is allowed, and it holds the liveness probe off until it succeeds.
+  # verified, only with personalDataScanning.enabled the analyzer answering for every configured category, and only with
+  # spamScanning.enabled the spam daemon answering. Its budget is what a slow first start is allowed, and it holds the
+  # liveness probe off until it succeeds.
   startup:
     path: /started
     periodSeconds: 5

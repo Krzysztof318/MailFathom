@@ -394,6 +394,56 @@ Its startup probe allows five minutes of that, and MailFathom's own startup gate
 not answering — so on a first install the application pod may restart a few times before the analyzer is ready. `resources`,
 `nodeSelector`, `tolerations`, `affinity`, and both security contexts are values under `personalDataScanning.analyzer`.
 
+## Spam scanning
+
+`spamScanning.enabled` is off, and off means the chart renders nothing for it: no Deployment, no Service, and no
+`SpamClassification__*` key in the application's environment. It follows `personalDataScanning`'s shape exactly, because
+it is the same decision — one value decides whether the chart runs the dependency, and the address is either derived
+from the release or stated, never both. [Spam classification](../features/spam-classification.md) records what a
+classification holds and what the scanner adds to it.
+
+```yaml
+spamScanning:
+  enabled: true
+  # scanner.deploy defaults to true: the chart runs Apache SpamAssassin and points MailFathom at its own Service.
+```
+
+That renders a single-replica Deployment and a ClusterIP Service, and writes `SpamClassification__Enabled`,
+`SpamClassification__UseScanner`, the derived host and port, and the three bounds into the application's environment.
+To use a daemon you already operate:
+
+```yaml
+spamScanning:
+  enabled: true
+  scanner:
+    deploy: false
+    host: spamassassin.mailfathom.svc.cluster.local
+```
+
+The chart refuses `deploy: true` together with a `host`, `deploy: false` without one, and a host set while spam scanning
+is off. Keep the address **inside the cluster**: the daemon is sent whole messages unredacted, and the feature page
+states what pointing it outside gives up.
+
+The scanner's Service is ClusterIP with no ingress rule and its pod mounts no service-account token. It is the second
+pod in the release that reads mail content in the clear.
+
+> [!IMPORTANT]
+> **The scanner pod needs a `baseline` namespace.** It starts as root to bind its port and drops to an unprivileged
+> account for every scan, which is what parses the mail, so it needs `SETUID` and `SETGID` back after dropping all
+> capabilities and cannot run under `restricted` Pod Security Standards. MailFathom's own pod is unaffected and stays
+> `restricted`-compatible; if your namespace enforces `restricted`, the scanner belongs in a namespace of its own with
+> `deploy: false` pointing at it.
+
+**Rule updates and DNS.** `DNS_CHECKS` is off, so the daemon runs local rules and sends nothing derived from the
+owner's mail to a third-party blocklist. Whether it can fetch rule updates is your cluster's egress policy rather than a
+chart value; a corpus frozen at the image's build scores today's mail worse than a fresh one, and the feature page states
+that trade.
+
+**Resources and readiness.** The daemon compiles its rule corpus before it listens, so its startup probe allows time for
+that and MailFathom's own startup gate refuses to come up while the daemon is not answering — on a first install the
+application pod may restart a few times before the scanner is ready. `resources`, `nodeSelector`, `tolerations`,
+`affinity`, both security contexts, and the digest-pinned image are values under `spamScanning.scanner`.
+
 ## Scheduling, resources, and placement
 
 `nodeSelector`, `tolerations`, `affinity`, `topologySpreadConstraints`, `priorityClassName`, `resources`,

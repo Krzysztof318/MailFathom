@@ -69,6 +69,14 @@ internal sealed class SpamClassificationOptions : IValidatableObject
     /// </remarks>
     public double? ScannerThreshold { get; set; }
 
+    /// <summary>Gets or sets where the scanner daemon is and what one scan of a message may cost.</summary>
+    /// <remarks>
+    /// Always present so that a deployment which states none of its keys still binds and validates, and read only where
+    /// <see cref="UseScanner" /> is on. What it holds is a container's address and this adapter's bounds rather than a
+    /// decision about mail, which is why it is a block instead of four more keys beside the switches.
+    /// </remarks>
+    public SpamScannerOptions Scanner { get; set; } = new();
+
     /// <inheritdoc />
     public IEnumerable<ValidationResult> Validate(ValidationContext validationContext) => this.FindErrors();
 
@@ -88,6 +96,11 @@ internal sealed class SpamClassificationOptions : IValidatableObject
         }
 
         foreach (var result in this.FindThresholdErrors())
+        {
+            yield return result;
+        }
+
+        foreach (var result in this.Scanner.FindErrors(this.UseScanner))
         {
             yield return result;
         }
