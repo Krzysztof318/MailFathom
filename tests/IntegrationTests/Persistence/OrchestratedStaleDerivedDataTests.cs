@@ -126,6 +126,81 @@ public sealed class OrchestratedStaleDerivedDataTests(MailFathomOrchestrationFix
         Assert.Null(underAnotherConfiguration);
     }
 
+    /// <summary>A walk that is not rebuilding must leave the cursor's stamp alone, or the rebuild it precedes finds nothing.</summary>
+    /// <remarks>
+    /// The failure this guards is silent in both directions. An ordinary walk that recorded the current configuration on
+    /// the cursor would leave a deployment whose categories were widened while the rebuild was off with a position row
+    /// already matching: the operator then switches the rebuild on, the walk resumes at the end of the mailbox, and every
+    /// message stays under-redacted while the run reports itself complete.
+    /// </remarks>
+    [Fact]
+    public async Task SaveResumePositionAsync_AWalkThatIsNotRebuilding_LeavesTheStampADifferentConfigurationRecorded()
+    {
+        // Arrange
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var services = await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken);
+        var binding = await OrchestratedFolderBinding.CommitAsync(services, FolderAlias, cancellationToken);
+        var stored = await InsertDocumentedEmailsAsync(services, binding, cancellationToken);
+
+        var recordedUnderTheOlderConfiguration = await services.CommitAsync(
+            (scope, session, token) => this.StoreIn(scope, rebuildsStaleDerivedData: true, stamp: OlderStamp)
+                .SaveResumePositionAsync(session, stored.WrittenUnderAnOlderConfiguration, token),
+            cancellationToken);
+        Assert.Equal(PersistenceCommitResult.Committed, recordedUnderTheOlderConfiguration);
+
+        // Act
+        var advanced = await services.CommitAsync(
+            (scope, session, token) => this.StoreIn(scope, rebuildsStaleDerivedData: false)
+                .SaveResumePositionAsync(session, stored.WrittenUnderTheCurrentConfiguration, token),
+            cancellationToken);
+
+        var resumedByARebuild = await services.InScopeAsync(
+            (scope, token) => this.StoreIn(scope, rebuildsStaleDerivedData: true).FindResumePositionAsync(token),
+            cancellationToken);
+
+        // Assert
+        Assert.Equal(PersistenceCommitResult.Committed, advanced);
+        Assert.Null(resumedByARebuild);
+    }
+
+    /// <summary>A document recording that extraction never ran can never be re-stamped, so it is neither counted nor walked.</summary>
+    /// <remarks>
+    /// Its message is the one whose stored MIME no reader parses: a rebuilding walk fetches it, reads nothing, and writes
+    /// nothing, so counting it would leave an operator watching a figure that never reaches zero and re-reading the same
+    /// unreadable messages on every pass.
+    /// </remarks>
+    [Fact]
+    public async Task GetEmailsAwaitingExtractionAsync_ADocumentRecordingThatExtractionNeverRan_IsNeitherWalkedNorCounted()
+    {
+        // Arrange
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var services = await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken);
+        var binding = await OrchestratedFolderBinding.CommitAsync(services, FolderAlias, cancellationToken);
+        var unreadable = await InsertUnreadableEmailAsync(services, binding, cancellationToken);
+
+        // Act
+        var rebuilding = await this.SelectAsync(services, rebuildsStaleDerivedData: true, cancellationToken);
+        var staleCount = await services.InScopeAsync(
+            (scope, token) => this.StoreIn(scope, rebuildsStaleDerivedData: false)
+                .CountEmailsWithStaleDerivedDataAsync(CurrentStamp, token),
+            cancellationToken);
+        var countedWithoutTheExclusion = await services.InScopeAsync(
+            (scope, token) => scope.GetRequiredService<MailFathomDbContext>().EmailSearchDocuments
+                .AsNoTracking()
+                .CountAsync(
+                    document => document.SensitiveContentStamp != CurrentStamp.Value
+                        || document.SensitiveContentStamp == null,
+                    token),
+            cancellationToken);
+
+        // Assert
+        Assert.DoesNotContain(unreadable, rebuilding);
+
+        // The control the assertion above needs: the row is there, it carries no current stamp, and the only reason it
+        // is absent from both answers is the text source rather than an arrangement that wrote nothing.
+        Assert.True(countedWithoutTheExclusion > staleCount);
+    }
+
     private async Task<IReadOnlyList<StoredEmailId>> SelectAsync(
         OrchestratedMailFathomServices services,
         bool rebuildsStaleDerivedData,
@@ -160,6 +235,56 @@ public sealed class OrchestratedStaleDerivedDataTests(MailFathomOrchestrationFix
             {
                 RebuildsStaleDerivedData = rebuildsStaleDerivedData,
             });
+    }
+
+    /// <summary>Inserts one stored email whose MIME nothing could read, indexed on its envelope alone.</summary>
+    private static async Task<StoredEmailId> InsertUnreadableEmailAsync(
+        OrchestratedMailFathomServices services,
+        MailFolderResolution binding,
+        CancellationToken cancellationToken)
+    {
+        var alias = binding.Alias.Value;
+        var generation = binding.Generation.Value;
+        var insertedId = Guid.CreateVersion7(SyntheticEmail.SentAt.AddSeconds(10));
+
+        var commitResult = await services.CommitAsync(
+            async (scope, session, token) =>
+            {
+                var dbContext = scope.GetRequiredService<MailFathomDbContext>();
+                var folder = await dbContext.MailFolders.SingleAsync(
+                    candidate => candidate.MailboxAccountId == SyntheticMailAccount.AccountId.Value
+                        && candidate.Alias == alias
+                        && candidate.ResolutionGeneration == generation,
+                    token);
+
+                var storedEmail = new StoredEmailEntity
+                {
+                    Id = insertedId,
+                    MailboxAccountId = folder.MailboxAccountId,
+                    MailFolder = folder,
+                    UidValidity = SyntheticEmail.UidValidity,
+                    Uid = 3100,
+                    Subject = "stale-derived-data-unreadable",
+                    SizeOctets = 2048,
+                    ContentAvailability = StoredEmailContentAvailability.Available,
+                };
+
+                dbContext.StoredEmails.Add(storedEmail);
+                dbContext.EmailSearchDocuments.Add(new EmailSearchDocumentEntity
+                {
+                    StoredEmailId = storedEmail.Id,
+                    StoredEmail = storedEmail,
+                    SubjectText = storedEmail.Subject,
+                    TextSource = ExtractedEmailTextSource.BodyNotExtracted,
+                    ExtractedAt = SyntheticEmail.SentAt,
+                    SensitiveContentStamp = OlderStamp.Value,
+                });
+            },
+            cancellationToken);
+
+        Assert.Equal(PersistenceCommitResult.Committed, commitResult);
+
+        return StoredEmailId.Create(insertedId);
     }
 
     /// <summary>Inserts three stored emails whose derived text was written under three different configurations.</summary>

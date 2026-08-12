@@ -135,7 +135,9 @@ detection was performed. The analyzer's language is in, because it is part of th
 
 **An absent stamp means the text predates any scanner.** It is a different value from every stamp, not a missing one,
 so a mailbox derived before the feature was switched on is counted and rebuilt exactly like one derived under an older
-configuration.
+configuration. A message indexed on its envelope alone — one whose stored MIME no reader could parse — is the one
+exception, and it is neither counted nor re-read: it holds no derived body text to correct, and re-reading it would
+produce nothing to write on every pass forever.
 
 ### What a late switch does, and what it costs to fix
 

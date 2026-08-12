@@ -186,27 +186,36 @@ internal sealed class StoredEmailExtractionBackfillStore(
     {
         var currentStamp = current.Value;
 
-        // The same two conditions the walk selects on — a message that is not tombstoned and whose raw MIME is stored —
-        // beside a document whose stamp is not the current one. A message with no document at all is left out here and
-        // is not: it has never been derived, so it holds no under-redacted text, and it is already outstanding for the
-        // reason the backfill has always existed.
+        // The same conditions the walk selects on — a message that is not tombstoned and whose raw MIME is stored —
+        // beside a document that holds derived body text whose stamp is not the current one. A message with no document
+        // at all is left out here and is not: it has never been derived, so it holds no under-redacted text, and it is
+        // already outstanding for the reason the backfill has always existed.
         return dbContext.StoredEmails
             .AsNoTracking()
             .Where(StoredEmailTombstone.IsNotTombstoned)
             .Where(email => email.ContentAvailability == StoredEmailContentAvailability.Available
                 && email.SearchDocument != null
+                && email.SearchDocument.TextSource != ExtractedEmailTextSource.BodyNotExtracted
                 && email.SearchDocument.SensitiveContentStamp != currentStamp)
             .CountAsync(cancellationToken);
     }
 
     /// <summary>Selects the messages this walk still owes work on, under the configuration it is walking for.</summary>
     /// <remarks>
+    /// <para>
     /// Two shapes rather than one predicate carrying a flag, because they are two different questions and the deployment
     /// asking each is different. Without a rebuild the walk owes work only where extraction never ran, which is the
     /// original question and the query a deployment that scans nothing goes on issuing unchanged. With one it also owes
     /// work where the derived text was written under a configuration this deployment no longer runs — including the
     /// absent stamp, which is a document derived before any scanner was switched on and is exactly the case an operator
     /// enabling one late is asking about.
+    /// </para>
+    /// <para>
+    /// A document recording that extraction never ran is left out of the rebuilding branch, because re-reading it
+    /// produces nothing to write: its message is the one whose stored MIME no reader can parse, so a walk would fetch
+    /// it, fail to read it, and leave the stamp exactly where it was on every pass forever. Such a row holds no derived
+    /// body text and therefore nothing written under an older configuration to correct.
+    /// </para>
     /// </remarks>
     private IQueryable<StoredEmailEntity> Outstanding()
     {
@@ -223,7 +232,8 @@ internal sealed class StoredEmailExtractionBackfillStore(
         var currentStamp = current.Value;
 
         return outstanding.Where(email => email.SearchDocument == null
-            || email.SearchDocument.SensitiveContentStamp != currentStamp);
+            || (email.SearchDocument.TextSource != ExtractedEmailTextSource.BodyNotExtracted
+                && email.SearchDocument.SensitiveContentStamp != currentStamp));
     }
 
     /// <summary>Where a previous walk stopped, and the configuration it stopped under.</summary>

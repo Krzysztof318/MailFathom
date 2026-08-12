@@ -68,7 +68,7 @@ internal sealed class SensitiveContentOptions : IValidatableObject
     /// It is here rather than beside the walk that performs it because it answers a question about this section: an
     /// operator who has just switched a scanner on is reading these keys, and what they need to know next is that the
     /// mail already stored is not covered. The rebuild rides the extraction backfill, so a deployment that switched
-    /// <c>Mail:ExtractionBackfill:Enabled</c> off performs none.
+    /// <c>MailExtractionBackfill:Enabled</c> off performs none.
     /// </para>
     /// </remarks>
     public bool RebuildStaleDerivedData { get; set; }
