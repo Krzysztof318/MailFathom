@@ -58,6 +58,14 @@ public sealed class OrchestratedStoredEmailTimelineReaderTests(MailFathomOrchest
 
     private const string CopiedRecipientAddress = "copied@mailfathom.test";
 
+    /// <summary>The first UID of the block this class seeds, which is what tells its own rows from another class's.</summary>
+    /// <remarks>
+    /// A UID names an occurrence, so the folder a test seeds is not necessarily a folder only it wrote to: the unmapped
+    /// alias is shared by every class that needs the folder MailFathom does not have, and counting the whole binding
+    /// would report their messages as this class's. The block is contiguous and belongs to this class alone.
+    /// </remarks>
+    private const uint FirstSeededUid = 5000;
+
     private static readonly DateTimeOffset FirstReceivedAt = SyntheticEmail.ReceivedAt;
 
     public static TheoryData<EmailTimelineDirection> BothDirections =>
@@ -191,7 +199,16 @@ public sealed class OrchestratedStoredEmailTimelineReaderTests(MailFathomOrchest
         // Assert
         Assert.Empty(listed);
         Assert.Empty(freshness);
-        Assert.Empty(unmappedScope.ReadableFolders);
+
+        // The alias is not among the folders a tool may read, which is what makes the two empty answers above a folder
+        // MailFathom does not have rather than one holding no mail. The folders that are readable are the control: on
+        // an empty list this would hold however the mapping had answered.
+        Assert.NotEmpty(unmappedScope.ReadableFolders);
+        Assert.DoesNotContain(
+            new MailFolderIdentity(
+                SyntheticMailAccount.AccountId,
+                MailFolderAlias.Create(SyntheticMailAccount.UnmappedFolderAlias)),
+            unmappedScope.ReadableFolders);
         Assert.Equal(SeededEmailCount, await CountSeededEmailsAsync(services, binding, cancellationToken));
     }
 
@@ -507,7 +524,7 @@ public sealed class OrchestratedStoredEmailTimelineReaderTests(MailFathomOrchest
     private static IEnumerable<SeededEmail> SeededEmails(MailFolderResolution binding) =>
         Enumerable.Range(0, SeededEmailCount).Select(index =>
         {
-            var occurrenceId = SyntheticEmail.OccurrenceIn(binding, (uint)(5000 + index));
+            var occurrenceId = SyntheticEmail.OccurrenceIn(binding, FirstSeededUid + (uint)index);
             var subject = index == WildcardSubjectIndex ? WildcardSubject : $"timeline-{index:D4}";
             var extraction = SyntheticEmail.ExtractionOf(
                 occurrenceId,
@@ -577,6 +594,7 @@ public sealed class OrchestratedStoredEmailTimelineReaderTests(MailFathomOrchest
     {
         var alias = binding.Alias.Value;
         var generation = binding.Generation.Value;
+        var lastSeededUid = FirstSeededUid + (uint)SeededEmailCount - 1;
 
         return services.InScopeAsync(
             (scope, token) => scope
@@ -584,7 +602,10 @@ public sealed class OrchestratedStoredEmailTimelineReaderTests(MailFathomOrchest
                 .StoredEmails
                 .AsNoTracking()
                 .CountAsync(
-                    email => email.MailFolder.Alias == alias && email.MailFolder.ResolutionGeneration == generation,
+                    email => email.MailFolder.Alias == alias
+                        && email.MailFolder.ResolutionGeneration == generation
+                        && email.Uid >= FirstSeededUid
+                        && email.Uid <= lastSeededUid,
                     token),
             cancellationToken);
     }

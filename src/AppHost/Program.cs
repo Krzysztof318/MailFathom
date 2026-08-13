@@ -264,6 +264,17 @@ if (runsIntegrationTests)
         .WithEnvironment(
             "MailSynchronization__Accounts__0__DisplayName",
             OrchestrationContract.ServedMailAccountDisplayName)
+        // The folder that account maps, which is what makes the mail stored in it readable through a tool. A readable
+        // scope is composed from mappings rather than from what the store holds, so an account with no folder answers a
+        // tool call with an empty window rather than with an unnarrowed one — and the remote path is stated because a
+        // mapping names a folder on a server, even under a host whose synchronization is switched off and which
+        // therefore never reaches one.
+        .WithEnvironment(
+            "MailSynchronization__Accounts__0__Folders__0__Alias",
+            OrchestrationContract.ComposedHostReadableFolderAlias)
+        .WithEnvironment(
+            "MailSynchronization__Accounts__0__Folders__0__RemotePath",
+            OrchestrationContract.ComposedHostReadableFolderAlias)
         // The endpoint is served under the posture worth proving end to end — a credential is required, and the origins
         // are narrowed. Leaving the permissive origin default would let a suite pass while the check was never wired in.
         .WithEnvironment("McpEndpoint__Enabled", "true")

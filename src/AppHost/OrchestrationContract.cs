@@ -346,6 +346,16 @@ public static class OrchestrationContract
     /// </remarks>
     public const string ServedMailAccountDisplayName = "Integration mailbox";
 
+    /// <summary>The one folder the composed host maps, which is the folder a tool call over its MCP endpoint reads.</summary>
+    /// <remarks>
+    /// Declared here for the reason the account identifier is, and it is the same failure one step further in: a mapping
+    /// is what makes MailFathom have a folder at all, so a host that mapped none resolves an empty readable scope and
+    /// answers every tool call with an empty window over mail the suite had just stored. One alias rather than the
+    /// suite's whole list, because the composed host is reached by the tests that prove a request pipeline and only one
+    /// of them reads mail; a test that needs a second folder there names it here beside this one.
+    /// </remarks>
+    public const string ComposedHostReadableFolderAlias = "mcp-tool-contract";
+
     /// <summary>The whole app host argument that selects the integration-test topology.</summary>
     /// <remarks>
     /// Matched against the argument list itself rather than read through <c>IDistributedApplicationBuilder.Configuration</c>,

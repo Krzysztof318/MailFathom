@@ -118,7 +118,7 @@ public sealed class OrchestratedEmailEmbeddingGenerationTests(MailFathomOrchestr
                 token),
             cancellationToken);
 
-    /// <summary>Stores one synthetic message, whose passages the chunk writer derives in the same session.</summary>
+    /// <summary>Stores one synthetic message and cuts it, which is the state an account run leaves one in.</summary>
     private static async Task<StoredEmailId> StoreOneMessageAsync(
         OrchestratedMailFathomServices services,
         uint uid,
@@ -145,6 +145,9 @@ public sealed class OrchestratedEmailEmbeddingGenerationTests(MailFathomOrchestr
             cancellationToken);
 
         Assert.Equal(PersistenceCommitResult.Committed, commitResult);
+
+        // The passages this class embeds, cut in their own transaction because storing no longer cuts.
+        await OrchestratedPassages.CutAsync(services, storedEmailId, cancellationToken);
 
         return storedEmailId;
     }

@@ -55,10 +55,9 @@ public sealed class OrchestratedEmailEmbeddingBackfillTests(MailFathomOrchestrat
         var storedBeforeChunking = await StoreOneMessageAsync(services, uid: 9301, cancellationToken);
         var storedBeforeTheProfile = await StoreOneMessageAsync(services, uid: 9302, cancellationToken);
 
-        // What a row written before chunking existed looks like: the extraction and its search document are there and
-        // the passages are not, which no synchronization run can produce today.
-        var removedPassageCount = await RemovePassagesAsync(services, storedBeforeChunking, cancellationToken);
-        Assert.True(removedPassageCount > 0);
+        // The two rows the sweep's two groups are: the first is what storing leaves behind — text, a search document,
+        // and no passages — and the second is a message an account run already cut, outstanding only for its vectors.
+        await OrchestratedPassages.CutAsync(services, storedBeforeTheProfile, cancellationToken);
 
         var profileId = await OrchestratedEmbeddingProfile.EnsureActiveDeterministicAsync(services, cancellationToken);
 
@@ -68,8 +67,13 @@ public sealed class OrchestratedEmailEmbeddingBackfillTests(MailFathomOrchestrat
 
         // Assert
         Assert.True(sweep.ChunkedEmailCount > 0);
+
+        // Counted rather than compared alone: the message the sweep had to cut ends with passages and a vector for each
+        // of them, and two equal zeroes would report a sweep that never reached it as one that finished it.
+        var cutPassageCount = await CountPassagesAsync(services, storedBeforeChunking, cancellationToken);
+        Assert.True(cutPassageCount > 0);
         Assert.Equal(
-            await CountPassagesAsync(services, storedBeforeChunking, cancellationToken),
+            cutPassageCount,
             await CountVectorsAsync(services, storedBeforeChunking, profileId, cancellationToken));
         Assert.Equal(
             await CountPassagesAsync(services, storedBeforeTheProfile, cancellationToken),
@@ -137,7 +141,6 @@ public sealed class OrchestratedEmailEmbeddingBackfillTests(MailFathomOrchestrat
             cancellationToken,
             SyntheticMailAccount.UnmappedFolderAlias);
         var mapped = await StoreOneMessageAsync(services, uid: 9322, cancellationToken);
-        await RemovePassagesAsync(services, mapped, cancellationToken);
         var profileId = await OrchestratedEmbeddingProfile.EnsureActiveDeterministicAsync(services, cancellationToken);
 
         // Act
@@ -168,8 +171,6 @@ public sealed class OrchestratedEmailEmbeddingBackfillTests(MailFathomOrchestrat
         await using var services = await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken);
         var unevaluated = await StoreOneMessageAsync(services, uid: 9331, cancellationToken);
         var evaluated = await StoreOneMessageAsync(services, uid: 9332, cancellationToken);
-        await RemovePassagesAsync(services, unevaluated, cancellationToken);
-        await RemovePassagesAsync(services, evaluated, cancellationToken);
         await OrchestratedRuleEvaluationStamp.ClearAsync(services, unevaluated, cancellationToken);
         var profileId = await OrchestratedEmbeddingProfile.EnsureActiveDeterministicAsync(services, cancellationToken);
 
@@ -202,8 +203,6 @@ public sealed class OrchestratedEmailEmbeddingBackfillTests(MailFathomOrchestrat
         await using var services = await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken);
         var relocating = await StoreOneMessageAsync(services, uid: 9341, cancellationToken);
         var settled = await StoreOneMessageAsync(services, uid: 9342, cancellationToken);
-        await RemovePassagesAsync(services, relocating, cancellationToken);
-        await RemovePassagesAsync(services, settled, cancellationToken);
         await RecordConvergingRelocationAsync(services, relocating, uid: 9341, cancellationToken);
         var profileId = await OrchestratedEmbeddingProfile.EnsureActiveDeterministicAsync(services, cancellationToken);
 
@@ -357,16 +356,6 @@ public sealed class OrchestratedEmailEmbeddingBackfillTests(MailFathomOrchestrat
 
         return storedEmailId;
     }
-
-    /// <summary>Removes one message's passages, leaving the row shape an instance that predates chunking has.</summary>
-    private static Task<int> RemovePassagesAsync(
-        OrchestratedMailFathomServices services,
-        StoredEmailId storedEmailId,
-        CancellationToken cancellationToken) => services.InScopeAsync(
-            (scope, token) => scope.GetRequiredService<MailFathomDbContext>().EmailChunks
-                .Where(chunk => chunk.StoredEmailId == storedEmailId.Value)
-                .ExecuteDeleteAsync(token),
-            cancellationToken);
 
     private static Task<int> CountPassagesAsync(
         OrchestratedMailFathomServices services,

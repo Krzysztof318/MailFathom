@@ -55,7 +55,8 @@ internal sealed class SyntheticMailAccount(
     IMailAnsweringAuditSettingsReader,
     IMailAccountCatalog,
     IMailFolderParticipationReader,
-    IMailFolderMappingReader
+    IMailFolderMappingReader,
+    IJunkMailFolderCatalog
 {
     /// <summary>Every folder alias this suite's configuration maps, which is every alias its tests bind one to.</summary>
     /// <remarks>
@@ -113,6 +114,7 @@ internal sealed class SyntheticMailAccount(
         "relocation-source",
         "relocation-target",
         "rule-evaluation",
+        "rule-evaluation-parked",
         "seen-state-provenance",
         "spam-scan",
         "stale-derived-data",
@@ -129,6 +131,16 @@ internal sealed class SyntheticMailAccount(
     /// </remarks>
     internal const string UnmappedFolderAlias = "no-mapping-names-this";
 
+    /// <summary>Gets the account identifier every occurrence this suite stores belongs to.</summary>
+    /// <remarks>
+    /// Declared above every static that reads it, and that is load-bearing rather than tidy: static initializers run in
+    /// the order they are written, so a folder set built above this line would name the default account — an empty
+    /// identifier that narrows every account-scoped query to nothing and reads as a store that lost the mail the same
+    /// run wrote, in every test at once rather than in the one that got it wrong.
+    /// </remarks>
+    public static MailAccountId AccountId { get; } =
+        MailAccountId.Create(OrchestrationContract.ServedMailAccountId);
+
     private static readonly MailFolderMapping Inbox = MailFolderMapping.ToSpecialUse(
         MailFolderAlias.Create(nameof(MailFolderSpecialUse.Inbox)),
         MailFolderSpecialUse.Inbox);
@@ -142,10 +154,6 @@ internal sealed class SyntheticMailAccount(
 
     /// <summary>The window this account keeps an answering entry for, which a retention test writes an older entry than.</summary>
     internal static readonly TimeSpan AnsweringAuditRetention = TimeSpan.FromDays(30);
-
-    /// <summary>Gets the account identifier every occurrence this suite stores belongs to.</summary>
-    public static MailAccountId AccountId { get; } =
-        MailAccountId.Create(OrchestrationContract.ServedMailAccountId);
 
     /// <inheritdoc />
     /// <remarks>
@@ -236,6 +244,21 @@ internal sealed class SyntheticMailAccount(
                 this.FoldersVisibleToTools.Contains(folder))
             : MailFolderParticipation.Unmapped;
     }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Nothing, because the one mapping this account carries plays the inbox role and no test maps a junk folder. That
+    /// is a deployment an operator can have — the production reader answers with nothing for exactly the same reason,
+    /// an account whose configuration names no junk folder — and it is what makes every mailbox read here behave as it
+    /// did before junk was withheld from one. A test that needs the narrowing itself has to map a folder to the junk
+    /// role first, because a catalog answering with nothing withholds nothing and would report the narrowing as working
+    /// whatever the query did.
+    /// </remarks>
+    public IReadOnlyList<MailFolderIdentity> JunkFolders => [];
+
+    /// <inheritdoc />
+    /// <remarks>Answered from the same mapping the list above is read from, so the per-folder question and the per-query one cannot disagree.</remarks>
+    public bool IsJunkFolder(MailAccountId accountId, MailFolderAlias folderAlias) => false;
 
     /// <inheritdoc />
     /// <remarks>
