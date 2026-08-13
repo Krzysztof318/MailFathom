@@ -5,6 +5,8 @@
 using MailFathom.Application.Emails.Chunking;
 using MailFathom.Application.Emails.Embeddings;
 using MailFathom.Application.Jobs;
+using MailFathom.Application.Jobs.Scheduling;
+using MailFathom.Application.Rules.History;
 using MailFathom.Application.SensitiveContent.Derivation;
 using MailFathom.CodeCoverage;
 using MailFathom.Domain.Emails;
@@ -252,6 +254,8 @@ internal sealed class MailFathomDbContext : DbContext
 
     internal DbSet<JobEntity> Jobs => this.Set<JobEntity>();
 
+    internal DbSet<JobScheduleEntity> JobSchedules => this.Set<JobScheduleEntity>();
+
     /// <inheritdoc />
     /// <remarks>
     /// UIDVALIDITY and UID are modelled as CLR <see cref="uint" /> because that is the IMAP wire type, and PostgreSQL has
@@ -430,6 +434,11 @@ internal sealed class MailFathomDbContext : DbContext
                 .HasMaxLength(MailRuleEvaluationRunEntity.RevisionLength)
                 .IsFixedLength();
             entity.Property(run => run.Ending).HasConversion<string>().HasMaxLength(64);
+            entity.Property(run => run.Trigger)
+                .HasConversion<string>()
+                .HasMaxLength(64)
+                .HasDefaultValue(MailRuleExecutionTrigger.RequestedRun)
+                .IsRequired();
 
             // See the stored-email mapping: this is the PostgreSQL `xmin` system column, not a user-defined column.
             entity.Property(run => run.ConcurrencyVersion).IsRowVersion();
@@ -504,6 +513,7 @@ internal sealed class MailFathomDbContext : DbContext
         ConfigureMailAnsweringAuditEntry(modelBuilder);
         ConfigureMailRuleExecution(modelBuilder);
         ConfigureJob(modelBuilder);
+        ConfigureJobSchedule(modelBuilder);
     }
 
     /// <summary>Declares the queue of durable background work, and the three questions it is asked.</summary>
@@ -583,6 +593,23 @@ internal sealed class MailFathomDbContext : DbContext
                 .WithMany()
                 .HasForeignKey(job => job.MailboxAccountId)
                 .OnDelete(DeleteBehavior.Cascade);
+        });
+
+    /// <summary>Declares what each recurring dispatch has already done, which is the only state a schedule keeps.</summary>
+    /// <remarks>
+    /// One row per declared schedule, keyed by the identity the declaration composes, so a second replica advancing a
+    /// schedule writes the same row rather than adding one. The declarations themselves are configuration and are not
+    /// stored: what is durable here is the occasion last accounted for and the job it enqueued, which is what a restart
+    /// would otherwise have no way to tell from a fresh deployment.
+    /// </remarks>
+    private static void ConfigureJobSchedule(ModelBuilder modelBuilder) =>
+        modelBuilder.Entity<JobScheduleEntity>(entity =>
+        {
+            entity.ToTable("job_schedules");
+            entity.HasKey(schedule => schedule.ScheduleId);
+            entity.Property(schedule => schedule.ScheduleId)
+                .HasMaxLength(JobScheduleId.MaximumLength)
+                .ValueGeneratedNever();
         });
 
     /// <summary>Declares the record of what each rule concluded about each email, and what those conclusions asked for.</summary>

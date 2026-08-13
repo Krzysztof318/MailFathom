@@ -44,18 +44,19 @@ public sealed class MailRuleTriggerTests
     }
 
     [Theory]
-    [InlineData("Arrival")]
-    [InlineData("arrival")]
-    [InlineData("  Arrival  ")]
-    public void TryParseName_ADeclaredName_ProducesTheTrigger(string name)
+    [InlineData("Arrival", "Arrival")]
+    [InlineData("arrival", "Arrival")]
+    [InlineData("  Arrival  ", "Arrival")]
+    [InlineData("Schedule", "Schedule")]
+    [InlineData("schedule", "Schedule")]
+    public void TryParseName_ADeclaredName_ProducesTheTrigger(string name, string expectedName)
     {
         // Act
         var parsed = MailRuleTrigger.TryParseName(name, out var trigger);
 
         // Assert
         Assert.True(parsed);
-        Assert.Equal(MailRuleTrigger.Arrival, trigger);
-        Assert.Equal("Arrival", trigger.Name);
+        Assert.Equal(expectedName, trigger.Name);
     }
 
     /// <summary>A name this set does not hold is unknown rather than new, so nothing reconstructs a trigger from it.</summary>
@@ -63,7 +64,6 @@ public sealed class MailRuleTriggerTests
     [InlineData(null)]
     [InlineData("")]
     [InlineData("   ")]
-    [InlineData("Schedule")]
     [InlineData("OnDemand")]
     public void TryParseName_AnUndeclaredName_ProducesTheUnspecifiedDefault(string? name)
     {
@@ -113,7 +113,7 @@ public sealed class MailRuleTriggerTests
     }
 
     [Theory]
-    [InlineData("\"Schedule\"")]
+    [InlineData("\"OnDemand\"")]
     [InlineData("7")]
     public void JsonConverter_AValueThatNamesNoTrigger_IsRefused(string json)
     {

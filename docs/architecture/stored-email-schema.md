@@ -370,6 +370,7 @@ that the message can be fetched and read whole through the reads that already se
 |---|---|
 | `mailbox_account_id` | The account whose mail the run walks, and the primary key |
 | `requested_at` | When the run was asked for |
+| `Trigger` | What put the run there — `RequestedRun` for one an operator asked for, `ScheduledRun` for one a rule's schedule asked for. It is what the pass reads the walk's reach from, so a scheduled run reaches the rules declaring a schedule while a requested one reaches every rule; it is also what the run history's own trigger is recorded as. Text for the reason every other bounded value here is |
 | `revision` | The rule set the run is bound to, null until the first pass picks it up. Bound when the run starts rather than when it is requested, because the set may reload between the two and what matters is the one in force when the first message is actually evaluated |
 | `position` | The identity of the last message a batch committed, null while the run has committed none. Committed with the evaluations it accounts for, which is what makes the run resumable rather than merely restartable |
 | `evaluated_email_count`, `matched_email_count`, `skipped_email_count` | What the run has done so far, across every account run that has carried it |
@@ -377,6 +378,8 @@ that the message can be fetched and read whole through the reads that already se
 | `ConcurrencyVersion` | The `xmin` token again, because a pass committing a position and a request arriving can both reach this row |
 
 The row survives the run it describes, holding the last ending until a new request replaces it, and there is no history behind it: one account has one row. Nothing cascades into it and it carries no foreign key onto `mailbox_accounts`, for the reason `mailbox_refresh_tokens` carries none — a run may be asked for before any folder of the account has been bound.
+
+One row per account is also what settles the two triggers against each other. An operator's request replaces an outstanding scheduled run, because it reaches every rule and the scheduled one reaches only some of them; a schedule's occasion finding any run outstanding stands down and is counted as skipped rather than starting a second walk of one mailbox.
 
 Nothing in it is personal data. An account alias, a derived rule set identity, a message identifier, three counts, and three instants are MailFathom's own names for things, which is what lets a run be explained without any of the mail it walked being copied.
 
@@ -424,7 +427,7 @@ Nothing in either table is personal data. Rule names, folder aliases, mutation n
 
 ## Durable background work
 
-`jobs` holds work that is enqueued now and done later: what it is, what it points at, who is holding it, and until when. Nothing in the running system enqueues into it yet, and no build registers a handler for a job type, so an instance runs no pass at all and says so once at startup — this is the record every consumer of durable background work is written against, and [ADR 0009](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0009-durable-job-store-and-execution-identity.md) is the decision it implements. What paces the worker over it is the [`Jobs`](../operations/configuration-reference.md#jobs) configuration section.
+`jobs` holds work that is enqueued now and done later: what it is, what it points at, who is holding it, and until when. A [rule's schedule](../features/mail-rules.md#running-a-rule-on-a-schedule) is what enqueues into it today, and the handler that runs one records a whole-mailbox rule run for an account; this is the record every consumer of durable background work is written against, and [ADR 0009](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0009-durable-job-store-and-execution-identity.md) is the decision it implements. What paces the worker over it is the [`Jobs`](../operations/configuration-reference.md#jobs) configuration section.
 
 | Column | What it records |
 |---|---|
@@ -460,6 +463,23 @@ A dead letter is terminal but not permanent, because the two things that could r
 A terminal row keeps its key. That is what stops a repeating trigger enqueuing work that has already been done, and it is why a finished job stays in this table rather than moving to another one. It also makes pruning a correctness setting rather than housekeeping: erasing terminal rows is what ends the deduplication, so whichever change adds pruning inherits a retention floor of the longest window in which one trigger can legitimately fire again.
 
 What the store delivers is at-least-once execution and nothing stronger. Uniqueness stops the same work being *enqueued* twice; only a handler can stop a re-run after a crash from having a second effect.
+
+## What each recurring dispatch has already done
+
+`job_schedules` holds one row per declared schedule: where its occasions are counted from, and which of them it has already turned into a job. It is what makes "a due time that passed is skipped rather than replayed" a property of the schema — the state says which occasion was last acted on, and everything before that is simply never asked about again.
+
+| Column | What it records |
+|---|---|
+| `ScheduleId` | The schedule's identity, and the primary key. Composed of MailFathom's own names — for a rule's schedule, the account identifier and the rule name — so it survives a restart, means the same thing on every replica reading one configuration, and carries nothing out of a message. An identity that changed would be seeded afresh and would forget the occasion it last dispatched |
+| `ObservedFrom` | When this instance first saw the schedule declared. The first pass to meet a schedule records this instead of dispatching, so a declaration added today does not owe every occasion since the epoch |
+| `LastOccurrenceAt` | The occasion the dispatch last acted on, null until it has acted on one. Occasions are counted from this when it is set and from `ObservedFrom` when it is not, and it advances even where the occasion was passed over — which is exactly what makes a missed one skipped rather than owed |
+| `LastDispatchedJobId` | The job the last dispatched occasion enqueued, null until one was, kept so an operator can follow a schedule to the work it produced |
+
+There is no `xmin` token, because one writer decides about one schedule: the pass reads a state, decides, and writes the decision back, and a second instance reaching the same occasion is answered by the queue's own uniqueness rather than by this row — the job's idempotency key is the schedule's identity and the occasion's instant, so two instances dispatching one occasion produce one job.
+
+The row carries no foreign key onto anything. A schedule is declared in configuration rather than stored, so there is no row for a constraint to point at, and a declaration withdrawn from the configuration leaves its state behind harmlessly: nothing reads a state whose schedule is no longer declared.
+
+Nothing in it is personal data. An account alias, a rule name, two instants and a job identifier are MailFathom's own names for things.
 
 ## Indexes
 
@@ -560,6 +580,8 @@ trace, or an error message.
 
 `jobs` is derived personal data by the same reading as a chunk or a classification: a row says that something is to be done about somebody's message, and it points at that message by its occurrence identity. What keeps it a pointer rather than a copy is the payload contract — a document of references with no property a subject, an address, or a body could go in, bounded in size at the enqueue boundary so a payload that grew into a copy is refused instead of stored. The account column and the cascade from `mailbox_accounts` are what erasure reaches queued work by. The message the payload names is deliberately not a foreign key: the identity in the document is the remote occurrence rather than the local row, so there is nothing for a constraint to point at, and reaching the message is a lookup by that identity like every other read of it.
 
+`job_schedules` holds no personal data either, for the reason `embedding_spend_periods` does not: an identity composed of MailFathom's own configured names, two instants, and the identifier of a job say when a recurring dispatch last acted and on which occasion, and none of them names a message. That is also why nothing cascades into it — erasing an account's mail says nothing about when its rules are due to run again.
+
 `embedding_profiles` is the exception on this page: it holds no personal data at all. It describes a model, and the credential that reaches that model is configuration rather than a column here, so nothing in this table is a secret or is derived from anybody's mail.
 
 ## How this schema reaches a database
@@ -590,4 +612,5 @@ Every claim on this page that is a claim about PostgreSQL rather than about the 
 - A stored vector cannot disagree with its profile: a vector whose length differs from the `Dimension` beside it, and a `Dimension` the named profile never declared, are both refused at the write, while the matching width is stored. Two profiles of different widths coexist in the one dimensionless column, re-registering a geometry already present is refused by the fingerprint index, and deleting a message erases the vectors derived from it while the profile they named survives.
 - The [search read model](../features/email-search.md) composes that vector, `websearch_to_tsquery`, `ts_rank`, and `ts_headline` into commands PostgreSQL accepts — a malformed headline option list is a runtime failure rather than a compiler error — ranks the window it returns, cuts snippets inside the configured bounds, and leaves the change tracker empty across every query it issues.
 - Both guarantees the job store gets from PostgreSQL rather than from its own code: two callers racing to enqueue one execution produce one job, because the unique index refuses the second insert; and two workers claiming at the same moment take different jobs, because the claim selects and stamps under `FOR UPDATE SKIP LOCKED` in one statement. A lease that has run out is reclaimed with a second attempt counted, the attempt it was taken from writes nothing afterwards, a completed job keeps the key that refuses the same execution again, and a row whose type this build does not declare is left where it is. A dead letter is claimed by nothing and keeps the key and the recorded failure that ended it, a scheduled retry holds the job back until the instant it named, and a release hands the attempt back with the job.
+- A schedule's durable state is written by one statement whether the row is there or not: a schedule seeded and then advanced leaves one row carrying the latest occasion, and a schedule nothing has written is absent from the read rather than answered with an empty state — which is the difference between seeding once and seeding on every pass.
 - The same read model's vector half ranks the eligible mail by a correlated minimum over each message's own embedded passages, measured by the operator the active profile's metric names. Mail carrying no vector under that profile is absent from the ranking rather than distant, and the ordering is the part only a server can settle: whether the distance operator, the aggregate, and the caller's filters compose into one statement at all is a translation question rather than a compile-time one.

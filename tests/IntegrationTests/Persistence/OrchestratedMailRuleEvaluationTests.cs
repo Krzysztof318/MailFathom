@@ -5,6 +5,7 @@
 using MailFathom.Application.Persistence;
 using MailFathom.Application.Rules;
 using MailFathom.Application.Rules.Evaluation;
+using MailFathom.Application.Rules.History;
 using MailFathom.Application.Synchronization;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Folders;
@@ -198,6 +199,7 @@ public sealed class OrchestratedMailRuleEvaluationTests(MailFathomOrchestrationF
         {
             AccountId = SyntheticMailAccount.AccountId,
             RequestedAt = RequestedAt,
+            Trigger = MailRuleExecutionTrigger.ScheduledRun,
         };
 
         // Act
@@ -228,11 +230,13 @@ public sealed class OrchestratedMailRuleEvaluationTests(MailFathomOrchestrationF
 
         Assert.NotNull(afterRequest);
         Assert.Equal(RequestedAt, afterRequest.RequestedAt);
+        Assert.Equal(MailRuleExecutionTrigger.ScheduledRun, afterRequest.Trigger);
         Assert.False(afterRequest.Revision.IsSpecified);
         Assert.Null(afterRequest.Position);
         Assert.True(afterRequest.IsOutstanding);
 
         Assert.NotNull(afterProgress);
+        Assert.Equal(MailRuleExecutionTrigger.ScheduledRun, afterProgress.Trigger);
         Assert.Equal(Revision, afterProgress.Revision);
         Assert.Equal(position, afterProgress.Position);
         Assert.Equal(2, afterProgress.EvaluatedEmailCount);

@@ -102,6 +102,40 @@ public sealed class RuleCommandTests : IDisposable
             this.console.Lines.Where(line => line.Contains("Runs on:", StringComparison.Ordinal)));
     }
 
+    /// <summary>Naming the trigger without the occasions would leave an operator asking the one thing they came to ask.</summary>
+    [Fact]
+    public async Task List_AScheduledRule_SaysWhenItRunsBesideTheTriggerThatRunsIt()
+    {
+        // Arrange
+        using var deployment = FakeRuleDeployment.Answering(rules: """
+            {
+              "revision": "a1b2c3d4e5f6",
+              "configurationAccepted": true,
+              "refusedSettingCount": 0,
+              "rules": [
+                {
+                  "name": "archive-old-newsletters",
+                  "accounts": [],
+                  "readableFacts": ["ageInDays"],
+                  "actions": [{"position":0,"mutation":"relocate","destination":"archive","desiredSeenState":null}],
+                  "stopWhenMatched": false,
+                  "triggers": ["Schedule"],
+                  "schedule": "daily:03:00:Europe/Warsaw"
+                }
+              ]
+            }
+            """);
+
+        // Act
+        var exitCode = await this.RunAsync(deployment, "rules", "list", "--endpoint", Endpoint);
+
+        // Assert
+        Assert.Equal(CliExitCode.Success, exitCode);
+        Assert.Equal(
+            ["  Runs on:    Schedule (daily:03:00:Europe/Warsaw)"],
+            this.console.Lines.Where(line => line.Contains("Runs on:", StringComparison.Ordinal)));
+    }
+
     /// <summary>
     /// The one answer this command exists for. A refused reload leaves the previous rules running and says so to the
     /// log alone, so an edited file and an unchanged deployment read identically until this is asked.
@@ -270,6 +304,32 @@ public sealed class RuleCommandTests : IDisposable
         Assert.Equal(0, deployment.RunRequestCount());
         Assert.Contains(this.console.Lines, line => line.Contains("under way", StringComparison.Ordinal));
         Assert.Contains(this.console.Lines, line => line.Contains("120 evaluated", StringComparison.Ordinal));
+    }
+
+    /// <summary>A run nobody asked for reads as one unless the answer says what started it, which is why it carries that.</summary>
+    [Fact]
+    public async Task RunStatus_ARunAScheduleStarted_SaysWhatStartedIt()
+    {
+        // Arrange
+        using var deployment = FakeRuleDeployment.Answering(runState: $$"""
+            {"account":"{{Account}}","run":{{Run(ended: false, trigger: "ScheduledRun")}}}
+            """);
+
+        // Act
+        var exitCode = await this.RunAsync(
+            deployment,
+            "rules",
+            "run-status",
+            "--account",
+            Account,
+            "--endpoint",
+            Endpoint);
+
+        // Assert
+        Assert.Equal(CliExitCode.Success, exitCode);
+        Assert.Contains(
+            this.console.Lines,
+            line => line.Contains("started by ScheduledRun", StringComparison.Ordinal));
     }
 
     /// <summary>An account nobody has asked for a run is an answer rather than an error, and names the command that asks.</summary>
@@ -544,9 +604,10 @@ public sealed class RuleCommandTests : IDisposable
         {"started":{{(started ? "true" : "false")}},"run":{{Run(ended: false)}}}
         """;
 
-    private static string Run(bool ended) => $$"""
+    private static string Run(bool ended, string trigger = "RequestedRun") => $$"""
         {
           "requestedAt": "2026-08-08T11:00:00+00:00",
+          "trigger": "{{trigger}}",
           "revision": "a1b2c3d4e5f6",
           "evaluatedEmailCount": 120,
           "matchedEmailCount": 4,

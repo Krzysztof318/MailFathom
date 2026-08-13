@@ -4,6 +4,7 @@
 
 using MailFathom.Application.Persistence;
 using MailFathom.Application.Rules.Evaluation;
+using MailFathom.Application.Rules.History;
 using MailFathom.Application.UnitTests.TestDoubles;
 using MailFathom.Domain.Accounts;
 using Microsoft.Extensions.Time.Testing;
@@ -61,6 +62,7 @@ public sealed class MailRuleEvaluationRunRequestsTests
         {
             AccountId = Account,
             RequestedAt = RequestedAt.AddDays(-1),
+            Trigger = MailRuleExecutionTrigger.RequestedRun,
             EndedAt = RequestedAt.AddDays(-1).AddMinutes(3),
             Ending = MailRuleEvaluationRunEnding.Completed,
         });
@@ -72,6 +74,65 @@ public sealed class MailRuleEvaluationRunRequestsTests
         Assert.True(request.Accepted);
         Assert.Equal(RequestedAt, this.runStore.Find(Account)?.RequestedAt);
         Assert.Null(this.runStore.Find(Account)?.Ending);
+    }
+
+    /// <summary>A schedule's occasion records a run of its own, which is what the pass reads the narrower reach from.</summary>
+    [Fact]
+    public async Task SubmitScheduledAsync_AccountWithNoRunOutstanding_RecordsAScheduledRun()
+    {
+        // Act
+        var request = await this.CreateRequests().SubmitScheduledAsync(Account, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.True(request.Accepted);
+        Assert.Equal(MailRuleExecutionTrigger.ScheduledRun, request.Run.Trigger);
+        Assert.Equal(MailRuleExecutionTrigger.ScheduledRun, this.runStore.Find(Account)?.Trigger);
+    }
+
+    /// <summary>One run per schedule at a time: an occasion finding the mailbox already being walked stands down.</summary>
+    [Theory]
+    [InlineData(MailRuleExecutionTrigger.RequestedRun)]
+    [InlineData(MailRuleExecutionTrigger.ScheduledRun)]
+    public async Task SubmitScheduledAsync_AnyRunAlreadyOutstanding_IsAnsweredWithItAndRecordsNothing(
+        MailRuleExecutionTrigger outstanding)
+    {
+        // Arrange
+        this.runStore.Arrange(new MailRuleEvaluationRun
+        {
+            AccountId = Account,
+            RequestedAt = RequestedAt.AddMinutes(-5),
+            Trigger = outstanding,
+        });
+
+        // Act
+        var request = await this.CreateRequests().SubmitScheduledAsync(Account, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.False(request.Accepted);
+        Assert.Equal(outstanding, request.Run.Trigger);
+        Assert.Empty(this.runStore.Saves);
+    }
+
+    /// <summary>An operator's request reaches every rule, so it replaces a scheduled walk that reaches only some of them.</summary>
+    [Fact]
+    public async Task SubmitAsync_AScheduledRunOutstanding_ReplacesItRatherThanAnsweringWithIt()
+    {
+        // Arrange
+        this.runStore.Arrange(new MailRuleEvaluationRun
+        {
+            AccountId = Account,
+            RequestedAt = RequestedAt.AddMinutes(-5),
+            Trigger = MailRuleExecutionTrigger.ScheduledRun,
+            EvaluatedEmailCount = 40,
+        });
+
+        // Act
+        var request = await this.CreateRequests().SubmitAsync(Account, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.True(request.Accepted);
+        Assert.Equal(MailRuleExecutionTrigger.RequestedRun, request.Run.Trigger);
+        Assert.Equal(0, this.runStore.Find(Account)?.EvaluatedEmailCount);
     }
 
     private MailRuleEvaluationRunRequests CreateRequests()

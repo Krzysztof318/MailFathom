@@ -17,6 +17,7 @@ using MailFathom.Application.Emails.Extraction;
 using MailFathom.Application.Emails.Search;
 using MailFathom.Application.Folders;
 using MailFathom.Application.Jobs.Execution;
+using MailFathom.Application.Jobs.Scheduling;
 using MailFathom.Application.Mail;
 using MailFathom.Application.Mail.Mutations;
 using MailFathom.Application.Mail.Mutations.Audit;
@@ -577,6 +578,13 @@ try
     builder.Services.AddScoped<JobHandlerRegistry>();
     builder.Services.AddScoped<JobExecutor>();
     builder.Services.AddScoped<JobQueuePass>();
+    // Recurring dispatch, scoped beside the pass that claims: it is a step the worker takes before claiming rather than
+    // a loop of its own, so a schedule reaches the same worker and the same capacity bounds as an event-driven enqueue.
+    builder.Services.AddScoped<IScheduledJobSource, MailRuleScheduleSource>();
+    builder.Services.AddScoped<JobSchedulePass>();
+    // The one handler this build registers, which is also what makes the worker claim at all. A rule's scheduled run is
+    // recorded here and walked by the account's own synchronization run, so the job itself is short.
+    builder.Services.AddScoped<IJobHandler, ScheduledMailRuleRunHandler>();
     // A singleton rather than a scoped value: the bound is a deployment-wide privacy control, so every search in the
     // process applies the one an operator configured rather than whichever snapshot a scope happened to open under.
     builder.Services.AddSingleton(provider =>

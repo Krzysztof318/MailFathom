@@ -2,12 +2,13 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Application.Rules.History;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 
 namespace MailFathom.Application.Rules.Evaluation;
 
-/// <summary>A whole-mailbox rule run somebody asked for, and how far the account's synchronization runs have carried it.</summary>
+/// <summary>A whole-mailbox rule run, and how far the account's synchronization runs have carried it.</summary>
 /// <remarks>
 /// <para>
 /// Durable because it has to survive the process. The run spans as many account runs as its batch budget needs, so a
@@ -17,6 +18,8 @@ namespace MailFathom.Application.Rules.Evaluation;
 /// <para>
 /// One outstanding run per account, which is what makes a second request an answer rather than a second walk. There is
 /// no queue behind it: asking twice for the same thing is asking once, and the reply says the run is already under way.
+/// That holds across what started them as well — a rule's schedule finding a run in front of the account is answered
+/// with it, because the mailbox is going to be walked either way.
 /// </para>
 /// <para>
 /// Every field is either MailFathom's own identity for something or a count. Nothing derived from a message belongs in
@@ -30,6 +33,14 @@ public sealed record MailRuleEvaluationRun
 
     /// <summary>Gets when the run was asked for.</summary>
     public required DateTimeOffset RequestedAt { get; init; }
+
+    /// <summary>Gets what started the run, which decides both the rules it reaches and what its executions are recorded as.</summary>
+    /// <remarks>
+    /// Only <see cref="MailRuleExecutionTrigger.RequestedRun" /> and <see cref="MailRuleExecutionTrigger.ScheduledRun" />
+    /// occur here, because arrival is not a run at all. The distinction is not cosmetic: a requested run applies every
+    /// rule the account has, and a scheduled one applies the rules that declared the schedule trigger.
+    /// </remarks>
+    public required MailRuleExecutionTrigger Trigger { get; init; }
 
     /// <summary>Gets the rule set the run is bound to, which is unspecified until the first pass picks the run up.</summary>
     /// <remarks>

@@ -291,6 +291,10 @@ retire-old-newsletters
   Applies to: every account
   Runs on:    nothing automatically; 'mfctl rules run' applies it
   A match:    setSeen → read
+archive-old-newsletters
+  Applies to: every account
+  Runs on:    Schedule (daily:03:00:Europe/Warsaw)
+  A match:    relocate → archive
 ```
 
 The order is the answer as much as the rules are: which rule reaches a message first is a property of the set, and a
@@ -299,10 +303,12 @@ full, including the facts its condition can read. Neither prints the condition a
 carries no text, which is what keeps an address somebody typed into a condition out of every record naming the rule.
 
 `Runs on:` is the [triggers](../features/mail-rules.md#which-triggers-run-a-rule) the rule declares, and the second
-line above is what a rule naming none reads as — whether it writes `"Triggers": []` or leaves the key out, which say
+rule above is what a rule naming none reads as — whether it writes `"Triggers": []` or leaves the key out, which say
 the same thing. Such a rule is bound, validated, and applied by a whole-mailbox run like any other, and no arriving
 message reaches it — so the wording says what does run it rather than reporting an empty list, because a rule nothing
-fires by itself and a rule that never matches look identical in a history that records neither.
+fires by itself and a rule that never matches look identical in a history that records neither. A rule declaring
+`Schedule` names its occasions beside the trigger, in the canonical form the deployment read them as — which is how an
+operator tells a schedule that was accepted as written from one they meant to write.
 
 **`mfctl rules run --account <id>` applies the rules to mail that arrived before them.** It returns as soon as the
 deployment has written the request down and never waits for the walk; the pass is a step of the account's
@@ -317,7 +323,10 @@ The run is carried by the account's synchronization runs. Watch it with 'mfctl r
 ```
 
 `mfctl rules run-status --account <id>` is where it is watched from, and an account nobody has ever asked for a run is
-an answer rather than an error. [Running the rules over mail you already
+an answer rather than an error. A run under way says what started it — `under way, started by RequestedRun` for one this
+command asked for, `started by ScheduledRun` for one [a rule's own
+schedule](../features/mail-rules.md#running-a-rule-on-a-schedule) asked for — because the two walk the same mail and
+reach different rules. [Running the rules over mail you already
 have](../features/mail-rules.md#running-the-rules-over-mail-you-already-have) holds what a run guarantees, including
 what happens to one when the rules change under it.
 

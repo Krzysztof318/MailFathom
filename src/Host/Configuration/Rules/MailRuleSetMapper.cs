@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Application.Jobs.Scheduling;
 using MailFathom.Application.Rules;
 using MailFathom.Application.Rules.Actions;
 using MailFathom.Application.Rules.Conditions;
@@ -42,7 +43,8 @@ internal static class MailRuleSetMapper
                 (rule.Actions ?? new MailRuleActionOptions()).ToActions(),
                 rule.StopWhenMatched,
                 [.. rule.Accounts.Select(account => account.Trim())],
-                ReadTriggers(rule)))
+                ReadTriggers(rule),
+                ReadSchedule(rule)))
             .ToArray();
 
         var rules = declarations
@@ -52,7 +54,8 @@ internal static class MailRuleSetMapper
                 MailRuleActionSet.Create(declaration.Actions),
                 declaration.StopWhenMatched,
                 declaration.Accounts,
-                declaration.Triggers))
+                declaration.Triggers,
+                declaration.Schedule))
             .ToArray();
 
         return MailRuleSet.Create(rules, MailRuleSetRevision.Create(declarations), bounds);
@@ -73,6 +76,24 @@ internal static class MailRuleSetMapper
             ? triggers
             : throw new InvalidOperationException(
                 $"A mail rule set was mapped before it was validated. Rule '{rule.Name}' declares a trigger this system does not recognize.");
+    }
+
+    /// <summary>Reads the schedule a rule declares, refusing one validation would already have reported.</summary>
+    /// <remarks>
+    /// A schedule dropped here would leave the rule declaring the trigger with no occasions, which
+    /// <see cref="MailRule.Create" /> refuses anyway — so this raises with the rule named rather than leaving the
+    /// refusal to say only that a rule somewhere disagreed with itself.
+    /// </remarks>
+    private static JobRecurrence? ReadSchedule(MailRuleOptions rule)
+    {
+        if (string.IsNullOrWhiteSpace(rule.Schedule))
+        {
+            return null;
+        }
+
+        return rule.ToSchedule()
+            ?? throw new InvalidOperationException(
+                $"A mail rule set was mapped before it was validated. Rule '{rule.Name}' declares a schedule this system cannot read.");
     }
 
     private static IMailRuleCondition Compile(

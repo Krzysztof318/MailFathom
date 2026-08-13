@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.ComponentModel.DataAnnotations;
+using MailFathom.Application.Jobs.Scheduling;
 using MailFathom.Application.Rules;
 using MailFathom.Application.Rules.Actions;
 using MailFathom.Application.Rules.Conditions;
@@ -86,6 +87,7 @@ internal static class MailRuleDeclarationRules
         .. FindRuleErrors(rule, position),
         .. FindScopeErrors(rule, position, declaredAccounts),
         .. FindTriggerErrors(rule, position),
+        .. FindScheduleErrors(rule, position),
         .. FindActionErrors(rule, position, declaredAccounts),
         .. FindIdentityErrors(rule, position),
     ];
@@ -204,6 +206,46 @@ internal static class MailRuleDeclarationRules
         {
             yield return
                 $"{opening} — no trigger is named '{unknown}'. A rule may declare {DescribeDeclarableTriggers()}, and declaring none of them is a rule only a whole-mailbox run applies.";
+        }
+    }
+
+    /// <summary>Judges the schedule a rule declares against the trigger that is the only thing which uses one.</summary>
+    /// <remarks>
+    /// The two keys are one decision, so they are judged together rather than each on its own. A trigger with no
+    /// schedule is a rule declaring it runs on occasions it never names, and a schedule with no trigger names occasions
+    /// nothing acts on; neither is resolved into whichever of the two was probably meant, because a housekeeping rule
+    /// that quietly never runs is indistinguishable from one nothing matched. An unreadable expression is refused here
+    /// for the same reason and with the rule named, since the key alone would leave an operator counting positions in a
+    /// list to find which rule they mistyped.
+    /// </remarks>
+    private static IEnumerable<string> FindScheduleErrors(MailRuleOptions rule, int position)
+    {
+        var opening =
+            $"{MailRulesOptions.SectionName}:{nameof(MailRulesOptions.Rules)}:{position}:{nameof(MailRuleOptions.Schedule)}";
+        var ruleName = DescribeRule(rule, position);
+        var declaresTrigger = rule.Triggers.Any(trigger =>
+            MailRuleTrigger.TryParseName(trigger, out var declared) && declared == MailRuleTrigger.Schedule);
+        var declaresSchedule = !string.IsNullOrWhiteSpace(rule.Schedule);
+
+        if (declaresTrigger && !declaresSchedule)
+        {
+            yield return
+                $"{opening} — rule '{ruleName}' declares the '{MailRuleTrigger.Schedule.Name}' trigger and no schedule, so nothing would ever run it.";
+
+            yield break;
+        }
+
+        if (!declaresTrigger && declaresSchedule)
+        {
+            yield return
+                $"{opening} — rule '{ruleName}' declares a schedule and not the '{MailRuleTrigger.Schedule.Name}' trigger, so the occasions it names would run nothing.";
+
+            yield break;
+        }
+
+        if (declaresSchedule && !JobRecurrence.TryParse(rule.Schedule, out _, out var error))
+        {
+            yield return $"{opening} — rule '{ruleName}' declares a schedule this system cannot read: {error}";
         }
     }
 

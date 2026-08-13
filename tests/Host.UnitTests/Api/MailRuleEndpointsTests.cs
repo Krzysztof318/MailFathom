@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.Accounts;
+using MailFathom.Application.Jobs.Scheduling;
 using MailFathom.Application.Persistence;
 using MailFathom.Application.Rules;
 using MailFathom.Application.Rules.Actions;
@@ -141,6 +142,28 @@ public sealed class MailRuleEndpointsTests
         // Assert
         Assert.Equal(["Arrival"], result.Value!.Rules[0].Triggers);
         Assert.Empty(result.Value.Rules[1].Triggers);
+        Assert.All(result.Value.Rules, rule => Assert.Null(rule.Schedule));
+    }
+
+    /// <summary>The trigger says a schedule runs the rule and only the schedule itself says when, so both are served.</summary>
+    [Fact]
+    public async Task ReadRules_AScheduledRule_ReportsTheOccasionsItDeclares()
+    {
+        // Arrange
+        Assert.True(JobRecurrence.TryParse("Daily at 03:00 Europe/Warsaw", out var recurrence, out _));
+        var ruleSet = RuleSetOf(MailRule.Create(
+            "archive-old-newsletters",
+            ConditionReading(MailRuleFact.Subject),
+            triggers: [MailRuleTrigger.Schedule],
+            schedule: recurrence));
+        await using var settings = CreateSettings();
+
+        // Act
+        var result = MailRuleEndpoints.ReadRules(SourceOf(ruleSet), settings);
+
+        // Assert
+        Assert.Equal(["Schedule"], result.Value!.Rules[0].Triggers);
+        Assert.Equal("daily:03:00:Europe/Warsaw", result.Value.Rules[0].Schedule);
     }
 
     /// <summary>A deployment nobody has edited says its configuration is the one the running set was read from.</summary>
@@ -183,6 +206,7 @@ public sealed class MailRuleEndpointsTests
         {
             AccountId = Account,
             RequestedAt = Now.AddMinutes(-5),
+            Trigger = MailRuleExecutionTrigger.RequestedRun,
             EvaluatedEmailCount = 120,
         };
         this.runs.FindOutstandingAsync(Account, Arg.Any<CancellationToken>()).Returns(outstanding);
@@ -194,6 +218,7 @@ public sealed class MailRuleEndpointsTests
         var started = Assert.IsType<Ok<MailRuleRunStartResponse>>(result.Result);
         Assert.False(started.Value!.Started);
         Assert.Equal(outstanding.RequestedAt, started.Value.Run.RequestedAt);
+        Assert.Equal(nameof(MailRuleExecutionTrigger.RequestedRun), started.Value.Run.Trigger);
         Assert.Equal(120, started.Value.Run.EvaluatedEmailCount);
         await this.runs.DidNotReceive().SaveAsync(
             Arg.Any<IPersistenceSession>(),
@@ -259,6 +284,7 @@ public sealed class MailRuleEndpointsTests
         {
             AccountId = Account,
             RequestedAt = Now.AddHours(-1),
+            Trigger = MailRuleExecutionTrigger.RequestedRun,
             EvaluatedEmailCount = 400,
             MatchedEmailCount = 12,
             SkippedEmailCount = 3,

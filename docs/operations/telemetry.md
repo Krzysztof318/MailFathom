@@ -285,7 +285,7 @@ words, which is a cardinality rule as much as a privacy one.
 
 ### Durable background work
 
-The queue of durable background work publishes four instruments, all broken down by `mailfathom.job.type` — the job
+The queue of durable background work publishes six instruments, all broken down by `mailfathom.job.type` — the job
 type's own name, which is the same word the log line, the span, and the stored row use. Nothing else about a job reaches
 any of them: not its identifier, not the idempotency key it was enqueued under, not the account it belongs to, and not
 the reason recorded against a failure. The key is the one that would carry mail, because it is composed of folder
@@ -323,9 +323,24 @@ pass after pass pays for it no more often than an idle one. A type whose queue e
 non-zero depth; a type nothing has ever measured is absent from the gauge entirely, so a flat zero always means measured
 and empty.
 
-An instance with `Jobs:Enabled` switched off, or one with no registered handler, publishes none of the four: its worker
-does not start, so it neither runs work nor measures the queue. The depth of a queue that instance is not draining is
-somebody else's replica to report.
+`mailfathom.jobs.schedule.dispatches` counts what a recurring dispatch decided about one schedule, tagged with
+`mailfathom.job.outcome` as one of `seeded`, `not_due`, `dispatched`, `already_dispatched`, `previous_run_in_flight`, or
+`refused_at_capacity`. It is one measurement per schedule per pass, which is at most once per `Jobs:PollInterval`, and
+`seeded` appears once per schedule ever: the first pass that sees a declaration records where it starts counting from
+rather than treating every occasion since the epoch as missed.
+
+`mailfathom.jobs.schedule.skipped_occurrences` counts the scheduled occasions that were deliberately not run, under the
+same outcome tag. A due time that passed while the process was down, while the queue was full, or while the schedule's
+previous run was still going is skipped rather than replayed, so this is the only place those occasions are visible at
+all — nothing else records a walk that did not happen. **A steady non-zero rate is worth alerting on**: under
+`previous_run_in_flight` it says a schedule asks for a mailbox walk more often than the walk finishes, and under
+`refused_at_capacity` it says `Jobs:MaxQueueDepthPerType` is turning scheduled work away. Neither carries the schedule's
+own identity, which is composed of an account and a rule name and would grow with the configuration; which schedule is
+behind is read from the log line the worker writes beside the measurement.
+
+An instance with `Jobs:Enabled` switched off, or one with no registered handler, publishes none of the six: its worker
+does not start, so it neither runs work, dispatches a schedule, nor measures the queue. The depth of a queue that
+instance is not draining is somebody else's replica to report.
 
 ### What a synchronization cycle emits
 

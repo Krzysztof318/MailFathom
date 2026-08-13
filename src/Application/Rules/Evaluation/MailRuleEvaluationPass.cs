@@ -32,9 +32,11 @@ namespace MailFathom.Application.Rules.Evaluation;
 /// The two walks reach different mail and different rules. The arrival walk reaches mail no pass has evaluated, and
 /// recording an evaluation is what takes an email out of it, which is what makes a rule apply to mail arriving from now
 /// on; it runs the rules declaring the <see cref="MailRuleTrigger.Arrival" /> trigger and passes over the rest. The
-/// requested walk is the only way mail already evaluated is evaluated again — reprocessing under a newer rule set is
-/// something an owner asks for, never something an edit sets off — and it runs every rule of the set, because asking
-/// for a run is the request itself rather than an occasion a rule opts into.
+/// whole-mailbox walk is the only way mail already evaluated is evaluated again — reprocessing under a newer rule set is
+/// something an owner asks for or a rule's own schedule brings round, never something an edit sets off. Which rules it
+/// runs is read from what started it: a run somebody asked for runs every rule of the set, because asking for a run is
+/// the request itself rather than an occasion a rule opts into, and a run a schedule started runs the rules that
+/// declared the <see cref="MailRuleTrigger.Schedule" /> trigger.
 /// </para>
 /// <para>
 /// Both walks are bounded per batch and commit each batch with the position it reached, so an interrupted pass resumes
@@ -150,12 +152,9 @@ public sealed class MailRuleEvaluationPass
             BoundRuleSet.For(ruleSet, accountId, MailRuleExecutionTrigger.Arrival),
             cancellationToken);
 
-        var requestedRun = await this.WalkRequestedRunAsync(
-            accountId,
-            BoundRuleSet.For(ruleSet, accountId, MailRuleExecutionTrigger.RequestedRun),
-            cancellationToken);
+        var outstandingRun = await this.WalkOutstandingRunAsync(accountId, ruleSet, cancellationToken);
 
-        return new MailRuleEvaluationReport(ruleSet.Revision, arrivals, requestedRun.Walk, requestedRun.Ending);
+        return new MailRuleEvaluationReport(ruleSet.Revision, arrivals, outstandingRun.Walk, outstandingRun.Ending);
     }
 
     /// <summary>Walks the mail no pass has evaluated, in identity order, until the queue or the batch budget runs out.</summary>
@@ -228,15 +227,23 @@ public sealed class MailRuleEvaluationPass
         return tally.ToWalk(emailsRemain);
     }
 
-    /// <summary>Carries a requested whole-mailbox run as far as one pass's batch budget reaches.</summary>
+    /// <summary>Carries the whole-mailbox run the account has outstanding as far as one pass's batch budget reaches.</summary>
     /// <remarks>
+    /// <para>
+    /// The rule set is bound to the run rather than to the pass, because what started the run decides which rules it
+    /// reaches: a run somebody asked for applies every rule the account has, and one a rule's own schedule started
+    /// applies the rules that declared the schedule trigger. Reading that from the run is what keeps the two apart
+    /// through a restart, since the pass that resumes a run is never the pass that began it.
+    /// </para>
+    /// <para>
     /// The revision check is the first thing the run meets. A run that has already started under one rule set cannot be
     /// finished under another — MailFathom holds only the set its configuration currently declares — so a set that has
     /// moved ends the run as superseded rather than letting one walk apply two rule sets to one mailbox.
+    /// </para>
     /// </remarks>
-    private async Task<RequestedRunOutcome> WalkRequestedRunAsync(
+    private async Task<RequestedRunOutcome> WalkOutstandingRunAsync(
         MailAccountId accountId,
-        BoundRuleSet boundRuleSet,
+        MailRuleSet ruleSet,
         CancellationToken cancellationToken)
     {
         var run = await this.runStore.FindOutstandingAsync(accountId, cancellationToken);
@@ -245,6 +252,8 @@ public sealed class MailRuleEvaluationPass
         {
             return new RequestedRunOutcome(Walk: null, Ending: null);
         }
+
+        var boundRuleSet = BoundRuleSet.For(ruleSet, accountId, run.Trigger);
 
         if (run.Revision.IsSpecified && run.Revision != boundRuleSet.RuleSet.Revision)
         {
@@ -515,6 +524,7 @@ public sealed class MailRuleEvaluationPass
         private static MailRuleReach ReachOf(MailRuleExecutionTrigger trigger) => trigger switch
         {
             MailRuleExecutionTrigger.Arrival => MailRuleReach.TriggeredBy(MailRuleTrigger.Arrival),
+            MailRuleExecutionTrigger.ScheduledRun => MailRuleReach.TriggeredBy(MailRuleTrigger.Schedule),
             MailRuleExecutionTrigger.RequestedRun => MailRuleReach.EveryRule,
             _ => throw new ArgumentOutOfRangeException(
                 nameof(trigger),

@@ -78,6 +78,7 @@ internal sealed class MailRuleEvaluationRunStore(MailFathomDbContext dbContext) 
     {
         AccountId = accountId,
         RequestedAt = entity.RequestedAt,
+        Trigger = entity.Trigger,
         Revision = entity.Revision is { } revision
             ? MailRuleSetRevision.Restore(revision)
             : default,
@@ -92,6 +93,7 @@ internal sealed class MailRuleEvaluationRunStore(MailFathomDbContext dbContext) 
     private static void Write(MailRuleEvaluationRunEntity entity, MailRuleEvaluationRun run)
     {
         entity.RequestedAt = run.RequestedAt;
+        entity.Trigger = run.Trigger;
         entity.Revision = run.Revision.IsSpecified ? run.Revision.Value : null;
         entity.Position = run.Position?.Value;
         entity.EvaluatedEmailCount = run.EvaluatedEmailCount;

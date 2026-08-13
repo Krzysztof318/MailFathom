@@ -353,11 +353,46 @@ public sealed class MailRuleSetMappingTests
         // Arrange
         var settings = new MailRulesOptions
         {
-            Rules = [CreateRule("names-a-trigger-that-does-not-exist", "isSeen", triggers: ["Schedule"])],
+            Rules = [CreateRule("names-a-trigger-that-does-not-exist", "isSeen", triggers: ["Periodically"])],
         };
 
         // Act, Assert
         Assert.Throws<InvalidOperationException>(() => MailRuleSetMapper.Map(settings, this.compiler));
+    }
+
+    /// <summary>A scheduled rule arrives carrying the occasions it named, which is what the dispatch reads them from.</summary>
+    [Fact]
+    public void Map_RuleDeclaringASchedule_CarriesTheOccasionsItNamed()
+    {
+        // Arrange
+        var settings = new MailRulesOptions
+        {
+            Rules = [CreateRule("nightly", "isSeen", triggers: ["Schedule"], schedule: "Daily at 03:00 Europe/Warsaw")],
+        };
+
+        // Act
+        var ruleSet = MailRuleSetMapper.Map(settings, this.compiler);
+
+        // Assert
+        Assert.True(ruleSet.Rules[0].RunsOn(MailRuleTrigger.Schedule));
+        Assert.Equal("daily:03:00:Europe/Warsaw", ruleSet.Rules[0].Schedule?.CanonicalForm);
+    }
+
+    /// <summary>Mapping a schedule nothing can read would leave a rule that silently never runs, so it is refused instead.</summary>
+    [Fact]
+    public void Map_RuleDeclaringAScheduleNothingCanRead_IsRefusedNamingTheRule()
+    {
+        // Arrange
+        var settings = new MailRulesOptions
+        {
+            Rules = [CreateRule("nightly", "isSeen", triggers: ["Schedule"], schedule: "0 3 * * *")],
+        };
+
+        // Act
+        var refusal = Assert.Throws<InvalidOperationException>(() => MailRuleSetMapper.Map(settings, this.compiler));
+
+        // Assert
+        Assert.Contains("nightly", refusal.Message, StringComparison.Ordinal);
     }
 
     private static MailRuleOptions CreateRule(
@@ -367,7 +402,8 @@ public sealed class MailRuleSetMappingTests
         bool enabled = true,
         string[]? accounts = null,
         MailRuleActionOptions? actions = null,
-        string[]? triggers = null) =>
+        string[]? triggers = null,
+        string? schedule = null) =>
         new()
         {
             Name = name,
@@ -377,5 +413,6 @@ public sealed class MailRuleSetMappingTests
             Accounts = accounts ?? [],
             Actions = actions ?? new MailRuleActionOptions(),
             Triggers = triggers ?? [],
+            Schedule = schedule,
         };
 }

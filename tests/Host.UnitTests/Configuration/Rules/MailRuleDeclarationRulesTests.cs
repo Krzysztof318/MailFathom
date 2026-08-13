@@ -736,7 +736,7 @@ public sealed class MailRuleDeclarationRulesTests
     public void FindDeclarationErrors_ATriggerNothingDeclares_IsRefusedNamingTheRuleAndTheValue()
     {
         // Arrange
-        var candidate = new MailRulesOptions { Rules = [CreateRule("housekeeping", "isSeen", triggers: ["Schedule"])] };
+        var candidate = new MailRulesOptions { Rules = [CreateRule("housekeeping", "isSeen", triggers: ["Periodically"])] };
 
         // Act
         var errors = MailRuleDeclarationRules.FindDeclarationErrors(candidate, this.compiler, DeclaredAccounts);
@@ -744,7 +744,7 @@ public sealed class MailRuleDeclarationRulesTests
         // Assert
         var error = Assert.Single(errors);
         Assert.Contains("MailRules:Rules:0:Triggers", error, StringComparison.Ordinal);
-        Assert.Contains("Schedule", error, StringComparison.Ordinal);
+        Assert.Contains("Periodically", error, StringComparison.Ordinal);
         Assert.Contains("'Arrival'", error, StringComparison.Ordinal);
     }
 
@@ -804,13 +804,90 @@ public sealed class MailRuleDeclarationRulesTests
         Assert.Contains(errors, error => error.Contains("MailRules:Rules:0:Triggers", StringComparison.Ordinal));
     }
 
+    /// <summary>The occasions and the trigger are one declaration, so the pair is what the deployment is judged on.</summary>
+    [Fact]
+    public void FindDeclarationErrors_AScheduledRuleDeclaringWhenItRuns_ReportsNothing()
+    {
+        // Arrange
+        var candidate = new MailRulesOptions
+        {
+            Rules = [CreateRule("housekeeping", "isSeen", triggers: ["Schedule"], schedule: "Daily at 03:00 Europe/Warsaw")],
+        };
+
+        // Act
+        var errors = MailRuleDeclarationRules.FindDeclarationErrors(candidate, this.compiler, DeclaredAccounts);
+
+        // Assert
+        Assert.Empty(errors);
+    }
+
+    /// <summary>A trigger with no occasions behind it is a rule an operator believes runs nightly and which never runs.</summary>
+    [Fact]
+    public void FindDeclarationErrors_TheScheduleTriggerWithoutASchedule_IsRefusedNamingTheRule()
+    {
+        // Arrange
+        var candidate = new MailRulesOptions { Rules = [CreateRule("housekeeping", "isSeen", triggers: ["Schedule"])] };
+
+        // Act
+        var errors = MailRuleDeclarationRules.FindDeclarationErrors(candidate, this.compiler, DeclaredAccounts);
+
+        // Assert
+        var error = Assert.Single(errors);
+        Assert.Contains("MailRules:Rules:0:Schedule", error, StringComparison.Ordinal);
+        Assert.Contains("housekeeping", error, StringComparison.Ordinal);
+    }
+
+    /// <summary>Occasions nothing fires are the same mistake read the other way round, and are refused the same way.</summary>
+    [Fact]
+    public void FindDeclarationErrors_AScheduleWithoutTheScheduleTrigger_IsRefusedNamingTheRule()
+    {
+        // Arrange
+        var candidate = new MailRulesOptions
+        {
+            Rules = [CreateRule("housekeeping", "isSeen", triggers: ["Arrival"], schedule: "Daily at 03:00")],
+        };
+
+        // Act
+        var errors = MailRuleDeclarationRules.FindDeclarationErrors(candidate, this.compiler, DeclaredAccounts);
+
+        // Assert
+        var error = Assert.Single(errors);
+        Assert.Contains("MailRules:Rules:0:Schedule", error, StringComparison.Ordinal);
+        Assert.Contains("housekeeping", error, StringComparison.Ordinal);
+    }
+
+    /// <summary>A schedule this system cannot read is refused where it was written, with the reason and the rule it belongs to.</summary>
+    [Theory]
+    [InlineData("0 3 * * *")]
+    [InlineData("Daily at 25:00")]
+    [InlineData("Daily at 03:00 Middle/Earth")]
+    [InlineData("Every 00:00:30")]
+    public void FindDeclarationErrors_AScheduleThisSystemCannotRead_IsRefusedNamingTheRuleAndTheReason(string schedule)
+    {
+        // Arrange
+        var candidate = new MailRulesOptions
+        {
+            Rules = [CreateRule("housekeeping", "isSeen", triggers: ["Schedule"], schedule: schedule)],
+        };
+
+        // Act
+        var errors = MailRuleDeclarationRules.FindDeclarationErrors(candidate, this.compiler, DeclaredAccounts);
+
+        // Assert
+        var error = Assert.Single(errors);
+        Assert.Contains("MailRules:Rules:0:Schedule", error, StringComparison.Ordinal);
+        Assert.Contains("housekeeping", error, StringComparison.Ordinal);
+        Assert.Contains("cannot read", error, StringComparison.Ordinal);
+    }
+
     private static MailRuleOptions CreateRule(
         string name,
         string conditionText,
         bool enabled = true,
         string[]? accounts = null,
         MailRuleActionOptions? actions = null,
-        string[]? triggers = null) =>
+        string[]? triggers = null,
+        string? schedule = null) =>
         new()
         {
             Name = name,
@@ -819,6 +896,7 @@ public sealed class MailRuleDeclarationRulesTests
             Accounts = accounts ?? [],
             Actions = actions ?? new MailRuleActionOptions(),
             Triggers = triggers ?? [],
+            Schedule = schedule,
         };
 
     /// <summary>One declared account, mirroring an archive folder and permitting whatever the caller says it does.</summary>

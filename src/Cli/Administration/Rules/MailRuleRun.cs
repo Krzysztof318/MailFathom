@@ -32,6 +32,7 @@ internal sealed record MailRuleRunState(
 
 /// <summary>One whole-mailbox rule run, and how far the account's synchronization runs have carried it.</summary>
 /// <param name="RequestedAt">When the run was asked for.</param>
+/// <param name="Trigger">What started the run, which is what says whether anybody asked for it.</param>
 /// <param name="Revision">The rule set the run is bound to, absent until the first pass picks it up.</param>
 /// <param name="EvaluatedEmailCount">How many of the account's emails the run has evaluated.</param>
 /// <param name="MatchedEmailCount">How many of those at least one rule matched.</param>
@@ -40,6 +41,7 @@ internal sealed record MailRuleRunState(
 /// <param name="Ending">How it ended, absent for exactly as long as <paramref name="EndedAt" /> is.</param>
 internal sealed record MailRuleRun(
     [property: JsonPropertyName("requestedAt")] DateTimeOffset RequestedAt,
+    [property: JsonPropertyName("trigger")] string? Trigger,
     [property: JsonPropertyName("revision")] string? Revision,
     [property: JsonPropertyName("evaluatedEmailCount")] int EvaluatedEmailCount,
     [property: JsonPropertyName("matchedEmailCount")] int MatchedEmailCount,
@@ -56,6 +58,7 @@ internal sealed record MailRuleRun(
     /// </remarks>
     internal string DescribeState() => this switch
     {
+        { EndedAt: null } when this.Trigger is { Length: > 0 } trigger => $"under way, started by {trigger}",
         { EndedAt: { } endedAt, Ending: { Length: > 0 } ending } =>
             $"{ending} at {endedAt.ToString("u", CultureInfo.InvariantCulture)}",
         { EndedAt: { } endedAt } => $"ended at {endedAt.ToString("u", CultureInfo.InvariantCulture)}",

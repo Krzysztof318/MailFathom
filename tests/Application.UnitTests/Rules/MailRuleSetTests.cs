@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Application.Jobs.Scheduling;
 using MailFathom.Application.Rules;
 using MailFathom.Application.Rules.Conditions;
 using MailFathom.Application.UnitTests.TestDoubles;
@@ -93,6 +94,32 @@ public sealed class MailRuleSetTests
     {
         // Act, Assert
         Assert.Throws<ArgumentNullException>(() => MailRule.Create("rule", null!, stopWhenMatched: false));
+    }
+
+    /// <summary>The schedule and the trigger are one declaration, so a rule carrying one without the other is refused.</summary>
+    [Fact]
+    public void Create_ARuleDeclaringTheScheduleTriggerWithoutASchedule_IsRefused()
+    {
+        // Act, Assert
+        Assert.Throws<ArgumentException>(() => MailRule.Create(
+            "nightly",
+            ScriptedMailRuleCondition.Answering(matches: true),
+            triggers: [MailRuleTrigger.Schedule]));
+    }
+
+    /// <summary>A schedule nothing fires would be an occasion an operator declared and the system never keeps.</summary>
+    [Fact]
+    public void Create_ARuleCarryingAScheduleItDeclaresNoTriggerFor_IsRefused()
+    {
+        // Arrange
+        Assert.True(JobRecurrence.TryParse("Daily at 03:00", out var recurrence, out _));
+
+        // Act, Assert
+        Assert.Throws<ArgumentException>(() => MailRule.Create(
+            "nightly",
+            ScriptedMailRuleCondition.Answering(matches: true),
+            triggers: [MailRuleTrigger.Arrival],
+            schedule: recurrence));
     }
 
     private static MailRule CreateRule(string name) =>

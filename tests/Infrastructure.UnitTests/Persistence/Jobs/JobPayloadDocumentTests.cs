@@ -49,6 +49,21 @@ public sealed class JobPayloadDocumentTests
             document);
     }
 
+    /// <summary>A recurring dispatch stores an account and nothing about the mail in it, and reads it back the same way.</summary>
+    [Fact]
+    public void Serialize_AnAccountPayload_WritesTheAccountAndReadsItBackAsTheSameReference()
+    {
+        // Arrange
+        var payload = MailAccountJobPayload.For(MailAccountId.Create("account-a"));
+
+        // Act
+        var document = JobPayloadDocument.Serialize(payload);
+
+        // Assert
+        Assert.Equal("""{"accountId":"account-a"}""", document);
+        Assert.Equal(payload, JobPayloadDocument.Deserialize(JobType.RunScheduledMailRules, document));
+    }
+
     /// <summary>
     /// A payload holds references and every reference this system composes is short, so a document over the bound is
     /// evidence that something copied content into job state. It is refused rather than truncated or stored.

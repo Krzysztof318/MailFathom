@@ -22,7 +22,8 @@ namespace MailFathom.Application.Rules;
 /// Reordering the rules themselves does move it, because declared order is part of what a rule set means. So is the
 /// scope: narrowing a rule to one account changes which mail it reaches, which is a different rule set rather than the
 /// same one applied differently. So are the triggers, for the same reason — a rule withdrawn from firing on arrival
-/// reaches different mail from the one that fires on it. So are the actions, for the reason the revision is part of a
+/// reaches different mail from the one that fires on it — and so is the schedule beside them, because moving when a rule
+/// walks a mailbox is moving which mail it reaches at any moment. So are the actions, for the reason the revision is part of a
 /// request's identity at all — a rule now filing into a different folder must ask afresh rather than be answered by the
 /// record of the filing it asked for before the edit.
 /// </para>
@@ -112,6 +113,8 @@ public readonly record struct MailRuleSetRevision
                 .AppendJoin(ListSeparator, declaration.Accounts)
                 .Append(FieldSeparator)
                 .AppendJoin(ListSeparator, declaration.Triggers.Select(trigger => trigger.Name))
+                .Append(FieldSeparator)
+                .Append(declaration.Schedule?.CanonicalForm ?? string.Empty)
                 .Append(RuleSeparator);
         }
 
