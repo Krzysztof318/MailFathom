@@ -3,10 +3,14 @@
 # Project repository: https://github.com/Krzysztof318/MailFathom
 
 # The boundaries the code is built on. The decisions behind them are the architectural decision
-# records, which stay in the repository rather than on this site.
+# records, which stay in the repository rather than on this site. The `description` beside a page is the line the
+# published map carries for it; `docs/toc.yml` records why it lives here.
 - name: Solution structure
   href: solution-structure.md
+  description: The projects, which way their dependencies point, and what belongs inside each boundary.
 - name: The stored email schema
   href: stored-email-schema.md
+  description: The columns, constraints, and indexes the mail timeline is read from, and why raw MIME and search text live in tables of their own.
 - name: Outbound resilience
   href: outbound-resilience.md
+  description: The one model for deciding whether repeating a failed call to a dependency is recovery or damage.

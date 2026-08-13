@@ -3032,6 +3032,217 @@ every_table_of_contents_entry_names_a_page_that_exists() {
   (( failures == 0 ))
 }
 
+# The same documentation is published a second time, as the artifacts an AI agent reads rather than browses: a map of
+# every page with the line saying what it answers, each page's Markdown source beside the rendered page, and one bundle
+# per reader's path through the user guide. `scripts/write-docs-agent-artifacts.sh` writes them from the tables of
+# contents above, which is what makes the map a function of the navigation instead of a second index to keep in step.
+#
+# The two ways that can come apart are the two the tables of contents can, and a reader meets each as an absence: a
+# page the map never names is documentation an agent reports as missing, and a map entry naming nothing is a fetch that
+# 404s in the middle of an answer. The first two contracts assert both against this repository, where the real
+# navigation is; the rest drive each refusal from a fixture, because a repository that has them right cannot show what
+# happens to one that does not.
+write_documentation_agent_artifacts() {
+  local repository="$1" version_directory="$2" output_file="$3"
+
+  rm -rf "$version_directory"
+  mkdir -p "$version_directory"
+
+  (
+    cd "$repository"
+    bash scripts/write-docs-agent-artifacts.sh "$version_directory"
+  ) > "$output_file" 2>&1
+}
+
+# Every link of an llms.txt file list, which is where the map states what this version carries.
+documentation_map_targets() {
+  sed --quiet --regexp-extended 's/^- \[[^]]*\]\(([^)]*)\).*/\1/p' "$1"
+}
+
+the_documentation_map_lists_every_published_page() {
+  local version_directory="$test_directory/docs-agent-artifacts"
+  local output_file="$test_directory/docs-agent-artifacts-output"
+  local page targets failures=0
+
+  if ! write_documentation_agent_artifacts "$source_repository_root" "$version_directory" "$output_file"; then
+    cat "$output_file" >&2
+    return 1
+  fi
+
+  targets="$(documentation_map_targets "$version_directory/llms.txt")"
+
+  while IFS= read -r page; do
+    # The site's landing page, which the map leaves out for the reason the tables of contents leave it out: it says
+    # where to start in a browser, and an agent holding the map has already arrived.
+    [[ "$page" == 'docs/index.md' ]] && continue
+
+    if ! grep --quiet --line-regexp --fixed-strings "${page#docs/}" <<< "$targets"; then
+      printf '%s is published and llms.txt lists no entry for it\n' "$page" >&2
+      failures=$(( failures + 1 ))
+    fi
+  done < <(published_documentation_pages)
+
+  (( failures == 0 ))
+}
+
+every_documentation_map_entry_names_a_page_the_version_carries() {
+  local version_directory="$test_directory/docs-agent-artifacts-entries"
+  local output_file="$test_directory/docs-agent-artifacts-entries-output"
+  local target failures=0
+
+  if ! write_documentation_agent_artifacts "$source_repository_root" "$version_directory" "$output_file"; then
+    cat "$output_file" >&2
+    return 1
+  fi
+
+  while IFS= read -r target; do
+    if [[ ! -f "$version_directory/$target" ]]; then
+      printf 'llms.txt lists %s, and the built version carries no such file\n' "$target" >&2
+      failures=$(( failures + 1 ))
+    fi
+  done < <(documentation_map_targets "$version_directory/llms.txt")
+
+  (( failures == 0 ))
+}
+
+# A miniature of the real documentation: the two sections a map needs to have both shapes in it, the six pages the
+# bundles name, and the changelog the header lists from outside `docs/`. Both scripts are copied in rather than reached
+# through `$source_repository_root`, because the one under test resolves its own repository root and finds the other
+# beside it.
+create_documentation_artifacts_fixture() {
+  local fixture_root="$1" page
+
+  rm -rf "$fixture_root"
+  mkdir -p "$fixture_root/docs/users" "$fixture_root/docs/features" "$fixture_root/scripts"
+
+  printf '%s\n' \
+    '- name: User guide' \
+    '  href: users/' \
+    '  description: The guided path.' \
+    '- name: Features' \
+    '  href: features/' \
+    '  description: What the product does.' \
+    '- name: Changelog' \
+    '  href: ../CHANGELOG.md' \
+    '  description: What each release shipped.' \
+    > "$fixture_root/docs/toc.yml"
+
+  : > "$fixture_root/docs/users/toc.yml"
+
+  for page in installation getting-started mailbox-providers administering mcp-clients usage; do
+    printf '%s\n' \
+      "- name: The $page page" \
+      "  href: $page.md" \
+      "  description: What the $page page answers." \
+      >> "$fixture_root/docs/users/toc.yml"
+
+    printf '# The %s page\n' "$page" > "$fixture_root/docs/users/$page.md"
+  done
+
+  printf 'It links [a widget](../features/widgets.md) and [a sibling](installation.md).\n' \
+    >> "$fixture_root/docs/users/usage.md"
+
+  printf '%s\n' \
+    '- name: Mailbox widgets' \
+    '  href: widgets.md' \
+    '  description: What a widget answers.' \
+    > "$fixture_root/docs/features/toc.yml"
+
+  printf '# Mailbox widgets\n' > "$fixture_root/docs/features/widgets.md"
+  printf '# Changelog\n' > "$fixture_root/CHANGELOG.md"
+
+  cp "$source_repository_root/scripts/write-docs-agent-artifacts.sh" \
+    "$source_repository_root/scripts/rebase-markdown-links.sh" "$fixture_root/scripts/"
+  chmod +x "$fixture_root/scripts/write-docs-agent-artifacts.sh" \
+    "$fixture_root/scripts/rebase-markdown-links.sh"
+
+  git -C "$fixture_root" init --initial-branch=main --quiet
+  git -C "$fixture_root" config user.email agent-workflow@example.invalid
+  git -C "$fixture_root" config user.name 'Agent Workflow Tests'
+  git -C "$fixture_root" add .
+  git -C "$fixture_root" commit --quiet -m 'base'
+}
+
+the_documentation_artifacts_refuse_a_published_page_the_map_would_miss() {
+  local fixture_root="$test_directory/docs-artifacts-unmapped"
+  local version_directory="$test_directory/docs-artifacts-unmapped-version"
+  local output_file="$test_directory/docs-artifacts-unmapped-output"
+
+  create_documentation_artifacts_fixture "$fixture_root"
+
+  printf '# Mailbox gadgets\n' > "$fixture_root/docs/features/gadgets.md"
+  git -C "$fixture_root" add docs/features/gadgets.md
+
+  if write_documentation_agent_artifacts "$fixture_root" "$version_directory" "$output_file"; then
+    printf 'The artifacts were written for a page no table of contents lists\n' >&2
+    return 1
+  fi
+
+  assert_contains 'docs/features/gadgets.md is published and llms.txt lists no entry for it' "$output_file"
+}
+
+the_documentation_artifacts_refuse_a_map_entry_naming_no_page() {
+  local fixture_root="$test_directory/docs-artifacts-dangling"
+  local version_directory="$test_directory/docs-artifacts-dangling-version"
+  local output_file="$test_directory/docs-artifacts-dangling-output"
+
+  create_documentation_artifacts_fixture "$fixture_root"
+
+  printf '%s\n' \
+    '- name: Mailbox gadgets' \
+    '  href: gadgets.md' \
+    '  description: What a gadget answers.' \
+    >> "$fixture_root/docs/features/toc.yml"
+
+  if write_documentation_agent_artifacts "$fixture_root" "$version_directory" "$output_file"; then
+    printf 'The artifacts were written with a map entry naming no page\n' >&2
+    return 1
+  fi
+
+  assert_contains 'llms.txt lists features/gadgets.md, and this version carries no such page' "$output_file"
+}
+
+# The line beside a link is what the map is for: without it an agent reads a list of titles it has to fetch one by one,
+# which is the search over fragments the map exists to replace.
+the_documentation_artifacts_refuse_a_page_with_no_description() {
+  local fixture_root="$test_directory/docs-artifacts-undescribed"
+  local version_directory="$test_directory/docs-artifacts-undescribed-version"
+  local output_file="$test_directory/docs-artifacts-undescribed-output"
+
+  create_documentation_artifacts_fixture "$fixture_root"
+
+  printf '%s\n' \
+    '- name: Mailbox widgets' \
+    '  href: widgets.md' \
+    > "$fixture_root/docs/features/toc.yml"
+
+  if write_documentation_agent_artifacts "$fixture_root" "$version_directory" "$output_file"; then
+    printf 'The artifacts were written for a page whose table of contents says nothing about it\n' >&2
+    return 1
+  fi
+
+  assert_contains 'docs/features/toc.yml lists Mailbox widgets with no description' "$output_file"
+}
+
+# A bundle is read from the version's root rather than from the section its pages came from, so every relative link in
+# it is resolved for that move. Left alone, a link out of the section would climb above the site and one inside it
+# would name a page that is not where the reader is.
+a_documentation_bundle_resolves_a_link_out_of_its_own_section() {
+  local fixture_root="$test_directory/docs-artifacts-bundle"
+  local version_directory="$test_directory/docs-artifacts-bundle-version"
+  local output_file="$test_directory/docs-artifacts-bundle-output"
+
+  create_documentation_artifacts_fixture "$fixture_root"
+
+  if ! write_documentation_agent_artifacts "$fixture_root" "$version_directory" "$output_file"; then
+    cat "$output_file" >&2
+    return 1
+  fi
+
+  assert_contains '[a widget](features/widgets.md)' "$version_directory/llms-mailbox-user.txt"
+  assert_contains '[a sibling](users/installation.md)' "$version_directory/llms-mailbox-user.txt"
+}
+
 # The index itself. It calls no API, so unlike the gate and the settle loop it needs no `gh` stub and
 # no extraction from the workflow: the fixture is a tree on disk and a `files.json` beside it.
 create_obligation_fixture() {
@@ -4711,6 +4922,12 @@ run_test no_documentation_page_carries_the_third_party_notice_twice
 run_test every_third_party_notice_sits_directly_under_its_marker
 run_test every_published_documentation_page_is_in_a_table_of_contents
 run_test every_table_of_contents_entry_names_a_page_that_exists
+run_test the_documentation_map_lists_every_published_page
+run_test every_documentation_map_entry_names_a_page_the_version_carries
+run_test the_documentation_artifacts_refuse_a_published_page_the_map_would_miss
+run_test the_documentation_artifacts_refuse_a_map_entry_naming_no_page
+run_test the_documentation_artifacts_refuse_a_page_with_no_description
+run_test a_documentation_bundle_resolves_a_link_out_of_its_own_section
 run_test every_readme_site_link_names_a_page_that_exists
 run_test no_readme_link_reaches_a_published_page_through_the_repository
 run_test the_docker_hub_overview_fits_what_docker_hub_accepts

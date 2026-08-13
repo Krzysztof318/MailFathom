@@ -4,19 +4,29 @@
 
 # The site's top navigation. Each entry points at a directory, so the entry decides the header link
 # and the `toc.yml` inside that directory decides the sidebar under it.
+#
+# The `description` beside an entry is the line an agent reads. `scripts/write-docs-agent-artifacts.sh` writes the
+# published map from these files, so every entry naming a page or a section carries one and a page joins the map by
+# joining the navigation here — one file to write when a page is added rather than two.
 - name: User guide
   href: users/
+  description: The guided path from choosing an installation to a first tool call, for whoever installs, operates, and uses MailFathom.
 - name: Operations
   href: operations/
+  description: What a running deployment is configured with, served on, secured by, and reports about itself.
 - name: Features
   href: features/
+  description: What the product does, from the mail arriving to the tool call answering, and what each behavior deliberately bounds.
 - name: Architecture
   href: architecture/
+  description: The boundaries the code is built on, and the shape of what it stores.
 # The page here, rather than the directory: the rest of `api/` is generated at build time and carries its own sidebar,
 # and naming the directory would send docfx looking for a table of contents beside this file that nothing writes.
 - name: API reference
   href: api/index.md
+  description: Every public type and member, generated from the XML documentation comments in MailFathom's own source.
 # The repository-root changelog, published as it stands. It is the one page on this site written outside `docs/`,
 # because what a release shipped is a question a reader arrives with and the answer already exists in one place.
 - name: Changelog
   href: ../CHANGELOG.md
+  description: What each release shipped, one section per released version.

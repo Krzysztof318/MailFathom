@@ -5,63 +5,90 @@
 # Grouped by the question an operator is holding, rather than alphabetically. `scripts/test-agent-workflow.sh`
 # asserts that every published page appears in one of these files, so a page added under `docs/`
 # without a place here fails before it can go missing on the site.
+#
+# The `description` beside a page is the line the published map carries for it; `docs/toc.yml` records why it lives
+# here. A group heading names no page and carries none: what it groups is the pages under it.
 - name: Configuration
   items:
     - name: Configuration reference
       href: configuration-reference.md
+      description: Every user-settable option in one place, with its type, default, constraint, and whether changing it needs a restart.
     - name: Configuration sources
       href: configuration-sources.md
+      description: Where settings are read from and in which order, what a deployment may provision outside the content root, and why configuration is read-only.
     - name: Provider endpoints
       href: provider-endpoints.md
+      description: The addresses and API shapes each supported AI provider publishes, and what each entry here rests on.
     - name: Secret provisioning
       href: secret-provisioning.md
+      description: How a secret-bearing setting names material rather than carrying it, the schemes that resolve a reference, and what a leaked configuration file exposes.
     - name: Secret rotation
       href: secret-rotation.md
+      description: Which credentials are rotated without restarting, what MailFathom does when one changes, and how to verify the rotation took.
 - name: Deployment
   items:
     - name: The container image
       href: container-image.md
+      description: What the one image definition produces, what runs inside it, how it is tagged and published, and how to verify a pulled image.
     - name: Docker Compose
       href: deployment-compose.md
+      description: Running MailFathom and PostgreSQL on one machine with Compose, and upgrading, backing up, restoring, and removing that installation.
     - name: Podman Quadlet
       href: deployment-quadlet.md
+      description: Running MailFathom and PostgreSQL as rootless systemd units under Podman, taking credentials the way a native service takes them.
     - name: Kubernetes
       href: deployment-kubernetes.md
+      description: Installing the Helm chart, the objects it creates, the Secret it deliberately leaves to whoever operates the cluster, and the values that matter.
     - name: Applying the database schema
       href: database-schema.md
+      description: Applying a migration as an explicit operator action, why startup never applies one, and what an instance does when the schema is behind.
     - name: Changing the embedding model
       href: embedding-profiles.md
+      description: Activating a new embedding profile without invalidating the vectors already stored, and what the change costs while it runs.
 - name: Endpoints
   items:
     - name: The MCP endpoint
       href: mcp-endpoint.md
+      description: Enabling the endpoint an agent reaches, what a client has to present, which origins and certificates it accepts, and how much traffic it takes.
     - name: MCP client OAuth
       href: mcp-client-oauth.md
+      description: Connecting a chat client through your own identity provider instead of an API key, provider by provider.
     - name: The administrative endpoint
       href: admin-endpoint.md
+      description: How mfctl reaches a running deployment, and what that deployment has to have enabled before it will answer.
     - name: Health endpoints
       href: health-endpoints.md
+      description: What each of the three probes consults, which port they answer on, and how a deployment turns them off or puts TLS in front of them.
 - name: Mail servers and transport security
   items:
     - name: Mailbox OAuth
       href: mailbox-oauth.md
+      description: Registering an application at a mail provider so a mailbox is synchronized with OAuth rather than a password.
     - name: The platform TLS policy
       href: platform-tls-policy.md
+      description: Why the system OpenSSL decides which mail servers are reachable at all, and what a refusal MailFathom never saw looks like.
 - name: What it reports about itself
   items:
     - name: Telemetry
       href: telemetry.md
+      description: What the host emits as logs, metrics, and traces, the one switch that lets any of it leave the process, and why deployments ship with it off.
     - name: Host startup telemetry
       href: host-startup-telemetry.md
+      description: How process lifetime is recorded before and after the logging pipeline exists, and what a failure during startup leaves behind.
 - name: Developing and releasing
   items:
     - name: Local development
       href: local-development.md
+      description: The SDK, the database, the package sources and lock files, and the commands a change is built, tested, and verified with.
     - name: The agent workflow
       href: agent-workflow.md
+      description: The scripts and skills a repository change passes through, what each one asserts, and how a review runs on a pull request.
     - name: Issue tracking and the roadmap board
       href: issue-tracking.md
+      description: How work is tracked — the issue body, the one type label, the board's fields and views, and how an arrival from outside is triaged.
     - name: The release procedure
       href: release-procedure.md
+      description: Where the version number lives, how a build acquires it, and the sequence that turns a commit into a published release.
     - name: The documentation site
       href: documentation-site.md
+      description: How this site is generated, which versions it carries, how a link in it is written, and what it publishes for an AI agent to read.

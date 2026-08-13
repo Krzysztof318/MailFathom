@@ -17,6 +17,8 @@ set -euo pipefail
 #   index.html      the landing page, which sends a reader to that version
 #   <page>.html     one redirect per page of that version, mirrored at the site root, so that a page has an address
 #                   naming no version — which is what the repository-root README links to
+#   llms.txt        that version's map of the documentation, at the address an agent looks for it, with every link in
+#                   it resolved into the version directory it came from
 #   .nojekyll       what stops GitHub Pages from running the whole site through Jekyll first
 #
 # **The site opens on the newest release, not on `latest`.** Somebody arriving at the documentation is running a
@@ -24,11 +26,15 @@ set -euo pipefail
 # published version accepts. `latest` stays in the selector, one click away, and every page outside the default version
 # says which version it is and links to the current one.
 #
-# Nothing here reads the repository. The composition is a function of the directories present, so the same site is
-# produced whether it was assembled from one build or from a matrix of them.
+# Nothing here reads the documentation sources. The composition is a function of the directories present, so the same
+# site is produced whether it was assembled from one build or from a matrix of them; the one repository file it uses is
+# the link rebaser beside it, which is a tool rather than an input.
 
 readonly default_branch_version='latest'
 readonly release_version_pattern='^v[0-9]+\.[0-9]+\.[0-9]+$'
+readonly map_file='llms.txt'
+
+scripts_directory="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 
 site_directory="${1-}"
 
@@ -169,6 +175,26 @@ done < <(
 # destination, stated as the address a reader would type.
 write_redirect 'index.html' "$default_version/" "$default_version"
 
+# The map an agent looks for, which it looks for at the site root. Each version carries its own — the default version's
+# is the one a reader arriving without a version gets, exactly as the redirects above hand them that version's pages.
+#
+# It is copied rather than redirected to, because a redirect stub is an HTML page and what this address has to return
+# is the text of the map. Copying it moves it one directory up, so every link in it is resolved for that move and the
+# root map reaches the default version's own pages. That names a version inside the file, which the stable addresses
+# above exist to avoid — and it costs nothing here for the reason it costs everything there: this file is rewritten by
+# every publish, while a link written into a README once is read for as long as that README stands.
+#
+# A release built before the artifacts existed carries no map, and the site opens on the newest release rather than on
+# `latest`. So the root map arrives with the first release that carries one, and until then this says so rather than
+# failing a publish over a version whose commit could not have written it.
+map_at_root='no'
+
+if [[ -f "$site_directory/$default_version/$map_file" ]]; then
+  bash "$scripts_directory/rebase-markdown-links.sh" "$default_version" \
+    < "$site_directory/$default_version/$map_file" > "$site_directory/$map_file"
+  map_at_root='yes'
+fi
+
 # Jekyll is what GitHub Pages runs by default, and it drops every path beginning with an underscore. Nothing docfx
 # generates needs building, so the whole pass is skipped rather than configured around.
 touch "$site_directory/.nojekyll"
@@ -176,3 +202,10 @@ touch "$site_directory/.nojekyll"
 printf 'Composed %d version(s) in %s, opening on %s, with %d version-agnostic address(es):\n' \
   "${#ordered_versions[@]}" "$site_directory" "$default_version" "$stub_count"
 printf '  %s\n' "${ordered_versions[@]}"
+
+if [[ "$map_at_root" == 'yes' ]]; then
+  printf '%s at the site root reads %s.\n' "$map_file" "$default_version"
+else
+  printf '%s carries no %s, so the site root has none: that release predates the artifact.\n' \
+    "$default_version" "$map_file"
+fi
