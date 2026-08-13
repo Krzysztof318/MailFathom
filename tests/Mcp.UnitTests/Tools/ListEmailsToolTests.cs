@@ -7,6 +7,7 @@ using MailFathom.Application.Emails.ListEmails;
 using MailFathom.Application.Emails.Mailboxes;
 using MailFathom.Application.Emails.Summaries;
 using MailFathom.Application.Folders;
+using MailFathom.Application.Observability;
 using MailFathom.Application.SensitiveContent.Egress;
 using MailFathom.Application.Synchronization.Checkpoints;
 using MailFathom.Domain.Accounts;
@@ -18,6 +19,7 @@ using MailFathom.Mcp.Tools.Results;
 using MailFathom.Mcp.Tools.Summaries;
 using MailFathom.Mcp.UnitTests.TestDoubles;
 using MailFathom.TestSupport;
+using NSubstitute;
 using Xunit;
 
 namespace MailFathom.Mcp.UnitTests.Tools;
@@ -648,6 +650,7 @@ public sealed class ListEmailsToolTests
                 StubMailFolderParticipation.Nothing,
                 junkFolders ?? StubJunkMailFolderCatalog.None,
                 folderMappings.Resolver),
-            egressGuard ?? SensitiveContentEgressGuards.Inactive()),
+            egressGuard ?? SensitiveContentEgressGuards.Inactive(),
+            Substitute.For<IMailboxReadTelemetry>()),
         new StubMailAccountCatalog(ServedAccountId));
 }

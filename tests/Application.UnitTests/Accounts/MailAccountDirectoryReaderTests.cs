@@ -4,7 +4,9 @@
 
 using MailFathom.Application.Accounts;
 using MailFathom.Application.Emails.Mailboxes;
+using MailFathom.Application.Observability;
 using MailFathom.Application.Synchronization.Checkpoints;
+using MailFathom.Application.UnitTests.TestDoubles;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Folders;
 using MailFathom.Domain.Synchronization;
@@ -132,12 +134,56 @@ public sealed class MailAccountDirectoryReaderTests
         Assert.Single(directory.Accounts);
     }
 
+    /// <summary>
+    /// The read is reported as the operation it is, so the queries it issues have a use case above them in a trace
+    /// rather than only the protocol call that reached it.
+    /// </summary>
+    [Fact]
+    public async Task ReadAsync_AnyRead_ReportsTheDirectoryReadAndHowManyAccountsItPublished()
+    {
+        // Arrange
+        var readTelemetry = new RecordingMailboxReadTelemetry();
+        var reader = ReaderOver(readTelemetry, Freshness(), synchronizationEnabled: true, Work, Private);
+
+        // Act
+        await reader.ReadAsync(TestContext.Current.CancellationToken);
+
+        // Assert
+        var read = Assert.Single(readTelemetry.Reads);
+
+        Assert.Equal(MailboxReadOperation.ReadAccountDirectory, read.Operation);
+        Assert.Equal(2, read.ResultCount);
+        Assert.True(read.WasClosed);
+    }
+
+    /// <summary>A deployment serving nothing still reports the read, because a read that happened is not a read that did nothing.</summary>
+    [Fact]
+    public async Task ReadAsync_ADeploymentServingNoAccount_ReportsTheReadAsAnEmptyOne()
+    {
+        // Arrange
+        var readTelemetry = new RecordingMailboxReadTelemetry();
+        var reader = ReaderOver(readTelemetry, Freshness(), synchronizationEnabled: true);
+
+        // Act
+        await reader.ReadAsync(TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(0, Assert.Single(readTelemetry.Reads).ResultCount);
+    }
+
     private static MailAccountDirectoryReader ReaderOver(
         ISynchronizationFreshnessReader freshnessReader,
         params ServedMailAccount[] servedAccounts) =>
         ReaderOver(freshnessReader, synchronizationEnabled: true, servedAccounts);
 
     private static MailAccountDirectoryReader ReaderOver(
+        ISynchronizationFreshnessReader freshnessReader,
+        bool synchronizationEnabled,
+        params ServedMailAccount[] servedAccounts) =>
+        ReaderOver(new RecordingMailboxReadTelemetry(), freshnessReader, synchronizationEnabled, servedAccounts);
+
+    private static MailAccountDirectoryReader ReaderOver(
+        IMailboxReadTelemetry readTelemetry,
         ISynchronizationFreshnessReader freshnessReader,
         bool synchronizationEnabled,
         params ServedMailAccount[] servedAccounts)
@@ -153,7 +199,8 @@ public sealed class MailAccountDirectoryReaderTests
                 catalog,
                 StubMailFolderParticipation.Nothing,
                 StubJunkMailFolderCatalog.None,
-                StubMailFolderMappings.ResolvingNothing));
+                StubMailFolderMappings.ResolvingNothing),
+            readTelemetry);
     }
 
     /// <summary>Answers the folders local state knows of, in an order the reader is expected to correct.</summary>

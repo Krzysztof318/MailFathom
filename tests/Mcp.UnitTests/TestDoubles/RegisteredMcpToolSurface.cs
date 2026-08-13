@@ -14,6 +14,7 @@ using MailFathom.Application.Emails.Mailboxes;
 using MailFathom.Application.Emails.Search;
 using MailFathom.Application.Emails.SearchEmails;
 using MailFathom.Application.Emails.Summaries;
+using MailFathom.Application.Observability;
 using MailFathom.Application.Retrieval.AskMail;
 using MailFathom.Application.Synchronization.Checkpoints;
 using Microsoft.Extensions.DependencyInjection;
@@ -82,6 +83,7 @@ internal static class RegisteredMcpToolSurface
         services.AddSingleton(Substitute.For<IEmailContentRepairRequestStore>());
         services.AddSingleton<IMailAccountCatalog>(new StubMailAccountCatalog("personal"));
         services.AddSingleton<MailboxScopeResolver>();
+        services.AddSingleton(Substitute.For<IMailboxReadTelemetry>());
         services.AddSingleton<MailAccountDirectoryReader>();
         services.AddSingleton<MailboxTimelineReader>();
         services.AddSingleton<EmailContentReader>();

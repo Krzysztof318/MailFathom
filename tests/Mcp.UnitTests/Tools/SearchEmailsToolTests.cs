@@ -9,6 +9,7 @@ using MailFathom.Application.Emails.Mailboxes;
 using MailFathom.Application.Emails.Search;
 using MailFathom.Application.Emails.SearchEmails;
 using MailFathom.Application.Emails.Summaries;
+using MailFathom.Application.Observability;
 using MailFathom.Application.SensitiveContent.Egress;
 using MailFathom.Application.Synchronization.Checkpoints;
 using MailFathom.Domain.Accounts;
@@ -588,7 +589,8 @@ public sealed class SearchEmailsToolTests
                     junkFolders ?? StubJunkMailFolderCatalog.None,
                     StubMailFolderMappings.ResolvingNothing),
                 bounds,
-                egressGuard ?? SensitiveContentEgressGuards.Inactive()),
+                egressGuard ?? SensitiveContentEgressGuards.Inactive(),
+                Substitute.For<IMailboxReadTelemetry>()),
             bounds,
             new StubMailAccountCatalog(ServedAccountId));
     }

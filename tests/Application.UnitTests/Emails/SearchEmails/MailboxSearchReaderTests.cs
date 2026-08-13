@@ -8,6 +8,7 @@ using MailFathom.Application.Emails.Embeddings;
 using MailFathom.Application.Emails.Mailboxes;
 using MailFathom.Application.Emails.Search;
 using MailFathom.Application.Emails.SearchEmails;
+using MailFathom.Application.Observability;
 using MailFathom.Application.SensitiveContent.Detection;
 using MailFathom.Application.SensitiveContent.Egress;
 using MailFathom.Application.Synchronization.Checkpoints;
@@ -600,6 +601,50 @@ public sealed class MailboxSearchReaderTests
         Assert.Equal([$"use {Marker} to sign in"], match.Snippets);
     }
 
+    /// <summary>
+    /// The search is reported as the operation it is, so a slow query has a use case above its index reads in a trace
+    /// rather than only the protocol call that reached it.
+    /// </summary>
+    [Fact]
+    public async Task SearchEmailsAsync_AWindowThatWasServed_ReportsTheSearchAndWhatItReturned()
+    {
+        // Arrange
+        var readTelemetry = new RecordingMailboxReadTelemetry();
+        var index = new InMemoryEmailSearchIndex()
+            .With(SyntheticEmailSummaries.Create(FirstJuly), relevanceRank: 0.9f, matchedText: "invoice")
+            .With(SyntheticEmailSummaries.Create(FirstJuly.AddDays(1)), relevanceRank: 0.2f, matchedText: "invoice");
+        var reader = ReaderOver(index, readTelemetry: readTelemetry);
+
+        // Act
+        await reader.SearchEmailsAsync(RequestFor("invoice"), TestContext.Current.CancellationToken);
+
+        // Assert
+        var read = Assert.Single(readTelemetry.Reads);
+
+        Assert.Equal(MailboxReadOperation.SearchMailbox, read.Operation);
+        Assert.Equal(2, read.ResultCount);
+        Assert.True(read.WasClosed);
+    }
+
+    /// <summary>A refused search reports no result, which is what makes the span say the read did not finish.</summary>
+    [Fact]
+    public async Task SearchEmailsAsync_ARefusedQuery_ReportsAReadThatReturnedNothing()
+    {
+        // Arrange
+        var readTelemetry = new RecordingMailboxReadTelemetry();
+        var reader = ReaderOver(new InMemoryEmailSearchIndex(), readTelemetry: readTelemetry);
+
+        // Act
+        await Assert.ThrowsAsync<MailboxQueryFilterInvalidException>(
+            () => reader.SearchEmailsAsync(RequestFor("   "), TestContext.Current.CancellationToken));
+
+        // Assert
+        var read = Assert.Single(readTelemetry.Reads);
+
+        Assert.Null(read.ResultCount);
+        Assert.True(read.WasClosed);
+    }
+
     private static SearchEmailsRequest RequestFor(string? queryText) => new() { QueryText = queryText };
 
     private static MailboxSearchReader ReaderOver(
@@ -607,7 +652,8 @@ public sealed class MailboxSearchReaderTests
         IMailAccountCatalog? accountCatalog = null,
         EmailSearchSnippetBounds? snippetBounds = null,
         SemanticEmailSearch? semanticSearch = null,
-        SensitiveContentEgressGuard? egressGuard = null) => new(
+        SensitiveContentEgressGuard? egressGuard = null,
+        IMailboxReadTelemetry? readTelemetry = null) => new(
         index,
         semanticSearch ?? LexicalOnlySemanticSearch(),
         FreshnessReaderReturning(InboxFreshness),
@@ -617,7 +663,8 @@ public sealed class MailboxSearchReaderTests
             StubJunkMailFolderCatalog.None,
             StubMailFolderMappings.ResolvingNothing),
         snippetBounds ?? EmailSearchSnippetBounds.Default,
-        egressGuard ?? SensitiveContentEgressGuards.Inactive());
+        egressGuard ?? SensitiveContentEgressGuards.Inactive(),
+        readTelemetry ?? new RecordingMailboxReadTelemetry());
 
     /// <summary>Builds the semantic half of a deployment that configured no embedding provider and activated nothing.</summary>
     private static SemanticEmailSearch LexicalOnlySemanticSearch() => new(

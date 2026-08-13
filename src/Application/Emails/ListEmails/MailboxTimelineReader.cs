@@ -5,6 +5,7 @@
 using MailFathom.Application.Accounts;
 using MailFathom.Application.Emails.Mailboxes;
 using MailFathom.Application.Emails.Summaries;
+using MailFathom.Application.Observability;
 using MailFathom.Application.SensitiveContent.Detection;
 using MailFathom.Application.SensitiveContent.Egress;
 using MailFathom.Application.Synchronization.Checkpoints;
@@ -36,28 +37,33 @@ public sealed class MailboxTimelineReader
     private readonly ISynchronizationFreshnessReader freshnessReader;
     private readonly MailboxScopeResolver scopeResolver;
     private readonly SensitiveContentEgressGuard egressGuard;
+    private readonly IMailboxReadTelemetry readTelemetry;
 
     /// <summary>Initializes the use case.</summary>
     /// <param name="timelineReader">Reads bounded pages of stored email summaries.</param>
     /// <param name="freshnessReader">Reads how current the local copy of each folder is.</param>
     /// <param name="scopeResolver">Decides which accounts and folders the listing runs against.</param>
     /// <param name="egressGuard">Scans what the page is about to publish, where this deployment scans anything.</param>
+    /// <param name="readTelemetry">Publishes the read as the operation it is, beside the call it happened inside.</param>
     /// <exception cref="ArgumentNullException">Thrown when any argument is <see langword="null" />.</exception>
     public MailboxTimelineReader(
         IStoredEmailTimelineReader timelineReader,
         ISynchronizationFreshnessReader freshnessReader,
         MailboxScopeResolver scopeResolver,
-        SensitiveContentEgressGuard egressGuard)
+        SensitiveContentEgressGuard egressGuard,
+        IMailboxReadTelemetry readTelemetry)
     {
         ArgumentNullException.ThrowIfNull(timelineReader);
         ArgumentNullException.ThrowIfNull(freshnessReader);
         ArgumentNullException.ThrowIfNull(scopeResolver);
         ArgumentNullException.ThrowIfNull(egressGuard);
+        ArgumentNullException.ThrowIfNull(readTelemetry);
 
         this.timelineReader = timelineReader;
         this.freshnessReader = freshnessReader;
         this.scopeResolver = scopeResolver;
         this.egressGuard = egressGuard;
+        this.readTelemetry = readTelemetry;
     }
 
     /// <summary>Lists one page of emails.</summary>
@@ -79,6 +85,8 @@ public sealed class MailboxTimelineReader
     {
         ArgumentNullException.ThrowIfNull(request);
 
+        using var read = this.readTelemetry.BeginRead(MailboxReadOperation.ListMailboxTimeline, cancellationToken);
+
         var filter = this.ReadableFilter(request);
         var pageSize = MailboxQueryPageSize.FromRequested(request.PageSize);
         var continueAfter = ContinuationPosition(request.Cursor, filter);
@@ -87,6 +95,8 @@ public sealed class MailboxTimelineReader
         // refusals a deployment that serves several does, and only then reports that it holds nothing to read.
         if (filter.Selection.Scope.AccountIds.Count is 0)
         {
+            read.Completed(0);
+
             return new ListEmailsResult([], NextCursor: null, [], filter.Selection.Scope.IncludesJunkMail);
         }
 
@@ -110,8 +120,12 @@ public sealed class MailboxTimelineReader
         // Guarded after the cursor is issued rather than before it. The cursor names a position in the timeline, which
         // is the received instant and the stored identity, and redaction touches neither — issuing it from the guarded
         // page would be the same value arrived at through more work.
+        var guardedPage = await this.GuardedAsync(page, cancellationToken);
+
+        read.Completed(guardedPage.Count);
+
         return new ListEmailsResult(
-            await this.GuardedAsync(page, cancellationToken),
+            guardedPage,
             nextCursor,
             folderFreshness,
             filter.Selection.Scope.IncludesJunkMail);
