@@ -5,6 +5,7 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Runtime.ExceptionServices;
 using MailFathom.Application.Persistence;
+using MailFathom.Infrastructure.Observability;
 using Microsoft.EntityFrameworkCore;
 
 namespace MailFathom.Infrastructure.Persistence.Sessions;
@@ -40,7 +41,14 @@ internal interface IEfCorePersistenceSessionResources : IAsyncDisposable
 }
 
 /// <summary>Owns one short EF Core write transaction and translates concurrency failures.</summary>
-internal sealed class EfCorePersistenceSession(IEfCorePersistenceSessionResources resources)
+/// <remarks>
+/// Every ending is counted here rather than by the retry policy above it, because this is where a conflict is actually
+/// observed: the policy sees only the conflicts that survived every attempt it was allowed, and the ones it resolved
+/// are exactly the ones a rate exists to make visible.
+/// </remarks>
+internal sealed class EfCorePersistenceSession(
+    IEfCorePersistenceSessionResources resources,
+    PersistenceCommitTelemetry telemetry)
     : IPersistenceSession, IEfCorePersistenceSession
 {
     private bool completed;
@@ -59,15 +67,13 @@ internal sealed class EfCorePersistenceSession(IEfCorePersistenceSessionResource
         }
         catch (DbUpdateConcurrencyException)
         {
-            await resources.RollbackTransactionAsync(cancellationToken);
-            this.completed = true;
+            await this.RollbackAfterConflictAsync(cancellationToken);
 
             return PersistenceCommitResult.ConcurrencyConflict;
         }
         catch (DbUpdateException exception) when (resources.IsConcurrencyConflict(exception))
         {
-            await resources.RollbackTransactionAsync(cancellationToken);
-            this.completed = true;
+            await this.RollbackAfterConflictAsync(cancellationToken);
 
             return PersistenceCommitResult.ConcurrencyConflict;
         }
@@ -75,6 +81,7 @@ internal sealed class EfCorePersistenceSession(IEfCorePersistenceSessionResource
         await resources.CommitTransactionAsync(cancellationToken);
 
         this.completed = true;
+        telemetry.RecordCommitted();
 
         return PersistenceCommitResult.Committed;
     }
@@ -117,5 +124,14 @@ internal sealed class EfCorePersistenceSession(IEfCorePersistenceSessionResource
         {
             ExceptionDispatchInfo.Capture(firstCleanupException).Throw();
         }
+    }
+
+    /// <summary>Rolls one session back after a race it lost, and counts the conflict as one that happened.</summary>
+    private async Task RollbackAfterConflictAsync(CancellationToken cancellationToken)
+    {
+        await resources.RollbackTransactionAsync(cancellationToken);
+
+        this.completed = true;
+        telemetry.RecordConcurrencyConflict();
     }
 }

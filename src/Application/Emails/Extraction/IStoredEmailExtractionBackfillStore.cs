@@ -11,9 +11,9 @@ namespace MailFathom.Application.Emails.Extraction;
 /// <summary>The state the extraction backfill reads and writes as it walks the emails stored before extraction existed.</summary>
 /// <remarks>
 /// <para>
-/// The port is one contract rather than three because its four operations describe one restartable walk: where the
-/// last run stopped, which emails come next, what one email's re-reading produced, and how far this run has come. A
-/// caller holding only some of them could not make the walk terminate.
+/// The port is one contract rather than three because its operations describe one restartable walk: where the last run
+/// stopped, how much is left, which emails come next, what one email's re-reading produced, and how far this run has
+/// come. A caller holding only some of them could not make the walk terminate.
 /// </para>
 /// <para>
 /// The resume position is what makes the walk finite. Selecting only emails that have no extraction would already be
@@ -41,6 +41,16 @@ public interface IStoredEmailExtractionBackfillStore
         StoredEmailId? resumeAfter,
         int batchSize,
         CancellationToken cancellationToken);
+
+    /// <summary>Counts the stored emails this walk still owes work on, under the configuration it is walking for.</summary>
+    /// <param name="cancellationToken">Propagates caller cancellation.</param>
+    /// <returns>How many stored emails the walk would still reach, which is zero once it has finished.</returns>
+    /// <remarks>
+    /// Answered by the walk's own store and through the same predicate the batch query is narrowed by, so the backlog an
+    /// operator watches and the work a run would actually do are one number rather than two that drift the first time
+    /// either learns something about tombstones, about missing content, or about a rebuild.
+    /// </remarks>
+    Task<int> CountEmailsAwaitingExtractionAsync(CancellationToken cancellationToken);
 
     /// <summary>Writes what re-reading one email's MIME produced onto its existing row and search document.</summary>
     /// <param name="session">The explicit persistence session this write participates in.</param>

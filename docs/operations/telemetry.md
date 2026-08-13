@@ -1,6 +1,6 @@
 # Telemetry and the Aspire dashboard
 
-<!-- describes: src/Application/Observability/**, src/Common/Observability/**, src/Host/Observability/**, src/Host/ServiceDefaultsExtensions.cs, src/Host/Hosting/Workers/MailExtractionBackfillWorker.cs, src/Infrastructure/Observability/**, src/Infrastructure/Mail/MailKit/MailKitImapClientFactory.cs, src/Infrastructure/HostApplicationBuilderExtensions.cs, src/AppHost/** -->
+<!-- describes: src/Application/Observability/**, src/Common/Observability/**, src/Host/Observability/**, src/Host/ServiceDefaultsExtensions.cs, src/Host/Hosting/Workers/MailExtractionBackfillWorker.cs, src/Infrastructure/Observability/**, src/Infrastructure/Mail/MailKit/MailKitImapClientFactory.cs, src/Infrastructure/HostApplicationBuilderExtensions.cs, src/Mcp/Observability/**, src/AppHost/** -->
 
 The host instruments itself with OpenTelemetry throughout — logs, metrics, and traces — and exports none of it unless
 the environment names a destination. Today exactly one environment does that out of the box: a local run under the
@@ -229,6 +229,37 @@ carries no age. Only a change is written: every provider call records a state, s
 with the mailbox instead of with what an operator would act on. A first call that succeeded is the one change that is
 not written, because it restored nothing; a first call that failed is.
 
+Every tool call is counted and timed. `mailfathom.mcp.tool.calls` and `mailfathom.mcp.tool.call.duration` carry
+`mailfathom.mcp.tool` with the tool's name and `mailfathom.mcp.tool.outcome` with one of `succeeded`, `tool_error`,
+`cancelled`, `protocol_error`, `refused`, or `failed`. They answer what a span cannot: how often a tool is called, how
+its duration is distributed, and whether either is moving — which is how a regression in one tool arrives, long before
+anybody correlates the individual complaints it produces. The figure is the same one the record of that call carries,
+taken from the same measurement rather than from a second timing path.
+
+The three failing outcomes are apart on purpose. `tool_error` is an answer the tool diagnosed and reported, `refused` is
+a MailFathom error code the caller can act on, and `failed` is the generic code a call gets when nothing diagnosed it;
+a deployment answering every call with a refusal and one that is broken would otherwise read the same. `cancelled` is
+ordinary traffic on this surface — an impatient client, not a fault — and `protocol_error` is a JSON-RPC error the
+transport reported.
+
+The tool dimension is the one thing here a caller chooses, so it is bounded by construction: a name is used only when
+this surface publishes a tool answering to it, and anything else is measured as `(unpublished)`. The log line beside it
+keeps the name the caller sent whenever its shape is safe, because somebody diagnosing a client's mistake needs to read
+it; a metric dimension cannot afford the same, since a client calling `list_email` in a loop would otherwise mint a time
+series that never goes away. Nothing else about a call reaches either instrument — not an argument, not a filter value,
+not a mailbox, not a result.
+
+One counter belongs to no feature at all. `mailfathom.persistence.commits` counts every local write transaction this
+process completed, tagged with `mailfathom.persistence.commit.outcome` as `committed` or `concurrency_conflict`. An
+optimistic concurrency conflict is an expected branch rather than a failure — the retry policy commits again from a
+fresh read — so a conflict it resolves leaves no other trace, and the only one that surfaces today is the conflict
+nobody resolved, which arrives as a single exception after every allowed attempt was spent. The rate is what separates a
+deployment where two writers race constantly from one where they never meet, and it is the reading that says a bound
+wants raising before anybody sees that exception. Both outcomes are counted because a rate needs the writes it is a rate
+of, and the denominator is MailFathom's own sessions rather than EF Core's count of every `SaveChanges` this process
+issues. What was written is nowhere on it: a session covers whatever a use case staged, so any dimension naming it would
+eventually name mail.
+
 ### What a request-path trace contains
 
 A tool call arrives with a span from the request pipeline and leaves a set of database spans behind it, and neither of
@@ -271,6 +302,18 @@ returns columns sized like a row; this one returns a whole message, so a command
 forty-megabyte message from a two-kilobyte one. An email whose content was never stored reports `found` as false and no
 size, which is an answer rather than a failure.
 
+Four instruments answer over all of those reads what that span answers about one, and cover the write beside it.
+`mailfathom.mail.content.read.bytes` and `mailfathom.mail.content.write.bytes` are how large the messages moving through
+the store are, and `mailfathom.mail.content.read.duration` and `mailfathom.mail.content.write.duration` are how long
+each took, tagged with `mailfathom.mail.content.outcome` as `found`, `absent`, `stored`, or `failed`. All four are
+distributions rather than totals, because what an operator acts on here is the tail: one enormous message and a steady
+stream of ordinary ones cost the same in a sum and mean entirely different things. A read of an email whose content was
+never stored is timed and not sized, since a zero there would pull the distribution towards a message that never
+existed; a read or a write that threw is timed under `failed`, so a store that started failing does not read as one
+nobody is using. The write is measured and deliberately not spanned — it happens once per stored message inside a folder
+run that already has a span, so a span apiece would put one per synchronized email into a trace store to say what the
+histogram says better.
+
 One more span belongs to no request at all. The extraction backfill opens **`backfill_email_extraction`** once per
 bounded pass, which is what tells work an interval caused apart from work a caller caused — without it the pass appears
 as parentless database commands competing with the requests around them. It carries
@@ -278,6 +321,28 @@ as parentless database commands competing with the requests around them. It carr
 `…remaining` as whether any stored email still awaits extraction, and `…outcome` as one of `succeeded`, `deferred`,
 `failed`, or `interrupted`. `deferred` is a competing writer the pass could not resolve against and `interrupted` is
 shutdown; neither is a failure, and the next interval resumes from the committed position in both cases.
+
+That pass publishes a family under the same names, because the question an operator has about a backfill — *will this
+finish* — needs a rate and a remaining amount side by side, over passes rather than within one.
+`mailfathom.mail.extraction.backfill.extracted`, `…unreadable`, and `…missing_content` count what the passes moved, and
+`…run.duration` times each pass under the same four outcomes the span carries, so its own count is how many passes there
+were. Each counter is added to only when it moved, so an instance with nothing left to extract is not a stream of zeroes
+indistinguishable from one working through a mailbox.
+
+`mailfathom.mail.extraction.backfill.outstanding` is what those counters are working through: how many stored emails
+still awaited extraction when the most recent pass ended. It is fed once per pass rather than measured when a collector
+asks, because it is a count over every message the walk still owes work on and answering it inside the meter's callback
+would put that scan on whatever interval a collector happened to be configured with. It is measured after the pass
+rather than before it, so what a pass moved and what it left behind describe the same moment — and because the last pass
+of a backfill is the one that finds nothing to do and then ends the worker, which would otherwise leave the figure it
+started with published for the life of the process.
+
+Two readings of it are worth knowing. A backlog that stops falling while the extracted counter keeps rising is a walk
+finding new work as fast as it does old — a mailbox still synchronizing rather than a backfill that has stalled, and the
+two are only separable because both figures are published. And a small figure that never reaches zero is not a stall
+either: a message no reader can parse, and one whose raw MIME is no longer there, never gain an extraction, so they stay
+in this count while the walk correctly reports nothing left to attempt. The counters beside it say how many of each the
+passes stepped over.
 
 Nothing on any of these spans is derived from a message. There is nowhere on them to put a query text, a filter value, a
 cursor, a subject, an address, or a stored identity — the values are counts, sizes, and closed sets of MailFathom's own

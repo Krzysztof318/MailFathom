@@ -4,8 +4,10 @@
 
 using System.Diagnostics.CodeAnalysis;
 using MailFathom.Application.Persistence;
+using MailFathom.Infrastructure.Observability;
 using MailFathom.Infrastructure.Persistence;
 using MailFathom.Infrastructure.Persistence.Sessions;
+using MailFathom.Infrastructure.UnitTests.TestDoubles;
 using Microsoft.EntityFrameworkCore;
 using Xunit;
 
@@ -13,6 +15,10 @@ namespace MailFathom.Infrastructure.UnitTests.Persistence.Sessions;
 
 public sealed class EfCorePersistenceSessionTests
 {
+    private const string CommitsInstrumentName = "mailfathom.persistence.commits";
+
+    private const string OutcomeTagName = "mailfathom.persistence.commit.outcome";
+
     [Fact]
     public async Task CommitAsync_DbUpdateConcurrencyException_RollsBackAndReturnsConflict()
     {
@@ -97,6 +103,36 @@ public sealed class EfCorePersistenceSessionTests
         Assert.Equal(1, resources.ClearTrackedStateCount);
     }
 
+    /// <summary>
+    /// A conflict rate is only real if the session that observed one says so, and a conflict resolved by a retry leaves
+    /// no other trace at all — so this is the wiring that decides whether the counter measures anything.
+    /// </summary>
+    [Fact]
+    public async Task CommitAsync_EitherEnding_CountsItUnderTheOutcomeThatHappened()
+    {
+        // Arrange
+        var (_, committingSession) = CreateSession();
+        var (_, conflictingSession) = CreateSession(new DbUpdateConcurrencyException());
+        using var measurements = new RecordedMailFathomMeasurements(CommitsInstrumentName);
+
+        // Act
+        await using (committingSession)
+        {
+            _ = await committingSession.CommitAsync(CancellationToken.None);
+        }
+
+        await using (conflictingSession)
+        {
+            _ = await conflictingSession.CommitAsync(CancellationToken.None);
+        }
+
+        // Assert
+        var outcomes = measurements.DimensionOf(CommitsInstrumentName, OutcomeTagName);
+
+        Assert.Contains("committed", outcomes);
+        Assert.Contains("concurrency_conflict", outcomes);
+    }
+
     [SuppressMessage(
         "Reliability",
         "CA2000:Dispose objects before losing scope",
@@ -114,7 +150,7 @@ public sealed class EfCorePersistenceSessionTests
                 classifiesSaveChangesExceptionAsConcurrencyConflict,
         };
 
-        return (resources, new EfCorePersistenceSession(resources));
+        return (resources, new EfCorePersistenceSession(resources, new PersistenceCommitTelemetry()));
     }
 
     private sealed class TestPersistenceSessionResources : IEfCorePersistenceSessionResources

@@ -15,12 +15,15 @@ namespace MailFathom.Mcp.Observability;
 
 /// <summary>Records how every tool call ended and keeps undiagnosed failures inside the server.</summary>
 /// <param name="timeProvider">Measures how long a call took.</param>
+/// <param name="telemetry">Publishes that measurement as the aggregate a rate and a distribution are read from.</param>
 /// <param name="logger">Records the tool name, the outcome, and the duration.</param>
 /// <remarks>
 /// <para>
 /// The reporter wraps every <c>tools/call</c> invocation, so the two obligations it carries are met once for the whole
 /// protocol surface instead of per tool. The first is observability: the tool name, the outcome, and the duration are
-/// recorded, and never a filter value, a mailbox address, a subject, or any part of a result.
+/// recorded, and never a filter value, a mailbox address, a subject, or any part of a result. One measurement serves
+/// both destinations — the record of what happened to one call, and the instruments an operator reads a distribution
+/// off — because a second timing path would eventually disagree with the first about the same call.
 /// </para>
 /// <para>
 /// The second is that nothing undiagnosed reaches a client, and this is the one place that decides it. A
@@ -43,7 +46,10 @@ namespace MailFathom.Mcp.Observability;
 /// transport must report as one.
 /// </para>
 /// </remarks>
-internal sealed partial class McpToolCallReporter(TimeProvider timeProvider, ILogger<McpToolCallReporter> logger)
+internal sealed partial class McpToolCallReporter(
+    TimeProvider timeProvider,
+    McpToolCallTelemetry telemetry,
+    ILogger<McpToolCallReporter> logger)
 {
     /// <summary>Invokes the rest of the tool-call pipeline and reports how it ended.</summary>
     /// <param name="next">The pipeline this reporter wraps.</param>
@@ -63,21 +69,27 @@ internal sealed partial class McpToolCallReporter(TimeProvider timeProvider, ILo
         ArgumentNullException.ThrowIfNull(next);
         ArgumentNullException.ThrowIfNull(request);
 
-        var toolName = RecordableToolName(request.Params?.Name);
+        var requestedToolName = request.Params?.Name;
+        var toolName = RecordableToolName(requestedToolName);
         var startedAt = timeProvider.GetTimestamp();
 
         try
         {
             var result = await next(request, cancellationToken);
 
-            var completedAfterMilliseconds = this.ElapsedMilliseconds(startedAt);
-            this.LogCallCompleted(toolName, result.IsError is true, completedAfterMilliseconds);
+            var completedAfter = timeProvider.GetElapsedTime(startedAt);
+            var completedAfterMilliseconds = Milliseconds(completedAfter);
+            var isError = result.IsError is true;
+            telemetry.RecordCompleted(requestedToolName, isError, completedAfter);
+            this.LogCallCompleted(toolName, isError, completedAfterMilliseconds);
 
             return result;
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
-            var cancelledAfterMilliseconds = this.ElapsedMilliseconds(startedAt);
+            var cancelledAfter = timeProvider.GetElapsedTime(startedAt);
+            var cancelledAfterMilliseconds = Milliseconds(cancelledAfter);
+            telemetry.RecordCancelled(requestedToolName, cancelledAfter);
             this.LogCallCanceled(toolName, cancelledAfterMilliseconds);
 
             throw;
@@ -87,7 +99,9 @@ internal sealed partial class McpToolCallReporter(TimeProvider timeProvider, ILo
             // Recorded before it leaves, so a call that ended as a JSON-RPC error still appears in the audit trail with a
             // duration. It is then rethrown rather than answered, because the transport has to report it as the protocol
             // error it is.
-            var refusedAfterMilliseconds = this.ElapsedMilliseconds(startedAt);
+            var refusedAfter = timeProvider.GetElapsedTime(startedAt);
+            var refusedAfterMilliseconds = Milliseconds(refusedAfter);
+            telemetry.RecordProtocolFailure(requestedToolName, refusedAfter);
             this.LogCallFailedTheProtocol(toolName, (int)protocolFailure.ErrorCode, refusedAfterMilliseconds);
 
             throw;
@@ -97,14 +111,18 @@ internal sealed partial class McpToolCallReporter(TimeProvider timeProvider, ILo
             // A use case raised this, so the code and the client-safe wording are already decided and no tool has to
             // repeat the mapping. Which failure it was is logged here rather than by the tool, because the tool did not
             // diagnose it.
-            var rejectedAfterMilliseconds = this.ElapsedMilliseconds(startedAt);
+            var rejectedAfter = timeProvider.GetElapsedTime(startedAt);
+            var rejectedAfterMilliseconds = Milliseconds(rejectedAfter);
+            telemetry.RecordRefused(requestedToolName, rejectedAfter);
             this.LogCallReportedAKnownFailure(toolName, expectedFailure.ErrorCode.Value, rejectedAfterMilliseconds);
 
             return ErrorResult(McpToolFailure.Describe(expectedFailure));
         }
         catch (Exception unexpectedFailure)
         {
-            var failedAfterMilliseconds = this.ElapsedMilliseconds(startedAt);
+            var failedAfter = timeProvider.GetElapsedTime(startedAt);
+            var failedAfterMilliseconds = Milliseconds(failedAfter);
+            telemetry.RecordUnexpectedFailure(requestedToolName, failedAfter);
             this.LogCallFailedUnexpectedly(toolName, failedAfterMilliseconds, unexpectedFailure);
 
             return ErrorResult(
@@ -120,6 +138,11 @@ internal sealed partial class McpToolCallReporter(TimeProvider timeProvider, ILo
     /// tool it is unvalidated caller input on its way into retained structured logs. Anything outside the shape a MailFathom
     /// tool name is spelled with is therefore recorded as one fixed placeholder, which keeps arbitrary text, control
     /// characters, and unbounded length out of the log without needing the registry to answer first.
+    /// <para>
+    /// The instruments are stricter, and deliberately so. A log line keeps a name of an unpublished tool because that is
+    /// what somebody diagnosing a client's mistake needs to read; a metric dimension cannot, because a name a caller
+    /// chose is a time series a caller opened. <see cref="McpToolCallTelemetry" /> holds that half.
+    /// </para>
     /// </remarks>
     private static string RecordableToolName(string? requestedName) =>
         requestedName is not null && ToolNameShape().IsMatch(requestedName) ? requestedName : "(unrecognized)";
@@ -133,8 +156,7 @@ internal sealed partial class McpToolCallReporter(TimeProvider timeProvider, ILo
         Content = [new TextContentBlock { Text = failureText }],
     };
 
-    private long ElapsedMilliseconds(long startedAt) =>
-        (long)timeProvider.GetElapsedTime(startedAt).TotalMilliseconds;
+    private static long Milliseconds(TimeSpan elapsed) => (long)elapsed.TotalMilliseconds;
 
     [LoggerMessage(
         Level = LogLevel.Information,

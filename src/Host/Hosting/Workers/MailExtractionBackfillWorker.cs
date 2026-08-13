@@ -8,6 +8,7 @@ using MailFathom.Application.Emails.Extraction;
 using MailFathom.Application.Persistence;
 using MailFathom.Common.Observability;
 using MailFathom.Host.Configuration.Mail;
+using MailFathom.Infrastructure.Observability;
 using Microsoft.Extensions.Options;
 
 namespace MailFathom.Host.Hosting.Workers;
@@ -34,20 +35,18 @@ internal sealed partial class MailExtractionBackfillWorker : BackgroundService
     internal const string UnreadableTagName = "mailfathom.mail.extraction.backfill.unreadable";
     internal const string MissingContentTagName = "mailfathom.mail.extraction.backfill.missing_content";
     internal const string RemainingTagName = "mailfathom.mail.extraction.backfill.remaining";
-    internal const string OutcomeTagName = "mailfathom.mail.extraction.backfill.outcome";
 
-    internal const string SucceededOutcomeName = "succeeded";
+    /// <summary>The tag name and the four outcomes, taken from the instruments so a span and a series cannot disagree.</summary>
+    internal const string OutcomeTagName = MailExtractionBackfillTelemetry.OutcomeTagName;
 
-    /// <summary>Names a pass a competing writer deferred, which the next interval resumes from.</summary>
-    internal const string DeferredOutcomeName = "deferred";
-
-    internal const string FailedOutcomeName = "failed";
-
-    /// <summary>Names a pass the host stopped, which is shutdown rather than a failure.</summary>
-    internal const string InterruptedOutcomeName = "interrupted";
+    internal const string SucceededOutcomeName = MailExtractionBackfillTelemetry.SucceededOutcomeName;
+    internal const string DeferredOutcomeName = MailExtractionBackfillTelemetry.DeferredOutcomeName;
+    internal const string FailedOutcomeName = MailExtractionBackfillTelemetry.FailedOutcomeName;
+    internal const string InterruptedOutcomeName = MailExtractionBackfillTelemetry.InterruptedOutcomeName;
 
     private readonly IServiceScopeFactory scopeFactory;
     private readonly MailExtractionBackfillOptions settings;
+    private readonly MailExtractionBackfillTelemetry telemetry;
     private readonly ILogger<MailExtractionBackfillWorker> logger;
     private readonly TimeProvider timeProvider;
 
@@ -55,6 +54,7 @@ internal sealed partial class MailExtractionBackfillWorker : BackgroundService
     public MailExtractionBackfillWorker(
         IServiceScopeFactory scopeFactory,
         IOptions<MailExtractionBackfillOptions> settings,
+        MailExtractionBackfillTelemetry telemetry,
         ILogger<MailExtractionBackfillWorker> logger,
         TimeProvider timeProvider)
     {
@@ -62,6 +62,7 @@ internal sealed partial class MailExtractionBackfillWorker : BackgroundService
 
         this.scopeFactory = scopeFactory;
         this.settings = settings.Value;
+        this.telemetry = telemetry;
         this.logger = logger;
         this.timeProvider = timeProvider;
     }
@@ -98,6 +99,7 @@ internal sealed partial class MailExtractionBackfillWorker : BackgroundService
     private async Task<bool> RunOnceAsync(CancellationToken cancellationToken)
     {
         using var run = Telemetry.ActivitySource.StartActivity(RunSpanName);
+        var startedAt = this.timeProvider.GetTimestamp();
 
         try
         {
@@ -105,6 +107,8 @@ internal sealed partial class MailExtractionBackfillWorker : BackgroundService
 
             var backfill = scope.ServiceProvider.GetRequiredService<StoredEmailExtractionBackfill>();
             var result = await backfill.RunAsync(cancellationToken);
+
+            this.telemetry.RecordCompleted(result, this.timeProvider.GetElapsedTime(startedAt));
 
             run?.SetTag(ExtractedTagName, result.ExtractedEmailCount);
             run?.SetTag(UnreadableTagName, result.UnreadableEmailCount);
@@ -131,12 +135,14 @@ internal sealed partial class MailExtractionBackfillWorker : BackgroundService
             // Shutdown rather than a failure, exactly as an interrupted synchronization cycle is, so a rolling restart
             // does not read as a backfill that broke.
             run?.SetTag(OutcomeTagName, InterruptedOutcomeName);
+            this.telemetry.RecordInterrupted(this.timeProvider.GetElapsedTime(startedAt));
 
             throw;
         }
         catch (PersistenceConcurrencyConflictException exception)
         {
             run?.SetTag(OutcomeTagName, DeferredOutcomeName);
+            this.telemetry.RecordDeferred(this.timeProvider.GetElapsedTime(startedAt));
 
             this.LogBackfillDeferredAfterConcurrencyConflict(exception);
 
@@ -146,6 +152,7 @@ internal sealed partial class MailExtractionBackfillWorker : BackgroundService
         {
             run?.SetTag(OutcomeTagName, FailedOutcomeName);
             run?.SetStatus(ActivityStatusCode.Error);
+            this.telemetry.RecordFailed(this.timeProvider.GetElapsedTime(startedAt));
 
             this.LogBackfillFailed(exception);
 

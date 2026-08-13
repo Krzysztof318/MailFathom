@@ -62,6 +62,11 @@ internal sealed class EmailContentStore(
     }
 
     /// <inheritdoc />
+    /// <remarks>
+    /// The write is measured rather than spanned, for the reason
+    /// <see cref="StoredEmailContentTelemetry" /> records: it happens once per stored message inside a folder run that
+    /// already has a span, and what an operator asks of it is a distribution rather than an individual.
+    /// </remarks>
     public async Task SaveContentAsync(
         IPersistenceSession session,
         StoredEmailId storedEmailId,
@@ -69,6 +74,8 @@ internal sealed class EmailContentStore(
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(content);
+
+        using var write = telemetry.BeginWrite();
 
         var dbContext = EfCorePersistenceSessionAccessor.DbContextOf(session);
 
@@ -103,6 +110,8 @@ internal sealed class EmailContentStore(
             trackedEntity.Sha256Hash = hash;
             trackedEntity.StoredAt = storedAt;
 
+            write.Stored(byteLength);
+
             return;
         }
 
@@ -130,6 +139,8 @@ internal sealed class EmailContentStore(
                 StoredAt = storedAt,
             });
         }
+
+        write.Stored(byteLength);
     }
 
     private static void EnsureOccurrenceMatches(

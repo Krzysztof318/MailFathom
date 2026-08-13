@@ -82,6 +82,18 @@ internal sealed class RecordedMailFathomMeasurements : IDisposable
         [.. this.recorded.Where(measurement => measurement.InstrumentName == instrumentName)
             .Select(measurement => measurement.Tags)];
 
+    /// <summary>Gets what one instrument published under one dimension, in order.</summary>
+    /// <param name="instrumentName">The instrument to read.</param>
+    /// <param name="tagName">The dimension to read off each of its measurements.</param>
+    /// <returns>One value per measurement, or <see langword="null" /> where the measurement carried no such tag.</returns>
+    /// <remarks>
+    /// Beside <see cref="TagsOf" /> rather than replacing it: that one renders the two embedding dimensions as one
+    /// comparable value, and this one reads whichever dimension an instrument outside that family carries.
+    /// </remarks>
+    internal IReadOnlyList<object?> DimensionOf(string instrumentName, string tagName) =>
+        [.. this.recorded.Where(measurement => measurement.InstrumentName == instrumentName)
+            .Select(measurement => measurement.Dimensions.GetValueOrDefault(tagName))];
+
     /// <inheritdoc />
     public void Dispose() => this.listener.Dispose();
 
@@ -90,7 +102,8 @@ internal sealed class RecordedMailFathomMeasurements : IDisposable
         this.recorded.Enqueue(new RecordedMeasurement(
             instrument.Name,
             Convert.ToDouble(measurement, System.Globalization.CultureInfo.InvariantCulture),
-            DescribeTags(tags)));
+            DescribeTags(tags),
+            tags.ToArray().ToDictionary(tag => tag.Key, tag => tag.Value, StringComparer.Ordinal)));
 
     /// <summary>Renders the outcome and failure tags as one value a sequence assertion can compare.</summary>
     /// <remarks>
@@ -123,4 +136,9 @@ internal sealed class RecordedMailFathomMeasurements : IDisposable
 /// <param name="InstrumentName">Which instrument took it.</param>
 /// <param name="Value">What it measured, widened so a counter and a histogram compare the same way.</param>
 /// <param name="Tags">Its outcome and failure tags, rendered as <c>outcome/failure</c>.</param>
-internal sealed record RecordedMeasurement(string InstrumentName, double Value, string Tags);
+/// <param name="Dimensions">Every tag it carried, for an instrument outside the embedding family.</param>
+internal sealed record RecordedMeasurement(
+    string InstrumentName,
+    double Value,
+    string Tags,
+    IReadOnlyDictionary<string, object?> Dimensions);

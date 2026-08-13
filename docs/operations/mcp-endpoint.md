@@ -1591,6 +1591,11 @@ about why. When a client reports `54001`, the server log is where the reason is.
 A refused call is logged with the five-digit code it was refused with, so an operator can correlate a client's complaint
 against a server record without learning what was searched for.
 
+That same measurement is published as instruments, so a rate and a distribution can be read without going through the
+records one at a time. What they carry is the tool and how the call ended, and nothing else;
+[telemetry](telemetry.md#what-mailfathom-publishes-under-its-own-name) names them and says why a tool a caller asked for
+by a name this deployment does not publish is measured under one fixed placeholder rather than under the name it sent.
+
 ## What a client learns while connecting
 
 The `initialize` handshake reports this deployment as `MailFathom` and names the version the protocol assembly was built
