@@ -91,6 +91,96 @@ public sealed class PublishedOAuthMetadataTests
     public void For_NoEntryAtAll_IsRefusedRatherThanPublishingAnEmptyDocument() =>
         Assert.Throws<ArgumentException>(() => PublishedOAuthMetadata.For([]));
 
+    /// <summary>
+    /// The document states what a client should ask for, so a scope the deployment advertises without checking is in it
+    /// beside the ones it does check. <c>offline_access</c> is the value the whole separation exists for: a client that
+    /// never asks for it holds no refresh token, and sends its user back through the authorization server every time the
+    /// access token expires.
+    /// </summary>
+    [Fact]
+    public void For_AnEntryAdvertisingOfflineAccess_PublishesItBesideTheRequiredScopes()
+    {
+        // Arrange
+        var workforce = EntryFor(WorkforceIssuer, "workforce", "mailfathom.read");
+        workforce.AdvertisedScopes.Add("offline_access");
+
+        // Act
+        var published = PublishedOAuthMetadata.For([workforce]);
+
+        // Assert
+        Assert.Equal(["mailfathom.read", "offline_access"], published.ScopesSupported);
+    }
+
+    /// <summary>A deployment that advertises nothing extra publishes exactly what it requires, which is what it published before the two lists were separated.</summary>
+    [Fact]
+    public void For_AnEntryAdvertisingNothingExtra_PublishesOnlyWhatItRequires()
+    {
+        // Arrange
+        var workforce = EntryFor(WorkforceIssuer, "workforce", "mailfathom.read");
+
+        // Act
+        var published = PublishedOAuthMetadata.For([workforce]);
+
+        // Assert
+        Assert.Equal(["mailfathom.read"], published.ScopesSupported);
+    }
+
+    /// <summary>One document over several entries, so a scope one of them advertises reaches every client reading it, once.</summary>
+    [Fact]
+    public void For_SeveralEntriesAdvertisingScopes_PublishesEveryRequiredScopeThenEveryAdvertisedOneOnce()
+    {
+        // Arrange
+        var workforce = EntryFor(WorkforceIssuer, "workforce", "mailfathom.read");
+        workforce.AdvertisedScopes.Add("offline_access");
+
+        var partners = EntryFor(PartnerIssuer, "partners", "partners.read");
+        partners.AdvertisedScopes.Add("offline_access");
+        partners.AdvertisedScopes.Add("openid");
+
+        // Act
+        var published = PublishedOAuthMetadata.For([workforce, partners]);
+
+        // Assert
+        Assert.Equal(
+            ["mailfathom.read", "partners.read", "offline_access", "openid"],
+            published.ScopesSupported);
+    }
+
+    /// <summary>
+    /// Advertising is not requiring. What turns an authenticated caller away is the required list alone, so a scope
+    /// reaching the document must leave that list exactly where it was — otherwise publishing a hint for clients would
+    /// start refusing every token an authorization server issues without it.
+    /// </summary>
+    [Fact]
+    public void For_AnAdvertisedScope_LeavesWhatATokenIsCheckedAgainstUntouched()
+    {
+        // Arrange
+        var workforce = EntryFor(WorkforceIssuer, "workforce", "mailfathom.read");
+        workforce.AdvertisedScopes.Add("offline_access");
+
+        // Act
+        var published = PublishedOAuthMetadata.For([workforce]);
+
+        // Assert
+        Assert.Contains("offline_access", published.ScopesSupported);
+        Assert.Equal(["mailfathom.read"], workforce.RequiredScopes);
+    }
+
+    /// <summary>An entry that requires nothing and advertises a scope publishes it, which is the deployment accepting any token while still telling clients what to ask for.</summary>
+    [Fact]
+    public void For_AnEntryRequiringNothingButAdvertisingAScope_PublishesThatScope()
+    {
+        // Arrange
+        var workforce = EntryFor(WorkforceIssuer, "workforce");
+        workforce.AdvertisedScopes.Add("offline_access");
+
+        // Act
+        var published = PublishedOAuthMetadata.For([workforce]);
+
+        // Assert
+        Assert.Equal(["offline_access"], published.ScopesSupported);
+    }
+
     private static OAuthValidationOptions EntryFor(string issuer, string name, params string[] requiredScopes)
     {
         var oauth = new OAuthValidationOptions { Resource = Resource };

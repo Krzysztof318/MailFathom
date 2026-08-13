@@ -105,9 +105,14 @@ internal sealed class DeploymentAuthorizer
         // and the deployment refuses it — correctly, and for a reason nothing in the refusal explains.
         query["resource"] = authorization.Resource;
 
-        // A refresh token is what makes the session outlive the first hour, and both of the widely deployed servers ask
-        // for it by name in the scope list rather than inferring it from the grant.
-        query["scope"] = ScopeWithOfflineAccess(authorization.Scope);
+        // Verbatim from the deployment's metadata document, including 'offline_access' where it advertises one. Adding a
+        // scope the document never named would ask an authorization server for something the operator did not intend,
+        // and a session that outlives the first hour is the deployment's decision to publish rather than this client's
+        // to assume.
+        if (!string.IsNullOrWhiteSpace(authorization.Scope))
+        {
+            query["scope"] = authorization.Scope;
+        }
 
         return new PendingSignIn(
             new UriBuilder(authorizationEndpoint) { Query = query.ToString() }.Uri,
@@ -227,33 +232,33 @@ internal sealed class DeploymentAuthorizer
         ArgumentNullException.ThrowIfNull(clientId);
         ArgumentNullException.ThrowIfNull(refreshToken);
 
+        var form = new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["grant_type"] = "refresh_token",
+            ["refresh_token"] = refreshToken,
+            ["client_id"] = clientId,
+            ["resource"] = authorization.Resource,
+        };
+
+        AddPublishedScopes(form, authorization);
+
         var renewed = await this.ExchangeAsync(
             authorization,
-            new Dictionary<string, string>(StringComparer.Ordinal)
-            {
-                ["grant_type"] = "refresh_token",
-                ["refresh_token"] = refreshToken,
-                ["client_id"] = clientId,
-                ["resource"] = authorization.Resource,
-                ["scope"] = authorization.Scope,
-            },
+            form,
             GrantAttempt.StoredRefreshToken,
             cancellationToken);
 
         return renewed with { RefreshToken = refreshToken };
     }
 
-    /// <summary>Asks for offline access by name, so a refresh token is issued rather than hoped for.</summary>
-    /// <remarks>Appended rather than assumed present, because the scopes come from what the deployment requires and a deployment has no reason to list a scope about the client's own session.</remarks>
-    private static string ScopeWithOfflineAccess(string scope)
+    /// <summary>Asks for the scopes the deployment published, and asks for nothing where it published none.</summary>
+    /// <remarks>An empty <c>scope</c> parameter is not the same thing as an absent one, and a deployment that requires and advertises no scope publishes an empty list — so the parameter is left out rather than sent empty to a server that may well refuse it. Blank is read as absent as well, because a stored session predating this reading may carry one.</remarks>
+    private static void AddPublishedScopes(Dictionary<string, string> form, DeploymentAuthorization authorization)
     {
-        const string OfflineAccess = "offline_access";
-
-        var requested = scope.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-
-        return requested.Contains(OfflineAccess, StringComparer.Ordinal)
-            ? scope
-            : string.Join(' ', [.. requested, OfflineAccess]);
+        if (!string.IsNullOrWhiteSpace(authorization.Scope))
+        {
+            form["scope"] = authorization.Scope;
+        }
     }
 
     /// <summary>Creates the opaque value the redirect must echo, which is what binds a returned code to this request.</summary>
@@ -330,14 +335,17 @@ internal sealed class DeploymentAuthorizer
         string clientId,
         CancellationToken cancellationToken)
     {
+        var form = new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["client_id"] = clientId,
+            ["resource"] = authorization.Resource,
+        };
+
+        AddPublishedScopes(form, authorization);
+
         var response = await this.PostFormAsync(
             deviceAuthorizationEndpoint,
-            new Dictionary<string, string>(StringComparer.Ordinal)
-            {
-                ["client_id"] = clientId,
-                ["scope"] = ScopeWithOfflineAccess(authorization.Scope),
-                ["resource"] = authorization.Resource,
-            },
+            form,
             CliJsonContext.Default.OAuthDeviceAuthorizationResponse,
             cancellationToken);
 
@@ -437,7 +445,7 @@ internal sealed class DeploymentAuthorizer
         if (attempt is not GrantAttempt.StoredRefreshToken && response.RefreshToken is not { Length: > 0 })
         {
             throw new CliFailure(
-                "The authorization server issued no refresh token, so the sign-in would end within the hour. Grant the client offline access, or sign in with an API key instead.");
+                "The authorization server issued no refresh token, so the sign-in would end within the hour. Grant the client offline access at the authorization server and have the deployment advertise 'offline_access', or sign in with an API key instead.");
         }
 
         return new DeploymentGrant(

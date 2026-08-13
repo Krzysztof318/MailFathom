@@ -94,20 +94,57 @@ public sealed class OAuthSignInTests : IDisposable
     {
         // Arrange
         var deployment = FakeOAuthDeployment.Answering();
-        deployment.RequiredScopes = ["mailfathom.admin", "mailfathom.read"];
+        deployment.PublishedScopes = ["mailfathom.admin", "mailfathom.read", "offline_access"];
         using var handler = deployment.Handler();
 
         // Act
         await this.RunInteractiveAsync(this.CreateStore(), handler);
 
         // Assert
-        var requested = HttpUtility.ParseQueryString(new Uri(this.AuthorizationAddress()).Query)["scope"]?.Split(' ');
-        Assert.Contains("mailfathom.admin", requested!);
-        Assert.Contains("mailfathom.read", requested!);
+        var requested = HttpUtility.ParseQueryString(new Uri(this.AuthorizationAddress()).Query)["scope"]!.Split(' ');
+        Assert.Equal(["mailfathom.admin", "mailfathom.read", "offline_access"], requested);
+    }
 
-        // Without offline access asked for by name, neither of the widely deployed servers issues a refresh token, and
-        // the session would end within the hour.
-        Assert.Contains("offline_access", requested!);
+    /// <summary>
+    /// The document states what to ask for, and this command asks for that and nothing more. It used to append
+    /// <c>offline_access</c> itself, which meant a deployment could not decide whether its clients hold a refresh token;
+    /// now the deployment advertises the scope and every client reading the same document asks for it, rather than only
+    /// the one client that hard-coded the value.
+    /// </summary>
+    [Fact]
+    public async Task Login_ADeploymentAdvertisingNoOfflineAccess_AsksForNothingItDidNotPublish()
+    {
+        // Arrange
+        var deployment = FakeOAuthDeployment.Answering();
+        deployment.PublishedScopes = ["mailfathom.admin"];
+        using var handler = deployment.Handler();
+
+        // Act
+        await this.RunInteractiveAsync(this.CreateStore(), handler);
+
+        // Assert
+        var requested = HttpUtility.ParseQueryString(new Uri(this.AuthorizationAddress()).Query)["scope"]!.Split(' ');
+        Assert.Equal(["mailfathom.admin"], requested);
+    }
+
+    /// <summary>
+    /// A deployment requiring and advertising nothing publishes an empty list, and an empty <c>scope</c> parameter is
+    /// not the same request as one carrying none — several authorization servers refuse the first outright. Nothing is
+    /// substituted for the absence either: the sign-in then ends within the hour, which is the deployment's own choice.
+    /// </summary>
+    [Fact]
+    public async Task Login_ADeploymentPublishingNoScopeAtAll_AsksWithNoScopeParameter()
+    {
+        // Arrange
+        var deployment = FakeOAuthDeployment.Answering();
+        deployment.PublishedScopes = [];
+        using var handler = deployment.Handler();
+
+        // Act
+        await this.RunInteractiveAsync(this.CreateStore(), handler);
+
+        // Assert
+        Assert.Null(HttpUtility.ParseQueryString(new Uri(this.AuthorizationAddress()).Query)["scope"]);
     }
 
     /// <summary>A redirect echoing a value this run never issued belongs to a different request, so nothing may be redeemed against it.</summary>
@@ -315,6 +352,82 @@ public sealed class OAuthSignInTests : IDisposable
         Assert.Equal("urn:ietf:params:oauth:grant-type:device_code", deployment.LastTokenRequest["grant_type"]);
     }
 
+    /// <summary>
+    /// A device sign-in asks for its scopes at the device authorization endpoint, before any code exists to exchange,
+    /// so that request is the only place a wrong scope list would appear. Dropping a scope the deployment advertises
+    /// costs the person a refresh token they were meant to have and shows up as nothing else.
+    /// </summary>
+    [Fact]
+    public async Task Login_ADeviceSignIn_AsksTheDeviceEndpointForTheScopesTheDeploymentPublishes()
+    {
+        // Arrange
+        var deployment = FakeOAuthDeployment.Answering();
+        deployment.PublishedScopes = ["mailfathom.admin", "offline_access"];
+        using var handler = deployment.Handler();
+
+        // The device grant polls, and the poll waits on the injected clock rather than on a real delay.
+        var signIn = RunAsync(
+            this.Context(this.CreateStore(), handler, FakeMailboxRedirect.Silent()),
+            "login",
+            "--endpoint",
+            FakeOAuthDeployment.DeploymentAddress,
+            "--mode",
+            "device",
+            "--client-id",
+            ClientId);
+
+        // Act
+        await this.AdvanceUntilCompleteAsync(signIn);
+
+        // Assert
+        Assert.Equal(0, await signIn);
+        Assert.Equal("mailfathom.admin offline_access", deployment.LastDeviceAuthorizationRequest["scope"]);
+    }
+
+    /// <summary>The same guard as the interactive request, on the request that carries it: an empty <c>scope</c> parameter is not an absent one.</summary>
+    [Fact]
+    public async Task Login_ADeviceSignInAgainstADeploymentPublishingNoScope_AsksWithNoScopeParameter()
+    {
+        // Arrange
+        var deployment = FakeOAuthDeployment.Answering();
+        deployment.PublishedScopes = [];
+        using var handler = deployment.Handler();
+
+        // The device grant polls, and the poll waits on the injected clock rather than on a real delay.
+        var signIn = RunAsync(
+            this.Context(this.CreateStore(), handler, FakeMailboxRedirect.Silent()),
+            "login",
+            "--endpoint",
+            FakeOAuthDeployment.DeploymentAddress,
+            "--mode",
+            "device",
+            "--client-id",
+            ClientId);
+
+        // Act
+        await this.AdvanceUntilCompleteAsync(signIn);
+
+        // Assert
+        Assert.Equal(0, await signIn);
+        Assert.DoesNotContain("scope", deployment.LastDeviceAuthorizationRequest.Keys);
+    }
+
+    /// <summary>A document answering with blanks composes into a scope parameter made of spaces, which is the empty one the guard exists to avoid — and it comes from a machine this process does not own.</summary>
+    [Fact]
+    public async Task Login_ADeploymentPublishingBlankScopes_AsksWithNoScopeParameter()
+    {
+        // Arrange
+        var deployment = FakeOAuthDeployment.Answering();
+        deployment.PublishedScopes = [" ", string.Empty];
+        using var handler = deployment.Handler();
+
+        // Act
+        await this.RunInteractiveAsync(this.CreateStore(), handler);
+
+        // Assert
+        Assert.Null(HttpUtility.ParseQueryString(new Uri(this.AuthorizationAddress()).Query)["scope"]);
+    }
+
     /// <summary>A server publishing no device endpoint is reported as that, rather than as a sign-in that hangs on a grant it will never answer.</summary>
     [Fact]
     public async Task Login_ADeviceSignInAtAServerOfferingNone_SaysSoRatherThanPolling()
@@ -442,6 +555,9 @@ public sealed class OAuthSignInTests : IDisposable
         Assert.Equal(0, exitCode);
         Assert.Equal("refresh_token", deployment.LastTokenRequest["grant_type"]);
         Assert.Equal("a-renewed-access-token", store.Resolve(requestedDeployment: null).Token);
+
+        // The renewal asks for the same scopes the sign-in did, so a session does not quietly narrow as it is renewed.
+        Assert.Equal("mailfathom.admin", deployment.LastTokenRequest["scope"]);
     }
 
     /// <summary>

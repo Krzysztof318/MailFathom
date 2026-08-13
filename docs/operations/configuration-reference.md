@@ -1046,13 +1046,16 @@ same entries; the administrative one adds a single rule, stated with it below.
 | `…:<n>:PublicKey` | secret block | — | One [named secret](secret-provisioning.md#the-secret-block) with its own `Lifetime`, resolving to one client's PEM public key. Startup refuses material that is not one, an RSA key below 2048 bits, and — explicitly — material carrying a private key | restart; material per request |
 | `…:<n>:OAuth:Resource` | string | — | Required; the canonical `https` URL clients reach this endpoint at — behind a proxy, the proxy's public URL. Every OAuth entry names the same one, because the endpoint publishes one metadata document at an address derived from it | restart |
 | `…:<n>:OAuth:RequiredScopes` | string list | empty | Scopes a token from *this entry's* servers must carry; empty accepts any token they issued for this resource | restart |
+| `…:<n>:OAuth:AdvertisedScopes` | string list | empty | Scopes published in `scopes_supported` for a client to ask for and checked on no token — `offline_access` is what a client needs to be issued a refresh token. Every required scope is published regardless, so a value repeating one is refused, as is one that is not a scope token | restart |
 | `…:<n>:OAuth:AuthorizationServers:<m>:Name` | string | — | Required; the identity diagnostics use, and unique across every entry because it composes the scheme its validator registers under | restart |
 | `…:<n>:OAuth:AuthorizationServers:<m>:Issuer` | string | — | Required; a well-formed `https` issuer, compared against `iss` exactly, and unique across every entry | restart |
 | `…:<n>:OAuth:AuthorizationServers:<m>:MetadataAddress` | string | unset | An absolute `https` URL on the issuer's own host; overrides issuer-derived discovery | restart |
 | `…:<n>:OAuth:AuthorizationServers:<m>:AuthorizedSubjects` | string list | — | At least one; a token whose `sub` is not listed is refused, so every user the server can sign in does not automatically read this mailbox | restart |
 
 MailFathom is a protected resource only; an external authorization server signs users in.
-[`OAuth`](mcp-endpoint.md#oauth) records what a token must prove,
+[`OAuth`](mcp-endpoint.md#oauth) records what a token must prove and
+[scopes you advertise but do not require](mcp-endpoint.md#scopes-you-advertise-but-do-not-require) why the published list
+is longer than the checked one,
 [API keys](mcp-endpoint.md#api-keys) what a key is compared against, and
 [Key pairs](mcp-endpoint.md#key-pairs) what a client signs and what the deployment verifies — including the audience,
 expiry, and replay identifier an assertion carries, none of which is a setting.

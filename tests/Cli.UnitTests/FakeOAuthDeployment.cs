@@ -46,8 +46,9 @@ internal sealed class FakeOAuthDeployment
     /// <remarks>What proves whether a rotated token was adopted: the second renewal presents either the original or the one the first renewal returned.</remarks>
     internal IReadOnlyList<string> PresentedRefreshTokens => this.issuedRefreshTokens;
 
-    /// <summary>Gets or sets the scopes the deployment publishes as required.</summary>
-    internal IReadOnlyList<string> RequiredScopes { get; set; } = ["mailfathom.admin"];
+    /// <summary>Gets or sets the scopes the deployment publishes for a client to ask for.</summary>
+    /// <remarks>This is the document's <c>scopes_supported</c> rather than what a token is checked against, so a deployment advertising offline access states it here and one that does not simply leaves it out.</remarks>
+    internal IReadOnlyList<string> PublishedScopes { get; set; } = ["mailfathom.admin"];
 
     /// <summary>Gets or sets the issuers the deployment publishes, which is more than one where several are accepted.</summary>
     internal IReadOnlyList<string> Issuers { get; set; } = [Issuer];
@@ -69,6 +70,11 @@ internal sealed class FakeOAuthDeployment
 
     /// <summary>Gets the form the token endpoint was last posted, so a test can assert what the command asked for.</summary>
     internal IReadOnlyDictionary<string, string> LastTokenRequest { get; private set; } =
+        new Dictionary<string, string>(StringComparer.Ordinal);
+
+    /// <summary>Gets the form the device authorization endpoint was last posted.</summary>
+    /// <remarks>Recorded separately from the token endpoint's because a device sign-in asks for its scopes here, before any code exists to exchange — so a request that asked for the wrong ones would otherwise reach no assertion at all.</remarks>
+    internal IReadOnlyDictionary<string, string> LastDeviceAuthorizationRequest { get; private set; } =
         new Dictionary<string, string>(StringComparer.Ordinal);
 
     /// <summary>Builds a deployment that publishes OAuth metadata and an authorization server that answers.</summary>
@@ -113,14 +119,25 @@ internal sealed class FakeOAuthDeployment
             OpenIdConnectDiscoveryPath => Json(HttpStatusCode.OK, this.AuthorizationServerMetadata()),
             "/realms/mailfathom/protocol/openid-connect/token" =>
                 await this.AnswerTokenEndpointAsync(request, cancellationToken),
-            "/realms/mailfathom/protocol/openid-connect/auth/device" => Json(
-                HttpStatusCode.OK,
-                $$"""{"device_code":"a-device-code","user_code":"WDJB-MJHT","verification_uri":"{{this.VerificationUri}}","expires_in":600,"interval":1}"""),
+            "/realms/mailfathom/protocol/openid-connect/auth/device" =>
+                await this.AnswerDeviceAuthorizationEndpointAsync(request, cancellationToken),
             "/api/admin/session" => Json(
                 HttpStatusCode.OK,
                 FakeAdminEndpoint.SessionBody("kasia", FakeAdminEndpoint.CommandVersion)),
             _ => new HttpResponseMessage(HttpStatusCode.NotFound),
         };
+    }
+
+    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "The response is handed to the HttpClient that asked for it, which disposes it.")]
+    private async Task<HttpResponseMessage> AnswerDeviceAuthorizationEndpointAsync(
+        HttpRequestMessage request,
+        CancellationToken cancellationToken)
+    {
+        this.LastDeviceAuthorizationRequest = await ReadFormAsync(request, cancellationToken);
+
+        return Json(
+            HttpStatusCode.OK,
+            $$"""{"device_code":"a-device-code","user_code":"WDJB-MJHT","verification_uri":"{{this.VerificationUri}}","expires_in":600,"interval":1}""");
     }
 
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "The response is handed to the HttpClient that asked for it, which disposes it.")]
@@ -161,7 +178,7 @@ internal sealed class FakeOAuthDeployment
         {
           "resource": "{{Resource}}",
           "authorization_servers": [{{string.Join(", ", this.Issuers.Select(issuer => $"\"{issuer}\""))}}],
-          "scopes_supported": [{{string.Join(", ", this.RequiredScopes.Select(scope => $"\"{scope}\""))}}],
+          "scopes_supported": [{{string.Join(", ", this.PublishedScopes.Select(scope => $"\"{scope}\""))}}],
           "bearer_methods_supported": ["header"],
           "resource_name": "MailFathom"
         }

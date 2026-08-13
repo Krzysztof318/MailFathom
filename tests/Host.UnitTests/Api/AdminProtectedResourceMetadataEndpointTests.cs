@@ -71,6 +71,25 @@ public sealed class AdminProtectedResourceMetadataEndpointTests
         Assert.Equal(["mailfathom.admin", "mailfathom.read", "partners.read"], document.ScopesSupported);
     }
 
+    /// <summary>
+    /// <c>mfctl</c> asks for exactly what this document lists and adds nothing to it, so a deployment that wants the
+    /// sign-in to outlive its first access token says so here. The field is what a client should ask for rather than
+    /// what a token is checked against, which is what RFC 9728 defines it as.
+    /// </summary>
+    [Fact]
+    public void For_AnEntryAdvertisingOfflineAccess_PublishesItForTheClientToAskFor()
+    {
+        // Arrange
+        var oauthSettings = Configured();
+        oauthSettings.AdvertisedScopes.Add("offline_access");
+
+        // Act
+        var document = ProtectedResourceMetadataDocument.For([oauthSettings]);
+
+        // Assert
+        Assert.Equal(["mailfathom.admin", "mailfathom.read", "offline_access"], document.ScopesSupported);
+    }
+
     /// <summary>A credential in a query string reaches every access log on the path, so the header is the only method offered.</summary>
     [Fact]
     public void For_AnySettings_OffersTheHeaderAsTheOnlyWayToPresentAToken()

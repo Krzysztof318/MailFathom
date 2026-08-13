@@ -7,7 +7,7 @@ namespace MailFathom.Host.Configuration.Access;
 /// <summary>What a protected surface's configured OAuth entries publish about themselves to a client holding nothing yet.</summary>
 /// <param name="Resource">The identifier a token must be issued for, which every entry names identically.</param>
 /// <param name="AuthorizationServers">Every issuer a token may come from, across every entry.</param>
-/// <param name="ScopesSupported">Every scope any entry asks for, listed once however many ask for it.</param>
+/// <param name="ScopesSupported">Every scope a client should ask for, listed once however many entries name it.</param>
 /// <remarks>
 /// <para>
 /// Two surfaces publish an RFC 9728 document and neither may publish a different one: the MCP endpoint through the
@@ -21,6 +21,14 @@ namespace MailFathom.Host.Configuration.Access;
 /// address derived from that resource's identifier. Every entry names the same resource, which configuration validation
 /// is what guarantees, so the resource comes from the first; the two lists carry what all of them accept, because a
 /// client reads this to find out where to authorize and what to ask for.
+/// </para>
+/// <para>
+/// <see cref="ScopesSupported" /> is what a client should ask for rather than what a token is checked against, which is
+/// what RFC 9728 defines the field as. It therefore composes an entry's required scopes together with the ones it
+/// advertises without checking — <c>offline_access</c> being the case that needs the distinction, since a client has to
+/// ask for it to be issued a refresh token while a token proves nothing by carrying it. Enforcement reads
+/// <see cref="OAuthValidationOptions.RequiredScopes" /> directly and never this list, so advertising a scope can widen
+/// what a client requests and can never narrow who is served.
 /// </para>
 /// </remarks>
 internal sealed record PublishedOAuthMetadata(
@@ -52,6 +60,11 @@ internal sealed record PublishedOAuthMetadata(
                     .SelectMany(oauthMethod => oauthMethod.AuthorizationServers)
                     .Select(authorizationServer => authorizationServer.ValidatedIssuer()),
             ],
-            [.. oauthMethods.SelectMany(oauthMethod => oauthMethod.RequiredScopes).Distinct(StringComparer.Ordinal)]);
+            [
+                .. oauthMethods
+                    .SelectMany(oauthMethod => oauthMethod.RequiredScopes)
+                    .Concat(oauthMethods.SelectMany(oauthMethod => oauthMethod.AdvertisedScopes))
+                    .Distinct(StringComparer.Ordinal),
+            ]);
     }
 }

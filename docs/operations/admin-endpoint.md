@@ -800,6 +800,19 @@ the scopes to ask for all come from the deployment: it publishes an [RFC 9728](h
 metadata document at `/.well-known/oauth-protected-resource/api/admin`, and the server it names publishes where to
 authorize. Nothing is transcribed, so nothing is transcribed wrongly.
 
+**The scope list is taken verbatim, and that includes `offline_access`.** A refresh token is what makes the sign-in
+outlive its first access token, and a client is issued one by naming that scope — so the entry serving this endpoint has
+to advertise it, in
+[`AdvertisedScopes`](mcp-endpoint.md#scopes-you-advertise-but-do-not-require) rather than in `RequiredScopes`. Without
+it the sign-in is refused where the token is issued rather than an hour later, naming what to do:
+
+```console
+$ mfctl login --endpoint https://mail.example.test:8443 --mode interactive --client-id mfctl
+The authorization server issued no refresh token, so the sign-in would end within the hour. Grant the client offline
+access at the authorization server and have the deployment advertise 'offline_access', or sign in with an API key
+instead.
+```
+
 Register the command as a **public client** with an authorization-code grant, PKCE required, and the redirect address
 `http://127.0.0.1:8765/`. It ships as a binary anyone can download, so it holds no client secret and presents none.
 Pass `--redirect-uri` if you registered a different loopback port, and `--issuer` if the deployment accepts tokens from
@@ -929,6 +942,11 @@ clear-text protection off globally. These are the client's decisions about one d
 An access token is typically minted for an hour, and you should never notice. Every command checks the stored token
 before it sends anything and exchanges the refresh token for a new one when it is within a minute of expiring, which is
 what keeps that hour from being an hourly interruption.
+
+**Whether there is a refresh token at all is the deployment's decision**, taken by advertising `offline_access` on the
+OAuth entry serving this endpoint — see [with OAuth](#with-oauth) above. The command asks for exactly the scopes the
+metadata document lists and adds nothing of its own, so a deployment that advertises the scope gives every client a
+renewable session and one that does not gives none of them one.
 
 **The refresh token itself is never renewed, and a rotated one is not adopted.** When the authorization server answers a
 renewal with a new refresh token, the command keeps the one issued at sign-in and discards the new one. That is
@@ -1077,7 +1095,7 @@ encryption answers the copy. Holding the credential in the platform's own secret
 | `not a usable web address` | The authorization server published a `verification_uri` that is not an absolute `http` or `https` address, so there is nothing to put in front of the person signing in. This is a fault at the authorization server rather than in its configuration here. |
 | `publishes no OAuth metadata` | The endpoint accepts API keys only. Sign in with one, or ask the operator to add an `OAuth` entry to `AdminEndpoint:Authentication`. |
 | `accepts tokens from several authorization servers` | More than one is configured and only you know which population you belong to. Name it with `--issuer`. |
-| `issued no refresh token` | The client was not granted offline access, so the session would end within the hour. Grant it at the authorization server. |
+| `issued no refresh token` | Nothing asked for offline access, so the session would end within the hour. Two settings can be missing: the deployment advertising `offline_access` in [`AdvertisedScopes`](mcp-endpoint.md#scopes-you-advertise-but-do-not-require), and the client being granted the scope at the authorization server. Check the metadata document first — if `scopes_supported` does not list it, nothing asked. |
 | `no device authorization endpoint` | That authorization server offers no device grant. Sign in from a machine with a browser. |
 
 ## Related
