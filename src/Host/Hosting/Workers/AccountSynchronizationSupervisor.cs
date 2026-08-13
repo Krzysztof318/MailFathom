@@ -496,7 +496,7 @@ internal sealed partial class AccountSynchronizationSupervisor
     /// <summary>Runs this account's rules over the mail that has arrived, and over its whole mailbox where one was asked for.</summary>
     /// <remarks>
     /// <para>
-    /// Last of the run's local steps, and after the folders rather than beside them, which is what makes "evaluation
+    /// After the folders rather than beside them, and in front of the cut, which is what makes "evaluation
     /// never runs inside the synchronization transaction" true rather than merely intended: every message it can reach
     /// was committed by a folder that has already finished, in a scope and a transaction of its own. Mail a folder the
     /// operator stopped mirroring still holds is out of reach here whichever order the steps ran in, because the pass
