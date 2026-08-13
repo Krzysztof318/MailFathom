@@ -115,6 +115,7 @@ internal sealed class SyntheticMailAccount(
         "rule-evaluation",
         "seen-state-provenance",
         "spam-scan",
+        "stale-derived-data",
         "synchronized",
         "timeline-and-search",
         "timeline-read-model",

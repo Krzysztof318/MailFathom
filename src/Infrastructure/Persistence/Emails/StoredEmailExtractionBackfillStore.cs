@@ -10,6 +10,7 @@ using MailFathom.CodeCoverage;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Folders;
+using MailFathom.Domain.Mutations;
 using MailFathom.Infrastructure.Persistence.Entities;
 using MailFathom.Infrastructure.Persistence.Sessions;
 using MailFathom.Infrastructure.Persistence.Spam;
@@ -262,6 +263,20 @@ internal sealed class StoredEmailExtractionBackfillStore(
     /// window withholds the cut for it too, by <see cref="MailAwaitingRelocation" />, which every cutting path reads.
     /// </para>
     /// <para>
+    /// Both of those wait for a <em>first</em> cut and nothing else, which is why a message that already carries
+    /// passages is ready whatever they say. This walk is the only path that can replace an existing passage — every
+    /// other one selects on having none — so a rebuild reaching an unstamped or still-moving message would otherwise
+    /// write the new document, take the row out of the walk, and leave the passages and the vectors built from them
+    /// derived under exactly the configuration the rebuild exists to replace, permanently and while the stored text
+    /// reports the new stamp. Cutting them again costs at worst passages of the folder the message is leaving, which is
+    /// the folder they already describe.
+    /// </para>
+    /// <para>
+    /// The classification half takes no such exemption. A verdict of junk is not an ordering to wait for but a decision
+    /// that this message is not derived from at all, and passages it was cut before that verdict are taken away by the
+    /// classifier rather than replaced here.
+    /// </para>
+    /// <para>
     /// It costs one indexed read of the row this write is already holding, whether or not the deployment classifies
     /// anything.
     /// </para>
@@ -272,10 +287,17 @@ internal sealed class StoredEmailExtractionBackfillStore(
         CancellationToken cancellationToken)
     {
         var terms = derivedWorkGate.ReadTerms();
+        // Written inline rather than through MailAwaitingRelocation's expression, because it is one branch of a larger
+        // predicate here: the two orderings hold a first cut back together, and a re-cut answers past both of them.
         var email = sessionContext.StoredEmails
             .AsNoTracking()
-            .Where(candidate => candidate.Id == storedEmailId.Value && candidate.RulesEvaluatedAt != null)
-            .Where(MailAwaitingRelocation.IsSettledWhereItIs);
+            .Where(candidate => candidate.Id == storedEmailId.Value)
+            .Where(candidate => candidate.Chunks.Any()
+                || (candidate.RulesEvaluatedAt != null
+                    && !candidate.Mutations.Any(mutation =>
+                        mutation.Mutation == MailAwaitingRelocation.RelocateMutationName
+                        && mutation.Stage != MailboxMutationStage.Completed
+                        && mutation.Stage != MailboxMutationStage.Abandoned)));
 
         return await (terms.IsApplied ? DerivedWorkAdmittedEmails.Admitting(email, terms) : email)
             .AnyAsync(cancellationToken);

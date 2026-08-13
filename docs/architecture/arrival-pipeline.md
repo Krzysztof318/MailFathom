@@ -148,7 +148,10 @@ before that keeps whatever passages it already had until synchronization is swit
   newly synchronized one reaches rather than at a state a second walk has to finish. It cuts only what both stages in
   front of the cut have finished with, which is what keeps *the same state* true: the text it has just written is
   exactly what lets the rule pass read a message it had been skipping, and cutting in this transaction would cut before
-  that pass ever saw it. Such a message is cut by the account's next run instead.
+  that pass ever saw it. Such a message is cut by the account's next run instead. Both stages are waited for a *first*
+  cut alone, so a message that already carries passages is re-cut whatever they say: this walk is the only path that
+  can replace a passage, and withholding one here would leave the passages — and the vectors built from them — derived
+  under exactly the configuration a rebuild exists to replace, beside stored text reporting the new one.
 - **The embedding backfill** sweeps for messages with extracted text and no passages, and for passages with no vector.
   It cuts through the same writer and is narrowed by the same classification predicate, the same rule stamp, and the
   same folder switch, so it reaches whatever one account run's batch budget did not. The rule stamp is what stops it
