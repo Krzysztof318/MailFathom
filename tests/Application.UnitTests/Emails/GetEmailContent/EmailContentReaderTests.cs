@@ -1056,6 +1056,47 @@ public sealed class EmailContentReaderTests
         Assert.Equal("alerts@example.test", participant.Address.Address);
     }
 
+    /// <summary>
+    /// A scan is a round trip where the analyzer runs in a container, so an addressee list somebody expanded must not
+    /// turn one local read into thousands of them. What is dropped past the bound is the name, never the address, and
+    /// never a name nothing scanned.
+    /// </summary>
+    [Fact]
+    public async Task ReadContentAsync_MoreNamedParticipantsThanOneReadScans_PublishesTheRestWithoutADisplayName()
+    {
+        // Arrange
+        using var egress = ScanningSensitiveContentEgress.Finding(Marker, TimeProvider.System);
+        var summary = SyntheticEmailSummaries.Create();
+        var participants = Enumerable
+            .Range(0, 45)
+            .Select(position => ParticipantOf($"{Marker} {position}", $"recipient{position}@example.test"))
+            .ToArray();
+        var reader = ReaderOver(
+            summary,
+            RendererReturning(RenderingOf(headers: HeadersOf(subject: null, participants))),
+            egressGuard: egress.Guard);
+
+        // Act
+        var result = await reader.ReadContentAsync(
+            RequestFor([summary.StoredEmailId]),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        var published = ContentOf(Assert.Single(result.Emails)).Headers.Participants;
+
+        Assert.Equal(45, published.Count);
+        Assert.Equal(
+            40,
+            egress.Scanner.ScannedTexts.Count(text => text.StartsWith(Marker, StringComparison.Ordinal)));
+        Assert.Equal(
+            [.. Enumerable.Repeat("[redacted:CloudKey]", 40).Select((name, position) => $"{name} {position}")],
+            published.Take(40).Select(participant => participant.Address.DisplayName));
+        Assert.All(published.Skip(40), participant => Assert.Null(participant.Address.DisplayName));
+        Assert.Equal(
+            [.. participants.Select(participant => participant.Address.Address)],
+            published.Select(participant => participant.Address.Address));
+    }
+
     /// <summary>Text nothing analyzed is text this deployment does not hand out, and a caller has to be told which bound ended it.</summary>
     [Fact]
     public async Task ReadContentAsync_ABodyBeyondTheAnalyzedCeiling_ReturnsWhatWasScannedAndNamesTheCeiling()

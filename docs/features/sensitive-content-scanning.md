@@ -112,11 +112,14 @@ so for a given rule corpus, analyzer profile, and category set, the text `ask_ma
 text `get_email_content` returns for the same message. That agreement is the point: a citation that landed on different
 words would read as invented.
 
-**What is scanned is what the message's author wrote** — both body representations, the subject, and each participant's
-display name. The addresses, the account, the folder alias, the stored identity, the sizes, the flags, and every
-attachment's file name are left as they are, on the same line the guarded points above draw: a routing identity is what
-a caller acts on, and redacting the address a reply goes to would remove the read's whole use while protecting nothing
-the body did not already carry. Each value is scanned on its own and the message is composed afterwards.
+**What is scanned is what the message's author wrote** — both body representations, the subject, and the display names
+of the first 40 named participants, past which the address is published with no display name rather than one nothing
+scanned. That count is bounded here rather than by the message because a parse publishes up to 256 addresses per header
+role and a scan is a round trip on a deployment running the analyzer in a container. The addresses, the account, the
+folder alias, the stored identity, the sizes, the flags, and every attachment's file name are left as they are, on the
+same line the guarded points above draw: a routing identity is what a caller acts on, and redacting the address a reply
+goes to would remove the read's whole use while protecting nothing the body did not already carry. Each value is scanned
+on its own and the message is composed afterwards.
 
 **The analyzed ceiling is stated rather than hidden.** A body longer than `SensitiveContent:MaximumAnalyzedCharacters`
 comes back cut at that ceiling, with `truncatedBy` reading `sensitiveContentScanCeiling` — the third bound a

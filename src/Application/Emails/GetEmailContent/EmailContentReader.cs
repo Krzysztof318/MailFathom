@@ -58,6 +58,15 @@ namespace MailFathom.Application.Emails.GetEmailContent;
 /// </remarks>
 public sealed class EmailContentReader
 {
+    /// <summary>How many of one message's display names a scanned read analyzes before it publishes addresses alone.</summary>
+    /// <remarks>
+    /// Set where a real message stops and a list expansion begins: correspondence a person reads names a handful of
+    /// people, a thread across two departments names a few dozen, and an addressee list beyond that is a distribution
+    /// somebody expanded rather than a set of names anybody reads. Both sides of the bound cost something, and the
+    /// cheaper one is losing a display name past the fortieth participant of one message.
+    /// </remarks>
+    private const int MaximumScannedDisplayNames = 40;
+
     private readonly IStoredEmailSummaryReader summaryReader;
     private readonly IEmailContentStore contentStore;
     private readonly IEmailContentRenderer renderer;
@@ -260,10 +269,13 @@ public sealed class EmailContentReader
     /// <summary>Scans the display name each participant carries, leaving the address it sits in front of alone.</summary>
     /// <remarks>
     /// <para>
-    /// What bounds the work is the message rather than this loop: a parse publishes at most
-    /// <see cref="EmailParticipant.MaximumPerRole" /> addresses per header role and a name is a few dozen characters,
-    /// so an addressee list somebody expanded costs scans in proportion to a bound already applied to it. Ordinary mail
-    /// carries a handful, and a participant the sender wrote no name for costs none at all.
+    /// The count is bounded here rather than left to the message, because a scan is a round trip on the deployment that
+    /// runs the personal-data analyzer in a container: a parse publishes up to
+    /// <see cref="EmailParticipant.MaximumPerRole" /> addresses for each header role, so a list expansion would
+    /// otherwise turn one read into thousands of sequential requests taking the process-wide scan permits from every
+    /// listing and answering run behind it. Past <see cref="MaximumScannedDisplayNames" /> the address is published with
+    /// no display name at all, which withholds rather than serves a name nothing scanned. A participant the sender wrote
+    /// no name for costs nothing and counts towards nothing.
     /// </para>
     /// <para>
     /// A participant whose guarded name cannot be put back is dropped rather than published unguarded, which is the
@@ -276,6 +288,7 @@ public sealed class EmailContentReader
         CancellationToken cancellationToken)
     {
         var guarded = new List<EmailParticipant>(participants.Count);
+        var named = 0;
 
         foreach (var participant in participants)
         {
@@ -286,10 +299,12 @@ public sealed class EmailContentReader
                 continue;
             }
 
-            var guardedName = await this.egressGuard.GuardAsync(
-                SensitiveContentEgressPoint.McpEmailContent,
-                displayName,
-                cancellationToken);
+            var guardedName = named++ < MaximumScannedDisplayNames
+                ? await this.egressGuard.GuardAsync(
+                    SensitiveContentEgressPoint.McpEmailContent,
+                    displayName,
+                    cancellationToken)
+                : null;
 
             if (EmailAddress.TryCreate(guardedName, participant.Address.Address, out var address))
             {
@@ -332,6 +347,12 @@ public sealed class EmailContentReader
     /// over whichever bound had cut it already, because the ceiling is where the returned text now ends. It is the one
     /// of the three a caller cannot act on: naming fewer emails returns no more of this message, and only raising
     /// <c>SensitiveContent:MaximumAnalyzedCharacters</c> does.
+    /// </para>
+    /// <para>
+    /// That cut is the one place the balanced-markup property of the sanitized representation stops holding. The
+    /// renderer keeps markup balanced by shrinking its source and sanitizing again, and a ceiling applied here cuts what
+    /// the sanitizer had already serialized, so a representation carrying this truncation can end inside an element. It
+    /// is preferred to the alternative: re-serializing would mean handing back text the scan never analyzed.
     /// </para>
     /// <para>
     /// The source length is untouched by all of this. It states what the message held, which redaction does not change.

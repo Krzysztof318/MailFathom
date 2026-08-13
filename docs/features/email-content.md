@@ -354,6 +354,12 @@ what the message's author wrote is scanned on every read and returned with each 
 beside those names, the identifiers, the sizes, the flags, and every attachment's file name are left as they are, on the
 line that page draws between a routing identity and free text.
 
+The display names of the first 40 named participants of a message are scanned, and past that the address is published
+with no display name at all. A scan is a round trip where the personal-data analyzer runs in a container of its own, and
+a parse publishes up to 256 addresses per header role, so a list expansion would otherwise turn one read into thousands
+of sequential requests holding the scan permits every listing and answering run shares. Losing a name past the fortieth
+participant is the cheaper side of that bound, and a withheld name is never a name nothing scanned.
+
 The scan is what the read hands over rather than what it stored: nothing rewrites the raw MIME or the extracted text,
 and no span, offset, or finding location for a stored message is written anywhere. That is why it is paid per call.
 
@@ -363,6 +369,13 @@ bound that cut it — the same property re-serialized markup already has, and th
 than derived from the two lengths. A body longer than the scan's own ceiling comes back cut at it and says
 `SensitiveContentScanCeiling`, over whichever bound had cut it already, because that is where the returned text now
 ends. And a detector that cannot answer fails the call with `81001` rather than serving the message unscanned.
+
+**That ceiling is the one place the balanced-markup guarantee above stops applying.** It cuts what the sanitizer had
+already serialized rather than the source it was serialized from, so a `sanitizedHtml` representation reporting
+`SensitiveContentScanCeiling` can end inside an element — the fragment the source-first cut exists to avoid. The
+alternative is worse in the way this whole feature is written against: sanitizing again would hand back markup the scan
+never analyzed. A caller that renders the markup treats this truncation as it would a broken document; the plain text
+beside it is unaffected, since nothing re-serializes it.
 
 With both switches off none of this happens: no detector is constructed, nothing is scanned, and the read is
 byte-identical to the one the same message produced before the feature existed.
