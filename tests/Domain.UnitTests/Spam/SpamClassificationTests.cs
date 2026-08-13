@@ -14,6 +14,9 @@ public sealed class SpamClassificationTests
 
     private static readonly DateTimeOffset EvaluatedAt = new(2026, 8, 12, 9, 30, 0, TimeSpan.Zero);
 
+    private static readonly SpamClassificationProfile Profile =
+        SpamClassificationProfile.Create(usesScanner: true, scannerThreshold: 5);
+
     [Fact]
     public void Create_MoreSignalsThanTheBoundAdmits_KeepsTheOnesTheStagesProducedFirst()
     {
@@ -102,14 +105,37 @@ public sealed class SpamClassificationTests
             SpamClassificationStage.Deterministic,
             assessment: null,
             corpusRevision: null,
+            Profile,
             signals: null!,
             EvaluatedAt));
+    }
+
+    /// <summary>A record written before the profile joined it carries none, and is read back rather than refused.</summary>
+    [Fact]
+    public void Create_NoProfile_RecordsTermsNothingCanCompare()
+    {
+        // Arrange, Act
+        var classification = Classification(profile: default(SpamClassificationProfile));
+
+        // Assert
+        Assert.False(classification.Profile.IsSpecified);
+    }
+
+    [Fact]
+    public void Create_AProfile_RecordsTheTermsTheVerdictWasReachedUnder()
+    {
+        // Arrange, Act
+        var classification = Classification();
+
+        // Assert
+        Assert.Equal(Profile, classification.Profile);
     }
 
     private static SpamClassification Classification(
         SpamVerdict verdict = SpamVerdict.Spam,
         SpamClassificationStage decidedBy = SpamClassificationStage.Deterministic,
         string? corpusRevision = null,
+        SpamClassificationProfile? profile = null,
         IReadOnlyList<SpamSignal>? signals = null,
         DateTimeOffset? evaluatedAt = null) => SpamClassification.Create(
         Occurrence,
@@ -117,6 +143,7 @@ public sealed class SpamClassificationTests
         decidedBy,
         assessment: null,
         corpusRevision,
+        profile ?? Profile,
         signals ?? [],
         evaluatedAt ?? EvaluatedAt);
 

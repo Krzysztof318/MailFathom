@@ -72,4 +72,12 @@ public enum SpamActionOutcome
     /// whole once the account is declared again.
     /// </remarks>
     AccountNoLongerConfigured = 8,
+
+    /// <summary>Every change was worked out and none was written down, because the caller asked for a dry run.</summary>
+    /// <remarks>
+    /// It is reached at exactly the point <see cref="Requested" /> is: the switches, the destination, and every reason to
+    /// leave the message alone have all been read by then, so a dry run reports the decision the acting run would have
+    /// taken rather than a guess at it. What is absent is the pair of record identifiers, because no record was opened.
+    /// </remarks>
+    WouldRequest = 9,
 }

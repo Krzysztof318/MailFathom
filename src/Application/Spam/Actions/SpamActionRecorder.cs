@@ -31,6 +31,11 @@ namespace MailFathom.Application.Spam.Actions;
 /// which the same reading makes idempotent.
 /// </para>
 /// <para>
+/// The caller's posture decides whether the last step happens at all. A dry run takes every decision above and opens no
+/// record, which is what lets a run over a whole mailbox report what it would do to somebody's mail before any of it
+/// reaches their server. Nothing else about the work differs, so the two postures cannot disagree about one message.
+/// </para>
+/// <para>
 /// Both changes are written down in one commit, and the <c>\Seen</c> change is written first so it is issued first. On a
 /// server without <c>MOVE</c> a relocation gives the message a new UID, and a flag stored afterwards would be aimed at an
 /// occurrence the source folder no longer holds.
@@ -89,21 +94,37 @@ public sealed class SpamActionRecorder
 
     /// <summary>Asks for whatever the switches say should happen to one classified message.</summary>
     /// <param name="classification">What classification concluded about the occurrence.</param>
+    /// <param name="posture">Whether the changes are written down or only worked out.</param>
     /// <param name="cancellationToken">Propagates caller cancellation.</param>
-    /// <returns>The changes that were written down, or the reason none were.</returns>
+    /// <returns>The changes that were written down, what a dry run would have written down, or the reason there were none.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="classification" /> is <see langword="null" />.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="posture" /> is not a defined member.</exception>
     /// <exception cref="PersistenceConcurrencyConflictException">Thrown when every allowed commit attempt conflicted.</exception>
     /// <remarks>
     /// The checks run in the order of what they cost and of what they settle. Whether anything is switched on at all is
     /// free and answers for the whole deployment; the verdict and the threshold are already in hand; only then is the
     /// mailbox read. A deployment that asked for no action therefore performs one property read per classified message
     /// and nothing else.
+    /// <para>
+    /// The posture is read last of all, after every one of those checks. That is what makes a dry run a rehearsal rather
+    /// than a prediction: a message a filing would be refused for reports the refusal in both postures, so an operator
+    /// reading a dry run is reading the answers the acting run would reach and not a shorter list of them.
+    /// </para>
     /// </remarks>
     public async Task<SpamActionResult> RecordAsync(
         SpamClassification classification,
+        SpamActionPosture posture,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(classification);
+
+        if (!Enum.IsDefined(posture))
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(posture),
+                posture,
+                "An attempt either writes the changes down or works them out and writes nothing.");
+        }
 
         var settings = this.settingsReader.Actions;
 
@@ -141,6 +162,11 @@ public sealed class SpamActionRecorder
         if (!marksRead && filing.Plan is null)
         {
             return SpamActionResult.NotActedOn(SpamActionOutcome.NothingToChange);
+        }
+
+        if (posture is SpamActionPosture.DryRun)
+        {
+            return SpamActionResult.NotActedOn(SpamActionOutcome.WouldRequest);
         }
 
         return await this.OpenRecordsAsync(

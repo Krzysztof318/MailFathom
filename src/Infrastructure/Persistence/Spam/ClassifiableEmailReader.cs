@@ -42,4 +42,54 @@ internal sealed class ClassifiableEmailReader(MailFathomDbContext dbContext) : I
                 MailAccountId.Create(row.MailboxAccountId),
                 MailFolderAlias.Create(row.Alias));
     }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// The folder is matched on the alias the mapping gave it rather than on the remote path, because the alias is what
+    /// the run's scope was written in and what an operator typed. A tombstoned occurrence is walked for the reason it is
+    /// readable one at a time: the local copy is mail somebody can still reach, so leaving it out would put exactly the
+    /// mail nobody else can act on outside every run.
+    /// </remarks>
+    public async Task<IReadOnlyList<ClassifiableEmail>> GetStoredEmailsAsync(
+        MailAccountId accountId,
+        IReadOnlyList<MailFolderAlias> folderAliases,
+        StoredEmailId? resumeAfter,
+        int batchSize,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(folderAliases);
+        ArgumentOutOfRangeException.ThrowIfLessThan(batchSize, 1);
+
+        if (folderAliases.Count == 0)
+        {
+            return [];
+        }
+
+        var mailboxAccountId = accountId.Value;
+        string[] aliases = [.. folderAliases.Select(static alias => alias.Value)];
+        var emails = dbContext.StoredEmails
+            .AsNoTracking()
+            .Where(email => email.MailboxAccountId == mailboxAccountId && aliases.Contains(email.MailFolder.Alias));
+
+        if (resumeAfter is { } position)
+        {
+            var boundary = position.Value;
+
+            emails = emails.Where(email => email.Id > boundary);
+        }
+
+        var rows = await emails
+            .OrderBy(email => email.Id)
+            .Take(batchSize)
+            .Select(email => new { email.Id, email.MailFolder.Alias })
+            .ToArrayAsync(cancellationToken);
+
+        return
+        [
+            .. rows.Select(row => new ClassifiableEmail(
+                StoredEmailId.Create(row.Id),
+                accountId,
+                MailFolderAlias.Create(row.Alias))),
+        ];
+    }
 }

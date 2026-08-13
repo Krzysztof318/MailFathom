@@ -10,6 +10,7 @@ using MailFathom.Application.Persistence;
 using MailFathom.Application.Retrieval.AskMail.Audit;
 using MailFathom.Application.Rules.Evaluation;
 using MailFathom.Application.Rules.History;
+using MailFathom.Application.Spam.Runs;
 using MailFathom.Application.Synchronization;
 using MailFathom.Application.Synchronization.Reconciliation;
 using MailFathom.Application.Synchronization.Sessions;
@@ -242,6 +243,7 @@ internal sealed partial class AccountSynchronizationSupervisor
             if (!schedulingToken.IsCancellationRequested)
             {
                 await this.EraseExpiredAuditEntriesAsync(runSettings, workUnitToken);
+                await this.ClassifyRequestedMailAsync(runSettings, workUnitToken);
                 await this.EvaluateMailRulesAsync(runSettings, workUnitToken);
             }
         }
@@ -372,6 +374,97 @@ internal sealed partial class AccountSynchronizationSupervisor
         catch (Exception exception)
         {
             this.LogAuditRetentionFailed(exception, this.accountId.Value);
+        }
+    }
+
+    /// <summary>Carries this account's whole-mailbox classification run, where somebody asked for one.</summary>
+    /// <remarks>
+    /// <para>
+    /// Before the rules and after everything else, which is the order the feature's own framing gives: junk ends a
+    /// message's journey through automation, so a message this pass files as junk is one the rule pass beside it should
+    /// not also be filing somewhere else. It runs after the folders for the reason the rule pass does — every message it
+    /// can reach was committed by a folder that has already finished, in a scope and a transaction of its own.
+    /// </para>
+    /// <para>
+    /// A failure never fails the run. What the pass reads about the mail is already stored, and the two things it can
+    /// reach the network for — a scanner sidecar and, where the run acts, the folder a filing names — are both bounded by
+    /// their own callers. An unreachable mail server has already put the account into backoff by the time this step
+    /// begins wherever the run synchronized or converged anything, so backing it off again here would slow the remote
+    /// work over a local problem or over the same remote one twice. What a pass did not finish, the next run resumes from
+    /// the batches this one committed.
+    /// </para>
+    /// </remarks>
+    [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "A pass that failed is logged and resumed by the next run rather than putting the account into backoff; the remarks hold why that stays right for the remote steps it can take.")]
+    private async Task ClassifyRequestedMailAsync(
+        MailSynchronizationOptions runSettings,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            using var scope = this.scopeFactory.CreateScope();
+
+            scope.ServiceProvider.GetRequiredService<ScopedMailSynchronizationSettings>().UseRunSnapshot(runSettings);
+
+            var report = await scope.ServiceProvider
+                .GetRequiredService<SpamClassificationPass>()
+                .RunAsync(this.accountId, cancellationToken);
+
+            this.ReportSpamClassification(report);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception exception)
+        {
+            this.LogSpamClassificationFailed(exception, this.accountId.Value);
+        }
+    }
+
+    /// <summary>Emits what the classification run did, in counts alone; nothing derived from a message may appear here.</summary>
+    /// <remarks>
+    /// An account with no run outstanding says nothing, which is what keeps a deployment that has never asked for one
+    /// from repeating a line per interval forever. The posture is part of the line because the same counts mean two
+    /// different things under it: a dry run reporting mail it acted on is reporting mail it would have acted on.
+    /// </remarks>
+    private void ReportSpamClassification(SpamClassificationRunReport report)
+    {
+        if (report.Walk is not { } walk)
+        {
+            return;
+        }
+
+        var profile = report.Profile.ToString();
+
+        if (!walk.IsEmpty)
+        {
+            this.LogSpamClassificationProgressed(
+                this.accountId.Value,
+                profile,
+                walk.ClassifiedEmailCount,
+                walk.SkippedEmailCount,
+                walk.SpamEmailCount,
+                walk.UnclassifiableEmailCount,
+                walk.ActedEmailCount,
+                walk.EmailsRemain);
+        }
+
+        switch (report.Ending)
+        {
+            case SpamClassificationRunEnding.Completed:
+                this.LogSpamClassificationCompleted(this.accountId.Value, profile);
+
+                break;
+            case SpamClassificationRunEnding.Superseded:
+                this.LogSpamClassificationSuperseded(this.accountId.Value);
+
+                break;
+            case SpamClassificationRunEnding.Disabled:
+                this.LogSpamClassificationDisabled(this.accountId.Value);
+
+                break;
+            default:
+                break;
         }
     }
 
@@ -929,6 +1022,42 @@ internal sealed partial class AccountSynchronizationSupervisor
         Level = LogLevel.Warning,
         Message = "Evaluating the rules of account {AccountId} ended unexpectedly; the account is not backed off for it and its next run resumes from the batches this one committed.")]
     private partial void LogMailRuleEvaluationFailed(Exception exception, string accountId);
+
+    /// <summary>Reports one account run's share of a whole-mailbox classification run, in counts and the profile alone.</summary>
+    [LoggerMessage(
+        Level = LogLevel.Information,
+        Message = "Carried the whole-mailbox classification run of account {AccountId} under profile {Profile}; scored {ClassifiedEmailCount} messages, passed over {SkippedEmailCount} already decided under it, found {SpamEmailCount} junk, could reach no verdict about {UnclassifiableEmailCount}, acted on or would act on {ActedEmailCount}, and more remain: {EmailsRemain}.")]
+    private partial void LogSpamClassificationProgressed(
+        string accountId,
+        string profile,
+        int classifiedEmailCount,
+        int skippedEmailCount,
+        int spamEmailCount,
+        int unclassifiableEmailCount,
+        int actedEmailCount,
+        bool emailsRemain);
+
+    [LoggerMessage(
+        Level = LogLevel.Information,
+        Message = "The whole-mailbox classification run of account {AccountId} reached the end of its mail under profile {Profile}.")]
+    private partial void LogSpamClassificationCompleted(string accountId, string profile);
+
+    /// <summary>Names the remedy, because a superseded run is answered by asking for another rather than by waiting.</summary>
+    [LoggerMessage(
+        Level = LogLevel.Warning,
+        Message = "The classification settings changed while the whole-mailbox run of account {AccountId} was outstanding, so the run ended without reaching the end of its mail; ask for it again to classify under the settings now in force.")]
+    private partial void LogSpamClassificationSuperseded(string accountId);
+
+    /// <summary>Separates a run nobody switched classification on for from one that walked a mailbox and found it clean.</summary>
+    [LoggerMessage(
+        Level = LogLevel.Warning,
+        Message = "Classification was switched off while the whole-mailbox run of account {AccountId} was outstanding, so the run ended without reading its mail; switch classification on and ask for the run again.")]
+    private partial void LogSpamClassificationDisabled(string accountId);
+
+    [LoggerMessage(
+        Level = LogLevel.Warning,
+        Message = "Carrying the whole-mailbox classification run of account {AccountId} ended unexpectedly; the account is not backed off for it and its next run resumes from the batches this one committed.")]
+    private partial void LogSpamClassificationFailed(Exception exception, string accountId);
 
     [LoggerMessage(
         Level = LogLevel.Warning,

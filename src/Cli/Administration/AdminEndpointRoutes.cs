@@ -49,6 +49,13 @@ internal static class AdminEndpointRoutes
     /// <summary>Where a deployment reports what its rules concluded about the mail they were run over.</summary>
     internal const string RuleHistoryPath = $"{Prefix}/rules/history";
 
+    /// <summary>Where a whole-mailbox classification run is asked for, and where the one an account has is read.</summary>
+    /// <remarks>One path read with <c>GET</c> and asked for with <c>POST</c>, for the reason the rule runs path is.</remarks>
+    internal const string SpamClassificationRunsPath = $"{Prefix}/spam/runs";
+
+    /// <summary>Where a deployment reports what classification concluded about an account's mail.</summary>
+    internal const string SpamClassificationsPath = $"{Prefix}/spam/classifications";
+
     /// <summary>Where a deployment publishes the document naming its authorization servers, resource, and required scopes.</summary>
     /// <remarks>
     /// Composed rather than discovered from a challenge, because a client that knows which routes it is about to call

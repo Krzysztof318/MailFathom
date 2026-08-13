@@ -18,6 +18,10 @@ using MailFathom.Application.Rules.Actions;
 using MailFathom.Application.Rules.Conditions;
 using MailFathom.Application.Rules.Evaluation;
 using MailFathom.Application.Rules.History;
+using MailFathom.Application.Spam;
+using MailFathom.Application.Spam.Actions;
+using MailFathom.Application.Spam.Runs;
+using MailFathom.Application.Spam.Signals;
 using MailFathom.Application.Synchronization;
 using MailFathom.Application.Synchronization.Checkpoints;
 using MailFathom.Application.Synchronization.Reconciliation;
@@ -189,6 +193,23 @@ internal static class SynchronizationTestHost
         services.AddSingleton<IMailRuleExecutionStore>(ruleHistory);
         services.AddScoped<MailRuleEvaluationPass>();
 
+        // The classification walk rides the same run, one step before the rules, and a supervisor resolves it from the
+        // same scope. These tests ask for no run over any mailbox, so the store below answers that the account has none
+        // outstanding and the pass returns without reading a message — which is what an account nobody asked costs.
+        services.AddSingleton(CreateClassificationRunStoreWithNothingOutstanding());
+        services.AddSingleton(Substitute.For<IClassifiableEmailReader>());
+        services.AddSingleton(Substitute.For<IEmailSpamClassificationStore>());
+        services.AddSingleton(Substitute.For<IEmailSpamHeaderReader>());
+        services.AddSingleton(Substitute.For<IJunkMailFolderCatalog>());
+        services.AddSingleton(Substitute.For<ISpamActionOccurrenceReader>());
+        services.AddScoped(_ => new SpamClassificationRunOptions());
+        services.AddScoped(_ => CreateClassificationSettingsReader());
+        services.AddScoped(_ => CreateSpamActionSettingsReader());
+        services.AddScoped<DeterministicSpamClassifier>();
+        services.AddScoped<EmailSpamClassifier>();
+        services.AddScoped<SpamActionRecorder>();
+        services.AddScoped<SpamClassificationPass>();
+
         // The history's retention pass rides the same run, and a supervisor resolves it from the same scope. These
         // tests configure no mail to evaluate, so it answers that there is nothing to erase.
         services.AddScoped<MailRuleHistoryRetention>();
@@ -237,6 +258,35 @@ internal static class SynchronizationTestHost
             MailRuleSet.Create([], MailRuleSetRevision.Create([]), MailRuleConditionBounds.Default));
 
         return ruleSetSource;
+    }
+
+    /// <summary>Answers that the account has never been asked to have its whole mailbox classified.</summary>
+    private static ISpamClassificationRunStore CreateClassificationRunStoreWithNothingOutstanding()
+    {
+        var runStore = Substitute.For<ISpamClassificationRunStore>();
+
+        runStore.FindOutstandingAsync(Arg.Any<MailAccountId>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<SpamClassificationRun?>(null));
+
+        return runStore;
+    }
+
+    /// <summary>Answers with classification switched off, which is what a deployment configuring none of it runs with.</summary>
+    private static ISpamClassificationSettingsReader CreateClassificationSettingsReader()
+    {
+        var reader = Substitute.For<ISpamClassificationSettingsReader>();
+        reader.Settings.Returns(SpamClassificationSettings.Disabled);
+
+        return reader;
+    }
+
+    /// <summary>Answers with neither junk switch on, so a verdict here could ask a mailbox for nothing.</summary>
+    private static ISpamActionSettingsReader CreateSpamActionSettingsReader()
+    {
+        var reader = Substitute.For<ISpamActionSettingsReader>();
+        reader.Actions.Returns(SpamActionSettings.None);
+
+        return reader;
     }
 
     private static IMailRuleEvaluationRunStore CreateRunStoreWithNothingOutstanding()

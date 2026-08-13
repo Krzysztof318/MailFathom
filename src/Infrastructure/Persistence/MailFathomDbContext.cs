@@ -125,6 +125,14 @@ internal sealed class MailFathomDbContext : DbContext
     /// </remarks>
     internal const string MailRuleEvaluationRunPrimaryKeyConstraintName = "pk_mail_rule_evaluation_runs";
 
+    /// <summary>The key that keeps one whole-mailbox classification run per account, and which a second request meets.</summary>
+    /// <remarks>
+    /// Named for the reason the rule run's key is: two requests for one account's first run reach the database together,
+    /// one of them violates this key, and the retry reads back the run the winner asked for — which is how asking twice
+    /// produces one walk of one mailbox rather than two.
+    /// </remarks>
+    internal const string SpamClassificationRunPrimaryKeyConstraintName = "pk_spam_classification_runs";
+
     /// <summary>The constraint a mutation's idempotency identity is enforced by, and which a losing writer is recognized from.</summary>
     /// <remarks>
     /// Named because the name is how the same request arriving twice is told apart from a genuine failure. Two callers
@@ -217,6 +225,8 @@ internal sealed class MailFathomDbContext : DbContext
 
     internal DbSet<EmailSpamClassificationSignalEntity> EmailSpamClassificationSignals =>
         this.Set<EmailSpamClassificationSignalEntity>();
+
+    internal DbSet<SpamClassificationRunEntity> SpamClassificationRuns => this.Set<SpamClassificationRunEntity>();
 
     internal DbSet<BackfillPositionEntity> BackfillPositions => this.Set<BackfillPositionEntity>();
 
@@ -414,6 +424,25 @@ internal sealed class MailFathomDbContext : DbContext
             entity.Property(run => run.MailboxAccountId).HasMaxLength(128).ValueGeneratedNever();
             entity.Property(run => run.Revision)
                 .HasMaxLength(MailRuleEvaluationRunEntity.RevisionLength)
+                .IsFixedLength();
+            entity.Property(run => run.Ending).HasConversion<string>().HasMaxLength(64);
+
+            // See the stored-email mapping: this is the PostgreSQL `xmin` system column, not a user-defined column.
+            entity.Property(run => run.ConcurrencyVersion).IsRowVersion();
+        });
+
+        // One row per account, which is what makes "one outstanding whole-mailbox classification run" a property of the
+        // key rather than of a check. The scope is a text array because it is read back whole and never filtered on: the
+        // run states which folders it walks, and nothing asks the database which runs walk one folder.
+        modelBuilder.Entity<SpamClassificationRunEntity>(entity =>
+        {
+            entity.ToTable("spam_classification_runs");
+            entity.HasKey(run => run.MailboxAccountId).HasName(SpamClassificationRunPrimaryKeyConstraintName);
+            entity.Property(run => run.MailboxAccountId).HasMaxLength(128).ValueGeneratedNever();
+            entity.Property(run => run.FolderAliases).IsRequired();
+            entity.Property(run => run.Posture).HasConversion<string>().HasMaxLength(64).IsRequired();
+            entity.Property(run => run.Profile)
+                .HasMaxLength(SpamClassificationRunEntity.ProfileLength)
                 .IsFixedLength();
             entity.Property(run => run.Ending).HasConversion<string>().HasMaxLength(64);
 
@@ -954,6 +983,9 @@ internal sealed class MailFathomDbContext : DbContext
             entity.Property(classification => classification.DecidedBy).HasConversion<string>().HasMaxLength(64).IsRequired();
             entity.Property(classification => classification.CorpusRevision)
                 .HasMaxLength(EmailSpamClassificationEntity.MaximumCorpusRevisionLength);
+            entity.Property(classification => classification.Profile)
+                .HasMaxLength(EmailSpamClassificationEntity.ProfileLength)
+                .IsFixedLength();
 
             // See the stored-email mapping: this is the PostgreSQL `xmin` system column, not a user-defined column.
             entity.Property(classification => classification.ConcurrencyVersion).IsRowVersion();

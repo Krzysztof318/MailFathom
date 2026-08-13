@@ -42,6 +42,8 @@ using MailFathom.Application.SensitiveContent.Egress;
 using MailFathom.Application.SensitiveContent.Redaction;
 using MailFathom.Application.Spam;
 using MailFathom.Application.Spam.Actions;
+using MailFathom.Application.Spam.History;
+using MailFathom.Application.Spam.Runs;
 using MailFathom.Application.Spam.Scanning;
 using MailFathom.Application.Spam.Signals;
 using MailFathom.Application.Synchronization;
@@ -329,6 +331,8 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IEmailSpamClassificationStore, EmailSpamClassificationStore>();
         services.AddScoped<IClassifiableEmailReader, ClassifiableEmailReader>();
         services.AddScoped<ISpamActionOccurrenceReader, SpamActionOccurrenceReader>();
+        services.AddScoped<ISpamClassificationRunStore, SpamClassificationRunStore>();
+        services.AddScoped<ISpamClassificationHistoryReader, SpamClassificationHistoryReader>();
 
         // The read side takes no persistence session and joins no transaction, so its ports are registered beside the
         // write repositories rather than through one of them.

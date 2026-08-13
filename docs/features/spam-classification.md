@@ -44,6 +44,7 @@ behind switches of its own — described in [what an operator can let a verdict 
 | The score and the threshold it was judged against, when a stage produced numbers | A score without its threshold cannot be read: the same number is spam under one configuration and ordinary mail under another |
 | The rule corpus the deciding stage ran under, when it has one | What a reclassification is worth comparing against |
 | The signals the verdict rests on, in the order the stages produced them | An operator diagnosing a wrong verdict asks *which* authentication method failed and *what* the provider header said |
+| The profile the verdict was reached under | Whether a scanner was consulted and the threshold its score was judged by, as a short digest. It is what makes *this message was already decided under the settings now in force* a question somebody can ask of a record that already exists |
 | When it was evaluated | |
 
 A signal is one fact: its kind, its name, what was observed, and where it came from — a header field, a folder
@@ -257,6 +258,61 @@ Content comes from the local content store, which already holds it, so no classi
 none can affect a remote `\Seen` flag. A message stored without content — one that exceeded the size limit — is
 reported as unclassifiable rather than fetched.
 
+## Classifying the mail you already have
+
+Nothing classifies a message on its own yet — see [what is not here](#what-is-not-here) — so a **classification run** is
+what reaches the mail a deployment holds, and it is what switching classification on, moving a threshold, or switching
+filing on is applied to the mailbox with. `mfctl spam run --account <id>` asks for one, and
+[administering a deployment](../operations/admin-endpoint.md#classifying-the-mail-you-already-have-and-reading-what-was-concluded)
+is the command reference.
+
+**It is a dry run unless `--apply` is given.** With filing switched on, a run over an inbox is the largest single thing
+this feature does to somebody's mail, so the default works out every change and writes none of them down. The posture
+is read last, after every refusal above it, so what a dry run reports is the decision the acting run would take rather
+than a guess at it: a message already filed reports that, a destination that resolves to nothing reports that, and only
+a message the switches genuinely reach is counted as one the run would act on. The verdicts are recorded under either
+posture, because a classification is derived data rather than a change to a mailbox.
+
+The run's terms — the folders, the posture, and whether it rescores — are fixed when it is asked for. A walk spans as
+many account runs as its batch budget needs, so reading configuration again on each pass would let a folder added
+halfway through be walked from wherever the run had got to, and a reader of the record could not say which mail the run
+had covered. Editing configuration therefore changes the next run rather than this one.
+
+**A message already decided under the run's profile is not scored again, and is still acted on.** Skipping the scoring
+is what makes a run over a mailbox that has already been classified cost one lookup per message instead of one scanner
+call; skipping the action would make *switch filing on and apply it to what is there* a run that files nothing, which
+is one of the two reasons the run exists. A record from before the profile was part of one, or from before a threshold
+moved, names terms the run cannot compare and is reached again. `--rescore` scores everything in scope afresh, which is
+the one form of the run that costs a scanner call per message however recently the message was decided.
+
+The scope defaults to the folders classification is configured over, and is bounded by them: `--folder` narrows within
+that scope and a folder outside it is refused, naming the configured scope as the thing to edit. A run over a folder
+nobody classifies would read the whole of it and record nothing, because the classifier declines an occurrence outside
+the scope message by message.
+
+One run per account is outstanding at a time. Asking twice is asking once — the second request is answered with the run
+already under way, on the terms it was asked for rather than the ones the second request carried, because a walk that
+has scored half a mailbox as a dry run cannot become one that acts halfway through.
+
+The run is carried by the account's synchronization run, one step before [mail
+rules](mail-rules.md#running-the-rules-over-mail-you-already-have) are evaluated, and takes a bounded number of batches
+per pass. That run already has per-account isolation, backoff, and a slot count that stops one account starving
+another; classification needs every one of those and none of them differently. Each batch commits the position it
+reached, so a restart resumes at the message nobody scored rather than at the beginning of the mailbox, and a request
+that arrived seconds before a shutdown is still a request afterwards. A pass that fails does not defer the account's
+next fetch: classification reaches no mail server for the mail it reads, so a failure here says nothing about the
+mailbox.
+
+A run ends in one of three ways. **Completed** is the walk reaching the end of its scope. **Superseded** is the profile
+having moved while the run was outstanding — a run cannot finish under terms it did not start with, and half a mailbox
+decided each way is worse than a run an operator asks for again. **Disabled** is classification having been switched
+off under it. All three are reported, and the run is readable after it has ended: *it completed an hour ago* and *you
+never asked* are different answers.
+
+What a run reports is counts and nothing derived from a message: how many it scored, how many were already decided,
+how many it could reach no verdict about, how many are junk, how many nothing decided either way, and how many the
+switches reach. That last one is the whole of what an operator is deciding on when they read a dry run.
+
 ## What it costs when it is off
 
 Nothing. Every switch is off by default, and the checks run in the order of what they cost: whether classification is
@@ -275,7 +331,10 @@ The `SpamClassification` section, in full, is in the
 - whether classification runs at all;
 - whether a configured scanner is consulted after the deterministic stage;
 - which folder aliases are classified, defaulting to whichever alias each account maps to its inbox;
-- the threshold a scanner's score is judged against, defaulting to the scanner's own.
+- the threshold a scanner's score is judged against, defaulting to the scanner's own;
+- how wide one pass of a classification run is: how many messages a batch commits, and how many batches one account run
+  takes before it leaves the rest to the next. Neither is a schedule — how often a pass happens is the account's own
+  synchronization interval.
 
 Two blocks sit below it. `SpamClassification:Scanner` holds the daemon's address and bounds and is read only where the
 scanner is switched on. `SpamClassification:Actions` holds the two switches, the folder junk is filed into, and the score
@@ -286,11 +345,28 @@ answer, and so is one who switched it on and named no address for it, one who as
 classification off, and one whose accounts do not all map the folder a filing would go to. An unusable folder alias, an
 out-of-range threshold, and a bound outside its range each fail startup naming themselves.
 
+## Reading what was concluded
+
+`mfctl spam classifications --account <id>` reads the records back, newest first, in bounded keyset-paginated pages.
+Narrowing to a message with `--email` answers *why is this message in junk*; narrowing to a verdict with `--verdict`
+answers *what would this run file, before I let it*.
+
+It is a reading of the classification records rather than a second copy of them. There is no per-run history table:
+a classification is what is believed about a message now, so the run that reached it is recoverable from the instant
+and the profile the record already names, and a row per run per message would duplicate the verdict in order to record
+it twice. A change a verdict asked for is named and pointed at rather than described — what became of it is the
+[mutation trail](imap-synchronization.md#an-account-can-keep-a-record-of-what-was-done-to-it-and-none-does-by-default)'s
+own answer, with its own retention.
+
+**The signals appear by name and never by value.** A name is an authentication method, a header field, a folder alias,
+or a scanner rule; the observation beside it is text a mail server wrote and can carry a sending domain, which is
+exactly the second copy of the mailbox a record read back over an administrative endpoint must not become.
+
 ## What is not here
 
-No on-demand run over a mailbox that is already stored, and nothing yet schedules classification as mail arrives,
-because the durable job model it is to run as an execution in is not built. Until something calls it, the switches above
-describe what a verdict causes rather than something happening on a schedule.
+Nothing classifies a message as it arrives. The trigger that would do it is not built, so every verdict this deployment
+holds was reached by a run somebody asked for, and mail stored since the last one carries none until the next one is
+asked for.
 
 ## Privacy
 

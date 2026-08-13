@@ -31,6 +31,7 @@ using MailFathom.Application.SensitiveContent.Detection;
 using MailFathom.Application.SensitiveContent.Redaction;
 using MailFathom.Application.Spam;
 using MailFathom.Application.Spam.Actions;
+using MailFathom.Application.Spam.Runs;
 using MailFathom.Application.Synchronization;
 using MailFathom.Application.Synchronization.Checkpoints;
 using MailFathom.Application.Synchronization.Reconciliation;
@@ -300,6 +301,18 @@ try
             .ToProfile());
         builder.Services.AddSpamAssassinScanning();
     }
+
+    // The on-demand run over a whole mailbox is a step of the account's synchronization run, exactly as rule evaluation
+    // is, so its collaborators are scoped the way that run's other steps are: one scope per work unit, with the pass's
+    // bounds read from the bound section when the scope is built rather than captured once at startup. Both are
+    // registered whatever the switches say, because a run is asked for through the administrative endpoint and an
+    // instance that has classification switched off must be able to answer that rather than fail to resolve it.
+    builder.Services.AddScoped(provider => provider
+        .GetRequiredService<IOptionsMonitor<SpamClassificationOptions>>()
+        .CurrentValue
+        .ToRunOptions());
+    builder.Services.AddScoped<SpamClassificationPass>();
+    builder.Services.AddScoped<SpamClassificationRunRequests>();
 
     // Rules are authored in configuration rather than in a table, which ADR 0010 records: what an instance will do to a
     // mailbox is then reviewable in a diff before it runs and reproducible from a repository afterwards. Bound strictly
