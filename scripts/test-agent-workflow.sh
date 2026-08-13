@@ -1482,6 +1482,27 @@ fathom_review_never_counts_a_requested_review_against_the_ceiling() {
   assert_contains 'review=true' "$step_output_file"
 }
 
+# A review body carries the reviewer's own findings, which are model text derived from the diff. A
+# requested review of a change to the workflow itself quotes the automatic marker in a finding, so
+# matching the marker anywhere in the body would count that review as an automatic pass and refuse a
+# later push a review it was owed. The marker counts where the submission step writes it: the last
+# line.
+fathom_review_counts_the_marker_only_where_the_submission_writes_it() {
+  local output_file="$test_directory/fathom-review-marker-position-output"
+  local step_output_file="$test_directory/fathom-review-marker-position-step-output"
+  local reviews_file="$test_directory/fathom-review-marker-position-reviews"
+
+  jq -nc '
+    [range(5) | {user: {login: "fathom-reviewer[bot]"}, body: "# NEEDS CHANGES\n\n<!-- fathom-review: automatic -->"}]
+    + [range(3) | {user: {login: "fathom-reviewer[bot]"},
+                   body: "# NEEDS CHANGES\n\nThe gate counts a body ending in <!-- fathom-review: automatic --> and this one quotes it.\n\n<!-- fathom-review: requested -->"}]
+  ' > "$reviews_file"
+
+  run_fathom_review_gate 'synchronize' "$output_file" "$step_output_file" 'Krzysztof318' '' "$reviews_file"
+
+  assert_contains 'review=true' "$step_output_file"
+}
+
 fathom_review_answers_a_request_past_the_automatic_ceiling() {
   local output_file="$test_directory/fathom-review-request-past-ceiling-output"
   local step_output_file="$test_directory/fathom-review-request-past-ceiling-step-output"
@@ -2397,8 +2418,10 @@ fathom_review_reports_the_files_a_review_never_named() {
 
   ((coverage_status == 0))
   assert_contains 'names 1 of the 3 changed files as read' "$coverage_file"
-  assert_contains '`src/Other.cs`' "$coverage_file"
-  assert_contains '`docs/features/sample.md`' "$coverage_file"
+  # The whole list, not each path in turn. Asserting them individually passed while the paths were
+  # joined by alternating delimiters — `paste -d` reads its argument as a list of them — so what the
+  # author read was ``a`,`b` `c``.
+  assert_contains 'Not named: `docs/features/sample.md`, `src/Other.cs`.' "$coverage_file"
 }
 
 fathom_review_reports_no_gap_when_the_review_named_every_file() {
@@ -5345,6 +5368,7 @@ run_test fathom_review_reviews_a_push_to_a_published_pull_request
 run_test fathom_review_reviews_a_push_below_the_automatic_ceiling
 run_test fathom_review_stops_reviewing_a_push_at_the_automatic_ceiling
 run_test fathom_review_never_counts_a_requested_review_against_the_ceiling
+run_test fathom_review_counts_the_marker_only_where_the_submission_writes_it
 run_test fathom_review_answers_a_request_past_the_automatic_ceiling
 run_test fathom_review_refuses_a_closed_pull_request
 run_test fathom_review_refuses_a_pull_request_the_updater_opened

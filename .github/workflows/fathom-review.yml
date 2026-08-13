@@ -321,6 +321,14 @@ jobs:
             # a security one, so one extra review is a better outcome than failing a run over a
             # transient API error — and the workflow gates nothing, so a red run here would be noise
             # a reader has to dismiss rather than a signal.
+            # The marker is matched as the body's last line rather than anywhere in it. A review body
+            # carries the reviewer's summary and findings, which are model text derived from the
+            # diff, so a requested review of a change to *this file* — whose finding quotes the
+            # marker — would otherwise count as an automatic pass and spend a budget the requested
+            # path never spends. The submission step writes the marker as the final line, which is
+            # the position asserted here; carriage returns and trailing blank lines are stripped
+            # first, so a round trip that normalizes line endings cannot silently stop the count.
+            #
             # Both the login and the marker reach jq through the environment rather than through
             # string interpolation: the login carries `[bot]` brackets and the marker carries `<!--`,
             # and either arriving as filter syntax would be a broken filter rather than a wrong count.
@@ -328,7 +336,11 @@ jobs:
               gh api "repos/${REPOSITORY}/pulls/${PULL_REQUEST_NUMBER}/reviews?per_page=100" --paginate \
                 --jq '[.[]
                        | select(.user.login == env.REVIEWER_LOGIN)
-                       | select((.body // "") | contains(env.AUTOMATIC_REVIEW_MARKER))] | length' \
+                       | select(((.body // "")
+                                 | split("\n")
+                                 | map(sub("\r$"; ""))
+                                 | map(select(. != ""))
+                                 | last // "") == env.AUTOMATIC_REVIEW_MARKER)] | length' \
                 | jq -s 'add // 0'
             ) || automatic_reviews='0'
 
@@ -1249,7 +1261,12 @@ jobs:
           ' "$answer_file")"
 
           if (( unread_count > 0 )); then
-            listed="$(head -n "$NAME_CEILING" "$unread_file" | sed 's/^/`/; s/$/`/' | paste -sd ', ' -)"
+            # `jq` rather than `paste -sd ', '`, which takes its argument as a *list* of delimiters
+            # used circularly and would join three paths as `a`,`b` `c`. Reading the lines as strings
+            # also means a path is quoted and joined as a value rather than as text, so a comma in a
+            # file name cannot become a separator.
+            listed="$(head -n "$NAME_CEILING" "$unread_file" \
+              | jq -R -s -r 'split("\n") | map(select(. != "")) | map("`\(.)`") | join(", ")')"
 
             if (( unread_count > NAME_CEILING )); then
               listed="${listed}, and $(( unread_count - NAME_CEILING )) more"

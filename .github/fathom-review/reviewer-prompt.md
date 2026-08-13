@@ -154,6 +154,10 @@ What that changes:
   it now stands before deciding either way.
 - Your summary says what changed since the last pass in a line or two: what the new
   commits fixed, what they did not, and what they introduced.
+- Your `covered` list is this pass alone. It is never carried over from a previous
+  review, and a file you read last time is not covered this time until you have opened
+  it again — a page or a remark nothing has touched stops being true when the code it
+  describes moves, which is precisely what a later pass is for.
 
 A previous review whose `commit_id` is the current `HEAD SHA` means nothing has been
 pushed since it: this run was asked for by a comment. Say what you looked at again and
