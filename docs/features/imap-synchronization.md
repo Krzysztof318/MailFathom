@@ -1168,6 +1168,13 @@ Nothing about that changes what a run reports or how far it gets. A message the 
 passages exactly as one it accepted, and an instance that has activated no embedding profile offers into a backlog
 nothing drains. [Automatic embedding](automatic-embedding.md) is what happens on the other side of it.
 
+Where spam classification is switched on over the folder, both halves of that are decided one step earlier: the message
+is neither cut nor offered while no verdict exists for it, junk is neither cut nor offered at all, and the
+[embedding backfill](embedding-backfill.md) sweep is what cuts and embeds it once a verdict admits it or its wait runs
+out.
+[Junk is kept out of what a deployment derives from mail](spam-classification.md#junk-is-kept-out-of-what-a-deployment-derives-from-mail)
+holds the rule and the bound. With classification off, which is the default, the paragraphs above describe every message.
+
 ## Reconciling against the server
 
 A synchronization run has two halves. The forward pass only ever moves past the checkpoint, so it discovers new mail and

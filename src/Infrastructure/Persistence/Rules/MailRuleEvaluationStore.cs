@@ -6,6 +6,7 @@ using MailFathom.Application.Folders;
 using MailFathom.Application.Persistence;
 using MailFathom.Application.Rules.Evaluation;
 using MailFathom.Application.Rules.Facts;
+using MailFathom.Application.Spam.Gating;
 using MailFathom.CodeCoverage;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
@@ -13,6 +14,7 @@ using MailFathom.Domain.Folders;
 using MailFathom.Infrastructure.Persistence.Emails;
 using MailFathom.Infrastructure.Persistence.Entities;
 using MailFathom.Infrastructure.Persistence.Sessions;
+using MailFathom.Infrastructure.Persistence.Spam;
 using Microsoft.EntityFrameworkCore;
 
 namespace MailFathom.Infrastructure.Persistence.Rules;
@@ -33,11 +35,20 @@ namespace MailFathom.Infrastructure.Persistence.Rules;
 /// every one of them at the head of the arrival queue forever, since what takes an email out of that queue is a pass
 /// having evaluated it.
 /// </para>
+/// <para>
+/// Both walks also leave out the mail classification is withholding, which is the ordering between the two mechanisms
+/// rather than a filter of the rule engine's own. An authored rule filing a sender's mail into a folder and a
+/// classification filing the same message into junk are two fates for one occurrence; classification decides first, so
+/// they can never disagree about one message. A message merely waiting on a verdict is left in the queue exactly as an
+/// email waiting for extraction is — it is evaluated once the verdict arrives, or once the wait a verdict is allowed
+/// runs out.
+/// </para>
 /// </remarks>
 [RequiresIntegrationCoverage]
 internal sealed class MailRuleEvaluationStore(
     MailFathomDbContext dbContext,
-    IMailFolderParticipationReader folderParticipation) : IMailRuleEvaluationStore
+    IMailFolderParticipationReader folderParticipation,
+    DerivedWorkGate derivedWorkGate) : IMailRuleEvaluationStore
 {
     /// <inheritdoc />
     /// <remarks>
@@ -143,8 +154,10 @@ internal sealed class MailRuleEvaluationStore(
         // retained and refreshed by nothing, and mail of a folder configuration no longer names at all. Only an
         // admission reaches the second — no list of withheld names carries a folder nobody named — and a rule acting on
         // either would move or flag mail nothing here is still reading.
-        var candidates = await AccountScopedMailFolders
-            .Admitting(emails, folderParticipation.FoldersSynchronized)
+        var candidates = await DerivedWorkAdmittedEmails
+            .Admitting(
+                AccountScopedMailFolders.Admitting(emails, folderParticipation.FoldersSynchronized),
+                derivedWorkGate.ReadTerms())
             .AsNoTracking()
             .Where(StoredEmailTombstone.IsNotTombstoned)
             .Where(email => email.MailboxAccountId == mailboxAccountId

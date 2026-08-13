@@ -19,7 +19,6 @@ namespace MailFathom.Infrastructure.Persistence.Emails;
 [RequiresIntegrationCoverage]
 internal sealed class StoredEmailMetadataRepository(
     TimeProvider timeProvider,
-    EmailChunkWriter chunkWriter,
     SensitiveContentDerivationGuard derivationGuard)
     : IEmailMetadataRepository
 {
@@ -52,6 +51,7 @@ internal sealed class StoredEmailMetadataRepository(
                 MailFolder = folder,
                 UidValidity = occurrenceId.UidValidity.Value,
                 Uid = occurrenceId.Uid.Value,
+                StoredAt = timeProvider.GetUtcNow(),
             };
 
             dbContext.StoredEmails.Add(entity);
@@ -73,11 +73,6 @@ internal sealed class StoredEmailMetadataRepository(
                 timeProvider.GetUtcNow(),
                 derivationGuard.Stamp,
                 cancellationToken);
-
-            // Cut in the same session as the text it derives from, so a committed message is never one whose passages
-            // a later reader has to wait for. Nothing here reaches a provider: chunking is a local derivation, and an
-            // instance that never enables embeddings simply keeps passages nothing asks for yet.
-            await chunkWriter.SaveAsync(dbContext, entity, extractedMetadata.Text, cancellationToken);
         }
         else
         {

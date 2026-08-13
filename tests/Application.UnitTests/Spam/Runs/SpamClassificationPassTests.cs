@@ -5,6 +5,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using MailFathom.Application.EmailContent.Storage;
+using MailFathom.Application.Emails.Chunking;
 using MailFathom.Application.Folders;
 using MailFathom.Application.Mail;
 using MailFathom.Application.Mail.Mutations;
@@ -447,6 +448,8 @@ public sealed class SpamClassificationPassTests
             new DeterministicSpamClassifier(),
             settingsReader,
             this.classifications,
+            Substitute.For<IEmailChunkStore>(),
+            new RecordingDerivedWorkGateTelemetry(),
             commitPolicy,
             this.timeProvider);
     }

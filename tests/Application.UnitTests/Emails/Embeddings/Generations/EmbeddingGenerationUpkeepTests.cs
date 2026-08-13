@@ -11,6 +11,7 @@ using MailFathom.Application.Emails.Embeddings.Limits;
 using MailFathom.Application.Persistence;
 using MailFathom.Application.UnitTests.TestDoubles;
 using MailFathom.Domain.Emails;
+using MailFathom.TestSupport;
 using Microsoft.Extensions.Time.Testing;
 using NSubstitute;
 using Xunit;
@@ -311,6 +312,7 @@ public sealed class EmbeddingGenerationUpkeepTests
                         new FakeTimeProvider()),
                     EmbeddingRequestPacer.Create(maxRequestsPerMinute: 0, new FakeTimeProvider())),
                 concurrencyRetryPolicy,
+                new RecordingDerivedWorkGateTelemetry(),
                 new StoredEmailEmbeddingBackfillOptions
                 {
                     BatchSize = batchSize,

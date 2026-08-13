@@ -3,12 +3,15 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.EmailContent.Storage;
+using MailFathom.Application.Emails.Chunking;
 using MailFathom.Application.Emails.Embeddings.Generation;
 using MailFathom.Application.Emails.Extraction;
 using MailFathom.Application.Emails.Summaries;
 using MailFathom.Application.Folders;
 using MailFathom.Application.Mail;
 using MailFathom.Application.Persistence;
+using MailFathom.Application.Spam;
+using MailFathom.Application.Spam.Gating;
 using MailFathom.Application.Synchronization;
 using MailFathom.Application.Synchronization.Checkpoints;
 using MailFathom.Application.Synchronization.Reconciliation;
@@ -20,6 +23,7 @@ using MailFathom.Domain.Folders;
 using MailFathom.Domain.Mutations;
 using MailFathom.Domain.Synchronization;
 using MailFathom.Domain.Transport;
+using MailFathom.TestSupport;
 using Microsoft.Extensions.Time.Testing;
 using NSubstitute;
 using Xunit;
@@ -498,6 +502,113 @@ public sealed class MailboxSynchronizerTests
         Assert.Equal(1, result.StoredEmailCount);
         Assert.Equal([arrangement.StoredEmailId], backlog.Accepted);
         Assert.Equal(0, backlog.RefusedCount);
+    }
+
+    /// <summary>With classification off there is no ordering to obey, so the message is cut and offered exactly as before.</summary>
+    [Fact]
+    public async Task SynchronizeAsync_ClassificationSwitchedOff_CutsThePassagesInTheSameCommit()
+    {
+        // Arrange
+        var backlog = new RecordingEmailEmbeddingBacklog();
+        var arrangement = ArrangeOneStoredMessage(backlog);
+
+        // Act
+        await arrangement.Synchronizer.SynchronizeAsync(
+            arrangement.AccountId,
+            InboxMapping,
+            CancellationToken.None);
+
+        // Assert
+        await arrangement.ChunkStore.Received(1).DeriveChunksAsync(
+            arrangement.PersistenceSession,
+            arrangement.StoredEmailId,
+            Arg.Any<ExtractedEmailText>(),
+            CancellationToken.None);
+        Assert.Equal([DerivedWorkAdmission.Admitted], arrangement.GateTelemetry.Admissions);
+    }
+
+    /// <summary>
+    /// The ordering itself: a message classification is going to score carries no verdict at the moment it is committed,
+    /// so nothing downstream of classification runs for it — it is not cut, and it is not offered to a provider.
+    /// </summary>
+    [Fact]
+    public async Task SynchronizeAsync_AMessageClassificationWillScore_CutsNoPassagesAndOffersNothingForEmbedding()
+    {
+        // Arrange
+        var backlog = new RecordingEmailEmbeddingBacklog();
+        var arrangement = ArrangeOneStoredMessage(backlog, ClassifyingTheInbox());
+
+        // Act
+        var result = await arrangement.Synchronizer.SynchronizeAsync(
+            arrangement.AccountId,
+            InboxMapping,
+            CancellationToken.None);
+
+        // Assert
+        Assert.Equal(1, result.StoredEmailCount);
+        await arrangement.ChunkStore.DidNotReceiveWithAnyArgs().DeriveChunksAsync(
+            Arg.Any<IPersistenceSession>(),
+            Arg.Any<StoredEmailId>(),
+            Arg.Any<ExtractedEmailText>(),
+            Arg.Any<CancellationToken>());
+        Assert.Empty(backlog.Accepted);
+        Assert.Equal([DerivedWorkAdmission.AwaitingClassification], arrangement.GateTelemetry.Admissions);
+    }
+
+    /// <summary>Mail arriving in the junk folder needs no scanner to say so, and never reaches a provider.</summary>
+    [Fact]
+    public async Task SynchronizeAsync_AMessageArrivingInTheJunkFolder_CutsNoPassagesAndOffersNothingForEmbedding()
+    {
+        // Arrange
+        var backlog = new RecordingEmailEmbeddingBacklog();
+        var arrangement = ArrangeOneStoredMessage(
+            backlog,
+            ClassifyingTheInbox(),
+            StubJunkMailFolderCatalog.Naming(new MailFolderIdentity(MailAccountId.Create("primary"), InboxAlias)));
+
+        // Act
+        var result = await arrangement.Synchronizer.SynchronizeAsync(
+            arrangement.AccountId,
+            InboxMapping,
+            CancellationToken.None);
+
+        // Assert
+        Assert.Equal(1, result.StoredEmailCount);
+        await arrangement.ChunkStore.DidNotReceiveWithAnyArgs().DeriveChunksAsync(
+            Arg.Any<IPersistenceSession>(),
+            Arg.Any<StoredEmailId>(),
+            Arg.Any<ExtractedEmailText>(),
+            Arg.Any<CancellationToken>());
+        Assert.Empty(backlog.Accepted);
+        Assert.Equal([DerivedWorkAdmission.WithheldAsJunk], arrangement.GateTelemetry.Admissions);
+    }
+
+    /// <summary>A folder no classification runs over waits on nothing, so its mail is cut and offered as it always was.</summary>
+    [Fact]
+    public async Task SynchronizeAsync_AMessageOutsideTheClassifiedScope_CutsThePassagesInTheSameCommit()
+    {
+        // Arrange
+        var backlog = new RecordingEmailEmbeddingBacklog();
+        var arrangement = ArrangeOneStoredMessage(
+            backlog,
+            SpamClassificationSettings.Create(
+                isEnabled: true,
+                usesScanner: false,
+                [MailFolderAlias.Create("archive")]));
+
+        // Act
+        await arrangement.Synchronizer.SynchronizeAsync(
+            arrangement.AccountId,
+            InboxMapping,
+            CancellationToken.None);
+
+        // Assert
+        await arrangement.ChunkStore.Received(1).DeriveChunksAsync(
+            arrangement.PersistenceSession,
+            arrangement.StoredEmailId,
+            Arg.Any<ExtractedEmailText>(),
+            CancellationToken.None);
+        Assert.Equal([arrangement.StoredEmailId], backlog.Accepted);
     }
 
     [Fact]
@@ -1713,6 +1824,12 @@ public sealed class MailboxSynchronizerTests
         await mimeReader.DidNotReceiveWithAnyArgs().ReadMetadataAsync(default!, CancellationToken.None);
     }
 
+    /// <summary>Settings that put the folder every arrival test synchronizes inside classification's scope.</summary>
+    private static SpamClassificationSettings ClassifyingTheInbox() => SpamClassificationSettings.Create(
+        isEnabled: true,
+        usesScanner: false,
+        [InboxAlias]);
+
     private static EmailMimeExtractionResult CreateFailedExtraction(EmailMimeExtractionOutcome outcome) => outcome switch
     {
         EmailMimeExtractionOutcome.MalformedContent => EmailMimeExtractionResult.MalformedContent(),
@@ -2112,7 +2229,10 @@ public sealed class MailboxSynchronizerTests
     }
 
     /// <summary>Composes a run that stores exactly one message, which is the shape both embedding tests assert about.</summary>
-    private static OneStoredMessageArrangement ArrangeOneStoredMessage(IEmailEmbeddingBacklog embeddingBacklog)
+    private static OneStoredMessageArrangement ArrangeOneStoredMessage(
+        IEmailEmbeddingBacklog embeddingBacklog,
+        SpamClassificationSettings? classificationSettings = null,
+        IJunkMailFolderCatalog? junkFolders = null)
     {
         var accountId = MailAccountId.Create("primary");
         var folder = InboxFolder;
@@ -2132,6 +2252,8 @@ public sealed class MailboxSynchronizerTests
         var metadata = new RemoteEmailMetadata(occurrence, "message-1@example.test", "Subject", new DateTimeOffset(2026, 7, 24, 8, 0, 0, TimeSpan.Zero), 128);
         var content = new RemoteEmailContent(occurrence, new ReadOnlyMemory<byte>([1, 2, 3]));
         var storedEmailId = StoredEmailId.Create(Guid.CreateVersion7());
+        var chunkStore = Substitute.For<IEmailChunkStore>();
+        var gateTelemetry = new RecordingDerivedWorkGateTelemetry();
 
         checkpointStore.GetCheckpointAsync(accountId, folder.Id, CancellationToken.None).Returns(SynchronizationCheckpoint.None(uidValidity));
         sessionFactory.OpenReadOnlyAsync(accountId, folder, Arg.Any<MailTransportSecurityPolicy>(), CancellationToken.None).Returns(session);
@@ -2148,14 +2270,20 @@ public sealed class MailboxSynchronizerTests
             contentStore,
             clock,
             options,
-            embeddingBacklog: embeddingBacklog);
+            embeddingBacklog: embeddingBacklog,
+            chunkStore: chunkStore,
+            classificationSettings: classificationSettings,
+            junkFolders: junkFolders,
+            gateTelemetry: gateTelemetry);
 
         return new OneStoredMessageArrangement(
             synchronizer,
             accountId,
             storedEmailId,
             contentStore,
-            persistenceSession);
+            persistenceSession,
+            chunkStore,
+            gateTelemetry);
     }
 
     /// <summary>The parts of a one-message run the embedding assertions read back.</summary>
@@ -2164,7 +2292,9 @@ public sealed class MailboxSynchronizerTests
         MailAccountId AccountId,
         StoredEmailId StoredEmailId,
         IEmailContentStore ContentStore,
-        IPersistenceSession PersistenceSession);
+        IPersistenceSession PersistenceSession,
+        IEmailChunkStore ChunkStore,
+        RecordingDerivedWorkGateTelemetry GateTelemetry);
 
     private static MailboxSynchronizer CreateSynchronizer(
         IMailboxSessionFactory mailboxSessionFactory,
@@ -2183,7 +2313,11 @@ public sealed class MailboxSynchronizerTests
         IEmailEmbeddingBacklog? embeddingBacklog = null,
         IStoredEmailContentInventory? contentInventory = null,
         RawMimeMemoryBudget? rawMimeMemoryBudget = null,
-        StoredContentCeiling? storedContentCeiling = null)
+        StoredContentCeiling? storedContentCeiling = null,
+        IEmailChunkStore? chunkStore = null,
+        SpamClassificationSettings? classificationSettings = null,
+        IJunkMailFolderCatalog? junkFolders = null,
+        IDerivedWorkGateTelemetry? gateTelemetry = null)
     {
         var concurrencyRetryPolicy = new OptimisticConcurrencyRetryPolicy(
             persistenceSessionFactory,
@@ -2213,6 +2347,13 @@ public sealed class MailboxSynchronizerTests
                 timeProvider,
                 options),
             embeddingBacklog ?? new RecordingEmailEmbeddingBacklog(),
+            chunkStore ?? Substitute.For<IEmailChunkStore>(),
+            new DerivedWorkGate(
+                new StubSpamClassificationSettingsReader(
+                    classificationSettings ?? SpamClassificationSettings.Disabled),
+                junkFolders ?? StubJunkMailFolderCatalog.None,
+                timeProvider),
+            gateTelemetry ?? new RecordingDerivedWorkGateTelemetry(),
             concurrencyRetryPolicy,
             timeProvider,
             options);

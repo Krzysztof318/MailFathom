@@ -4,6 +4,7 @@
 
 using MailFathom.Application.Emails.Embeddings.Generation;
 using MailFathom.Application.Persistence;
+using MailFathom.Application.Spam.Gating;
 using MailFathom.Domain.Emails;
 
 namespace MailFathom.Application.Emails.Embeddings.Backfill;
@@ -41,28 +42,33 @@ public sealed class StoredEmailEmbeddingBackfill
     private readonly IStoredEmailEmbeddingBackfillStore backfillStore;
     private readonly StoredEmailEmbeddingGenerator embeddingGenerator;
     private readonly OptimisticConcurrencyRetryPolicy concurrencyRetryPolicy;
+    private readonly IDerivedWorkGateTelemetry gateTelemetry;
     private readonly StoredEmailEmbeddingBackfillOptions options;
 
     /// <summary>Initializes a new embedding backfill.</summary>
     /// <param name="backfillStore">Reads what remains and writes both the passages and the position a run produced.</param>
     /// <param name="embeddingGenerator">Brings one message up to date, which is the same unit of work the live worker performs.</param>
     /// <param name="concurrencyRetryPolicy">Commits a write, retrying a conflict with a competing writer.</param>
+    /// <param name="gateTelemetry">Records why a message the classification gate was holding is being derived from now.</param>
     /// <param name="options">Bounds one run.</param>
     /// <exception cref="ArgumentNullException">Thrown when any argument is <see langword="null" />.</exception>
     public StoredEmailEmbeddingBackfill(
         IStoredEmailEmbeddingBackfillStore backfillStore,
         StoredEmailEmbeddingGenerator embeddingGenerator,
         OptimisticConcurrencyRetryPolicy concurrencyRetryPolicy,
+        IDerivedWorkGateTelemetry gateTelemetry,
         StoredEmailEmbeddingBackfillOptions options)
     {
         ArgumentNullException.ThrowIfNull(backfillStore);
         ArgumentNullException.ThrowIfNull(embeddingGenerator);
         ArgumentNullException.ThrowIfNull(concurrencyRetryPolicy);
+        ArgumentNullException.ThrowIfNull(gateTelemetry);
         ArgumentNullException.ThrowIfNull(options);
 
         this.backfillStore = backfillStore;
         this.embeddingGenerator = embeddingGenerator;
         this.concurrencyRetryPolicy = concurrencyRetryPolicy;
+        this.gateTelemetry = gateTelemetry;
         this.options = options;
     }
 
@@ -176,6 +182,12 @@ public sealed class StoredEmailEmbeddingBackfill
     {
         if (email.RequiresChunking)
         {
+            // Cutting a message's first passages is where a message the classification gate held is let through, and the
+            // only place the release is decidable one message at a time — the sweeps below it are narrowed by a
+            // set-based predicate that answers about a batch rather than about a message. A message with passages
+            // already cut is ordinary outstanding work and says nothing about the gate, so it is not counted here.
+            this.gateTelemetry.RecordAdmission(email.Admission);
+
             await this.concurrencyRetryPolicy.CommitAsync(
                 (persistenceSession, attemptCancellationToken) => this.backfillStore.DeriveChunksAsync(
                     persistenceSession,

@@ -25,6 +25,13 @@ and nothing of it is ever sent to a provider.
 states that switch beside the other two, and [message chunks](message-chunks.md#when-chunking-runs) what happens to
 passages cut before it was set.
 
+A second narrowing applies wherever spam classification is switched on: junk is never embedded and its content never
+reaches a provider, and a message no verdict has been reached about is not offered here while it waits. The consequence
+for this path is that a message of a classified folder is not cut or offered as it arrives — the
+[backfill](embedding-backfill.md) sweep is what reaches it once a verdict admits it or its wait runs out.
+[Junk is kept out of what a deployment derives from mail](spam-classification.md#junk-is-kept-out-of-what-a-deployment-derives-from-mail)
+holds the whole of it, and none of it applies with classification off.
+
 ## The backlog between synchronization and the provider
 
 A message is offered for embedding **after** it and its passages are committed, never inside the transaction that

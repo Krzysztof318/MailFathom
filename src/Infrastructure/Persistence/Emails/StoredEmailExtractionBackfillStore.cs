@@ -5,12 +5,14 @@
 using MailFathom.Application.Emails.Extraction;
 using MailFathom.Application.Persistence;
 using MailFathom.Application.SensitiveContent.Derivation;
+using MailFathom.Application.Spam.Gating;
 using MailFathom.CodeCoverage;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Folders;
 using MailFathom.Infrastructure.Persistence.Entities;
 using MailFathom.Infrastructure.Persistence.Sessions;
+using MailFathom.Infrastructure.Persistence.Spam;
 using Microsoft.EntityFrameworkCore;
 
 namespace MailFathom.Infrastructure.Persistence.Emails;
@@ -22,6 +24,7 @@ internal sealed class StoredEmailExtractionBackfillStore(
     TimeProvider timeProvider,
     EmailChunkWriter chunkWriter,
     SensitiveContentDerivationGuard derivationGuard,
+    DerivedWorkGate derivedWorkGate,
     StoredEmailExtractionBackfillOptions options)
     : IStoredEmailExtractionBackfillStore
 {
@@ -135,8 +138,15 @@ internal sealed class StoredEmailExtractionBackfillStore(
             cancellationToken);
 
         // Cut from the same extraction, so an email this walk reaches arrives at the same state a newly synchronized
-        // one does rather than at a state a second walk would have to complete.
-        await chunkWriter.SaveAsync(sessionContext, storedEmail, metadata.Text, cancellationToken);
+        // one does rather than at a state a second walk would have to complete — including when classification is what
+        // decides it arrives with no passages at all. The gate is read here rather than being folded into the batch
+        // query for the reason it is read at synchronization: an email whose passages this walk withholds still needs
+        // its extraction applied, so what the answer decides is one of the two writes rather than whether the email is
+        // reached.
+        if (await this.IsAdmittedForDerivedWorkAsync(sessionContext, storedEmailId, cancellationToken))
+        {
+            await chunkWriter.SaveAsync(sessionContext, storedEmail, metadata.Text, cancellationToken);
+        }
     }
 
     /// <inheritdoc />
@@ -231,6 +241,31 @@ internal sealed class StoredEmailExtractionBackfillStore(
         return outstanding.Where(email => email.SearchDocument == null
             || (email.SearchDocument.TextSource != ExtractedEmailTextSource.BodyNotExtracted
                 && email.SearchDocument.SensitiveContentStamp != currentStamp));
+    }
+
+    /// <summary>Asks the classification gate about one email, through the same predicate every walk is narrowed by.</summary>
+    /// <remarks>
+    /// Expressed as an existence test over the shared predicate rather than as a second reading of the rule, so this
+    /// path and the sweeps can never disagree about one message. It costs one indexed read of the row this write is
+    /// already holding, and none at all on a deployment that classifies nothing.
+    /// </remarks>
+    private async Task<bool> IsAdmittedForDerivedWorkAsync(
+        MailFathomDbContext sessionContext,
+        StoredEmailId storedEmailId,
+        CancellationToken cancellationToken)
+    {
+        var terms = derivedWorkGate.ReadTerms();
+
+        if (!terms.IsApplied)
+        {
+            return true;
+        }
+
+        return await DerivedWorkAdmittedEmails
+            .Admitting(
+                sessionContext.StoredEmails.AsNoTracking().Where(email => email.Id == storedEmailId.Value),
+                terms)
+            .AnyAsync(cancellationToken);
     }
 
     /// <summary>Where a previous walk stopped, and the configuration it stopped under.</summary>

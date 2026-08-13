@@ -5,6 +5,7 @@
 using System.ComponentModel.DataAnnotations;
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
+using MailFathom.Application.Spam;
 using MailFathom.Application.Spam.Runs;
 using MailFathom.Domain.Folders;
 
@@ -69,6 +70,17 @@ internal sealed class SpamClassificationOptions : IValidatableObject
     /// reaches the deterministic stage, whose provider headers carry a threshold in a scale of their own.
     /// </remarks>
     public double? ScannerThreshold { get; set; }
+
+    /// <summary>Gets or sets how long a message waits on a verdict before chunking, embedding, and rules run for it unclassified.</summary>
+    /// <remarks>
+    /// The bound on the ordering rather than a bound on classification. Derived work is withheld from a message until a
+    /// verdict says it is not junk, so a scanner that has stopped answering would otherwise stop the index too — and an
+    /// index that quietly stops filling is worse than no ordering at all. What the wait buys is that spam is not
+    /// embedded in the ordinary case; what it costs is that a deployment whose classification is wedged indexes without
+    /// it after this long, and says so through <c>mailfathom.spam.derived_work.admissions</c>.
+    /// </remarks>
+    [Range(typeof(TimeSpan), "00:00:01", "7.00:00:00")]
+    public TimeSpan ClassificationWait { get; set; } = SpamClassificationSettings.DefaultMaximumClassificationWait;
 
     /// <summary>Gets or sets how many stored occurrences one batch of an on-demand run classifies and commits.</summary>
     /// <remarks>

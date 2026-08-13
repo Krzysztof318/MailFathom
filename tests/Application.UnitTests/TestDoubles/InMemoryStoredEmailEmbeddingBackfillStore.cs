@@ -6,6 +6,7 @@ using MailFathom.Application.Emails.Chunking;
 using MailFathom.Application.Emails.Embeddings;
 using MailFathom.Application.Emails.Embeddings.Backfill;
 using MailFathom.Application.Persistence;
+using MailFathom.Application.Spam.Gating;
 using MailFathom.Domain.Emails;
 
 namespace MailFathom.Application.UnitTests.TestDoubles;
@@ -43,8 +44,14 @@ internal sealed class InMemoryStoredEmailEmbeddingBackfillStore : IStoredEmailEm
     public CancellationTokenSource? CancelWhenPositionSaved { get; set; }
 
     /// <summary>Adds a message stored before chunking existed: it has extracted text and no passages at all.</summary>
-    public void AddEmailAwaitingChunking(StoredEmailId storedEmailId, int passageCount) =>
-        this.mail.Add(new WalkedEmail(storedEmailId, passageCount));
+    /// <param name="storedEmailId">The message the walk will find.</param>
+    /// <param name="passageCount">How many passages cutting it yields.</param>
+    /// <param name="admission">Why the classification gate lets the walk cut it, the default being a deployment that classifies nothing.</param>
+    public void AddEmailAwaitingChunking(
+        StoredEmailId storedEmailId,
+        int passageCount,
+        DerivedWorkAdmission admission = DerivedWorkAdmission.Admitted) =>
+        this.mail.Add(new WalkedEmail(storedEmailId, passageCount) { Admission = admission });
 
     /// <summary>Adds a message that already has its passages, none of which carries a vector yet.</summary>
     public void AddEmailAwaitingEmbedding(StoredEmailId storedEmailId, int passageCount)
@@ -104,7 +111,10 @@ internal sealed class InMemoryStoredEmailEmbeddingBackfillStore : IStoredEmailEm
 
             if (await this.IsOutstandingAsync(email, profileId, cancellationToken))
             {
-                batch.Add(new StoredEmailAwaitingEmbedding(email.StoredEmailId, !email.IsChunked));
+                batch.Add(new StoredEmailAwaitingEmbedding(
+                    email.StoredEmailId,
+                    !email.IsChunked,
+                    email.Admission));
             }
         }
 
@@ -186,5 +196,7 @@ internal sealed class InMemoryStoredEmailEmbeddingBackfillStore : IStoredEmailEm
     private sealed record WalkedEmail(StoredEmailId StoredEmailId, int PassageCount)
     {
         public bool IsChunked { get; set; }
+
+        public DerivedWorkAdmission Admission { get; init; }
     }
 }

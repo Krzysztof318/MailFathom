@@ -1,6 +1,6 @@
 # Message chunks
 
-<!-- describes: src/AI/Chunking/**, src/Application/Emails/Chunking/**, src/Infrastructure/Persistence/Emails/EmailChunkWriter.cs, src/Infrastructure/Persistence/Entities/EmailChunkEntity.cs -->
+<!-- describes: src/AI/Chunking/**, src/Application/Emails/Chunking/**, src/Infrastructure/Persistence/Emails/EmailChunkWriter.cs, src/Infrastructure/Persistence/Emails/EmailChunkStore.cs, src/Infrastructure/Persistence/Entities/EmailChunkEntity.cs -->
 
 A message is often too big to be the unit a search answers with. A forwarded thread can carry twenty exchanges, and the
 one paragraph that answers a question is somewhere inside it. MailFathom therefore cuts a message's extracted text
@@ -18,6 +18,15 @@ describes the table they are stored in.
 A message is cut in the same database transaction that stores what was extracted from it, on both paths that extract:
 the synchronization run that has just fetched a message, and the backfill that re-derives text for mail stored before
 extraction existed. A committed message is therefore never one whose passages something else still has to produce.
+
+**Unless spam classification is deciding whether it may be cut at all.** With classification configured over a folder,
+whether that folder's mail is cut is a question the message's verdict answers, and the verdict does not exist while the
+message is being stored — so the cut is not made on the arrival path and the
+[embedding backfill](embedding-backfill.md) sweep makes it once the message is admitted. A message classification files
+as junk is never cut on any path, and one already cut when a junk verdict arrives has its passages removed.
+[Junk is kept out of what a deployment derives from mail](spam-classification.md#junk-is-kept-out-of-what-a-deployment-derives-from-mail)
+holds all of it, including what a message waiting on a verdict costs. None of it applies with classification off, which
+is the default: the sentence above then describes every message.
 
 A message that yielded no text is cut into nothing. That covers a body that carried no words and a body that arrived
 encrypted: both keep the search document that makes them findable on their subject and participants, and neither gains a

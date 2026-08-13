@@ -8,6 +8,7 @@ using MailFathom.Application.EmailContent.Attachments;
 using MailFathom.Application.EmailContent.Rendering;
 using MailFathom.Application.EmailContent.Repair;
 using MailFathom.Application.EmailContent.Storage;
+using MailFathom.Application.Emails.Chunking;
 using MailFathom.Application.Emails.DownloadAttachment;
 using MailFathom.Application.Emails.Embeddings;
 using MailFathom.Application.Emails.Embeddings.Administration;
@@ -43,6 +44,7 @@ using MailFathom.Application.SensitiveContent.Egress;
 using MailFathom.Application.SensitiveContent.Redaction;
 using MailFathom.Application.Spam;
 using MailFathom.Application.Spam.Actions;
+using MailFathom.Application.Spam.Gating;
 using MailFathom.Application.Spam.History;
 using MailFathom.Application.Spam.Runs;
 using MailFathom.Application.Spam.Scanning;
@@ -261,6 +263,10 @@ public static class ServiceCollectionExtensions
         // passage rows a message owns. Its `IEmailTextChunker` comes from the AI boundary, which this project may not
         // reference, so a composition root that registers persistence without the local derivations resolves nothing.
         services.AddScoped<EmailChunkWriter>();
+        // The port over it, which is what the synchronization run and a junk verdict reach it through. Deriving is a
+        // call the run makes rather than something the metadata write does on its way past, because what decides whether
+        // a message is cut is what classification says about it.
+        services.AddScoped<IEmailChunkStore, EmailChunkStore>();
         // The backlog is a singleton because the bound it enforces is one process-wide limit on how much embedding work
         // is held in memory; a scoped one would hold that bound per scope, and a synchronization run would be offering
         // into a backlog no worker is reading. Registered whether or not this deployment embeds, because the
@@ -417,6 +423,9 @@ public static class ServiceCollectionExtensions
         // instead would put a null check and a second code path into each consumer, which is how two of them end up
         // disagreeing about what an unguarded egress looks like.
         services.AddSingleton<ISensitiveContentEgressTelemetry, SensitiveContentEgressTelemetry>();
+        // A singleton for the reason every other instrument here is one: what it counts is a fact about the process, and
+        // a scoped instance would create a meter per request.
+        services.AddSingleton<IDerivedWorkGateTelemetry, DerivedWorkGateTelemetry>();
         services.AddSingleton(provider => new SensitiveContentEgressGuard(
             provider.GetService<SensitiveContentRedactor>(),
             provider.GetRequiredService<ISensitiveContentEgressTelemetry>(),
@@ -451,9 +460,15 @@ public static class ServiceCollectionExtensions
             provider.GetRequiredService<DeterministicSpamClassifier>(),
             provider.GetRequiredService<ISpamClassificationSettingsReader>(),
             provider.GetRequiredService<IEmailSpamClassificationStore>(),
+            provider.GetRequiredService<IEmailChunkStore>(),
+            provider.GetRequiredService<IDerivedWorkGateTelemetry>(),
             provider.GetRequiredService<OptimisticConcurrencyRetryPolicy>(),
             provider.GetRequiredService<TimeProvider>(),
             provider.GetService<ISpamScanner>()));
+        // The ordering that puts classification in front of chunking, embedding, and rule evaluation. Registered for
+        // every deployment because the paths that obey it are unconditional: with classification off the gate admits
+        // everything and every one of them behaves exactly as it did before the gate existed.
+        services.AddScoped<DerivedWorkGate>();
         // Registered beside the classifier and independent of it: what a verdict causes is a decision of its own, and the
         // classifier resolves nothing from here, which is what keeps a deployment that records verdicts and touches
         // nothing genuinely unable to reach a mailbox through classification.

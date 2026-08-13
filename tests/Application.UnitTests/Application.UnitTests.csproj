@@ -9,6 +9,10 @@
     <Compile Include="..\shared\ExceptionHierarchyAssertion.cs" Link="ExceptionHierarchyAssertion.cs" />
     <Compile Include="..\shared\StubMailFolderParticipation.cs" Link="StubMailFolderParticipation.cs" />
     <Compile Include="..\shared\StubJunkMailFolderCatalog.cs" Link="StubJunkMailFolderCatalog.cs" />
+    <!-- The classification gate reaches synchronization, the classifier, and both persistence walks, so the settings a
+         gate is built from and the instrument that reports what it decided are linked wherever one is constructed. -->
+    <Compile Include="..\shared\StubSpamClassificationSettingsReader.cs" Link="StubSpamClassificationSettingsReader.cs" />
+    <Compile Include="..\shared\RecordingDerivedWorkGateTelemetry.cs" Link="RecordingDerivedWorkGateTelemetry.cs" />
     <Compile Include="..\shared\StubMailFolderMappings.cs" Link="StubMailFolderMappings.cs" />
     <Compile Include="..\shared\SyntheticServedAccount.cs" Link="SyntheticServedAccount.cs" />
     <!-- The body text is the one mail-rule fact whose resolution costs a read, and both this project and

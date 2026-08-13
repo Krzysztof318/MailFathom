@@ -7,6 +7,7 @@ using MailFathom.Application.Persistence;
 using MailFathom.Application.SensitiveContent;
 using MailFathom.Application.SensitiveContent.Derivation;
 using MailFathom.Application.SensitiveContent.Redaction;
+using MailFathom.Application.Spam.Gating;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Folders;
 using MailFathom.Infrastructure.Observability;
@@ -242,6 +243,7 @@ public sealed class OrchestratedStaleDerivedDataTests(MailFathomOrchestrationFix
                 stamp ?? CurrentStamp,
                 new SensitiveContentDerivationTelemetry(),
                 timeProvider),
+            scope.GetRequiredService<DerivedWorkGate>(),
             new StoredEmailExtractionBackfillOptions
             {
                 RebuildsStaleDerivedData = rebuildsStaleDerivedData,

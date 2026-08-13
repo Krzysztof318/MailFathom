@@ -7,8 +7,10 @@ using MailFathom.Application.Emails.Embeddings.Backfill;
 using MailFathom.Application.Emails.Embeddings.Generation;
 using MailFathom.Application.Emails.Embeddings.Limits;
 using MailFathom.Application.Persistence;
+using MailFathom.Application.Spam.Gating;
 using MailFathom.Application.UnitTests.TestDoubles;
 using MailFathom.Domain.Emails;
+using MailFathom.TestSupport;
 using Microsoft.Extensions.Time.Testing;
 using NSubstitute;
 using Xunit;
@@ -45,6 +47,46 @@ public sealed class StoredEmailEmbeddingBackfillTests
         // The passages the cut produced are the ones the provider was asked about, which is the ordering the backfill
         // exists to guarantee: a message with neither becomes a message with both, in that order.
         Assert.Equal(3, world.EmbeddingStore.EmbeddedPassages.Count);
+    }
+
+    /// <summary>The sweep is where a message classification never decided about is let through, so it says which answer let it.</summary>
+    /// <remarks>
+    /// It is the only place the release is decidable one message at a time: the walk below it is narrowed by a
+    /// set-based predicate, which admits a batch without saying what admitted each row. Without this count a wedged
+    /// classifier and a mailbox with nothing to embed publish the same silence.
+    /// </remarks>
+    [Theory]
+    [InlineData(DerivedWorkAdmission.ReleasedAfterWaiting)]
+    [InlineData(DerivedWorkAdmission.ReleasedAsUnclassifiable)]
+    [InlineData(DerivedWorkAdmission.Admitted)]
+    public async Task RunAsync_MessageTheGateReleased_RecordsWhichAnswerReleasedIt(DerivedWorkAdmission admission)
+    {
+        // Arrange
+        var world = CreateWorld();
+        world.BackfillStore.AddEmailAwaitingChunking(NextEmail(), passageCount: 2, admission);
+        var backfill = world.CreateBackfill();
+
+        // Act
+        await backfill.RunAsync(world.Target, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal([admission], world.GateTelemetry.Admissions);
+    }
+
+    /// <summary>A message whose passages already exist is ordinary outstanding work and says nothing about the gate.</summary>
+    [Fact]
+    public async Task RunAsync_MessageThatAlreadyHasPassages_RecordsNoAdmission()
+    {
+        // Arrange
+        var world = CreateWorld();
+        world.BackfillStore.AddEmailAwaitingEmbedding(NextEmail(), passageCount: 2);
+        var backfill = world.CreateBackfill();
+
+        // Act
+        await backfill.RunAsync(world.Target, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Empty(world.GateTelemetry.Admissions);
     }
 
     /// <summary>A message that already has its passages is embedded without being cut a second time.</summary>
@@ -369,7 +411,8 @@ public sealed class StoredEmailEmbeddingBackfillTests
                     spendBudget ?? EmbeddingSpendBudget.Unbounded,
                     new FakeTimeProvider(PeriodStart)),
                 EmbeddingRequestPacer.Create(maxRequestsPerMinute: 0, new FakeTimeProvider())),
-            concurrencyRetryPolicy);
+            concurrencyRetryPolicy,
+            new RecordingDerivedWorkGateTelemetry());
     }
 
     /// <summary>The mail, the vectors, and the collaborators one backfill run works against.</summary>
@@ -379,12 +422,14 @@ public sealed class StoredEmailEmbeddingBackfillTests
         InMemoryStoredEmailEmbeddingBackfillStore BackfillStore,
         ScriptedTextEmbeddingGenerator TextEmbeddingGenerator,
         StoredEmailEmbeddingGenerator EmbeddingGenerator,
-        OptimisticConcurrencyRetryPolicy ConcurrencyRetryPolicy)
+        OptimisticConcurrencyRetryPolicy ConcurrencyRetryPolicy,
+        RecordingDerivedWorkGateTelemetry GateTelemetry)
     {
         public StoredEmailEmbeddingBackfill CreateBackfill(int batchSize = 50, int maxBatchesPerRun = 10) => new(
             this.BackfillStore,
             this.EmbeddingGenerator,
             this.ConcurrencyRetryPolicy,
+            this.GateTelemetry,
             new StoredEmailEmbeddingBackfillOptions
             {
                 BatchSize = batchSize,

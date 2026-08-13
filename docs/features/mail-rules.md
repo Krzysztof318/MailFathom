@@ -484,6 +484,16 @@ mailbox state nobody here is still reading.
 [What a mapping decides beyond where the folder is](imap-synchronization.md#what-a-mapping-decides-beyond-where-the-folder-is)
 states what each of the two is and what makes both unreachable everywhere else too.
 
+**Junk is not offered to the rule set at all.** Where spam classification is switched on, a message in the account's
+junk folder and a message a verdict called spam are left out of both passes, so a rule set is never fired by mail
+somebody else chose to send. A message no verdict has been reached about is left out too and stays a candidate, so the
+pass that evaluates it is the one after classification has decided or after the message's wait has run out — which is
+the same ordering everything derived from mail follows here, and it is applied where the candidates are read rather than
+after they come back.
+[Junk is kept out of what a deployment derives from mail](spam-classification.md#junk-is-kept-out-of-what-a-deployment-derives-from-mail)
+holds the whole of it, including the bound on the wait and what a failed classification does. With classification off,
+which is the default, nothing here is narrowed.
+
 **A rule declaring `Arrival` applies to mail that arrives after the rule exists.** Each message is evaluated once, and
 the record of that
 evaluation is what takes it out of the queue the next pass reads — so editing a rule changes what happens to the mail

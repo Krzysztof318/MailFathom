@@ -14,16 +14,27 @@ namespace MailFathom.Application.Spam;
 /// </remarks>
 public sealed record SpamClassificationSettings
 {
+    /// <summary>The wait a verdict is allowed when an operator names none.</summary>
+    /// <remarks>
+    /// Long enough that an ordinary classification backlog drains inside it and short enough that a wedged scanner
+    /// delays the index by a visible amount rather than an unbounded one. Nothing is lost by the release: a message let
+    /// through unclassified is chunked and embedded like any other, and a verdict that arrives afterwards is what a
+    /// later reading of the gate acts on.
+    /// </remarks>
+    public static readonly TimeSpan DefaultMaximumClassificationWait = TimeSpan.FromMinutes(15);
+
     private SpamClassificationSettings(
         bool isEnabled,
         bool usesScanner,
         IReadOnlyList<MailFolderAlias> scannedFolderAliases,
-        double? scannerThreshold)
+        double? scannerThreshold,
+        TimeSpan maximumClassificationWait)
     {
         this.IsEnabled = isEnabled;
         this.UsesScanner = usesScanner;
         this.ScannedFolderAliases = scannedFolderAliases;
         this.ScannerThreshold = scannerThreshold;
+        this.MaximumClassificationWait = maximumClassificationWait;
         this.Profile = SpamClassificationProfile.Create(usesScanner, scannerThreshold);
     }
 
@@ -32,7 +43,8 @@ public sealed record SpamClassificationSettings
         isEnabled: false,
         usesScanner: false,
         [],
-        scannerThreshold: null);
+        scannerThreshold: null,
+        DefaultMaximumClassificationWait);
 
     /// <summary>Gets whether classification runs at all.</summary>
     public bool IsEnabled { get; }
@@ -62,6 +74,16 @@ public sealed record SpamClassificationSettings
     /// </remarks>
     public double? ScannerThreshold { get; }
 
+    /// <summary>Gets how long a message may wait on a verdict before derived work runs for it unclassified.</summary>
+    /// <remarks>
+    /// The bound that keeps ordering classification ahead of chunking, embedding, and rule evaluation from turning a
+    /// wedged scanner into an index that quietly stops filling. A message still inside it is waiting rather than
+    /// failing, which is a distinction the gate has to make: a rule that released only what had failed would never
+    /// release anything sitting in a backlog, and a backlog deep enough to matter is exactly where that decides whether
+    /// the index stops.
+    /// </remarks>
+    public TimeSpan MaximumClassificationWait { get; }
+
     /// <summary>Gets the identity of the terms a verdict reached under these settings was decided by.</summary>
     /// <remarks>
     /// Derived once here rather than at each use, because it is a digest and every classification records it. What it
@@ -74,14 +96,16 @@ public sealed record SpamClassificationSettings
     /// <param name="usesScanner">Whether a configured scanner is consulted.</param>
     /// <param name="scannedFolderAliases">The folder aliases to classify, already resolved to the inbox where the operator named none.</param>
     /// <param name="scannerThreshold">The threshold to judge a scanner's score by, or <see langword="null" /> to keep the scanner's own.</param>
+    /// <param name="maximumClassificationWait">How long a message waits on a verdict before derived work runs unclassified, or <see langword="null" /> for the default.</param>
     /// <returns>The settings, with the alias list deduplicated and ordered.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="scannedFolderAliases" /> is <see langword="null" />.</exception>
-    /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="scannerThreshold" /> is not a finite number.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="scannerThreshold" /> is not a finite number, or the wait is not positive.</exception>
     public static SpamClassificationSettings Create(
         bool isEnabled,
         bool usesScanner,
         IEnumerable<MailFolderAlias> scannedFolderAliases,
-        double? scannerThreshold = null)
+        double? scannerThreshold = null,
+        TimeSpan? maximumClassificationWait = null)
     {
         ArgumentNullException.ThrowIfNull(scannedFolderAliases);
 
@@ -93,6 +117,16 @@ public sealed record SpamClassificationSettings
                 "A configured scanner threshold is a finite number.");
         }
 
+        var wait = maximumClassificationWait ?? DefaultMaximumClassificationWait;
+
+        if (wait <= TimeSpan.Zero)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(maximumClassificationWait),
+                wait,
+                "A message waits a positive length of time on a verdict, because a wait of none releases every message before anything could classify it.");
+        }
+
         return new SpamClassificationSettings(
             isEnabled,
             usesScanner,
@@ -101,7 +135,8 @@ public sealed record SpamClassificationSettings
                     .DistinctBy(static alias => alias.Value, StringComparer.Ordinal)
                     .OrderBy(static alias => alias.Value, StringComparer.Ordinal),
             ],
-            scannerThreshold);
+            scannerThreshold,
+            wait);
     }
 
     /// <summary>Reports whether classification runs over one folder.</summary>

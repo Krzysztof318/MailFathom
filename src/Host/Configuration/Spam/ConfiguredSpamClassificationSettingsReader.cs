@@ -37,7 +37,8 @@ internal sealed class ConfiguredSpamClassificationSettingsReader(
                 options.Enabled,
                 options.UseScanner,
                 this.ScannedFolderAliases(options),
-                options.ScannerThreshold);
+                options.ScannerThreshold,
+                options.ClassificationWait);
         }
     }
 

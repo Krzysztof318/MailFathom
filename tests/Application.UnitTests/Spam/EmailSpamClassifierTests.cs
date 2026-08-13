@@ -5,6 +5,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using MailFathom.Application.EmailContent.Storage;
+using MailFathom.Application.Emails.Chunking;
 using MailFathom.Application.Persistence;
 using MailFathom.Application.Spam;
 using MailFathom.Application.Spam.Scanning;
@@ -37,6 +38,10 @@ public sealed class EmailSpamClassifierTests
     private readonly InMemoryEmailSpamClassificationStore store = new();
 
     private readonly IEmailContentStore contentStore = Substitute.For<IEmailContentStore>();
+
+    private readonly IEmailChunkStore chunkStore = Substitute.For<IEmailChunkStore>();
+
+    private readonly RecordingDerivedWorkGateTelemetry gateTelemetry = new();
 
     [Fact]
     public async Task ClassifyAsync_ClassificationSwitchedOff_RecordsNothingAndReadsNoMail()
@@ -145,6 +150,58 @@ public sealed class EmailSpamClassifierTests
         Assert.Equal(SpamClassificationStage.Deterministic, saved.DecidedBy);
         Assert.Equal(EvaluatedAt, saved.EvaluatedAt);
         Assert.Null(saved.CorpusRevision);
+    }
+
+    /// <summary>
+    /// Ordering keeps derived data from being created for junk in the first place, so this reaches only mail that was
+    /// chunked and embedded before anybody scored it — which is what an on-demand run over an existing mailbox meets.
+    /// </summary>
+    [Fact]
+    public async Task ClassifyAsync_AVerdictOfSpam_RemovesThePassagesAndVectorsAlreadyDerivedFromTheMessage()
+    {
+        // Arrange
+        this.chunkStore
+            .DiscardChunksAsync(Arg.Any<IPersistenceSession>(), Occurrence, Arg.Any<CancellationToken>())
+            .Returns(4);
+        var classifier = this.Classifier(
+            SettingsCovering(Inbox),
+            FactsSaying("X-Spam-Status", "Yes, score=15.2 required=5.0"));
+
+        // Act
+        await classifier.ClassifyAsync(
+            Occurrence,
+            SpamClassificationMode.FirstTimeOnly,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        await this.chunkStore
+            .Received(1)
+            .DiscardChunksAsync(Arg.Any<IPersistenceSession>(), Occurrence, Arg.Any<CancellationToken>());
+        Assert.Equal([4], this.gateTelemetry.DiscardedPassageCounts);
+    }
+
+    /// <summary>Ordinary correspondence keeps everything derived from it, whichever way the verdict fell short of spam.</summary>
+    [Theory]
+    [InlineData("X-Spam-Status", "No, score=0.1 required=5.0")]
+    [InlineData("X-Nothing-Relevant", "")]
+    public async Task ClassifyAsync_AVerdictThatIsNotSpam_LeavesThePassagesAndVectorsAlone(string field, string value)
+    {
+        // Arrange
+        var classifier = this.Classifier(SettingsCovering(Inbox), FactsSaying(field, value));
+
+        // Act
+        await classifier.ClassifyAsync(
+            Occurrence,
+            SpamClassificationMode.FirstTimeOnly,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.NotEqual(SpamVerdict.Spam, Assert.Single(this.store.Saved).Verdict);
+        await this.chunkStore.DidNotReceiveWithAnyArgs().DiscardChunksAsync(
+            Arg.Any<IPersistenceSession>(),
+            Arg.Any<StoredEmailId>(),
+            Arg.Any<CancellationToken>());
+        Assert.Empty(this.gateTelemetry.DiscardedPassageCounts);
     }
 
     /// <summary>An arrival trigger fires per message, so a repeat has to leave an existing record alone.</summary>
@@ -443,6 +500,8 @@ public sealed class EmailSpamClassifierTests
             new DeterministicSpamClassifier(),
             settingsReader,
             this.store,
+            this.chunkStore,
+            this.gateTelemetry,
             new OptimisticConcurrencyRetryPolicy(
                 sessionFactory,
                 new PersistenceConcurrencyOptions(),

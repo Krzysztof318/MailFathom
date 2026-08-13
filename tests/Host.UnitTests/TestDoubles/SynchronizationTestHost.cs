@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.EmailContent.Storage;
+using MailFathom.Application.Emails.Chunking;
 using MailFathom.Application.Emails.Embeddings.Generation;
 using MailFathom.Application.Emails.Extraction;
 using MailFathom.Application.Emails.Summaries;
@@ -20,6 +21,7 @@ using MailFathom.Application.Rules.Evaluation;
 using MailFathom.Application.Rules.History;
 using MailFathom.Application.Spam;
 using MailFathom.Application.Spam.Actions;
+using MailFathom.Application.Spam.Gating;
 using MailFathom.Application.Spam.Runs;
 using MailFathom.Application.Spam.Signals;
 using MailFathom.Application.Synchronization;
@@ -36,6 +38,7 @@ using MailFathom.Host.Configuration.Mail;
 using MailFathom.Infrastructure.Mail;
 using MailFathom.Infrastructure.Observability;
 using MailFathom.Infrastructure.Secrets.Discovery;
+using MailFathom.TestSupport;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Time.Testing;
 using NSubstitute;
@@ -124,6 +127,15 @@ internal static class SynchronizationTestHost
         // Every committed message is offered for embedding, so a synchronizer cannot be composed without somewhere to
         // offer it. Nothing here reads the backlog back; these tests are about the run, not about what embeds afterwards.
         services.AddSingleton<IEmailEmbeddingBacklog>(new ScriptedEmailEmbeddingBacklog());
+        // A committed message is also cut into passages and asked about by the classification gate, so both are composed
+        // for the same reason the backlog is. The gate's own two dependencies are registered with the classification
+        // pass further down rather than again here — the container resolves the last registration of a type, so a second
+        // pair would leave these the ones nothing reads. Classification is off there, which is what every account these
+        // tests configure runs with: the gate then admits everything and the run behaves exactly as it did before it
+        // existed.
+        services.AddSingleton(Substitute.For<IEmailChunkStore>());
+        services.AddSingleton<IDerivedWorkGateTelemetry>(new RecordingDerivedWorkGateTelemetry());
+        services.AddScoped<DerivedWorkGate>();
 
         var (catalog, resolutionStore) = CreateResolvedFolders(options, unadvertisedAliases);
         services.AddSingleton(remoteFolderCatalog ?? catalog);
@@ -200,7 +212,9 @@ internal static class SynchronizationTestHost
         services.AddSingleton(Substitute.For<IClassifiableEmailReader>());
         services.AddSingleton(Substitute.For<IEmailSpamClassificationStore>());
         services.AddSingleton(Substitute.For<IEmailSpamHeaderReader>());
-        services.AddSingleton(Substitute.For<IJunkMailFolderCatalog>());
+        // A stub rather than a substitute, because the gate resolved above enumerates the folder list: a substituted
+        // IReadOnlyList happens to enumerate as empty today, which is the right answer reached by accident.
+        services.AddSingleton<IJunkMailFolderCatalog>(StubJunkMailFolderCatalog.None);
         services.AddSingleton(Substitute.For<ISpamActionOccurrenceReader>());
         services.AddScoped(_ => new SpamClassificationRunOptions());
         services.AddScoped(_ => CreateClassificationSettingsReader());
