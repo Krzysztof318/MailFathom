@@ -576,7 +576,8 @@ opening a database. [Telemetry § What a run records](../operations/telemetry.md
 
 The split between the two records is the point rather than an accident. Which messages a run read cannot go on a span:
 a tag per message opens a time series per person, a span store is not MailFathom's to carry an obligation in, exports
-are off by default, spans are sampled, and an erasure request cannot reach somebody else's trace backend. How long a run
+are off by default, [a deployment may sample spans away](../operations/telemetry.md#how-much-of-a-trace-is-recorded),
+and an erasure request cannot reach somebody else's trace backend. How long a run
 took and how much it considered cannot usefully go in a table either, because that is what a dashboard already answers.
 Between them the three questions an operator actually has are answered, each in one place: why did it answer *that* —
 the record; why is it slow — the span; why did it degrade — the span.

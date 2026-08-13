@@ -22,6 +22,10 @@
     <!-- Every boundary that publishes instruments asserts them the same way, through a listener over the one
          process-wide meter, so the recorder is built once rather than per suite. -->
     <Compile Include="..\shared\RecordedMailFathomMeasurements.cs" Link="RecordedMailFathomMeasurements.cs" />
+
+    <!-- The redaction contract is stated once and asserted in every project that has a telemetry name to hold against
+         it. This one holds the names every assembly declares, so it needs the rules and not the recorder. -->
+    <Compile Include="..\shared\TelemetryRedactionContract.cs" Link="TelemetryRedactionContract.cs" />
   </ItemGroup>
 
   <ItemGroup>

@@ -160,8 +160,9 @@ no disposal on their account.
 
 What publishes to that name is documented with the subsystem that does it.
 
-Every change MailFathom makes to a remote mailbox opens a span named after the mutation, and is counted along with how
-long it took, broken down by the mutation, the account, the folder alias, and whether it succeeded. It is deliberately
+Every change MailFathom makes to a remote mailbox opens a span named after the mutation, and is counted by
+`mailfathom.mailbox.mutations` and timed by `mailfathom.mailbox.mutation.duration`, both broken down by the mutation,
+the account, the folder alias, and whether it succeeded. It is deliberately
 **not** broken down by which IMAP commands carried the change — a relocation is one operation whether the server
 offered RFC 6851 `MOVE` or the copy-flag-expunge sequence was used instead, and a dimension telling the two apart is
 exactly what would make a missing server extension look like a different operation on a dashboard. Which path ran is in
@@ -624,11 +625,72 @@ either keeps up or does not. The refusals are how much of a mailbox is being lef
 is retried on a later run rather than lost. All five read zero on a deployment with both switches off, which constructs
 no detector on this path at all.
 
-What such a signal may carry is bounded by the same rule that governs the log lines, and it is a cardinality rule as
-much as a privacy one. Counts, sizes, durations, outcomes, error codes, and MailFathom's own configured account and
-folder aliases are permitted. Mail content, an address, a subject, a remote folder path, a message identifier, a UID, a
-search term, a credential, and model prompt or completion text are not — every one of them would open a time series per
-message or per person, quite apart from putting personal data in a span store.
+## What no signal carries, and what holds every signal to it
+
+Everything above is one rule, and it is a cardinality rule as much as a privacy one. **Counts, sizes, durations,
+outcomes, error codes, and MailFathom's own configured account, folder, and provider-endpoint aliases are permitted.
+Mail content, an address, a subject, a remote folder path, a message identifier, a UID, a search term, a credential, and
+model prompt or completion text are not** — every one of them would open a time series per message or per person, quite
+apart from putting personal data in a span store. It governs a name as much as a value: a span, an instrument, and a
+dimension are all named after the operation or the quantity they report, never after anything the operation saw.
+
+The rule is the same one that governs the log lines, and the aliases are the one place a value an operator wrote
+reaches an exporter. That is deliberate: an alias is MailFathom's own word for an account, a folder, or an endpoint, it
+is bounded by the size of somebody's configuration, and a dashboard without it cannot say which account is behind.
+
+What makes it a contract rather than a convention is that it is asserted over the emitted surface as a whole rather
+than per feature. A rule checked once per publisher is a rule the next publisher is not covered by, and a telemetry
+surface grows one publisher at a time — so the unit-test suite drives **every** publisher the two boundaries that own
+one hold, through a listener over MailFathom's activity source and meter, and holds what came out against four claims:
+
+- No span name, instrument name, or dimension key is named after a word from the refused list, matched whole segment by
+  whole segment. That is what separates `token`, which names a credential, from `tokens`, which is how many a model
+  consumed.
+- Every instrument name and dimension key sits under the single `mailfathom.` namespace in lower case, which is what
+  keeps a dimension from being minted out of a value at run time.
+- Every span is named as one lower-case phrase, so a span name is an operation rather than anything it read.
+- **Every string the drive hands a publisher is a sentinel**, one per class of input — a configured alias, text a caller
+  sent, text read out of a message — and the assertion is where each was allowed to surface. A caller's text and
+  anything mail-derived may reach nothing at all; an alias may reach the dimensions named for it and no others.
+
+Two things keep that from decaying quietly. Within each of those two boundaries a publisher is found by what it holds —
+an instrument field, or a declared span name — rather than by where it lives, so a publisher nobody added to the drive
+fails the suite instead of going unasserted. And the names every assembly of this deployment *declares*, the host's own
+included, are read and held against the same vocabulary, which reaches what no drive does: the span the extraction
+backfill worker opens, and a dimension only a failure path sets.
+
+## How much of a trace is recorded
+
+Sampling is a decision rather than a default to inherit, and MailFathom's is **parent-based always-on**: every trace
+this process starts is recorded, and a trace it did not start keeps the decision the caller already made.
+
+The always-on half is what a mailbox-sized workload is worth. The volume is bounded by one deployment's accounts and one
+assistant's tool calls rather than by public traffic; a folder run whose duration doubled is attributable only if the
+run before it was recorded too; and export is off unless an endpoint is configured, so the default costs an
+unconfigured deployment nothing at all. The parent-based half keeps a head decision made upstream from being overturned
+here — the MCP surface continues a caller's trace, and a caller that dropped it is not asking for a fragment of it back.
+
+A deployment paying a collector per span is the case that wants the other answer, and it is the operator's to give:
+
+| Variable | What it does |
+| --- | --- |
+| `OTEL_TRACES_SAMPLER` | `always_on`, `always_off`, `traceidratio`, `parentbased_always_on`, `parentbased_always_off`, or `parentbased_traceidratio`. Unset is the default above |
+| `OTEL_TRACES_SAMPLER_ARG` | The ratio the two `traceidratio` samplers use, between `0` and `1` |
+
+Both are read by the OpenTelemetry SDK itself, and MailFathom sets its own sampler **only when the first is unset** —
+the SDK ignores its own configuration when a sampler was set programmatically and reports the fact to an event source
+nobody is listening to, so setting one unconditionally would answer an operator's variable with silence.
+
+Three things follow from the SDK reading these itself. `OTEL_TRACES_SAMPLER_ARG` on its own does nothing, because no
+sampler is a ratio one until the first variable names it. A value the SDK does not recognize — a hyphen where the name
+takes an underscore — is reported to that same event source and falls back to `parentbased_always_on`, which is what
+this host would have set anyway, so a misspelling reads as the variable having been ignored rather than as an error.
+And both have to be **environment variables**, not configuration keys, for the reason the exporter switch below gives —
+a start that writes any `OTEL_*` name into a file or an argument fails naming it.
+
+Health and liveness probes are excluded from tracing before any sampler sees them. A probe arrives every few seconds
+for the life of the process and says the same thing every time, so on a deployment exporting to a collector it pays for,
+the polling would otherwise be most of the bill.
 
 ## The one switch: `OTEL_EXPORTER_OTLP_ENDPOINT`
 
