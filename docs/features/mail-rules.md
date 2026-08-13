@@ -49,6 +49,11 @@ changes the set's revision exactly as deleting it would.
 below](#which-triggers-run-a-rule) states what each way of writing it means, and why it is a different statement from
 `Enabled`.
 
+`Schedule` is when a rule declaring the `Schedule` trigger runs, written as `Every <interval>` or
+`Daily at <HH:mm> [<zone>]`. The key and the trigger are one declaration: neither is written without the other, and
+[running a rule on a schedule](#running-a-rule-on-a-schedule) states the syntax, what happens to an occasion that
+passed while nothing was running, and how such a run differs from one an owner asks for.
+
 ## Which accounts a rule applies to
 
 `Accounts` is the filter, and it is the one part of a rule that says which mail reaches it at all rather than which mail
@@ -81,6 +86,7 @@ decides *when* a rule is reached rather than which mail it matches once it is.
 | Written | What the rule takes part in |
 | --- | --- |
 | `[ "Arrival" ]` | Every message the account's synchronization run commits |
+| `[ "Schedule" ]` | The occasions the rule's own `Schedule` names, each of them a walk of the whole mailbox |
 | `[]` | No automatic occasion at all: nothing fires the rule, and a whole-mailbox run is what applies it |
 | the key left out | The same as `[]` — a rule takes part in the occasions it names and in no others |
 
@@ -94,25 +100,105 @@ omission, and it is the same statement as writing `[]`: the rule is bound, valid
 run is what applies it. So a rule meant to file mail as it arrives writes `Arrival` — there is no occasion a rule joins
 without naming it.
 
-**Such a rule is one you run rather than one that runs**, which is what periodic housekeeping wants — file everything
+**Such a rule is one you run rather than one that runs**, which is what housekeeping wants — file everything
 older than a quarter, delete what a mailing list left behind — where firing on each arriving message is either useless
 or exactly what the owner is afraid of. [A whole-mailbox
-run](#running-the-rules-over-mail-you-already-have) is what applies it.
+run](#running-the-rules-over-mail-you-already-have) is what applies it, and [a
+schedule](#running-a-rule-on-a-schedule) is how the same rule gets applied without anybody asking each time.
 
 **A rule a trigger does not reach is not evaluated and records no outcome**, exactly as a rule scoped to another
 account is not: it did not decline to match, it was not one of that pass's rules. It follows that such a rule cannot end
 a pass either, whatever `StopWhenMatched` says.
 
-**A whole-mailbox run is never a member of the list**, and it applies the whole rule set including the manual-only
+**A run somebody asks for is never a member of the list**, and it applies the whole rule set including the manual-only
 rules. Somebody asking for a run is the request itself, so a rule declining to run because it had not agreed to be asked
-would be surprising in the one place surprise is least affordable. No run selects rules by name either: what a run
-applies is the set the configuration declares.
+would be surprising in the one place surprise is least affordable. `Schedule` is a member of the list for the opposite
+reason: nobody is asking, so the rule has to have said in advance that it wanted to be run. No run selects rules by name
+either: what a run applies is the set the configuration declares, narrowed only by what started the run.
 
 **A name this system does not recognize is refused when the configuration is read**, naming the rule and the value, and
 so is the same trigger written twice, because the value is a set. Neither is dropped: a list whose only entry was
 mistyped would otherwise arrive as an empty one, which would silently turn an automatic rule into a manual one — and a
 rule that never fires is indistinguishable from a rule nothing matched. The name is read the way the binder reads every
 other closed vocabulary this configuration declares, so `arrival` and `Arrival` are one trigger.
+
+### Running a rule on a schedule
+
+A rule declaring the `Schedule` trigger names its own occasions in a `Schedule` key, and each occasion is a walk of the
+whole mailbox rather than anything about one message:
+
+```json
+{
+  "Name": "archive-old-newsletters",
+  "Condition": "contains(subject, 'newsletter') and ageInDays > 90",
+  "Triggers": [ "Schedule" ],
+  "Schedule": "Daily at 03:00 Europe/Warsaw",
+  "Actions": { "MoveTo": "archive" }
+}
+```
+
+**The syntax is MailFathom's own, and it accepts exactly two forms.** It is deliberately not cron: an owner writing
+when their own mailbox is tidied needs an interval or a time of day, and the four fields cron would add are ones nothing
+here would honour to the minute anyway.
+
+| Written | What it means |
+| --- | --- |
+| `Every <interval>` | An occasion every interval, where the interval is `hh:mm:ss` or `d.hh:mm:ss` — `Every 06:00:00`, `Every 7.00:00:00` |
+| `Daily at <HH:mm>` | One occasion a day at that time of day, read in UTC |
+| `Daily at <HH:mm> <zone>` | The same, read in a named time zone — `Daily at 03:00 Europe/Warsaw` |
+
+- **The keyword is read case-insensitively and repeated spaces are ignored**, so `daily at 03:00` and `Daily at 03:00`
+  are one schedule and the rule set's revision does not move between them.
+- **An interval is at least one minute and at most 365 days.** A shorter one would ask for a walk of the whole mailbox
+  more often than the queue is polled; a longer one is a date rather than a recurrence.
+- **A time of day is written as `HH:mm` on a 24-hour clock**, zero-padded — `03:00`, not `3:00`.
+- **The zone is a time-zone identifier the host recognizes**, so a deployment writing one gets that zone's wall clock
+  including its daylight-saving changes. Leaving it out means UTC, which is what an owner reads off the declaration
+  without knowing where the container runs.
+- **Anything else is refused when the configuration is read**, naming the rule and what could not be read — a cron
+  expression, an unpadded time, a zone nothing knows. A schedule silently dropped would leave a rule that never runs,
+  which is indistinguishable from a rule nothing matched.
+
+**Occasions are anchored rather than counted from the last run.** `Every 06:00:00` means midnight, 06:00, 12:00, and
+18:00 UTC whatever time the instance started, so restarting the process does not shift a schedule and two instances
+reading one configuration agree on when its occasions are.
+
+**A local time daylight saving skips happens when the gap ends, and one it passes through twice happens once.** A rule
+at `Daily at 02:30 Europe/Warsaw` runs at the instant the clock reaches 03:00 on the spring-forward day, and on the
+autumn day it runs at the first 02:30 rather than at both.
+
+**An occasion that passed while nothing was running is skipped rather than replayed.** Whatever a process being down,
+a queue being full, or a previous run still walking cost, the dispatch takes the most recent occasion and steps over the
+ones before it — a mailbox does not want six walks because the host was off for a day, and each of those walks would
+apply the same rules to the same mail. What the skip leaves is a count:
+`mailfathom.jobs.schedule.skipped_occurrences`, broken down by why they were passed over, beside
+`mailfathom.jobs.schedule.dispatches` for the decisions themselves. [Telemetry](../operations/telemetry.md#durable-background-work)
+lists both.
+
+**One run per schedule at a time.** An occasion arriving while that schedule's previous run is still in the queue or
+still being walked is answered with the run already under way rather than starting a second one, and it counts as
+skipped. It follows that a schedule shorter than the walk it asks for does not pile up; it runs as often as the mailbox
+allows.
+
+**A scheduled walk reaches the rules that declared a schedule, and no others.** That is the one place it differs from a
+whole-mailbox run an owner asks for, which applies the entire rule set including the rules declaring no trigger at all.
+Both walk the same mail, are bounded by the same two settings, run as a step of the account's synchronization run, and
+are bound to the rule-set revision they started under.
+
+**An owner's request replaces an outstanding scheduled run** rather than being answered with it, because the request
+reaches every rule and the scheduled run reaches only some of them. A schedule's occasion arriving while any run is
+outstanding stands down, whichever started it.
+
+**A scheduled run is distinguishable from the other two.** The run says what started it — `mfctl rules run-status`
+prints `under way, started by ScheduledRun` — and every outcome it records carries the trigger `ScheduledRun`, apart
+from `Arrival` for the walk of arriving mail and `RequestedRun` for the one somebody asked for. [Finding out what a rule
+did](#finding-out-what-a-rule-did) is where those records are read.
+
+**A rule scoped to accounts has one schedule per account it reaches**, so a mailbox behind on its walk does not delay
+another's. Two rules declaring different schedules for one account are two schedules, and either occasion walks the
+mailbox for every scheduled rule that account has — the walk is per mailbox rather than per rule, so a rule whose
+occasion has not come round yet is still reached by one that has. Where that matters, give the rules the same schedule
+or put them on different accounts.
 
 ### `Triggers: []` and `Enabled: false` say different things
 
@@ -410,7 +496,9 @@ each is refused with a message naming the rule, what was wrong, and where:
 
 The rule's `Accounts` filter is checked beside those four: every identifier names a declared account, none is blank, and
 none is repeated. Its `Triggers` list is checked the same way: every name is one this system declares, none is blank,
-and none is repeated.
+and none is repeated. Its `Schedule` is checked against that list and against itself: a rule declaring the `Schedule`
+trigger carries one, a rule carrying one declares that trigger, and the expression is one [this system
+runs](#running-a-rule-on-a-schedule) — each refused naming the rule.
 
 So is its `Actions` block, against the rule itself and against every account the rule reaches:
 
@@ -524,10 +612,12 @@ message is recorded as evaluated. The account is not put into backoff for it eit
 remotely, so fetching the account's mail less often would answer a local problem by slowing remote work that had nothing
 to do with it. The next section lists the two reasons.
 
-**Nothing scans on a timer.** The account run recurs already, so anything a scan would find on arrival is found by the
-`Arrival` trigger; a rule whose condition only becomes true with the passage of time — mail older than some age — fires
-when the owner asks for a whole-mailbox run. Such a rule is what [`Triggers: []`](#which-triggers-run-a-rule) is for:
-declaring no automatic trigger keeps it out of every arrival pass without taking it out of the set.
+**Nothing scans on a timer of its own.** The account run recurs already, so anything a scan would find on arrival is
+found by the `Arrival` trigger; a rule whose condition only becomes true with the passage of time — mail older than some
+age — is applied by a whole-mailbox run, which the owner asks for or a rule's own
+[schedule](#running-a-rule-on-a-schedule) asks for on its behalf. A schedule adds no loop and no second worker either:
+its occasions are dispatched as ordinary jobs by the queue's worker, under the same capacity bounds as every other job,
+and the walk still happens as a step of the account's synchronization run.
 
 ## Running the rules over mail you already have
 
@@ -536,12 +626,16 @@ Editing a rule is only useful if the rules can be applied to mail that arrived b
 again under the rules now in force.
 
 - **One per account, and asking twice is asking once.** A request that finds a run already outstanding is answered with
-  that run rather than starting a second walk of the same mailbox.
+  that run rather than starting a second walk of the same mailbox. The one exception is a run [a schedule
+  started](#running-a-rule-on-a-schedule), which a request replaces rather than is answered with, because a request
+  reaches rules a scheduled walk does not.
 - **It runs where every other pass runs.** The request records that the run is wanted and nothing more; the work happens
   as a step of the account's synchronization run, bounded by the same two settings. Whoever asked is not what keeps it
   alive, so closing a terminal does not cancel a walk of a mailbox.
-- **It applies the whole rule set.** Every rule the configuration declares for the account is run, including the ones
-  that declare no automatic trigger, and nothing selects a subset of them for one run.
+- **A run you ask for applies the whole rule set.** Every rule the configuration declares for the account is run,
+  including the ones that declare no automatic trigger, and nothing selects a subset of them for one run. A run a
+  schedule started is the one narrower case: it applies the rules that declared a schedule, which is what they opted
+  into.
 - **It is bound to one rule set.** The revision in force when the run starts is recorded with it, so a reload cannot
   change what the run is doing halfway through. If the rules do change while a run is outstanding, the run ends as
   **superseded** and says so, because MailFathom keeps only the rule set its configuration currently declares and
@@ -554,6 +648,11 @@ again under the rules now in force.
 watched from. Both are documented under [reading the rules, running them, and finding out what they
 did](../operations/admin-endpoint.md#reading-the-rules-running-them-and-finding-out-what-they-did). Neither waits for
 the walk, because the run is carried by the account's synchronization runs rather than by whoever asked.
+
+**A rule's own [schedule](#running-a-rule-on-a-schedule) asks for one of these walks without anybody typing the
+command.** Such a run is the same walk under the same bounds and is watched the same way; it differs in reaching only
+the rules that declared a schedule, in saying `ScheduledRun` where a requested run says `RequestedRun`, and in giving
+way to a request rather than answering it.
 
 ## Finding out what a rule did
 
@@ -747,6 +846,18 @@ Quarterly housekeeping nothing fires by itself, which the owner applies by askin
   "Condition": "contains(subject, 'newsletter') and ageInDays > 90",
   "Actions": { "MoveTo": "archive" },
   "Triggers": []
+}
+```
+
+The same housekeeping without anybody asking, run once a night in the owner's own time zone:
+
+```json
+{
+  "Name": "retire-old-newsletters-nightly",
+  "Condition": "contains(subject, 'newsletter') and ageInDays > 90",
+  "Actions": { "MoveTo": "archive" },
+  "Triggers": [ "Schedule" ],
+  "Schedule": "Daily at 03:00 Europe/Warsaw"
 }
 ```
 

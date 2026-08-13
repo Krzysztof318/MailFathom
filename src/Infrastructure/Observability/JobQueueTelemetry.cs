@@ -7,6 +7,7 @@ using System.Diagnostics;
 using System.Diagnostics.Metrics;
 using MailFathom.Application.Jobs;
 using MailFathom.Application.Jobs.Execution;
+using MailFathom.Application.Jobs.Scheduling;
 using MailFathom.Common.Observability;
 
 namespace MailFathom.Infrastructure.Observability;
@@ -14,11 +15,14 @@ namespace MailFathom.Infrastructure.Observability;
 /// <summary>Makes durable background work legible from outside the process: what ran, how long it took, and what is waiting.</summary>
 /// <remarks>
 /// <para>
-/// Four instruments, and each answers a question the others cannot. The attempts and their durations say what the queue
+/// Six instruments, and each answers a question the others cannot. The attempts and their durations say what the queue
 /// is doing; the retries say how much of that is work being repeated, which is what separates an instance that is busy
 /// from one that is failing and trying again; the dead letters say what has stopped, which is the only one of the four
 /// that waits for a person. The depth beside them is the level the first three are a rate against — a backlog is
-/// visible there while it is still small, and long before the effect of it reaches anything else.
+/// visible there while it is still small, and long before the effect of it reaches anything else. The two beside those
+/// belong to recurring dispatch: what each schedule's occasion did, and how many occasions were deliberately not run,
+/// which is the one thing a queue's own instruments could never show — an occasion that was skipped enqueued nothing and
+/// would otherwise be indistinguishable from an interval nobody declared.
 /// </para>
 /// <para>
 /// Dead letters carry their own instrument rather than being a dimension of the attempts, because the classification
@@ -52,6 +56,8 @@ public sealed class JobQueueTelemetry
     private readonly Histogram<double> attemptDuration;
     private readonly Counter<long> retryCount;
     private readonly Counter<long> deadLetterCount;
+    private readonly Counter<long> scheduleDispatchCount;
+    private readonly Counter<long> scheduleSkipCount;
 
     /// <summary>Initializes the instruments every job attempt and every queue measurement reports through.</summary>
     public JobQueueTelemetry()
@@ -72,6 +78,14 @@ public sealed class JobQueueTelemetry
             "mailfathom.jobs.dead_letters",
             unit: "{job}",
             description: "Jobs nothing will attempt again, by job type, the outcome that ended them, and its classification.");
+        this.scheduleDispatchCount = Telemetry.Meter.CreateCounter<long>(
+            "mailfathom.jobs.schedule.dispatches",
+            unit: "{decision}",
+            description: "Decisions a recurring dispatch reached about one schedule, by job type and what it did.");
+        this.scheduleSkipCount = Telemetry.Meter.CreateCounter<long>(
+            "mailfathom.jobs.schedule.skipped_occurrences",
+            unit: "{occurrence}",
+            description: "Scheduled occasions that were deliberately not run, by job type and why the dispatch passed over them.");
         Telemetry.Meter.CreateObservableGauge(
             "mailfathom.jobs.queue.depth",
             this.ObserveWaitingCounts,
@@ -124,6 +138,34 @@ public sealed class JobQueueTelemetry
         }
     }
 
+    /// <summary>Records what a pass decided about one schedule, and how many occasions that decision passed over.</summary>
+    /// <param name="dispatch">What the pass decided.</param>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="dispatch" /> is <see langword="null" />.</exception>
+    /// <remarks>
+    /// The skipped occasions carry their own instrument rather than being a dimension of the decisions, because a
+    /// decision is one event and the occasions it stepped over are a count that can be any number. Both are broken down
+    /// by the outcome, which is what separates the two reasons an occasion is skipped: a process that was down over it,
+    /// and a queue that was full or a previous run that was still going. Neither carries the schedule's own identity —
+    /// it is composed of an account and a rule name, which is a dimension that grows with the configuration.
+    /// </remarks>
+    public void RecordScheduleDispatch(JobScheduleDispatch dispatch)
+    {
+        ArgumentNullException.ThrowIfNull(dispatch);
+
+        var tags = new TagList
+        {
+            { JobTypeTagName, dispatch.JobType.Name },
+            { OutcomeTagName, ScheduleTagOf(dispatch.Outcome) },
+        };
+
+        this.scheduleDispatchCount.Add(1, tags);
+
+        if (dispatch.SkippedOccurrenceCount > 0)
+        {
+            this.scheduleSkipCount.Add(dispatch.SkippedOccurrenceCount, tags);
+        }
+    }
+
     /// <summary>Publishes what the worker last measured the queue's depth to be.</summary>
     /// <param name="readings">One reading per job type measured.</param>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="readings" /> is <see langword="null" />.</exception>
@@ -162,6 +204,17 @@ public sealed class JobQueueTelemetry
         JobExecutionOutcome.TimedOut => "timed_out",
         JobExecutionOutcome.ReleasedForShutdown => "released_for_shutdown",
         JobExecutionOutcome.LeaseLost => "lease_lost",
+        _ => "unknown",
+    };
+
+    private static string ScheduleTagOf(JobScheduleDispatchOutcome outcome) => outcome switch
+    {
+        JobScheduleDispatchOutcome.Seeded => "seeded",
+        JobScheduleDispatchOutcome.NotDue => "not_due",
+        JobScheduleDispatchOutcome.Dispatched => "dispatched",
+        JobScheduleDispatchOutcome.AlreadyDispatched => "already_dispatched",
+        JobScheduleDispatchOutcome.PreviousRunInFlight => "previous_run_in_flight",
+        JobScheduleDispatchOutcome.RefusedAtCapacity => "refused_at_capacity",
         _ => "unknown",
     };
 

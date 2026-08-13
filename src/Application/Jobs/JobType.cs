@@ -39,9 +39,16 @@ public readonly record struct JobType
     /// <remarks>Its payload contract is <see cref="EmailOccurrenceJobPayload" />, which names the occurrence and copies nothing out of the message.</remarks>
     public static JobType ClassifyEmailSpam { get; } = new("classify-email-spam");
 
+    /// <summary>Gets the type whose work is asking for one account's scheduled rules to be run over its whole mailbox.</summary>
+    /// <remarks>
+    /// Its payload contract is <see cref="MailAccountJobPayload" />, which names the account and nothing in it. The work
+    /// itself is short: it records that the run is wanted, and the account's own synchronization runs carry the walk.
+    /// </remarks>
+    public static JobType RunScheduledMailRules { get; } = new("run-scheduled-mail-rules");
+
     /// <summary>Gets every declared job type.</summary>
     /// <remarks>Declared last so the members it lists are already initialized when this initializer runs.</remarks>
-    public static IReadOnlyList<JobType> All { get; } = [ClassifyEmailSpam];
+    public static IReadOnlyList<JobType> All { get; } = [ClassifyEmailSpam, RunScheduledMailRules];
 
     /// <summary>Gets whether this value names a declared job type rather than the unusable struct default.</summary>
     public bool IsSpecified => this.name is not null;

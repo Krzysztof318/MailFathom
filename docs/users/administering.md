@@ -233,7 +233,8 @@ switch and a rollback cost.
 ## Applying your rules, and seeing what they did
 
 [Mail rules](../features/mail-rules.md) select mail as it arrives, so a rule you write today does nothing about the mail
-already in the mailbox until you ask. That asking is a command, and so is finding out what the rules have been doing:
+already in the mailbox until you ask — or until a [schedule](../features/mail-rules.md#running-a-rule-on-a-schedule) you
+gave the rule asks on your behalf. That asking is a command, and so is finding out what the rules have been doing:
 
 | What you want | Command |
 | --- | --- |
@@ -248,8 +249,9 @@ validate and goes on running the previous set, which it reports to its log and n
 out whether your edit took effect, rather than from mail that kept being filed the old way. Each rule it prints says
 what runs it, on a `Runs on:` line, which is how a rule naming [no
 trigger](../features/mail-rules.md#which-triggers-run-a-rule) is told apart from one that simply never matched: nothing
-fires such a rule by itself, and `mfctl rules run` is how it is run. It is also where a rule you meant to run over
-arriving mail shows that it never says `Arrival`.
+fires such a rule by itself, and `mfctl rules run` is how it is run. A rule with a schedule says so on that same line,
+with the occasions it declares beside the trigger. It is also where a rule you meant to run over arriving mail shows
+that it never says `Arrival`.
 
 None of these writes a rule, and none ever will: rules are configuration, so you change one by editing the file your
 deployment reads. [Reading the rules, running them, and finding out what they

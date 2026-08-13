@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Application.Jobs.Scheduling;
 using MailFathom.Application.Rules.Actions;
 
 namespace MailFathom.Application.Rules;
@@ -13,6 +14,7 @@ namespace MailFathom.Application.Rules;
 /// <param name="StopWhenMatched">Whether a match ends the pass rather than continuing to the rules below.</param>
 /// <param name="Accounts">The accounts the rule was scoped to, in declared order, empty for a rule that applies to every account.</param>
 /// <param name="Triggers">The automatic triggers the rule takes part in, in declared order, empty for a rule only a requested walk runs.</param>
+/// <param name="Schedule">The occasions a scheduled walk happens on, and <see langword="null" /> for a rule declaring no schedule.</param>
 /// <remarks>
 /// <para>
 /// Deliberately separate from <see cref="MailRule" />, which carries a compiled condition and no authored text. A
@@ -31,6 +33,11 @@ namespace MailFathom.Application.Rules;
 /// name: they mean the same thing, and a revision that told them apart would supersede a run over an edit that changed
 /// nothing.
 /// </para>
+/// <para>
+/// The schedule is the parsed recurrence rather than the text as well, and for the same reason: two spellings of one
+/// occasion are one rule set, so a revision that told them apart would supersede a run over an edit that changed nothing
+/// about when anything happens.
+/// </para>
 /// </remarks>
 public sealed record MailRuleDeclaration(
     string Name,
@@ -38,4 +45,5 @@ public sealed record MailRuleDeclaration(
     IReadOnlyList<MailRuleAction> Actions,
     bool StopWhenMatched,
     IReadOnlyList<string> Accounts,
-    IReadOnlyList<MailRuleTrigger> Triggers);
+    IReadOnlyList<MailRuleTrigger> Triggers,
+    JobRecurrence? Schedule = null);

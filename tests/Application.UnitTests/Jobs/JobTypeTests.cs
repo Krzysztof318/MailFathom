@@ -18,7 +18,7 @@ public sealed class JobTypeTests
     public void All_HoldsExactlyTheDeclaredTypes()
     {
         // Arrange
-        JobType[] expected = [JobType.ClassifyEmailSpam];
+        JobType[] expected = [JobType.ClassifyEmailSpam, JobType.RunScheduledMailRules];
 
         // Act
         var declared = JobType.All;

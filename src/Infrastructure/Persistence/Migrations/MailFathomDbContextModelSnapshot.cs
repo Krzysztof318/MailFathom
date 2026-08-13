@@ -471,6 +471,26 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                     b.ToTable("jobs", (string)null);
                 });
 
+            modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.JobScheduleEntity", b =>
+                {
+                    b.Property<string>("ScheduleId")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<Guid?>("LastDispatchedJobId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset?>("LastOccurrenceAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset>("ObservedFrom")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("ScheduleId");
+
+                    b.ToTable("job_schedules", (string)null);
+                });
+
             modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.MailAnsweringAuditEntryEntity", b =>
                 {
                     b.Property<Guid>("Id")
@@ -620,6 +640,13 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
 
                     b.Property<int>("SkippedEmailCount")
                         .HasColumnType("integer");
+
+                    b.Property<string>("Trigger")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasDefaultValue("RequestedRun");
 
                     b.HasKey("MailboxAccountId")
                         .HasName("pk_mail_rule_evaluation_runs");

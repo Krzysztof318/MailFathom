@@ -7,6 +7,7 @@ using System.Diagnostics.Metrics;
 using System.Globalization;
 using MailFathom.Application.Jobs;
 using MailFathom.Application.Jobs.Execution;
+using MailFathom.Application.Jobs.Scheduling;
 using MailFathom.Common.Observability;
 using MailFathom.Infrastructure.Observability;
 using Xunit;
@@ -27,6 +28,8 @@ public sealed class JobQueueTelemetryTests
     private const string RetriesInstrumentName = "mailfathom.jobs.retries";
     private const string DeadLettersInstrumentName = "mailfathom.jobs.dead_letters";
     private const string DepthInstrumentName = "mailfathom.jobs.queue.depth";
+    private const string ScheduleDispatchesInstrumentName = "mailfathom.jobs.schedule.dispatches";
+    private const string ScheduleSkipsInstrumentName = "mailfathom.jobs.schedule.skipped_occurrences";
     private const string JobTypeTagName = "mailfathom.job.type";
 
     private static readonly JobQueueTelemetry QueueTelemetry = new();
@@ -186,6 +189,80 @@ public sealed class JobQueueTelemetryTests
         Assert.Equal(0, Assert.Single(collector.ReadObservable(DepthInstrumentName)).Value);
     }
 
+    /// <summary>An occasion that reached the queue is one decision, and it stepped over nothing.</summary>
+    [Fact]
+    public void RecordScheduleDispatch_AnOccasionThatWasDispatched_CountsTheDecisionAndNoSkippedOccasion()
+    {
+        // Arrange
+        using var collector = new MeasurementCollector();
+
+        // Act
+        QueueTelemetry.RecordScheduleDispatch(Dispatch(JobScheduleDispatchOutcome.Dispatched));
+
+        // Assert
+        var dispatch = Assert.Single(collector.ReadOf(JobType.RunScheduledMailRules, ScheduleDispatchesInstrumentName));
+        Assert.Equal(1, dispatch.Value);
+        Assert.Equal("dispatched", dispatch.Tags["mailfathom.job.outcome"]);
+        Assert.Empty(collector.ReadOf(JobType.RunScheduledMailRules, ScheduleSkipsInstrumentName));
+    }
+
+    /// <summary>An occasion that passed while nothing was running is skipped rather than replayed, and the skip is counted.</summary>
+    [Theory]
+    [InlineData(JobScheduleDispatchOutcome.Dispatched, "dispatched")]
+    [InlineData(JobScheduleDispatchOutcome.PreviousRunInFlight, "previous_run_in_flight")]
+    [InlineData(JobScheduleDispatchOutcome.RefusedAtCapacity, "refused_at_capacity")]
+    public void RecordScheduleDispatch_OccasionsThatWereNotRun_CountsThemUnderWhyTheyWerePassedOver(
+        JobScheduleDispatchOutcome outcome,
+        string expectedTag)
+    {
+        // Arrange
+        using var collector = new MeasurementCollector();
+
+        // Act
+        QueueTelemetry.RecordScheduleDispatch(Dispatch(outcome, skippedOccurrenceCount: 4));
+
+        // Assert
+        var skipped = Assert.Single(collector.ReadOf(JobType.RunScheduledMailRules, ScheduleSkipsInstrumentName));
+        Assert.Equal(4, skipped.Value);
+        Assert.Equal(expectedTag, skipped.Tags["mailfathom.job.outcome"]);
+    }
+
+    /// <summary>A schedule's identity is an account and a rule name, so it never becomes a dimension of a metric.</summary>
+    [Fact]
+    public void RecordScheduleDispatch_AnyOccasion_PublishesNeitherTheScheduleNorTheInstantItNamed()
+    {
+        // Arrange
+        using var collector = new MeasurementCollector();
+        var dispatch = Dispatch(JobScheduleDispatchOutcome.Dispatched, skippedOccurrenceCount: 1);
+
+        // Act
+        QueueTelemetry.RecordScheduleDispatch(dispatch);
+
+        // Assert
+        var published = collector.ReadOf(
+            JobType.RunScheduledMailRules,
+            ScheduleDispatchesInstrumentName,
+            ScheduleSkipsInstrumentName);
+        Assert.All(
+            published,
+            measurement => Assert.Equal(
+                ["mailfathom.job.type", "mailfathom.job.outcome"],
+                measurement.Tags.Keys));
+        Assert.All(
+            published.SelectMany(measurement => measurement.Tags.Values),
+            value => Assert.NotEqual(dispatch.Id.Value, value as string));
+    }
+
+    private static JobScheduleDispatch Dispatch(
+        JobScheduleDispatchOutcome outcome,
+        int skippedOccurrenceCount = 0) =>
+        new(
+            JobScheduleId.Create("mail-rules:work:housekeeping"),
+            JobType.RunScheduledMailRules,
+            outcome,
+            new DateTimeOffset(2026, 8, 13, 3, 0, 0, TimeSpan.Zero),
+            skippedOccurrenceCount);
+
     private static JobExecutionResult Result(
         JobExecutionOutcome outcome,
         TimeSpan duration,
@@ -222,10 +299,14 @@ public sealed class JobQueueTelemetryTests
 
         /// <summary>Returns what the named instruments published for this class's job type.</summary>
         internal IReadOnlyList<PublishedMeasurement> Read(params string[] instrumentNames) =>
+            this.ReadOf(JobType.ClassifyEmailSpam, instrumentNames);
+
+        /// <summary>Returns what the named instruments published for one job type.</summary>
+        internal IReadOnlyList<PublishedMeasurement> ReadOf(JobType jobType, params string[] instrumentNames) =>
         [
             .. this.measurements.ToArray().Where(measurement =>
                 instrumentNames.Contains(measurement.InstrumentName, StringComparer.Ordinal)
-                && Names(measurement, JobType.ClassifyEmailSpam)),
+                && Names(measurement, jobType)),
         ];
 
         /// <summary>Collects every gauge once and returns what one instrument published for this class's job type.</summary>

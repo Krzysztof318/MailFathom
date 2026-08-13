@@ -34,13 +34,15 @@ internal sealed record LoadedRuleSet(
 /// <param name="Actions">What a match asks the mailbox for, in the order the rule declares the changes.</param>
 /// <param name="StopWhenMatched">Whether a match ends the pass rather than continuing to the rules below.</param>
 /// <param name="Triggers">The automatic triggers it takes part in, empty for a rule only a requested run applies.</param>
+/// <param name="Schedule">The occasions it declares, absent for a rule declaring none.</param>
 internal sealed record LoadedRule(
     [property: JsonPropertyName("name")] string? Name,
     [property: JsonPropertyName("accounts")] IReadOnlyList<string>? Accounts,
     [property: JsonPropertyName("readableFacts")] IReadOnlyList<string>? ReadableFacts,
     [property: JsonPropertyName("actions")] IReadOnlyList<LoadedRuleAction>? Actions,
     [property: JsonPropertyName("stopWhenMatched")] bool StopWhenMatched,
-    [property: JsonPropertyName("triggers")] IReadOnlyList<string>? Triggers)
+    [property: JsonPropertyName("triggers")] IReadOnlyList<string>? Triggers,
+    [property: JsonPropertyName("schedule")] string? Schedule)
 {
     /// <summary>Describes what the rule applies to in one line an operator reads.</summary>
     /// <returns>The accounts it names, or that it names none.</returns>
@@ -54,9 +56,12 @@ internal sealed record LoadedRule(
     /// A rule nothing fires by itself is the one an operator is most likely to be asking about — it looks identical to
     /// a rule that never matched — so the answer says what does run it rather than reporting an empty list.
     /// </remarks>
-    internal string DescribeTriggers() => this.Triggers is { Count: > 0 } triggers
-        ? string.Join(", ", triggers)
-        : $"nothing automatically; '{CliRootCommand.CommandName} rules run' applies it";
+    internal string DescribeTriggers() => (this.Triggers, this.Schedule) switch
+    {
+        ({ Count: > 0 } triggers, { Length: > 0 } schedule) => $"{string.Join(", ", triggers)} ({schedule})",
+        ({ Count: > 0 } triggers, _) => string.Join(", ", triggers),
+        _ => $"nothing automatically; '{CliRootCommand.CommandName} rules run' applies it",
+    };
 
     /// <summary>Describes what a match does in one line an operator reads.</summary>
     /// <returns>The changes in declared order, and the fact that a match ends the pass where it does.</returns>

@@ -127,6 +127,19 @@ internal sealed class JobStore(
     }
 
     /// <inheritdoc />
+    /// <remarks>A plain projection: the state is a column, and nothing about reading it needs the row's other values.</remarks>
+    public async Task<JobState?> FindStateAsync(JobId jobId, CancellationToken cancellationToken)
+    {
+        var jobIdValue = jobId.Value;
+
+        return await dbContext.Jobs
+            .AsNoTracking()
+            .Where(job => job.Id == jobIdValue)
+            .Select(job => (JobState?)job.State)
+            .SingleOrDefaultAsync(cancellationToken);
+    }
+
+    /// <inheritdoc />
     /// <remarks>
     /// The condition is the owner and the state rather than the expiry, so an attempt whose lease has run out but which
     /// nothing has reclaimed yet renews it and goes on working. That is safe because it still holds the row exclusively:

@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.Folders;
+using MailFathom.Application.Jobs.Scheduling;
 using MailFathom.Application.Mail;
 using MailFathom.Application.Mail.Mutations;
 using MailFathom.Application.Mail.Mutations.Destinations;
@@ -537,6 +538,43 @@ public sealed class MailRuleEvaluationPassTests
         Assert.Equal("re-run", execution.RuleName);
     }
 
+    /// <summary>A schedule's walk reaches the rules that declared one, and leaves an arrival rule where it was.</summary>
+    [Fact]
+    public async Task RunAsync_AScheduledRun_ReachesTheScheduledRulesAndRecordsThatTrigger()
+    {
+        // Arrange
+        this.store.Add(FactsFor(Account), evaluatedAt: EvaluatedAt.AddDays(-1));
+        this.runStore.Arrange(ScheduledRun());
+        var pass = this.CreatePass(RuleSetOf(
+            ArrivalRule("on-arrival", ScriptedMailRuleCondition.Answering(matches: true)),
+            ScheduledRule("nightly", ScriptedMailRuleCondition.Answering(matches: true))));
+
+        // Act
+        await pass.RunAsync(Account, TestContext.Current.CancellationToken);
+
+        // Assert
+        var execution = Assert.Single(this.history.Executions);
+        Assert.Equal("nightly", execution.RuleName);
+        Assert.Equal(MailRuleExecutionTrigger.ScheduledRun, execution.Trigger);
+    }
+
+    /// <summary>The occasion is bound to the revision it began under, so an edit part way through changes nothing it decided.</summary>
+    [Fact]
+    public async Task RunAsync_AScheduledRunPickedUp_BindsTheRevisionItStartedUnder()
+    {
+        // Arrange
+        this.store.Add(FactsFor(Account), evaluatedAt: EvaluatedAt.AddDays(-1));
+        this.runStore.Arrange(ScheduledRun());
+        var ruleSet = RuleSetOf(ScheduledRule("nightly", ScriptedMailRuleCondition.Answering(matches: true)));
+
+        // Act
+        await this.CreatePass(ruleSet).RunAsync(Account, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(ruleSet.Revision, Assert.Single(this.history.Executions).Revision);
+        Assert.Equal(ruleSet.Revision, this.runStore.Find(Account)?.Revision);
+    }
+
     /// <summary>A rule nobody asked leaves nothing, which is what keeps it apart from a rule that answered no.</summary>
     [Fact]
     public async Task RunAsync_ARuleThatEndedThePass_LeavesNoRecordForTheRulesBelowIt()
@@ -634,16 +672,30 @@ public sealed class MailRuleEvaluationPassTests
         ScriptedMailRuleCondition.Answering(matches: true),
         MailRuleActionSet.Create([MailRuleAction.Relocate(MailFolderReference.ToAlias(destination ?? Archive))]));
 
+    /// <summary>A rule an occasion fires rather than an arrival, which is what the scheduled walk reaches.</summary>
+    private static MailRule ScheduledRule(string name, IMailRuleCondition condition)
+    {
+        Assert.True(JobRecurrence.TryParse("Daily at 03:00", out var recurrence, out _));
+
+        return MailRule.Create(name, condition, triggers: [MailRuleTrigger.Schedule], schedule: recurrence);
+    }
+
     private static MailRuleEvaluationRun RequestedRun() => new()
     {
         AccountId = Account,
         RequestedAt = EvaluatedAt.AddMinutes(-1),
+        Trigger = MailRuleExecutionTrigger.RequestedRun,
+    };
+
+    private static MailRuleEvaluationRun ScheduledRun() => RequestedRun() with
+    {
+        Trigger = MailRuleExecutionTrigger.ScheduledRun,
     };
 
     private static MailRuleSet RuleSetOf(params MailRule[] rules) => MailRuleSet.Create(
         rules,
         MailRuleSetRevision.Create(
-            [.. rules.Select(rule => new MailRuleDeclaration(rule.Name, "isSeen", [.. rule.Actions.Actions], rule.StopWhenMatched, [.. rule.Accounts], [.. rule.Triggers]))]),
+            [.. rules.Select(rule => new MailRuleDeclaration(rule.Name, "isSeen", [.. rule.Actions.Actions], rule.StopWhenMatched, [.. rule.Accounts], [.. rule.Triggers], rule.Schedule))]),
         MailRuleConditionBounds.Default);
 
     /// <summary>Resolves destinations over a server advertising nothing, so only a recorded binding ever answers.</summary>

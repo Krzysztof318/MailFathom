@@ -38,4 +38,22 @@ public interface IMailRuleEvaluationRunStore
     /// crash between the two would otherwise either replay a batch or step over one.
     /// </remarks>
     Task SaveAsync(IPersistenceSession session, MailRuleEvaluationRun run, CancellationToken cancellationToken);
+
+    /// <summary>Stages a run that is starting, unless the account's row has meanwhile become one it may not replace.</summary>
+    /// <param name="session">The session the write is staged in.</param>
+    /// <param name="run">The run this request wants to start.</param>
+    /// <param name="cancellationToken">Cancels the staging.</param>
+    /// <returns>The run the account already has, when this request must stand down; <see langword="null" /> once the write is staged.</returns>
+    /// <remarks>
+    /// Separate from <see cref="SaveAsync" /> because the two write for opposite reasons. A pass committing a batch owns
+    /// the run it is carrying and overwrites it deliberately. A request is only entitled to the row while the row still
+    /// says what it said when the request decided to write, so the check belongs beside the write rather than at the
+    /// read that preceded it: between the two, another request or another schedule's occasion may have claimed the
+    /// account, and an unconditional write would silently replace a wider run with a narrower one or reset a walk that
+    /// was already under way. <see cref="MailRuleEvaluationRun.Supersedes" /> is the rule this applies.
+    /// </remarks>
+    Task<MailRuleEvaluationRun?> TryStartAsync(
+        IPersistenceSession session,
+        MailRuleEvaluationRun run,
+        CancellationToken cancellationToken);
 }

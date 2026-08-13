@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.Collections.Frozen;
+using MailFathom.Application.Jobs.Scheduling;
 using MailFathom.Application.Rules.Actions;
 using MailFathom.Application.Rules.Conditions;
 
@@ -22,7 +23,8 @@ public sealed class MailRule
         MailRuleActionSet actions,
         bool stopWhenMatched,
         FrozenSet<string> accounts,
-        FrozenSet<MailRuleTrigger> triggers)
+        FrozenSet<MailRuleTrigger> triggers,
+        JobRecurrence? schedule)
     {
         this.Name = name;
         this.Condition = condition;
@@ -30,6 +32,7 @@ public sealed class MailRule
         this.StopWhenMatched = stopWhenMatched;
         this.Accounts = accounts;
         this.Triggers = triggers;
+        this.Schedule = schedule;
     }
 
     /// <summary>Gets the name the rule is declared and reported under.</summary>
@@ -65,6 +68,14 @@ public sealed class MailRule
     /// </remarks>
     public IReadOnlySet<MailRuleTrigger> Triggers { get; }
 
+    /// <summary>Gets the occasions a scheduled walk of this rule happens on, and <see langword="null" /> when it declares no schedule.</summary>
+    /// <remarks>
+    /// Present exactly when <see cref="MailRuleTrigger.Schedule" /> is declared, which is a claim the configuration
+    /// section makes true rather than one read here: a schedule without the trigger names occasions nothing acts on, and
+    /// the trigger without a schedule is a rule that would never fire.
+    /// </remarks>
+    public JobRecurrence? Schedule { get; }
+
     /// <summary>Creates a rule from a condition that has already been proven usable.</summary>
     /// <param name="name">The name the rule is declared and reported under.</param>
     /// <param name="condition">The compiled condition.</param>
@@ -76,10 +87,12 @@ public sealed class MailRule
     /// and <see langword="null" /> say the same thing, because a rule takes part in the occasions it names and in no
     /// others.
     /// </param>
+    /// <param name="schedule">The occasions a scheduled walk happens on, required by and only by the schedule trigger.</param>
     /// <returns>The rule.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="condition" /> is <see langword="null" />.</exception>
     /// <exception cref="ArgumentException">
-    /// Thrown when <paramref name="name" /> is empty or whitespace, an account is, or a trigger is unspecified.
+    /// Thrown when <paramref name="name" /> is empty or whitespace, an account is, a trigger is unspecified, or the
+    /// schedule and the trigger that uses it do not agree.
     /// </exception>
     public static MailRule Create(
         string name,
@@ -87,7 +100,8 @@ public sealed class MailRule
         MailRuleActionSet? actions = null,
         bool stopWhenMatched = false,
         IReadOnlyList<string>? accounts = null,
-        IReadOnlyList<MailRuleTrigger>? triggers = null)
+        IReadOnlyList<MailRuleTrigger>? triggers = null,
+        JobRecurrence? schedule = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
         ArgumentNullException.ThrowIfNull(condition);
@@ -102,13 +116,23 @@ public sealed class MailRule
             throw new ArgumentException("A rule cannot declare a trigger that is unspecified.", nameof(triggers));
         }
 
+        var declaredTriggers = triggers is null ? FrozenSet<MailRuleTrigger>.Empty : triggers.ToFrozenSet();
+
+        if (declaredTriggers.Contains(MailRuleTrigger.Schedule) != (schedule is not null))
+        {
+            throw new ArgumentException(
+                $"A rule declares a schedule if and only if it declares the '{MailRuleTrigger.Schedule.Name}' trigger.",
+                nameof(schedule));
+        }
+
         return new MailRule(
             name,
             condition,
             actions ?? MailRuleActionSet.Empty,
             stopWhenMatched,
             accounts is null ? FrozenSet<string>.Empty : accounts.Select(account => account.Trim()).ToFrozenSet(StringComparer.Ordinal),
-            triggers is null ? FrozenSet<MailRuleTrigger>.Empty : triggers.ToFrozenSet());
+            declaredTriggers,
+            schedule);
     }
 
     /// <summary>Reports whether this rule is one of the rules the given account's mail is passed through.</summary>

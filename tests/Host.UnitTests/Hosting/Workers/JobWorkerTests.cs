@@ -4,6 +4,8 @@
 
 using MailFathom.Application.Jobs;
 using MailFathom.Application.Jobs.Execution;
+using MailFathom.Application.Jobs.Scheduling;
+using MailFathom.Domain.Accounts;
 using MailFathom.Host.Configuration.Jobs;
 using MailFathom.Host.Hosting.Workers;
 using MailFathom.Host.UnitTests.TestDoubles;
@@ -221,6 +223,71 @@ public sealed class JobWorkerTests
         await world.Worker.StopAsync(TestContext.Current.CancellationToken);
     }
 
+    /// <summary>A schedule is dispatched by the worker that already runs, which is what keeps it out of a loop of its own.</summary>
+    [Fact]
+    public async Task ExecuteAsync_TheFirstPass_DispatchesTheSchedulesThisInstanceDeclares()
+    {
+        // Arrange
+        using var world = CreateWorld(new JobQueueOptions(), WithAHandler);
+        world.Schedules.ReadSchedules().Returns([ScheduledJobFor("mail-rules:work:housekeeping")]);
+
+        // Act
+        await world.Worker.StartAsync(TestContext.Current.CancellationToken);
+        await world.Logger.WaitForOccurrences(
+            "seen for the first time",
+            occurrences: 1,
+            TestContext.Current.CancellationToken);
+        await world.Worker.StopAsync(TestContext.Current.CancellationToken);
+
+        // Assert
+        var seeded = Assert.Single(world.ScheduleStore.Saves);
+        Assert.Equal("mail-rules:work:housekeeping", seeded.Id.Value);
+        Assert.Null(seeded.LastOccurrenceAt);
+    }
+
+    /// <summary>A dispatch that could not read its schedules advances nothing and leaves the worker claiming.</summary>
+    [Fact]
+    public async Task ExecuteAsync_ARecurringDispatchThatFails_LogsItWithoutEndingTheWorker()
+    {
+        // Arrange
+        using var world = CreateWorld(new JobQueueOptions(), WithAHandler);
+        var claimed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        world.Store
+            .ClaimAsync(Arg.Any<JobClaimRequest>(), Arg.Any<CancellationToken>())
+            .Returns(_ =>
+            {
+                claimed.TrySetResult();
+
+                return Task.FromResult<IReadOnlyList<LeasedJob>>([]);
+            });
+        world.Schedules
+            .ReadSchedules()
+            .Returns(_ => throw new InvalidOperationException("the rules are unreadable"));
+
+        // Act
+        await world.Worker.StartAsync(TestContext.Current.CancellationToken);
+        await world.Logger.WaitForOccurrences(
+            "no schedule advanced",
+            occurrences: 1,
+            TestContext.Current.CancellationToken);
+        await claimed.Task;
+
+        // Assert
+        await world.Store.Received().ClaimAsync(Arg.Any<JobClaimRequest>(), Arg.Any<CancellationToken>());
+        Assert.False(world.Worker.ExecuteTask!.IsCompleted);
+        await world.Worker.StopAsync(TestContext.Current.CancellationToken);
+    }
+
+    private static ScheduledJob ScheduledJobFor(string identity)
+    {
+        Assert.True(JobRecurrence.TryParse("Daily at 03:00", out var recurrence, out _));
+
+        return new ScheduledJob(
+            JobScheduleId.Create(identity),
+            MailAccountJobPayload.For(MailAccountId.Create("work")),
+            recurrence!);
+    }
+
     private static LeasedJob LeasedJobFor(int index) => new(
         JobId.Create(Guid.CreateVersion7(Noon.AddSeconds(index))),
         JobType.ClassifyEmailSpam,
@@ -256,6 +323,7 @@ public sealed class JobWorkerTests
         world.DepthReader
             .ReadWaitingDepthsAsync(Arg.Any<IReadOnlyList<JobType>>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<IReadOnlyList<JobQueueDepthReading>>([]));
+        world.Schedules.ReadSchedules().Returns([]);
 
         var services = new ServiceCollection();
         services.AddSingleton<TimeProvider>(world.TimeProvider);
@@ -273,6 +341,9 @@ public sealed class JobWorkerTests
             settings.MaxQueueDepthPerType));
         services.AddSingleton(Substitute.For<IJobFailureClassifier>());
         services.AddSingleton(world.DepthReader);
+        services.AddSingleton(world.Schedules);
+        services.AddSingleton<IJobScheduleStore>(world.ScheduleStore);
+        services.AddScoped<JobSchedulePass>();
         services.AddSingleton<JobConcurrencyGate>();
         services.AddSingleton<IJobAttemptRunner, ScopedJobAttemptRunner>();
         services.AddScoped<JobHandlerRegistry>();
@@ -292,6 +363,31 @@ public sealed class JobWorkerTests
                 world.TimeProvider));
 
         return world;
+    }
+
+    /// <summary>The durable state of the schedules this worker dispatched, kept where a test can read it.</summary>
+    internal sealed class RecordingJobScheduleStore : IJobScheduleStore
+    {
+        private readonly Dictionary<string, JobScheduleState> states = new(StringComparer.Ordinal);
+        private readonly List<JobScheduleState> saves = [];
+
+        public IReadOnlyList<JobScheduleState> Saves => this.saves;
+
+        public Task<IReadOnlyDictionary<string, JobScheduleState>> ReadAsync(
+            IReadOnlyCollection<JobScheduleId> ids,
+            CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyDictionary<string, JobScheduleState>>(
+                ids.Select(id => this.states.GetValueOrDefault(id.Value))
+                    .OfType<JobScheduleState>()
+                    .ToDictionary(state => state.Id.Value, StringComparer.Ordinal));
+
+        public Task SaveAsync(JobScheduleState state, CancellationToken cancellationToken)
+        {
+            this.states[state.Id.Value] = state;
+            this.saves.Add(state);
+
+            return Task.CompletedTask;
+        }
     }
 
     /// <summary>A handler that does nothing, because these tests are about the loop rather than about any work.</summary>
@@ -315,6 +411,10 @@ public sealed class JobWorkerTests
         public IJobStore Store { get; } = Substitute.For<IJobStore>();
 
         public IJobQueueDepthReader DepthReader { get; } = Substitute.For<IJobQueueDepthReader>();
+
+        public IScheduledJobSource Schedules { get; } = Substitute.For<IScheduledJobSource>();
+
+        public RecordingJobScheduleStore ScheduleStore { get; } = new();
 
         public JobWorker Worker => this.worker!;
 

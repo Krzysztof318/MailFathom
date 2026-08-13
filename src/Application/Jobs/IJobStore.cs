@@ -64,6 +64,17 @@ public interface IJobStore
     /// </remarks>
     Task<IReadOnlyList<LeasedJob>> ClaimAsync(JobClaimRequest request, CancellationToken cancellationToken);
 
+    /// <summary>Reads where one job stands, which is what a caller holding an identifier asks before acting on it.</summary>
+    /// <param name="jobId">The job to read.</param>
+    /// <param name="cancellationToken">Cancels the read.</param>
+    /// <returns>The job's state, or <see langword="null" /> when no job carries that identifier.</returns>
+    /// <remarks>
+    /// A reading rather than a guarantee. The state can move the instant after it is read, so what it supports is a
+    /// decision that is safe to get wrong occasionally — a recurring dispatch standing down while the previous one is
+    /// still going, where an unlucky read costs one occasion — and never an exclusion, which is what the lease is for.
+    /// </remarks>
+    Task<JobState?> FindStateAsync(JobId jobId, CancellationToken cancellationToken);
+
     /// <summary>Pushes a held job's lease further out, so a long execution is not reclaimed underneath it.</summary>
     /// <param name="jobId">The job whose lease is renewed.</param>
     /// <param name="owner">The attempt claiming to hold it.</param>

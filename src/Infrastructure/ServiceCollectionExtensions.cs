@@ -28,6 +28,7 @@ using MailFathom.Application.Folders;
 using MailFathom.Application.Jobs;
 using MailFathom.Application.Jobs.DeadLetters;
 using MailFathom.Application.Jobs.Execution;
+using MailFathom.Application.Jobs.Scheduling;
 using MailFathom.Application.Mail.Mutations;
 using MailFathom.Application.Mail.Mutations.Audit;
 using MailFathom.Application.Mail.Mutations.Convergence;
@@ -337,6 +338,9 @@ public static class ServiceCollectionExtensions
         // acts under a lease it holds, and these two answer an operator who holds none.
         services.AddScoped<IJobQueueDepthReader, JobQueueDepthReader>();
         services.AddScoped<IDeadLetteredJobStore, DeadLetteredJobStore>();
+        // What each recurring dispatch has already done. Scoped and sessionless like the queue itself, because a
+        // schedule is advanced against work that is already enqueued.
+        services.AddScoped<IJobScheduleStore, JobScheduleStore>();
         // A singleton with the instruments on it, for the reason every other telemetry type here is one: an instrument
         // created per scope would publish a second time series for the same measurement.
         services.AddSingleton<JobQueueTelemetry>();

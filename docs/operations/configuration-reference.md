@@ -848,7 +848,7 @@ instant.
 | `Jobs:MaxAttempts` | int | `5` | 1 – 20; how many attempts one job may be handed out for before a transient failure dead-letters it. `1` leaves no retry at all. A permanent failure ends the job whatever this says | restart |
 | `Jobs:RetryBaseDelay` | TimeSpan | `00:00:30` | 1 s – 1 h; the delay the first retry is drawn around, doubling per attempt | restart |
 | `Jobs:RetryMaxDelay` | TimeSpan | `00:30:00` | 1 s – 24 h, and at least `Jobs:RetryBaseDelay`; the ceiling a grown retry delay never exceeds | restart |
-| `Jobs:PollInterval` | TimeSpan | `00:00:10` | 1 s – 10 min; how long an idle worker waits before looking again, and how often at most it measures the queue depth it publishes. A pass that filled its batch looks again at once | restart |
+| `Jobs:PollInterval` | TimeSpan | `00:00:10` | 1 s – 10 min; how long an idle worker waits before looking again, and how often at most it measures the queue depth it publishes and asks whether a rule's schedule has come due. A schedule is therefore noticed within one interval of its occasion rather than at it. A pass that filled its batch looks again at once | restart |
 
 ## `MailRules`
 
@@ -870,7 +870,8 @@ use — every fact, every function, every operator — and this section document
 | `MailRules:Rules:0:Condition` | string | required | One expression producing a boolean, within the two limits above | reload |
 | `MailRules:Rules:0:StopWhenMatched` | bool | `false` | A match ends the pass and the rules below it are not reached | reload |
 | `MailRules:Rules:0:Enabled` | bool | `true` | A rule switched off is left out of the set entirely | reload |
-| `MailRules:Rules:0:Triggers` | list | `[]` | The automatic occasions that run the rule; `Arrival` is the only one, an unknown or repeated name is refused, and naming none is a rule nothing fires by itself that a whole-mailbox run applies | reload |
+| `MailRules:Rules:0:Triggers` | list | `[]` | The automatic occasions that run the rule; `Arrival` and `Schedule` are the declared names, an unknown or repeated name is refused, and naming none is a rule nothing fires by itself that a whole-mailbox run applies | reload |
+| `MailRules:Rules:0:Schedule` | string | unset | When a rule declaring the `Schedule` trigger runs: `Every <hh:mm:ss>` or `Every <d.hh:mm:ss>`, from one minute to 365 days, or `Daily at <HH:mm>` optionally followed by a time-zone identifier and read in UTC without one. Required by that trigger and refused without it | reload |
 | `MailRules:Rules:0:Actions:MoveTo` | string | unset | The alias of the folder a match is filed into; the account must mirror it | reload |
 | `MailRules:Rules:0:Actions:CopyTo` | string | unset | The alias of the folder a copy of a match is placed in; the account must mirror it | reload |
 | `MailRules:Rules:0:Actions:Delete` | bool | unset | `true` removes a match from the folder it matched in; the account must permit deletion | reload |

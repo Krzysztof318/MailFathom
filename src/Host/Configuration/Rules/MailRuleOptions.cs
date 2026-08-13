@@ -4,6 +4,7 @@
 
 using System.ComponentModel.DataAnnotations;
 using System.Diagnostics.CodeAnalysis;
+using MailFathom.Application.Jobs.Scheduling;
 using MailFathom.Application.Rules;
 
 namespace MailFathom.Host.Configuration.Rules;
@@ -69,7 +70,8 @@ internal sealed class MailRuleOptions
     /// list say the same thing: a rule nothing fires by itself. Such a rule stays in the bound set, is validated like
     /// every other, and a whole-mailbox run is what applies it. That is a different statement from
     /// <see cref="Enabled" />, which leaves a rule out of the set altogether and makes it unrunnable. A rule that
-    /// should run over arriving mail writes <c>Arrival</c>, which is the whole vocabulary today.
+    /// should run over arriving mail writes <c>Arrival</c>; one that should walk the mailbox on its own writes
+    /// <c>Schedule</c> and the <see cref="Schedule" /> beside it, and those two are the whole vocabulary.
     /// </para>
     /// <para>
     /// The elements are text rather than the trigger itself, for the reason the actions are one key each: the binder
@@ -79,6 +81,32 @@ internal sealed class MailRuleOptions
     /// </para>
     /// </remarks>
     public IList<string> Triggers { get; set; } = [];
+
+    /// <summary>Gets or sets the occasions a scheduled walk of this rule happens on.</summary>
+    /// <remarks>
+    /// <para>
+    /// Written as <c>Every &lt;hh:mm:ss&gt;</c>, or <c>Every &lt;d.hh:mm:ss&gt;</c> for an interval of a day or more —
+    /// <c>Every 7.00:00:00</c> — or as <c>Daily at &lt;HH:mm&gt;</c> with an optional IANA time zone —
+    /// <c>Daily at 03:30 Europe/Warsaw</c>. <strong>A time with no zone is UTC</strong>, which is worth reading twice: a
+    /// housekeeping rule an owner believes runs at night is the one place that answer is noticed.
+    /// </para>
+    /// <para>
+    /// Required by and only by the <c>Schedule</c> trigger. A schedule without the trigger names occasions nothing acts
+    /// on, and the trigger without a schedule is a rule that could never fire, so both are refused when the
+    /// configuration is read rather than resolved into whichever of them was probably meant.
+    /// </para>
+    /// </remarks>
+    public string? Schedule { get; set; }
+
+    /// <summary>Reads the declared schedule, or nothing where the rule declares none or wrote one this system cannot read.</summary>
+    /// <returns>The occasions a scheduled walk happens on, or <see langword="null" />.</returns>
+    /// <remarks>
+    /// An unreadable schedule is left out rather than raised, for the reason an unreadable trigger name is: it is
+    /// reported by validation against the key an operator edits, and <see cref="MailRuleSetMapper" /> refuses a set that
+    /// reaches it with one.
+    /// </remarks>
+    internal JobRecurrence? ToSchedule() =>
+        JobRecurrence.TryParse(this.Schedule, out var recurrence, out _) ? recurrence : null;
 
     /// <summary>Reads the declared triggers, leaving out a name this system cannot read.</summary>
     /// <returns>The triggers, empty for a rule only a requested walk runs.</returns>

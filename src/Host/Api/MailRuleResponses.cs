@@ -52,6 +52,7 @@ internal sealed record MailRuleSetResponse(
 /// <param name="Actions">What a match asks the mailbox for, in the order the rule declares the changes.</param>
 /// <param name="StopWhenMatched">Whether a match ends the pass rather than continuing to the rules below.</param>
 /// <param name="Triggers">The automatic triggers it takes part in, empty for a rule only a requested run applies.</param>
+/// <param name="Schedule">The occasions the rule declares, in their canonical form, absent for a rule declaring none.</param>
 /// <remarks>
 /// The authored condition is deliberately absent. A compiled rule carries no text — which is what keeps an address the
 /// operator typed into a condition out of every record naming the rule — so what this reports of a condition is the
@@ -63,7 +64,8 @@ internal sealed record MailRuleResponse(
     IReadOnlyList<string> ReadableFacts,
     IReadOnlyList<MailRuleActionResponse> Actions,
     bool StopWhenMatched,
-    IReadOnlyList<string> Triggers)
+    IReadOnlyList<string> Triggers,
+    string? Schedule)
 {
     /// <summary>Describes one rule for the wire.</summary>
     /// <param name="rule">The bound rule.</param>
@@ -79,7 +81,8 @@ internal sealed record MailRuleResponse(
             [.. rule.Condition.ReferencedFacts.Select(fact => fact.Name)],
             [.. rule.Actions.Actions.Select((action, position) => MailRuleActionResponse.For(action, position))],
             rule.StopWhenMatched,
-            [.. MailRuleTrigger.All.Where(rule.RunsOn).Select(trigger => trigger.Name)]);
+            [.. MailRuleTrigger.All.Where(rule.RunsOn).Select(trigger => trigger.Name)],
+            rule.Schedule?.CanonicalForm);
     }
 }
 
@@ -134,6 +137,7 @@ internal sealed record MailRuleRunStateResponse(string Account, MailRuleRunRespo
 
 /// <summary>One whole-mailbox rule run, as the administrative endpoint serves it.</summary>
 /// <param name="RequestedAt">When the run was asked for.</param>
+/// <param name="Trigger">What started the run, which is what says whether anybody asked for it.</param>
 /// <param name="Revision">The rule set the run is bound to, absent until the first pass picks it up.</param>
 /// <param name="EvaluatedEmailCount">How many of the account's emails the run has evaluated.</param>
 /// <param name="MatchedEmailCount">How many of those at least one rule matched.</param>
@@ -146,6 +150,7 @@ internal sealed record MailRuleRunStateResponse(string Account, MailRuleRunRespo
 /// </remarks>
 internal sealed record MailRuleRunResponse(
     DateTimeOffset RequestedAt,
+    string Trigger,
     string? Revision,
     int EvaluatedEmailCount,
     int MatchedEmailCount,
@@ -163,6 +168,7 @@ internal sealed record MailRuleRunResponse(
 
         return new MailRuleRunResponse(
             run.RequestedAt,
+            run.Trigger.ToString(),
             run.Revision.IsSpecified ? run.Revision.Value : null,
             run.EvaluatedEmailCount,
             run.MatchedEmailCount,

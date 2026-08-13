@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.Rules.Evaluation;
+using MailFathom.Application.Rules.History;
 using MailFathom.CodeCoverage;
 
 namespace MailFathom.Infrastructure.Persistence.Entities;
@@ -33,6 +34,13 @@ internal sealed class MailRuleEvaluationRunEntity
     public required string MailboxAccountId { get; set; }
 
     public DateTimeOffset RequestedAt { get; set; }
+
+    /// <summary>Gets or sets what started the run, which decides the rules it reaches and what its executions are recorded as.</summary>
+    /// <remarks>
+    /// Stored as text for the reason every other outcome here is, and non-null with the requested run as its default, so
+    /// a row written before schedules existed reads back as what it was rather than as an unset value.
+    /// </remarks>
+    public MailRuleExecutionTrigger Trigger { get; set; }
 
     /// <summary>Gets or sets the rule set the run is bound to, absent until the first pass picks the run up.</summary>
     public string? Revision { get; set; }

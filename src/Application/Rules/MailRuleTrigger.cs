@@ -16,10 +16,9 @@ namespace MailFathom.Application.Rules;
 /// configuration surface and the derived identity both have to survive.
 /// </para>
 /// <para>
-/// One member today, and the set is closed rather than final: a scheduled pass was refused for now rather than forever,
-/// so a second occasion is a member to append. What is deliberately not a member is a run somebody asked for. That is
-/// the request itself rather than an occasion a rule opts into, so it reaches every rule of the set;
-/// <see cref="MailRuleReach" /> is where the two are told apart.
+/// Two members, and the set is closed rather than final: a third occasion is a member to append. What is deliberately
+/// not a member is a run somebody asked for. That is the request itself rather than an occasion a rule opts into, so it
+/// reaches every rule of the set; <see cref="MailRuleReach" /> is where the two are told apart.
 /// </para>
 /// <para>
 /// Being a struct, <see langword="default" /> is reachable and names no trigger. <see cref="IsSpecified" /> reports
@@ -41,9 +40,17 @@ public readonly record struct MailRuleTrigger
     /// </remarks>
     public static MailRuleTrigger Arrival { get; } = new("Arrival");
 
+    /// <summary>Gets the trigger that runs a rule over the account's whole mailbox when a declared occasion has passed.</summary>
+    /// <remarks>
+    /// A rule declaring it also declares the schedule beside it, because the trigger says the rule runs on an occasion
+    /// and the schedule says which. It is what a housekeeping rule wants — one whose condition becomes true with the
+    /// passage of time rather than with a message arriving — and it reaches the same mail a run somebody asked for does.
+    /// </remarks>
+    public static MailRuleTrigger Schedule { get; } = new("Schedule");
+
     /// <summary>Gets every trigger a rule may declare.</summary>
     /// <remarks>Declared last so the members it lists are already initialized when this initializer runs.</remarks>
-    public static IReadOnlyList<MailRuleTrigger> All { get; } = [Arrival];
+    public static IReadOnlyList<MailRuleTrigger> All { get; } = [Arrival, Schedule];
 
     /// <summary>Gets whether this value names a trigger rather than the unusable struct default.</summary>
     public bool IsSpecified => this.name is not null;

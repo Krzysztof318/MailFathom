@@ -5,6 +5,7 @@
 using System.Diagnostics.CodeAnalysis;
 using MailFathom.Application.Jobs;
 using MailFathom.Application.Jobs.Execution;
+using MailFathom.Application.Jobs.Scheduling;
 using MailFathom.Application.Persistence;
 using MailFathom.Host.Configuration.Jobs;
 using MailFathom.Infrastructure.Observability;
@@ -96,7 +97,11 @@ internal sealed partial class JobWorker : BackgroundService
 
         while (!stoppingToken.IsCancellationRequested)
         {
-            await this.MeasureQueueDepthAsync(handledTypes, stoppingToken);
+            if (this.IsPeriodicWorkDue())
+            {
+                await this.DispatchSchedulesAsync(stoppingToken);
+                await this.MeasureQueueDepthAsync(handledTypes, stoppingToken);
+            }
 
             var results = await this.RunPassAsync(stoppingToken);
 
@@ -139,11 +144,6 @@ internal sealed partial class JobWorker : BackgroundService
     [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "A measurement that failed must not stop the pass that follows it, and the last published depth stays until the next successful one.")]
     private async Task MeasureQueueDepthAsync(IReadOnlyList<JobType> handledTypes, CancellationToken stoppingToken)
     {
-        if (!this.IsDepthMeasurementDue())
-        {
-            return;
-        }
-
         try
         {
             using var scope = this.scopeFactory.CreateScope();
@@ -162,9 +162,88 @@ internal sealed partial class JobWorker : BackgroundService
         }
     }
 
-    /// <summary>Reports whether the poll interval has elapsed since the last measurement, and stamps it when it has.</summary>
-    /// <remarks>The first pass always measures, so an instance that starts with a backlog publishes it before it begins draining rather than one interval later.</remarks>
-    private bool IsDepthMeasurementDue()
+    /// <summary>Dispatches every schedule whose occasion has passed, isolating a failure from the claim that follows it.</summary>
+    /// <remarks>
+    /// <para>
+    /// Recurring work reaches the queue here rather than through a loop of its own, which is what makes a schedule an
+    /// occasion on the existing worker instead of a second scheduler: the jobs it writes are claimed by the very next
+    /// pass, under the same concurrency ceiling, the same depth bound, and the same retry and dead-letter path.
+    /// </para>
+    /// <para>
+    /// A failure is swallowed for the reason a failed depth measurement is. Nothing about the queue depends on it, the
+    /// schedules are read again on the next interval, and an occasion missed because the database was briefly away is a
+    /// skipped occasion — which is the answer this mechanism gives a missed occasion anyway.
+    /// </para>
+    /// </remarks>
+    [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "A dispatch that failed must not stop the claim that follows it; the schedules are read again on the next interval.")]
+    private async Task DispatchSchedulesAsync(CancellationToken stoppingToken)
+    {
+        try
+        {
+            using var scope = this.scopeFactory.CreateScope();
+
+            var pass = scope.ServiceProvider.GetRequiredService<JobSchedulePass>();
+
+            foreach (var dispatch in await pass.RunAsync(stoppingToken))
+            {
+                this.telemetry.RecordScheduleDispatch(dispatch);
+                this.ReportSchedule(dispatch);
+            }
+        }
+        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+        {
+            // The loop's own condition ends it; a stopping host is not a failure of the dispatch.
+        }
+        catch (Exception exception)
+        {
+            this.LogScheduleDispatchFailed(exception);
+        }
+    }
+
+    /// <summary>Says what a schedule's occasion did, at the level each outcome deserves.</summary>
+    /// <remarks>
+    /// A schedule with nothing due says nothing at all, because that is the ordinary state of every schedule between its
+    /// occasions and a line per schedule per interval would be the whole log. What is reported is the occasion that ran
+    /// and, separately, the occasions that did not — the second at a level an operator sees, because a schedule quietly
+    /// not running is the failure this whole mechanism exists to make visible.
+    /// </remarks>
+    private void ReportSchedule(JobScheduleDispatch dispatch)
+    {
+        if (dispatch is { SkippedOccurrenceCount: > 0 })
+        {
+            this.LogScheduleOccurrencesSkipped(
+                dispatch.Id.Value,
+                dispatch.SkippedOccurrenceCount,
+                dispatch.Outcome,
+                dispatch.OccurrenceAt);
+        }
+
+        switch (dispatch.Outcome)
+        {
+            case JobScheduleDispatchOutcome.Seeded:
+                this.LogScheduleSeeded(dispatch.Id.Value);
+
+                break;
+
+            case JobScheduleDispatchOutcome.Dispatched or JobScheduleDispatchOutcome.AlreadyDispatched:
+                this.LogScheduleDispatched(dispatch.Id.Value, dispatch.JobType.Name, dispatch.OccurrenceAt);
+
+                break;
+
+            default:
+                break;
+        }
+    }
+
+    /// <summary>Reports whether the poll interval has elapsed since the last time the periodic steps ran, and stamps it when it has.</summary>
+    /// <remarks>
+    /// The first pass always takes them, so an instance that starts with a backlog publishes it before it begins
+    /// draining rather than one interval later, and a schedule whose occasion passed while the process was down is
+    /// decided about at once. Both steps share one interval because both are levels rather than work: a pass that filled
+    /// its batch takes the next one immediately, and neither a gauge nor a schedule is worth a database read on that
+    /// cadence.
+    /// </remarks>
+    private bool IsPeriodicWorkDue()
     {
         var now = this.timeProvider.GetTimestamp();
 
@@ -362,4 +441,31 @@ internal sealed partial class JobWorker : BackgroundService
         Level = LogLevel.Debug,
         Message = "The depth of the durable job queue could not be measured, so the gauge keeps the last figure it was given. Nothing about running the work depends on it.")]
     private partial void LogQueueDepthMeasurementFailed(Exception exception);
+
+    /// <summary>Reports a schedule seen for the first time, which dispatches nothing because a schedule is a when rather than a debt.</summary>
+    [LoggerMessage(
+        Level = LogLevel.Information,
+        Message = "Schedule {ScheduleId} was seen for the first time, so its occasions count from now and the one that had already passed is not owed.")]
+    private partial void LogScheduleSeeded(string scheduleId);
+
+    /// <summary>Reports an occasion that reached the queue; the schedule's identity is MailFathom's own names and no mail.</summary>
+    [LoggerMessage(
+        Level = LogLevel.Information,
+        Message = "Schedule {ScheduleId} enqueued a {JobType} job for the occasion at {OccurrenceAt}.")]
+    private partial void LogScheduleDispatched(string scheduleId, string jobType, DateTimeOffset? occurrenceAt);
+
+    /// <summary>Reports occasions that were deliberately not run, which is the one thing a queue's own instruments cannot show.</summary>
+    [LoggerMessage(
+        Level = LogLevel.Warning,
+        Message = "Schedule {ScheduleId} passed over {SkippedOccurrenceCount} occasion(s) and resolved as {Outcome} at the occasion of {OccurrenceAt}. Occasions that passed while this instance was down, while the queue was full, or while the previous run was still going are skipped rather than replayed.")]
+    private partial void LogScheduleOccurrencesSkipped(
+        string scheduleId,
+        int skippedOccurrenceCount,
+        JobScheduleDispatchOutcome outcome,
+        DateTimeOffset? occurrenceAt);
+
+    [LoggerMessage(
+        Level = LogLevel.Warning,
+        Message = "Recurring dispatch failed, so no schedule advanced on this interval; the schedules are read again on the next one and a missed occasion is skipped rather than replayed.")]
+    private partial void LogScheduleDispatchFailed(Exception exception);
 }

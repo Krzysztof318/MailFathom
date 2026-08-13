@@ -5,6 +5,7 @@
 using MailFathom.Application.Persistence;
 using MailFathom.Application.Rules;
 using MailFathom.Application.Rules.Evaluation;
+using MailFathom.Application.Rules.History;
 using MailFathom.Application.Synchronization;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Folders;
@@ -198,6 +199,7 @@ public sealed class OrchestratedMailRuleEvaluationTests(MailFathomOrchestrationF
         {
             AccountId = SyntheticMailAccount.AccountId,
             RequestedAt = RequestedAt,
+            Trigger = MailRuleExecutionTrigger.ScheduledRun,
         };
 
         // Act
@@ -228,11 +230,13 @@ public sealed class OrchestratedMailRuleEvaluationTests(MailFathomOrchestrationF
 
         Assert.NotNull(afterRequest);
         Assert.Equal(RequestedAt, afterRequest.RequestedAt);
+        Assert.Equal(MailRuleExecutionTrigger.ScheduledRun, afterRequest.Trigger);
         Assert.False(afterRequest.Revision.IsSpecified);
         Assert.Null(afterRequest.Position);
         Assert.True(afterRequest.IsOutstanding);
 
         Assert.NotNull(afterProgress);
+        Assert.Equal(MailRuleExecutionTrigger.ScheduledRun, afterProgress.Trigger);
         Assert.Equal(Revision, afterProgress.Revision);
         Assert.Equal(position, afterProgress.Position);
         Assert.Equal(2, afterProgress.EvaluatedEmailCount);
@@ -241,6 +245,59 @@ public sealed class OrchestratedMailRuleEvaluationTests(MailFathomOrchestrationF
         Assert.True(afterProgress.IsOutstanding);
 
         Assert.Null(afterEnding);
+    }
+
+    /// <summary>
+    /// A start decides from the row it is about to write over, so a run already in front of the account is answered with
+    /// rather than replaced — and the account keeps the walk it had, with the position and counts that walk reached.
+    /// </summary>
+    /// <remarks>
+    /// Only a real database settles this. The decision is a read the write's own session performs against a row another
+    /// transaction has already committed, and the version token EF Core puts in the <c>UPDATE</c> catches a row that
+    /// changed after that read rather than a decision taken before it. A substitute would report whatever the test told
+    /// it about a row that never existed.
+    /// </remarks>
+    [Fact]
+    public async Task TheOutstandingRun_AScheduledStartMeetingARunAlreadyCommitted_LeavesThatRunAndItsProgressAlone()
+    {
+        // Arrange
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var services = await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken);
+        await EndAnyOutstandingRunAsync(services, cancellationToken);
+
+        // Act
+        var claimedByTheRequest = await TryStartRunAsync(
+            services,
+            new MailRuleEvaluationRun
+            {
+                AccountId = SyntheticMailAccount.AccountId,
+                RequestedAt = RequestedAt,
+                Trigger = MailRuleExecutionTrigger.RequestedRun,
+                EvaluatedEmailCount = 7,
+            },
+            cancellationToken);
+        var claimedByTheSchedule = await TryStartRunAsync(
+            services,
+            new MailRuleEvaluationRun
+            {
+                AccountId = SyntheticMailAccount.AccountId,
+                RequestedAt = RequestedAt.AddMinutes(1),
+                Trigger = MailRuleExecutionTrigger.ScheduledRun,
+            },
+            cancellationToken);
+        var outstanding = await FindOutstandingRunAsync(services, cancellationToken);
+
+        // Assert
+        Assert.Null(claimedByTheRequest);
+
+        Assert.NotNull(claimedByTheSchedule);
+        Assert.Equal(MailRuleExecutionTrigger.RequestedRun, claimedByTheSchedule.Trigger);
+        Assert.Equal(RequestedAt, claimedByTheSchedule.RequestedAt);
+
+        Assert.NotNull(outstanding);
+        Assert.Equal(MailRuleExecutionTrigger.RequestedRun, outstanding.Trigger);
+        Assert.Equal(RequestedAt, outstanding.RequestedAt);
+        Assert.Equal(7, outstanding.EvaluatedEmailCount);
     }
 
     /// <summary>
@@ -492,6 +549,24 @@ public sealed class OrchestratedMailRuleEvaluationTests(MailFathomOrchestrationF
             (scope, session, token) => scope.GetRequiredService<IMailRuleEvaluationRunStore>()
                 .SaveAsync(session, run, token),
             cancellationToken);
+
+    /// <summary>Starts a run the way a request does, and reports the run the account already had where it has one.</summary>
+    private static async Task<MailRuleEvaluationRun?> TryStartRunAsync(
+        OrchestratedMailFathomServices services,
+        MailRuleEvaluationRun run,
+        CancellationToken cancellationToken)
+    {
+        MailRuleEvaluationRun? claimed = null;
+        var commitResult = await services.CommitAsync(
+            async (scope, session, token) => claimed = await scope
+                .GetRequiredService<IMailRuleEvaluationRunStore>()
+                .TryStartAsync(session, run, token),
+            cancellationToken);
+
+        Assert.Equal(PersistenceCommitResult.Committed, commitResult);
+
+        return claimed;
+    }
 
     /// <summary>Ends whatever run the account carries, so a test arranges the request it is about to make.</summary>
     private static async Task EndAnyOutstandingRunAsync(

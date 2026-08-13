@@ -50,14 +50,47 @@ public sealed class MailRuleOptionsBindingTests
             """
             {
               "MailRules": {
-                "Rules": [ { "Name": "on-arrival", "Condition": "isSeen", "Triggers": [ "Arrival", "Schedule" ] } ]
+                "Rules": [ { "Name": "on-arrival", "Condition": "isSeen", "Triggers": [ "Arrival", "Periodically" ] } ]
               }
             }
             """);
 
         // Assert
-        Assert.Equal(["Arrival", "Schedule"], bound.Rules[0].Triggers);
+        Assert.Equal(["Arrival", "Periodically"], bound.Rules[0].Triggers);
         Assert.Equal([MailRuleTrigger.Arrival], bound.Rules[0].ToTriggers());
+    }
+
+    /// <summary>The schedule is text until validation reads it, so a typo reaches a refusal naming the rule.</summary>
+    [Fact]
+    public void Bind_ARuleDeclaringASchedule_ReadsItAsWrittenAndAsTheOccasionsItNames()
+    {
+        // Act
+        var bound = BindRules(
+            """
+            {
+              "MailRules": {
+                "Rules": [
+                  { "Name": "nightly", "Condition": "isSeen", "Triggers": [ "Schedule" ], "Schedule": "Daily at 03:00" }
+                ]
+              }
+            }
+            """);
+
+        // Assert
+        Assert.Equal("Daily at 03:00", bound.Rules[0].Schedule);
+        Assert.Equal([MailRuleTrigger.Schedule], bound.Rules[0].ToTriggers());
+        Assert.Equal("daily:03:00:UTC", bound.Rules[0].ToSchedule()?.CanonicalForm);
+    }
+
+    [Fact]
+    public void Bind_ARuleWithNoScheduleKey_NamesNoOccasion()
+    {
+        // Act
+        var bound = BindRules("""{ "MailRules": { "Rules": [ { "Name": "says-nothing", "Condition": "isSeen" } ] } }""");
+
+        // Assert
+        Assert.Null(bound.Rules[0].Schedule);
+        Assert.Null(bound.Rules[0].ToSchedule());
     }
 
     /// <summary>The section binds strictly, so a key nothing declares fails rather than being read past.</summary>

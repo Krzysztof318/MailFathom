@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Application.Jobs.Scheduling;
 using MailFathom.Application.Rules;
 using MailFathom.Application.Rules.Actions;
 using MailFathom.Domain.Folders;
@@ -89,6 +90,35 @@ public sealed class MailRuleSetRevisionTests
 
         // Assert
         Assert.NotEqual(MailRuleSetRevision.Create([FileInvoices]), manualOnly);
+    }
+
+    /// <summary>When a rule runs is part of what it means, so moving its schedule is a different rule set.</summary>
+    [Fact]
+    public void Create_AScheduleMoved_ProducesADifferentIdentity()
+    {
+        // Arrange
+        var nightly = Scheduled(FileInvoices, "Daily at 03:00");
+
+        // Act
+        var moved = Scheduled(FileInvoices, "Daily at 04:00");
+        var zoned = Scheduled(FileInvoices, "Daily at 03:00 Europe/Warsaw");
+
+        // Assert
+        Assert.NotEqual(MailRuleSetRevision.Create([nightly]), MailRuleSetRevision.Create([moved]));
+        Assert.NotEqual(MailRuleSetRevision.Create([nightly]), MailRuleSetRevision.Create([zoned]));
+        Assert.NotEqual(MailRuleSetRevision.Create([FileInvoices]), MailRuleSetRevision.Create([nightly]));
+    }
+
+    /// <summary>One schedule written two ways is one schedule, because the identity is derived from what it means.</summary>
+    [Fact]
+    public void Create_AScheduleRewrittenWithoutChangingIt_LeavesTheIdentityWhereItWas()
+    {
+        // Act
+        var declared = MailRuleSetRevision.Create([Scheduled(FileInvoices, "Daily at 03:00")]);
+        var rewritten = MailRuleSetRevision.Create([Scheduled(FileInvoices, "  daily   AT   03:00  ")]);
+
+        // Assert
+        Assert.Equal(declared, rewritten);
     }
 
     /// <summary>A request's identity carries the revision, so an edited action has to ask afresh rather than be answered by the old record.</summary>
@@ -214,5 +244,12 @@ public sealed class MailRuleSetRevisionTests
         Assert.False(revision.IsSpecified);
         Assert.Throws<InvalidOperationException>(() => revision.Value);
         Assert.Equal("(unspecified)", revision.ToString());
+    }
+
+    private static MailRuleDeclaration Scheduled(MailRuleDeclaration declaration, string schedule)
+    {
+        Assert.True(JobRecurrence.TryParse(schedule, out var recurrence, out _));
+
+        return declaration with { Triggers = [MailRuleTrigger.Schedule], Schedule = recurrence };
     }
 }
