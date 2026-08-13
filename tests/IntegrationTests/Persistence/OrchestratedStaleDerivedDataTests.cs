@@ -124,6 +124,8 @@ public sealed class OrchestratedStaleDerivedDataTests(MailFathomOrchestrationFix
         // Assert
         Assert.Equal(stored.WrittenUnderTheCurrentConfiguration, underTheSameConfiguration);
         Assert.Null(underAnotherConfiguration);
+
+        await RemoveExtractionCursorAsync(services, cancellationToken);
     }
 
     /// <summary>A walk that is not rebuilding clears the cursor's stamp, because it moves the position a rebuild owns.</summary>
@@ -168,6 +170,8 @@ public sealed class OrchestratedStaleDerivedDataTests(MailFathomOrchestrationFix
         // Assert
         Assert.Equal(PersistenceCommitResult.Committed, advanced);
         Assert.Null(resumedByTheRebuild);
+
+        await RemoveExtractionCursorAsync(services, cancellationToken);
     }
 
     /// <summary>A document recording that extraction never ran can never be re-stamped, so it is neither counted nor walked.</summary>
@@ -292,6 +296,35 @@ public sealed class OrchestratedStaleDerivedDataTests(MailFathomOrchestrationFix
         Assert.Equal(PersistenceCommitResult.Committed, commitResult);
 
         return StoredEmailId.Create(insertedId);
+    }
+
+    /// <summary>Removes the extraction cursor a test recorded, which is one row for the whole suite rather than per test.</summary>
+    /// <remarks>
+    /// <c>backfill_positions</c> holds a single row per walk, so every class writing the extraction cursor writes the same
+    /// one. <c>OrchestratedExtractionBackfillTests</c> asserts no walk has recorded a position yet, class order inside a
+    /// collection is not fixed, and nothing resets the shared database between classes — so a cursor left behind here
+    /// would decide whether that arrangement holds.
+    /// </remarks>
+    private static async Task RemoveExtractionCursorAsync(
+        OrchestratedMailFathomServices services,
+        CancellationToken cancellationToken)
+    {
+        var commitResult = await services.CommitAsync(
+            async (scope, session, token) =>
+            {
+                var dbContext = scope.GetRequiredService<MailFathomDbContext>();
+                var cursor = await dbContext.BackfillPositions.SingleOrDefaultAsync(
+                    candidate => candidate.Name == BackfillPositionEntity.StoredEmailExtractionName,
+                    token);
+
+                if (cursor is not null)
+                {
+                    dbContext.BackfillPositions.Remove(cursor);
+                }
+            },
+            cancellationToken);
+
+        Assert.Equal(PersistenceCommitResult.Committed, commitResult);
     }
 
     /// <summary>Inserts three stored emails whose derived text was written under three different configurations.</summary>
