@@ -74,7 +74,7 @@ internal sealed class OpenAiCompatibleClientFactory
                 options);
 #pragma warning restore OPENAI001
 
-        return client.AsIEmbeddingGenerator();
+        return ObservedThroughTelemetry(client.AsIEmbeddingGenerator());
     }
 
     /// <summary>Opens a chat client over the declared endpoint for the duration of one request.</summary>
@@ -100,7 +100,7 @@ internal sealed class OpenAiCompatibleClientFactory
         ArgumentNullException.ThrowIfNull(credential);
         ArgumentNullException.ThrowIfNull(transport);
 
-        return endpoint.Api switch
+        return ObservedThroughTelemetry(endpoint.Api switch
         {
             ChatProviderApi.ChatCompletions => this.OpenChatCompletionsClient(endpoint, credential, transport),
             ChatProviderApi.Responses => this.OpenResponsesClient(endpoint, credential, transport),
@@ -108,7 +108,7 @@ internal sealed class OpenAiCompatibleClientFactory
                 nameof(endpoint),
                 endpoint.Api,
                 "The endpoint names no API this factory can reach."),
-        };
+        });
     }
 
     private IChatClient OpenChatCompletionsClient(
@@ -154,6 +154,60 @@ internal sealed class OpenAiCompatibleClientFactory
         return client.AsIChatClient(endpoint.RoutedModelName);
 #pragma warning restore OPENAI001
     }
+
+    /// <summary>Wraps one chat client in the decorator every provider call is observed through.</summary>
+    /// <remarks>
+    /// <para>
+    /// Applied where the client is built rather than at a call site, because a call site is what a later feature adds:
+    /// the single-request adapter and the answering run each open a client here, and an adapter written after this one
+    /// is spanned by construction instead of by somebody remembering to wrap it.
+    /// </para>
+    /// <para>
+    /// It sits innermost, beneath the resilience and budget decorators an answering run composes, so a span measures
+    /// one attempt against the provider. A decorator placed outside the resilience pipeline would report a call that
+    /// was retried three times as a single slow one, which is the opposite of what the span is read for.
+    /// </para>
+    /// <para>
+    /// Prompt and completion capture is switched off explicitly rather than left at its default, and that is what the
+    /// callback exists for. The library turns it on when <c>OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT</c> says
+    /// so, and a deployment whose collector then held every question asked of a mailbox and every answer given would
+    /// have made a second copy of the mail out of its trace store — under a retention nobody chose and an access rule
+    /// the mail store never granted. An explicit value takes precedence over that variable, so the setting is not
+    /// reachable from the environment at all. What is left is metadata: the operation, the model, the endpoint address,
+    /// the token counts, and the outcome, none of which opens a dimension per message, per address, or per prompt.
+    /// </para>
+    /// <para>
+    /// No source name is passed, so the spans and instruments arrive under the library's own default. The host
+    /// subscribes that name beside the other library names it collects, and its unit tests assert the string against
+    /// the library's own declaration, which is what makes a rename arriving with a package bump a failing build rather
+    /// than a quietly empty dashboard.
+    /// </para>
+    /// <para>
+    /// What this position costs is the instruments rather than the spans, and it is measured rather than suspected: the
+    /// decorator creates a meter of its own, a client is built per call, and the OpenTelemetry SDK caps a provider at
+    /// 1000 metric streams — so beyond roughly 250 calls inside one export interval a measurement is dropped, while
+    /// every span is still recorded. Ordinary use stays well under that; a backfill running at full concurrency does
+    /// not. Lifting the decorator above the per-call construction is what removes the cap, and it is a change to how a
+    /// provider client is held rather than to where the decorator is applied.
+    /// </para>
+    /// </remarks>
+    private static IChatClient ObservedThroughTelemetry(IChatClient client) =>
+        client
+            .AsBuilder()
+            .UseOpenTelemetry(configure: static observed => observed.EnableSensitiveData = false)
+            .Build();
+
+    /// <summary>Wraps one embedding generator in the same decorator, for the same reasons.</summary>
+    /// <remarks>
+    /// The passages an embedding request carries are mail, so the capture switch matters here exactly as it does for a
+    /// chat client: what a span records is how many passages were embedded and how long it took, never what they said.
+    /// </remarks>
+    private static IEmbeddingGenerator<string, Embedding<float>> ObservedThroughTelemetry(
+        IEmbeddingGenerator<string, Embedding<float>> generator) =>
+        generator
+            .AsBuilder()
+            .UseOpenTelemetry(configure: static observed => observed.EnableSensitiveData = false)
+            .Build();
 
     /// <summary>Builds the options a chat completions or embedding client is constructed with.</summary>
     private static OpenAIClientOptions BuildClientOptions(Uri? address, HttpClient transport)

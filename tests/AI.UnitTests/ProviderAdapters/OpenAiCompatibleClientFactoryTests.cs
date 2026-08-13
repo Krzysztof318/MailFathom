@@ -10,6 +10,7 @@ using MailFathom.AI.ProviderAdapters;
 using MailFathom.AI.Providers;
 using MailFathom.AI.UnitTests.TestDoubles;
 using MailFathom.TestSupport;
+using Microsoft.Extensions.AI;
 using Xunit;
 
 namespace MailFathom.AI.UnitTests.ProviderAdapters;
@@ -22,6 +23,9 @@ namespace MailFathom.AI.UnitTests.ProviderAdapters;
 /// </remarks>
 public sealed class OpenAiCompatibleClientFactoryTests
 {
+    /// <summary>The variable the telemetry decorators read prompt and completion capture from when nothing sets it.</summary>
+    private const string MessageCaptureVariable = "OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT";
+
     private readonly OpenAiCompatibleClientFactory factory = new();
 
     [Fact]
@@ -289,6 +293,120 @@ public sealed class OpenAiCompatibleClientFactoryTests
             ChatDeclarations.Endpoint(api: (ChatProviderApi)7),
             credential,
             transport));
+    }
+
+    /// <summary>
+    /// Every client this factory builds is observed, whichever role and whichever API it was opened for. Asserted
+    /// against the construction rather than against a call site, because a call site is what a later feature adds: an
+    /// adapter written tomorrow reaches a provider through this factory and is spanned without anybody wrapping it.
+    /// </summary>
+    [Theory]
+    [InlineData(ChatProviderApi.ChatCompletions)]
+    [InlineData(ChatProviderApi.Responses)]
+    public void OpenChatClient_AnyDeclaredApi_OpensAClientObservedThroughTheTelemetryDecorator(ChatProviderApi api)
+    {
+        // Arrange
+        using var handler = new FakeHttpMessageHandler(
+            (_, _) => Task.FromResult(new HttpResponseMessage(System.Net.HttpStatusCode.OK)));
+        using var transport = new HttpClient(handler, disposeHandler: false);
+        using var credential = ProviderEndpointCredential.FromApiKey("a-resolved-key", resolvedMaterial: null);
+
+        // Act
+        using var client = this.factory.OpenChatClient(ChatDeclarations.Endpoint(api: api), credential, transport);
+
+        // Assert
+        Assert.NotNull(client.GetService<OpenTelemetryChatClient>());
+    }
+
+    [Fact]
+    public void OpenEmbeddingGenerator_AnyEndpoint_OpensAGeneratorObservedThroughTheTelemetryDecorator()
+    {
+        // Arrange
+        using var handler = new FakeHttpMessageHandler(
+            (_, _) => Task.FromResult(new HttpResponseMessage(System.Net.HttpStatusCode.OK)));
+        using var transport = new HttpClient(handler, disposeHandler: false);
+        using var credential = ProviderEndpointCredential.FromApiKey("a-resolved-key", resolvedMaterial: null);
+
+        // Act
+        using var generator = this.factory.OpenEmbeddingGenerator(
+            EmbeddingDeclarations.Endpoint(),
+            credential,
+            transport);
+
+        // Assert
+        Assert.NotNull(generator.GetService<OpenTelemetryEmbeddingGenerator<string, Embedding<float>>>());
+    }
+
+    /// <summary>
+    /// What the decorator must never be allowed to record. The question a person asked of their mailbox and the answer
+    /// a model gave are the mail itself, so a trace store holding them would be a second copy of it — and the library
+    /// turns that capture on from an environment variable unless the value is set explicitly. These two tests are why
+    /// the variable is set here rather than only asserted absent: a run that read the environment would pass with the
+    /// variable unset and export message content the moment an operator set it.
+    /// </summary>
+    [Theory]
+    [InlineData(null)]
+    [InlineData("true")]
+    public void OpenChatClient_WhateverTheEnvironmentAsksFor_CapturesNoPromptOrCompletion(string? messageCapture)
+    {
+        // Arrange
+        using var handler = new FakeHttpMessageHandler(
+            (_, _) => Task.FromResult(new HttpResponseMessage(System.Net.HttpStatusCode.OK)));
+        using var transport = new HttpClient(handler, disposeHandler: false);
+        using var credential = ProviderEndpointCredential.FromApiKey("a-resolved-key", resolvedMaterial: null);
+
+        var restored = Environment.GetEnvironmentVariable(MessageCaptureVariable);
+        Environment.SetEnvironmentVariable(MessageCaptureVariable, messageCapture);
+
+        try
+        {
+            // Act
+            using var client = this.factory.OpenChatClient(ChatDeclarations.Endpoint(), credential, transport);
+
+            // Assert
+            var observed = client.GetService<OpenTelemetryChatClient>();
+
+            Assert.NotNull(observed);
+            Assert.False(observed.EnableSensitiveData);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable(MessageCaptureVariable, restored);
+        }
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("true")]
+    public void OpenEmbeddingGenerator_WhateverTheEnvironmentAsksFor_CapturesNoPassageText(string? messageCapture)
+    {
+        // Arrange
+        using var handler = new FakeHttpMessageHandler(
+            (_, _) => Task.FromResult(new HttpResponseMessage(System.Net.HttpStatusCode.OK)));
+        using var transport = new HttpClient(handler, disposeHandler: false);
+        using var credential = ProviderEndpointCredential.FromApiKey("a-resolved-key", resolvedMaterial: null);
+
+        var restored = Environment.GetEnvironmentVariable(MessageCaptureVariable);
+        Environment.SetEnvironmentVariable(MessageCaptureVariable, messageCapture);
+
+        try
+        {
+            // Act
+            using var generator = this.factory.OpenEmbeddingGenerator(
+                EmbeddingDeclarations.Endpoint(),
+                credential,
+                transport);
+
+            // Assert
+            var observed = generator.GetService<OpenTelemetryEmbeddingGenerator<string, Embedding<float>>>();
+
+            Assert.NotNull(observed);
+            Assert.False(observed.EnableSensitiveData);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable(MessageCaptureVariable, restored);
+        }
     }
 
     /// <summary>The narrowest embeddings answer a client will read, so a request can be sent and its headers inspected.</summary>

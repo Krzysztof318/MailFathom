@@ -41,6 +41,14 @@ internal static class TelemetrySubscriptionExtensions
     /// <summary>The meter EF Core publishes its context, query, and concurrency instruments to.</summary>
     private const string EntityFrameworkCoreMeterName = "Microsoft.EntityFrameworkCore";
 
+    /// <summary>The one name the AI telemetry decorators publish both their spans and their instruments under.</summary>
+    /// <remarks>
+    /// The decorators the AI boundary applies to every chat client and embedding generator it builds pass no source
+    /// name, so this is the library's own default rather than a name MailFathom chose. The unit tests read it from the
+    /// library's declaration and assert it against this string.
+    /// </remarks>
+    private const string MicrosoftExtensionsAiTelemetryName = "Experimental.Microsoft.Extensions.AI";
+
     /// <summary>Subscribes the activity source MailFathom publishes spans to.</summary>
     /// <param name="tracing">The tracing pipeline being composed.</param>
     /// <returns>The same builder instance for chaining.</returns>
@@ -76,6 +84,12 @@ internal static class TelemetrySubscriptionExtensions
     /// that did not happen rather than as a span nobody collected.
     /// </para>
     /// <para>
+    /// The AI decorators span one call against a chat model or an embedding model, from the position the AI boundary
+    /// applies them: innermost, beneath the resilience and budget decorators, so a span is one attempt rather than a
+    /// retried sequence. Without this subscription a slow answer is attributable to the code around the model call and
+    /// not to the call, which is the one distinction the whole span exists to draw.
+    /// </para>
+    /// <para>
     /// EF Core is deliberately absent. It reports through <c>DiagnosticSource</c> rather than an
     /// <c>ActivitySource</c>, so no name subscribes it; reaching it means adding a bridging instrumentation package,
     /// which would then span the same database commands the <c>Npgsql</c> source already spans.
@@ -85,7 +99,7 @@ internal static class TelemetrySubscriptionExtensions
     {
         ArgumentNullException.ThrowIfNull(tracing);
 
-        return tracing.AddSource(ModelContextProtocolTelemetryName);
+        return tracing.AddSource(ModelContextProtocolTelemetryName, MicrosoftExtensionsAiTelemetryName);
     }
 
     /// <summary>Subscribes the meters the pinned libraries publish instruments to under their own names.</summary>
@@ -101,11 +115,18 @@ internal static class TelemetrySubscriptionExtensions
     /// <c>PersistenceConcurrencyConflictException</c> and is visible nowhere else.
     /// </para>
     /// <para>
+    /// The AI decorators report the duration of one provider call and the tokens it consumed, which is what makes a
+    /// model's latency and a model's consumption readable per operation and per model rather than only in an invoice.
+    /// </para>
+    /// <para>
     /// Every tag on those instruments is a bounded set: a protocol method, a transport kind, a negotiated version, one
-    /// of MailFathom's three tool names, an outcome. The MCP SDK does tag a metric with a resource URI, which would be
-    /// neither bounded nor free of personal data, but only for the resource methods — and MailFathom publishes tools
-    /// alone, no resources and no prompts, so the tag cannot arise. A resource capability added later brings that
-    /// question with it.
+    /// of MailFathom's three tool names, an outcome, and — on the AI instruments — the operation, the provider, the
+    /// requested and answered model names, the configured endpoint's address and port, and the token type. The MCP SDK
+    /// does tag a metric with a resource URI, which would be neither bounded nor free of personal data, but only for
+    /// the resource methods — and MailFathom publishes tools alone, no resources and no prompts, so the tag cannot
+    /// arise. A resource capability added later brings that question with it. Nothing here opens a dimension per
+    /// message, per address, or per prompt, and the one thing that could — the AI decorators capturing prompts and
+    /// completions — is switched off where those decorators are applied rather than left to this subscription.
     /// </para>
     /// </remarks>
     public static MeterProviderBuilder AddLibraryMeters(this MeterProviderBuilder metrics)
@@ -115,6 +136,7 @@ internal static class TelemetrySubscriptionExtensions
         return metrics.AddMeter(
             PollyMeterName,
             ModelContextProtocolTelemetryName,
-            EntityFrameworkCoreMeterName);
+            EntityFrameworkCoreMeterName,
+            MicrosoftExtensionsAiTelemetryName);
     }
 }
