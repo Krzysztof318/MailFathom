@@ -127,8 +127,11 @@ representation can name, beside the per-body limit and the read's budget, and th
 naming fewer emails in a call returns no more of that message, and only raising the ceiling does. The default ceiling
 matches what one whole read may return, so an ordinary message never reaches it.
 
-**A detector that cannot answer fails the read.** It is not degraded to serving the stored text: the call comes back as
-`81001` naming the scanner, the caller keeps nothing, and the same read succeeds once the detector answers again.
+**A detector that cannot answer fails the read.** It is not degraded to serving the stored text: the caller keeps
+nothing, and the same read succeeds once the detector answers again. What each side sees follows the rule
+[MCP tools § error reporting](mcp-tools.md#error-reporting) already states — the server log records `81001` naming the
+scanner, and the client receives `54001`, because only the MCP boundary's own category is described to a caller. An
+operator diagnosing a refused read therefore reads the log rather than the client's message.
 
 With both switches off the read is exactly the read it was before this feature existed — no detector is constructed, no
 text is scanned, and no representation names a ceiling.

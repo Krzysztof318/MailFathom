@@ -133,7 +133,9 @@ Seven parts of the result exist so that an agent does not misreport a message:
 - **A `[redacted:…]` marker is not message text.** On a server whose operator switched sensitive-content scanning on,
   the body, the subject, and the display names come back with each detected credential or piece of personal data
   replaced by `[redacted:<category>]`. Report it as material of that kind withheld rather than quoting it as words the
-  sender wrote, and expect the same marker every time; [sensitive-content
+  sender wrote, and expect the same marker every time. Only the first 40 named participants of a message have their
+  display name scanned; every one after that is published as an address with no name, so on such a server a missing
+  `displayName` does not prove the sender wrote none. [Sensitive-content
   scanning](../features/sensitive-content-scanning.md#reading-a-message-is-scanned-in-flight) records what is scanned.
 
 The HTML body, when requested, is aggressively sanitized — no scripts, no styles, no remote loads — and

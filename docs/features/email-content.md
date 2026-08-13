@@ -368,7 +368,9 @@ character a caller receives is one a scanner saw, and the placeholders can carry
 bound that cut it — the same property re-serialized markup already has, and the reason `Truncation` is stated rather
 than derived from the two lengths. A body longer than the scan's own ceiling comes back cut at it and says
 `SensitiveContentScanCeiling`, over whichever bound had cut it already, because that is where the returned text now
-ends. And a detector that cannot answer fails the call with `81001` rather than serving the message unscanned.
+ends. And a detector that cannot answer fails the call rather than serving the message unscanned: the server log records
+`81001` naming the scanner while the caller receives `54001`, under the category rule
+[MCP tools § error reporting](mcp-tools.md#error-reporting) states.
 
 **That ceiling is the one place the balanced-markup guarantee above stops applying.** It cuts what the sanitizer had
 already serialized rather than the source it was serialized from, so a `sanitizedHtml` representation reporting
