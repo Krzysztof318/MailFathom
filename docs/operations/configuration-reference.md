@@ -779,6 +779,27 @@ The worker that extracts text for messages stored before extraction existed or b
 | `MailExtractionBackfill:BatchSize` | int | `50` | 1 – 500 | restart |
 | `MailExtractionBackfill:MaxBatchesPerRun` | int | `10` | 1 – 1000 | restart |
 
+## `Jobs`
+
+The worker that runs durable background work. A root of its own rather than a block inside any feature, because the
+queue is a mechanism every consumer shares: what a job does belongs to the feature that enqueues it, and how much of
+the instance the queue may take belongs here. Nothing here names a job type, and an instance whose build registers no
+handler runs no pass at all — the worker says so once at startup and stops, which is what leaves work an older replica
+cannot run for a newer one.
+
+`ExecutionTimeout` must be shorter than `LeaseDuration`, and startup refuses a pair that inverts them. That ordering is
+what keeps two workers off one job: an attempt is cancelled before its lease can expire underneath it. The lease is
+renewed at half its duration while a handler works, so a job that legitimately takes longer than one lease is not
+reclaimed while it runs.
+
+| Key | Type | Default | Constraint | Change |
+| --- | --- | --- | --- | --- |
+| `Jobs:Enabled` | bool | `true` | turning it off leaves enqueued work where it is, for a replica that runs it | restart |
+| `Jobs:BatchSize` | int | `5` | 1 – 100; how many jobs one pass claims. They run one after another, so this bounds what a pass holds rather than what runs at once | restart |
+| `Jobs:LeaseDuration` | TimeSpan | `00:05:00` | 2 s – 1 h; how long work stays held after the process running it stops existing, which is the delay before a crash is recovered from | restart |
+| `Jobs:ExecutionTimeout` | TimeSpan | `00:02:00` | 1 s – 1 h, and strictly shorter than `Jobs:LeaseDuration`; exceeding it cancels the job and records it as failed | restart |
+| `Jobs:PollInterval` | TimeSpan | `00:00:10` | 1 s – 10 min; how long an idle worker waits before looking again. A pass that filled its batch looks again at once | restart |
+
 ## `MailRules`
 
 The rules that select mail, written here rather than held in a table, because a rule is a statement about how an

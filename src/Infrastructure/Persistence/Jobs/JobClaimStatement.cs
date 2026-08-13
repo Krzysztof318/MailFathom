@@ -25,10 +25,12 @@ namespace MailFathom.Infrastructure.Persistence.Jobs;
 /// lease is indistinguishable from one whose holder is gone.
 /// </para>
 /// <para>
-/// The predicate opens by excluding the terminal state, which the two due predicates below it already imply. It is
-/// there so PostgreSQL can prove the partial claim index applies: an implication it would otherwise have to derive
-/// through a disjunction, which its prover does not attempt, and a queue whose only volume query fell back to a
-/// sequential scan would slow down with its own history.
+/// The predicate opens by naming the two states a claim can take, which the two due predicates below it already imply.
+/// It is there so PostgreSQL can prove the partial claim index applies: an implication it would otherwise have to
+/// derive through a disjunction, which its prover does not attempt, and a queue whose only volume query fell back to a
+/// sequential scan would slow down with its own history. It is written as the claimable states rather than as the
+/// terminal ones so that the index filter and this predicate stay one statement of the same fact, whatever terminal
+/// states the queue later gains.
 /// </para>
 /// <para>
 /// Every value is a parameter. The identifiers are quoted because EF Core names the columns after the properties, which
@@ -49,7 +51,7 @@ internal static class JobClaimStatement
         var handledTypeNames = request.HandledTypes.Select(handledType => handledType.Name).ToArray();
         var pending = nameof(JobState.Pending);
         var claimed = nameof(JobState.Claimed);
-        var succeeded = nameof(JobState.Succeeded);
+        var claimableStates = new[] { pending, claimed };
         var leaseOwner = request.Owner.Value;
         var leaseExpiresAt = claimedAt + request.LeaseDuration;
         var batchSize = request.BatchSize;
@@ -61,7 +63,7 @@ internal static class JobClaimStatement
                 WITH due AS (
                     SELECT candidate."Id"
                     FROM jobs AS candidate
-                    WHERE candidate."State" <> {succeeded}
+                    WHERE candidate."State" = ANY({claimableStates})
                       AND candidate."JobType" = ANY({handledTypeNames})
                       AND ((candidate."State" = {pending} AND candidate."AvailableAt" <= {claimedAt})
                         OR (candidate."State" = {claimed} AND candidate."LeaseExpiresAt" <= {claimedAt}))

@@ -16,6 +16,7 @@ using MailFathom.Application.Emails.Embeddings.Limits;
 using MailFathom.Application.Emails.Extraction;
 using MailFathom.Application.Emails.Search;
 using MailFathom.Application.Folders;
+using MailFathom.Application.Jobs.Execution;
 using MailFathom.Application.Mail;
 using MailFathom.Application.Mail.Mutations;
 using MailFathom.Application.Mail.Mutations.Audit;
@@ -43,6 +44,7 @@ using MailFathom.Host.Configuration.Chat;
 using MailFathom.Host.Configuration.DataEncryption;
 using MailFathom.Host.Configuration.Embeddings;
 using MailFathom.Host.Configuration.Endpoints;
+using MailFathom.Host.Configuration.Jobs;
 using MailFathom.Host.Configuration.Mail;
 using MailFathom.Host.Configuration.Persistence;
 using MailFathom.Host.Configuration.Providers;
@@ -202,6 +204,15 @@ try
     builder.Services.AddOptions<EmbeddingBackfillOptions>()
         .Bind(
             builder.Configuration.GetSection("EmbeddingBackfill"),
+            binderOptions => binderOptions.ErrorOnUnknownConfiguration = true)
+        .ValidateDataAnnotations()
+        .ValidateOnStart();
+    // A configuration root of its own, because durable background work is a mechanism every consumer shares rather than
+    // a property of any one of them: what a job does belongs to the feature that enqueues it, and how much of the
+    // instance the queue may take belongs here.
+    builder.Services.AddOptions<JobWorkerOptions>()
+        .Bind(
+            builder.Configuration.GetSection("Jobs"),
             binderOptions => binderOptions.ErrorOnUnknownConfiguration = true)
         .ValidateDataAnnotations()
         .ValidateOnStart();
@@ -533,6 +544,22 @@ try
     {
         MaximumCommitAttempts = provider.GetRequiredService<IOptions<PersistenceOptions>>().Value.MaximumConcurrencyCommitAttempts,
     });
+    // A singleton, because the ordering between the timeout and the lease is one deployment-wide guarantee rather than a
+    // per-scope value, and mapping it here is where the bound options stop being the host's shape and become the
+    // application's. Create refuses an inverted pair, which the options validator has already rejected at startup.
+    builder.Services.AddSingleton(provider =>
+    {
+        var jobSettings = provider.GetRequiredService<IOptions<JobWorkerOptions>>().Value;
+        return JobExecutionSettings.Create(
+            jobSettings.BatchSize,
+            jobSettings.LeaseDuration,
+            jobSettings.ExecutionTimeout);
+    });
+    // Scoped with the store they write through: a pass is one work unit and opens a scope of its own, and the registry
+    // is built from whatever handlers a consumer registered, which may themselves be scoped.
+    builder.Services.AddScoped<JobHandlerRegistry>();
+    builder.Services.AddScoped<JobExecutor>();
+    builder.Services.AddScoped<JobQueuePass>();
     // A singleton rather than a scoped value: the bound is a deployment-wide privacy control, so every search in the
     // process applies the one an operator configured rather than whichever snapshot a scope happened to open under.
     builder.Services.AddSingleton(provider =>
@@ -799,6 +826,10 @@ try
 
     builder.Services.AddHostedService<MailSynchronizationCoordinator>();
     builder.Services.AddHostedService<MailExtractionBackfillWorker>();
+    // Registered unconditionally, and inert on an instance that registered no handler: the worker says so once and
+    // stops, which is the same answer a conditional registration would give without putting the condition in a second
+    // place.
+    builder.Services.AddHostedService<JobWorker>();
 
     // Started only where a provider was declared. A deployment that declared none resolves no generator at all, so a
     // worker registered anyway would fail on the first message the backlog handed it rather than idle harmlessly.

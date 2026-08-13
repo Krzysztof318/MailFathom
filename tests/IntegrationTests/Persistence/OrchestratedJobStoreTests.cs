@@ -347,6 +347,68 @@ public sealed class OrchestratedJobStoreTests(MailFathomOrchestrationFixture orc
         Assert.Equal(2, reclaimed[0].AttemptCount);
     }
 
+    /// <summary>
+    /// A failed job is terminal in exactly the way a completed one is. It has to be, or one job whose work cannot
+    /// finish would be handed out again as fast as the queue can do it — and it keeps its key, so the trigger that
+    /// enqueued it is answered with the failed job rather than allowed to enqueue the same work behind it.
+    /// </summary>
+    [Fact]
+    public async Task FailAsync_ByTheHolder_LeavesATerminalRowNoClaimTakesAgain()
+    {
+        // Arrange
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var services = await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken);
+        await DrainAsync(services, cancellationToken);
+        var request = await RequestAsync(services, uid: 901, cancellationToken);
+        var enqueued = await services.InScopeAsync(
+            (scope, token) => scope.GetRequiredService<IJobStore>().EnqueueAsync(request, token),
+            cancellationToken);
+        var claimed = await services.InScopeAsync(
+            (scope, token) => ClaimAsync(scope, batchSize: 10, HeldLease, token),
+            cancellationToken);
+
+        // Act
+        var failed = await FailAsync(services, enqueued.JobId, Assert.Single(claimed).Lease.Owner, cancellationToken);
+
+        // Assert
+        Assert.True(failed);
+        Assert.Equal(nameof(JobState.Failed), await ReadStateAsync(services, enqueued.JobId, cancellationToken));
+
+        Assert.Empty(await services.InScopeAsync(
+            (scope, token) => ClaimAsync(scope, batchSize: 10, HeldLease, token),
+            cancellationToken));
+
+        var reEnqueued = await services.InScopeAsync(
+            (scope, token) => scope.GetRequiredService<IJobStore>().EnqueueAsync(request, token),
+            cancellationToken);
+        Assert.Equal(JobEnqueueOutcome.AlreadyEnqueued, reEnqueued.Outcome);
+        Assert.Equal(enqueued.JobId, reEnqueued.JobId);
+    }
+
+    /// <summary>
+    /// Failure is conditional on the lease owner for the same reason completion is: an attempt that was reclaimed and
+    /// then gave up must not mark the row failed under the attempt that is still working on it.
+    /// </summary>
+    [Fact]
+    public async Task FailAsync_ByAnAttemptThatNoLongerHoldsTheJob_WritesNothing()
+    {
+        // Arrange
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var services = await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken);
+        await DrainAsync(services, cancellationToken);
+        var jobId = await EnqueueAsync(services, uid: 902, cancellationToken);
+        await services.InScopeAsync(
+            (scope, token) => ClaimAsync(scope, batchSize: 10, HeldLease, token),
+            cancellationToken);
+
+        // Act
+        var failed = await FailAsync(services, jobId, JobLeaseOwner.NewAttempt(), cancellationToken);
+
+        // Assert
+        Assert.False(failed);
+        Assert.Equal(nameof(JobState.Claimed), await ReadStateAsync(services, jobId, cancellationToken));
+    }
+
     /// <summary>Enqueues one job about a synthetic occurrence this class owns, and answers with its identifier.</summary>
     private static async Task<JobId> EnqueueAsync(
         OrchestratedMailFathomServices services,
@@ -404,6 +466,14 @@ public sealed class OrchestratedJobStoreTests(MailFathomOrchestrationFixture orc
         JobLeaseOwner owner,
         CancellationToken cancellationToken) => services.InScopeAsync(
             (scope, token) => scope.GetRequiredService<IJobStore>().CompleteAsync(jobId, owner, token),
+            cancellationToken);
+
+    private static Task<bool> FailAsync(
+        OrchestratedMailFathomServices services,
+        JobId jobId,
+        JobLeaseOwner owner,
+        CancellationToken cancellationToken) => services.InScopeAsync(
+            (scope, token) => scope.GetRequiredService<IJobStore>().FailAsync(jobId, owner, token),
             cancellationToken);
 
     private static Task<bool> ReleaseAsync(

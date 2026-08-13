@@ -70,18 +70,42 @@ public sealed class JobClaimStatementTests
     }
 
     /// <summary>
-    /// The terminal state is excluded explicitly even though the two due predicates already imply it, so PostgreSQL can
-    /// prove the partial claim index applies rather than having to derive that through a disjunction.
+    /// The claimable states are named explicitly even though the two due predicates already imply them, so PostgreSQL
+    /// can prove the partial claim index applies rather than having to derive that through a disjunction. Naming the
+    /// claimable states rather than excluding the terminal ones is what keeps the predicate and the index filter one
+    /// statement of the same fact as terminal states are added.
     /// </summary>
     [Fact]
-    public void Compose_AClaim_ExcludesTheTerminalStateInItsOwnPredicate()
+    public void Compose_AClaim_NamesTheClaimableStatesInItsOwnPredicate()
     {
         // Act
         var statement = JobClaimStatement.Compose(Request, ClaimedAt);
 
         // Assert
-        Assert.Contains("candidate.\"State\" <> ", statement.Format, StringComparison.Ordinal);
-        Assert.Contains(nameof(JobState.Succeeded), statement.GetArguments());
+        Assert.Contains("candidate.\"State\" = ANY(", statement.Format, StringComparison.Ordinal);
+        Assert.Contains(
+            statement.GetArguments(),
+            argument => argument is string[] states
+                && states.SequenceEqual([nameof(JobState.Pending), nameof(JobState.Claimed)]));
+    }
+
+    /// <summary>
+    /// A job that failed is terminal, so a claim must not hand it out again. Nothing else stops it: the state is the
+    /// only thing that distinguishes work nobody will attempt again from work waiting to be taken.
+    /// </summary>
+    [Fact]
+    public void Compose_AClaim_NamesNeitherTerminalState()
+    {
+        // Act
+        var statement = JobClaimStatement.Compose(Request, ClaimedAt);
+
+        // Assert
+        var arguments = statement.GetArguments().SelectMany(argument => argument is string[] values
+            ? values
+            : [argument as string ?? string.Empty]);
+
+        Assert.DoesNotContain(nameof(JobState.Succeeded), arguments);
+        Assert.DoesNotContain(nameof(JobState.Failed), arguments);
     }
 
     /// <summary>The claim counts the attempt, because a process that dies mid-execution never reaches a line that would.</summary>

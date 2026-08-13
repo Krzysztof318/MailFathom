@@ -11,11 +11,11 @@ namespace MailFathom.Infrastructure.Persistence.Jobs;
 /// <summary>Keeps durable background work in PostgreSQL, and leases each job to one attempt at a time.</summary>
 /// <remarks>
 /// <para>
-/// Four of the five operations are written statements rather than composed queries, and each for the same reason: the
+/// Five of the six operations are written statements rather than composed queries, and each for the same reason: the
 /// guarantee is the statement's atomicity. Enqueuing inserts on the unique key and lets the database refuse the
-/// duplicate; claiming selects and stamps under <c>FOR UPDATE SKIP LOCKED</c>; and renewal, completion, and release are
-/// each a single conditional update that writes nothing when the lease has moved on. Reading a row and then writing it
-/// would leave a window between the two in every one of those.
+/// duplicate; claiming selects and stamps under <c>FOR UPDATE SKIP LOCKED</c>; and renewal, completion, failure, and
+/// release are each a single conditional update that writes nothing when the lease has moved on. Reading a row and then
+/// writing it would leave a window between the two in every one of those.
 /// </para>
 /// <para>
 /// The scoped context is used throughout and no method takes a persistence session, because a job is enqueued against
@@ -162,6 +162,37 @@ internal sealed class JobStore(MailFathomDbContext dbContext, TimeProvider timeP
             cancellationToken);
 
         return completedRows == 1;
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// The same conditional update completion is, and terminal in the same way: the lease is cleared, the key is kept,
+    /// and the available instant is left where it was because nothing is going to read it again.
+    /// </remarks>
+    public async Task<bool> FailAsync(JobId jobId, JobLeaseOwner owner, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(owner);
+
+        var stateChangedAt = timeProvider.GetUtcNow();
+        var jobIdValue = jobId.Value;
+        var ownerValue = owner.Value;
+        var claimed = nameof(JobState.Claimed);
+        var failed = nameof(JobState.Failed);
+
+        var failedRows = await dbContext.Database.ExecuteSqlAsync(
+            $"""
+             UPDATE jobs
+             SET "State" = {failed},
+                 "LeaseOwner" = NULL,
+                 "LeaseExpiresAt" = NULL,
+                 "StateChangedAt" = {stateChangedAt}
+             WHERE "Id" = {jobIdValue}
+               AND "State" = {claimed}
+               AND "LeaseOwner" = {ownerValue}
+             """,
+            cancellationToken);
+
+        return failedRows == 1;
     }
 
     /// <inheritdoc />
