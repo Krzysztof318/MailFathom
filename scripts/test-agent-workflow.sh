@@ -110,14 +110,38 @@ printf '%s' "$FAKE_CHANGED_PATHS"
 FAKE_GH
 chmod +x "$typo_check_bin_directory/gh"
 
-# The `Fathom review` gate makes one API call, counting the reviews its App has already submitted on
-# the pull request. This fake `gh` prints the per-page count the real `--jq` would leave, so the
-# ceiling arithmetic in the step runs unchanged. It answers zero, which is a pull request the App has
-# not reviewed yet — the state both contracts below are about.
+# The gate asks one endpoint — the reviews already on this pull request — and counts the automatic
+# ones among them. The filter that decides which those are is the contract worth testing, so this
+# runs the step's own `--jq` against whatever reviews a contract set up rather than answering with a
+# number of its own. No fixture means a pull request nobody has reviewed, which is what every
+# contract about the other branches of the gate wants.
 mkdir -p "$fathom_review_bin_directory"
 cat > "$fathom_review_bin_directory/gh" <<'FAKE_GH'
 #!/usr/bin/env bash
-printf '0\n'
+set -euo pipefail
+
+filter=''
+
+while (($# > 0)); do
+  if [[ "$1" == '--jq' ]]; then
+    filter="$2"
+    shift 2
+    continue
+  fi
+
+  shift
+done
+
+if [[ -z "$filter" ]]; then
+  echo 'The gate called gh without a --jq filter.' >&2
+  exit 1
+fi
+
+if [[ -n "${FAKE_REVIEWS_FILE:-}" && -s "${FAKE_REVIEWS_FILE:-}" ]]; then
+  jq "$filter" "$FAKE_REVIEWS_FILE"
+else
+  printf '[]\n' | jq "$filter"
+fi
 FAKE_GH
 chmod +x "$fathom_review_bin_directory/gh"
 
@@ -1349,6 +1373,9 @@ run_fathom_review_gate() {
   # and an event carrying no label — so a contract below names only the input it is about.
   local pull_request_author="${4:-Krzysztof318}"
   local added_label="${5:-}"
+  # The reviews already on the pull request, absent by default: a first review is the ordinary case
+  # and the ceiling contracts are the ones that write a history.
+  local reviews_file="${6:-}"
   local step_script="$test_directory/fathom-review-gate.sh"
 
   extract_fathom_review_step 'gate' "$step_script"
@@ -1356,6 +1383,7 @@ run_fathom_review_gate() {
 
   (
     export PATH="$fathom_review_bin_directory:$PATH"
+    export FAKE_REVIEWS_FILE="$reviews_file"
     export EVENT_NAME='pull_request_target'
     export EVENT_ACTION="$event_action"
     export REPOSITORY='Krzysztof318/MailFathom'
@@ -1370,9 +1398,29 @@ run_fathom_review_gate() {
     export GH_TOKEN='fake-token'
     export REVIEWER_LOGIN='fathom-reviewer[bot]'
     export UPDATER_LOGIN='dependabot[bot]'
+    # The markers the workflow declares once at the top of the file. The gate reads the automatic one
+    # to count with; the requested one is here because a contract writes it into a fixture review.
+    export AUTOMATIC_REVIEW_MARKER='<!-- fathom-review: automatic -->'
+    export REQUESTED_REVIEW_MARKER='<!-- fathom-review: requested -->'
     export GITHUB_OUTPUT="$step_output_file"
     bash "$step_script"
   ) > "$output_file" 2>&1
+}
+
+# The reviews the gate counts, written as the endpoint returns them: this App's automatic passes,
+# this App's requested passes, and somebody else's review, which is never either.
+write_fathom_review_history() {
+  local automatic_count="$1"
+  local requested_count="$2"
+  local reviews_file="$3"
+
+  jq -nc \
+    --argjson automatic "$automatic_count" \
+    --argjson requested "$requested_count" '
+    [range($automatic) | {user: {login: "fathom-reviewer[bot]"}, body: "# NEEDS CHANGES\n\n<!-- fathom-review: automatic -->"}]
+    + [range($requested) | {user: {login: "fathom-reviewer[bot]"}, body: "# NEEDS CHANGES\n\n<!-- fathom-review: requested -->"}]
+    + [{user: {login: "Krzysztof318"}, body: "Looks right to me."}]
+  ' > "$reviews_file"
 }
 
 fathom_review_reviews_a_push_to_a_published_pull_request() {
@@ -1382,7 +1430,91 @@ fathom_review_reviews_a_push_to_a_published_pull_request() {
   run_fathom_review_gate 'synchronize' "$output_file" "$step_output_file"
 
   assert_contains 'review=true' "$step_output_file"
+  # A push started this run, so the review it produces is one of the six the ceiling counts, and the
+  # marker the submission writes into the body is what makes it countable.
+  assert_contains 'explicit=false' "$step_output_file"
   assert_contains 'the branch was pushed to' "$output_file"
+}
+
+# The ceiling is what stops a branch pushed to forty times being reviewed forty times. These five
+# contracts fix both halves of it: which reviews are counted, and which runs the count refuses.
+fathom_review_reviews_a_push_below_the_automatic_ceiling() {
+  local output_file="$test_directory/fathom-review-below-ceiling-output"
+  local step_output_file="$test_directory/fathom-review-below-ceiling-step-output"
+  local reviews_file="$test_directory/fathom-review-below-ceiling-reviews"
+
+  write_fathom_review_history 5 0 "$reviews_file"
+
+  run_fathom_review_gate 'synchronize' "$output_file" "$step_output_file" 'Krzysztof318' '' "$reviews_file"
+
+  assert_contains 'review=true' "$step_output_file"
+}
+
+fathom_review_stops_reviewing_a_push_at_the_automatic_ceiling() {
+  local output_file="$test_directory/fathom-review-ceiling-reached-output"
+  local step_output_file="$test_directory/fathom-review-ceiling-reached-step-output"
+  local reviews_file="$test_directory/fathom-review-ceiling-reached-reviews"
+
+  write_fathom_review_history 6 0 "$reviews_file"
+
+  run_fathom_review_gate 'synchronize' "$output_file" "$step_output_file" 'Krzysztof318' '' "$reviews_file"
+
+  assert_contains 'review=false' "$step_output_file"
+  assert_contains 'the automatic review ceiling of 6 is reached' "$output_file"
+  # The refusal names the way out, because a maintainer reading it is one label away from the pass
+  # the ceiling just declined to spend.
+  assert_contains 'label it fathom-review or comment fathom-review' "$output_file"
+}
+
+# A review somebody asked for is a decision already taken, so it neither counts against the budget a
+# later push draws on nor is refused by it. Counting every review instead — which is what this
+# replaces — let a few requested passes stop a pull request being reviewed on push at all.
+fathom_review_never_counts_a_requested_review_against_the_ceiling() {
+  local output_file="$test_directory/fathom-review-requested-uncounted-output"
+  local step_output_file="$test_directory/fathom-review-requested-uncounted-step-output"
+  local reviews_file="$test_directory/fathom-review-requested-uncounted-reviews"
+
+  write_fathom_review_history 5 4 "$reviews_file"
+
+  run_fathom_review_gate 'synchronize' "$output_file" "$step_output_file" 'Krzysztof318' '' "$reviews_file"
+
+  assert_contains 'review=true' "$step_output_file"
+}
+
+# A review body carries the reviewer's own findings, which are model text derived from the diff. A
+# requested review of a change to the workflow itself quotes the automatic marker in a finding, so
+# matching the marker anywhere in the body would count that review as an automatic pass and refuse a
+# later push a review it was owed. The marker counts where the submission step writes it: the last
+# line.
+fathom_review_counts_the_marker_only_where_the_submission_writes_it() {
+  local output_file="$test_directory/fathom-review-marker-position-output"
+  local step_output_file="$test_directory/fathom-review-marker-position-step-output"
+  local reviews_file="$test_directory/fathom-review-marker-position-reviews"
+
+  jq -nc '
+    [range(5) | {user: {login: "fathom-reviewer[bot]"}, body: "# NEEDS CHANGES\n\n<!-- fathom-review: automatic -->"}]
+    + [range(3) | {user: {login: "fathom-reviewer[bot]"},
+                   body: "# NEEDS CHANGES\n\nThe gate counts a body ending in <!-- fathom-review: automatic --> and this one quotes it.\n\n<!-- fathom-review: requested -->"}]
+  ' > "$reviews_file"
+
+  run_fathom_review_gate 'synchronize' "$output_file" "$step_output_file" 'Krzysztof318' '' "$reviews_file"
+
+  assert_contains 'review=true' "$step_output_file"
+}
+
+fathom_review_answers_a_request_past_the_automatic_ceiling() {
+  local output_file="$test_directory/fathom-review-request-past-ceiling-output"
+  local step_output_file="$test_directory/fathom-review-request-past-ceiling-step-output"
+  local reviews_file="$test_directory/fathom-review-request-past-ceiling-reviews"
+
+  write_fathom_review_history 9 0 "$reviews_file"
+
+  run_fathom_review_gate 'labeled' "$output_file" "$step_output_file" 'Krzysztof318' 'fathom-review' "$reviews_file"
+
+  assert_contains 'review=true' "$step_output_file"
+  # The other half of the same decision: a maintainer asked for this one, so it carries the requested
+  # marker and never joins the count that refused the push.
+  assert_contains 'explicit=true' "$step_output_file"
 }
 
 # A merge, the owner's ruleset bypass included, arrives as this event, and its whole purpose is the
@@ -2052,8 +2184,15 @@ run_fathom_review_submit() {
   local payload_file="$3"
   # A reviewer that finished is the ordinary case; the contract about a run that did not names it.
   local review_outcome="${4:-success}"
+  # What the coverage step found, absent by default: most reviews name every changed file, and a
+  # missing file is also what this step sees when the step that writes it never ran.
+  local coverage_note="${5:-}"
+  # Which marker the published review carries. A push is the ordinary case, and the gate of the next
+  # run counts exactly the reviews carrying this one.
+  local trigger_marker="${6:-<!-- fathom-review: automatic -->}"
   local step_script="$test_directory/fathom-review-submit.sh"
   local review_directory="$test_directory/fathom-review-submit-review"
+  local coverage_file="$test_directory/fathom-review-submit-coverage"
 
   submit_step_output_file="$test_directory/fathom-review-submit-step-output"
 
@@ -2061,6 +2200,12 @@ run_fathom_review_submit() {
   write_fathom_review_collection "$review_directory"
   rm -f "$payload_file"
   : > "$submit_step_output_file"
+
+  if [[ -n "$coverage_note" ]]; then
+    printf '%s\n' "$coverage_note" > "$coverage_file"
+  else
+    rm -f "$coverage_file"
+  fi
 
   set +e
   (
@@ -2075,6 +2220,8 @@ run_fathom_review_submit() {
     export REVIEW_OUTCOME="$review_outcome"
     export FINDINGS="$findings"
     export REVIEW_DIRECTORY="$review_directory"
+    export COVERAGE_FILE="$coverage_file"
+    export TRIGGER_MARKER="$trigger_marker"
     export FAKE_REVIEW_PAYLOAD="$payload_file"
     # The verdict the board job reads. It is written only where a review was posted, so a contract
     # that asserts on an empty file is asserting that nothing was published.
@@ -2136,6 +2283,65 @@ fathom_review_approves_when_it_finds_nothing() {
   assert_contains 'verdict=approved' "$submit_step_output_file"
 }
 
+# The marker is what the ceiling counts with, and it is written by the only step that publishes. A
+# review carrying the wrong one, or none, is a pass the next gate miscounts — in either direction.
+fathom_review_marks_a_review_with_what_started_it() {
+  local output_file="$test_directory/fathom-review-submit-marker-output"
+  local payload_file="$test_directory/fathom-review-submit-marker-payload"
+
+  run_fathom_review_submit \
+    '{"summary":"Found nothing above the bar.","covered":["src/Sample.cs"],"findings":[]}' \
+    "$output_file" "$payload_file" 'success' '' '<!-- fathom-review: requested -->'
+
+  ((submit_status == 0))
+  # The position, not the presence. The gate counts a review whose *last non-empty line* is the
+  # automatic marker, so the submission placing it last is load-bearing and pinned nowhere else: a
+  # later change appending a footer after it would leave a presence assertion green while the count
+  # went to zero, the ceiling stopped refusing, and every push of a busy branch spent a review.
+  assert_json '"<!-- fathom-review: requested -->"' \
+    '.body | split("\n") | map(select(. != "")) | last' "$payload_file"
+  assert_excludes '<!-- fathom-review: automatic -->' "$payload_file"
+
+  run_fathom_review_submit \
+    '{"summary":"Read part of it.","covered":["src/Sample.cs"],"findings":[{"severity":"P1","path":"src/Sample.cs","start_line":null,"line":12,"title":"Refuse the empty case","impact":"An empty list reaches the loop.","correction":"Return early.","rule":"`AGENTS.md`"}]}' \
+    "$output_file" "$payload_file"
+
+  ((submit_status == 0))
+  # A review carrying findings ends with the marker too, which is the branch the ceiling actually
+  # counts: the automatic passes it refuses a seventh of are the ones that found something.
+  assert_json '"<!-- fathom-review: automatic -->"' \
+    '.body | split("\n") | map(select(. != "")) | last' "$payload_file"
+}
+
+fathom_review_publishes_the_coverage_gap_beside_its_findings() {
+  local output_file="$test_directory/fathom-review-submit-gap-output"
+  local payload_file="$test_directory/fathom-review-submit-gap-payload"
+
+  run_fathom_review_submit \
+    '{"summary":"Read part of the change.","covered":["src/Sample.cs"],"findings":[{"severity":"P1","path":"src/Sample.cs","start_line":null,"line":12,"title":"Refuse the empty case","impact":"An empty list reaches the loop.","correction":"Return early.","rule":"`AGENTS.md`"}]}' \
+    "$output_file" "$payload_file" 'success' \
+    'The review names 1 of the 3 changed files as read. Not named: `src/Other.cs`.'
+
+  ((submit_status == 0))
+  assert_contains 'names 1 of the 3 changed files as read' "$payload_file"
+}
+
+fathom_review_publishes_the_coverage_gap_under_an_approval() {
+  local output_file="$test_directory/fathom-review-submit-gap-approved-output"
+  local payload_file="$test_directory/fathom-review-submit-gap-approved-payload"
+
+  # This is the shape the gap matters most in. An approval asserts the absence of defects across the
+  # whole change, so one published by a pass that read half of it says what it actually covered.
+  run_fathom_review_submit \
+    '{"summary":"Found nothing above the bar.","covered":["src/Sample.cs"],"findings":[]}' \
+    "$output_file" "$payload_file" 'success' \
+    'The review names 1 of the 3 changed files as read. Not named: `src/Other.cs`.'
+
+  ((submit_status == 0))
+  assert_json '"APPROVE"' '.event' "$payload_file"
+  assert_contains 'names 1 of the 3 changed files as read' "$payload_file"
+}
+
 fathom_review_publishes_nothing_when_the_reviewer_returned_no_answer() {
   local output_file="$test_directory/fathom-review-submit-silent-output"
   local payload_file="$test_directory/fathom-review-submit-silent-payload"
@@ -2179,6 +2385,140 @@ fathom_review_refuses_findings_that_carry_a_credential() {
   ((submit_status == 1))
   [[ ! -e "$payload_file" ]]
   assert_contains 'shaped like a credential' "$output_file"
+}
+
+# The coverage step is the one place a review is measured against the change rather than read on its
+# own terms. It takes the reviewer's `covered` ledger and the collected `files.json` and writes the
+# difference, which the submission step then publishes; what these contracts fix is that the
+# difference is composed from the collection and never from the answer, because the answer is model
+# text derived from an untrusted diff and this is a path into a published review body.
+run_fathom_review_coverage() {
+  local findings="$1"
+  local changed_files="$2"
+  local output_file="$3"
+  local coverage_file="$4"
+  local step_script="$test_directory/fathom-review-coverage.sh"
+  local review_directory="$test_directory/fathom-review-coverage-review"
+
+  extract_fathom_review_step 'coverage' "$step_script"
+  mkdir -p "$review_directory"
+  printf '%s\n' "$changed_files" > "$review_directory/files.json"
+  rm -f "$coverage_file"
+
+  set +e
+  (
+    export FINDINGS="$findings"
+    export REVIEW_DIRECTORY="$review_directory"
+    export COVERAGE_FILE="$coverage_file"
+    export NAME_CEILING='10'
+    bash "$step_script"
+  ) > "$output_file" 2>&1
+  coverage_status=$?
+  set -e
+}
+
+fathom_review_reports_the_files_a_review_never_named() {
+  local output_file="$test_directory/fathom-review-coverage-gap-output"
+  local coverage_file="$test_directory/fathom-review-coverage-gap"
+
+  run_fathom_review_coverage \
+    '{"summary":"Read part of it.","covered":["src/Sample.cs"],"findings":[]}' \
+    '[{"filename":"src/Sample.cs"},{"filename":"src/Other.cs"},{"filename":"docs/features/sample.md"}]' \
+    "$output_file" "$coverage_file"
+
+  ((coverage_status == 0))
+  assert_contains 'names 1 of the 3 changed files as read' "$coverage_file"
+  # The whole list, not each path in turn. Asserting them individually passed while the paths were
+  # joined by alternating delimiters — `paste -d` reads its argument as a list of them — so what the
+  # author read was ``a`,`b` `c``.
+  assert_contains 'Not named: `docs/features/sample.md`, `src/Other.cs`.' "$coverage_file"
+}
+
+fathom_review_reports_no_gap_when_the_review_named_every_file() {
+  local output_file="$test_directory/fathom-review-coverage-complete-output"
+  local coverage_file="$test_directory/fathom-review-coverage-complete"
+
+  # A file named twice counts once, so a ledger that repeats itself is complete rather than
+  # over-complete, and the reviewer is not asked to deduplicate what `jq` can.
+  run_fathom_review_coverage \
+    '{"summary":"Read all of it.","covered":["src/Sample.cs","src/Other.cs","src/Sample.cs"],"findings":[]}' \
+    '[{"filename":"src/Sample.cs"},{"filename":"src/Other.cs"}]' \
+    "$output_file" "$coverage_file"
+
+  ((coverage_status == 0))
+  [[ ! -s "$coverage_file" ]]
+  assert_contains 'names every one of the 2 changed files' "$output_file"
+}
+
+fathom_review_counts_a_named_path_the_change_does_not_contain() {
+  local output_file="$test_directory/fathom-review-coverage-unknown-output"
+  local coverage_file="$test_directory/fathom-review-coverage-unknown"
+
+  # The path itself is never printed. It came from the answer rather than from the collection, and
+  # what this step writes is published into a review body, so an invented name reaches the author as
+  # a count of names and not as the names.
+  run_fathom_review_coverage \
+    '{"summary":"Read it.","covered":["src/Sample.cs","src/Invented.cs"],"findings":[]}' \
+    '[{"filename":"src/Sample.cs"}]' \
+    "$output_file" "$coverage_file"
+
+  ((coverage_status == 0))
+  assert_contains 'names 1 path(s) that the collected change does not contain' "$coverage_file"
+  assert_excludes 'src/Invented.cs' "$coverage_file"
+}
+
+fathom_review_bounds_how_many_unread_files_it_names() {
+  local output_file="$test_directory/fathom-review-coverage-ceiling-output"
+  local coverage_file="$test_directory/fathom-review-coverage-ceiling"
+  local changed_files
+  local index
+
+  # Two digits, because the list is compared in the order `jq` sorts it and `File2` would otherwise
+  # fall behind `File13` — which would make the contract assert on something other than the ceiling.
+  changed_files='[]'
+  for index in $(seq -w 1 13); do
+    changed_files="$(jq -c --arg name "src/File${index}.cs" '. + [{filename: $name}]' <<< "$changed_files")"
+  done
+
+  run_fathom_review_coverage \
+    '{"summary":"Read none of it.","covered":[],"findings":[]}' \
+    "$changed_files" "$output_file" "$coverage_file"
+
+  ((coverage_status == 0))
+  assert_contains 'names 0 of the 13 changed files as read' "$coverage_file"
+  assert_contains 'and 3 more' "$coverage_file"
+  assert_excludes 'src/File11.cs' "$coverage_file"
+}
+
+fathom_review_reads_a_ledger_of_the_wrong_shape_as_an_empty_one() {
+  local output_file="$test_directory/fathom-review-coverage-shape-output"
+  local coverage_file="$test_directory/fathom-review-coverage-shape"
+
+  # The schema requires an array of strings and the action refuses an answer that does not conform,
+  # so this is unreachable through the action. It is fixed anyway because the step sits between a
+  # model and a published review: a ledger of the wrong shape reports the change as unnamed rather
+  # than turning a review that was ready to post into a red job.
+  run_fathom_review_coverage \
+    '{"summary":"Read it.","covered":12,"findings":[]}' \
+    '[{"filename":"src/Sample.cs"}]' \
+    "$output_file" "$coverage_file"
+
+  ((coverage_status == 0))
+  assert_contains 'names 0 of the 1 changed files as read' "$coverage_file"
+}
+
+fathom_review_compares_no_coverage_when_the_reviewer_returned_no_answer() {
+  local output_file="$test_directory/fathom-review-coverage-silent-output"
+  local coverage_file="$test_directory/fathom-review-coverage-silent"
+
+  # A reviewer that never answered has already failed and said why. A gap line here would report the
+  # whole change as unread and bury that cause under a consequence.
+  run_fathom_review_coverage \
+    '' '[{"filename":"src/Sample.cs"}]' "$output_file" "$coverage_file"
+
+  ((coverage_status == 0))
+  [[ ! -s "$coverage_file" ]]
+  assert_contains 'no coverage ledger to compare' "$output_file"
 }
 
 # The board step turns a published verdict into the one field the owner's views group by. Its inputs
@@ -5035,6 +5375,11 @@ run_test typo_check_falls_back_to_the_whole_checkout_for_a_path_containing_white
 run_test typo_check_falls_back_to_the_whole_checkout_for_a_path_containing_a_glob_character
 run_test typo_check_falls_back_to_the_whole_checkout_for_a_pull_request_beyond_the_reportable_limit
 run_test fathom_review_reviews_a_push_to_a_published_pull_request
+run_test fathom_review_reviews_a_push_below_the_automatic_ceiling
+run_test fathom_review_stops_reviewing_a_push_at_the_automatic_ceiling
+run_test fathom_review_never_counts_a_requested_review_against_the_ceiling
+run_test fathom_review_counts_the_marker_only_where_the_submission_writes_it
+run_test fathom_review_answers_a_request_past_the_automatic_ceiling
 run_test fathom_review_refuses_a_closed_pull_request
 run_test fathom_review_refuses_a_pull_request_the_updater_opened
 run_test fathom_review_reviews_an_updater_pull_request_the_maintainer_labelled
@@ -5058,6 +5403,15 @@ run_test apply_pull_request_labels_reports_a_write_it_was_refused
 run_test fathom_review_anchors_a_finding_to_its_line
 run_test fathom_review_moves_a_finding_with_no_line_into_the_body
 run_test fathom_review_approves_when_it_finds_nothing
+run_test fathom_review_reports_the_files_a_review_never_named
+run_test fathom_review_reports_no_gap_when_the_review_named_every_file
+run_test fathom_review_counts_a_named_path_the_change_does_not_contain
+run_test fathom_review_bounds_how_many_unread_files_it_names
+run_test fathom_review_reads_a_ledger_of_the_wrong_shape_as_an_empty_one
+run_test fathom_review_compares_no_coverage_when_the_reviewer_returned_no_answer
+run_test fathom_review_marks_a_review_with_what_started_it
+run_test fathom_review_publishes_the_coverage_gap_beside_its_findings
+run_test fathom_review_publishes_the_coverage_gap_under_an_approval
 run_test fathom_review_publishes_nothing_when_the_reviewer_returned_no_answer
 run_test fathom_review_fails_when_a_finished_reviewer_returned_no_answer
 run_test fathom_review_refuses_findings_that_carry_a_credential
