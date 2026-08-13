@@ -1119,8 +1119,6 @@ internal static class HostComposition
                 composedListeners.Errors);
         }
 
-        var servedSurfacesByPort = composedListeners.SurfacesByPort();
-
         // Registered whether or not the endpoint is enabled, because it is the warning that decides whether it has
         // anything to say — the same reason the MCP warnings above are registered unconditionally.
         builder.Services.AddHostedService<AdminTransportSecurityWarning>();
