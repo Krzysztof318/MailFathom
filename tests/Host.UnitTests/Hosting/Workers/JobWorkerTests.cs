@@ -25,7 +25,7 @@ public sealed class JobWorkerTests
     public async Task ExecuteAsync_TheWorkerSwitchedOff_ClaimsNothingAndEnds()
     {
         // Arrange
-        using var world = CreateWorld(new JobWorkerOptions { Enabled = false }, WithAHandler);
+        using var world = CreateWorld(new JobQueueOptions { Enabled = false }, WithAHandler);
 
         // Act
         await world.Worker.StartAsync(TestContext.Current.CancellationToken);
@@ -48,7 +48,7 @@ public sealed class JobWorkerTests
     public async Task ExecuteAsync_NoRegisteredHandler_SaysSoAndClaimsNothing()
     {
         // Arrange
-        using var world = CreateWorld(new JobWorkerOptions(), WithNoHandler);
+        using var world = CreateWorld(new JobQueueOptions(), WithNoHandler);
 
         // Act
         await world.Worker.StartAsync(TestContext.Current.CancellationToken);
@@ -71,7 +71,7 @@ public sealed class JobWorkerTests
     public async Task ExecuteAsync_APassThatFilledItsBatch_ClaimsAgainWithoutWaitingOutTheInterval()
     {
         // Arrange
-        using var world = CreateWorld(new JobWorkerOptions { BatchSize = BatchSize }, WithAHandler);
+        using var world = CreateWorld(new JobQueueOptions { BatchSize = BatchSize }, WithAHandler);
         var claimedAgain = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var claimCount = 0;
 
@@ -107,7 +107,7 @@ public sealed class JobWorkerTests
     public async Task ExecuteAsync_AJobItRan_ReportsItByTypeAndAttempt()
     {
         // Arrange
-        using var world = CreateWorld(new JobWorkerOptions { BatchSize = BatchSize }, WithAHandler);
+        using var world = CreateWorld(new JobQueueOptions { BatchSize = BatchSize }, WithAHandler);
 
         world.Store
             .ClaimAsync(Arg.Any<JobClaimRequest>(), Arg.Any<CancellationToken>())
@@ -138,7 +138,7 @@ public sealed class JobWorkerTests
     public async Task ExecuteAsync_AClaimThatFails_LogsItWithoutEndingTheWorker()
     {
         // Arrange
-        using var world = CreateWorld(new JobWorkerOptions(), WithAHandler);
+        using var world = CreateWorld(new JobQueueOptions(), WithAHandler);
 
         world.Store
             .ClaimAsync(Arg.Any<JobClaimRequest>(), Arg.Any<CancellationToken>())
@@ -181,7 +181,7 @@ public sealed class JobWorkerTests
         // consumer does.
     }
 
-    private static WorkerWorld CreateWorld(JobWorkerOptions settings, Action<IServiceCollection> registerHandlers)
+    private static WorkerWorld CreateWorld(JobQueueOptions settings, Action<IServiceCollection> registerHandlers)
     {
         var world = new WorkerWorld();
 
@@ -199,7 +199,13 @@ public sealed class JobWorkerTests
             settings.MaxAttempts,
             settings.RetryBaseDelay,
             settings.RetryMaxDelay));
+        services.AddSingleton(JobCapacitySettings.Create(
+            settings.MaxConcurrentJobs,
+            settings.MaxConcurrentJobsPerType,
+            settings.MaxQueueDepthPerType));
         services.AddSingleton(Substitute.For<IJobFailureClassifier>());
+        services.AddSingleton<JobConcurrencyGate>();
+        services.AddSingleton<IJobAttemptRunner, ScopedJobAttemptRunner>();
         services.AddScoped<JobHandlerRegistry>();
         services.AddScoped<JobExecutor>();
         services.AddScoped<JobQueuePass>();

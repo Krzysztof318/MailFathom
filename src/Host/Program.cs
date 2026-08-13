@@ -210,7 +210,7 @@ try
     // A configuration root of its own, because durable background work is a mechanism every consumer shares rather than
     // a property of any one of them: what a job does belongs to the feature that enqueues it, and how much of the
     // instance the queue may take belongs here.
-    builder.Services.AddOptions<JobWorkerOptions>()
+    builder.Services.AddOptions<JobQueueOptions>()
         .Bind(
             builder.Configuration.GetSection("Jobs"),
             binderOptions => binderOptions.ErrorOnUnknownConfiguration = true)
@@ -549,7 +549,7 @@ try
     // application's. Create refuses an inverted pair, which the options validator has already rejected at startup.
     builder.Services.AddSingleton(provider =>
     {
-        var jobSettings = provider.GetRequiredService<IOptions<JobWorkerOptions>>().Value;
+        var jobSettings = provider.GetRequiredService<IOptions<JobQueueOptions>>().Value;
         return JobExecutionSettings.Create(
             jobSettings.BatchSize,
             jobSettings.LeaseDuration,
@@ -558,6 +558,20 @@ try
             jobSettings.RetryBaseDelay,
             jobSettings.RetryMaxDelay);
     });
+    // How much of this instance background work may take is one statement about the instance, so the capacity and the
+    // gate that hands it out are singletons: a per-scope ceiling would be a ceiling per pass, which bounds nothing.
+    builder.Services.AddSingleton(provider =>
+    {
+        var jobSettings = provider.GetRequiredService<IOptions<JobQueueOptions>>().Value;
+        return JobCapacitySettings.Create(
+            jobSettings.MaxConcurrentJobs,
+            jobSettings.MaxConcurrentJobsPerType,
+            jobSettings.MaxQueueDepthPerType);
+    });
+    builder.Services.AddSingleton<JobConcurrencyGate>();
+    // A singleton holding nothing but the scope factory: what it creates per attempt is the scope, and the executor it
+    // resolves there is scoped like every other consumer of the persistence session.
+    builder.Services.AddSingleton<IJobAttemptRunner, ScopedJobAttemptRunner>();
     // Scoped with the store they write through: a pass is one work unit and opens a scope of its own, and the registry
     // is built from whatever handlers a consumer registered, which may themselves be scoped.
     builder.Services.AddScoped<JobHandlerRegistry>();

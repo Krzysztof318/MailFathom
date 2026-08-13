@@ -24,6 +24,10 @@ namespace MailFathom.Host.Hosting.Workers;
 /// without making enqueued work wait for a schedule.
 /// </para>
 /// <para>
+/// One pass at a time, and the concurrency inside it is the application's. A second loop claiming beside this one would
+/// be a second unstated bound on how much work is in flight, where the configured ceilings are the stated one.
+/// </para>
+/// <para>
 /// An instance with no registered handler stops the loop before it starts. Nothing here can run any of the declared job
 /// types until a consumer registers a handler for one, and a worker that claimed under those conditions would be taking
 /// work it would have to hand straight back.
@@ -33,14 +37,14 @@ namespace MailFathom.Host.Hosting.Workers;
 internal sealed partial class JobWorker : BackgroundService
 {
     private readonly IServiceScopeFactory scopeFactory;
-    private readonly JobWorkerOptions settings;
+    private readonly JobQueueOptions settings;
     private readonly ILogger<JobWorker> logger;
     private readonly TimeProvider timeProvider;
 
     /// <summary>Initializes a new job worker.</summary>
     public JobWorker(
         IServiceScopeFactory scopeFactory,
-        IOptions<JobWorkerOptions> settings,
+        IOptions<JobQueueOptions> settings,
         ILogger<JobWorker> logger,
         TimeProvider timeProvider)
     {

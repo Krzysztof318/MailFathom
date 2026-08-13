@@ -4,7 +4,7 @@
 
 namespace MailFathom.Application.Jobs.Execution;
 
-/// <summary>Takes one batch of due jobs this process can run, and runs each of them in turn.</summary>
+/// <summary>Takes one batch of due jobs this process can run, and runs them under the capacity the instance allows.</summary>
 /// <remarks>
 /// <para>
 /// One claim and one owner per pass. The owner identifies the attempt rather than the process, which is what lets a
@@ -12,8 +12,10 @@ namespace MailFathom.Application.Jobs.Execution;
 /// statement.
 /// </para>
 /// <para>
-/// The jobs run one after another. How many may run at once is a bound this pass does not express, so running them in
-/// sequence is what keeps a batch from becoming an unstated concurrency limit of its own.
+/// How many of a batch run at once is not the batch's business: the batch is what one claim took, and the ceiling is
+/// what the instance may spend on background work. Every claimed job is therefore dispatched at once and each waits for
+/// <see cref="JobConcurrencyGate" /> to let it through, so raising the batch size buys fewer round trips rather than
+/// more work in flight.
 /// </para>
 /// <para>
 /// A process with no handler claims nothing at all, rather than claiming and abandoning. That is the ordinary state of
@@ -25,39 +27,44 @@ public sealed class JobQueuePass
 {
     private readonly IJobStore store;
     private readonly JobHandlerRegistry handlers;
-    private readonly JobExecutor executor;
+    private readonly IJobAttemptRunner attemptRunner;
+    private readonly JobConcurrencyGate concurrency;
     private readonly JobExecutionSettings settings;
 
-    /// <summary>Initializes the pass from the queue it claims out of and the bounds it claims under.</summary>
+    /// <summary>Initializes the pass from the queue it claims out of and the bounds it claims and runs under.</summary>
     /// <param name="store">Claims the batch this pass runs.</param>
     /// <param name="handlers">Answers which job types this process can run.</param>
-    /// <param name="executor">Runs one claimed job and records its outcome.</param>
+    /// <param name="attemptRunner">Runs one claimed job, isolated from the jobs running beside it, and records its outcome.</param>
+    /// <param name="concurrency">Decides how many of the batch run at once, in total and per job type.</param>
     /// <param name="settings">The batch size and the lease each claimed job is held under.</param>
     /// <exception cref="ArgumentNullException">Thrown when a collaborator is <see langword="null" />.</exception>
     public JobQueuePass(
         IJobStore store,
         JobHandlerRegistry handlers,
-        JobExecutor executor,
+        IJobAttemptRunner attemptRunner,
+        JobConcurrencyGate concurrency,
         JobExecutionSettings settings)
     {
         ArgumentNullException.ThrowIfNull(store);
         ArgumentNullException.ThrowIfNull(handlers);
-        ArgumentNullException.ThrowIfNull(executor);
+        ArgumentNullException.ThrowIfNull(attemptRunner);
+        ArgumentNullException.ThrowIfNull(concurrency);
         ArgumentNullException.ThrowIfNull(settings);
 
         this.store = store;
         this.handlers = handlers;
-        this.executor = executor;
+        this.attemptRunner = attemptRunner;
+        this.concurrency = concurrency;
         this.settings = settings;
     }
 
     /// <summary>Claims one batch and runs it, reporting what each job did.</summary>
     /// <param name="stoppingToken">Cancels the claim, and stops each running job so its lease is given back.</param>
-    /// <returns>One result per claimed job, in the order they were run, and an empty answer when nothing was due.</returns>
+    /// <returns>One result per claimed job, in the order they were claimed, and an empty answer when nothing was due.</returns>
     /// <remarks>
-    /// Cancellation does not end the pass early. Every claimed job is still dispatched, because a job the executor
-    /// finds already cancelled is released rather than run — which is how the jobs behind the one that was running get
-    /// their leases back instead of waiting out an expiry.
+    /// Cancellation does not end the pass early. Every claimed job is still dispatched, because a job the runner finds
+    /// already cancelled is released rather than run — which is how the jobs behind the ones that were running get their
+    /// leases back instead of waiting out an expiry.
     /// </remarks>
     public async Task<IReadOnlyList<JobExecutionResult>> RunAsync(CancellationToken stoppingToken)
     {
@@ -74,13 +81,24 @@ public sealed class JobQueuePass
 
         var claimedJobs = await this.store.ClaimAsync(request, stoppingToken);
 
-        var results = new List<JobExecutionResult>(claimedJobs.Count);
+        var attempts = claimedJobs
+            .Select(claimedJob => this.RunWithinCapacityAsync(claimedJob, stoppingToken))
+            .ToArray();
 
-        foreach (var claimedJob in claimedJobs)
-        {
-            results.Add(await this.executor.ExecuteAsync(claimedJob, stoppingToken));
-        }
+        return await Task.WhenAll(attempts);
+    }
 
-        return results;
+    /// <summary>Waits for the capacity one job needs, runs it, and gives that capacity back however it ended.</summary>
+    /// <remarks>
+    /// The wait itself is not cancellable, deliberately. A stopping host still has to reach every claimed job, because
+    /// reaching it is what releases its lease, and a wait abandoned on shutdown would leave the jobs behind the running
+    /// ones held until their leases expired. Nothing waits indefinitely for that to be safe: each attempt ahead is
+    /// already bounded by the execution timeout, and a stopping host cancels the ones in flight at once.
+    /// </remarks>
+    private async Task<JobExecutionResult> RunWithinCapacityAsync(LeasedJob job, CancellationToken stoppingToken)
+    {
+        using var capacity = await this.concurrency.AcquireAsync(job.JobType, CancellationToken.None);
+
+        return await this.attemptRunner.RunAsync(job, stoppingToken);
     }
 }

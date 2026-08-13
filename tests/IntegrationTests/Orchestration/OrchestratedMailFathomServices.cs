@@ -14,6 +14,7 @@ using MailFathom.Application.Emails.Embeddings.Limits;
 using MailFathom.Application.Emails.Extraction;
 using MailFathom.Application.Emails.Search;
 using MailFathom.Application.Folders;
+using MailFathom.Application.Jobs.Execution;
 using MailFathom.Application.Mail;
 using MailFathom.Application.Mail.Mutations;
 using MailFathom.Application.Mail.Mutations.Audit;
@@ -66,6 +67,10 @@ internal sealed class OrchestratedMailFathomServices : IAsyncDisposable
     /// <summary>The key this suite seals with, base64 of the ASCII text <c>mailfathom-integrationtests-key!</c>.</summary>
     /// <remarks>A literal under the same restriction as the orchestrated mailbox's password: it protects synthetic data in a database created and destroyed by one run, and it unlocks nothing anything else holds.</remarks>
     internal const string DataEncryptionKeyMaterial = "bWFpbGZhdGhvbS1pbnRlZ3JhdGlvbnRlc3RzLWtleSE=";
+
+    /// <summary>How many jobs of one type may be waiting before this suite's store refuses to enqueue another.</summary>
+    /// <remarks>Far below the deployed default, because a test proving that backpressure is expressed has to be able to fill the queue.</remarks>
+    internal const int JobQueueDepthPerType = 5;
 
     /// <summary>The width of the space the deterministic generator produces vectors in for this suite.</summary>
     /// <remarks>Deliberately narrow. Nothing here measures a distance, so a wider space would only make every stored row larger.</remarks>
@@ -233,6 +238,14 @@ internal sealed class OrchestratedMailFathomServices : IAsyncDisposable
         builder.Services.AddSingleton(new MailboxMutationOptions());
         builder.Services.AddSingleton(new MailboxConvergenceOptions());
         builder.Services.AddSingleton(new PersistenceConcurrencyOptions { MaximumCommitAttempts = 3 });
+        // The capacity a composition root reads from the Jobs section, of which only the queue depth reaches this
+        // suite: the store refuses an enqueue against it, and the concurrency ceilings belong to a worker nothing here
+        // starts. The depth is small for the reason the batch sizes above are — a bound a test proves has to be one a
+        // test can reach — and still comfortably above what any one test leaves waiting behind it.
+        builder.Services.AddSingleton(JobCapacitySettings.Create(
+            maxConcurrentJobs: 2,
+            maxConcurrentJobsPerType: 1,
+            JobQueueDepthPerType));
         // The bound a composition root reads from the Embeddings section. The backlog itself is registered by
         // AddInfrastructure, because every committed message is offered into it whether or not this deployment embeds.
         builder.Services.AddSingleton(new EmailEmbeddingBacklogOptions());

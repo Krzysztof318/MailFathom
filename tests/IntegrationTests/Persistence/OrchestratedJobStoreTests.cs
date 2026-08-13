@@ -9,6 +9,7 @@ using MailFathom.IntegrationTests.Orchestration;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
+using Xunit.Sdk;
 
 namespace MailFathom.IntegrationTests.Persistence;
 
@@ -305,19 +306,19 @@ public sealed class OrchestratedJobStoreTests(MailFathomOrchestrationFixture orc
         // Act
         var completed = await CompleteAsync(
             services,
-            enqueued.JobId,
+            JobIdOf(enqueued),
             Assert.Single(claimed).Lease.Owner,
             cancellationToken);
 
         // Assert
         Assert.True(completed);
-        Assert.Equal(nameof(JobState.Succeeded), await ReadStateAsync(services, enqueued.JobId, cancellationToken));
+        Assert.Equal(nameof(JobState.Succeeded), await ReadStateAsync(services, JobIdOf(enqueued), cancellationToken));
 
         var reEnqueued = await services.InScopeAsync(
             (scope, token) => scope.GetRequiredService<IJobStore>().EnqueueAsync(request, token),
             cancellationToken);
         Assert.Equal(JobEnqueueOutcome.AlreadyEnqueued, reEnqueued.Outcome);
-        Assert.Equal(enqueued.JobId, reEnqueued.JobId);
+        Assert.Equal(JobIdOf(enqueued), reEnqueued.JobId);
 
         // A terminal job is no longer due, so nothing claims it again.
         Assert.Empty(await services.InScopeAsync(
@@ -380,20 +381,20 @@ public sealed class OrchestratedJobStoreTests(MailFathomOrchestrationFixture orc
         // Act
         var deadLettered = await DeadLetterAsync(
             services,
-            enqueued.JobId,
+            JobIdOf(enqueued),
             Assert.Single(claimed).Lease.Owner,
             PermanentFailure,
             cancellationToken);
 
         // Assert
         Assert.True(deadLettered);
-        Assert.Equal(nameof(JobState.DeadLettered), await ReadStateAsync(services, enqueued.JobId, cancellationToken));
+        Assert.Equal(nameof(JobState.DeadLettered), await ReadStateAsync(services, JobIdOf(enqueued), cancellationToken));
         Assert.Equal(
             nameof(JobFailureClassification.Permanent),
-            await ReadLastFailureClassificationAsync(services, enqueued.JobId, cancellationToken));
+            await ReadLastFailureClassificationAsync(services, JobIdOf(enqueued), cancellationToken));
         Assert.Equal(
             PermanentFailure.Reason,
-            await ReadLastFailureReasonAsync(services, enqueued.JobId, cancellationToken));
+            await ReadLastFailureReasonAsync(services, JobIdOf(enqueued), cancellationToken));
 
         Assert.Empty(await services.InScopeAsync(
             (scope, token) => ClaimAsync(scope, batchSize: 10, HeldLease, token),
@@ -403,7 +404,7 @@ public sealed class OrchestratedJobStoreTests(MailFathomOrchestrationFixture orc
             (scope, token) => scope.GetRequiredService<IJobStore>().EnqueueAsync(request, token),
             cancellationToken);
         Assert.Equal(JobEnqueueOutcome.AlreadyEnqueued, reEnqueued.Outcome);
-        Assert.Equal(enqueued.JobId, reEnqueued.JobId);
+        Assert.Equal(JobIdOf(enqueued), reEnqueued.JobId);
     }
 
     /// <summary>
@@ -479,6 +480,71 @@ public sealed class OrchestratedJobStoreTests(MailFathomOrchestrationFixture orc
             cancellationToken));
     }
 
+    /// <summary>
+    /// A queue already holding as much of one type as the deployment accepts refuses the next enqueue rather than
+    /// growing, and says so as an outcome its caller acts on. Only a real database settles it: what counts as waiting
+    /// is a predicate over the claimable rows, and a predicate that counted the wrong states would refuse an idle
+    /// instance or accept an unbounded backlog while every unit test went on passing.
+    /// </summary>
+    [Fact]
+    public async Task EnqueueAsync_AQueueHoldingAsMuchOfOneTypeAsItAccepts_RefusesInsteadOfGrowing()
+    {
+        // Arrange
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var services = await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken);
+        await DrainAsync(services, cancellationToken);
+
+        const uint firstUid = 1001;
+        var attemptedCount = OrchestratedMailFathomServices.JobQueueDepthPerType + 2;
+        var results = new List<JobEnqueueResult>(attemptedCount);
+
+        // Act
+        // Enqueued one at a time rather than as a projection, because each answer depends on how much the ones before
+        // it left waiting.
+        for (var offset = 0; offset < attemptedCount; offset++)
+        {
+            results.Add(await EnqueueOnceAsync(services, firstUid + (uint)offset, cancellationToken));
+        }
+
+        // Assert
+        Assert.Equal(JobEnqueueOutcome.Created, results[0].Outcome);
+
+        var refusals = results.Where(result => result.Outcome is JobEnqueueOutcome.RefusedAtCapacity).ToArray();
+
+        Assert.NotEmpty(refusals);
+        Assert.All(refusals, refusal => Assert.Null(refusal.JobId));
+
+        // A retrying enqueuer is told its work is already queued rather than turned away from work it produced itself.
+        var reEnqueued = await EnqueueOnceAsync(services, firstUid, cancellationToken);
+
+        Assert.Equal(JobEnqueueOutcome.AlreadyEnqueued, reEnqueued.Outcome);
+        Assert.Equal(results[0].JobId, reEnqueued.JobId);
+
+        // The bound is on what is waiting, so draining the queue is what makes room again.
+        await DrainAsync(services, cancellationToken);
+
+        var afterDraining = await EnqueueOnceAsync(services, firstUid + (uint)attemptedCount, cancellationToken);
+
+        Assert.Equal(JobEnqueueOutcome.Created, afterDraining.Outcome);
+    }
+
+    /// <summary>Enqueues one job about a synthetic occurrence this class owns, and answers with whatever the queue did.</summary>
+    private static async Task<JobEnqueueResult> EnqueueOnceAsync(
+        OrchestratedMailFathomServices services,
+        uint uid,
+        CancellationToken cancellationToken)
+    {
+        var request = await RequestAsync(services, uid, cancellationToken);
+
+        return await services.InScopeAsync(
+            (scope, token) => scope.GetRequiredService<IJobStore>().EnqueueAsync(request, token),
+            cancellationToken);
+    }
+
+    /// <summary>Reads the job an accepted enqueue named, which a refused one would have left absent.</summary>
+    private static JobId JobIdOf(JobEnqueueResult enqueued) => enqueued.JobId
+        ?? throw new XunitException($"The enqueue was {enqueued.Outcome} and named no job to act on.");
+
     /// <summary>Enqueues one job about a synthetic occurrence this class owns, and answers with its identifier.</summary>
     private static async Task<JobId> EnqueueAsync(
         OrchestratedMailFathomServices services,
@@ -492,7 +558,7 @@ public sealed class OrchestratedJobStoreTests(MailFathomOrchestrationFixture orc
 
         Assert.Equal(JobEnqueueOutcome.Created, enqueued.Outcome);
 
-        return enqueued.JobId;
+        return JobIdOf(enqueued);
     }
 
     /// <summary>Composes one execution about an occurrence in this class's own folder binding.</summary>

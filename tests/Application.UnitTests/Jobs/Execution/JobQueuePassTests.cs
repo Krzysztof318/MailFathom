@@ -11,15 +11,17 @@ using Xunit;
 
 namespace MailFathom.Application.UnitTests.Jobs.Execution;
 
-public sealed class JobQueuePassTests
+public sealed class JobQueuePassTests : IDisposable
 {
     private static readonly DateTimeOffset Noon = new(2026, 8, 13, 12, 0, 0, TimeSpan.Zero);
     private static readonly TimeSpan LeaseDuration = TimeSpan.FromMinutes(10);
     private static readonly TimeSpan ExecutionTimeout = TimeSpan.FromMinutes(9);
     private const int BatchSize = 3;
+    private const int MaxQueueDepthPerType = 100;
 
     private readonly FakeTimeProvider timeProvider = new(Noon);
     private readonly IJobStore store = Substitute.For<IJobStore>();
+    private JobConcurrencyGate? concurrency;
 
     /// <summary>
     /// A process with no handler would claim under a filter naming no type, so it claims nothing at all — which is also
@@ -140,6 +142,66 @@ public sealed class JobQueuePassTests
             Arg.Any<CancellationToken>());
     }
 
+    /// <summary>
+    /// A batch is what one claim took, not what may run: the jobs beyond the process ceiling wait for a slot, which is
+    /// what keeps background work from taking the capacity a mail synchronization and an MCP read also need.
+    /// </summary>
+    [Fact]
+    public async Task RunAsync_MoreClaimedJobsThanTheProcessCeiling_RunsNoMoreThanTheCeilingAtOnce()
+    {
+        // Arrange
+        const int processCeiling = 2;
+        var handler = new ConcurrencyObservingJobHandler(JobType.ClassifyEmailSpam, processCeiling);
+        var claimedJobs = Enumerable.Range(0, 3).Select(LeasedJobFor).ToArray();
+
+        this.store.ClaimAsync(Arg.Any<JobClaimRequest>(), Arg.Any<CancellationToken>()).Returns(claimedJobs);
+        this.store
+            .CompleteAsync(Arg.Any<JobId>(), Arg.Any<JobLeaseOwner>(), Arg.Any<CancellationToken>())
+            .Returns(true);
+
+        var capacity = JobCapacitySettings.Create(processCeiling, processCeiling, MaxQueueDepthPerType);
+        var pass = this.PassFor(capacity, handler);
+
+        // Act
+        var results = await pass.RunAsync(CancellationToken.None);
+
+        // Assert
+        Assert.Equal(processCeiling, handler.PeakConcurrency);
+        Assert.Equal(claimedJobs.Length, handler.RunCount);
+        Assert.Equal(claimedJobs.Length, results.Count);
+    }
+
+    /// <summary>
+    /// The per-type ceiling binds below the process ceiling, which is what stops one consumer's backlog from occupying
+    /// every slot another consumer's work would have run in.
+    /// </summary>
+    [Fact]
+    public async Task RunAsync_ABatchOfOneTypeUnderATighterPerTypeCeiling_RunsNoMoreOfThatTypeThanItAllows()
+    {
+        // Arrange
+        const int perTypeCeiling = 1;
+        var handler = new ConcurrencyObservingJobHandler(JobType.ClassifyEmailSpam, perTypeCeiling);
+        var claimedJobs = Enumerable.Range(0, 3).Select(LeasedJobFor).ToArray();
+
+        this.store.ClaimAsync(Arg.Any<JobClaimRequest>(), Arg.Any<CancellationToken>()).Returns(claimedJobs);
+        this.store
+            .CompleteAsync(Arg.Any<JobId>(), Arg.Any<JobLeaseOwner>(), Arg.Any<CancellationToken>())
+            .Returns(true);
+
+        var capacity = JobCapacitySettings.Create(claimedJobs.Length, perTypeCeiling, MaxQueueDepthPerType);
+        var pass = this.PassFor(capacity, handler);
+
+        // Act
+        await pass.RunAsync(CancellationToken.None);
+
+        // Assert
+        Assert.Equal(perTypeCeiling, handler.PeakConcurrency);
+        Assert.Equal(claimedJobs.Length, handler.RunCount);
+    }
+
+    /// <inheritdoc />
+    public void Dispose() => this.concurrency?.Dispose();
+
     private static LeasedJob LeasedJobFor(int uid) => new(
         JobId.Create(Guid.CreateVersion7(Noon.AddSeconds(uid))),
         JobType.ClassifyEmailSpam,
@@ -156,7 +218,10 @@ public sealed class JobQueuePassTests
         AttemptCount: 1,
         new JobLease(JobLeaseOwner.Create("attempt-a"), Noon + LeaseDuration));
 
-    private JobQueuePass PassFor(params IJobHandler[] handlers)
+    private JobQueuePass PassFor(params IJobHandler[] handlers) =>
+        this.PassFor(JobCapacitySettings.Create(BatchSize, BatchSize, MaxQueueDepthPerType), handlers);
+
+    private JobQueuePass PassFor(JobCapacitySettings capacity, params IJobHandler[] handlers)
     {
         var settings = JobExecutionSettings.Create(
             BatchSize,
@@ -167,11 +232,15 @@ public sealed class JobQueuePassTests
             TimeSpan.FromMinutes(30));
         var registry = new JobHandlerRegistry(handlers);
         var failureClassifier = new StubJobFailureClassifier(JobFailureClassification.Permanent);
+        var executor = new JobExecutor(this.store, registry, failureClassifier, settings, this.timeProvider);
+
+        this.concurrency = new JobConcurrencyGate(capacity);
 
         return new JobQueuePass(
             this.store,
             registry,
-            new JobExecutor(this.store, registry, failureClassifier, settings, this.timeProvider),
+            new DirectJobAttemptRunner(executor),
+            this.concurrency,
             settings);
     }
 }

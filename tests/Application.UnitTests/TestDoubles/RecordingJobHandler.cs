@@ -16,6 +16,7 @@ namespace MailFathom.Application.UnitTests.TestDoubles;
 internal sealed class RecordingJobHandler : IJobHandler
 {
     private readonly Func<IJobPayload, CancellationToken, Task> work;
+    private int runCount;
 
     internal RecordingJobHandler(JobType jobType, Func<IJobPayload, CancellationToken, Task>? work = null)
     {
@@ -30,13 +31,14 @@ internal sealed class RecordingJobHandler : IJobHandler
     internal IJobPayload? ReceivedPayload { get; private set; }
 
     /// <summary>Gets how many times the handler was run.</summary>
-    internal int RunCount { get; private set; }
+    /// <remarks>Counted atomically, because a pass runs the jobs of one batch at once and a handler serves all of them.</remarks>
+    internal int RunCount => Volatile.Read(ref this.runCount);
 
     /// <inheritdoc />
     public Task RunAsync(IJobPayload payload, CancellationToken cancellationToken)
     {
         this.ReceivedPayload = payload;
-        this.RunCount++;
+        Interlocked.Increment(ref this.runCount);
 
         return this.work(payload, cancellationToken);
     }
