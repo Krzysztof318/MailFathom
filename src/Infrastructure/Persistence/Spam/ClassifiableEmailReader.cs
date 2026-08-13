@@ -45,6 +45,38 @@ internal sealed class ClassifiableEmailReader(MailFathomDbContext dbContext) : I
 
     /// <inheritdoc />
     /// <remarks>
+    /// The folder is matched on the alias and the generation it was bound under rather than on the remote path, for the
+    /// reason the occurrence identity carries both: an alias repointed at another folder names a different message from
+    /// the one the work was enqueued for. A tombstoned occurrence is readable here on the same terms as everywhere else
+    /// in this reader.
+    /// </remarks>
+    public async Task<StoredEmailId?> FindStoredEmailIdAsync(
+        EmailOccurrenceId occurrenceId,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(occurrenceId);
+
+        var mailboxAccountId = occurrenceId.AccountId.Value;
+        var alias = occurrenceId.FolderResolutionId.Alias.Value;
+        var generation = occurrenceId.FolderResolutionId.Generation.Value;
+        var uidValidity = occurrenceId.UidValidity.Value;
+        var uid = occurrenceId.Uid.Value;
+
+        var row = await dbContext.StoredEmails
+            .AsNoTracking()
+            .Where(email => email.MailboxAccountId == mailboxAccountId
+                && email.MailFolder.Alias == alias
+                && email.MailFolder.ResolutionGeneration == generation
+                && email.UidValidity == uidValidity
+                && email.Uid == uid)
+            .Select(email => new { email.Id })
+            .SingleOrDefaultAsync(cancellationToken);
+
+        return row is null ? null : StoredEmailId.Create(row.Id);
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
     /// The folder is matched on the alias the mapping gave it rather than on the remote path, because the alias is what
     /// the run's scope was written in and what an operator typed. A tombstoned occurrence is walked for the reason it is
     /// readable one at a time: the local copy is mail somebody can still reach, so leaving it out would put exactly the

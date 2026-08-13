@@ -17,6 +17,7 @@ namespace MailFathom.Application.UnitTests.TestDoubles;
 internal sealed class InMemoryClassifiableEmailReader : IClassifiableEmailReader
 {
     private readonly List<ClassifiableEmail> emails = [];
+    private readonly Dictionary<EmailOccurrenceId, StoredEmailId> emailIdsByOccurrence = [];
 
     /// <summary>Gets the batch sizes the reads asked for, oldest first.</summary>
     internal List<int> RequestedBatchSizes { get; } = [];
@@ -31,9 +32,21 @@ internal sealed class InMemoryClassifiableEmailReader : IClassifiableEmailReader
         return email.Id;
     }
 
+    /// <summary>Stores the occurrence one held email was discovered at, so a job payload naming it resolves.</summary>
+    /// <param name="occurrenceId">The stable remote occurrence identity.</param>
+    /// <param name="emailId">The local identity it was stored as.</param>
+    internal void AddOccurrence(EmailOccurrenceId occurrenceId, StoredEmailId emailId) =>
+        this.emailIdsByOccurrence[occurrenceId] = emailId;
+
     /// <inheritdoc />
     public Task<ClassifiableEmail?> FindAsync(StoredEmailId emailId, CancellationToken cancellationToken) =>
         Task.FromResult(this.emails.FirstOrDefault(email => email.Id == emailId));
+
+    /// <inheritdoc />
+    public Task<StoredEmailId?> FindStoredEmailIdAsync(
+        EmailOccurrenceId occurrenceId,
+        CancellationToken cancellationToken) => Task.FromResult(
+        this.emailIdsByOccurrence.TryGetValue(occurrenceId, out var emailId) ? emailId : (StoredEmailId?)null);
 
     /// <inheritdoc />
     public Task<IReadOnlyList<ClassifiableEmail>> GetStoredEmailsAsync(

@@ -1,6 +1,6 @@
 # The arrival pipeline
 
-<!-- describes: src/Application/Synchronization/MailboxSynchronizer.cs, src/Application/Emails/Chunking/MailChunkingPass.cs, src/Infrastructure/Persistence/Emails/StoredEmailChunkingStore.cs, src/Application/Emails/Extraction/RedactingEmailMimeReader.cs, src/Application/Spam/Gating/**, src/Application/Spam/Runs/SpamClassificationPass.cs, src/Application/Rules/Evaluation/MailRuleEvaluationPass.cs, src/Host/Hosting/Workers/AccountSynchronizationSupervisor.cs, src/Host/Hosting/Workers/MailEmbeddingWorker.cs -->
+<!-- describes: src/Application/Synchronization/MailboxSynchronizer.cs, src/Application/Emails/Chunking/MailChunkingPass.cs, src/Infrastructure/Persistence/Emails/StoredEmailChunkingStore.cs, src/Application/Emails/Extraction/RedactingEmailMimeReader.cs, src/Application/Spam/Gating/**, src/Application/Spam/Runs/SpamClassificationPass.cs, src/Application/Spam/SpamClassificationArrivals.cs, src/Application/Spam/EmailSpamClassificationHandler.cs, src/Application/Rules/Evaluation/MailRuleEvaluationPass.cs, src/Host/Hosting/Workers/AccountSynchronizationSupervisor.cs, src/Host/Hosting/Workers/MailEmbeddingWorker.cs -->
 
 Six features decide what happens to a message between the moment synchronization commits it and the moment everything
 derived from it exists. Each of them documents its own half, and none of them can state the order, because the order is
@@ -21,7 +21,8 @@ flowchart TD
         fetch["Fetch raw MIME, without setting the remote Seen flag"]
         extract["Extract the body text"]
         commit[("Commit: metadata, raw MIME, search document")]
-        classify["Classification pass — only when somebody asked for a run"]
+        ask(["Ask for the message to be classified"])
+        classify["Classification pass — only when somebody asked for a run over the whole mailbox"]
         rules["Rule evaluation pass"]
         cut["Cut the passages"]
         offer(["Offer the message to the embedding backlog"])
@@ -34,6 +35,7 @@ flowchart TD
     end
 
     subgraph elsewhere["Executions outside the run"]
+        job["Classification job — one message, leased, retried, dead-lettered"]
         worker["Embedding worker — one message at a time"]
         sweeps["Extraction and embedding backfills"]
     end
@@ -42,29 +44,41 @@ flowchart TD
     extract -. "redaction, fails closed" .-> presidio
     presidio -. "placeholders replace every finding" .-> extract
     extract --> commit
-    commit --> classify
+    commit --> ask
+    ask -. "one job per occurrence; a full queue refuses rather than waits" .-> job
+    ask --> classify
+    job -. "one scan per message" .-> spamd
     classify -. "one scan per message" .-> spamd
+    job -. "records the verdict" .-> gate
     classify --> gate{"What does classification say?"}
     gate -- "junk" --> withheld["Nothing further runs, and passages already cut are removed"]
     gate -- "not junk, or no classification covers the folder" --> rules
-    gate -- "still waiting for a verdict" --> held["Held; the next run or a sweep asks again"]
+    gate -- "no verdict yet: queued, running, or the job ran out of attempts" --> held["Held; the next run or a sweep asks again"]
     gate -- "released: unclassifiable, or waited longer than allowed" --> rules
     rules --> cut
     cut --> offer
     offer -.-> worker
     sweeps --> cut
     sweeps --> worker
-
-    classDef seam stroke-dasharray: 5 3;
-    class classify seam;
 ```
 
-The dashed border on the classification pass is the one stage that is a seam rather than a running job in this release:
-the call site sits where the order requires it, and what reaches it today is an operator asking for a run over a
-mailbox. Nothing classifies a message because it arrived. The trigger that will is
-[issue 730](https://github.com/Krzysztof318/MailFathom/issues/730), and until it ships the gate below releases mail that
-has waited longer than a verdict is allowed to take, so an unclassified deployment indexes exactly as it did before
-classification existed.
+Classification happens in two places and the drawing separates them deliberately. **A message is classified because it
+arrived**: the run asks for one as soon as it has committed the message and its content, and the work runs as an
+execution of the durable queue — leased to one worker, retried per message with a jittered backoff, and dead-lettered
+when it cannot succeed. That per-message backoff is the whole reason it is a job rather than another pass of the run: a
+scan reaches a sidecar that can be unreachable, saturated, or restarting, and a run whose only recovery is deferring the
+whole account cannot express one message out of three hundred deserving another attempt.
+
+The pass inside the run is the second place, and it is the operator's:
+[classifying the mail you already have](../features/spam-classification.md#classifying-the-mail-you-already-have) walks
+a mailbox that was stored before any of this, or stored while the feature was off. Both reach the same use case, record
+the same record, and consult the same sidecar; what differs is which mail they cover.
+
+Four things can become of one classification, and the gate below reads what was recorded rather than what happened to
+the job. A verdict of junk withholds the message; a verdict of anything else admits it; a scan that could not answer
+still records the verdict the headers reached, so the message is admitted or withheld on that; and a job that failed
+every attempt records nothing at all, which leaves the message waiting until the bound below releases it. **No outcome
+of the queue stops a mailbox being indexed** — that is what the bound is for.
 
 ## What the run waits for, and what it hands off
 
@@ -74,11 +88,19 @@ the folders between them are walked by `MaxConcurrentFoldersPerAccount` at a tim
 a deployment that raises it has several folders fetching, extracting, and committing side by side.
 [Synchronizing a mailbox](../features/imap-synchronization.md) states that bound and what else it costs.
 
-The one hand-off is the last arrow: offering a message to the embedding backlog is a non-blocking enqueue into a
-bounded in-process queue, and **a full backlog is not an error**. An initial synchronization of a large mailbox produces
-work faster than any provider accepts it, so the bound refuses rather than waits; the message is stored with its
-passages, and the
+There are two hand-offs, both drawn as dashed arrows out of the run, and **neither of them is allowed to fail the pass
+that produced it**. Offering a message to the embedding backlog is a non-blocking enqueue into a bounded in-process
+queue, and a full backlog is not an error: an initial synchronization of a large mailbox produces work faster than any
+provider accepts it, so the bound refuses rather than waits; the message is stored with its passages, and the
 [embedding backfill](../features/embedding-backfill.md) is what reaches mail the live path did not.
+
+Asking for a classification is the same shape against a durable queue rather than an in-process one. It is one insert
+per stored message, made after the transaction that stored the message has committed — the queue takes no persistence
+session by design, so there is no way to enqueue work whose subject may still roll back. A queue already holding as much
+of that type as the deployment accepts refuses the row rather than growing, and the run does not read the answer: a
+message nobody classifies is released by the wait a verdict is allowed, which is the property that keeps a classification
+backlog a degraded signal instead of a stalled mailbox. A message stored without its content is not asked for at all,
+because a message whose payload is not stored is reported unclassifiable rather than fetched.
 
 Nothing else about the pipeline crosses a process boundary while a transaction is open. The two sidecar calls happen
 outside the commit that follows them, and the embedding provider is reached only by the worker, which consumes committed
@@ -92,7 +114,7 @@ pipeline unchanged.
 | Sidecar | What it is shown | What its silence does |
 | --- | --- | --- |
 | Personal-data analyzer | The extracted body text of one message | **Fails closed.** The derivation is refused, nothing derived is written, and the run retries the message later |
-| Spam scanner | The raw MIME of one message | **Fails open.** No verdict is recorded, the message keeps waiting, and the wait's own bound eventually releases it |
+| Spam scanner | The raw MIME of one message | **Fails open.** The classification keeps the verdict the message's own headers reached, which may be that nothing was found either way, and the message is admitted or withheld on that |
 
 The asymmetry is deliberate and it is the single most important thing on this page. Redaction is an egress guard: text
 that reached a derived store unscanned is text a retrieval hit can hand back months later, and putting it back costs a
@@ -114,7 +136,7 @@ mail an owner drags out of the junk folder ordinary mail from that moment.
 | --- | --- | --- | --- |
 | Junk — a verdict, or the message is in the account's junk folder | No | No, and any already cut are removed | No |
 | Not junk, or the folder is outside the configured scope | Yes | Yes | Yes |
-| Still waiting for a verdict | No, held | No, held | No, held |
+| No verdict yet — the job is queued, running, or ran out of attempts without recording one | No, held | No, held | No, held |
 | Released — the message carries nothing classifiable, or it waited longer than allowed | Yes | Yes | Yes |
 
 A held message is held rather than dropped. The same four facts are read again by the next account run and by both

@@ -8,6 +8,7 @@ using MailFathom.Application.Folders;
 using MailFathom.Application.Mail;
 using MailFathom.Application.Mail.Mutations;
 using MailFathom.Application.Persistence;
+using MailFathom.Application.Spam;
 using MailFathom.Application.Spam.Gating;
 using MailFathom.Application.Synchronization.Checkpoints;
 using MailFathom.Application.Synchronization.Reconciliation;
@@ -40,6 +41,7 @@ public sealed class MailboxSynchronizer
     private readonly MailboxReconciler reconciler;
     private readonly DerivedWorkGate derivedWorkGate;
     private readonly IDerivedWorkGateTelemetry gateTelemetry;
+    private readonly SpamClassificationArrivals classificationArrivals;
     private readonly OptimisticConcurrencyRetryPolicy concurrencyRetryPolicy;
     private readonly TimeProvider timeProvider;
     private readonly MailboxSynchronizationOptions options;
@@ -62,6 +64,7 @@ public sealed class MailboxSynchronizer
         MailboxReconciler reconciler,
         DerivedWorkGate derivedWorkGate,
         IDerivedWorkGateTelemetry gateTelemetry,
+        SpamClassificationArrivals classificationArrivals,
         OptimisticConcurrencyRetryPolicy concurrencyRetryPolicy,
         TimeProvider timeProvider,
         MailboxSynchronizationOptions options)
@@ -82,6 +85,7 @@ public sealed class MailboxSynchronizer
         this.reconciler = reconciler;
         this.derivedWorkGate = derivedWorkGate;
         this.gateTelemetry = gateTelemetry;
+        this.classificationArrivals = classificationArrivals;
         this.concurrencyRetryPolicy = concurrencyRetryPolicy;
         this.timeProvider = timeProvider;
         this.options = options;
@@ -587,6 +591,12 @@ public sealed class MailboxSynchronizer
     /// belongs in a folder mapped differently. <see cref="Emails.Chunking.MailChunkingPass" /> is where the passages are
     /// cut, after those two stages, and the same pass is what offers the message for embedding.
     /// </para>
+    /// <para>
+    /// What follows the commit is the one hand-off this method makes: the message is asked to be classified, as a job
+    /// the durable queue leases and retries per message. It is asked for only where the content was stored, because a
+    /// message without content is reported unclassifiable rather than fetched, and only after the commit, because the
+    /// queue enqueues against state that cannot roll back underneath it.
+    /// </para>
     /// </remarks>
     private async Task<OccurrenceSynchronizationOutcome> StoreOccurrenceAsync(
         IMailboxSession mailboxSession,
@@ -690,6 +700,15 @@ public sealed class MailboxSynchronizer
 
         budget.RecordStored(content.RawMime.Length);
         storageClaim.Settle(content.RawMime.Length);
+
+        // Asked for after the commit rather than inside it, because the queue takes no persistence session by design:
+        // work enqueued against a transaction that then rolled back would name a message no local state holds. It is one
+        // insert per stored message, it is refused rather than queued once the deployment's backlog bound is reached,
+        // and it is skipped outright where classification is off or does not cover this folder.
+        await this.classificationArrivals.ScheduleAsync(
+            storedEmailId,
+            metadata.OccurrenceId,
+            cancellationToken);
 
         return new OccurrenceSynchronizationOutcome(
             storedEmailId,

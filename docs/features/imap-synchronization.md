@@ -1178,8 +1178,10 @@ passages exactly as one it accepted, and an instance that has activated no embed
 nothing drains. [Automatic embedding](automatic-embedding.md) is what happens on the other side of it.
 
 Where spam classification is switched on over the folder, both halves of that are decided one step earlier: the message
-is neither cut nor offered while no verdict exists for it, and junk is neither cut nor offered at all. What releases a
-held message is the account's own next run — its rule pass and the cut behind it ask the gate again — rather than the
+is neither cut nor offered while no verdict exists for it, and junk is neither cut nor offered at all. The verdict is
+usually already there, because the run asks for one as soon as it has committed the message and the work runs on the
+durable queue rather than in the run. What releases a message the verdict was not there for is the account's own next
+run — its rule pass and the cut behind it ask the gate again — rather than the
 [embedding backfill](embedding-backfill.md) sweep, which is narrowed by the same admission and therefore never sees a
 message no rule pass has stamped.
 [Junk is kept out of what a deployment derives from mail](spam-classification.md#junk-is-kept-out-of-what-a-deployment-derives-from-mail)

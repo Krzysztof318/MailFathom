@@ -582,9 +582,11 @@ try
     // a loop of its own, so a schedule reaches the same worker and the same capacity bounds as an event-driven enqueue.
     builder.Services.AddScoped<IScheduledJobSource, MailRuleScheduleSource>();
     builder.Services.AddScoped<JobSchedulePass>();
-    // The one handler this build registers, which is also what makes the worker claim at all. A rule's scheduled run is
-    // recorded here and walked by the account's own synchronization run, so the job itself is short.
+    // The handlers this build registers, which are also what makes the worker claim at all. A rule's scheduled run is
+    // recorded here and walked by the account's own synchronization run, so that job is short; a classification runs the
+    // whole of one message's work, which is what the per-message lease and backoff exist for.
     builder.Services.AddScoped<IJobHandler, ScheduledMailRuleRunHandler>();
+    builder.Services.AddScoped<IJobHandler, EmailSpamClassificationHandler>();
     // A singleton rather than a scoped value: the bound is a deployment-wide privacy control, so every search in the
     // process applies the one an operator configured rather than whichever snapshot a scope happened to open under.
     builder.Services.AddSingleton(provider =>

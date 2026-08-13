@@ -33,6 +33,18 @@ public interface IClassifiableEmailReader
     /// </remarks>
     Task<ClassifiableEmail?> FindAsync(StoredEmailId emailId, CancellationToken cancellationToken);
 
+    /// <summary>Resolves the stable remote occurrence identity into the local email it was stored as.</summary>
+    /// <param name="occurrenceId">The account, folder binding, UIDVALIDITY, and UID the message was discovered under.</param>
+    /// <param name="cancellationToken">Cancels the lookup.</param>
+    /// <returns>The local identity, or <see langword="null" /> when nothing is stored at that occurrence.</returns>
+    /// <remarks>
+    /// A durable execution names the occurrence rather than the local key, because the local key is a value this system
+    /// generated and the occurrence is what the mail server and the enqueuer both know. This is where the one is turned
+    /// into the other, and an absent answer is the ordinary case of a message expunged between the moment the work was
+    /// enqueued and the moment it ran.
+    /// </remarks>
+    Task<StoredEmailId?> FindStoredEmailIdAsync(EmailOccurrenceId occurrenceId, CancellationToken cancellationToken);
+
     /// <summary>Reads one account's stored occurrences in identity order, narrowed to a set of folders.</summary>
     /// <param name="accountId">The account whose mailbox is walked.</param>
     /// <param name="folderAliases">MailFathom's own names for the folders the walk covers.</param>
