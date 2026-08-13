@@ -1163,20 +1163,25 @@ The walk reaches no mail server — every byte it reads was fetched and stored b
 
 ### Offering a stored message for embedding
 
-Once a message and the passages derived beside it are committed, the run offers it to the embedding backlog and moves
-on. The offer is deliberately outside the transaction that stored them: a provider call inside it would hold a database
-transaction open for as long as a remote model takes to answer, and a provider outage would stall the mailbox fetch
-behind it. It also never waits — the run is holding an open IMAP session, so a full backlog refuses the offer rather
-than making a mailbox as slow as the provider is.
+The offer is made by the run's last local step rather than by the commit that stored the message. That step runs after
+the classification and rule passes and after every folder has finished, and it names a message whose passages are
+already durable in a transaction of their own — so what is offered is committed work, cut under the folder mapping the
+message actually ended up in. [The arrival pipeline](../architecture/arrival-pipeline.md) draws that order and says why
+the cut is not part of the storing commit.
+
+The offer is deliberately outside a transaction: a provider call inside one would hold a database transaction open for
+as long as a remote model takes to answer, and a provider outage would stall the run behind it. It also never waits — a
+full backlog refuses the offer rather than making a mailbox as slow as the provider is.
 
 Nothing about that changes what a run reports or how far it gets. A message the backlog turned away is stored with its
 passages exactly as one it accepted, and an instance that has activated no embedding profile offers into a backlog
 nothing drains. [Automatic embedding](automatic-embedding.md) is what happens on the other side of it.
 
 Where spam classification is switched on over the folder, both halves of that are decided one step earlier: the message
-is neither cut nor offered while no verdict exists for it, junk is neither cut nor offered at all, and the
-[embedding backfill](embedding-backfill.md) sweep is what cuts and embeds it once a verdict admits it or its wait runs
-out.
+is neither cut nor offered while no verdict exists for it, and junk is neither cut nor offered at all. What releases a
+held message is the account's own next run — its rule pass and the cut behind it ask the gate again — rather than the
+[embedding backfill](embedding-backfill.md) sweep, which is narrowed by the same admission and therefore never sees a
+message no rule pass has stamped.
 [Junk is kept out of what a deployment derives from mail](spam-classification.md#junk-is-kept-out-of-what-a-deployment-derives-from-mail)
 holds the rule and the bound. With classification off, which is the default, the paragraphs above describe every message.
 
