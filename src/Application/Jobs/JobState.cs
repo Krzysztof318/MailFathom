@@ -21,4 +21,13 @@ public enum JobState
 
     /// <summary>The work was done. The row is terminal and keeps its idempotency key, so the same trigger cannot enqueue it again.</summary>
     Succeeded = 2,
+
+    /// <summary>An attempt at the work did not finish it. The row is terminal and keeps its idempotency key, exactly as a succeeded one does.</summary>
+    /// <remarks>
+    /// Every failure lands here, whatever caused it, because nothing yet decides which failures are worth repeating: a
+    /// job left claimable after a failing attempt would be taken again as fast as the queue can hand it out, so the
+    /// terminal state is what keeps one job that cannot succeed from occupying a worker. What the row keeps is its
+    /// attempt count and its key, which is what a later decision about repeating the work is made against.
+    /// </remarks>
+    Failed = 3,
 }

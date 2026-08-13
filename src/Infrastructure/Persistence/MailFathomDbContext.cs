@@ -518,8 +518,9 @@ internal sealed class MailFathomDbContext : DbContext
     /// The claim index carries the type and the instant a job becomes available, because the claim statement is the only
     /// query this table runs at any volume and those are what it selects on. It is filtered to the states a claim can
     /// still take, so a queue that has been running for a year holds an index the size of its backlog rather than of its
-    /// history — and the claim repeats that same inequality in its own predicate so PostgreSQL can prove the index
-    /// applies to it.
+    /// history — and the claim repeats that same membership in its own predicate so PostgreSQL can prove the index
+    /// applies to it. Naming the two claimable states rather than excluding the terminal ones is what keeps the filter
+    /// correct as terminal states are added: a job that failed leaves the index the moment it stops being claimable.
     /// </para>
     /// <para>
     /// The account is a column with an index of its own rather than a value inside the payload, because erasure,
@@ -560,7 +561,8 @@ internal sealed class MailFathomDbContext : DbContext
                 .HasDatabaseName(JobIdentityUniqueIndexName);
             entity.HasIndex(job => new { job.JobType, job.AvailableAt })
                 .HasDatabaseName(JobClaimIndexName)
-                .HasFilter($"\"{nameof(JobEntity.State)}\" <> '{nameof(JobState.Succeeded)}'");
+                .HasFilter(
+                    $"\"{nameof(JobEntity.State)}\" IN ('{nameof(JobState.Pending)}', '{nameof(JobState.Claimed)}')");
             entity.HasIndex(job => new { job.MailboxAccountId, job.EnqueuedAt })
                 .HasDatabaseName(JobAccountIndexName);
 

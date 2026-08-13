@@ -82,6 +82,20 @@ public interface IJobStore
     /// </remarks>
     Task<bool> CompleteAsync(JobId jobId, JobLeaseOwner owner, CancellationToken cancellationToken);
 
+    /// <summary>Ends a held job as unfinished work nothing will attempt again, leaving a terminal row that keeps its key.</summary>
+    /// <param name="jobId">The job to fail.</param>
+    /// <param name="owner">The attempt claiming to hold it.</param>
+    /// <param name="cancellationToken">Cancels the write.</param>
+    /// <returns><see langword="true" /> when this attempt still held the job and the failure was written; otherwise <see langword="false" />.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="owner" /> is <see langword="null" />.</exception>
+    /// <remarks>
+    /// It is terminal for the reason <see cref="JobState.Failed" /> states: nothing here decides which failures are
+    /// worth repeating, and a job left claimable after a failing attempt would be taken again immediately. The row
+    /// keeps its key and its attempt count, so a later decision about repeating the work is made against evidence
+    /// rather than against a row that was deleted.
+    /// </remarks>
+    Task<bool> FailAsync(JobId jobId, JobLeaseOwner owner, CancellationToken cancellationToken);
+
     /// <summary>Gives a held job back unfinished, so it is claimable again at once.</summary>
     /// <param name="jobId">The job to release.</param>
     /// <param name="owner">The attempt claiming to hold it.</param>
