@@ -34,7 +34,11 @@ Two conditions select a message, and they are the two halves of what a pre-exist
   walk reaches ends up cut exactly as the same message arriving today would be. Requiring that the rules have finished
   is part of that sameness rather than a narrowing beside it: this sweep runs on its own interval while an account run
   is still fetching a mailbox, so without it a first synchronization would have its mail cut here before a single rule
-  had read it — which is the one order [the arrival pipeline](../architecture/arrival-pipeline.md) exists to fix.
+  had read it — which is the one order [the arrival pipeline](../architecture/arrival-pipeline.md) exists to fix. The
+  stamp is written by an account run's rule pass and by nothing else, so **a deployment running with
+  `MailSynchronization:Enabled` set to `false` cuts nothing here**: no run starts, no message is ever stamped, and mail
+  that has no passages keeps none until synchronization is switched on again. Mail that already carries passages is
+  embedded either way, since that is the other group and it waits on nothing.
 - **A message with a passage that carries no vector** under the generation being walked towards was stored before that
   generation existed, or was turned away by `Embeddings:MaxQueuedEmails`, or was left part-way through by a provider
   call that failed. For a generation being built from nothing, that is every message the instance holds.
@@ -52,13 +56,13 @@ change stays and is retrieved like any other vector, subject to what the reading
 [What a mapping decides beyond where the folder is](imap-synchronization.md#what-a-mapping-decides-beyond-where-the-folder-is)
 states both cases.
 
-**This sweep is where spam classification lets a held message through.** Where classification is switched on, the query
-leaves out junk entirely and leaves out a message no verdict has been reached about, so a message of a classified folder
-appears here the moment its verdict admits it or its wait runs out — and the cut it gets is the one the account run's
-own last step passed over. That makes the sweep both the thing that keeps spam away from a provider and the thing that
-stops a wedged classifier turning the index into one that quietly stopped filling; cutting a message's first passages is
-also the one
-place a release is countable per message, which is what
+**A message classification was holding is released by an account run rather than by this sweep.** The rule pass is
+narrowed by the same admission, so a message waiting on a verdict is never stamped — and with the stamp required here,
+such a message cannot appear in this query at all while it waits. What admits it is the next account run: its rule pass
+stamps the message, and the cut one step later in that same run cuts it. This sweep still leaves out junk entirely and
+still cannot reach a message no verdict has been reached about, so it never carries spam to a provider; what it reaches
+is what a run's own batch budget left behind. Cutting a message's first passages is still where a release is countable
+per message wherever this sweep is what performs it, which is what
 `mailfathom.spam.derived_work.admissions` reports.
 [Junk is kept out of what a deployment derives from mail](spam-classification.md#junk-is-kept-out-of-what-a-deployment-derives-from-mail)
 holds the rule, and with classification off this query is exactly what it was.

@@ -11,6 +11,7 @@ using MailFathom.CodeCoverage;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Folders;
+using MailFathom.Domain.Mutations;
 using MailFathom.Domain.Spam;
 using MailFathom.Infrastructure.Persistence.Emails;
 using MailFathom.Infrastructure.Persistence.Entities;
@@ -164,17 +165,20 @@ internal sealed class StoredEmailEmbeddingBackfillStore(
     /// reader.
     /// </remarks>
     /// <remarks>
-    /// The second group carries the rule pass's stamp for the same reason the account run's own cut does, and it is a
+    /// The second group carries both of the conditions the account run's own cut waits for, because cutting is what
+    /// this walk would do to it: the rule pass's stamp, and no relocation still converging.
+    /// <see cref="MailAwaitingRelocation" /> holds the second and why a completed or abandoned one holds nothing
+    /// back. The stamp is a
     /// correctness condition rather than a tidiness one: this sweep runs on its own interval while a run is still
     /// fetching a mailbox, so without it a first synchronization would have its mail cut here, by whichever of the two
     /// got there first, before the rules had read a single message. What the stamp costs is nothing — an unevaluated
     /// message is cut a sweep later, by which time the pass that may still move it has run.
     /// </remarks>
     /// <remarks>
-    /// The classification narrowing is what makes this sweep the place a held message is released. Junk never appears
-    /// here at all, and a message waiting on a verdict appears the moment the verdict admits it or its wait runs out —
-    /// so the sweep both keeps spam away from the provider and stops a wedged scanner from turning the index into one
-    /// that quietly stopped filling.
+    /// The classification narrowing keeps junk out of this walk entirely, and the rule stamp beside it means a message
+    /// still waiting on a verdict cannot appear here at all: the rule pass is narrowed by the same admission, so such a
+    /// message is never stamped. What releases it is therefore the next account run — its rule pass, and the cut one
+    /// step behind that pass — rather than this sweep, which reaches what a run's own batch budget left behind.
     /// </remarks>
     /// <remarks>
     /// The walk is scoped to the folders a mapping admits to embedding, which is the same decision that stops their
@@ -196,7 +200,14 @@ internal sealed class StoredEmailEmbeddingBackfillStore(
                     || (!email.Chunks.Any()
                         && email.RulesEvaluatedAt != null
                         && email.SearchDocument != null
-                        && email.SearchDocument.BodyText != null)),
+                        && email.SearchDocument.BodyText != null
+                        // Composed inline rather than as a second Where, so it narrows the uncut group alone: a message
+                        // whose passages already exist and are missing a vector is embedded wherever it is sitting,
+                        // because the vectors hang on passages this walk is not deciding whether to derive.
+                        && !email.Mutations.Any(mutation =>
+                            mutation.Mutation == MailAwaitingRelocation.RelocateMutationName
+                            && mutation.Stage != MailboxMutationStage.Completed
+                            && mutation.Stage != MailboxMutationStage.Abandoned))),
             folderParticipation.FoldersGeneratingEmbeddings),
         terms);
 

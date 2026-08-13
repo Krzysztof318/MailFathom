@@ -10,7 +10,6 @@ using MailFathom.CodeCoverage;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Folders;
-using MailFathom.Domain.Mutations;
 using MailFathom.Domain.Spam;
 using MailFathom.Infrastructure.Persistence.Entities;
 using MailFathom.Infrastructure.Persistence.Sessions;
@@ -36,9 +35,6 @@ internal sealed class StoredEmailChunkingStore(
     DerivedWorkGate derivedWorkGate)
     : IStoredEmailChunkingStore
 {
-    /// <summary>The stored discriminator of the one mutation that can still change which folder a message is in.</summary>
-    private static readonly string RelocateMutationName = MailboxMutation.Relocate.Name;
-
     /// <inheritdoc />
     /// <remarks>
     /// Ordering is by the primary key, which is total, stable, and already indexed. No resume position travels with the
@@ -116,9 +112,8 @@ internal sealed class StoredEmailChunkingStore(
     /// abandoned after its bounded attempts — holds nothing back, since neither will move the message again.
     /// </para>
     /// <para>
-    /// Only a relocation is read. A copy leaves this message where it is and its own row is discovered in the
-    /// destination and walks the whole pipeline itself, and a pending delete costs at most one cut whose passages the
-    /// deletion then cascades away — neither derives anything under the wrong mapping.
+    /// <see cref="MailAwaitingRelocation" /> holds which records hold a cut back and which have stopped mattering, and
+    /// is read by every path that cuts.
     /// </para>
     /// </remarks>
     internal static IQueryable<StoredEmailEntity> Selecting(
@@ -134,10 +129,7 @@ internal sealed class StoredEmailChunkingStore(
                     && !email.Chunks.Any()
                     && email.SearchDocument != null
                     && email.SearchDocument.BodyText != null)
-                .Where(email => !email.Mutations.Any(mutation =>
-                    mutation.Mutation == RelocateMutationName
-                    && mutation.Stage != MailboxMutationStage.Completed
-                    && mutation.Stage != MailboxMutationStage.Abandoned)),
+                .Where(MailAwaitingRelocation.IsSettledWhereItIs),
             embeddedFolders),
         terms);
 

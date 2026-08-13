@@ -257,6 +257,11 @@ internal sealed class StoredEmailExtractionBackfillStore(
     /// passages of a folder the message was about to leave.
     /// </para>
     /// <para>
+    /// That last cost is also reachable with the stamp already written, because a rule declares a move rather than
+    /// performing one and the account's next run converges it. So the same walk reaching such a message inside that
+    /// window withholds the cut for it too, by <see cref="MailAwaitingRelocation" />, which every cutting path reads.
+    /// </para>
+    /// <para>
     /// It costs one indexed read of the row this write is already holding, whether or not the deployment classifies
     /// anything.
     /// </para>
@@ -269,7 +274,8 @@ internal sealed class StoredEmailExtractionBackfillStore(
         var terms = derivedWorkGate.ReadTerms();
         var email = sessionContext.StoredEmails
             .AsNoTracking()
-            .Where(candidate => candidate.Id == storedEmailId.Value && candidate.RulesEvaluatedAt != null);
+            .Where(candidate => candidate.Id == storedEmailId.Value && candidate.RulesEvaluatedAt != null)
+            .Where(MailAwaitingRelocation.IsSettledWhereItIs);
 
         return await (terms.IsApplied ? DerivedWorkAdmittedEmails.Admitting(email, terms) : email)
             .AnyAsync(cancellationToken);

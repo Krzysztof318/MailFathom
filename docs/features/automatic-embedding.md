@@ -27,7 +27,9 @@ passages cut before it was set.
 
 A second narrowing applies wherever spam classification is switched on: junk is never embedded and its content never
 reaches a provider, and a message no verdict has been reached about is neither cut nor offered here while it waits. The
-[backfill](embedding-backfill.md) sweep is what reaches such a message once a verdict admits it or its wait runs out.
+account's own next run is what reaches such a message once a verdict admits it or its wait runs out — the same two
+steps in the same order, one interval later — and the [backfill](embedding-backfill.md) sweep is what reaches whatever
+a run's batch budget left behind.
 [Junk is kept out of what a deployment derives from mail](spam-classification.md#junk-is-kept-out-of-what-a-deployment-derives-from-mail)
 holds the whole of it, and none of it applies with classification off.
 

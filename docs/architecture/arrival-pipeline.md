@@ -137,7 +137,10 @@ defect that is invisible when it happens.
 
 ## The paths that re-derive the same data
 
-Three paths produce derived data, and all three obey the order above rather than a version of it.
+Three paths produce derived data, and all three obey the order above rather than a version of it. Two of them wait for
+a stamp only an account run writes — the record that the rule pass has finished with a message — so on a deployment with
+`MailSynchronization:Enabled` set to `false` neither cuts anything: no run starts, nothing is stamped, and mail stored
+before that keeps whatever passages it already had until synchronization is switched on again.
 
 - **The live path** is the run drawn here.
 - **The extraction backfill** re-reads raw MIME stored before extraction existed. It redacts through the same guard,

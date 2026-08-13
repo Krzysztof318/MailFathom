@@ -147,6 +147,39 @@ public sealed class OrchestratedEmailEmbeddingBackfillTests(MailFathomOrchestrat
         Assert.True(await CountVectorsAsync(services, mapped, profileId, cancellationToken) > 0);
     }
 
+    /// <summary>
+    /// The sweep obeys the arrival pipeline's order rather than a version of it: a message the owner's rules have not
+    /// reached is not cut here, however long it has been sitting uncut.
+    /// </summary>
+    /// <remarks>
+    /// This is the ordering that is easiest to lose, because the sweep runs on its own interval while an account run is
+    /// still fetching a mailbox — so without it a first synchronization would have its mail cut by whichever of the two
+    /// got there first, before a rule had read any of it. The stamped message beside it is the control: without one,
+    /// zero passages would report a sweep that found nothing at all rather than one that passed this message over.
+    /// </remarks>
+    [Fact]
+    public async Task Sweeping_MailTheRulesHaveNotReachedYet_CutsNothingAndEmbedsNothingOfIt()
+    {
+        // Arrange
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var services = await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken);
+        var unevaluated = await StoreOneMessageAsync(services, uid: 9331, cancellationToken);
+        var evaluated = await StoreOneMessageAsync(services, uid: 9332, cancellationToken);
+        await RemovePassagesAsync(services, unevaluated, cancellationToken);
+        await RemovePassagesAsync(services, evaluated, cancellationToken);
+        await OrchestratedRuleEvaluationStamp.ClearAsync(services, unevaluated, cancellationToken);
+        var profileId = await OrchestratedEmbeddingProfile.EnsureActiveDeterministicAsync(services, cancellationToken);
+
+        // Act
+        await SweepAsync(services, cancellationToken);
+
+        // Assert
+        Assert.Equal(0, await CountPassagesAsync(services, unevaluated, cancellationToken));
+        Assert.Equal(0, await CountVectorsAsync(services, unevaluated, profileId, cancellationToken));
+        Assert.True(await CountPassagesAsync(services, evaluated, cancellationToken) > 0);
+        Assert.True(await CountVectorsAsync(services, evaluated, profileId, cancellationToken) > 0);
+    }
+
     /// <summary>Runs the backfill until the sweep ends, and answers with the last run that did any work.</summary>
     private static async Task<StoredEmailEmbeddingBackfillResult> SweepAsync(
         OrchestratedMailFathomServices services,
@@ -215,7 +248,13 @@ public sealed class OrchestratedEmailEmbeddingBackfillTests(MailFathomOrchestrat
                 .FindResumePositionAsync(token),
             cancellationToken);
 
-    /// <summary>Stores one synthetic message, whose passages the chunk writer derives in the same session.</summary>
+    /// <summary>Stores one synthetic message with no passages, as an instance that predates chunking holds it.</summary>
+    /// <remarks>
+    /// The metadata write cuts nothing — the cut is a step of the account run rather than something a store does on its
+    /// way past — so the message is stamped as one the rules have finished with, which is the state every cutting path
+    /// waits for and the state a run would have left it in. What this seeds is therefore exactly the sweep's first
+    /// group: text, no passages, and nothing still to happen to the message before it may be cut.
+    /// </remarks>
     private static async Task<StoredEmailId> StoreOneMessageAsync(
         OrchestratedMailFathomServices services,
         uint uid,
@@ -243,6 +282,8 @@ public sealed class OrchestratedEmailEmbeddingBackfillTests(MailFathomOrchestrat
             cancellationToken);
 
         Assert.Equal(PersistenceCommitResult.Committed, commitResult);
+
+        await OrchestratedRuleEvaluationStamp.ApplyAsync(services, storedEmailId, SyntheticEmail.SentAt, cancellationToken);
 
         return storedEmailId;
     }
