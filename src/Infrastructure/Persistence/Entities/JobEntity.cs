@@ -63,6 +63,20 @@ internal sealed class JobEntity
     /// <remarks>A process that dies mid-execution never reaches a line that would have counted its attempt, so counting at the claim is what keeps a crash loop visible.</remarks>
     public int AttemptCount { get; set; }
 
+    /// <summary>Gets or sets what the last failed attempt was classified as, and <see langword="null" /> while none has failed.</summary>
+    /// <remarks>
+    /// Kept beside the reason rather than derived from the state, because a dead letter and a job waiting for its next
+    /// attempt both carry one and the state distinguishes only the first of those.
+    /// </remarks>
+    public JobFailureClassification? LastFailureClassification { get; set; }
+
+    /// <summary>Gets or sets the operator-safe name of what the last attempt failed with, and <see langword="null" /> while none has failed.</summary>
+    /// <remarks>
+    /// A type name and a stable error code, never an exception message: a handler works on mail, and a library's
+    /// message may quote it. This column outlives the run and is read back into every report of the job.
+    /// </remarks>
+    public string? LastFailureReason { get; set; }
+
     /// <summary>Gets or sets the attempt holding the job, and <see langword="null" /> while none does.</summary>
     public string? LeaseOwner { get; set; }
 

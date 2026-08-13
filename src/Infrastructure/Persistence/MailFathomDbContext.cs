@@ -555,6 +555,8 @@ internal sealed class MailFathomDbContext : DbContext
             // Stored as text for the reason every other bounded value in this schema is: it stays readable in an ad-hoc
             // query and survives any later reordering of the enum.
             entity.Property(job => job.State).HasConversion<string>().HasMaxLength(64).IsRequired();
+            entity.Property(job => job.LastFailureClassification).HasConversion<string>().HasMaxLength(64);
+            entity.Property(job => job.LastFailureReason).HasMaxLength(JobFailureRecord.MaximumReasonLength);
 
             entity.HasIndex(job => new { job.JobType, job.IdempotencyKey })
                 .IsUnique()

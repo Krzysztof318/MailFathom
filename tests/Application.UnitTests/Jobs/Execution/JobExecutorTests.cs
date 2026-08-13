@@ -17,6 +17,9 @@ public sealed class JobExecutorTests
     private static readonly TimeSpan LeaseDuration = TimeSpan.FromMinutes(10);
     private static readonly TimeSpan ExecutionTimeout = TimeSpan.FromMinutes(9);
     private static readonly TimeSpan RenewalInterval = TimeSpan.FromMinutes(5);
+    private static readonly TimeSpan RetryBaseDelay = TimeSpan.FromSeconds(30);
+    private static readonly TimeSpan RetryMaxDelay = TimeSpan.FromMinutes(30);
+    private const int MaxAttempts = 5;
 
     private readonly FakeTimeProvider timeProvider = new(Noon);
     private readonly IJobStore store = Substitute.For<IJobStore>();
@@ -42,15 +45,15 @@ public sealed class JobExecutorTests
     }
 
     /// <summary>
-    /// A job nothing can run must stop rather than be handed out again forever, so it is recorded as failed instead of
-    /// left for its lease to expire.
+    /// A job nothing can run must stop rather than be handed out again forever, so it is dead-lettered on the attempt
+    /// that found no handler instead of spending the attempt budget discovering the same thing.
     /// </summary>
     [Fact]
-    public async Task ExecuteAsync_AJobWhoseTypeHasNoHandler_RecordsItAsFailedRatherThanLeavingItClaimable()
+    public async Task ExecuteAsync_AJobWhoseTypeHasNoHandler_DeadLettersItRatherThanLeavingItClaimable()
     {
         // Arrange
         var job = LeasedJobFor(JobType.ClassifyEmailSpam);
-        this.store.FailAsync(job.JobId, job.Lease.Owner, Arg.Any<CancellationToken>()).Returns(true);
+        this.AllowDeadLettering(job);
 
         var executor = this.ExecutorFor();
 
@@ -59,40 +62,130 @@ public sealed class JobExecutorTests
 
         // Assert
         Assert.Equal(JobExecutionOutcome.HandlerMissing, result.Outcome);
-        await this.store.Received(1).FailAsync(job.JobId, job.Lease.Owner, Arg.Any<CancellationToken>());
+        Assert.Equal(JobFailureDisposition.DeadLettered, result.AttemptFailure?.Disposition);
+        Assert.Equal(JobFailureClassification.Permanent, result.AttemptFailure?.Record.Classification);
+        await this.store.Received(1).DeadLetterAsync(
+            job.JobId,
+            job.Lease.Owner,
+            Arg.Is<JobFailureRecord>(failure => failure!.Reason == JobFailureRecord.HandlerMissing.Reason),
+            Arg.Any<CancellationToken>());
         await this.store.DidNotReceive().ReleaseAsync(
             Arg.Any<JobId>(),
             Arg.Any<JobLeaseOwner>(),
             Arg.Any<CancellationToken>());
     }
 
-    /// <summary>The exception travels with the result, because only the caller knows at what level a failure is reported.</summary>
+    /// <summary>
+    /// Repeating a permanent failure cannot change the answer, so the budget is never spent on one: the job is terminal
+    /// on its first attempt with every attempt still available.
+    /// </summary>
     [Fact]
-    public async Task ExecuteAsync_AHandlerThatRaises_RecordsTheFailureAndCarriesTheException()
+    public async Task ExecuteAsync_AHandlerRaisingAPermanentFailure_DeadLettersTheJobOnItsFirstAttempt()
     {
         // Arrange
         var raised = new InvalidOperationException("the handler could not finish");
         var handler = new RecordingJobHandler(JobType.ClassifyEmailSpam, (_, _) => Task.FromException(raised));
         var job = LeasedJobFor(JobType.ClassifyEmailSpam);
-        this.store.FailAsync(job.JobId, job.Lease.Owner, Arg.Any<CancellationToken>()).Returns(true);
+        var failureClassifier = new StubJobFailureClassifier(JobFailureClassification.Permanent, "PermanentFailure");
+        this.AllowDeadLettering(job);
 
-        var executor = this.ExecutorFor(handler);
+        var executor = this.ExecutorFor(failureClassifier, handler);
 
         // Act
         var result = await executor.ExecuteAsync(job, CancellationToken.None);
 
         // Assert
         Assert.Equal(JobExecutionOutcome.HandlerFailed, result.Outcome);
-        Assert.Same(raised, result.Failure);
-        await this.store.Received(1).FailAsync(job.JobId, job.Lease.Owner, Arg.Any<CancellationToken>());
+        Assert.Equal(JobFailureDisposition.DeadLettered, result.AttemptFailure?.Disposition);
+        Assert.Equal("PermanentFailure", result.AttemptFailure?.Record.Reason);
+        Assert.Same(raised, failureClassifier.ClassifiedFailure);
+        await this.store.DidNotReceive().ScheduleRetryAsync(
+            Arg.Any<JobId>(),
+            Arg.Any<JobLeaseOwner>(),
+            Arg.Any<JobFailureRecord>(),
+            Arg.Any<DateTimeOffset>(),
+            Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>
+    /// A transient failure is the one kind worth attempting again, and the job goes back to the queue behind a delay
+    /// rather than immediately: a job returned at once would be taken again as fast as the queue can hand it out.
+    /// </summary>
+    [Fact]
+    public async Task ExecuteAsync_AHandlerRaisingATransientFailureWithAttemptsLeft_SchedulesAnotherAttemptAfterADelay()
+    {
+        // Arrange
+        var raised = new TimeoutException("the dependency did not answer");
+        var handler = new RecordingJobHandler(JobType.ClassifyEmailSpam, (_, _) => Task.FromException(raised));
+        var job = LeasedJobFor(JobType.ClassifyEmailSpam, attemptCount: 1);
+        this.AllowRetryScheduling(job);
+
+        var executor = this.ExecutorFor(
+            new StubJobFailureClassifier(JobFailureClassification.Transient, "TransientFailure"),
+            handler);
+
+        // Act
+        var result = await executor.ExecuteAsync(job, CancellationToken.None);
+
+        // Assert
+        Assert.Equal(JobExecutionOutcome.HandlerFailed, result.Outcome);
+        Assert.Equal(JobFailureDisposition.RetryScheduled, result.AttemptFailure?.Disposition);
+        Assert.InRange(
+            result.AttemptFailure?.NextAttemptAt ?? Noon,
+            Noon + (RetryBaseDelay / 2),
+            Noon + RetryMaxDelay);
+        await this.store.Received(1).ScheduleRetryAsync(
+            job.JobId,
+            job.Lease.Owner,
+            Arg.Is<JobFailureRecord>(failure =>
+                failure!.Classification == JobFailureClassification.Transient && failure.Reason == "TransientFailure"),
+            Arg.Any<DateTimeOffset>(),
+            Arg.Any<CancellationToken>());
+        await this.store.DidNotReceive().DeadLetterAsync(
+            Arg.Any<JobId>(),
+            Arg.Any<JobLeaseOwner>(),
+            Arg.Any<JobFailureRecord>(),
+            Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>
+    /// The bound is what stops a dependency that stays broken from being approached forever: the attempt that reaches
+    /// it is terminal even though the failure itself is worth repeating.
+    /// </summary>
+    [Fact]
+    public async Task ExecuteAsync_ATransientFailureOnTheLastAllowedAttempt_DeadLettersTheJob()
+    {
+        // Arrange
+        var raised = new TimeoutException("the dependency did not answer");
+        var handler = new RecordingJobHandler(JobType.ClassifyEmailSpam, (_, _) => Task.FromException(raised));
+        var job = LeasedJobFor(JobType.ClassifyEmailSpam, attemptCount: MaxAttempts);
+        this.AllowDeadLettering(job);
+
+        var executor = this.ExecutorFor(
+            new StubJobFailureClassifier(JobFailureClassification.Transient, "TransientFailure"),
+            handler);
+
+        // Act
+        var result = await executor.ExecuteAsync(job, CancellationToken.None);
+
+        // Assert
+        Assert.Equal(JobFailureDisposition.DeadLettered, result.AttemptFailure?.Disposition);
+        Assert.Equal(JobFailureClassification.Transient, result.AttemptFailure?.Record.Classification);
+        Assert.Null(result.AttemptFailure?.NextAttemptAt);
+        await this.store.Received(1).DeadLetterAsync(
+            job.JobId,
+            job.Lease.Owner,
+            Arg.Any<JobFailureRecord>(),
+            Arg.Any<CancellationToken>());
     }
 
     /// <summary>
     /// A stuck handler is stopped through its token rather than abandoned while it runs, which is what keeps one slow
-    /// job from taking a worker out of service.
+    /// job from taking a worker out of service. A timeout says the work did not finish in time rather than that it
+    /// cannot, so the job is attempted again.
     /// </summary>
     [Fact]
-    public async Task ExecuteAsync_AHandlerThatOutlastsTheTimeout_CancelsItAndRecordsTheJobAsFailed()
+    public async Task ExecuteAsync_AHandlerThatOutlastsTheTimeout_CancelsItAndSchedulesAnotherAttempt()
     {
         // Arrange
         var started = new TaskCompletionSource();
@@ -100,7 +193,7 @@ public sealed class JobExecutorTests
             JobType.ClassifyEmailSpam,
             RecordingJobHandler.BlockUntilCancelled(started));
         var job = LeasedJobFor(JobType.ClassifyEmailSpam);
-        this.store.FailAsync(job.JobId, job.Lease.Owner, Arg.Any<CancellationToken>()).Returns(true);
+        this.AllowRetryScheduling(job);
         this.AllowLeaseRenewal(job);
 
         var executor = this.ExecutorFor(handler);
@@ -113,7 +206,13 @@ public sealed class JobExecutorTests
 
         // Assert
         Assert.Equal(JobExecutionOutcome.TimedOut, result.Outcome);
-        await this.store.Received(1).FailAsync(job.JobId, job.Lease.Owner, Arg.Any<CancellationToken>());
+        Assert.Equal(JobFailureDisposition.RetryScheduled, result.AttemptFailure?.Disposition);
+        await this.store.Received(1).ScheduleRetryAsync(
+            job.JobId,
+            job.Lease.Owner,
+            Arg.Is<JobFailureRecord>(failure => failure!.Reason == JobFailureRecord.ExecutionTimedOut.Reason),
+            Arg.Any<DateTimeOffset>(),
+            Arg.Any<CancellationToken>());
     }
 
     /// <summary>A job that legitimately takes longer than one lease must not have its work reclaimed underneath it.</summary>
@@ -136,7 +235,7 @@ public sealed class JobExecutorTests
 
                 return Task.FromResult<JobLease?>(new JobLease(job.Lease.Owner, Noon + LeaseDuration + LeaseDuration));
             });
-        this.store.FailAsync(job.JobId, job.Lease.Owner, Arg.Any<CancellationToken>()).Returns(true);
+        this.AllowRetryScheduling(job);
 
         var executor = this.ExecutorFor(handler);
 
@@ -183,13 +282,21 @@ public sealed class JobExecutorTests
 
         // Assert
         Assert.Equal(JobExecutionOutcome.LeaseLost, result.Outcome);
+        Assert.Null(result.AttemptFailure);
         await this.store.DidNotReceive().CompleteAsync(
             Arg.Any<JobId>(),
             Arg.Any<JobLeaseOwner>(),
             Arg.Any<CancellationToken>());
-        await this.store.DidNotReceive().FailAsync(
+        await this.store.DidNotReceive().DeadLetterAsync(
             Arg.Any<JobId>(),
             Arg.Any<JobLeaseOwner>(),
+            Arg.Any<JobFailureRecord>(),
+            Arg.Any<CancellationToken>());
+        await this.store.DidNotReceive().ScheduleRetryAsync(
+            Arg.Any<JobId>(),
+            Arg.Any<JobLeaseOwner>(),
+            Arg.Any<JobFailureRecord>(),
+            Arg.Any<DateTimeOffset>(),
             Arg.Any<CancellationToken>());
         await this.store.DidNotReceive().ReleaseAsync(
             Arg.Any<JobId>(),
@@ -198,7 +305,7 @@ public sealed class JobExecutorTests
     }
 
     /// <summary>
-    /// A deployment must not read as a burst of failures: the job goes back to the queue immediately and no attempt is
+    /// A deployment must not read as a burst of failures: the job goes back to the queue immediately and nothing is
     /// recorded against it.
     /// </summary>
     [Fact]
@@ -223,17 +330,25 @@ public sealed class JobExecutorTests
 
         // Assert
         Assert.Equal(JobExecutionOutcome.ReleasedForShutdown, result.Outcome);
+        Assert.Null(result.AttemptFailure);
         await this.store.Received(1).ReleaseAsync(job.JobId, job.Lease.Owner, Arg.Any<CancellationToken>());
-        await this.store.DidNotReceive().FailAsync(
+        await this.store.DidNotReceive().DeadLetterAsync(
             Arg.Any<JobId>(),
             Arg.Any<JobLeaseOwner>(),
+            Arg.Any<JobFailureRecord>(),
+            Arg.Any<CancellationToken>());
+        await this.store.DidNotReceive().ScheduleRetryAsync(
+            Arg.Any<JobId>(),
+            Arg.Any<JobLeaseOwner>(),
+            Arg.Any<JobFailureRecord>(),
+            Arg.Any<DateTimeOffset>(),
             Arg.Any<CancellationToken>());
     }
 
     /// <summary>
     /// A handler that turns its cancellation into an exception of its own must not have a deployment recorded against
-    /// its job. Releasing work that really was failing only runs it again; failing work a shutdown interrupted is a
-    /// terminal row nobody asked for.
+    /// its job. Releasing work that really was failing only runs it again; failing work a shutdown interrupted spends an
+    /// attempt on the operator's act.
     /// </summary>
     [Fact]
     public async Task ExecuteAsync_AHandlerRaisingSomethingElseAsTheHostStops_StillReleasesTheLease()
@@ -266,9 +381,10 @@ public sealed class JobExecutorTests
 
         // Assert
         Assert.Equal(JobExecutionOutcome.ReleasedForShutdown, result.Outcome);
-        await this.store.DidNotReceive().FailAsync(
+        await this.store.DidNotReceive().DeadLetterAsync(
             Arg.Any<JobId>(),
             Arg.Any<JobLeaseOwner>(),
+            Arg.Any<JobFailureRecord>(),
             Arg.Any<CancellationToken>());
     }
 
@@ -319,6 +435,65 @@ public sealed class JobExecutorTests
         Assert.Equal(JobExecutionOutcome.LeaseLost, result.Outcome);
     }
 
+    /// <summary>The same compare-and-set guards a scheduled retry, so a late attempt cannot reopen a job somebody else holds.</summary>
+    [Fact]
+    public async Task ExecuteAsync_ARetryTheStoreRefuses_ReportsTheLeaseAsLostAndRecordsNoFailure()
+    {
+        // Arrange
+        var handler = new RecordingJobHandler(
+            JobType.ClassifyEmailSpam,
+            (_, _) => Task.FromException(new TimeoutException("the dependency did not answer")));
+        var job = LeasedJobFor(JobType.ClassifyEmailSpam);
+        this.store
+            .ScheduleRetryAsync(
+                job.JobId,
+                job.Lease.Owner,
+                Arg.Any<JobFailureRecord>(),
+                Arg.Any<DateTimeOffset>(),
+                Arg.Any<CancellationToken>())
+            .Returns(false);
+
+        var executor = this.ExecutorFor(
+            new StubJobFailureClassifier(JobFailureClassification.Transient),
+            handler);
+
+        // Act
+        var result = await executor.ExecuteAsync(job, CancellationToken.None);
+
+        // Assert
+        Assert.Equal(JobExecutionOutcome.LeaseLost, result.Outcome);
+        Assert.Null(result.AttemptFailure);
+    }
+
+    /// <summary>
+    /// A handler works on mail, so a library's exception message may quote a subject, an address, or a header. What
+    /// leaves the executor is the record the classifier produced and nothing else, which is what keeps the message out
+    /// of every log line, counter, and span reporting the attempt.
+    /// </summary>
+    [Fact]
+    public async Task ExecuteAsync_AHandlerWhoseFailureQuotesTheMail_ReportsOnlyTheClassifiedRecord()
+    {
+        // Arrange
+        var raised = new InvalidOperationException("Re: your invoice from alex@example.test could not be parsed");
+        var handler = new RecordingJobHandler(JobType.ClassifyEmailSpam, (_, _) => Task.FromException(raised));
+        var job = LeasedJobFor(JobType.ClassifyEmailSpam);
+        this.AllowDeadLettering(job);
+
+        var executor = this.ExecutorFor(
+            new StubJobFailureClassifier(JobFailureClassification.Permanent, "InvalidOperationException"),
+            handler);
+
+        // Act
+        var result = await executor.ExecuteAsync(job, CancellationToken.None);
+
+        // Assert
+        Assert.Equal("InvalidOperationException", result.AttemptFailure?.Record.Reason);
+        Assert.DoesNotContain(
+            "example.test",
+            result.AttemptFailure?.Record.Reason ?? string.Empty,
+            StringComparison.Ordinal);
+    }
+
     /// <summary>What a result names is the queue's own vocabulary, so a report of one can carry nothing from the message.</summary>
     [Fact]
     public async Task ExecuteAsync_AnyJob_ReportsTheJobsOwnIdentityAndAttempt()
@@ -337,7 +512,7 @@ public sealed class JobExecutorTests
         Assert.Equal(job.JobId, result.JobId);
         Assert.Equal(JobType.ClassifyEmailSpam, result.JobType);
         Assert.Equal(3, result.AttemptCount);
-        Assert.Null(result.Failure);
+        Assert.Null(result.AttemptFailure);
     }
 
     private static LeasedJob LeasedJobFor(JobType jobType, int attemptCount = 1) => new(
@@ -361,9 +536,32 @@ public sealed class JobExecutorTests
         .RenewLeaseAsync(job.JobId, job.Lease.Owner, LeaseDuration, Arg.Any<CancellationToken>())
         .Returns(Task.FromResult<JobLease?>(new JobLease(job.Lease.Owner, Noon + LeaseDuration + LeaseDuration)));
 
-    private JobExecutor ExecutorFor(params IJobHandler[] handlers) => new(
+    private void AllowRetryScheduling(LeasedJob job) => this.store
+        .ScheduleRetryAsync(
+            job.JobId,
+            job.Lease.Owner,
+            Arg.Any<JobFailureRecord>(),
+            Arg.Any<DateTimeOffset>(),
+            Arg.Any<CancellationToken>())
+        .Returns(true);
+
+    private void AllowDeadLettering(LeasedJob job) => this.store
+        .DeadLetterAsync(job.JobId, job.Lease.Owner, Arg.Any<JobFailureRecord>(), Arg.Any<CancellationToken>())
+        .Returns(true);
+
+    private JobExecutor ExecutorFor(params IJobHandler[] handlers) =>
+        this.ExecutorFor(new StubJobFailureClassifier(JobFailureClassification.Permanent), handlers);
+
+    private JobExecutor ExecutorFor(IJobFailureClassifier failureClassifier, params IJobHandler[] handlers) => new(
         this.store,
         new JobHandlerRegistry(handlers),
-        JobExecutionSettings.Create(batchSize: 5, LeaseDuration, ExecutionTimeout),
+        failureClassifier,
+        JobExecutionSettings.Create(
+            batchSize: 5,
+            LeaseDuration,
+            ExecutionTimeout,
+            MaxAttempts,
+            RetryBaseDelay,
+            RetryMaxDelay),
         this.timeProvider);
 }

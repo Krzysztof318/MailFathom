@@ -166,25 +166,37 @@ internal sealed class JobStore(MailFathomDbContext dbContext, TimeProvider timeP
 
     /// <inheritdoc />
     /// <remarks>
-    /// The same conditional update completion is, and terminal in the same way: the lease is cleared, the key is kept,
-    /// and the available instant is left where it was because nothing is going to read it again.
+    /// The same conditional update the others are, and the job returns to the queue rather than staying held: what
+    /// keeps it from being taken again at once is the available instant, which is the whole of the backoff as far as
+    /// the queue is concerned. The attempt count is left where the claim put it, because the attempt was spent.
     /// </remarks>
-    public async Task<bool> FailAsync(JobId jobId, JobLeaseOwner owner, CancellationToken cancellationToken)
+    public async Task<bool> ScheduleRetryAsync(
+        JobId jobId,
+        JobLeaseOwner owner,
+        JobFailureRecord failure,
+        DateTimeOffset availableAt,
+        CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(owner);
+        ArgumentNullException.ThrowIfNull(failure);
 
         var stateChangedAt = timeProvider.GetUtcNow();
         var jobIdValue = jobId.Value;
         var ownerValue = owner.Value;
         var claimed = nameof(JobState.Claimed);
-        var failed = nameof(JobState.Failed);
+        var pending = nameof(JobState.Pending);
+        var classification = failure.Classification.ToString();
+        var reason = failure.Reason;
 
-        var failedRows = await dbContext.Database.ExecuteSqlAsync(
+        var scheduledRows = await dbContext.Database.ExecuteSqlAsync(
             $"""
              UPDATE jobs
-             SET "State" = {failed},
+             SET "State" = {pending},
                  "LeaseOwner" = NULL,
                  "LeaseExpiresAt" = NULL,
+                 "AvailableAt" = {availableAt},
+                 "LastFailureClassification" = {classification},
+                 "LastFailureReason" = {reason},
                  "StateChangedAt" = {stateChangedAt}
              WHERE "Id" = {jobIdValue}
                AND "State" = {claimed}
@@ -192,13 +204,57 @@ internal sealed class JobStore(MailFathomDbContext dbContext, TimeProvider timeP
              """,
             cancellationToken);
 
-        return failedRows == 1;
+        return scheduledRows == 1;
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// The same conditional update completion is, and terminal in the same way: the lease is cleared, the key is kept,
+    /// and the available instant is left where it was because no claim reads it again — the claim's own predicate names
+    /// the two claimable states, so a dead letter is outside it and outside the partial index over it as well.
+    /// </remarks>
+    public async Task<bool> DeadLetterAsync(
+        JobId jobId,
+        JobLeaseOwner owner,
+        JobFailureRecord failure,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(owner);
+        ArgumentNullException.ThrowIfNull(failure);
+
+        var stateChangedAt = timeProvider.GetUtcNow();
+        var jobIdValue = jobId.Value;
+        var ownerValue = owner.Value;
+        var claimed = nameof(JobState.Claimed);
+        var deadLettered = nameof(JobState.DeadLettered);
+        var classification = failure.Classification.ToString();
+        var reason = failure.Reason;
+
+        var deadLetteredRows = await dbContext.Database.ExecuteSqlAsync(
+            $"""
+             UPDATE jobs
+             SET "State" = {deadLettered},
+                 "LeaseOwner" = NULL,
+                 "LeaseExpiresAt" = NULL,
+                 "LastFailureClassification" = {classification},
+                 "LastFailureReason" = {reason},
+                 "StateChangedAt" = {stateChangedAt}
+             WHERE "Id" = {jobIdValue}
+               AND "State" = {claimed}
+               AND "LeaseOwner" = {ownerValue}
+             """,
+            cancellationToken);
+
+        return deadLetteredRows == 1;
     }
 
     /// <inheritdoc />
     /// <remarks>
     /// The available instant moves to now rather than staying where it was, so a released job is claimable immediately
-    /// instead of waiting out a schedule that has already been honoured. The attempt stays counted: it was handed out.
+    /// instead of waiting out a schedule that has already been honoured. The attempt the claim counted is given back
+    /// with it, guarded so a count nothing else could have lowered cannot go negative: a shutdown is the operator's act
+    /// rather than the work's failure, and a long job met by a few rolling restarts would otherwise reach the attempt
+    /// bound and be dead-lettered without ever having failed.
     /// </remarks>
     public async Task<bool> ReleaseAsync(JobId jobId, JobLeaseOwner owner, CancellationToken cancellationToken)
     {
@@ -217,6 +273,7 @@ internal sealed class JobStore(MailFathomDbContext dbContext, TimeProvider timeP
                  "LeaseOwner" = NULL,
                  "LeaseExpiresAt" = NULL,
                  "AvailableAt" = {releasedAt},
+                 "AttemptCount" = GREATEST("AttemptCount" - 1, 0),
                  "StateChangedAt" = {releasedAt}
              WHERE "Id" = {jobIdValue}
                AND "State" = {claimed}

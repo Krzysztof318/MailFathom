@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Application.Jobs.Execution;
 using MailFathom.Application.Resilience;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -60,6 +61,10 @@ public static class ResilienceServiceCollectionExtensions
         RejectSectionsNamingNoDependency(startupBudgets);
 
         services.AddSingleton<ITransientFailureClassifier, TransientFailureClassifier>();
+
+        // Registered here rather than beside the job store, because it classifies outbound failures and belongs to the
+        // same decision the classifier above makes, one level out: what a job does about a dependency that failed.
+        services.AddSingleton<IJobFailureClassifier, JobFailureClassifier>();
         services.AddSingleton<IValidateOptions<OutboundDependencyResilienceOptions>, OutboundDependencyResilienceOptionsValidator>();
         services.AddSingleton<OutboundOperationExecutor>();
         services.AddSingleton<IOutboundOperationRunner, OutboundOperationRunner>();

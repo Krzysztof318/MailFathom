@@ -9,7 +9,8 @@ namespace MailFathom.Application.Jobs.Execution;
 /// <para>
 /// It carries the job's own identity and the type's name and nothing from the work: a payload names a message
 /// occurrence and this names the payload's job, so neither a subject, an address, nor any other mail content can reach
-/// a log line, a counter, or a span through it.
+/// a log line, a counter, or a span through it. That holds of a failed attempt too, which is why the exception a
+/// handler raised stops at the classifier and only the record it produced travels on.
 /// </para>
 /// <para>
 /// The state the record needed is already written by the time a result exists. This is what the caller reports and
@@ -28,11 +29,11 @@ public sealed record JobExecutionResult(
     JobExecutionOutcome Outcome,
     TimeSpan Duration)
 {
-    /// <summary>Gets the exception a handler raised, and <see langword="null" /> when none did.</summary>
+    /// <summary>Gets what one failed attempt recorded and what became of the job, and <see langword="null" /> when nothing failed.</summary>
     /// <remarks>
-    /// Present so the caller can report the cause at the level its own outcome deserves. It is the exception itself
-    /// rather than a message derived from one, because narrowing it to text here would decide what a report may say
-    /// before anything knows who is reading it.
+    /// One member rather than several nullable ones, because a classification, a reason, a disposition, and a next
+    /// attempt are one answer about one failure: any of them present without the others would describe a state the
+    /// queue cannot be in.
     /// </remarks>
-    public Exception? Failure { get; init; }
+    public JobAttemptFailure? AttemptFailure { get; init; }
 }

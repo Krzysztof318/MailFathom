@@ -195,7 +195,11 @@ public sealed class JobWorkerTests
         services.AddSingleton(JobExecutionSettings.Create(
             settings.BatchSize,
             settings.LeaseDuration,
-            settings.ExecutionTimeout));
+            settings.ExecutionTimeout,
+            settings.MaxAttempts,
+            settings.RetryBaseDelay,
+            settings.RetryMaxDelay));
+        services.AddSingleton(Substitute.For<IJobFailureClassifier>());
         services.AddScoped<JobHandlerRegistry>();
         services.AddScoped<JobExecutor>();
         services.AddScoped<JobQueuePass>();

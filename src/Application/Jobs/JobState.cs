@@ -22,12 +22,19 @@ public enum JobState
     /// <summary>The work was done. The row is terminal and keeps its idempotency key, so the same trigger cannot enqueue it again.</summary>
     Succeeded = 2,
 
-    /// <summary>An attempt at the work did not finish it. The row is terminal and keeps its idempotency key, exactly as a succeeded one does.</summary>
+    /// <summary>The work will not be attempted again. The row is terminal and keeps its idempotency key, exactly as a succeeded one does.</summary>
     /// <remarks>
-    /// Every failure lands here, whatever caused it, because nothing yet decides which failures are worth repeating: a
-    /// job left claimable after a failing attempt would be taken again as fast as the queue can hand it out, so the
-    /// terminal state is what keeps one job that cannot succeed from occupying a worker. What the row keeps is its
-    /// attempt count and its key, which is what a later decision about repeating the work is made against.
+    /// <para>
+    /// A job reaches this either because its failure was permanent, where a second attempt could only reach the same
+    /// answer, or because it exhausted the attempts it was allowed. Both are the same thing to the queue: work that
+    /// stops consuming attempts and stops occupying a worker, so one poison message delays nothing else.
+    /// </para>
+    /// <para>
+    /// It is a state on the row rather than a move to another table, because uniqueness spans the whole table and a row
+    /// that gave up its key would let permanently failing work be enqueued again forever. What the row keeps beside the
+    /// key is its attempt count and the classification and reason of the failure that ended it, which is what an
+    /// operator acts on.
+    /// </para>
     /// </remarks>
-    Failed = 3,
+    DeadLettered = 3,
 }

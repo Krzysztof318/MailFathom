@@ -158,13 +158,20 @@ public sealed class JobQueuePassTests
 
     private JobQueuePass PassFor(params IJobHandler[] handlers)
     {
-        var settings = JobExecutionSettings.Create(BatchSize, LeaseDuration, ExecutionTimeout);
+        var settings = JobExecutionSettings.Create(
+            BatchSize,
+            LeaseDuration,
+            ExecutionTimeout,
+            maxAttempts: 5,
+            TimeSpan.FromSeconds(30),
+            TimeSpan.FromMinutes(30));
         var registry = new JobHandlerRegistry(handlers);
+        var failureClassifier = new StubJobFailureClassifier(JobFailureClassification.Permanent);
 
         return new JobQueuePass(
             this.store,
             registry,
-            new JobExecutor(this.store, registry, settings, this.timeProvider),
+            new JobExecutor(this.store, registry, failureClassifier, settings, this.timeProvider),
             settings);
     }
 }

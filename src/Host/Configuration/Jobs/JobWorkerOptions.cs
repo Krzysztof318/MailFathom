@@ -54,6 +54,28 @@ internal sealed class JobWorkerOptions : IValidatableObject
     [Range(typeof(TimeSpan), "00:00:01", "01:00:00")]
     public TimeSpan ExecutionTimeout { get; set; } = TimeSpan.FromMinutes(2);
 
+    /// <summary>Gets or sets how many attempts one job may be handed out for before a transient failure ends it.</summary>
+    /// <remarks>
+    /// It bounds a transient failure and nothing else: a permanent one is terminal on its first attempt, because
+    /// spending the budget to reach an answer already known would hold a worker for nothing. Setting it to <c>1</c>
+    /// leaves no retry at all, which is a deployment saying every failure is somebody's to look at.
+    /// </remarks>
+    [Range(1, 20)]
+    public int MaxAttempts { get; set; } = 5;
+
+    /// <summary>Gets or sets the delay the first retry is drawn around, from which the doubling grows.</summary>
+    /// <remarks>
+    /// A delay is drawn from a range rather than computed exactly, because jobs that failed together failed on the same
+    /// dependency and an exact delay would return all of them to it in the same instant.
+    /// </remarks>
+    [Range(typeof(TimeSpan), "00:00:01", "01:00:00")]
+    public TimeSpan RetryBaseDelay { get; set; } = TimeSpan.FromSeconds(30);
+
+    /// <summary>Gets or sets the ceiling a grown retry delay never exceeds.</summary>
+    /// <remarks>Must be at least <see cref="RetryBaseDelay" />, which is what keeps the growth from being capped below where it starts.</remarks>
+    [Range(typeof(TimeSpan), "00:00:01", "24:00:00")]
+    public TimeSpan RetryMaxDelay { get; set; } = TimeSpan.FromMinutes(30);
+
     /// <summary>Gets or sets how long the worker waits before looking again when a pass found nothing due.</summary>
     /// <remarks>
     /// A pass that filled its batch looks again at once, because a queue with work in it should be drained rather than
@@ -74,6 +96,16 @@ internal sealed class JobWorkerOptions : IValidatableObject
                     "Jobs:ExecutionTimeout must be shorter than Jobs:LeaseDuration, which is {0}. A job allowed to run for as long as its lease is held can be claimed by a second worker while the first is still running it.",
                     this.LeaseDuration),
                 [nameof(this.ExecutionTimeout)]);
+        }
+
+        if (this.RetryMaxDelay < this.RetryBaseDelay)
+        {
+            yield return new ValidationResult(
+                string.Format(
+                    CultureInfo.InvariantCulture,
+                    "Jobs:RetryMaxDelay must be at least Jobs:RetryBaseDelay, which is {0}. A ceiling below the delay the growth starts from caps every retry at the ceiling and leaves the backoff with nothing to grow.",
+                    this.RetryBaseDelay),
+                [nameof(this.RetryMaxDelay)]);
         }
     }
 }

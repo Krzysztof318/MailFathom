@@ -224,6 +224,16 @@ is the layer rather than something MailFathom re-implements:
 - **Optimistic concurrency.** `OptimisticConcurrencyRetryPolicy` in `Application` already retries a commit that lost a
   race. That is why the classifier reports a concurrency conflict as terminal: the pipeline must not become a second
   layer around the same rows.
+- **A durable job that failed.** The queue attempts a job again on its own jittered, bounded schedule, and that is not
+  a second layer around the call a handler made. It is a layer around the *job*, minutes later and in a process that
+  need not be the one that failed, and by the time a handler raises, whatever pipeline it reached has already spent its
+  own budget. What keeps the two from multiplying is that neither is inside the other: a handler adds no retry of its
+  own, so the attempts are the pipeline's within one attempt and the queue's between them. `JobFailureClassifier` is
+  where the second decision is made, beside `TransientFailureClassifier` because it reads the same failures — an
+  `OutboundDependencyUnavailableException` is a dependency declining the work and therefore worth attempting again
+  later, a failure that declares its own repeatability is deferred to, and anything unrecognized is permanent, which is
+  the same refusal this classifier makes. [The stored schema](stored-email-schema.md#durable-background-work) holds
+  what the queue writes and [`Jobs`](../operations/configuration-reference.md#jobs) the budget it runs under.
 
 ## Telemetry and privacy
 

@@ -792,12 +792,27 @@ what keeps two workers off one job: an attempt is cancelled before its lease can
 renewed at half its duration while a handler works, so a job that legitimately takes longer than one lease is not
 reclaimed while it runs.
 
+A failed attempt is classified before the attempt budget is consulted, and only a failure that could clear on its own is
+attempted again. A permanent one — a credential the dependency refused, a request it rejected, anything whose meaning is
+unknown — ends the job on its first attempt rather than spending `MaxAttempts` to reach an answer it already had. What
+runs out of attempts and what could never succeed both become dead letters: terminal rows nothing claims again, which
+hold up no other job and keep the classification and the reason they ended on. A shutdown is neither, and spends no
+attempt: the job goes straight back to the queue with the attempt it was claimed for given back.
+
+`RetryMaxDelay` must be at least `RetryBaseDelay`, and startup refuses a pair that inverts them. A retry delay doubles
+per attempt from `RetryBaseDelay`, is capped at `RetryMaxDelay`, and is drawn from a range rather than computed exactly
+— jobs that failed together failed on the same dependency, and an exact delay would return all of them to it in the same
+instant.
+
 | Key | Type | Default | Constraint | Change |
 | --- | --- | --- | --- | --- |
 | `Jobs:Enabled` | bool | `true` | turning it off leaves enqueued work where it is, for a replica that runs it | restart |
 | `Jobs:BatchSize` | int | `5` | 1 – 100; how many jobs one pass claims. They run one after another, so this bounds what a pass holds rather than what runs at once | restart |
 | `Jobs:LeaseDuration` | TimeSpan | `00:05:00` | 2 s – 1 h; how long work stays held after the process running it stops existing, which is the delay before a crash is recovered from | restart |
-| `Jobs:ExecutionTimeout` | TimeSpan | `00:02:00` | 1 s – 1 h, and strictly shorter than `Jobs:LeaseDuration`; exceeding it cancels the job and records it as failed | restart |
+| `Jobs:ExecutionTimeout` | TimeSpan | `00:02:00` | 1 s – 1 h, and strictly shorter than `Jobs:LeaseDuration`; exceeding it cancels the job, which counts as a transient failure and is attempted again. Raise it where this kind of work legitimately takes longer | restart |
+| `Jobs:MaxAttempts` | int | `5` | 1 – 20; how many attempts one job may be handed out for before a transient failure dead-letters it. `1` leaves no retry at all. A permanent failure ends the job whatever this says | restart |
+| `Jobs:RetryBaseDelay` | TimeSpan | `00:00:30` | 1 s – 1 h; the delay the first retry is drawn around, doubling per attempt | restart |
+| `Jobs:RetryMaxDelay` | TimeSpan | `00:30:00` | 1 s – 24 h, and at least `Jobs:RetryBaseDelay`; the ceiling a grown retry delay never exceeds | restart |
 | `Jobs:PollInterval` | TimeSpan | `00:00:10` | 1 s – 10 min; how long an idle worker waits before looking again. A pass that filled its batch looks again at once | restart |
 
 ## `MailRules`
