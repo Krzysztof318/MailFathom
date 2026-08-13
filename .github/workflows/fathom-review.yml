@@ -103,6 +103,18 @@ concurrency:
 permissions:
   contents: read
 
+# How a published review says what started it, which is the one thing the reviews endpoint does not
+# record and the per-pull-request ceiling has to know. It is written into the body by the step that
+# submits and read back by the gate two jobs earlier, so it is declared here rather than twice: a
+# marker the two halves spelled differently would silently stop counting and the ceiling would stop
+# holding, with nothing red to say so.
+#
+# It renders as nothing. A Markdown comment is invisible in the review GitHub displays and survives
+# the round trip through the API, which an invisible character or a trailing convention would not.
+env:
+  AUTOMATIC_REVIEW_MARKER: '<!-- fathom-review: automatic -->'
+  REQUESTED_REVIEW_MARKER: '<!-- fathom-review: requested -->'
+
 jobs:
   decide:
     name: Decide whether to review
@@ -117,6 +129,9 @@ jobs:
     outputs:
       review: ${{ steps.gate.outputs.review }}
       pull_request_number: ${{ steps.gate.outputs.pull_request_number }}
+      # Whether somebody asked for this review rather than a push starting it. The submission step is
+      # what records it on the review it publishes, and the gate of a later run is what reads it back.
+      explicit: ${{ steps.gate.outputs.explicit }}
       # The gate picks the default and the step that reads the labels may raise it, so the answer is
       # the second value where one exists. A skipped step has no output at all, which GitHub renders
       # as the empty string and this expression treats as *nothing was decided here* — the same shape
@@ -279,12 +294,23 @@ jobs:
           # would bound the wrong number, and a calendar quota would bound a busy month rather than
           # the pathological pull request that is the actual failure.
           #
-          # What is counted is every review the App has submitted here, including the ones somebody
-          # asked for, because the question is how many passes this pull request has already had
-          # rather than which of them were unprompted. Only the automatic path is refused by the
-          # answer: somebody with write access asking has already made the decision this ceiling
-          # exists to make when nobody made it, so a label and a comment still work afterwards.
-          automatic_review_limit=10
+          # What is counted is the reviews this App published from an automatic run, which each carry
+          # the marker the submission step writes into their body. A review somebody asked for is not
+          # counted and is never refused: a maintainer with write access has already made the decision
+          # this ceiling exists to make when nobody made it, so asking must neither be rationed nor
+          # consume the budget a later push draws on.
+          #
+          # Counting every review instead — the arrangement this replaces — spent the budget on the
+          # requested passes as well, so a pull request somebody had reviewed by hand a few times
+          # stopped being reviewed on push while the number of unprompted passes was still small.
+          #
+          # Six is the ceiling because it is past where a pass stops paying for itself. #811 took six
+          # rounds and the last two of them each moved two findings, both of which were fixes to
+          # earlier findings rather than anything the first pass had missed; a seventh automatic pass
+          # over the same pull request is usage spent to repeat what has been said. Past it the work
+          # is answering the review rather than asking for another, and a maintainer who disagrees
+          # says so with a label or a comment.
+          automatic_review_limit=6
 
           if [[ "$review" == 'true' && "$explicit" != 'true' ]]; then
             # `--paginate` runs `--jq` once per page, so the per-page counts are summed rather than
@@ -295,15 +321,20 @@ jobs:
             # a security one, so one extra review is a better outcome than failing a run over a
             # transient API error — and the workflow gates nothing, so a red run here would be noise
             # a reader has to dismiss rather than a signal.
-            submitted_reviews=$(
+            # Both the login and the marker reach jq through the environment rather than through
+            # string interpolation: the login carries `[bot]` brackets and the marker carries `<!--`,
+            # and either arriving as filter syntax would be a broken filter rather than a wrong count.
+            automatic_reviews=$(
               gh api "repos/${REPOSITORY}/pulls/${PULL_REQUEST_NUMBER}/reviews?per_page=100" --paginate \
-                --jq '[.[] | select(.user.login == env.REVIEWER_LOGIN)] | length' \
+                --jq '[.[]
+                       | select(.user.login == env.REVIEWER_LOGIN)
+                       | select((.body // "") | contains(env.AUTOMATIC_REVIEW_MARKER))] | length' \
                 | jq -s 'add // 0'
-            ) || submitted_reviews='0'
+            ) || automatic_reviews='0'
 
-            if (( submitted_reviews >= automatic_review_limit )); then
+            if (( automatic_reviews >= automatic_review_limit )); then
               review='false'
-              reason="the automatic review ceiling of ${automatic_review_limit} is reached; ${REVIEWER_LOGIN} has ${submitted_reviews} reviews on this pull request, so label it fathom-review or comment fathom-review to review it again"
+              reason="the automatic review ceiling of ${automatic_review_limit} is reached; ${REVIEWER_LOGIN} has published ${automatic_reviews} automatic reviews on this pull request, so label it fathom-review or comment fathom-review to review it again"
             fi
           fi
 
@@ -311,6 +342,7 @@ jobs:
             echo "review=${review}"
             echo "pull_request_number=${PULL_REQUEST_NUMBER}"
             echo "model=${model}"
+            echo "explicit=${explicit}"
           } >> "$GITHUB_OUTPUT"
 
           echo "Review: ${review} (${reason})."
@@ -1279,6 +1311,11 @@ jobs:
           # is read defensively below because this step still runs when the one that writes it did
           # not.
           COVERAGE_FILE: ${{ runner.temp }}/coverage.txt
+          # What started this run, written into the review as the invisible marker declared at the
+          # top of this file. It is the only record of that: the reviews endpoint reports who
+          # submitted a review and when, never what asked for it, and the gate of a later run needs
+          # exactly that to count the automatic passes without counting the requested ones.
+          TRIGGER_MARKER: ${{ needs.decide.outputs.explicit == 'true' && env.REQUESTED_REVIEW_MARKER || env.AUTOMATIC_REVIEW_MARKER }}
         run: |
           set -euo pipefail
 
@@ -1364,7 +1401,8 @@ jobs:
           if [[ "$(jq '(.findings // []) | length' "$findings_file")" == '0' ]]; then
             jq --arg commit "$HEAD_SHA" \
                --arg truncation "$(cat "$REVIEW_DIRECTORY/truncation.txt")" \
-               --arg coverage "$(cat "$COVERAGE_FILE" 2>/dev/null || true)" '
+               --arg coverage "$(cat "$COVERAGE_FILE" 2>/dev/null || true)" \
+               --arg marker "$TRIGGER_MARKER" '
               {
                 commit_id: $commit,
                 event: "APPROVE",
@@ -1373,6 +1411,7 @@ jobs:
                   + [((.summary // "") | if . == "" then "The review found nothing above the bar in this change." else . end)]
                   + (if $truncation == "" then [] else ["", $truncation] end)
                   + (if $coverage == "" then [] else ["", $coverage] end)
+                  + ["", $marker]
                   | join("\n")
                 )
               }' "$findings_file" > "$payload_file"
@@ -1411,7 +1450,8 @@ jobs:
           jq --slurpfile lines "$REVIEW_DIRECTORY/lines.json" \
              --arg commit "$HEAD_SHA" \
              --arg truncation "$(cat "$REVIEW_DIRECTORY/truncation.txt")" \
-             --arg coverage "$(cat "$COVERAGE_FILE" 2>/dev/null || true)" '
+             --arg coverage "$(cat "$COVERAGE_FILE" 2>/dev/null || true)" \
+             --arg marker "$TRIGGER_MARKER" '
             def allowed($path): $lines[0] | map(select(.filename == $path)) | .[0].lines // [];
             def anchored($finding):
               (allowed($finding.path) | index($finding.line)) != null
@@ -1461,6 +1501,7 @@ jobs:
                                + details(.))
                          | add)
                     end)
+                  + ["", $marker]
                   | join("\n")
                 ),
                 comments: ($kept | map(

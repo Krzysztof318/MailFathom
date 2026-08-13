@@ -579,20 +579,33 @@ Two things ask for a review anyway, whichever skip refused it:
   major that touches a workflow's inputs and is not worth doing for a version
   number the register already answers.
 
-An automatic review is bounded per pull request: once ten reviews by
+An automatic review is bounded per pull request: once six automatic reviews by
 `fathom-reviewer[bot]` stand on it, the gate refuses and says so in the run log
-instead of starting an eleventh. Every push to a published branch starts a
-review, so a branch pushed to forty times would otherwise be reviewed forty
-times, and past some number of passes over the same change another one repeats
-what it already said. The count is the App's own submitted reviews rather than a
-quota read from run history, because the runs endpoint cannot tell a run that
-decided not to review — a draft push, a comment about the workflow — from one
-that did. What it counts is every review the App has submitted on the pull
-request, the explicitly requested ones included, because the question is how many
-passes the change has already had rather than which of them were unprompted. Only
-the automatic path is refused by the answer: a label or a comment still starts a
-review afterwards, because somebody with write access asking has already made the
-decision the ceiling makes when nobody made it.
+instead of starting a seventh. Every push to a published branch starts a review,
+so a branch pushed to forty times would otherwise be reviewed forty times, and
+past some number of passes over the same change another one repeats what it
+already said. Six is where that begins: #811 took six rounds, and the last two of
+them each moved two findings that were corrections to earlier findings rather
+than anything the first pass had missed.
+
+The count is the App's own published reviews rather than a quota read from run
+history, because the runs endpoint cannot tell a run that decided not to review —
+a draft push, a comment about the workflow — from one that did. Among those it
+counts the automatic ones alone. A review somebody asked for neither consumes the
+budget a later push draws on nor is refused by it, because asking is the decision
+this ceiling exists to make when nobody made it, and a maintainer who has made it
+must not find the next push unreviewed as a consequence. So a label or a comment
+starts a review however many stand on the pull request already.
+
+Which passes were automatic is not something the reviews endpoint records, so the
+submission step writes it: every review it publishes carries an invisible Markdown
+comment naming what started the run, and the gate of a later run counts the ones
+carrying the automatic marker. Both spellings are declared once at the top of the
+workflow, because a marker written differently in the two halves would stop
+counting silently and the ceiling would stop holding with nothing red to say so.
+A review published before this arrangement carries no marker and counts as
+nothing, which resets the budget of any pull request open at the time and is
+worth a sentence rather than a migration.
 
 A run also ends before it finishes when the pull request it is reading closes. A
 merge — the owner's ruleset bypass included — and a close both arrive as
@@ -859,7 +872,8 @@ because each closes a different way the bill could grow:
 - a fork's own pushes never start a review; a maintainer's label does;
 - the comment trigger requires an `OWNER`, `MEMBER`, or `COLLABORATOR` author, so
   nobody outside the project can spend the subscription by typing;
-- an automatic review is capped per pull request, as described above;
+- an automatic review is capped at six per pull request, as described above, and a
+  review somebody asked for is outside that count in both directions;
 - the model is `claude-sonnet-5` rather than the costlier Opus, which exactly two
   things reach: a review request asking for it by name, and the `security` label
   on the pull request, described below;
