@@ -19,9 +19,6 @@ namespace MailFathom.Infrastructure.UnitTests.Observability;
 /// </remarks>
 public sealed class MailboxReadTelemetryTests : IDisposable
 {
-    /// <summary>Stands in for a source somebody else owns, which is what the MCP SDK's own span arrives from.</summary>
-    private static readonly ActivitySource ProtocolBoundary = new("MailboxReadTelemetryTests.ProtocolBoundary");
-
     private static readonly string[] ReadSpanNames =
     [
         MailboxReadTelemetry.AccountDirectorySpanName,
@@ -31,13 +28,29 @@ public sealed class MailboxReadTelemetryTests : IDisposable
     ];
 
     private readonly ConcurrentBag<Activity> published = [];
+
+    /// <summary>
+    /// Stands in for a source somebody else owns, which is what the MCP SDK's own span arrives from.
+    /// </summary>
+    /// <remarks>
+    /// It is an instance field so that it is constructed before the listener below, which is what makes the nesting
+    /// test deterministic. As a static field it was initialized lazily, and the first thing to touch it was the
+    /// delegate this listener registers with: the source was then constructed *during*
+    /// <see cref="ActivitySource.AddActivityListener"/>, found no listener to attach to because this one was still
+    /// being added, and was missed by the walk already in flight over the sources that existed before it. Nothing
+    /// listened to it, <see cref="ActivitySource.StartActivity(string, ActivityKind)"/> returned <c>null</c>, and the
+    /// test failed — but only when it was the first of this class to run, because every later instance found the
+    /// source already there.
+    /// </remarks>
+    private readonly ActivitySource protocolBoundary = new("MailboxReadTelemetryTests.ProtocolBoundary");
+
     private readonly ActivityListener listener;
 
     public MailboxReadTelemetryTests()
     {
         this.listener = new ActivityListener
         {
-            ShouldListenTo = source => source.Name == Telemetry.Name || source == ProtocolBoundary,
+            ShouldListenTo = source => source.Name == Telemetry.Name || source == this.protocolBoundary,
             Sample = static (ref ActivityCreationOptions<ActivityContext> _) =>
                 ActivitySamplingResult.AllDataAndRecorded,
             ActivityStopped = activity =>
@@ -52,7 +65,11 @@ public sealed class MailboxReadTelemetryTests : IDisposable
         ActivitySource.AddActivityListener(this.listener);
     }
 
-    public void Dispose() => this.listener.Dispose();
+    public void Dispose()
+    {
+        this.listener.Dispose();
+        this.protocolBoundary.Dispose();
+    }
 
     /// <summary>The span names an operator writes a filter against, one per use case the MCP surface reaches.</summary>
     [Theory]
@@ -115,7 +132,7 @@ public sealed class MailboxReadTelemetryTests : IDisposable
         var telemetry = new MailboxReadTelemetry();
 
         // Act
-        using var protocolCall = ProtocolBoundary.StartActivity("tools/call");
+        using var protocolCall = this.protocolBoundary.StartActivity("tools/call");
         using (var read = telemetry.BeginRead(
             MailboxReadOperation.ListMailboxTimeline,
             TestContext.Current.CancellationToken))
