@@ -44,7 +44,13 @@ public sealed class ComposedMcpToolContractTests(MailFathomOrchestrationFixture 
 {
     private const string ToolName = "search_emails";
 
-    private const string FolderAlias = "mcp-tool-contract";
+    /// <summary>The folder this class seeds into, which is the one the composed host's own configuration maps.</summary>
+    /// <remarks>
+    /// Taken from the app model rather than spelled again, because the two have to be the same folder: what makes the
+    /// seeded mail readable through a tool is the host's mapping, and a class naming a folder that host does not map
+    /// would read as the tool answering wrongly rather than as the mail being outside its scope.
+    /// </remarks>
+    private const string FolderAlias = OrchestrationContract.ComposedHostReadableFolderAlias;
 
     /// <summary>The word the seeded body carries and the query is written as, distinctive enough to select one message.</summary>
     private const string QueryTerm = "chartering";

@@ -104,7 +104,7 @@ public sealed class OrchestratedEmailVectorSearchTests(MailFathomOrchestrationFi
         isRemotelySeen: null,
         hasAttachments: null);
 
-    /// <summary>Stores one synthetic message, whose passages the chunk writer derives in the same session.</summary>
+    /// <summary>Stores one synthetic message and cuts it, which is the state an account run leaves one in.</summary>
     private static async Task<StoredEmailId> StoreOneMessageAsync(
         OrchestratedMailFathomServices services,
         MailFolderResolution binding,
@@ -131,6 +131,9 @@ public sealed class OrchestratedEmailVectorSearchTests(MailFathomOrchestrationFi
             cancellationToken);
 
         Assert.Equal(PersistenceCommitResult.Committed, commitResult);
+
+        // The passages every vector below hangs on, cut in their own transaction because storing no longer cuts.
+        await OrchestratedPassages.CutAsync(services, storedEmailId, cancellationToken);
 
         return storedEmailId;
     }

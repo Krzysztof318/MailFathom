@@ -39,8 +39,8 @@ public sealed class OrchestratedEmbeddingWorkloadTests(MailFathomOrchestrationFi
 
     /// <summary>
     /// One test covering the whole reading, because the two answers are only meaningful against each other: a geometry
-    /// nothing has registered owes the entire mailbox, and the geometry that has just embedded it owes nothing. Asking
-    /// them separately would leave either answer explainable by a query that ignored the fingerprint.
+    /// nothing has registered owes every passage in the mailbox, and the geometry that has just embedded them owes not
+    /// one. Asking them separately would leave either answer explainable by a query that ignored the fingerprint.
     /// </summary>
     [Fact]
     public async Task ReadWorkloadAsync_AMailboxEmbeddedUnderOneGeometry_OwesNothingUnderItAndEverythingUnderAnother()
@@ -57,6 +57,7 @@ public sealed class OrchestratedEmbeddingWorkloadTests(MailFathomOrchestrationFi
         var neverActivated = AGeometryNothingHasRegistered();
         var searchable = await CountSearchableEmailsAsync(services, cancellationToken);
         var passages = await CountPassagesAsync(services, cancellationToken);
+        var uncut = await CountUncutSearchableEmailsAsync(services, cancellationToken);
 
         // Act
         var underEmbedded = await ReadWorkloadAsync(services, embedded, cancellationToken);
@@ -64,10 +65,15 @@ public sealed class OrchestratedEmbeddingWorkloadTests(MailFathomOrchestrationFi
 
         // Assert
         Assert.Equal(searchable, underEmbedded.SearchableEmailCount);
-        Assert.Equal(0, underEmbedded.OutstandingEmailCount);
+
+        // Every passage carries a vector of this geometry, and what the space still owes is the mail nothing has cut.
+        // That group is not zero here and a deployment's is: cutting is a step of an account run, so a suite whose
+        // fixtures seed mail directly always leaves some behind, and asserting a plain zero would be asserting that no
+        // other class in this collection stored a message — which is a claim about the suite rather than about the count.
         Assert.Equal(0, underEmbedded.OutstandingPassageCount);
         Assert.Equal(0, underEmbedded.OutstandingCharacterCount);
-        Assert.Equal(searchable, underEmbedded.EmbeddedEmailCount);
+        Assert.Equal(uncut, underEmbedded.OutstandingEmailCount);
+        Assert.Equal(searchable - uncut, underEmbedded.EmbeddedEmailCount);
 
         Assert.Equal(searchable, underNeverActivated.OutstandingEmailCount);
         Assert.Equal(passages, underNeverActivated.OutstandingPassageCount);
@@ -108,6 +114,25 @@ public sealed class OrchestratedEmbeddingWorkloadTests(MailFathomOrchestrationFi
                 .CountAsync(
                     email => email.Chunks.Any()
                         || (email.SearchDocument != null && email.SearchDocument.BodyText != null),
+                    token),
+            cancellationToken);
+
+    /// <summary>Counts the searchable messages nothing has cut, which is what a vector space owes with no passage.</summary>
+    /// <remarks>
+    /// Mail every cutting path is still ahead of: a suite seeding messages directly runs no account run, so this group
+    /// holds whatever the other classes in this collection stored and is what the reader reports outstanding after a
+    /// sweep has embedded every passage that exists.
+    /// </remarks>
+    private static Task<int> CountUncutSearchableEmailsAsync(
+        OrchestratedMailFathomServices services,
+        CancellationToken cancellationToken) => services.InScopeAsync(
+            (scope, token) => scope.GetRequiredService<MailFathomDbContext>().StoredEmails
+                .AsNoTracking()
+                .Where(StoredEmailTombstone.IsNotTombstoned)
+                .CountAsync(
+                    email => !email.Chunks.Any()
+                        && email.SearchDocument != null
+                        && email.SearchDocument.BodyText != null,
                     token),
             cancellationToken);
 

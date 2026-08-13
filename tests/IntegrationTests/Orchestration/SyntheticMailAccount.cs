@@ -114,6 +114,7 @@ internal sealed class SyntheticMailAccount(
         "relocation-source",
         "relocation-target",
         "rule-evaluation",
+        "rule-evaluation-parked",
         "seen-state-provenance",
         "spam-scan",
         "stale-derived-data",

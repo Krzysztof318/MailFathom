@@ -277,20 +277,26 @@ public sealed class OrchestratedEmbeddingGenerationLifecycleTests(MailFathomOrch
         var occurrenceId = SyntheticEmail.OccurrenceIn(binding, uid);
         var subject = $"generation-{uid}";
 
+        var storedEmailId = default(StoredEmailId);
         var commitResult = await services.CommitAsync(
-            (scope, session, token) => scope.GetRequiredService<IEmailMetadataRepository>().UpsertMetadataAsync(
-                session,
-                SyntheticEmail.RemoteMetadataOf(occurrenceId, subject),
-                SyntheticEmail.ExtractionOf(
-                    occurrenceId,
-                    subject,
-                    SyntheticEmail.BodyTextContaining(subject, wordCount: 400),
-                    "recipient@mailfathom.test"),
-                StoredEmailContentAvailability.Available,
-                token),
+            async (scope, session, token) => storedEmailId = await scope
+                .GetRequiredService<IEmailMetadataRepository>()
+                .UpsertMetadataAsync(
+                    session,
+                    SyntheticEmail.RemoteMetadataOf(occurrenceId, subject),
+                    SyntheticEmail.ExtractionOf(
+                        occurrenceId,
+                        subject,
+                        SyntheticEmail.BodyTextContaining(subject, wordCount: 400),
+                        "recipient@mailfathom.test"),
+                    StoredEmailContentAvailability.Available,
+                    token),
             cancellationToken);
 
         Assert.Equal(PersistenceCommitResult.Committed, commitResult);
+
+        // The passages a generation is built over, cut in their own transaction because storing no longer cuts.
+        await OrchestratedPassages.CutAsync(services, storedEmailId, cancellationToken);
 
         var alias = occurrenceId.FolderResolutionId.Alias.Value;
         IReadOnlyList<Guid> chunkIds = await services.InScopeAsync(

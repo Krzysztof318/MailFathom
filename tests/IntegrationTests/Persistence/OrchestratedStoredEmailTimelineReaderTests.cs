@@ -191,7 +191,16 @@ public sealed class OrchestratedStoredEmailTimelineReaderTests(MailFathomOrchest
         // Assert
         Assert.Empty(listed);
         Assert.Empty(freshness);
-        Assert.Empty(unmappedScope.ReadableFolders);
+
+        // The alias is not among the folders a tool may read, which is what makes the two empty answers above a folder
+        // MailFathom does not have rather than one holding no mail. The folders that are readable are the control: on
+        // an empty list this would hold however the mapping had answered.
+        Assert.NotEmpty(unmappedScope.ReadableFolders);
+        Assert.DoesNotContain(
+            new MailFolderIdentity(
+                SyntheticMailAccount.AccountId,
+                MailFolderAlias.Create(SyntheticMailAccount.UnmappedFolderAlias)),
+            unmappedScope.ReadableFolders);
         Assert.Equal(SeededEmailCount, await CountSeededEmailsAsync(services, binding, cancellationToken));
     }
 

@@ -88,8 +88,10 @@ public sealed class OrchestratedMailRuleEvaluationTests(MailFathomOrchestrationF
         // upper-cases what configuration wrote, and the fact surface publishes what the row holds rather than what a
         // test typed.
         Assert.Equal(MailFolderAlias.Create(FolderAlias).Value, arrival.Facts.Folder);
-        Assert.Equal(SyntheticEmail.DefaultSenderAddress, arrival.Facts.SenderAddress);
-        Assert.Contains(RecipientAddress, arrival.Facts.RecipientAddresses);
+        // Both addresses for the same reason as the alias: EmailAddress upper-cases what a header wrote, and the fact
+        // surface publishes the comparison form a condition is matched against rather than the spelling of the message.
+        Assert.Equal(NormalizedAddress(SyntheticEmail.DefaultSenderAddress), arrival.Facts.SenderAddress);
+        Assert.Contains(NormalizedAddress(RecipientAddress), arrival.Facts.RecipientAddresses);
         Assert.Equal(SyntheticEmail.ReceivedAt, arrival.Facts.ReceivedAt);
         Assert.True(arrival.Facts.HasExtractedContent);
 
@@ -326,8 +328,11 @@ public sealed class OrchestratedMailRuleEvaluationTests(MailFathomOrchestrationF
         await using (var whileMirrored =
             await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken))
         {
-            parked = await StoreOneMessageAsync(whileMirrored, uid: 9441, cancellationToken, ParkedFolderAlias);
-            mirrored = await StoreOneMessageAsync(whileMirrored, uid: 9442, cancellationToken);
+            // Numbers of this test's own, because a UID names an occurrence: repeating one another test stored in the
+            // same folder would upsert that row rather than write one, and the message would arrive already carrying
+            // whatever that test left on it — an evaluation stamp above all, which takes it out of the arrival queue.
+            parked = await StoreOneMessageAsync(whileMirrored, uid: 9451, cancellationToken, ParkedFolderAlias);
+            mirrored = await StoreOneMessageAsync(whileMirrored, uid: 9452, cancellationToken);
         }
 
         await using var services = await OrchestratedMailFathomServices.StartAsync(
@@ -351,6 +356,18 @@ public sealed class OrchestratedMailRuleEvaluationTests(MailFathomOrchestrationF
     }
 
     private static string SubjectOf(uint uid) => $"{FolderAlias}-{uid}";
+
+    /// <summary>Normalizes an address the way extraction does, which is the form a stored row holds.</summary>
+    /// <remarks>
+    /// Asked of the domain type rather than upper-cased here, so that a test states the rule's own answer instead of a
+    /// second copy of it that would survive the rule changing.
+    /// </remarks>
+    private static string NormalizedAddress(string address)
+    {
+        Assert.True(EmailAddress.TryCreate(displayName: null, address, out var emailAddress));
+
+        return emailAddress.NormalizedAddress;
+    }
 
     /// <summary>Stores one synthetic message, whose extraction the same session derives its search document from.</summary>
     private static async Task<StoredEmailId> StoreOneMessageAsync(
