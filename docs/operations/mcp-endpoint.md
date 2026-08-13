@@ -41,6 +41,7 @@ endpoint exposes synchronized mailboxes to whoever can reach it and satisfy what
 | `Authentication[].ApiKey` | — | One key a client may present, a named secret with its own lifetime |
 | `Authentication[].OAuth.Resource` | — | The canonical public URL this deployment is known by in OAuth terms |
 | `Authentication[].OAuth.RequiredScopes` | empty | The scopes an access token from *this entry's* servers must carry |
+| `Authentication[].OAuth.AdvertisedScopes` | empty | Scopes published for a client to ask for and checked on no token — `offline_access` above all |
 | `Authentication[].OAuth.AuthorizationServers` | — | The external authorization servers whose tokens this entry accepts |
 | `Cors.AllowedOrigins` | `["*"]` | The browser origins served: `*` for every one, a list for exactly those, an empty list for none |
 | `ClientCertificateProfiles` | empty | The client applications whose certificates are accepted, each with its own authorities and expected names |
@@ -347,6 +348,7 @@ the identity provider — read that first if this is a deployment's first OAuth 
         "OAuth": {
           "Resource": "https://mail.example.test/mcp",
           "RequiredScopes": [ "mailfathom.read" ],
+          "AdvertisedScopes": [ "offline_access" ],
           "AuthorizationServers": [
             {
               "Name": "workforce",
@@ -361,9 +363,11 @@ the identity provider — read that first if this is a deployment's first OAuth 
 }
 ```
 
-**Several OAuth entries are supported, and each states its own terms.** `RequiredScopes` and `AuthorizationServers` belong
-to the entry that carries them, so a token is judged against what *its own* issuer's entry asks for — one tenant may be
-required to carry a scope while another is not, without either being weakened to match the other. What every entry must
+**Several OAuth entries are supported, and each states its own terms.** `RequiredScopes`, `AdvertisedScopes`, and
+`AuthorizationServers` belong to the entry that carries them, so a token is judged against what *its own* issuer's entry
+asks for — one tenant may be required to carry a scope while another is not, without either being weakened to match the
+other. The published document is the one place they are read together, because there is one of it: it lists every scope
+any entry requires or advertises, so a client cannot tell from it which entry asked for what. What every entry must
 agree on is `Resource`, and startup refuses two that disagree: the endpoint publishes one protected resource metadata
 document, at an address derived from that identifier, so a second resource would leave one entry's clients reading a
 document that describes somebody else and asking their authorization server for the wrong audience.
@@ -428,7 +432,8 @@ Every token is checked, before any MCP protocol handling and before any tool run
 - an `aud` equal to `Resource`. A valid signature from a trusted issuer is not by itself a reason to serve a mailbox;
 - `exp` and `nbf`, with 60 seconds of clock skew tolerated;
 - a `sub` among that profile's `AuthorizedSubjects`;
-- every scope in `RequiredScopes`.
+- every scope in `RequiredScopes`. `AdvertisedScopes` is checked on nothing — it is published for clients and takes no
+  part in any of this.
 
 A subject and a scope are both required and neither stands in for the other: a scope says what a token was issued for, and
 a subject says whose it is. A token from an authorized subject that is missing a scope is answered `403` naming the scopes;
@@ -452,6 +457,38 @@ boundary rather than a broken one, and it is the right setting where the authori
 token for MailFathom. A required scope constrains tokens only: an API key cannot carry one, and its authorization is the
 operator's decision to configure it.
 
+#### Scopes you advertise but do not require
+
+**`AdvertisedScopes` publishes a scope for clients to ask for, and checks it on nothing.** The metadata document's
+`scopes_supported` is what a client should request — that is what
+[RFC 9728](https://datatracker.ietf.org/doc/html/rfc9728) defines the field as — and it is not the same list as what a
+token is refused for lacking. Both lists reach the document; only `RequiredScopes` reaches the check.
+
+**`offline_access` is what the setting exists for.** A client asks for a refresh token by naming that scope, and the
+widely deployed authorization servers issue none without it. A client that reads your metadata document and asks for
+exactly what it lists therefore holds no refresh token, and sends the person back through a sign-in page whenever the
+access token expires — every hour on most servers. Advertising it fixes that for every client at once:
+
+```json
+{
+  "AdvertisedScopes": [ "offline_access" ]
+}
+```
+
+**Requiring it instead would be wrong, and there is deliberately no way to arrive at that by accident.** The value
+describes the client's own session rather than anything MailFathom protects, and an authorization server need not put it
+in the access token's `scope` claim at all — so requiring it would refuse perfectly good tokens from a server that
+grants offline access and does not name it in the token. A scope listed here can never turn a caller away.
+
+Every value is a scope token, refused at startup with the same message a malformed required scope gets, naming the
+setting and the index. A value that is already in `RequiredScopes` is refused as well: every required scope is published
+regardless, so writing it twice would say nothing and would leave the setting reading as the whole advertised list
+rather than as what is advertised beyond what is checked.
+
+`mfctl` asks for exactly what the document lists and adds nothing to it, so this is the setting that decides whether an
+`mfctl` sign-in survives its first hour — see
+[how long an OAuth sign-in lasts](admin-endpoint.md#how-long-an-oauth-sign-in-lasts).
+
 **Tokens are never passed on.** A token presented here is used to identify the caller and nothing else. It is not forwarded to
 a mail provider, to a downstream service, or to another MCP server.
 
@@ -465,7 +502,7 @@ derived from `Resource` — for `https://mail.example.test/mcp`, that is
 {
   "resource": "https://mail.example.test/mcp",
   "authorization_servers": [ "https://sso.example.test/realms/mailfathom" ],
-  "scopes_supported": [ "mailfathom.read" ],
+  "scopes_supported": [ "mailfathom.read", "offline_access" ],
   "bearer_methods_supported": [ "header" ],
   "resource_name": "MailFathom"
 }

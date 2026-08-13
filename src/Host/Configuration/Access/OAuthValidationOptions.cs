@@ -59,12 +59,31 @@ internal sealed class OAuthValidationOptions
 
     /// <summary>Gets the scopes a token must carry before any tool runs.</summary>
     /// <remarks>
-    /// Published as the minimal set in the protected resource metadata and named in the challenge that answers a token
-    /// lacking them, so a client learns what to ask for from the refusal itself. Leaving it empty accepts any token this
-    /// resource's authorization servers issued, which is a coarser boundary rather than a broken one; it is the right
-    /// setting only where the authorization server already restricts who receives a token for this resource.
+    /// Published in the protected resource metadata alongside <see cref="AdvertisedScopes" /> and named in the challenge
+    /// that answers a token lacking them, so a client learns what to ask for from the refusal itself. Leaving it empty
+    /// accepts any token this resource's authorization servers issued, which is a coarser boundary rather than a broken
+    /// one; it is the right setting only where the authorization server already restricts who receives a token for this
+    /// resource.
     /// </remarks>
     public IList<string> RequiredScopes { get; } = [];
+
+    /// <summary>Gets the scopes published for a client to ask for on top of the required ones, and checked on no token.</summary>
+    /// <remarks>
+    /// <para>
+    /// What a client should ask for and what a token is refused for lacking are two lists, and RFC 9728's
+    /// <c>scopes_supported</c> is the first of them. <c>offline_access</c> is what makes the difference visible: a client
+    /// that never asks for it is issued no refresh token and sends its user back through the authorization server every
+    /// time the access token expires, while requiring it here would refuse every token from a server that leaves it out
+    /// of the <c>scope</c> claim — which such a server may do, because the value describes the client's own session
+    /// rather than anything this resource protects.
+    /// </para>
+    /// <para>
+    /// Published beside <see cref="RequiredScopes" /> rather than instead of it: a required scope is advertised whether
+    /// it appears here or not, and a scope named here is never enforced. A value repeating a required one is refused
+    /// rather than folded away, so this list goes on saying exactly what the required list does not.
+    /// </para>
+    /// </remarks>
+    public IList<string> AdvertisedScopes { get; } = [];
 
     /// <summary>Gets the external authorization servers whose access tokens are accepted.</summary>
     public IList<AuthorizationServerOptions> AuthorizationServers { get; } = [];
@@ -73,6 +92,7 @@ internal sealed class OAuthValidationOptions
     public bool IsConfigured =>
         !string.IsNullOrWhiteSpace(this.Resource)
         || this.RequiredScopes.Count > 0
+        || this.AdvertisedScopes.Count > 0
         || this.AuthorizationServers.Any(authorizationServer => authorizationServer.IsConfigured);
 
     /// <summary>Finds everything an operator must fix before OAuth tokens can be validated.</summary>
@@ -92,6 +112,7 @@ internal sealed class OAuthValidationOptions
         }
 
         errors.AddRange(this.FindRequiredScopeErrors());
+        errors.AddRange(this.FindAdvertisedScopeErrors());
         errors.AddRange(this.FindAuthorizationServerErrors());
 
         return errors;
@@ -130,6 +151,38 @@ internal sealed class OAuthValidationOptions
             else if (!claimedScopes.Add(configuredScope))
             {
                 yield return $"{settingPath} — '{configuredScope}' repeats a scope the list already carries.";
+            }
+        }
+    }
+
+    /// <summary>Finds what an operator must fix in the scopes this entry advertises without checking.</summary>
+    /// <remarks>
+    /// A malformed value is refused exactly as a malformed required one is, because both are published in the metadata
+    /// document and named in a challenge, where a space or a quotation mark would split one scope into two or end the
+    /// header parameter early. A value that is already required is refused as well: every required scope is published
+    /// regardless, so repeating one here states nothing and would leave the list reading as the whole advertised set
+    /// rather than as what is advertised beyond what is checked.
+    /// </remarks>
+    private IEnumerable<string> FindAdvertisedScopeErrors()
+    {
+        var requiredScopes = new HashSet<string>(this.RequiredScopes, StringComparer.Ordinal);
+        var claimedScopes = new HashSet<string>(StringComparer.Ordinal);
+
+        foreach (var (index, configuredScope) in this.AdvertisedScopes.Index())
+        {
+            var settingPath = $"{nameof(this.AdvertisedScopes)}:{index}";
+
+            if (!IsScopeToken(configuredScope))
+            {
+                yield return $"{settingPath} — '{configuredScope}' is not a scope; write the value the authorization server issues, with no space, quotation mark, or backslash in it.";
+            }
+            else if (!claimedScopes.Add(configuredScope))
+            {
+                yield return $"{settingPath} — '{configuredScope}' repeats a scope the list already carries.";
+            }
+            else if (requiredScopes.Contains(configuredScope))
+            {
+                yield return $"{settingPath} — '{configuredScope}' is already required and is published for that reason; list here only a scope this endpoint advertises without checking it.";
             }
         }
     }

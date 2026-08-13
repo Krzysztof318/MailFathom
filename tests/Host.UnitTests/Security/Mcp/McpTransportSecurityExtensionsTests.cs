@@ -4,6 +4,7 @@
 
 using System.Buffers.Text;
 using System.Text;
+using MailFathom.Host.Api;
 using MailFathom.Host.Configuration.Access;
 using MailFathom.Host.Configuration.Endpoints;
 using MailFathom.Host.Security.Mcp;
@@ -15,6 +16,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using Microsoft.Net.Http.Headers;
+using ModelContextProtocol.AspNetCore.Authentication;
 using Xunit;
 
 namespace MailFathom.Host.UnitTests.Security.Mcp;
@@ -159,24 +161,68 @@ public sealed class McpTransportSecurityExtensionsTests
             .GetSchemeAsync(selectedScheme!));
     }
 
+    /// <summary>
+    /// Two surfaces publish this deployment's RFC 9728 document — the MCP endpoint through the protocol SDK's type, the
+    /// administrative endpoint through a record of this repository's own — and a client reads whichever one it reached.
+    /// Composing the scope list twice is what would let them disagree, so the two are asserted against each other over
+    /// settings where the answer is not simply the required list: a scope advertised without being checked has to reach
+    /// both documents or the same deployment tells two clients to ask for different things.
+    /// </summary>
+    [Fact]
+    public void AddMcpTransportSecurity_AnEndpointAdvertisingAScope_PublishesWhatTheAdministrativeDocumentPublishes()
+    {
+        // Arrange
+        var oauthSettings = OAuthEntryFor("workforce", "https://sso.example.test");
+        oauthSettings.RequiredScopes.Add("mailfathom.read");
+        oauthSettings.AdvertisedScopes.Add("offline_access");
+
+        var endpointSettings = new McpEndpointOptions { Enabled = true };
+        endpointSettings.Authentication.Add(new TransportAuthenticationOptions { OAuth = oauthSettings });
+
+        var services = new ServiceCollection();
+        services.AddLogging();
+
+        // Act
+        services.AddMcpTransportSecurity(endpointSettings);
+
+        // Assert
+        using var composed = services.BuildServiceProvider();
+        var published = composed
+            .GetRequiredService<IOptionsMonitor<McpAuthenticationOptions>>()
+            .Get(McpAuthenticationDefaults.AuthenticationScheme)
+            .ResourceMetadata;
+
+        Assert.NotNull(published);
+        Assert.Equal(["mailfathom.read", "offline_access"], published.ScopesSupported);
+        Assert.Equal(
+            ProtectedResourceMetadataDocument.For([oauthSettings]).ScopesSupported,
+            published.ScopesSupported);
+    }
+
     private static ServiceProvider ComposeOAuthOnlyEndpoint()
     {
         var services = new ServiceCollection();
         services.AddLogging();
 
         var endpointSettings = new McpEndpointOptions { Enabled = true };
-        var oauthSettings = new OAuthValidationOptions { Resource = McpResource };
-        oauthSettings.AuthorizationServers.Add(new AuthorizationServerOptions
-        {
-            Name = "workforce",
-            Issuer = "https://sso.example.test",
-        });
 
-        endpointSettings.Authentication.Add(new TransportAuthenticationOptions { OAuth = oauthSettings });
+        endpointSettings.Authentication.Add(new TransportAuthenticationOptions
+        {
+            OAuth = OAuthEntryFor("workforce", "https://sso.example.test"),
+        });
 
         services.AddMcpTransportSecurity(endpointSettings);
 
         return services.BuildServiceProvider();
+    }
+
+    private static OAuthValidationOptions OAuthEntryFor(string name, string issuer)
+    {
+        var oauthSettings = new OAuthValidationOptions { Resource = McpResource };
+
+        oauthSettings.AuthorizationServers.Add(new AuthorizationServerOptions { Name = name, Issuer = issuer });
+
+        return oauthSettings;
     }
 
     private static DefaultHttpContext RequestTo(IServiceProvider composed, string? authorizationHeaderValue)

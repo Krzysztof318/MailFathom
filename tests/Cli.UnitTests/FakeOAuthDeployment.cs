@@ -46,8 +46,9 @@ internal sealed class FakeOAuthDeployment
     /// <remarks>What proves whether a rotated token was adopted: the second renewal presents either the original or the one the first renewal returned.</remarks>
     internal IReadOnlyList<string> PresentedRefreshTokens => this.issuedRefreshTokens;
 
-    /// <summary>Gets or sets the scopes the deployment publishes as required.</summary>
-    internal IReadOnlyList<string> RequiredScopes { get; set; } = ["mailfathom.admin"];
+    /// <summary>Gets or sets the scopes the deployment publishes for a client to ask for.</summary>
+    /// <remarks>This is the document's <c>scopes_supported</c> rather than what a token is checked against, so a deployment advertising offline access states it here and one that does not simply leaves it out.</remarks>
+    internal IReadOnlyList<string> PublishedScopes { get; set; } = ["mailfathom.admin"];
 
     /// <summary>Gets or sets the issuers the deployment publishes, which is more than one where several are accepted.</summary>
     internal IReadOnlyList<string> Issuers { get; set; } = [Issuer];
@@ -161,7 +162,7 @@ internal sealed class FakeOAuthDeployment
         {
           "resource": "{{Resource}}",
           "authorization_servers": [{{string.Join(", ", this.Issuers.Select(issuer => $"\"{issuer}\""))}}],
-          "scopes_supported": [{{string.Join(", ", this.RequiredScopes.Select(scope => $"\"{scope}\""))}}],
+          "scopes_supported": [{{string.Join(", ", this.PublishedScopes.Select(scope => $"\"{scope}\""))}}],
           "bearer_methods_supported": ["header"],
           "resource_name": "MailFathom"
         }

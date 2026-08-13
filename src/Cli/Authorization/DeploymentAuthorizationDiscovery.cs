@@ -15,9 +15,14 @@ namespace MailFathom.Cli.Authorization;
 /// <remarks>
 /// <para>
 /// Two documents and no configuration. The deployment publishes which authorization servers it accepts, the resource
-/// identifier a token must be issued for, and the scopes it requires; the server publishes where a person approves a
-/// sign-in and where a grant is exchanged. Everything the sign-in needs comes from one of the two, which is what keeps
-/// <c>login</c> from being a command an operator has to prepare four values for, each wrong in its own way.
+/// identifier a token must be issued for, and the scopes a client should ask for; the server publishes where a person
+/// approves a sign-in and where a grant is exchanged. Everything the sign-in needs comes from one of the two, which is
+/// what keeps <c>login</c> from being a command an operator has to prepare four values for, each wrong in its own way.
+/// </para>
+/// <para>
+/// The scope list is taken verbatim, including <c>offline_access</c> where the deployment advertises one. Nothing is
+/// added to it: a client that appends a scope of its own asks an authorization server for something the operator never
+/// published, and whether this session may outlive its first access token is the deployment's decision to state.
 /// </para>
 /// <para>
 /// The issuer the deployment names is the anchor. A discovery document is accepted only when the <c>issuer</c> it

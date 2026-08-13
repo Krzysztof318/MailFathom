@@ -10,7 +10,7 @@ namespace MailFathom.Cli.Authorization;
 /// <summary>The subset of an RFC 9728 protected resource metadata document the command reads.</summary>
 /// <param name="Resource">The identifier a token must be issued for, sent back as RFC 8707's <c>resource</c> parameter.</param>
 /// <param name="AuthorizationServers">The issuers whose tokens the deployment accepts.</param>
-/// <param name="ScopesSupported">The scopes the deployment requires, which the command asks for rather than guessing.</param>
+/// <param name="ScopesSupported">The scopes the deployment tells a client to ask for, which the command asks for verbatim rather than adding to.</param>
 /// <remarks>
 /// Every member is optional because the document comes from a machine this process does not own — a proxy, a captive
 /// portal, and a deployment that serves no administrative surface all answer this address with something. What makes a

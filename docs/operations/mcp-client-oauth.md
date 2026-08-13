@@ -123,6 +123,15 @@ scope, from its own name.
 If you require no scope, create the client scope anyway and call it something descriptive. It exists to carry the
 mapper.
 
+**Decide here whether clients should hold a refresh token.** A client asks for one by naming `offline_access`, and it
+learns to ask by reading that scope in MailFathom's metadata document — so if you do not advertise it, a client asks
+only for the scope above and its user signs in again whenever the access token expires, typically hourly. It goes in
+[step 7](#7-write-the-mailfathom-entry) as `AdvertisedScopes` rather than `RequiredScopes`, because it describes the
+client's session rather than anything MailFathom protects and is checked on nothing;
+[the reference](mcp-endpoint.md#scopes-you-advertise-but-do-not-require) has the whole rule. **In Keycloak** the scope
+exists already, as the built-in `offline_access` client scope, and what remains is assigning it to the client in
+[step 4](#4-register-an-application-for-the-client) — nothing new is created here.
+
 ### 3. Make the token's audience agree
 
 **This is the step that is not guessable, and the one most first connections fail on.** An MCP client asks for a token
@@ -225,6 +234,7 @@ Now the part that is MailFathom's, and it is one block:
         "OAuth": {
           "Resource": "https://mail.example.com/mcp",
           "RequiredScopes": [ "mailfathom.read" ],
+          "AdvertisedScopes": [ "offline_access" ],
           "AuthorizationServers": [
             {
               "Name": "workforce",
@@ -239,8 +249,10 @@ Now the part that is MailFathom's, and it is one block:
 }
 ```
 
-`Resource` came from step 1, `RequiredScopes` from step 2, and `AuthorizedSubjects` from step 6; `Name` is a label of
-your own that diagnostics report. `Issuer` is the one new value and the one to be careful with: **copy it verbatim from
+`Resource` came from step 1, `RequiredScopes` and `AdvertisedScopes` from step 2, and `AuthorizedSubjects` from step 6;
+`Name` is a label of your own that diagnostics report. Drop `AdvertisedScopes` if you decided against offline access —
+it publishes a scope for clients to ask for and is checked on nothing, so leaving it out narrows no boundary and only
+shortens how long a client goes between sign-ins. `Issuer` is the one new value and the one to be careful with: **copy it verbatim from
 the provider, trailing slash included**, because it is compared to a token's `iss` by exact string equality and is the
 one identifier MailFathom deliberately never rewrites. Several widely deployed servers publish an issuer whose entire
 path is one trailing slash, and tidying it by hand produces a deployment that starts cleanly and then refuses every token
@@ -252,9 +264,10 @@ from the issuer, and takes the key set address out of it.
 
 The section is read once while the host is composed, so this takes effect on restart.
 
-[The reference](mcp-endpoint.md#oauth) is where the rules on these four live: what happens with several entries, why
-every entry must agree on `Resource`, why `Name` and `Issuer` are unique across the whole list, and what leaving
-`RequiredScopes` empty means. Two more things it records are worth knowing before the next step. A deployment behind a
+[The reference](mcp-endpoint.md#oauth) is where the rules on these five live: what happens with several entries, why
+every entry must agree on `Resource`, why `Name` and `Issuer` are unique across the whole list, what leaving
+`RequiredScopes` empty means, and why
+[a scope you advertise](mcp-endpoint.md#scopes-you-advertise-but-do-not-require) can never turn a caller away. Two more things it records are worth knowing before the next step. A deployment behind a
 TLS-terminating proxy must name that proxy in
 [`ReverseProxy:TrustedProxies`](mcp-endpoint.md#behind-a-tls-terminating-reverse-proxy) — an access token is refused
 outright when the request did not arrive over TLS, and with no proxy named that refusal stops working rather than
@@ -273,7 +286,7 @@ $ curl -sS https://mail.example.com/.well-known/oauth-protected-resource/mcp | j
 {
   "resource": "https://mail.example.com/mcp",
   "authorization_servers": [ "https://sso.example.test/realms/mailfathom" ],
-  "scopes_supported": [ "mailfathom.read" ],
+  "scopes_supported": [ "mailfathom.read", "offline_access" ],
   "bearer_methods_supported": [ "header" ],
   "resource_name": "MailFathom"
 }
@@ -281,7 +294,8 @@ $ curl -sS https://mail.example.com/.well-known/oauth-protected-resource/mcp | j
 
 Check `resource` against what you will type into the client, and `authorization_servers` against your issuer. A
 deployment configuring several authorization servers publishes them all here, and a client may use only the first —
-order them accordingly.
+order them accordingly. `scopes_supported` is what a client will ask for, which is why `offline_access` appears in it
+without being required: an absence here is a client that never asks for a refresh token.
 
 **An unauthenticated request is refused, and says where to authorize:**
 
@@ -372,6 +386,7 @@ second:
 | The client reports it cannot reach the server, and the provider logs no traffic at all | Discovery never completed, so the client never learned where to authorize. Run the first two commands of [step 8](#8-verify-before-you-touch-the-client) |
 | The sign-in page never appears, or the redirect is rejected | The callback URL is not allowed, or not matched ignoring the port for a loopback client — [step 5](#5-take-the-callback-url-from-the-client) |
 | The sign-in fails at the token exchange | The token-endpoint authentication method disagrees. A public client sending nothing to a confidential registration, or the reverse — [step 4](#4-register-an-application-for-the-client) |
+| Everything works, and the person is asked to sign in again every hour | The client was issued no refresh token, because nothing told it to ask for one. Advertise `offline_access` — [step 2](#2-register-mailfathom-as-a-resource-in-the-provider) — and assign the scope to the client at the provider |
 | `429` where you expected `401` | The [rate limiter](mcp-endpoint.md#rate-limiting) ran out of capacity before authorization was reached. A flood of bad credentials is meant to cost the sender something |
 | A startup failure naming `McpEndpoint:Authentication:0` | The entry itself. The [reference](mcp-endpoint.md#authentication) lists what is refused before anything binds |
 

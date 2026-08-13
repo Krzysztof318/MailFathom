@@ -94,20 +94,57 @@ public sealed class OAuthSignInTests : IDisposable
     {
         // Arrange
         var deployment = FakeOAuthDeployment.Answering();
-        deployment.RequiredScopes = ["mailfathom.admin", "mailfathom.read"];
+        deployment.PublishedScopes = ["mailfathom.admin", "mailfathom.read", "offline_access"];
         using var handler = deployment.Handler();
 
         // Act
         await this.RunInteractiveAsync(this.CreateStore(), handler);
 
         // Assert
-        var requested = HttpUtility.ParseQueryString(new Uri(this.AuthorizationAddress()).Query)["scope"]?.Split(' ');
-        Assert.Contains("mailfathom.admin", requested!);
-        Assert.Contains("mailfathom.read", requested!);
+        var requested = HttpUtility.ParseQueryString(new Uri(this.AuthorizationAddress()).Query)["scope"]!.Split(' ');
+        Assert.Equal(["mailfathom.admin", "mailfathom.read", "offline_access"], requested);
+    }
 
-        // Without offline access asked for by name, neither of the widely deployed servers issues a refresh token, and
-        // the session would end within the hour.
-        Assert.Contains("offline_access", requested!);
+    /// <summary>
+    /// The document states what to ask for, and this command asks for that and nothing more. It used to append
+    /// <c>offline_access</c> itself, which meant a deployment could not decide whether its clients hold a refresh token;
+    /// now the deployment advertises the scope and every client reading the same document asks for it, rather than only
+    /// the one client that hard-coded the value.
+    /// </summary>
+    [Fact]
+    public async Task Login_ADeploymentAdvertisingNoOfflineAccess_AsksForNothingItDidNotPublish()
+    {
+        // Arrange
+        var deployment = FakeOAuthDeployment.Answering();
+        deployment.PublishedScopes = ["mailfathom.admin"];
+        using var handler = deployment.Handler();
+
+        // Act
+        await this.RunInteractiveAsync(this.CreateStore(), handler);
+
+        // Assert
+        var requested = HttpUtility.ParseQueryString(new Uri(this.AuthorizationAddress()).Query)["scope"]!.Split(' ');
+        Assert.Equal(["mailfathom.admin"], requested);
+    }
+
+    /// <summary>
+    /// A deployment requiring and advertising nothing publishes an empty list, and an empty <c>scope</c> parameter is
+    /// not the same request as one carrying none — several authorization servers refuse the first outright. Nothing is
+    /// substituted for the absence either: the sign-in then ends within the hour, which is the deployment's own choice.
+    /// </summary>
+    [Fact]
+    public async Task Login_ADeploymentPublishingNoScopeAtAll_AsksWithNoScopeParameter()
+    {
+        // Arrange
+        var deployment = FakeOAuthDeployment.Answering();
+        deployment.PublishedScopes = [];
+        using var handler = deployment.Handler();
+
+        // Act
+        await this.RunInteractiveAsync(this.CreateStore(), handler);
+
+        // Assert
+        Assert.Null(HttpUtility.ParseQueryString(new Uri(this.AuthorizationAddress()).Query)["scope"]);
     }
 
     /// <summary>A redirect echoing a value this run never issued belongs to a different request, so nothing may be redeemed against it.</summary>
