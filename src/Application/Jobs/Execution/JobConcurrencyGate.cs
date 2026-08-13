@@ -9,9 +9,9 @@ namespace MailFathom.Application.Jobs.Execution;
 /// <para>
 /// The bound belongs to the process rather than to a pass, which is why this is held once and shared: a pass is a unit
 /// of claiming, and how much of the instance background work may take is a statement about the instance. A deployment
-/// running several replicas bounds in-flight work at this ceiling times the replica count, which is what
-/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0009-durable-job-store-and-execution-identity.md">ADR 0009</see>
-/// already records as the shape of the limit.
+/// running several replicas therefore bounds in-flight work at this ceiling times the replica count, which is legible
+/// but is not a deployment-wide limit; providing one would need a counted claim or an advisory lock, and nothing has
+/// asked for it.
 /// </para>
 /// <para>
 /// <b>The type's slot is taken before the process slot, and that ordering is the whole isolation guarantee.</b> A job
