@@ -1,6 +1,6 @@
 # IMAP synchronization
 
-<!-- describes: src/Application/Synchronization/**, src/Domain/Synchronization/**, src/Domain/Folders/**, src/Application/Folders/**, src/Infrastructure/Mail/**, src/Application/Mail/Mutations/**, src/Domain/Mutations/** -->
+<!-- describes: src/Application/Synchronization/**, src/Domain/Synchronization/**, src/Domain/Folders/**, src/Application/Folders/**, src/Infrastructure/Mail/**, src/Application/Mail/Mutations/**, src/Domain/Mutations/**, src/Host/Hosting/Workers/MailSynchronizationCoordinator.cs, src/Host/Hosting/Workers/AccountSynchronizationSupervisor.cs, src/Host/Hosting/Workers/AccountPushNotificationWatch.cs -->
 
 MailFathom synchronizes mailboxes read-only, on a bounded schedule, and — for an account that asks for it — the moment the mail server says something changed. Both mechanisms run the same synchronization pass over the same read-only session; what differs is only what starts one.
 
@@ -129,8 +129,11 @@ readable as well as stopping being synchronized. Turning `Enabled` off stops the
 readable; removing the account does both.
 
 Supervisor logs and run records carry the account identifier, the folder alias, counts, the run duration, the
-consecutive failure count, and the current backoff, and never message-level data. They are structured log records;
-first-party metering instruments for the same values are still [pending](#pending-work).
+consecutive failure count, and the current backoff, and never message-level data. The same facts are also spanned and
+metered under MailFathom's own name: a cycle is one span with a span per folder beneath it, so a cycle that stalled is
+attributable to the folder it stalled in, and the wait before an account's next run is a gauge, so a backing-off account
+is visible without a log line being read at all. [What a synchronization cycle
+emits](../operations/telemetry.md#what-a-synchronization-cycle-emits) names each signal and what it answers.
 
 ## Bounding how much mail a run brings in
 
@@ -1748,10 +1751,6 @@ A rejected reload is logged with the configuration path and the failure identity
 - Per-account discovery. Every folder currently resolves on its own short-lived connection, so a run costs one extra
   IMAP login per configured folder on top of its synchronization session. The listing is the same for every folder of
   an account, and the per-account supervisor a run now belongs to is where one listing can serve them all.
-- Metering instruments for the rest of a supervised run. The byte volume a run moves is published through MailFathom's
-  own meter, as [Bounding how much mail a run brings in](#bounding-how-much-mail-a-run-brings-in) lists; run duration,
-  the stored and skipped counts, the consecutive failure count, and the current backoff are still structured log
-  properties alone.
 - Watching a folder the account does not synchronize. A subscription names the folders a run resolved, so a change in a
   folder nothing is configured for is not reported and would not start a pass if it were.
 - A durable audit store for mapping changes. The log-backed sink cannot join the transaction that commits a binding,

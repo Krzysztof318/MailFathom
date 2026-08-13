@@ -9,6 +9,7 @@ using MailFathom.Domain.Transport;
 using MailFathom.Host.Configuration.Mail;
 using MailFathom.Host.Hosting.Workers;
 using MailFathom.Host.UnitTests.TestDoubles;
+using MailFathom.Infrastructure.Observability;
 using MailFathom.TestSupport;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Time.Testing;
@@ -289,6 +290,7 @@ public sealed class MailSynchronizationCoordinatorTests
             this.Coordinator = new MailSynchronizationCoordinator(
                 services.GetRequiredService<IServiceScopeFactory>(),
                 settings,
+                services.GetRequiredService<MailSynchronizationTelemetry>(),
                 this.loggerFactory,
                 clock);
         }

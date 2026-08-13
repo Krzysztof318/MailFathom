@@ -2,6 +2,8 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using System.Collections.Concurrent;
+using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using MailFathom.Application.Folders;
 using MailFathom.Application.Mail.Mutations;
@@ -9,6 +11,7 @@ using MailFathom.Application.Persistence;
 using MailFathom.Application.Rules.Evaluation;
 using MailFathom.Application.Synchronization;
 using MailFathom.Application.Synchronization.Sessions;
+using MailFathom.Common.Observability;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Folders;
@@ -17,6 +20,7 @@ using MailFathom.Domain.Transport;
 using MailFathom.Host.Configuration.Mail;
 using MailFathom.Host.Hosting.Workers;
 using MailFathom.Host.UnitTests.TestDoubles;
+using MailFathom.Infrastructure.Observability;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Time.Testing;
 using NSubstitute;
@@ -301,6 +305,57 @@ public sealed class AccountSynchronizationSupervisorTests
         var logged = string.Join(' ', harness.Logger.Messages);
         Assert.DoesNotContain("mailfathom@example.test", logged, StringComparison.Ordinal);
         Assert.DoesNotContain("imap-primary-password", logged, StringComparison.Ordinal);
+    }
+
+    /// <summary>A cycle is one span with its folders beneath it, which is what attributes a stall to the step it stalled in.</summary>
+    /// <remarks>
+    /// Asserted here rather than only against the telemetry itself, because the shape depends on where the supervisor
+    /// opens each scope: a folder span started outside the cycle's own would be a root span per folder, and a trace
+    /// that no longer says which cycle a slow folder belonged to.
+    /// </remarks>
+    [Fact]
+    public async Task RunAsync_ACycleOverTwoFolders_PublishesEachFolderBeneathTheCyclesOwnSpan()
+    {
+        // Arrange
+        var secondFolderReached = new TaskCompletionSource();
+        var openedFolderCount = 0;
+
+        await using var emptyMailbox = CreateEmptyMailbox();
+        var sessionFactory = Substitute.For<IMailboxSessionFactory>();
+        sessionFactory
+            .OpenReadOnlyAsync(
+                Arg.Any<MailAccountId>(),
+                Arg.Any<MailFolderResolution>(),
+                Arg.Any<MailTransportSecurityPolicy>(),
+                Arg.Any<CancellationToken>())
+            .Returns(_ =>
+            {
+                if (Interlocked.Increment(ref openedFolderCount) == 2)
+                {
+                    secondFolderReached.TrySetResult();
+                }
+
+                return Task.FromResult(emptyMailbox);
+            });
+
+        using var spans = new SynchronizationSpanCollector("spans-its-folders");
+        using var harness = CreateHarness(
+            SynchronizationTestHost.CreateOptions(
+                enabled: true,
+                SynchronizationTestHost.CreateAccount("spans-its-folders", "INBOX", "Archive")),
+            sessionFactory);
+
+        // Act
+        await harness.SuperviseUntilAsync(secondFolderReached.Task);
+
+        // Assert
+        var cycle = Assert.Single(spans.Named("synchronize_account"));
+        var folders = spans.Named("synchronize_folder");
+
+        Assert.Equal(
+            ["INBOX", "ARCHIVE"],
+            folders.Select(folder => (string?)folder.GetTagItem("mailfathom.mail.folder")));
+        Assert.All(folders, folder => Assert.Equal(cycle.SpanId, folder.ParentSpanId));
     }
 
     /// <summary>One IMAP connection per account is the default, so two folders of one account never open at once.</summary>
@@ -841,6 +896,42 @@ public sealed class AccountSynchronizationSupervisorTests
         return sessionFactory;
     }
 
+    /// <summary>Collects the synchronization spans one account published while a test ran.</summary>
+    /// <remarks>
+    /// Narrowed to one account, because the activity source is the application's own and every other class of this
+    /// suite supervises an account of its own at the same moment. The spans are kept in the order they stopped, which
+    /// is the order a run with one folder connection works its folders in.
+    /// </remarks>
+    private sealed class SynchronizationSpanCollector : IDisposable
+    {
+        private readonly ConcurrentQueue<Activity> stopped = new();
+        private readonly ActivityListener listener;
+
+        internal SynchronizationSpanCollector(string accountId)
+        {
+            this.listener = new ActivityListener
+            {
+                ShouldListenTo = source => source.Name == Telemetry.Name,
+                Sample = static (ref ActivityCreationOptions<ActivityContext> _) =>
+                    ActivitySamplingResult.AllDataAndRecorded,
+                ActivityStopped = activity =>
+                {
+                    if (Equals(activity.GetTagItem("mailfathom.mail.account"), accountId))
+                    {
+                        this.stopped.Enqueue(activity);
+                    }
+                },
+            };
+
+            ActivitySource.AddActivityListener(this.listener);
+        }
+
+        public void Dispose() => this.listener.Dispose();
+
+        internal IReadOnlyList<Activity> Named(string operationName) =>
+            [.. this.stopped.Where(activity => activity.OperationName == operationName)];
+    }
+
     /// <summary>Models a folder work unit that is under way and stays there until the test lets it end.</summary>
     private static async Task<IMailboxSession> HoldUntilReleasedAsync(TaskCompletionSource release)
     {
@@ -927,8 +1018,8 @@ public sealed class AccountSynchronizationSupervisorTests
                     services.GetRequiredService<IServiceScopeFactory>(),
                     this.PushLogger,
                     clock),
-                this.Logger,
-                clock);
+                services.GetRequiredService<MailSynchronizationTelemetry>(),
+                this.Logger);
         }
 
         internal StubSettingsSnapshot<MailSynchronizationOptions> Settings { get; }
