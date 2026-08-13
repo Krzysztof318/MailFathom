@@ -20,6 +20,9 @@ namespace MailFathom.Host;
 /// </summary>
 internal static class ServiceDefaultsExtensions
 {
+    /// <summary>The standard variable naming the collector every signal is exported to.</summary>
+    internal const string ExporterEndpointVariableName = "OTEL_EXPORTER_OTLP_ENDPOINT";
+
     /// <summary>
     /// Adds observability, service discovery, HTTP resilience, and health-check defaults.
     /// </summary>
@@ -52,7 +55,8 @@ internal static class ServiceDefaultsExtensions
     /// <remarks>
     /// The resource is configured once for all three signals, so a log record, a metric point, and a span all name the
     /// build they came from. <see cref="StampedBuildResourceExtensions" /> holds what that adds and what it leaves to
-    /// the OpenTelemetry SDK.
+    /// the OpenTelemetry SDK, and <see cref="TraceSamplingExtensions" /> holds which traces are recorded and which of
+    /// that decision is the operator's.
     /// </remarks>
     public static TBuilder ConfigureOpenTelemetry<TBuilder>(this TBuilder builder)
         where TBuilder : IHostApplicationBuilder
@@ -71,13 +75,12 @@ internal static class ServiceDefaultsExtensions
             })
             .WithTracing(tracing =>
             {
-                tracing.AddMailFathomActivitySources()
+                tracing.SetDefaultSampler(builder.Configuration)
+                    .AddMailFathomActivitySources()
                     .AddLibraryActivitySources()
-                    // A probe arrives every few seconds for the lifetime of the process and says the same thing every
-                    // time, so tracing it would fill a trace store with the polling rather than with the work.
                     .AddAspNetCoreInstrumentation(tracingOptions =>
                     {
-                        tracingOptions.Filter = context => !HealthProbe.IsProbePath(context.Request.Path);
+                        tracingOptions.Filter = IsWorthTracing;
                         tracingOptions.EnrichWithHttpRequest = RedactAttachmentCapability;
                     })
                     .AddHttpClientInstrumentation();
@@ -91,14 +94,29 @@ internal static class ServiceDefaultsExtensions
     private static TBuilder AddOpenTelemetryExporters<TBuilder>(this TBuilder builder)
         where TBuilder : IHostApplicationBuilder
     {
-        var useOtlpExporter = !string.IsNullOrWhiteSpace(builder.Configuration["OTEL_EXPORTER_OTLP_ENDPOINT"]);
-
-        if (useOtlpExporter)
+        if (ExportsOverOtlp(builder.Configuration))
         {
             builder.Services.AddOpenTelemetry().UseOtlpExporter();
         }
 
         return builder;
+    }
+
+    /// <summary>Reports whether this deployment named a collector, which is what attaches the exporter.</summary>
+    /// <param name="configuration">The configuration the standard endpoint variable is read from.</param>
+    /// <returns><see langword="true" /> when an endpoint is named, otherwise <see langword="false" />.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="configuration" /> is <see langword="null" />.</exception>
+    /// <remarks>
+    /// The default is off, and it is a privacy default rather than a gap: the signals describe activity around personal
+    /// mail, so where they flow is a decision an operator takes explicitly. This is a named method rather than a local
+    /// so that the default is asserted rather than read — every sibling change adds a publisher, and none of them may
+    /// turn export on for a deployment that named nowhere to send it.
+    /// </remarks>
+    internal static bool ExportsOverOtlp(IConfiguration configuration)
+    {
+        ArgumentNullException.ThrowIfNull(configuration);
+
+        return !string.IsNullOrWhiteSpace(configuration[ExporterEndpointVariableName]);
     }
 
     /// <summary>States what an exported log record carries beyond its message.</summary>
@@ -129,6 +147,24 @@ internal static class ServiceDefaultsExtensions
 
         logging.IncludeFormattedMessage = true;
         logging.IncludeScopes = false;
+    }
+
+    /// <summary>Reports whether a request is one the trace store is worth filling with.</summary>
+    /// <param name="context">The request the instrumentation is about to span.</param>
+    /// <returns><see langword="false" /> for a health or liveness probe, and <see langword="true" /> for anything else.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="context" /> is <see langword="null" />.</exception>
+    /// <remarks>
+    /// A probe arrives every few seconds for the lifetime of the process and says the same thing every time, so tracing
+    /// it would fill a trace store with the polling rather than with the work — and on a deployment exporting to a
+    /// collector it pays for, the polling would be most of the bill. This is a named method rather than a lambda
+    /// because it is a decision an operator relies on, and a decision nothing can assert is one a later change removes
+    /// without anything saying so.
+    /// </remarks>
+    internal static bool IsWorthTracing(HttpContext context)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+
+        return !HealthProbe.IsProbePath(context.Request.Path);
     }
 
     /// <summary>Replaces the recorded path of an attachment download with its route template.</summary>
