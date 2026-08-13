@@ -265,6 +265,16 @@ internal sealed partial class AccountSynchronizationSupervisor
             this.accountRunSlots.Release();
         }
 
+        // A cycle the host stopped scheduling did not finish, and its failure count says nothing about that: a folder
+        // still queued behind the folder bound returns without being started, so it raises no count and would leave
+        // a cycle that skipped most of its work reporting a clean run. Leaving the scope unreported publishes it as
+        // interrupted, which is what a folder cut off by the same shutdown already reports, and the line is withheld
+        // for the same reason — the supervisor logs the stop itself, and there is no finished run to announce.
+        if (schedulingToken.IsCancellationRequested)
+        {
+            return new AccountRunOutcome(failedFolderCount > 0 || convergenceFailed, [.. resolvedFolders]);
+        }
+
         run.Completed(scheduledFolders.Length, failedFolderCount, convergenceFailed);
 
         this.LogAccountRunFinished(

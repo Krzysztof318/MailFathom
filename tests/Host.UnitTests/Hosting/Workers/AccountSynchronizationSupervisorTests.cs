@@ -612,6 +612,57 @@ public sealed class AccountSynchronizationSupervisorTests
         Assert.Equal(["INBOX"], attemptedFolders);
     }
 
+    /// <summary>A cycle the host stopped mid-way skipped folders that raised no failure count, so it must not read as a clean run.</summary>
+    /// <remarks>
+    /// The folders still queued behind the folder bound return without being started, so nothing about them reaches
+    /// the failure count the cycle would otherwise be judged by. Reporting that as a run that succeeded would put a
+    /// spurious healthy point on the duration histogram at every shutdown that lands inside a cycle.
+    /// </remarks>
+    [Fact]
+    public async Task RunAsync_SchedulingStopsMidRun_PublishesTheCycleAsInterruptedRatherThanSucceeded()
+    {
+        // Arrange
+        var firstFolderEntered = new TaskCompletionSource();
+        var releaseFirstFolder = new TaskCompletionSource();
+
+        await using var emptyMailbox = CreateEmptyMailbox();
+        var sessionFactory = Substitute.For<IMailboxSessionFactory>();
+        sessionFactory
+            .OpenReadOnlyAsync(
+                Arg.Any<MailAccountId>(),
+                Arg.Any<MailFolderResolution>(),
+                Arg.Any<MailTransportSecurityPolicy>(),
+                Arg.Any<CancellationToken>())
+            .Returns(_ =>
+            {
+                firstFolderEntered.TrySetResult();
+
+                return HoldUntilReleasedAsync(releaseFirstFolder, emptyMailbox);
+            });
+
+        using var spans = new SynchronizationSpanCollector("interrupted-mid-cycle");
+        using var harness = CreateHarness(
+            SynchronizationTestHost.CreateOptions(
+                enabled: true,
+                SynchronizationTestHost.CreateAccount("interrupted-mid-cycle", "INBOX", "Archive", "Sent")),
+            sessionFactory);
+        var supervision = harness.StartSupervision();
+
+        // Act
+        await firstFolderEntered.Task.WaitAsync(DeadlockGuard, TestContext.Current.CancellationToken);
+        await harness.StopSchedulingAsync();
+        releaseFirstFolder.SetResult();
+        await supervision.WaitAsync(DeadlockGuard, TestContext.Current.CancellationToken);
+
+        // Assert
+        var cycle = Assert.Single(spans.Named("synchronize_account"));
+
+        Assert.Equal("interrupted", cycle.GetTagItem("mailfathom.mail.sync.outcome"));
+        Assert.DoesNotContain(
+            harness.Logger.Messages,
+            message => message.Contains("finished in", StringComparison.Ordinal));
+    }
+
     /// <summary>An account a reload removes is withdrawn work, not a failure, so its supervisor ends instead of connecting again.</summary>
     [Fact]
     public async Task RunAsync_AccountLeavesConfiguration_EndsSupervisionOfIt()
@@ -938,6 +989,16 @@ public sealed class AccountSynchronizationSupervisorTests
         await release.Task;
 
         throw new InvalidOperationException("connect failed");
+    }
+
+    /// <summary>Models the same work unit ending in a folder the server serves, for a test about what a held run finishes as.</summary>
+    private static async Task<IMailboxSession> HoldUntilReleasedAsync(
+        TaskCompletionSource release,
+        IMailboxSession mailbox)
+    {
+        await release.Task;
+
+        return mailbox;
     }
 
     /// <summary>Models a folder the server serves and that holds no email, which is the cheapest successful run there is.</summary>
