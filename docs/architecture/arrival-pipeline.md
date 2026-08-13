@@ -144,10 +144,11 @@ defect that is invisible when it happens.
 ## The paths that re-derive the same data
 
 Three paths produce derived data, and all three obey the order above rather than a version of it. Two of them wait for
-a stamp only an account run writes — the record that the rule pass has finished with a message — so on a deployment with
-`MailSynchronization:Enabled` set to `false` neither cuts a *first* set of passages: no run starts, nothing is stamped,
-and mail stored without them gains none until synchronization is switched on again. What the stamp holds back is that
-first cut alone, so a rebuild is not covered by it: the extraction backfill runs whether or not synchronization does,
+the record that the rule pass has finished with a message. That record is written by an account run's rule pass and once
+besides, by the migration that added the column, which stamped every message the previous version had already stored —
+so a deployment running with `MailSynchronization:Enabled` set to `false` does cut and embed the mail it upgraded with,
+and what the stamp holds back there is mail an account run stored and no rule pass reached. Only a *first* cut waits on
+it at all, so a rebuild is outside it in either case: the extraction backfill runs whether or not synchronization does,
 and with `SensitiveContent:RebuildStaleDerivedData` switched on it replaces the passages a message already carries —
 and, through them, the vectors the replacement cascades away.
 

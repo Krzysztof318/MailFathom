@@ -6,10 +6,13 @@ using MailFathom.Application.Emails.Embeddings;
 using MailFathom.Application.Emails.Embeddings.Backfill;
 using MailFathom.Application.Emails.Embeddings.Generation;
 using MailFathom.Application.Emails.Embeddings.Generations;
+using MailFathom.Application.Mail.Mutations;
 using MailFathom.Application.Persistence;
 using MailFathom.Application.Spam.Gating;
 using MailFathom.Application.Synchronization;
 using MailFathom.Domain.Emails;
+using MailFathom.Domain.Folders;
+using MailFathom.Domain.Mutations;
 using MailFathom.Infrastructure.Persistence;
 using MailFathom.IntegrationTests.Orchestration;
 using Microsoft.EntityFrameworkCore;
@@ -178,6 +181,73 @@ public sealed class OrchestratedEmailEmbeddingBackfillTests(MailFathomOrchestrat
         Assert.Equal(0, await CountVectorsAsync(services, unevaluated, profileId, cancellationToken));
         Assert.True(await CountPassagesAsync(services, evaluated, cancellationToken) > 0);
         Assert.True(await CountVectorsAsync(services, evaluated, profileId, cancellationToken) > 0);
+    }
+
+    /// <summary>
+    /// A message a rule has filed elsewhere is passed over too, until the move has actually landed: the stamp says the
+    /// rules finished, and the record beside it says where the message is going.
+    /// </summary>
+    /// <remarks>
+    /// A rule declares a move rather than performing one, and the account's next run carries it to the server, so
+    /// between the two the message sits in a folder it is leaving. This sweep runs on its own interval inside that
+    /// window, and passages are not undone by the message moving afterwards — so cutting it here would describe it under
+    /// the mapping it is about to leave, permanently. The settled message beside it is the control: without one, zero
+    /// passages would report a sweep that found nothing rather than one that passed this message over.
+    /// </remarks>
+    [Fact]
+    public async Task Sweeping_MailARuleIsStillMoving_CutsNothingAndEmbedsNothingOfIt()
+    {
+        // Arrange
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var services = await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken);
+        var relocating = await StoreOneMessageAsync(services, uid: 9341, cancellationToken);
+        var settled = await StoreOneMessageAsync(services, uid: 9342, cancellationToken);
+        await RemovePassagesAsync(services, relocating, cancellationToken);
+        await RemovePassagesAsync(services, settled, cancellationToken);
+        await RecordConvergingRelocationAsync(services, relocating, uid: 9341, cancellationToken);
+        var profileId = await OrchestratedEmbeddingProfile.EnsureActiveDeterministicAsync(services, cancellationToken);
+
+        // Act
+        await SweepAsync(services, cancellationToken);
+
+        // Assert
+        Assert.Equal(0, await CountPassagesAsync(services, relocating, cancellationToken));
+        Assert.Equal(0, await CountVectorsAsync(services, relocating, profileId, cancellationToken));
+        Assert.True(await CountPassagesAsync(services, settled, cancellationToken) > 0);
+        Assert.True(await CountVectorsAsync(services, settled, profileId, cancellationToken) > 0);
+    }
+
+    /// <summary>Writes down a relocation nothing has carried to the mail server yet.</summary>
+    /// <remarks>
+    /// Opened through the port the rule pass writes through rather than by inserting a row, so the record carries the
+    /// stage a freshly authored move actually has — <see cref="MailboxMutationStage.Recorded" />, which is neither
+    /// completed nor abandoned and is therefore exactly what the sweep has to pass over.
+    /// </remarks>
+    private static async Task RecordConvergingRelocationAsync(
+        OrchestratedMailFathomServices services,
+        StoredEmailId storedEmailId,
+        uint uid,
+        CancellationToken cancellationToken)
+    {
+        var binding = await OrchestratedFolderBinding.CommitAsync(services, FolderAlias, cancellationToken);
+        var occurrenceId = SyntheticEmail.OccurrenceIn(binding, uid);
+
+        var record = default(MailboxMutationRecord);
+        var commitResult = await services.CommitAsync(
+            async (scope, session, token) => record = await scope
+                .GetRequiredService<IMailboxMutationRecordStore>()
+                .OpenAsync(
+                    session,
+                    MailboxMutationRequest.Relocate(
+                        storedEmailId,
+                        occurrenceId,
+                        MailboxMutationRequester.Rule("file-the-newsletters", "1"),
+                        RemoteFolderPath.Create("Archive")),
+                    token),
+            cancellationToken);
+
+        Assert.Equal(PersistenceCommitResult.Committed, commitResult);
+        Assert.Equal(MailboxMutationStage.Recorded, record?.Stage);
     }
 
     /// <summary>Runs the backfill until the sweep ends, and answers with the last run that did any work.</summary>

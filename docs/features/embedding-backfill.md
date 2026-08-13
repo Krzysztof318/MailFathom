@@ -35,10 +35,11 @@ Two conditions select a message, and they are the two halves of what a pre-exist
   is part of that sameness rather than a narrowing beside it: this sweep runs on its own interval while an account run
   is still fetching a mailbox, so without it a first synchronization would have its mail cut here before a single rule
   had read it — which is the one order [the arrival pipeline](../architecture/arrival-pipeline.md) exists to fix. The
-  stamp is written by an account run's rule pass and by nothing else, so **a deployment running with
-  `MailSynchronization:Enabled` set to `false` cuts nothing here**: no run starts, no message is ever stamped, and mail
-  that has no passages keeps none until synchronization is switched on again. Mail that already carries passages is
-  embedded either way, since that is the other group and it waits on nothing.
+  stamp is written by an account run's rule pass and once besides, by the migration that added the column, which stamped
+  every message the previous version had already stored. So **a deployment running with `MailSynchronization:Enabled`
+  set to `false` still cuts and embeds the mail it upgraded with** — that mail carries the stamp already — and what the
+  switch holds back here is mail a later run stored and no rule pass reached, which on such a deployment is none. Mail
+  that already carries passages is embedded either way, since that is the other group and it waits on nothing.
 - **A message with a passage that carries no vector** under the generation being walked towards was stored before that
   generation existed, or was turned away by `Embeddings:MaxQueuedEmails`, or was left part-way through by a provider
   call that failed. For a generation being built from nothing, that is every message the instance holds.
