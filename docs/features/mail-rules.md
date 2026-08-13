@@ -466,8 +466,10 @@ instead of adding a second thing to configure and watch.
 The step comes after every folder has synchronized and committed, after the classification pass, and outside the
 synchronization transaction entirely. Only one thing runs after it, and it runs after it because of this pass: the cut
 that gives a message its passages, which waits until the rules have finished so that nothing derived describes a folder
-a rule was about to move the message out of. [The arrival pipeline](../architecture/arrival-pipeline.md) draws the whole
-order. Two consequences of this step's own position follow that are worth stating rather than inferring. A rule
+a rule was about to move the message out of. Waiting for the rules is not by itself enough for that, because a rule
+declares a move rather than performing one and the account's *next* run is what carries it to the mail server — so the
+cut also passes over a message whose relocation is still converging, and cuts it once it is in the folder it ended up
+in. [The arrival pipeline](../architecture/arrival-pipeline.md) draws the whole order. Two consequences of this step's own position follow that are worth stating rather than inferring. A rule
 can only ever see mail the run before it has already stored, so a provider redelivering a message or a synchronization
 retry cannot produce a different processing boundary than a clean run. And nothing an MCP tool does waits on a rule:
 reads are served from what is already stored, and a pass neither blocks one nor is blocked by one.

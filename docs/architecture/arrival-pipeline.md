@@ -125,6 +125,12 @@ classification can decide the message is not derived from at all, and the owner'
 differently from the one it arrived in. Passages are not undone by a message moving afterwards, so cutting inside the
 commit would write passages of a placement and a verdict that had not been settled yet.
 
+The rules are the slower of the two, because a rule declares a move rather than performing one: the record is durable
+when the pass ends and the account's **next** run carries it to the mail server. So waiting for the pass is not enough
+on its own, and the cut passes over a message whose relocation is still converging — cutting it once the message is in
+the folder it ended up in, under that folder's mapping. A relocation that completed or was abandoned holds nothing
+back, since neither will move the message again.
+
 What the ordering costs is one extra local transaction per message and nothing else: the cut reads the search document
 the commit already wrote, so it reaches no mail server, no provider, and no sidecar. What it removes is a whole class of
 defect that is invisible when it happens.
@@ -136,11 +142,17 @@ Three paths produce derived data, and all three obey the order above rather than
 - **The live path** is the run drawn here.
 - **The extraction backfill** re-reads raw MIME stored before extraction existed. It redacts through the same guard,
   writes the same search document, and cuts through the same writer, so a message it reaches arrives at the state a
-  newly synchronized one reaches rather than at a state a second walk has to finish.
+  newly synchronized one reaches rather than at a state a second walk has to finish. It cuts only what both stages in
+  front of the cut have finished with, which is what keeps *the same state* true: the text it has just written is
+  exactly what lets the rule pass read a message it had been skipping, and cutting in this transaction would cut before
+  that pass ever saw it. Such a message is cut by the account's next run instead.
 - **The embedding backfill** sweeps for messages with extracted text and no passages, and for passages with no vector.
-  It cuts through the same writer and is narrowed by the same classification predicate and the same folder switch, so it
-  reaches whatever one account run's batch budget did not. A held message needs no sweep to be released: the account's
-  own next run asks the gate again and cuts it in the same run the verdict admits it.
+  It cuts through the same writer and is narrowed by the same classification predicate, the same rule stamp, and the
+  same folder switch, so it reaches whatever one account run's batch budget did not. The rule stamp is what stops it
+  being a way around the order: it runs on its own interval while a run is still fetching a mailbox, so a first
+  synchronization would otherwise have its mail cut here before the rules had read any of it. A held message needs no
+  sweep to be released either: the account's own next run asks the gate again and cuts it in the same run the verdict
+  admits it.
 
 ## What the two folder switches decide
 

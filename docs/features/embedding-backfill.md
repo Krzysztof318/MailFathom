@@ -26,11 +26,15 @@ none.
 
 Two conditions select a message, and they are the two halves of what a pre-existing mailbox looks like.
 
-- **A message with extracted text and no passages** was stored before [message chunks](message-chunks.md) existed, or
-  was held back by spam classification while it waited for a verdict. Nothing can be embedded for it until they are cut,
-  so the walk cuts them first — from the text an earlier extraction already stored, which costs a database write and no
+- **A message with extracted text and no passages that the owner's rules have finished with** was stored before
+  [message chunks](message-chunks.md) existed, or was held back by spam classification while it waited for a verdict, or
+  was simply left behind by one account run's batch budget. Nothing can be embedded for it until they are cut, so the
+  walk cuts them first — from the text an earlier extraction already stored, which costs a database write and no
   provider call and reaches no mail server. The rules applied are the ones synchronization applies, so a message this
-  walk reaches ends up cut exactly as the same message arriving today would be.
+  walk reaches ends up cut exactly as the same message arriving today would be. Requiring that the rules have finished
+  is part of that sameness rather than a narrowing beside it: this sweep runs on its own interval while an account run
+  is still fetching a mailbox, so without it a first synchronization would have its mail cut here before a single rule
+  had read it — which is the one order [the arrival pipeline](../architecture/arrival-pipeline.md) exists to fix.
 - **A message with a passage that carries no vector** under the generation being walked towards was stored before that
   generation existed, or was turned away by `Embeddings:MaxQueuedEmails`, or was left part-way through by a provider
   call that failed. For a generation being built from nothing, that is every message the instance holds.
@@ -50,9 +54,10 @@ states both cases.
 
 **This sweep is where spam classification lets a held message through.** Where classification is switched on, the query
 leaves out junk entirely and leaves out a message no verdict has been reached about, so a message of a classified folder
-appears here the moment its verdict admits it or its wait runs out — and the cut it gets is the one the account run's own
-last step passed over. That makes the sweep both the thing that keeps spam away from a provider and the thing that stops a wedged
-classifier turning the index into one that quietly stopped filling; cutting a message's first passages is also the one
+appears here the moment its verdict admits it or its wait runs out — and the cut it gets is the one the account run's
+own last step passed over. That makes the sweep both the thing that keeps spam away from a provider and the thing that
+stops a wedged classifier turning the index into one that quietly stopped filling; cutting a message's first passages is
+also the one
 place a release is countable per message, which is what
 `mailfathom.spam.derived_work.admissions` reports.
 [Junk is kept out of what a deployment derives from mail](spam-classification.md#junk-is-kept-out-of-what-a-deployment-derives-from-mail)

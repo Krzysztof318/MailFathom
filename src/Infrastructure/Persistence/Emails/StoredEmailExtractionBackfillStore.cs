@@ -138,12 +138,12 @@ internal sealed class StoredEmailExtractionBackfillStore(
             cancellationToken);
 
         // Cut from the same extraction, so an email this walk reaches arrives at the same state a newly synchronized
-        // one does rather than at a state a second walk would have to complete — including when classification is what
-        // decides it arrives with no passages at all. The gate is read here rather than being folded into the batch
-        // query for the reason it is read at synchronization: an email whose passages this walk withholds still needs
-        // its extraction applied, so what the answer decides is one of the two writes rather than whether the email is
-        // reached.
-        if (await this.IsAdmittedForDerivedWorkAsync(sessionContext, storedEmailId, cancellationToken))
+        // one does rather than at a state a second walk would have to complete — which now means cutting only what the
+        // two stages in front of the cut have finished with, exactly as the account run's own cut does. The question is
+        // asked here rather than folded into the batch query for the reason the gate was: an email whose passages this
+        // walk withholds still needs its extraction applied, so the answer decides one of the two writes rather than
+        // whether the email is reached at all.
+        if (await this.IsReadyForTheCutAsync(sessionContext, storedEmailId, cancellationToken))
         {
             await chunkWriter.SaveAsync(sessionContext, storedEmail, metadata.Text, cancellationToken);
         }
@@ -243,28 +243,35 @@ internal sealed class StoredEmailExtractionBackfillStore(
                 && email.SearchDocument.SensitiveContentStamp != currentStamp));
     }
 
-    /// <summary>Asks the classification gate about one email, through the same predicate every walk is narrowed by.</summary>
+    /// <summary>Asks both stages that stand in front of the cut about one email, through the predicates they own.</summary>
     /// <remarks>
-    /// Expressed as an existence test over the shared predicate rather than as a second reading of the rule, so this
-    /// path and the sweeps can never disagree about one message. It costs one indexed read of the row this write is
-    /// already holding, and none at all on a deployment that classifies nothing.
+    /// <para>
+    /// The classification half is expressed as an existence test over the shared predicate rather than as a second
+    /// reading of the rule, so this path and the sweeps can never disagree about one message.
+    /// </para>
+    /// <para>
+    /// The rule half is the reason this walk cannot cut whatever it extracts. A message the rules skipped for want of
+    /// extracted text is exactly the message this walk supplies text to, so cutting it here would cut it before the
+    /// pass that may still move it has ever read it — and the extracted text this walk just wrote is what lets that
+    /// pass read it on the account's next run, which then cuts it. Withholding costs a run; cutting early costs
+    /// passages of a folder the message was about to leave.
+    /// </para>
+    /// <para>
+    /// It costs one indexed read of the row this write is already holding, whether or not the deployment classifies
+    /// anything.
+    /// </para>
     /// </remarks>
-    private async Task<bool> IsAdmittedForDerivedWorkAsync(
+    private async Task<bool> IsReadyForTheCutAsync(
         MailFathomDbContext sessionContext,
         StoredEmailId storedEmailId,
         CancellationToken cancellationToken)
     {
         var terms = derivedWorkGate.ReadTerms();
+        var email = sessionContext.StoredEmails
+            .AsNoTracking()
+            .Where(candidate => candidate.Id == storedEmailId.Value && candidate.RulesEvaluatedAt != null);
 
-        if (!terms.IsApplied)
-        {
-            return true;
-        }
-
-        return await DerivedWorkAdmittedEmails
-            .Admitting(
-                sessionContext.StoredEmails.AsNoTracking().Where(email => email.Id == storedEmailId.Value),
-                terms)
+        return await (terms.IsApplied ? DerivedWorkAdmittedEmails.Admitting(email, terms) : email)
             .AnyAsync(cancellationToken);
     }
 

@@ -14,6 +14,6 @@ namespace MailFathom.Application.Emails.Chunking;
 /// </remarks>
 public sealed record MailChunkingPassReport(int ChunkedEmailCount, int RefusedOfferCount, bool EmailsRemain)
 {
-    /// <summary>Gets whether this pass did anything worth an operator's attention.</summary>
+    /// <summary>Gets whether this pass did nothing worth an operator's attention.</summary>
     public bool IsEmpty => this.ChunkedEmailCount == 0 && this.RefusedOfferCount == 0;
 }

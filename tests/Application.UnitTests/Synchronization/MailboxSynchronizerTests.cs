@@ -1725,7 +1725,6 @@ public sealed class MailboxSynchronizerTests
     }
 
     /// <summary>Settings that put the folder every arrival test synchronizes inside classification's scope.</summary>
-    /// <summary>Settings that put the folder every arrival test synchronizes inside classification's scope.</summary>
     private static SpamClassificationSettings ClassifyingTheInbox() => SpamClassificationSettings.Create(
         isEnabled: true,
         usesScanner: false,

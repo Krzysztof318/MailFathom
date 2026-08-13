@@ -6,6 +6,7 @@ using MailFathom.Application.Spam.Gating;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Folders;
+using MailFathom.Domain.Mutations;
 using MailFathom.Domain.Spam;
 using MailFathom.Infrastructure.Persistence.Emails;
 using MailFathom.Infrastructure.Persistence.Entities;
@@ -15,10 +16,19 @@ namespace MailFathom.Infrastructure.UnitTests.Persistence.Emails;
 
 /// <summary>Covers which mail the account run's cut selects, which is where the arrival pipeline's ordering is enforced.</summary>
 /// <remarks>
+/// <para>
 /// The predicate is composed here and evaluated by PostgreSQL, so what these tests establish is which rows it selects
 /// rather than what SQL it becomes. Every clause it carries is one of the pipeline's orderings, and each of them fails
 /// silently when it lapses: passages cut from a message the rules were about to move, passages of junk, passages of a
 /// folder an operator asked not to have embedded, or a mailbox re-cut on every run.
+/// </para>
+/// <para>
+/// What the predicate reads about a folder is the admitted list, so the tool switch is deliberately absent from these
+/// tests: it decides nothing here. That a mapping withheld from tools still reaches the list — the one row of the
+/// switch table worth stating explicitly — is asserted where the list is built, by
+/// <c>MailFolderParticipationOptionsTests.FoldersVisibleToTools_AFolderWithdrawnFromTools_LeavesItOutAndKeepsItMirrored</c>,
+/// and the two facts compose into the row.
+/// </para>
 /// </remarks>
 public sealed class StoredEmailChunkingSelectionTests
 {
@@ -98,20 +108,6 @@ public sealed class StoredEmailChunkingSelectionTests
 
         // Assert
         Assert.Empty(selected.AsEnumerable());
-    }
-
-    /// <summary>A folder mapped to embed is cut whatever the tool switch says, which is the row the table states explicitly.</summary>
-    [Fact]
-    public void Selecting_AFolderMappedToEmbedButWithheldFromTools_SelectsItsMail()
-    {
-        // Arrange
-        var emails = Emails(Email("work", "INBOX"));
-
-        // Act — the tool switch reaches no admission here, so a folder that generates embeddings is admitted either way.
-        var selected = StoredEmailChunkingStore.Selecting(emails, "work", [WorkInbox], ClassificationOff);
-
-        // Assert
-        Assert.Single(selected.AsEnumerable());
     }
 
     /// <summary>A folder an operator asked not to embed cuts no passages, on this path as on every other.</summary>
@@ -210,6 +206,64 @@ public sealed class StoredEmailChunkingSelectionTests
         Assert.Empty(selected.AsEnumerable());
     }
 
+    /// <summary>
+    /// A rule declares a move rather than performing one, and the account's next run carries it to the mail server. So
+    /// the message is still in the folder it arrived in when this run's cut comes round, and cutting it there would
+    /// derive passages under the mapping it is leaving.
+    /// </summary>
+    [Theory]
+    [InlineData(MailboxMutationStage.Recorded)]
+    [InlineData(MailboxMutationStage.PlacementIssued)]
+    [InlineData(MailboxMutationStage.PlacementConfirmed)]
+    [InlineData(MailboxMutationStage.SourceFlaggedDeleted)]
+    public void Selecting_MailARuleIsStillRelocating_LeavesItOut(MailboxMutationStage stage)
+    {
+        // Arrange
+        var email = Email("work", "INBOX");
+        email.Mutations.Add(Mutation(email, MailboxMutation.Relocate, stage));
+
+        // Act
+        var selected = StoredEmailChunkingStore.Selecting(Emails(email), "work", [WorkInbox], ClassificationOff);
+
+        // Assert
+        Assert.Empty(selected.AsEnumerable());
+    }
+
+    /// <summary>A relocation that has stopped converging moves nothing again, so holding the cut back for it would hold it forever.</summary>
+    [Theory]
+    [InlineData(MailboxMutationStage.Completed)]
+    [InlineData(MailboxMutationStage.Abandoned)]
+    public void Selecting_MailWhoseRelocationHasEnded_SelectsIt(MailboxMutationStage stage)
+    {
+        // Arrange
+        var email = Email("work", "INBOX");
+        email.Mutations.Add(Mutation(email, MailboxMutation.Relocate, stage));
+
+        // Act
+        var selected = StoredEmailChunkingStore.Selecting(Emails(email), "work", [WorkInbox], ClassificationOff);
+
+        // Assert
+        Assert.Single(selected.AsEnumerable());
+    }
+
+    /// <summary>
+    /// A copy leaves this message where it is — the second occurrence is discovered in the destination and walks the
+    /// whole pipeline itself — so the mapping this message is cut under is the one it is already in.
+    /// </summary>
+    [Fact]
+    public void Selecting_MailARuleIsCopyingElsewhere_SelectsIt()
+    {
+        // Arrange
+        var email = Email("work", "INBOX");
+        email.Mutations.Add(Mutation(email, MailboxMutation.Copy, MailboxMutationStage.Recorded));
+
+        // Act
+        var selected = StoredEmailChunkingStore.Selecting(Emails(email), "work", [WorkInbox], ClassificationOff);
+
+        // Assert
+        Assert.Single(selected.AsEnumerable());
+    }
+
     private static DerivedWorkAdmissionTerms ClassificationOff { get; } = new(
         IsApplied: false,
         [],
@@ -253,4 +307,22 @@ public sealed class StoredEmailChunkingSelectionTests
 
         return email;
     }
+
+    /// <summary>Builds the record a rule's declared change is durable as, in the stage the test is about.</summary>
+    private static MailboxMutationEntity Mutation(
+        StoredEmailEntity email,
+        MailboxMutation mutation,
+        MailboxMutationStage stage) => new()
+        {
+            StoredEmailId = email.Id,
+            StoredEmail = email,
+            MailboxAccountId = email.MailboxAccountId,
+            MailFolder = email.MailFolder,
+            Mutation = mutation.Name,
+            RequesterIdentity = "rule:file-the-newsletters",
+            RequesterOrigin = MailboxMutationOrigin.Rule,
+            Stage = stage,
+            RecordedAt = Now,
+            StageChangedAt = Now,
+        };
 }

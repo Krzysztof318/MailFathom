@@ -164,6 +164,13 @@ internal sealed class StoredEmailEmbeddingBackfillStore(
     /// reader.
     /// </remarks>
     /// <remarks>
+    /// The second group carries the rule pass's stamp for the same reason the account run's own cut does, and it is a
+    /// correctness condition rather than a tidiness one: this sweep runs on its own interval while a run is still
+    /// fetching a mailbox, so without it a first synchronization would have its mail cut here, by whichever of the two
+    /// got there first, before the rules had read a single message. What the stamp costs is nothing — an unevaluated
+    /// message is cut a sweep later, by which time the pass that may still move it has run.
+    /// </remarks>
+    /// <remarks>
     /// The classification narrowing is what makes this sweep the place a held message is released. Junk never appears
     /// here at all, and a message waiting on a verdict appears the moment the verdict admits it or its wait runs out —
     /// so the sweep both keeps spam away from the provider and stops a wedged scanner from turning the index into one
@@ -187,6 +194,7 @@ internal sealed class StoredEmailEmbeddingBackfillStore(
                 .Where(email => email.Chunks.Any(chunk =>
                         !chunk.Embeddings.Any(vector => vector.EmbeddingProfileId == profileId))
                     || (!email.Chunks.Any()
+                        && email.RulesEvaluatedAt != null
                         && email.SearchDocument != null
                         && email.SearchDocument.BodyText != null)),
             folderParticipation.FoldersGeneratingEmbeddings),

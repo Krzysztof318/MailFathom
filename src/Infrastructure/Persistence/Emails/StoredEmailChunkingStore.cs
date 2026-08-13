@@ -10,6 +10,7 @@ using MailFathom.CodeCoverage;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Folders;
+using MailFathom.Domain.Mutations;
 using MailFathom.Domain.Spam;
 using MailFathom.Infrastructure.Persistence.Entities;
 using MailFathom.Infrastructure.Persistence.Sessions;
@@ -35,6 +36,9 @@ internal sealed class StoredEmailChunkingStore(
     DerivedWorkGate derivedWorkGate)
     : IStoredEmailChunkingStore
 {
+    /// <summary>The stored discriminator of the one mutation that can still change which folder a message is in.</summary>
+    private static readonly string RelocateMutationName = MailboxMutation.Relocate.Name;
+
     /// <inheritdoc />
     /// <remarks>
     /// Ordering is by the primary key, which is total, stable, and already indexed. No resume position travels with the
@@ -95,11 +99,27 @@ internal sealed class StoredEmailChunkingStore(
     /// <param name="terms">The classification terms the whole batch is decided under.</param>
     /// <returns>The narrowed query, which PostgreSQL evaluates in full.</returns>
     /// <remarks>
+    /// <para>
     /// Written as a composable predicate rather than inline, so what selects a message is one statement that can be
-    /// asserted about directly. The four clauses are the pipeline's own orderings: the message is still part of the
-    /// local mailbox, the rules have finished with it, its folder is one an operator asked to have embedded, and
-    /// classification admits it. The last condition — extracted text present and no passages — is what the cut removes,
-    /// which is why the pass needs no cursor.
+    /// asserted about directly. The clauses are the pipeline's own orderings: the message is still part of the local
+    /// mailbox, the rules have finished with it and are not still moving it, its folder is one an operator asked to
+    /// have embedded, and classification admits it. The last condition — extracted text present and no passages — is
+    /// what the cut removes, which is why the pass needs no cursor.
+    /// </para>
+    /// <para>
+    /// The relocation clause is what makes *the rules ran first* mean anything for a rule that files mail. A rule
+    /// declares a move rather than performing one: the record is durable at once and the account's *next* run carries
+    /// it to the mail server, so a message filed out of an embedded folder is still sitting in that folder when this
+    /// run's cut comes round. Cutting it there would derive passages under the mapping it is leaving and leave them
+    /// behind on the row that is carried to the destination. Waiting costs one interval, after which the message is
+    /// selected under the mapping it actually ended up in. A relocation that has stopped converging — completed, or
+    /// abandoned after its bounded attempts — holds nothing back, since neither will move the message again.
+    /// </para>
+    /// <para>
+    /// Only a relocation is read. A copy leaves this message where it is and its own row is discovered in the
+    /// destination and walks the whole pipeline itself, and a pending delete costs at most one cut whose passages the
+    /// deletion then cascades away — neither derives anything under the wrong mapping.
+    /// </para>
     /// </remarks>
     internal static IQueryable<StoredEmailEntity> Selecting(
         IQueryable<StoredEmailEntity> emails,
@@ -113,7 +133,11 @@ internal sealed class StoredEmailChunkingStore(
                     && email.RulesEvaluatedAt != null
                     && !email.Chunks.Any()
                     && email.SearchDocument != null
-                    && email.SearchDocument.BodyText != null),
+                    && email.SearchDocument.BodyText != null)
+                .Where(email => !email.Mutations.Any(mutation =>
+                    mutation.Mutation == RelocateMutationName
+                    && mutation.Stage != MailboxMutationStage.Completed
+                    && mutation.Stage != MailboxMutationStage.Abandoned)),
             embeddedFolders),
         terms);
 
