@@ -1001,6 +1001,12 @@ jobs:
           # use; `/proc`, where a process can read its own environment as a file; and `.claude`,
           # where the CLI keeps its own configuration. This input is written to the user settings
           # file, which is why every path pattern is absolute.
+          #
+          # It is also what bounds the subagents `Agent` lets the reviewer launch. A subagent
+          # inherits the permission rules of the session that spawned it rather than being granted
+          # its own, so every rule below reaches one, and a later change that widened a subagent
+          # beyond the main session would have to be made here, in the one place the session is
+          # already argued.
           settings: |
             {
               "permissions": {
@@ -1027,16 +1033,34 @@ jobs:
           # in that directory today, and this is what keeps that true if a later change puts
           # something there.
           #
-          # `--effort high` is what buys the two-pass sweep the prompt asks for. Effort decides how
+          # `--effort xhigh` is what buys the two-pass sweep the prompt asks for. Effort decides how
           # much the model thinks and how much work it does before answering, and a review is the
           # shape of task where that matters most: the cheap failure is a reviewer that reads the
           # first few files closely, finds something, and coasts.
           #
-          # It is stated because it is a decision, and because it is not the value that would apply
-          # otherwise: Claude Code runs `xhigh` by default. `high` is the deliberate step down —
-          # this workflow spends a personal subscription with no per-run ceiling anywhere in it, and
-          # the extra depth `xhigh` buys has not been measured against that cost here. Raise it if a
-          # missed finding ever justifies the measurement.
+          # This was `high` — a deliberate step down from the `xhigh` Claude Code applies by
+          # default — on the argument that the extra depth had not been measured against a personal
+          # subscription with no per-run ceiling. #811 is that measurement, and it went the other
+          # way. Six rounds ran on one change, and two of them reported first-commit code that three
+          # earlier passes had read and let through: `EmailChunkWriter.cs`, 68 added lines, first
+          # reported in the fourth review, and a claim in `arrival-pipeline.md` in the fifth. A
+          # round that finds nothing new costs a whole run of collection, model time, and the
+          # author answering it, so the depth is cheaper than the round it replaces.
+          #
+          # `Agent` is what lets the first pass be spread over subagents instead of read in one
+          # sitting, which is the other half of the same measurement: a session reading thirty files
+          # reads the last of them less closely than the first, and the prompt splits `files.json`
+          # into groups of a handful and gives each group its own reader. The tool is named `Agent`
+          # rather than `Task` — the two are the same tool and `Task` still resolves as an alias,
+          # but the alias is the older spelling and this is the flag that has to keep matching what
+          # the CLI documents.
+          #
+          # It grants the reviewer no reach it did not have. A subagent inherits this session's
+          # permission rules, so the deny list above applies to it unchanged: no shell, no editor,
+          # no writer, no network tool, no MCP tool, and none of the paths that hold a credential.
+          # What comes back from one is model text derived from the same untrusted diff the session
+          # already reads, and the prompt treats it as such — a list of places to look, confirmed by
+          # the main session against the file itself before it can become a finding.
           #
           # `--json-schema` is what makes the verdict the run's own answer rather than a side effect
           # of the session. Under it the model's final message is validated against the schema and
@@ -1052,8 +1076,8 @@ jobs:
           # to reach a CLI option from here.
           claude_args: |
             --model ${{ needs.decide.outputs.model }}
-            --effort high
-            --allowedTools "Read,Grep,Glob"
+            --effort xhigh
+            --allowedTools "Read,Grep,Glob,Agent"
             --setting-sources user
             --json-schema '${{ steps.prompt.outputs.schema }}'
 
@@ -1115,6 +1139,105 @@ jobs:
 
           printf '::error::The reviewer stopped: %s\n' "$reason"
 
+      # What the review says it read, against what the change actually contains. The reviewer answers
+      # with a `covered` list naming the entries of `files.json` it opened, and this is what turns
+      # that list into something a reader can act on: a run that covered eleven of twenty-seven files
+      # publishes a verdict shaped exactly like one that covered all of them, and until this step
+      # existed the only thing that told the two apart was the next round finding what the first pass
+      # walked past. #811 is the worked case — six rounds, two of them reporting first-commit code
+      # three earlier passes had read through.
+      #
+      # It reports and never gates. The ledger is the reviewer's own account of its reading and
+      # nothing here can verify it, so failing a run on it would buy a stricter-sounding gate that a
+      # reviewer closes by naming every file. What it is worth is the opposite: the gap is stated
+      # where the author and the owner already read the verdict, beside what a collection ceiling
+      # dropped, so a thin pass is visible at the moment it is published.
+      #
+      # Every path it prints comes from `files.json` rather than from the answer. The reviewer's list
+      # is untrusted model text derived from the diff, and this step publishes into a review body, so
+      # what it names is the *difference* — paths the collection step wrote — and a name in the
+      # answer that matches nothing in `files.json` is reported as a count and never quoted.
+      - name: Compare what the review says it read with what changed
+        id: coverage
+        if: ${{ !cancelled() && steps.collect.outcome == 'success' }}
+        shell: bash
+        env:
+          REVIEW_DIRECTORY: ${{ runner.temp }}/review
+          COVERAGE_FILE: ${{ runner.temp }}/coverage.txt
+          # Model text derived from an untrusted diff, so it arrives through the environment rather
+          # than through an expression, exactly as the submission step takes it.
+          FINDINGS: ${{ steps.review.outputs.structured_output }}
+          # How many unread paths are named before the rest become a count. A review body is read by
+          # a person, and a change of three hundred files would otherwise put three hundred lines of
+          # it above the findings.
+          NAME_CEILING: '10'
+        run: |
+          set -euo pipefail
+
+          : > "$COVERAGE_FILE"
+
+          answer_file="$(mktemp)"
+          printf '%s' "$FINDINGS" > "$answer_file"
+
+          # A reviewer that never answered has already failed and said why. There is no ledger to
+          # compare and no second error worth adding.
+          if [[ ! -s "$answer_file" ]] || ! jq -e '.' "$answer_file" > /dev/null 2>&1; then
+            echo '::notice::The reviewer returned no answer, so there is no coverage ledger to compare.'
+            exit 0
+          fi
+
+          unread_file="$(mktemp)"
+
+          # `unique` on both sides, so a path named twice counts once and a `files.json` that lists a
+          # rename under both of its names is not reported as two unread files.
+          #
+          # The ledger is read for its type before its contents. The schema requires an array of
+          # strings and the action refuses an answer that does not conform, so an answer reaching
+          # here with something else is unreachable — but this step runs between a model and a
+          # published review, and the cost of being wrong about that is a red job on a review that
+          # was otherwise ready to post. A ledger of the wrong shape reads as an empty one, which
+          # reports the whole change as unnamed and is exactly what it says.
+          jq -r --slurpfile answer "$answer_file" '
+            ([$answer[0].covered | select(type == "array") | .[] | select(type == "string")] | unique) as $named
+            | ((map(.filename) | unique) - $named)[]
+          ' "$REVIEW_DIRECTORY/files.json" > "$unread_file"
+
+          changed_count="$(jq 'map(.filename) | unique | length' "$REVIEW_DIRECTORY/files.json")"
+          unread_count="$(wc -l < "$unread_file" | tr -d ' ')"
+          read_count=$(( changed_count - unread_count ))
+
+          # A name the answer carries that `files.json` does not. It means the ledger was composed
+          # from something other than the collected change — a path invented, or one spelled the way
+          # the working directory spells it rather than the way the collection does — so it is worth
+          # a sentence, and the names themselves are not printed.
+          unknown_count="$(jq --slurpfile files "$REVIEW_DIRECTORY/files.json" '
+            ([.covered | select(type == "array") | .[] | select(type == "string")] | unique)
+            - ($files[0] | map(.filename) | unique)
+            | length
+          ' "$answer_file")"
+
+          if (( unread_count > 0 )); then
+            listed="$(head -n "$NAME_CEILING" "$unread_file" | sed 's/^/`/; s/$/`/' | paste -sd ', ' -)"
+
+            if (( unread_count > NAME_CEILING )); then
+              listed="${listed}, and $(( unread_count - NAME_CEILING )) more"
+            fi
+
+            printf 'The review names %s of the %s changed files as read. Not named: %s.\n' \
+              "$read_count" "$changed_count" "$listed" >> "$COVERAGE_FILE"
+          fi
+
+          if (( unknown_count > 0 )); then
+            printf 'The review also names %s path(s) that the collected change does not contain.\n' \
+              "$unknown_count" >> "$COVERAGE_FILE"
+          fi
+
+          if [[ -s "$COVERAGE_FILE" ]]; then
+            echo "::notice::$(head -n 1 "$COVERAGE_FILE")"
+          else
+            printf 'Coverage: the review names every one of the %s changed files as read.\n' "$changed_count"
+          fi
+
       # `!cancelled()` rather than `always()`, which GitHub documents as running a step even when the
       # run was cancelled. This step must still run after a reviewer that failed, so that the reason
       # is reported as a notice rather than as a second red step — but a cancelled run has the
@@ -1151,6 +1274,11 @@ jobs:
           FINDINGS: ${{ steps.review.outputs.structured_output }}
           # The path the collection step wrote, restated here for the reason given there.
           REVIEW_DIRECTORY: ${{ runner.temp }}/review
+          # What the coverage step found, empty when the ledger named every changed file. It sits
+          # outside `REVIEW_DIRECTORY`, which is read-only from the obligations step onwards, and it
+          # is read defensively below because this step still runs when the one that writes it did
+          # not.
+          COVERAGE_FILE: ${{ runner.temp }}/coverage.txt
         run: |
           set -euo pipefail
 
@@ -1235,7 +1363,8 @@ jobs:
 
           if [[ "$(jq '(.findings // []) | length' "$findings_file")" == '0' ]]; then
             jq --arg commit "$HEAD_SHA" \
-               --arg truncation "$(cat "$REVIEW_DIRECTORY/truncation.txt")" '
+               --arg truncation "$(cat "$REVIEW_DIRECTORY/truncation.txt")" \
+               --arg coverage "$(cat "$COVERAGE_FILE" 2>/dev/null || true)" '
               {
                 commit_id: $commit,
                 event: "APPROVE",
@@ -1243,6 +1372,7 @@ jobs:
                   ["# APPROVED", ""]
                   + [((.summary // "") | if . == "" then "The review found nothing above the bar in this change." else . end)]
                   + (if $truncation == "" then [] else ["", $truncation] end)
+                  + (if $coverage == "" then [] else ["", $coverage] end)
                   | join("\n")
                 )
               }' "$findings_file" > "$payload_file"
@@ -1280,7 +1410,8 @@ jobs:
           # does not change shape because its line moved.
           jq --slurpfile lines "$REVIEW_DIRECTORY/lines.json" \
              --arg commit "$HEAD_SHA" \
-             --arg truncation "$(cat "$REVIEW_DIRECTORY/truncation.txt")" '
+             --arg truncation "$(cat "$REVIEW_DIRECTORY/truncation.txt")" \
+             --arg coverage "$(cat "$COVERAGE_FILE" 2>/dev/null || true)" '
             def allowed($path): $lines[0] | map(select(.filename == $path)) | .[0].lines // [];
             def anchored($finding):
               (allowed($finding.path) | index($finding.line)) != null
@@ -1320,6 +1451,7 @@ jobs:
                   + [(.summary // "")]
                   + ["", "**Findings** — \(tally($findings))"]
                   + (if $truncation == "" then [] else ["", $truncation] end)
+                  + (if $coverage == "" then [] else ["", $coverage] end)
                   + (if ($dropped | length) == 0 then [] else
                       ["", "### Findings with no line to sit on"]
                       + ($dropped

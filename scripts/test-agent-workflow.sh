@@ -2052,8 +2052,12 @@ run_fathom_review_submit() {
   local payload_file="$3"
   # A reviewer that finished is the ordinary case; the contract about a run that did not names it.
   local review_outcome="${4:-success}"
+  # What the coverage step found, absent by default: most reviews name every changed file, and a
+  # missing file is also what this step sees when the step that writes it never ran.
+  local coverage_note="${5:-}"
   local step_script="$test_directory/fathom-review-submit.sh"
   local review_directory="$test_directory/fathom-review-submit-review"
+  local coverage_file="$test_directory/fathom-review-submit-coverage"
 
   submit_step_output_file="$test_directory/fathom-review-submit-step-output"
 
@@ -2061,6 +2065,12 @@ run_fathom_review_submit() {
   write_fathom_review_collection "$review_directory"
   rm -f "$payload_file"
   : > "$submit_step_output_file"
+
+  if [[ -n "$coverage_note" ]]; then
+    printf '%s\n' "$coverage_note" > "$coverage_file"
+  else
+    rm -f "$coverage_file"
+  fi
 
   set +e
   (
@@ -2075,6 +2085,7 @@ run_fathom_review_submit() {
     export REVIEW_OUTCOME="$review_outcome"
     export FINDINGS="$findings"
     export REVIEW_DIRECTORY="$review_directory"
+    export COVERAGE_FILE="$coverage_file"
     export FAKE_REVIEW_PAYLOAD="$payload_file"
     # The verdict the board job reads. It is written only where a review was posted, so a contract
     # that asserts on an empty file is asserting that nothing was published.
@@ -2136,6 +2147,35 @@ fathom_review_approves_when_it_finds_nothing() {
   assert_contains 'verdict=approved' "$submit_step_output_file"
 }
 
+fathom_review_publishes_the_coverage_gap_beside_its_findings() {
+  local output_file="$test_directory/fathom-review-submit-gap-output"
+  local payload_file="$test_directory/fathom-review-submit-gap-payload"
+
+  run_fathom_review_submit \
+    '{"summary":"Read part of the change.","covered":["src/Sample.cs"],"findings":[{"severity":"P1","path":"src/Sample.cs","start_line":null,"line":12,"title":"Refuse the empty case","impact":"An empty list reaches the loop.","correction":"Return early.","rule":"`AGENTS.md`"}]}' \
+    "$output_file" "$payload_file" 'success' \
+    'The review names 1 of the 3 changed files as read. Not named: `src/Other.cs`.'
+
+  ((submit_status == 0))
+  assert_contains 'names 1 of the 3 changed files as read' "$payload_file"
+}
+
+fathom_review_publishes_the_coverage_gap_under_an_approval() {
+  local output_file="$test_directory/fathom-review-submit-gap-approved-output"
+  local payload_file="$test_directory/fathom-review-submit-gap-approved-payload"
+
+  # This is the shape the gap matters most in. An approval asserts the absence of defects across the
+  # whole change, so one published by a pass that read half of it says what it actually covered.
+  run_fathom_review_submit \
+    '{"summary":"Found nothing above the bar.","covered":["src/Sample.cs"],"findings":[]}' \
+    "$output_file" "$payload_file" 'success' \
+    'The review names 1 of the 3 changed files as read. Not named: `src/Other.cs`.'
+
+  ((submit_status == 0))
+  assert_json '"APPROVE"' '.event' "$payload_file"
+  assert_contains 'names 1 of the 3 changed files as read' "$payload_file"
+}
+
 fathom_review_publishes_nothing_when_the_reviewer_returned_no_answer() {
   local output_file="$test_directory/fathom-review-submit-silent-output"
   local payload_file="$test_directory/fathom-review-submit-silent-payload"
@@ -2179,6 +2219,138 @@ fathom_review_refuses_findings_that_carry_a_credential() {
   ((submit_status == 1))
   [[ ! -e "$payload_file" ]]
   assert_contains 'shaped like a credential' "$output_file"
+}
+
+# The coverage step is the one place a review is measured against the change rather than read on its
+# own terms. It takes the reviewer's `covered` ledger and the collected `files.json` and writes the
+# difference, which the submission step then publishes; what these contracts fix is that the
+# difference is composed from the collection and never from the answer, because the answer is model
+# text derived from an untrusted diff and this is a path into a published review body.
+run_fathom_review_coverage() {
+  local findings="$1"
+  local changed_files="$2"
+  local output_file="$3"
+  local coverage_file="$4"
+  local step_script="$test_directory/fathom-review-coverage.sh"
+  local review_directory="$test_directory/fathom-review-coverage-review"
+
+  extract_fathom_review_step 'coverage' "$step_script"
+  mkdir -p "$review_directory"
+  printf '%s\n' "$changed_files" > "$review_directory/files.json"
+  rm -f "$coverage_file"
+
+  set +e
+  (
+    export FINDINGS="$findings"
+    export REVIEW_DIRECTORY="$review_directory"
+    export COVERAGE_FILE="$coverage_file"
+    export NAME_CEILING='10'
+    bash "$step_script"
+  ) > "$output_file" 2>&1
+  coverage_status=$?
+  set -e
+}
+
+fathom_review_reports_the_files_a_review_never_named() {
+  local output_file="$test_directory/fathom-review-coverage-gap-output"
+  local coverage_file="$test_directory/fathom-review-coverage-gap"
+
+  run_fathom_review_coverage \
+    '{"summary":"Read part of it.","covered":["src/Sample.cs"],"findings":[]}' \
+    '[{"filename":"src/Sample.cs"},{"filename":"src/Other.cs"},{"filename":"docs/features/sample.md"}]' \
+    "$output_file" "$coverage_file"
+
+  ((coverage_status == 0))
+  assert_contains 'names 1 of the 3 changed files as read' "$coverage_file"
+  assert_contains '`src/Other.cs`' "$coverage_file"
+  assert_contains '`docs/features/sample.md`' "$coverage_file"
+}
+
+fathom_review_reports_no_gap_when_the_review_named_every_file() {
+  local output_file="$test_directory/fathom-review-coverage-complete-output"
+  local coverage_file="$test_directory/fathom-review-coverage-complete"
+
+  # A file named twice counts once, so a ledger that repeats itself is complete rather than
+  # over-complete, and the reviewer is not asked to deduplicate what `jq` can.
+  run_fathom_review_coverage \
+    '{"summary":"Read all of it.","covered":["src/Sample.cs","src/Other.cs","src/Sample.cs"],"findings":[]}' \
+    '[{"filename":"src/Sample.cs"},{"filename":"src/Other.cs"}]' \
+    "$output_file" "$coverage_file"
+
+  ((coverage_status == 0))
+  [[ ! -s "$coverage_file" ]]
+  assert_contains 'names every one of the 2 changed files' "$output_file"
+}
+
+fathom_review_counts_a_named_path_the_change_does_not_contain() {
+  local output_file="$test_directory/fathom-review-coverage-unknown-output"
+  local coverage_file="$test_directory/fathom-review-coverage-unknown"
+
+  # The path itself is never printed. It came from the answer rather than from the collection, and
+  # what this step writes is published into a review body, so an invented name reaches the author as
+  # a count of names and not as the names.
+  run_fathom_review_coverage \
+    '{"summary":"Read it.","covered":["src/Sample.cs","src/Invented.cs"],"findings":[]}' \
+    '[{"filename":"src/Sample.cs"}]' \
+    "$output_file" "$coverage_file"
+
+  ((coverage_status == 0))
+  assert_contains 'names 1 path(s) that the collected change does not contain' "$coverage_file"
+  assert_excludes 'src/Invented.cs' "$coverage_file"
+}
+
+fathom_review_bounds_how_many_unread_files_it_names() {
+  local output_file="$test_directory/fathom-review-coverage-ceiling-output"
+  local coverage_file="$test_directory/fathom-review-coverage-ceiling"
+  local changed_files
+  local index
+
+  # Two digits, because the list is compared in the order `jq` sorts it and `File2` would otherwise
+  # fall behind `File13` — which would make the contract assert on something other than the ceiling.
+  changed_files='[]'
+  for index in $(seq -w 1 13); do
+    changed_files="$(jq -c --arg name "src/File${index}.cs" '. + [{filename: $name}]' <<< "$changed_files")"
+  done
+
+  run_fathom_review_coverage \
+    '{"summary":"Read none of it.","covered":[],"findings":[]}' \
+    "$changed_files" "$output_file" "$coverage_file"
+
+  ((coverage_status == 0))
+  assert_contains 'names 0 of the 13 changed files as read' "$coverage_file"
+  assert_contains 'and 3 more' "$coverage_file"
+  assert_excludes 'src/File11.cs' "$coverage_file"
+}
+
+fathom_review_reads_a_ledger_of_the_wrong_shape_as_an_empty_one() {
+  local output_file="$test_directory/fathom-review-coverage-shape-output"
+  local coverage_file="$test_directory/fathom-review-coverage-shape"
+
+  # The schema requires an array of strings and the action refuses an answer that does not conform,
+  # so this is unreachable through the action. It is fixed anyway because the step sits between a
+  # model and a published review: a ledger of the wrong shape reports the change as unnamed rather
+  # than turning a review that was ready to post into a red job.
+  run_fathom_review_coverage \
+    '{"summary":"Read it.","covered":12,"findings":[]}' \
+    '[{"filename":"src/Sample.cs"}]' \
+    "$output_file" "$coverage_file"
+
+  ((coverage_status == 0))
+  assert_contains 'names 0 of the 1 changed files as read' "$coverage_file"
+}
+
+fathom_review_compares_no_coverage_when_the_reviewer_returned_no_answer() {
+  local output_file="$test_directory/fathom-review-coverage-silent-output"
+  local coverage_file="$test_directory/fathom-review-coverage-silent"
+
+  # A reviewer that never answered has already failed and said why. A gap line here would report the
+  # whole change as unread and bury that cause under a consequence.
+  run_fathom_review_coverage \
+    '' '[{"filename":"src/Sample.cs"}]' "$output_file" "$coverage_file"
+
+  ((coverage_status == 0))
+  [[ ! -s "$coverage_file" ]]
+  assert_contains 'no coverage ledger to compare' "$output_file"
 }
 
 # The board step turns a published verdict into the one field the owner's views group by. Its inputs
@@ -5058,6 +5230,14 @@ run_test apply_pull_request_labels_reports_a_write_it_was_refused
 run_test fathom_review_anchors_a_finding_to_its_line
 run_test fathom_review_moves_a_finding_with_no_line_into_the_body
 run_test fathom_review_approves_when_it_finds_nothing
+run_test fathom_review_reports_the_files_a_review_never_named
+run_test fathom_review_reports_no_gap_when_the_review_named_every_file
+run_test fathom_review_counts_a_named_path_the_change_does_not_contain
+run_test fathom_review_bounds_how_many_unread_files_it_names
+run_test fathom_review_reads_a_ledger_of_the_wrong_shape_as_an_empty_one
+run_test fathom_review_compares_no_coverage_when_the_reviewer_returned_no_answer
+run_test fathom_review_publishes_the_coverage_gap_beside_its_findings
+run_test fathom_review_publishes_the_coverage_gap_under_an_approval
 run_test fathom_review_publishes_nothing_when_the_reviewer_returned_no_answer
 run_test fathom_review_fails_when_a_finished_reviewer_returned_no_answer
 run_test fathom_review_refuses_findings_that_carry_a_credential

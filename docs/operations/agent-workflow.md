@@ -660,25 +660,35 @@ files or comments; the line list derived from the files would inherit that shape
 and the submission step would then validate every anchor against the first page
 alone and push every other finding into the review body.
 
-Claude then runs with `Read`, `Grep`, and `Glob` and nothing else: no shell, no
-editor, no writer, no network tool, no MCP tool, and no read access to `.git`,
-where the action leaves a token for its own use. It holds no credential it could
-use and posts nothing. Its findings are the run's own answer, and the step after
-it validates them and submits a single review: `event: COMMENT` when the answer
-holds findings, `event: APPROVE` when it holds none.
+Claude then runs with `Read`, `Grep`, `Glob`, and `Agent` and nothing else: no
+shell, no editor, no writer, no network tool, no MCP tool, and no read access to
+`.git`, where the action leaves a token for its own use. It holds no credential it
+could use and posts nothing. Its findings are the run's own answer, and the step
+after it validates them and submits a single review: `event: COMMENT` when the
+answer holds findings, `event: APPROVE` when it holds none.
+
+`Agent` is what spreads the first pass over subagents, described under **What the
+reviewer is measured against** below. It widens what the session can *read* in
+parallel and nothing else: a subagent inherits the permission rules of the session
+that spawned it, so the deny list reaches it unchanged, and what it returns is
+model text the main session confirms against the file before it can become a
+finding.
 
 The model is named exactly rather than by alias: `claude-sonnet-5` at
-`--effort high`. An alias re-points at whatever ships next, and findings are only
+`--effort xhigh`. An alias re-points at whatever ships next, and findings are only
 comparable across runs when the model that produced them is the one the workflow
 names.
 
 Effort decides how much the reviewer works before answering, which is the
 difference between a sweep over the whole change and a close reading of the first
-few files followed by a shrug. `high` is a deliberate step down rather than the
-value that would apply otherwise — Claude Code runs `xhigh` by default — because
-this workflow spends a personal subscription and the extra depth `xhigh` buys has
-not been measured against that cost here. A missed finding is what would justify
-raising it, and the measurement would come with the change.
+few files followed by a shrug. It was `high` — a step down from the `xhigh` Claude
+Code applies by default — while the extra depth was unmeasured against a personal
+subscription with no per-run ceiling. #811 measured it: six rounds ran on one
+change, and two of them reported first-commit code that three earlier passes had
+read through, including a file of 68 added lines first named in the fourth review.
+A round that finds what an earlier round walked past costs a whole run of
+collection, model time, and an author answering it, so the depth is the cheaper
+half of that trade.
 
 That split is the point. Everything the reviewer reads about the change is
 untrusted — a diff, a comment, or an issue body can carry an instruction aimed
@@ -813,13 +823,20 @@ reaches one at all; `pull_request` would give the run neither the secrets it nee
 to publish under the App nor a trigger a maintainer can aim. What makes that safe
 is structural rather than procedural: the workspace holds `base.sha` and never the
 branch, nothing from the contribution is executed, and the reviewer runs with
-`Read`, `Grep`, and `Glob` and no shell, writer, network tool, or MCP tool. The
-purpose of the prohibition — untrusted code never runs with a credential — is met
-without avoiding the trigger.
+`Read`, `Grep`, `Glob`, and `Agent` and no shell, writer, network tool, or MCP
+tool. The purpose of the prohibition — untrusted code never runs with a credential
+— is met without avoiding the trigger.
+
+`Agent` is inside that argument rather than an exception to it. A subagent
+inherits the spawning session's permission rules, so every deny rule the reviewer
+runs under applies to it and it reaches nothing the reviewer cannot; what it adds
+is a second reader of the same files, and what it returns is untrusted text on the
+same terms as the diff that produced it.
 
 The exception is scoped to this workflow and to that shape. It is revoked by any
 change that checks out, builds, restores, or executes the branch under review,
-that grants the reviewer a shell, a writer, or a network tool, that adds
+that grants the reviewer a shell, a writer, or a network tool, that gives a
+subagent a permission the main session does not hold, that adds
 `workflow_dispatch` — a dispatch takes a ref, which would let the branch supply
 the job that receives the Claude credential — or that lets a trigger other than a
 maintainer's label or comment reach a fork. A second workflow wanting the trigger
@@ -829,7 +846,7 @@ does not inherit this reasoning; it argues its own case or uses `pull_request`.
 
 The run spends the repository owner's personal Claude subscription through
 `CLAUDE_CODE_OAUTH_TOKEN`, so what limits how often it runs is a design concern
-rather than an operational one. Eight things do, and they are listed together
+rather than an operational one. Seven things do, and they are listed together
 because each closes a different way the bill could grow:
 
 - a draft is never reviewed automatically, so a branch still being written is
@@ -846,9 +863,13 @@ because each closes a different way the bill could grow:
 - the model is `claude-sonnet-5` rather than the costlier Opus, which exactly two
   things reach: a review request asking for it by name, and the `security` label
   on the pull request, described below;
-- `--effort high` rather than the `xhigh` that would otherwise apply;
 - every collected input carries an explicit ceiling, and what a ceiling dropped is
   stated in the review body.
+
+`--effort` was the eighth of these and is no longer one of them. It bought less
+than the rounds it caused, which is the trade the paragraph on effort above
+records; what remains true is that reading depth is where this workflow spends
+deliberately rather than where it economizes.
 
 Moving the run onto a metered API key with a spend limit would replace that set
 with one number, and it is deliberately not done: the gate above already stops
@@ -917,6 +938,45 @@ enough. The second pass confirms each
 candidate against the file it concerns, names the rule it rests on, and drops
 whatever cannot be confirmed, is already answered by the surrounding file, or was
 already raised by another reviewer.
+
+That first pass is spread over subagents rather than read in one sitting.
+`files.json` is split into groups of four to six related files — one project, one
+feature, one directory, so that a group reads as a piece of work — and each group
+goes to a subagent that returns candidates and reaches no verdict, because it saw
+a fraction of the change and cannot know what the rest of it answers. One reader
+holding thirty files reads the last of them less closely than the first, which is
+what #811 cost four rounds; a reader holding six has no twentieth file to tire on.
+
+Three things are never delegated, each being a judgment about the change as a
+whole: the reading of `obligations.json`, the two readings of the pull request
+body, and the second pass. A subagent's report is untrusted in exactly the way the
+diff it read is, so it is a list of places to look, and the main session confirms
+every candidate by opening the file itself. Where the subagents are unavailable
+the reviewer reads the files directly and says so in its summary — covering the
+change matters more than covering it in a particular shape.
+
+### The review states what it read
+
+The reviewer's answer carries a `covered` list naming the entries of `files.json`
+it opened, and a step between the review and its submission compares that list
+against the collection and writes the difference into the published body, beside
+whatever a ceiling dropped. Until it existed, a pass that covered eleven of
+twenty-seven files published a verdict shaped exactly like one that covered all of
+them, and the only thing that told them apart was a later round finding what the
+first walked past.
+
+It reports and never gates. The ledger is the reviewer's own account and nothing
+in the job can verify it, so failing a run on it would buy a stricter-sounding
+gate that any reviewer closes by naming every file; what it is worth is that the
+gap is visible where the verdict is already read. An approval is where that
+matters most, since an approval asserts the absence of defects across a whole
+change.
+
+Every path it prints comes from `files.json` rather than from the answer, because
+this is a path from model text into a published review body: what the step names
+is the difference — paths the collection step wrote — and a name in the ledger
+that matches nothing in the collection is reported as a count and never quoted.
+The list of unread paths is bounded, and the remainder becomes a number.
 
 Both failure modes that split addresses are real and opposite. Judging a
 candidate while still looking suppresses findings that were not yet understood,
