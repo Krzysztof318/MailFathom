@@ -41,7 +41,7 @@ public sealed class OrchestratedEmailChunkTests(MailFathomOrchestrationFixture o
     /// what will later keep a vector attached to the passage it was produced for.
     /// </summary>
     [Fact]
-    public async Task UpsertMetadataAsync_TheSameExtractionTwice_LeavesTheFirstRunsPassagesInPlace()
+    public async Task DeriveChunksAsync_TheSameExtractionTwice_LeavesTheFirstRunsPassagesInPlace()
     {
         // Arrange
         var cancellationToken = TestContext.Current.CancellationToken;
@@ -72,7 +72,7 @@ public sealed class OrchestratedEmailChunkTests(MailFathomOrchestrationFixture o
     /// no row of the previous cut is left behind to be retrieved as though it were current.
     /// </summary>
     [Fact]
-    public async Task UpsertMetadataAsync_ChangedBodyText_ReplacesEveryPassageAndTheCascadeErasesThemWithTheEmail()
+    public async Task DeriveChunksAsync_ChangedBodyText_ReplacesEveryPassageAndTheCascadeErasesThemWithTheEmail()
     {
         // Arrange
         var cancellationToken = TestContext.Current.CancellationToken;
@@ -111,7 +111,7 @@ public sealed class OrchestratedEmailChunkTests(MailFathomOrchestrationFixture o
     /// predicate that never matched rather than a message deliberately left uncut.
     /// </remarks>
     [Fact]
-    public async Task UpsertMetadataAsync_AFolderTheAccountLeavesUnembedded_CutsNoPassagesAndLeavesTheRestCut()
+    public async Task DeriveChunksAsync_AFolderTheAccountLeavesUnembedded_CutsNoPassagesAndLeavesTheRestCut()
     {
         // Arrange
         var cancellationToken = TestContext.Current.CancellationToken;
@@ -150,7 +150,7 @@ public sealed class OrchestratedEmailChunkTests(MailFathomOrchestrationFixture o
     /// all. The mapped folder beside it is the control the absence needs.
     /// </remarks>
     [Fact]
-    public async Task UpsertMetadataAsync_AFolderNoMappingNames_CutsNoPassagesAndLeavesTheRestCut()
+    public async Task DeriveChunksAsync_AFolderNoMappingNames_CutsNoPassagesAndLeavesTheRestCut()
     {
         // Arrange
         var cancellationToken = TestContext.Current.CancellationToken;
@@ -183,7 +183,7 @@ public sealed class OrchestratedEmailChunkTests(MailFathomOrchestrationFixture o
     /// session that writes the passages, so a message and the record of what was left out of it are durable together.
     /// </remarks>
     [Fact]
-    public async Task UpsertMetadataAsync_ABodyBeyondThePerMessageCeiling_CutsToItAndRecordsTheLengthItHad()
+    public async Task DeriveChunksAsync_ABodyBeyondThePerMessageCeiling_CutsToItAndRecordsTheLengthItHad()
     {
         // Arrange
         var cancellationToken = TestContext.Current.CancellationToken;
