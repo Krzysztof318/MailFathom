@@ -35,6 +35,50 @@ public sealed class JobWorkerOptionsTests
             result => result.ErrorMessage?.Contains("Jobs:ExecutionTimeout", StringComparison.Ordinal) is true);
     }
 
+    /// <summary>
+    /// A ceiling below the delay the growth starts from caps every retry at the ceiling and leaves the backoff with
+    /// nothing to grow, which is the second rule no attribute on a single property can express.
+    /// </summary>
+    [Theory]
+    [InlineData(300, 60)]
+    [InlineData(300, 299)]
+    public void Validate_ARetryCeilingBelowTheDelayItGrowsFrom_IsRefused(int baseDelaySeconds, int maxDelaySeconds)
+    {
+        // Arrange
+        var settings = new JobWorkerOptions
+        {
+            RetryBaseDelay = TimeSpan.FromSeconds(baseDelaySeconds),
+            RetryMaxDelay = TimeSpan.FromSeconds(maxDelaySeconds),
+        };
+
+        // Act
+        var results = Validate(settings);
+
+        // Assert
+        Assert.Contains(
+            results,
+            result => result.ErrorMessage?.Contains("Jobs:RetryMaxDelay", StringComparison.Ordinal) is true
+                && result.MemberNames.Contains(nameof(JobWorkerOptions.RetryMaxDelay), StringComparer.Ordinal));
+    }
+
+    /// <summary>The two ceilings are equal at the boundary, where the growth has nowhere left to go but is not inverted.</summary>
+    [Fact]
+    public void Validate_ARetryCeilingEqualToTheDelayItGrowsFrom_IsAccepted()
+    {
+        // Arrange
+        var settings = new JobWorkerOptions
+        {
+            RetryBaseDelay = TimeSpan.FromSeconds(300),
+            RetryMaxDelay = TimeSpan.FromSeconds(300),
+        };
+
+        // Act
+        var results = Validate(settings);
+
+        // Assert
+        Assert.Empty(results);
+    }
+
     /// <summary>A small instance runs the defaults unchanged, so they have to satisfy the rule they exist under.</summary>
     [Fact]
     public void Validate_TheDefaults_AreAccepted()

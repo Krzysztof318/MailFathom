@@ -82,19 +82,44 @@ public interface IJobStore
     /// </remarks>
     Task<bool> CompleteAsync(JobId jobId, JobLeaseOwner owner, CancellationToken cancellationToken);
 
-    /// <summary>Ends a held job as unfinished work nothing will attempt again, leaving a terminal row that keeps its key.</summary>
-    /// <param name="jobId">The job to fail.</param>
+    /// <summary>Gives a held job back after a transient failure, claimable again once the instant named has passed.</summary>
+    /// <param name="jobId">The job to schedule another attempt for.</param>
     /// <param name="owner">The attempt claiming to hold it.</param>
+    /// <param name="failure">What this attempt failed with, which replaces whatever the previous one recorded.</param>
+    /// <param name="availableAt">The instant before which no claim may take the job again.</param>
     /// <param name="cancellationToken">Cancels the write.</param>
-    /// <returns><see langword="true" /> when this attempt still held the job and the failure was written; otherwise <see langword="false" />.</returns>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="owner" /> is <see langword="null" />.</exception>
+    /// <returns><see langword="true" /> when this attempt still held the job and the schedule was written; otherwise <see langword="false" />.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="owner" /> or <paramref name="failure" /> is <see langword="null" />.</exception>
     /// <remarks>
-    /// It is terminal for the reason <see cref="JobState.Failed" /> states: nothing here decides which failures are
-    /// worth repeating, and a job left claimable after a failing attempt would be taken again immediately. The row
-    /// keeps its key and its attempt count, so a later decision about repeating the work is made against evidence
-    /// rather than against a row that was deleted.
+    /// The attempt stays counted, because it was handed out and spent: the count is what the attempt bound is read
+    /// against, and a retry that gave it back would loop forever. Delaying the job rather than releasing it is what
+    /// separates this from a shutdown — a job returned to the queue at once after failing would be taken again as fast
+    /// as the queue can hand it out.
     /// </remarks>
-    Task<bool> FailAsync(JobId jobId, JobLeaseOwner owner, CancellationToken cancellationToken);
+    Task<bool> ScheduleRetryAsync(
+        JobId jobId,
+        JobLeaseOwner owner,
+        JobFailureRecord failure,
+        DateTimeOffset availableAt,
+        CancellationToken cancellationToken);
+
+    /// <summary>Ends a held job as work nothing will attempt again, leaving a terminal row that keeps its key and its last failure.</summary>
+    /// <param name="jobId">The job to dead-letter.</param>
+    /// <param name="owner">The attempt claiming to hold it.</param>
+    /// <param name="failure">What ended the job, which is what an operator reads when they ask why it stopped.</param>
+    /// <param name="cancellationToken">Cancels the write.</param>
+    /// <returns><see langword="true" /> when this attempt still held the job and the dead letter was written; otherwise <see langword="false" />.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="owner" /> or <paramref name="failure" /> is <see langword="null" />.</exception>
+    /// <remarks>
+    /// It is terminal for the reason <see cref="JobState.DeadLettered" /> states, and inert: no claim takes it, so one
+    /// job that cannot succeed consumes no further attempts and delays nothing behind it. The row keeps its key, its
+    /// attempt count, and the failure that ended it, so what an operator acts on survives the run that produced it.
+    /// </remarks>
+    Task<bool> DeadLetterAsync(
+        JobId jobId,
+        JobLeaseOwner owner,
+        JobFailureRecord failure,
+        CancellationToken cancellationToken);
 
     /// <summary>Gives a held job back unfinished, so it is claimable again at once.</summary>
     /// <param name="jobId">The job to release.</param>
@@ -103,8 +128,9 @@ public interface IJobStore
     /// <returns><see langword="true" /> when this attempt still held the job and the release was written; otherwise <see langword="false" />.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="owner" /> is <see langword="null" />.</exception>
     /// <remarks>
-    /// It is what a shutdown does with work it was holding, and it is deliberately not a failure: the attempt is spent
-    /// and stays counted, but the job returns to the queue immediately rather than waiting out its lease.
+    /// It is what a shutdown does with work it was holding, and it is deliberately not a failure. The attempt the claim
+    /// counted is given back with the job, because a deployment is not something the work did: a long job interrupted by
+    /// a rolling restart would otherwise reach the attempt bound and be dead-lettered without ever having failed.
     /// </remarks>
     Task<bool> ReleaseAsync(JobId jobId, JobLeaseOwner owner, CancellationToken cancellationToken);
 }

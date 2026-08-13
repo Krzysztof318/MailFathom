@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.Diagnostics.CodeAnalysis;
+using MailFathom.Application.Jobs;
 using MailFathom.Application.Jobs.Execution;
 using MailFathom.Application.Persistence;
 using MailFathom.Host.Configuration.Jobs;
@@ -151,42 +152,54 @@ internal sealed partial class JobWorker : BackgroundService
 
     /// <summary>Says what a pass did, at the level each outcome deserves.</summary>
     /// <remarks>
+    /// <para>
     /// A pass that ran nothing says nothing at all, because an idle queue is the ordinary state of an instance and a
-    /// line per poll would be the whole log. What needs an operator is a job that could not be run and a job that ran
-    /// out of time; a job whose handler failed is reported by the handler's own exception beside it.
+    /// line per poll would be the whole log.
+    /// </para>
+    /// <para>
+    /// A failed attempt is reported by what became of the job rather than by what stopped it, because that is what an
+    /// operator waiting on the work needs: a scheduled retry is a job still on its way and a dead letter is one that
+    /// needs somebody. The outcome and the recorded reason are properties of the line either way, so nothing is lost by
+    /// reading the disposition first.
+    /// </para>
     /// </remarks>
     private void Report(IReadOnlyList<JobExecutionResult> results)
     {
         foreach (var result in results)
         {
-            switch (result.Outcome)
+            switch (result)
             {
-                case JobExecutionOutcome.Succeeded:
+                case { AttemptFailure: { Disposition: JobFailureDisposition.RetryScheduled } attemptFailure }:
+                    this.LogRetryScheduled(
+                        result.JobType.Name,
+                        result.AttemptCount,
+                        result.Outcome,
+                        attemptFailure.Record.Reason,
+                        attemptFailure.NextAttemptAt);
+
+                    break;
+
+                case { AttemptFailure: { Disposition: JobFailureDisposition.DeadLettered } attemptFailure }:
+                    this.LogJobDeadLettered(
+                        result.JobType.Name,
+                        result.AttemptCount,
+                        result.Outcome,
+                        attemptFailure.Record.Classification,
+                        attemptFailure.Record.Reason);
+
+                    break;
+
+                case { Outcome: JobExecutionOutcome.Succeeded }:
                     this.LogJobSucceeded(result.JobType.Name, result.AttemptCount, result.Duration);
 
                     break;
 
-                case JobExecutionOutcome.HandlerFailed:
-                    this.LogJobFailed(result.JobType.Name, result.AttemptCount, result.Failure);
-
-                    break;
-
-                case JobExecutionOutcome.HandlerMissing:
-                    this.LogHandlerMissing(result.JobType.Name);
-
-                    break;
-
-                case JobExecutionOutcome.TimedOut:
-                    this.LogJobTimedOut(result.JobType.Name, result.AttemptCount, result.Duration);
-
-                    break;
-
-                case JobExecutionOutcome.ReleasedForShutdown:
+                case { Outcome: JobExecutionOutcome.ReleasedForShutdown }:
                     this.LogJobReleasedForShutdown(result.JobType.Name);
 
                     break;
 
-                case JobExecutionOutcome.LeaseLost:
+                case { Outcome: JobExecutionOutcome.LeaseLost }:
                     this.LogLeaseLost(result.JobType.Name, result.AttemptCount);
 
                     break;
@@ -218,20 +231,31 @@ internal sealed partial class JobWorker : BackgroundService
         Message = "Ran a {JobType} job on attempt {AttemptCount} in {Duration}.")]
     private partial void LogJobSucceeded(string jobType, int attemptCount, TimeSpan duration);
 
+    /// <summary>
+    /// Reports an attempt the queue will make again. The failure is named by the record rather than by the exception
+    /// that produced it, because a handler works on mail and a library's message may quote it; a handler that wants its
+    /// own failure diagnosed in full is the one place that knows what in it is safe to write.
+    /// </summary>
     [LoggerMessage(
         Level = LogLevel.Warning,
-        Message = "A {JobType} job failed on attempt {AttemptCount} and is recorded as failed; nothing will attempt it again.")]
-    private partial void LogJobFailed(string jobType, int attemptCount, Exception? exception);
+        Message = "A {JobType} job ended attempt {AttemptCount} as {Outcome} with a transient failure recorded as {FailureReason}, and is claimable again at {NextAttemptAt}.")]
+    private partial void LogRetryScheduled(
+        string jobType,
+        int attemptCount,
+        JobExecutionOutcome outcome,
+        string failureReason,
+        DateTimeOffset? nextAttemptAt);
 
+    /// <summary>Reports a job nothing will attempt again, which is the one job state that waits for a person.</summary>
     [LoggerMessage(
         Level = LogLevel.Error,
-        Message = "A {JobType} job was claimed and no handler is registered for it, so it is recorded as failed rather than claimed again. A claim is filtered to the types this build runs, so reaching this means a handler was registered and then withdrawn while the process was running.")]
-    private partial void LogHandlerMissing(string jobType);
-
-    [LoggerMessage(
-        Level = LogLevel.Warning,
-        Message = "A {JobType} job was cancelled on attempt {AttemptCount} after running for {Duration}, which is the configured Jobs:ExecutionTimeout, and is recorded as failed. Raise the timeout where this kind of work legitimately takes longer.")]
-    private partial void LogJobTimedOut(string jobType, int attemptCount, TimeSpan duration);
+        Message = "A {JobType} job ended attempt {AttemptCount} as {Outcome} and is dead-lettered: the failure is {FailureClassification}, recorded as {FailureReason}. Nothing claims it again, and it holds up no other job. An outcome of HandlerMissing means a handler was withdrawn while the process ran; TimedOut means the work outlasted Jobs:ExecutionTimeout, which is worth raising where this kind of work legitimately takes longer.")]
+    private partial void LogJobDeadLettered(
+        string jobType,
+        int attemptCount,
+        JobExecutionOutcome outcome,
+        JobFailureClassification failureClassification,
+        string failureReason);
 
     [LoggerMessage(
         Level = LogLevel.Information,

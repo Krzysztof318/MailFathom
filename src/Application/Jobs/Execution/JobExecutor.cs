@@ -25,33 +25,44 @@ namespace MailFathom.Application.Jobs.Execution;
 /// most needs to be durable is the shutdown that stopped the work, and a write cancelled by the same token as the
 /// handler would leave the job held until its lease ran out on its own.
 /// </para>
+/// <para>
+/// A failure is classified before the attempt budget is consulted, which is what keeps a permanent failure from
+/// spending the budget several times over to reach the answer it had on its first attempt. Only a transient failure is
+/// scheduled again, on a jittered delay; a permanent one, and a transient one that has run out of attempts, becomes a
+/// dead letter that keeps the classification and the reason it ended on.
+/// </para>
 /// </remarks>
 public sealed class JobExecutor
 {
     private readonly IJobStore store;
     private readonly JobHandlerRegistry handlers;
+    private readonly IJobFailureClassifier failureClassifier;
     private readonly JobExecutionSettings settings;
     private readonly TimeProvider timeProvider;
 
     /// <summary>Initializes the executor from the queue it writes to and the bounds it runs under.</summary>
-    /// <param name="store">Renews, completes, fails, and releases the lease this attempt holds.</param>
+    /// <param name="store">Renews, completes, retries, dead-letters, and releases the lease this attempt holds.</param>
     /// <param name="handlers">Answers which handler runs the job's type.</param>
-    /// <param name="settings">The execution timeout, the lease duration, and the renewal interval derived from it.</param>
-    /// <param name="timeProvider">Times the attempt, the timeout, and the renewal interval.</param>
+    /// <param name="failureClassifier">Decides whether a failure is worth attempting again, and names it safely.</param>
+    /// <param name="settings">The execution timeout, the lease duration, the attempt bound, and the retry delays.</param>
+    /// <param name="timeProvider">Times the attempt, the timeout, the renewal interval, and the next attempt's instant.</param>
     /// <exception cref="ArgumentNullException">Thrown when a collaborator is <see langword="null" />.</exception>
     public JobExecutor(
         IJobStore store,
         JobHandlerRegistry handlers,
+        IJobFailureClassifier failureClassifier,
         JobExecutionSettings settings,
         TimeProvider timeProvider)
     {
         ArgumentNullException.ThrowIfNull(store);
         ArgumentNullException.ThrowIfNull(handlers);
+        ArgumentNullException.ThrowIfNull(failureClassifier);
         ArgumentNullException.ThrowIfNull(settings);
         ArgumentNullException.ThrowIfNull(timeProvider);
 
         this.store = store;
         this.handlers = handlers;
+        this.failureClassifier = failureClassifier;
         this.settings = settings;
         this.timeProvider = timeProvider;
     }
@@ -82,7 +93,7 @@ public sealed class JobExecutor
             return await this.RecordFailureAsync(
                 job,
                 JobExecutionOutcome.HandlerMissing,
-                failure: null,
+                JobFailureRecord.HandlerMissing,
                 startingTimestamp);
         }
 
@@ -140,7 +151,7 @@ public sealed class JobExecutor
             {
                 // Nothing is written: the row is owned by the attempt that reclaimed it, and every write here is
                 // conditional on the owner anyway, so asking would only be a refused statement.
-                return this.Report(job, JobExecutionOutcome.LeaseLost, failure: null, startingTimestamp);
+                return this.Report(job, JobExecutionOutcome.LeaseLost, attemptFailure: null, startingTimestamp);
             }
 
             if (timeoutSource.IsCancellationRequested)
@@ -148,12 +159,18 @@ public sealed class JobExecutor
                 return await this.RecordFailureAsync(
                     job,
                     JobExecutionOutcome.TimedOut,
-                    failure: null,
+                    JobFailureRecord.ExecutionTimedOut,
                     startingTimestamp);
             }
         }
 
-        return await this.RecordFailureAsync(job, JobExecutionOutcome.HandlerFailed, failure, startingTimestamp);
+        // The exception is classified and then dropped. What travels on is the record it produced, because a handler
+        // works on mail and everything downstream of here is a log line, a counter, or a span.
+        return await this.RecordFailureAsync(
+            job,
+            JobExecutionOutcome.HandlerFailed,
+            this.failureClassifier.Classify(failure),
+            startingTimestamp);
     }
 
     /// <summary>Runs the handler and answers with whatever it raised, so one job's failure ends only that job.</summary>
@@ -233,19 +250,74 @@ public sealed class JobExecutor
         return this.Report(
             job,
             completed ? JobExecutionOutcome.Succeeded : JobExecutionOutcome.LeaseLost,
-            failure: null,
+            attemptFailure: null,
             startingTimestamp);
     }
 
+    /// <summary>Decides between another attempt and a dead letter, and writes whichever it decided.</summary>
+    /// <remarks>
+    /// The classification is read before the attempt count, because the two answer different questions and only one of
+    /// them can save an attempt: work that could never succeed stops now, however much budget is left. A job that has
+    /// already been handed out as many times as it is allowed is terminal whatever the classification says, which is
+    /// what bounds a dependency that stays broken.
+    /// </remarks>
     private async Task<JobExecutionResult> RecordFailureAsync(
         LeasedJob job,
         JobExecutionOutcome outcome,
-        Exception? failure,
+        JobFailureRecord failure,
         long startingTimestamp)
     {
-        var failed = await this.store.FailAsync(job.JobId, job.Lease.Owner, CancellationToken.None);
+        var attemptsRemain = job.AttemptCount < this.settings.MaxAttempts;
 
-        return this.Report(job, failed ? outcome : JobExecutionOutcome.LeaseLost, failure, startingTimestamp);
+        if (failure.Classification is JobFailureClassification.Transient && attemptsRemain)
+        {
+            return await this.ScheduleRetryAsync(job, outcome, failure, startingTimestamp);
+        }
+
+        var deadLettered = await this.store.DeadLetterAsync(
+            job.JobId,
+            job.Lease.Owner,
+            failure,
+            CancellationToken.None);
+
+        return deadLettered
+            ? this.Report(
+                job,
+                outcome,
+                new JobAttemptFailure(failure, JobFailureDisposition.DeadLettered),
+                startingTimestamp)
+            : this.Report(job, JobExecutionOutcome.LeaseLost, attemptFailure: null, startingTimestamp);
+    }
+
+    private async Task<JobExecutionResult> ScheduleRetryAsync(
+        LeasedJob job,
+        JobExecutionOutcome outcome,
+        JobFailureRecord failure,
+        long startingTimestamp)
+    {
+        var delay = JobRetryBackoff.DelayBeforeNextAttempt(
+            this.settings.RetryBaseDelay,
+            this.settings.RetryMaxDelay,
+            job.AttemptCount);
+        var availableAt = this.timeProvider.GetUtcNow() + delay;
+
+        var scheduled = await this.store.ScheduleRetryAsync(
+            job.JobId,
+            job.Lease.Owner,
+            failure,
+            availableAt,
+            CancellationToken.None);
+
+        return scheduled
+            ? this.Report(
+                job,
+                outcome,
+                new JobAttemptFailure(failure, JobFailureDisposition.RetryScheduled)
+                {
+                    NextAttemptAt = availableAt,
+                },
+                startingTimestamp)
+            : this.Report(job, JobExecutionOutcome.LeaseLost, attemptFailure: null, startingTimestamp);
     }
 
     private async Task<JobExecutionResult> ReleaseAsync(LeasedJob job, long startingTimestamp)
@@ -255,21 +327,21 @@ public sealed class JobExecutor
         return this.Report(
             job,
             released ? JobExecutionOutcome.ReleasedForShutdown : JobExecutionOutcome.LeaseLost,
-            failure: null,
+            attemptFailure: null,
             startingTimestamp);
     }
 
     private JobExecutionResult Report(
         LeasedJob job,
         JobExecutionOutcome outcome,
-        Exception? failure,
+        JobAttemptFailure? attemptFailure,
         long startingTimestamp)
     {
         var duration = this.timeProvider.GetElapsedTime(startingTimestamp);
 
         return new JobExecutionResult(job.JobId, job.JobType, job.AttemptCount, outcome, duration)
         {
-            Failure = failure,
+            AttemptFailure = attemptFailure,
         };
     }
 }

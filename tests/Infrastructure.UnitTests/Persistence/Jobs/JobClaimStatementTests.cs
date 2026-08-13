@@ -90,8 +90,9 @@ public sealed class JobClaimStatementTests
     }
 
     /// <summary>
-    /// A job that failed is terminal, so a claim must not hand it out again. Nothing else stops it: the state is the
-    /// only thing that distinguishes work nobody will attempt again from work waiting to be taken.
+    /// A dead letter is terminal, so a claim must not hand it out again — which is what makes one poison message inert
+    /// rather than a job that keeps occupying a worker. Nothing else stops it: the state is the only thing that
+    /// distinguishes work nobody will attempt again from work waiting to be taken.
     /// </summary>
     [Fact]
     public void Compose_AClaim_NamesNeitherTerminalState()
@@ -105,7 +106,7 @@ public sealed class JobClaimStatementTests
             : [argument as string ?? string.Empty]);
 
         Assert.DoesNotContain(nameof(JobState.Succeeded), arguments);
-        Assert.DoesNotContain(nameof(JobState.Failed), arguments);
+        Assert.DoesNotContain(nameof(JobState.DeadLettered), arguments);
     }
 
     /// <summary>The claim counts the attempt, because a process that dies mid-execution never reaches a line that would.</summary>

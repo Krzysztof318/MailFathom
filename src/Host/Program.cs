@@ -553,7 +553,10 @@ try
         return JobExecutionSettings.Create(
             jobSettings.BatchSize,
             jobSettings.LeaseDuration,
-            jobSettings.ExecutionTimeout);
+            jobSettings.ExecutionTimeout,
+            jobSettings.MaxAttempts,
+            jobSettings.RetryBaseDelay,
+            jobSettings.RetryMaxDelay);
     });
     // Scoped with the store they write through: a pass is one work unit and opens a scope of its own, and the registry
     // is built from whatever handlers a consumer registered, which may themselves be scoped.

@@ -40,6 +40,14 @@ public sealed class OrchestratedJobStoreTests(MailFathomOrchestrationFixture orc
     /// <summary>A lease that has run out by the time the next statement reaches the database, which is how a crash looks.</summary>
     private static readonly TimeSpan ExpiredLease = TimeSpan.FromMilliseconds(1);
 
+    /// <summary>The record a permanently failed attempt leaves, named the way the classifier composes one.</summary>
+    private static readonly JobFailureRecord PermanentFailure =
+        JobFailureRecord.Create(JobFailureClassification.Permanent, "MailboxUnavailableException (21001)");
+
+    /// <summary>The record a transient attempt leaves, which is what a scheduled retry writes beside its delay.</summary>
+    private static readonly JobFailureRecord TransientFailure =
+        JobFailureRecord.Create(JobFailureClassification.Transient, "SocketException");
+
     /// <summary>
     /// Two enqueues of one execution, dispatched together from separate scopes, and the queue holds one job. Only the
     /// unique index closes the window between reading and writing, so this is what separates the constraint that exists
@@ -319,10 +327,12 @@ public sealed class OrchestratedJobStoreTests(MailFathomOrchestrationFixture orc
 
     /// <summary>
     /// Releasing is what a shutdown does with work it was holding: the job is claimable again at once rather than after
-    /// its lease runs out, and the attempt it spent stays counted.
+    /// its lease runs out, and the attempt the claim counted is given back with it — a deployment is not something the
+    /// work did, and a long job met by a few rolling restarts would otherwise reach the attempt bound without having
+    /// failed once.
     /// </summary>
     [Fact]
-    public async Task ReleaseAsync_ByTheHolder_MakesTheJobClaimableAgainWithoutWaitingOutItsLease()
+    public async Task ReleaseAsync_ByTheHolder_MakesTheJobClaimableAgainAndGivesTheAttemptBack()
     {
         // Arrange
         var cancellationToken = TestContext.Current.CancellationToken;
@@ -344,16 +354,16 @@ public sealed class OrchestratedJobStoreTests(MailFathomOrchestrationFixture orc
             (scope, token) => ClaimAsync(scope, batchSize: 10, HeldLease, token),
             cancellationToken);
         Assert.Equal(jobId, Assert.Single(reclaimed).JobId);
-        Assert.Equal(2, reclaimed[0].AttemptCount);
+        Assert.Equal(1, reclaimed[0].AttemptCount);
     }
 
     /// <summary>
-    /// A failed job is terminal in exactly the way a completed one is. It has to be, or one job whose work cannot
+    /// A dead letter is terminal in exactly the way a completed job is. It has to be, or one job whose work cannot
     /// finish would be handed out again as fast as the queue can do it — and it keeps its key, so the trigger that
-    /// enqueued it is answered with the failed job rather than allowed to enqueue the same work behind it.
+    /// enqueued it is answered with the dead letter rather than allowed to enqueue the same work behind it.
     /// </summary>
     [Fact]
-    public async Task FailAsync_ByTheHolder_LeavesATerminalRowNoClaimTakesAgain()
+    public async Task DeadLetterAsync_ByTheHolder_LeavesATerminalRowNoClaimTakesAgainAndKeepsTheFailure()
     {
         // Arrange
         var cancellationToken = TestContext.Current.CancellationToken;
@@ -368,11 +378,22 @@ public sealed class OrchestratedJobStoreTests(MailFathomOrchestrationFixture orc
             cancellationToken);
 
         // Act
-        var failed = await FailAsync(services, enqueued.JobId, Assert.Single(claimed).Lease.Owner, cancellationToken);
+        var deadLettered = await DeadLetterAsync(
+            services,
+            enqueued.JobId,
+            Assert.Single(claimed).Lease.Owner,
+            PermanentFailure,
+            cancellationToken);
 
         // Assert
-        Assert.True(failed);
-        Assert.Equal(nameof(JobState.Failed), await ReadStateAsync(services, enqueued.JobId, cancellationToken));
+        Assert.True(deadLettered);
+        Assert.Equal(nameof(JobState.DeadLettered), await ReadStateAsync(services, enqueued.JobId, cancellationToken));
+        Assert.Equal(
+            nameof(JobFailureClassification.Permanent),
+            await ReadLastFailureClassificationAsync(services, enqueued.JobId, cancellationToken));
+        Assert.Equal(
+            PermanentFailure.Reason,
+            await ReadLastFailureReasonAsync(services, enqueued.JobId, cancellationToken));
 
         Assert.Empty(await services.InScopeAsync(
             (scope, token) => ClaimAsync(scope, batchSize: 10, HeldLease, token),
@@ -386,11 +407,11 @@ public sealed class OrchestratedJobStoreTests(MailFathomOrchestrationFixture orc
     }
 
     /// <summary>
-    /// Failure is conditional on the lease owner for the same reason completion is: an attempt that was reclaimed and
-    /// then gave up must not mark the row failed under the attempt that is still working on it.
+    /// Dead-lettering is conditional on the lease owner for the same reason completion is: an attempt that was reclaimed
+    /// and then gave up must not end the job under the attempt that is still working on it.
     /// </summary>
     [Fact]
-    public async Task FailAsync_ByAnAttemptThatNoLongerHoldsTheJob_WritesNothing()
+    public async Task DeadLetterAsync_ByAnAttemptThatNoLongerHoldsTheJob_WritesNothing()
     {
         // Arrange
         var cancellationToken = TestContext.Current.CancellationToken;
@@ -402,11 +423,60 @@ public sealed class OrchestratedJobStoreTests(MailFathomOrchestrationFixture orc
             cancellationToken);
 
         // Act
-        var failed = await FailAsync(services, jobId, JobLeaseOwner.NewAttempt(), cancellationToken);
+        var deadLettered = await DeadLetterAsync(
+            services,
+            jobId,
+            JobLeaseOwner.NewAttempt(),
+            PermanentFailure,
+            cancellationToken);
 
         // Assert
-        Assert.False(failed);
+        Assert.False(deadLettered);
         Assert.Equal(nameof(JobState.Claimed), await ReadStateAsync(services, jobId, cancellationToken));
+        Assert.Null(await ReadLastFailureReasonAsync(services, jobId, cancellationToken));
+    }
+
+    /// <summary>
+    /// A retry is the queue's own backoff, and the delay is the whole of it: the row goes back to pending with a later
+    /// available instant, so nothing takes the job until that instant has passed while the attempt it spent stays
+    /// counted against its bound.
+    /// </summary>
+    [Fact]
+    public async Task ScheduleRetryAsync_ByTheHolder_HoldsTheJobBackUntilTheInstantItNames()
+    {
+        // Arrange
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var services = await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken);
+        await DrainAsync(services, cancellationToken);
+        var jobId = await EnqueueAsync(services, uid: 903, cancellationToken);
+        var claimed = await services.InScopeAsync(
+            (scope, token) => ClaimAsync(scope, batchSize: 10, HeldLease, token),
+            cancellationToken);
+        var availableAt = TimeProvider.System.GetUtcNow().AddHours(1);
+
+        // Act
+        var scheduled = await services.InScopeAsync(
+            (scope, token) => scope.GetRequiredService<IJobStore>().ScheduleRetryAsync(
+                jobId,
+                Assert.Single(claimed).Lease.Owner,
+                TransientFailure,
+                availableAt,
+                token),
+            cancellationToken);
+
+        // Assert
+        Assert.True(scheduled);
+        Assert.Equal(nameof(JobState.Pending), await ReadStateAsync(services, jobId, cancellationToken));
+        Assert.Equal(
+            nameof(JobFailureClassification.Transient),
+            await ReadLastFailureClassificationAsync(services, jobId, cancellationToken));
+        Assert.Equal(TransientFailure.Reason, await ReadLastFailureReasonAsync(services, jobId, cancellationToken));
+        Assert.Null(await ReadLeaseOwnerAsync(services, jobId, cancellationToken));
+
+        // The delay is the backoff: a claim before the instant the retry named must not take the job.
+        Assert.Empty(await services.InScopeAsync(
+            (scope, token) => ClaimAsync(scope, batchSize: 10, HeldLease, token),
+            cancellationToken));
     }
 
     /// <summary>Enqueues one job about a synthetic occurrence this class owns, and answers with its identifier.</summary>
@@ -468,12 +538,13 @@ public sealed class OrchestratedJobStoreTests(MailFathomOrchestrationFixture orc
             (scope, token) => scope.GetRequiredService<IJobStore>().CompleteAsync(jobId, owner, token),
             cancellationToken);
 
-    private static Task<bool> FailAsync(
+    private static Task<bool> DeadLetterAsync(
         OrchestratedMailFathomServices services,
         JobId jobId,
         JobLeaseOwner owner,
+        JobFailureRecord failure,
         CancellationToken cancellationToken) => services.InScopeAsync(
-            (scope, token) => scope.GetRequiredService<IJobStore>().FailAsync(jobId, owner, token),
+            (scope, token) => scope.GetRequiredService<IJobStore>().DeadLetterAsync(jobId, owner, failure, token),
             cancellationToken);
 
     private static Task<bool> ReleaseAsync(
@@ -520,6 +591,36 @@ public sealed class OrchestratedJobStoreTests(MailFathomOrchestrationFixture orc
                 .SqlQuery<string?>($"""SELECT "State" AS "Value" FROM jobs WHERE "Id" = {jobId}""")
                 .SingleOrDefaultAsync(token),
             cancellationToken);
+
+    /// <summary>Reads the recorded verdict straight from the row, because what an operator acts on is the stored column.</summary>
+    private static Task<string?> ReadLastFailureClassificationAsync(
+        OrchestratedMailFathomServices services,
+        JobId jobId,
+        CancellationToken cancellationToken)
+    {
+        var jobIdValue = jobId.Value;
+
+        return services.InScopeAsync(
+            (scope, token) => scope.GetRequiredService<MailFathomDbContext>().Database
+                .SqlQuery<string?>(
+                    $"""SELECT "LastFailureClassification" AS "Value" FROM jobs WHERE "Id" = {jobIdValue}""")
+                .SingleOrDefaultAsync(token),
+            cancellationToken);
+    }
+
+    private static Task<string?> ReadLastFailureReasonAsync(
+        OrchestratedMailFathomServices services,
+        JobId jobId,
+        CancellationToken cancellationToken)
+    {
+        var jobIdValue = jobId.Value;
+
+        return services.InScopeAsync(
+            (scope, token) => scope.GetRequiredService<MailFathomDbContext>().Database
+                .SqlQuery<string?>($"""SELECT "LastFailureReason" AS "Value" FROM jobs WHERE "Id" = {jobIdValue}""")
+                .SingleOrDefaultAsync(token),
+            cancellationToken);
+    }
 
     /// <summary>Reads the lease holder straight from the row, so an assertion about it depends on no other operation.</summary>
     private static Task<string?> ReadLeaseOwnerAsync(
