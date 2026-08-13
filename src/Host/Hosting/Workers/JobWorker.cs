@@ -7,6 +7,7 @@ using MailFathom.Application.Jobs;
 using MailFathom.Application.Jobs.Execution;
 using MailFathom.Application.Persistence;
 using MailFathom.Host.Configuration.Jobs;
+using MailFathom.Infrastructure.Observability;
 using Microsoft.Extensions.Options;
 
 namespace MailFathom.Host.Hosting.Workers;
@@ -32,26 +33,40 @@ namespace MailFathom.Host.Hosting.Workers;
 /// types until a consumer registers a handler for one, and a worker that claimed under those conditions would be taking
 /// work it would have to hand straight back.
 /// </para>
+/// <para>
+/// What each pass did is reported twice, to the log and to the queue's instruments, because the two are read at
+/// different distances: a line names one job and an instrument names a rate. The queue's depth is measured here rather
+/// than published from the store, because a level is only worth a database read on a schedule somebody chose — this one
+/// measures at most once per poll interval, so a busy instance draining its queue back to back pays for it no more
+/// often than an idle one.
+/// </para>
 /// </remarks>
 [SuppressMessage("Performance", "CA1812:Avoid uninstantiated internal classes", Justification = "The dependency injection container materializes this hosted service.")]
 internal sealed partial class JobWorker : BackgroundService
 {
     private readonly IServiceScopeFactory scopeFactory;
     private readonly JobQueueOptions settings;
+    private readonly JobQueueTelemetry telemetry;
     private readonly ILogger<JobWorker> logger;
     private readonly TimeProvider timeProvider;
+
+    private long lastDepthMeasurementTimestamp;
+    private bool hasMeasuredDepth;
 
     /// <summary>Initializes a new job worker.</summary>
     public JobWorker(
         IServiceScopeFactory scopeFactory,
         IOptions<JobQueueOptions> settings,
+        JobQueueTelemetry telemetry,
         ILogger<JobWorker> logger,
         TimeProvider timeProvider)
     {
         ArgumentNullException.ThrowIfNull(settings);
+        ArgumentNullException.ThrowIfNull(telemetry);
 
         this.scopeFactory = scopeFactory;
         this.settings = settings.Value;
+        this.telemetry = telemetry;
         this.logger = logger;
         this.timeProvider = timeProvider;
     }
@@ -66,21 +81,23 @@ internal sealed partial class JobWorker : BackgroundService
             return;
         }
 
-        var handledTypeNames = this.ReadHandledTypeNames();
+        var handledTypes = this.ReadHandledTypes();
 
-        if (handledTypeNames.Length == 0)
+        if (handledTypes.Length == 0)
         {
             this.LogNoHandlerRegistered();
 
             return;
         }
 
-        var handledJobTypes = string.Join(", ", handledTypeNames);
+        var handledJobTypes = string.Join(", ", handledTypes.Select(handledType => handledType.Name));
 
         this.LogWorkerStarted(handledJobTypes);
 
         while (!stoppingToken.IsCancellationRequested)
         {
+            await this.MeasureQueueDepthAsync(handledTypes, stoppingToken);
+
             var results = await this.RunPassAsync(stoppingToken);
 
             this.Report(results);
@@ -96,13 +113,71 @@ internal sealed partial class JobWorker : BackgroundService
 
     /// <summary>Reads which job types this build can run, which decides whether the loop starts at all.</summary>
     /// <remarks>Read once rather than per pass: handlers are registered by the composition root, so the answer cannot change while the process runs.</remarks>
-    private string[] ReadHandledTypeNames()
+    private JobType[] ReadHandledTypes()
     {
         using var scope = this.scopeFactory.CreateScope();
 
         var handlers = scope.ServiceProvider.GetRequiredService<JobHandlerRegistry>();
 
-        return [.. handlers.HandledTypes.Select(handledType => handledType.Name)];
+        return [.. handlers.HandledTypes];
+    }
+
+    /// <summary>Measures how much is waiting, no more often than one poll interval, and publishes it.</summary>
+    /// <remarks>
+    /// <para>
+    /// The interval is what keeps the measurement a level rather than a cost. A pass that filled its batch runs the
+    /// next one at once, so an instance working through a backlog takes passes as fast as the database serves them, and
+    /// a reading per pass would put a bounded count on that same cadence for a number that only has to be roughly
+    /// current.
+    /// </para>
+    /// <para>
+    /// A failed measurement is swallowed and the depth is left where it was. Nothing about the queue depends on it —
+    /// the pass that follows claims whether or not it was measured — and a worker that stopped because a gauge could
+    /// not be read would trade the work for the reporting of it.
+    /// </para>
+    /// </remarks>
+    [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "A measurement that failed must not stop the pass that follows it, and the last published depth stays until the next successful one.")]
+    private async Task MeasureQueueDepthAsync(IReadOnlyList<JobType> handledTypes, CancellationToken stoppingToken)
+    {
+        if (!this.IsDepthMeasurementDue())
+        {
+            return;
+        }
+
+        try
+        {
+            using var scope = this.scopeFactory.CreateScope();
+
+            var depths = scope.ServiceProvider.GetRequiredService<IJobQueueDepthReader>();
+
+            this.telemetry.RecordQueueDepth(await depths.ReadWaitingDepthsAsync(handledTypes, stoppingToken));
+        }
+        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+        {
+            // The loop's own condition ends it; a stopping host is not a failure of the measurement.
+        }
+        catch (Exception exception)
+        {
+            this.LogQueueDepthMeasurementFailed(exception);
+        }
+    }
+
+    /// <summary>Reports whether the poll interval has elapsed since the last measurement, and stamps it when it has.</summary>
+    /// <remarks>The first pass always measures, so an instance that starts with a backlog publishes it before it begins draining rather than one interval later.</remarks>
+    private bool IsDepthMeasurementDue()
+    {
+        var now = this.timeProvider.GetTimestamp();
+
+        if (this.hasMeasuredDepth
+            && this.timeProvider.GetElapsedTime(this.lastDepthMeasurementTimestamp, now) < this.settings.PollInterval)
+        {
+            return false;
+        }
+
+        this.lastDepthMeasurementTimestamp = now;
+        this.hasMeasuredDepth = true;
+
+        return true;
     }
 
     /// <summary>Runs one scoped pass, isolating whatever goes wrong from the passes after it.</summary>
@@ -171,6 +246,8 @@ internal sealed partial class JobWorker : BackgroundService
     {
         foreach (var result in results)
         {
+            this.telemetry.RecordAttempt(result);
+
             switch (result)
             {
                 case { AttemptFailure: { Disposition: JobFailureDisposition.RetryScheduled } attemptFailure }:
@@ -280,4 +357,9 @@ internal sealed partial class JobWorker : BackgroundService
         Level = LogLevel.Warning,
         Message = "A durable job pass failed; anything it was holding stays leased until the lease expires and the next pass claims again.")]
     private partial void LogPassFailed(Exception exception);
+
+    [LoggerMessage(
+        Level = LogLevel.Debug,
+        Message = "The depth of the durable job queue could not be measured, so the gauge keeps the last figure it was given. Nothing about running the work depends on it.")]
+    private partial void LogQueueDepthMeasurementFailed(Exception exception);
 }

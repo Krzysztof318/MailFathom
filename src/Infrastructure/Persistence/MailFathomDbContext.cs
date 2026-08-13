@@ -180,6 +180,9 @@ internal sealed class MailFathomDbContext : DbContext
     /// <summary>The index an account's jobs are erased and aged through.</summary>
     internal const string JobAccountIndexName = "ix_jobs_account";
 
+    /// <summary>The index an operator reads what has stopped through, filtered to the one state that waits for them.</summary>
+    internal const string JobDeadLetterIndexName = "ix_jobs_dead_lettered";
+
     private readonly PostgresTextSearchConfiguration textSearchConfiguration;
 
     /// <summary>Initializes a new MailFathom EF Core context.</summary>
@@ -567,6 +570,14 @@ internal sealed class MailFathomDbContext : DbContext
                     $"\"{nameof(JobEntity.State)}\" IN ('{nameof(JobState.Pending)}', '{nameof(JobState.Claimed)}')");
             entity.HasIndex(job => new { job.MailboxAccountId, job.EnqueuedAt })
                 .HasDatabaseName(JobAccountIndexName);
+
+            // Partial for the reason the claim index is: the state it is filtered to is a small part of a table that
+            // grows with every enqueue, and an operator reading what has stopped orders by the instant it stopped. The
+            // ordering columns are the keyset pair the page is continued on, so one index serves the reading whichever
+            // of its two optional filters is applied.
+            entity.HasIndex(job => new { job.StateChangedAt, job.Id })
+                .HasDatabaseName(JobDeadLetterIndexName)
+                .HasFilter($"\"{nameof(JobEntity.State)}\" = '{nameof(JobState.DeadLettered)}'");
 
             entity.HasOne(job => job.MailboxAccount)
                 .WithMany()

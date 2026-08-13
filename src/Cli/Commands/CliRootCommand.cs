@@ -4,6 +4,7 @@
 
 using System.CommandLine;
 using MailFathom.Cli.Commands.Folders;
+using MailFathom.Cli.Commands.Jobs;
 using MailFathom.Cli.Commands.Rules;
 using MailFathom.Cli.Commands.Spam;
 using MailFathom.Versioning;
@@ -73,6 +74,16 @@ internal static class CliRootCommand
             ClassificationsCommand.Create(context),
         };
 
+        // Reading what has stopped, and the two decisions about one job. Nothing here enqueues, cancels a job that is
+        // still on its way, or edits what one points at: what a deployment does in the background is decided by its
+        // configuration and its mail, and this group is only where work that already gave up waits for a person.
+        Command jobsCommand = new("jobs", "Read the background work that stopped, and decide what becomes of it.")
+        {
+            DeadLettersCommand.Create(context),
+            RetryJobCommand.Create(context),
+            DropJobCommand.Create(context),
+        };
+
         // The one group that disposes of mail. A folder's local copy outlives both the switch that stopped mirroring it
         // and the mapping that named it, deliberately, so that no configuration edit can take somebody's mail away —
         // and this is where an operator who means it says so.
@@ -92,6 +103,7 @@ internal static class CliRootCommand
             embeddingCommand,
             rulesCommand,
             spamCommand,
+            jobsCommand,
             folderCommand,
         };
     }

@@ -7,6 +7,7 @@ using MailFathom.Application.Jobs.Execution;
 using MailFathom.Host.Configuration.Jobs;
 using MailFathom.Host.Hosting.Workers;
 using MailFathom.Host.UnitTests.TestDoubles;
+using MailFathom.Infrastructure.Observability;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Time.Testing;
@@ -156,6 +157,70 @@ public sealed class JobWorkerTests
         await world.Worker.StopAsync(TestContext.Current.CancellationToken);
     }
 
+    /// <summary>An instance that starts with a backlog publishes it before it begins draining, not one interval later.</summary>
+    [Fact]
+    public async Task ExecuteAsync_TheFirstPass_MeasuresTheQueueDepthOfEveryTypeItCanRun()
+    {
+        // Arrange
+        using var world = CreateWorld(new JobQueueOptions(), WithAHandler);
+        var measured = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        world.DepthReader
+            .ReadWaitingDepthsAsync(Arg.Any<IReadOnlyList<JobType>>(), Arg.Any<CancellationToken>())
+            .Returns(_ =>
+            {
+                measured.TrySetResult();
+
+                return Task.FromResult<IReadOnlyList<JobQueueDepthReading>>([]);
+            });
+
+        // Act
+        await world.Worker.StartAsync(TestContext.Current.CancellationToken);
+        await measured.Task;
+        await world.Worker.StopAsync(TestContext.Current.CancellationToken);
+
+        // Assert
+        await world.DepthReader.Received().ReadWaitingDepthsAsync(
+            Arg.Is<IReadOnlyList<JobType>>(types => types != null && types.Contains(JobType.ClassifyEmailSpam)),
+            Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>
+    /// Nothing about running the work depends on the measurement, so a failed one leaves the last published depth where
+    /// it was and the pass behind it claims exactly as it would have.
+    /// </summary>
+    [Fact]
+    public async Task ExecuteAsync_AQueueDepthMeasurementThatFails_StillClaimsAndKeepsTheWorkerAlive()
+    {
+        // Arrange
+        using var world = CreateWorld(new JobQueueOptions(), WithAHandler);
+        var claimed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        world.Store
+            .ClaimAsync(Arg.Any<JobClaimRequest>(), Arg.Any<CancellationToken>())
+            .Returns(_ =>
+            {
+                claimed.TrySetResult();
+
+                return Task.FromResult<IReadOnlyList<LeasedJob>>([]);
+            });
+        world.DepthReader
+            .ReadWaitingDepthsAsync(Arg.Any<IReadOnlyList<JobType>>(), Arg.Any<CancellationToken>())
+            .Returns<IReadOnlyList<JobQueueDepthReading>>(_ =>
+                throw new InvalidOperationException("the database is unavailable"));
+
+        // Act
+        await world.Worker.StartAsync(TestContext.Current.CancellationToken);
+        await world.Logger.WaitForOccurrences(
+            "could not be measured",
+            occurrences: 1,
+            TestContext.Current.CancellationToken);
+        await claimed.Task;
+
+        // Assert
+        await world.Store.Received().ClaimAsync(Arg.Any<JobClaimRequest>(), Arg.Any<CancellationToken>());
+        Assert.False(world.Worker.ExecuteTask!.IsCompleted);
+        await world.Worker.StopAsync(TestContext.Current.CancellationToken);
+    }
+
     private static LeasedJob LeasedJobFor(int index) => new(
         JobId.Create(Guid.CreateVersion7(Noon.AddSeconds(index))),
         JobType.ClassifyEmailSpam,
@@ -188,6 +253,9 @@ public sealed class JobWorkerTests
         world.Store
             .ClaimAsync(Arg.Any<JobClaimRequest>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<IReadOnlyList<LeasedJob>>([]));
+        world.DepthReader
+            .ReadWaitingDepthsAsync(Arg.Any<IReadOnlyList<JobType>>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IReadOnlyList<JobQueueDepthReading>>([]));
 
         var services = new ServiceCollection();
         services.AddSingleton<TimeProvider>(world.TimeProvider);
@@ -204,6 +272,7 @@ public sealed class JobWorkerTests
             settings.MaxConcurrentJobsPerType,
             settings.MaxQueueDepthPerType));
         services.AddSingleton(Substitute.For<IJobFailureClassifier>());
+        services.AddSingleton(world.DepthReader);
         services.AddSingleton<JobConcurrencyGate>();
         services.AddSingleton<IJobAttemptRunner, ScopedJobAttemptRunner>();
         services.AddScoped<JobHandlerRegistry>();
@@ -218,6 +287,7 @@ public sealed class JobWorkerTests
             new JobWorker(
                 serviceProvider.GetRequiredService<IServiceScopeFactory>(),
                 Options.Create(settings),
+                new JobQueueTelemetry(),
                 world.Logger,
                 world.TimeProvider));
 
@@ -243,6 +313,8 @@ public sealed class JobWorkerTests
         public FakeTimeProvider TimeProvider { get; } = new(Noon);
 
         public IJobStore Store { get; } = Substitute.For<IJobStore>();
+
+        public IJobQueueDepthReader DepthReader { get; } = Substitute.For<IJobQueueDepthReader>();
 
         public JobWorker Worker => this.worker!;
 

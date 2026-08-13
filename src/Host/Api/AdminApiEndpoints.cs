@@ -51,6 +51,13 @@ namespace MailFathom.Host.Api;
 /// automation over their mailbox rather than anything a model reasons over.
 /// </para>
 /// <para>
+/// The next three are what an operator does about background work that stopped, which
+/// <see cref="JobDeadLetterEndpoints" /> describes: reading what has dead-lettered, running one again after fixing what
+/// caused it, and recording that one will never be run. They are here because re-running work that changes somebody's
+/// mailbox should be bounded by the same credential as asking for it in the first place, and because a queue's terminal
+/// state is an operator's problem rather than anything a model reasons over.
+/// </para>
+/// <para>
 /// The last takes a folder's local mail away, which <see cref="MailFolderErasureEndpoint" /> describes. It is the only
 /// route that disposes of stored mail, which is why it is bounded by the same credential as everything else here and
 /// reachable from nowhere a model can write to.
@@ -79,6 +86,7 @@ internal static class AdminApiEndpoints
         api.MapEmbeddingProfile();
         api.MapMailRules();
         api.MapSpamClassification();
+        api.MapJobDeadLetters();
         api.MapMailFolderErasure();
 
         return api;
