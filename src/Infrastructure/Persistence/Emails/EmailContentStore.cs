@@ -65,7 +65,9 @@ internal sealed class EmailContentStore(
     /// <remarks>
     /// The write is measured rather than spanned, for the reason
     /// <see cref="StoredEmailContentTelemetry" /> records: it happens once per stored message inside a folder run that
-    /// already has a span, and what an operator asks of it is a distribution rather than an individual.
+    /// already has a span, and what an operator asks of it is a distribution rather than an individual. The measurement
+    /// is published by the session instead of here, because whether this staging becomes a stored message is the
+    /// session's answer rather than this method's.
     /// </remarks>
     public async Task SaveContentAsync(
         IPersistenceSession session,
@@ -75,9 +77,14 @@ internal sealed class EmailContentStore(
     {
         ArgumentNullException.ThrowIfNull(content);
 
-        using var write = telemetry.BeginWrite();
+        var writingSession = EfCorePersistenceSessionAccessor.SessionOf(session);
 
-        var dbContext = EfCorePersistenceSessionAccessor.DbContextOf(session);
+        // Held by the session rather than published here: this body is the staging callback an optimistic-concurrency
+        // retry runs again from the beginning, so a losing attempt would otherwise be counted as a stored message.
+        using var write = telemetry.BeginWrite();
+        writingSession.MeasureOnEnding(write);
+
+        var dbContext = writingSession.DbContext;
 
         // The metadata row is added earlier in this same uncommitted session, so it is usually still pending. FindAsync
         // resolves it from the change tracker without a query in that case and falls back to the database otherwise.

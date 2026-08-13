@@ -4,7 +4,7 @@
 
 using MailFathom.Mcp.Observability;
 using MailFathom.Mcp.Tools;
-using MailFathom.Mcp.UnitTests.TestDoubles;
+using MailFathom.TestSupport;
 using Xunit;
 
 namespace MailFathom.Mcp.UnitTests.Observability;

@@ -28,5 +28,9 @@
     <!-- A fact surface is built with the folder mappings a condition naming a folder's role reads, so a condition test
          supplies one whether or not it is about roles. -->
     <Compile Include="..\shared\StubMailFolderMappings.cs" Link="StubMailFolderMappings.cs" />
+
+    <!-- Every boundary that publishes instruments asserts them the same way, through a listener over the one
+         process-wide meter, so the recorder is built once rather than per suite. -->
+    <Compile Include="..\shared\RecordedMailFathomMeasurements.cs" Link="RecordedMailFathomMeasurements.cs" />
   </ItemGroup>
 </Project>

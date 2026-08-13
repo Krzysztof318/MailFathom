@@ -305,14 +305,22 @@ size, which is an answer rather than a failure.
 Four instruments answer over all of those reads what that span answers about one, and cover the write beside it.
 `mailfathom.mail.content.read.bytes` and `mailfathom.mail.content.write.bytes` are how large the messages moving through
 the store are, and `mailfathom.mail.content.read.duration` and `mailfathom.mail.content.write.duration` are how long
-each took, tagged with `mailfathom.mail.content.outcome` as `found`, `absent`, `stored`, or `failed`. All four are
-distributions rather than totals, because what an operator acts on here is the tail: one enormous message and a steady
-stream of ordinary ones cost the same in a sum and mean entirely different things. A read of an email whose content was
-never stored is timed and not sized, since a zero there would pull the distribution towards a message that never
-existed; a read or a write that threw is timed under `failed`, so a store that started failing does not read as one
+each took, tagged with `mailfathom.mail.content.outcome` as `found`, `absent`, `stored`, `discarded`, or `failed`. All
+four are distributions rather than totals, because what an operator acts on here is the tail: one enormous message and a
+steady stream of ordinary ones cost the same in a sum and mean entirely different things. A read of an email whose
+content was never stored is timed and not sized, since a zero there would pull the distribution towards a message that
+never existed; a read or a write that threw is timed under `failed`, so a store that started failing does not read as one
 nobody is using. The write is measured and deliberately not spanned — it happens once per stored message inside a folder
 run that already has a span, so a span apiece would put one per synchronized email into a trace store to say what the
 histogram says better.
+
+A write is published under the ending of the transaction that staged it, which is what separates `stored` from
+`discarded`. Raw MIME is staged inside an optimistic-concurrency attempt, and an attempt that loses the race is run
+again from the beginning in a fresh transaction — so a write counted where it happens would report one message as two
+stored ones, and would do it in exactly the deployment under contention that `mailfathom.persistence.commits` is being
+read about. `stored` is therefore the count of messages this deployment holds, `discarded` is payload it carried and
+threw away, and a `discarded` rate that is anything but negligible is the same finding as a conflict rate that is,
+priced in bytes.
 
 One more span belongs to no request at all. The extraction backfill opens **`backfill_email_extraction`** once per
 bounded pass, which is what tells work an interval caused apart from work a caller caused — without it the pass appears

@@ -7,6 +7,7 @@ using MailFathom.Application.Emails.Embeddings.Backfill;
 using MailFathom.Application.Emails.Embeddings.Generations;
 using MailFathom.Infrastructure.Observability;
 using MailFathom.Infrastructure.UnitTests.TestDoubles;
+using MailFathom.TestSupport;
 using Xunit;
 
 namespace MailFathom.Infrastructure.UnitTests.Observability;

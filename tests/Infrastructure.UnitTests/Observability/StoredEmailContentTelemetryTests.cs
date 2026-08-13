@@ -6,7 +6,7 @@ using System.Collections.Concurrent;
 using System.Diagnostics;
 using MailFathom.Common.Observability;
 using MailFathom.Infrastructure.Observability;
-using MailFathom.Infrastructure.UnitTests.TestDoubles;
+using MailFathom.TestSupport;
 using Microsoft.Extensions.Time.Testing;
 using Xunit;
 
@@ -206,24 +206,78 @@ public sealed class StoredEmailContentTelemetryTests : IDisposable
 
     /// <summary>A write is measured and not spanned, because one span per stored message would say less than this does.</summary>
     [Fact]
-    public void BeginWrite_ContentThatWasStored_RecordsItsSizeAndDurationAndNoSpan()
+    public void BeginWrite_ASessionThatCommitted_RecordsItsSizeAndDurationAndNoSpan()
     {
         // Arrange
         var telemetry = TelemetryOver(out var timeProvider);
         using var measurements = new RecordedMailFathomMeasurements(WriteBytesInstrument, WriteDurationInstrument);
 
         // Act
-        using (var write = telemetry.BeginWrite())
+        var write = telemetry.BeginWrite();
+        using (write)
         {
             timeProvider.Advance(TimeSpan.FromMilliseconds(500));
             write.Stored(96_000);
         }
+
+        write.PublishAfterSession(sessionCommitted: true);
 
         // Assert
         Assert.Equal([96_000d], measurements.ValuesOf(WriteBytesInstrument));
         Assert.Equal([0.5], measurements.ValuesOf(WriteDurationInstrument));
         Assert.Equal(["stored"], measurements.DimensionOf(WriteDurationInstrument, OutcomeTagName));
         Assert.Empty(this.published);
+    }
+
+    /// <summary>
+    /// The staging body is what an optimistic-concurrency retry runs again, so a payload carried by an attempt that
+    /// lost the race is a cost this deployment paid and never a message it holds. Publishing it as `stored` would
+    /// report a message twice in exactly the deployment under contention.
+    /// </summary>
+    [Fact]
+    public void BeginWrite_ASessionThatDidNotCommit_RecordsItAsDiscardedRatherThanStored()
+    {
+        // Arrange
+        var telemetry = TelemetryOver(out var timeProvider);
+        using var measurements = new RecordedMailFathomMeasurements(WriteBytesInstrument, WriteDurationInstrument);
+
+        // Act
+        var write = telemetry.BeginWrite();
+        using (write)
+        {
+            timeProvider.Advance(TimeSpan.FromMilliseconds(250));
+            write.Stored(96_000);
+        }
+
+        write.PublishAfterSession(sessionCommitted: false);
+
+        // Assert
+        Assert.Equal([96_000d], measurements.ValuesOf(WriteBytesInstrument));
+        Assert.Equal([0.25], measurements.ValuesOf(WriteDurationInstrument));
+        Assert.Equal(["discarded"], measurements.DimensionOf(WriteDurationInstrument, OutcomeTagName));
+    }
+
+    /// <summary>A session ends once, and disposal runs after both endings, so the same write is never published twice.</summary>
+    [Fact]
+    public void PublishAfterSession_CalledAgainForOneWrite_PublishesNothingFurther()
+    {
+        // Arrange
+        var telemetry = TelemetryOver(out _);
+        using var measurements = new RecordedMailFathomMeasurements(WriteBytesInstrument, WriteDurationInstrument);
+
+        // Act
+        var write = telemetry.BeginWrite();
+        using (write)
+        {
+            write.Stored(1_024);
+        }
+
+        write.PublishAfterSession(sessionCommitted: true);
+        write.PublishAfterSession(sessionCommitted: false);
+
+        // Assert
+        Assert.Equal([1_024d], measurements.ValuesOf(WriteBytesInstrument));
+        Assert.Equal(["stored"], measurements.DimensionOf(WriteDurationInstrument, OutcomeTagName));
     }
 
     /// <summary>
@@ -265,16 +319,19 @@ public sealed class StoredEmailContentTelemetryTests : IDisposable
             read.Found(10);
         }
 
-        using (var write = telemetry.BeginWrite())
+        var write = telemetry.BeginWrite();
+        using (write)
         {
             write.Stored(10);
         }
+
+        write.PublishAfterSession(sessionCommitted: true);
 
         // Assert
         Assert.All(
             measurements.Recorded,
             measurement => Assert.All(
-                measurement.Dimensions.Keys,
+                measurement.Tags.Keys,
                 dimension => Assert.Equal(OutcomeTagName, dimension)));
     }
 

@@ -5,7 +5,7 @@
 using MailFathom.Application.Emails.Embeddings.Generation;
 using MailFathom.Domain.Emails;
 using MailFathom.Infrastructure.Embeddings;
-using MailFathom.Infrastructure.UnitTests.TestDoubles;
+using MailFathom.TestSupport;
 using Xunit;
 
 namespace MailFathom.Infrastructure.UnitTests.Embeddings;

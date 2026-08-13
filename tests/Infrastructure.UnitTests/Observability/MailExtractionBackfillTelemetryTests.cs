@@ -4,7 +4,7 @@
 
 using MailFathom.Application.Emails.Extraction;
 using MailFathom.Infrastructure.Observability;
-using MailFathom.Infrastructure.UnitTests.TestDoubles;
+using MailFathom.TestSupport;
 using Xunit;
 
 namespace MailFathom.Infrastructure.UnitTests.Observability;
@@ -163,7 +163,7 @@ public sealed class MailExtractionBackfillTelemetryTests
         Assert.All(
             measurements.Recorded,
             measurement => Assert.All(
-                measurement.Dimensions.Keys,
+                measurement.Tags.Keys,
                 dimension => Assert.Equal(OutcomeTagName, dimension)));
     }
 

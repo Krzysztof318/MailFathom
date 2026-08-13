@@ -51,10 +51,20 @@ internal sealed class EfCorePersistenceSession(
     PersistenceCommitTelemetry telemetry)
     : IPersistenceSession, IEfCorePersistenceSession
 {
+    private readonly List<ISessionScopedMeasurement> heldMeasurements = [];
+
     private bool completed;
 
     /// <inheritdoc />
     public MailFathomDbContext DbContext => resources.DbContext;
+
+    /// <inheritdoc />
+    public void MeasureOnEnding(ISessionScopedMeasurement measurement)
+    {
+        ArgumentNullException.ThrowIfNull(measurement);
+
+        this.heldMeasurements.Add(measurement);
+    }
 
     /// <inheritdoc />
     public async Task<PersistenceCommitResult> CommitAsync(CancellationToken cancellationToken)
@@ -82,6 +92,7 @@ internal sealed class EfCorePersistenceSession(
 
         this.completed = true;
         telemetry.RecordCommitted();
+        this.PublishHeldMeasurements(sessionCommitted: true);
 
         return PersistenceCommitResult.Committed;
     }
@@ -118,6 +129,7 @@ internal sealed class EfCorePersistenceSession(
         {
             resources.ClearTrackedState();
             this.completed = true;
+            this.PublishHeldMeasurements(sessionCommitted: false);
         }
 
         if (firstCleanupException is not null)
@@ -133,5 +145,21 @@ internal sealed class EfCorePersistenceSession(
 
         this.completed = true;
         telemetry.RecordConcurrencyConflict();
+        this.PublishHeldMeasurements(sessionCommitted: false);
+    }
+
+    /// <summary>Publishes what was staged here under the ending this session actually reached, once.</summary>
+    /// <remarks>
+    /// Draining the held measurements is what makes the second call a no-op: disposal runs after a commit and after a
+    /// conflict alike, and an ending already reported must not be reported again as an abandoned one.
+    /// </remarks>
+    private void PublishHeldMeasurements(bool sessionCommitted)
+    {
+        foreach (var measurement in this.heldMeasurements)
+        {
+            measurement.PublishAfterSession(sessionCommitted);
+        }
+
+        this.heldMeasurements.Clear();
     }
 }

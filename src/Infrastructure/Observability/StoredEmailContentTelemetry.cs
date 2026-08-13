@@ -25,7 +25,9 @@ namespace MailFathom.Infrastructure.Observability;
 /// <para>
 /// A write is measured and not spanned. A read happens on a request path, where a span attributes it to the call that
 /// caused it; a write happens once per stored message inside a folder run that already has a span of its own, so a span
-/// apiece would put one per synchronized email into a trace store to say what the histogram says better.
+/// apiece would put one per synchronized email into a trace store to say what the histogram says better. It is also
+/// published after its transaction rather than where it is staged, for the reason
+/// <see cref="ISessionScopedMeasurement" /> records.
 /// </para>
 /// <para>
 /// Nothing here carries the stored identity, the account, the folder, or any part of the message. The identity alone
@@ -47,8 +49,11 @@ internal sealed class StoredEmailContentTelemetry
     /// <summary>Names a read of an email this deployment holds no content for, which is an answer rather than a failure.</summary>
     internal const string AbsentOutcomeName = "absent";
 
-    /// <summary>Names a write that stored a message.</summary>
+    /// <summary>Names a write whose session committed, which is a message this deployment now holds.</summary>
     internal const string StoredOutcomeName = "stored";
+
+    /// <summary>Names a write staged by a session that did not commit, so the payload was carried and thrown away.</summary>
+    internal const string DiscardedOutcomeName = "discarded";
 
     /// <summary>Names a read or a write that reported nothing, which is one that threw.</summary>
     internal const string FailedOutcomeName = "failed";
@@ -180,12 +185,21 @@ internal sealed class StoredEmailContentTelemetry
         }
     }
 
-    /// <summary>Carries one write of stored raw MIME from the moment it begins to what it turned out to store.</summary>
+    /// <summary>Carries one write of stored raw MIME from the moment it begins to what its session made of it.</summary>
     /// <remarks>
+    /// <para>
     /// A write that reported nothing is one that threw, and it is counted as such rather than left out — a store that
-    /// starts failing would otherwise show up as writes that stopped arriving, which reads as an idle deployment.
+    /// starts failing would otherwise show up as writes that stopped arriving, which reads as an idle deployment. That
+    /// one is published when the scope ends, because no session ending will say anything further about it.
+    /// </para>
+    /// <para>
+    /// A write that staged its payload is held instead, and published under the ending its session reached: `stored`
+    /// when the transaction committed and `discarded` when it did not. Staging happens inside an optimistic-concurrency
+    /// attempt that may be run again from the beginning, so publishing at the point of staging would report every
+    /// losing attempt as a stored message.
+    /// </para>
     /// </remarks>
-    internal sealed class ContentWriteScope : IDisposable
+    internal sealed class ContentWriteScope : IDisposable, ISessionScopedMeasurement
     {
         private readonly StoredEmailContentTelemetry telemetry;
         private readonly long startingTimestamp;
@@ -193,6 +207,7 @@ internal sealed class StoredEmailContentTelemetry
         private string outcome = FailedOutcomeName;
         private long? byteLength;
         private bool ended;
+        private TimeSpan? stagedFor;
 
         internal ContentWriteScope(StoredEmailContentTelemetry telemetry, long startingTimestamp)
         {
@@ -200,7 +215,7 @@ internal sealed class StoredEmailContentTelemetry
             this.startingTimestamp = startingTimestamp;
         }
 
-        /// <summary>Records the content that was written, and how many bytes of it there were.</summary>
+        /// <summary>Records the content that was staged, and how many bytes of it there were.</summary>
         /// <param name="byteLength">The length of the raw MIME the write carried.</param>
         public void Stored(long byteLength)
         {
@@ -218,10 +233,32 @@ internal sealed class StoredEmailContentTelemetry
 
             this.ended = true;
 
+            var elapsed = this.telemetry.ElapsedSince(this.startingTimestamp);
+
+            if (this.outcome == FailedOutcomeName)
+            {
+                this.telemetry.RecordWrite(FailedOutcomeName, byteLength: null, elapsed);
+
+                return;
+            }
+
+            this.stagedFor = elapsed;
+        }
+
+        /// <inheritdoc />
+        public void PublishAfterSession(bool sessionCommitted)
+        {
+            if (this.stagedFor is not { } staged)
+            {
+                return;
+            }
+
+            this.stagedFor = null;
+
             this.telemetry.RecordWrite(
-                this.outcome,
+                sessionCommitted ? StoredOutcomeName : DiscardedOutcomeName,
                 this.byteLength,
-                this.telemetry.ElapsedSince(this.startingTimestamp));
+                staged);
         }
     }
 }

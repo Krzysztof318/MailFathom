@@ -3,7 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Infrastructure.Observability;
-using MailFathom.Infrastructure.UnitTests.TestDoubles;
+using MailFathom.TestSupport;
 using Xunit;
 
 namespace MailFathom.Infrastructure.UnitTests.Observability;
@@ -64,6 +64,6 @@ public sealed class PersistenceCommitTelemetryTests
         // Assert
         Assert.All(
             measurements.Recorded.Where(measurement => measurement.InstrumentName == CommitsInstrumentName),
-            measurement => Assert.Equal([OutcomeTagName], measurement.Dimensions.Keys));
+            measurement => Assert.Equal([OutcomeTagName], measurement.Tags.Keys));
     }
 }

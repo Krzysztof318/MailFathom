@@ -20,5 +20,8 @@
     <!-- SyntheticServedAccount from tests/shared builds an application port's value, so this project references what
          every consumer of that file already does. Compiling it any other way would not be compiling it as a consumer. -->
     <ProjectReference Include="..\..\src\Application\Application.csproj" />
+
+    <!-- RecordedMailFathomMeasurements from tests/shared listens to the one process-wide meter Common declares. -->
+    <ProjectReference Include="..\..\src\Common\Common.csproj" />
   </ItemGroup>
 </Project>

@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.Persistence;
+using MailFathom.Infrastructure.Observability;
 
 namespace MailFathom.Infrastructure.Persistence.Sessions;
 
@@ -17,6 +18,10 @@ internal interface IEfCorePersistenceSession
 {
     /// <summary>Gets the context enlisted in this session's transaction.</summary>
     MailFathomDbContext DbContext { get; }
+
+    /// <summary>Holds a measurement of work staged here until this session's ending is known.</summary>
+    /// <param name="measurement">The measurement to publish once the session has committed or rolled back.</param>
+    void MeasureOnEnding(ISessionScopedMeasurement measurement);
 }
 
 /// <summary>Resolves the EF Core context enlisted in an application persistence session.</summary>
@@ -32,7 +37,17 @@ internal static class EfCorePersistenceSessionAccessor
     /// valid: writing through its context is exactly the intended behavior, because that is the transaction its
     /// caller opened.
     /// </exception>
-    public static MailFathomDbContext DbContextOf(IPersistenceSession session)
+    public static MailFathomDbContext DbContextOf(IPersistenceSession session) => SessionOf(session).DbContext;
+
+    /// <summary>Gets the EF Core session <paramref name="session" /> is.</summary>
+    /// <param name="session">The session the calling write operation must join.</param>
+    /// <returns>The same session, seen through the seam a write operation needs.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="session" /> is <see langword="null" />.</exception>
+    /// <exception cref="ArgumentException">
+    /// Thrown when <paramref name="session" /> is backed by a different persistence provider, exactly as
+    /// <see cref="DbContextOf" /> describes.
+    /// </exception>
+    public static IEfCorePersistenceSession SessionOf(IPersistenceSession session)
     {
         ArgumentNullException.ThrowIfNull(session);
 
@@ -43,6 +58,6 @@ internal static class EfCorePersistenceSessionAccessor
                 nameof(session));
         }
 
-        return efCoreSession.DbContext;
+        return efCoreSession;
     }
 }

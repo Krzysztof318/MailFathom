@@ -9,7 +9,6 @@ using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Failures;
 using MailFathom.Domain.Folders;
 using MailFathom.Mcp.Observability;
-using MailFathom.Mcp.UnitTests.TestDoubles;
 using MailFathom.TestSupport;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Time.Testing;

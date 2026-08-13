@@ -7,7 +7,7 @@ using MailFathom.Application.Persistence;
 using MailFathom.Infrastructure.Observability;
 using MailFathom.Infrastructure.Persistence;
 using MailFathom.Infrastructure.Persistence.Sessions;
-using MailFathom.Infrastructure.UnitTests.TestDoubles;
+using MailFathom.TestSupport;
 using Microsoft.EntityFrameworkCore;
 using Xunit;
 
@@ -133,6 +133,58 @@ public sealed class EfCorePersistenceSessionTests
         Assert.Contains("concurrency_conflict", outcomes);
     }
 
+    /// <summary>
+    /// Work staged here is work the deployment kept only if this session committed, and an optimistic-concurrency
+    /// retry stages the same body again in a fresh session — so a measurement published where the work happens would
+    /// count the attempt that lost the race. The ending each held measurement is told is the whole of that fix.
+    /// </summary>
+    [Fact]
+    public async Task MeasureOnEnding_EitherEnding_PublishesTheHeldMeasurementUnderItExactlyOnce()
+    {
+        // Arrange
+        var (_, committingSession) = CreateSession();
+        var (_, conflictingSession) = CreateSession(new DbUpdateConcurrencyException());
+        var afterCommit = new HeldMeasurement();
+        var afterConflict = new HeldMeasurement();
+
+        // Act
+        await using (committingSession)
+        {
+            committingSession.MeasureOnEnding(afterCommit);
+
+            _ = await committingSession.CommitAsync(CancellationToken.None);
+        }
+
+        await using (conflictingSession)
+        {
+            conflictingSession.MeasureOnEnding(afterConflict);
+
+            _ = await conflictingSession.CommitAsync(CancellationToken.None);
+        }
+
+        // Assert
+        Assert.Equal([true], afterCommit.Endings);
+        Assert.Equal([false], afterConflict.Endings);
+    }
+
+    /// <summary>A session nobody committed is one whose staged work was rolled back, whatever ended it.</summary>
+    [Fact]
+    public async Task MeasureOnEnding_ASessionDisposedWithoutACommit_PublishesItAsNotCommitted()
+    {
+        // Arrange
+        var (_, persistenceSession) = CreateSession();
+        var afterDisposal = new HeldMeasurement();
+
+        // Act
+        await using (persistenceSession)
+        {
+            persistenceSession.MeasureOnEnding(afterDisposal);
+        }
+
+        // Assert
+        Assert.Equal([false], afterDisposal.Endings);
+    }
+
     [SuppressMessage(
         "Reliability",
         "CA2000:Dispose objects before losing scope",
@@ -208,5 +260,15 @@ public sealed class EfCorePersistenceSessionTests
 
             return ValueTask.CompletedTask;
         }
+    }
+
+    /// <summary>Stands in for a measurement of staged work, and remembers every ending it was told about.</summary>
+    private sealed class HeldMeasurement : ISessionScopedMeasurement
+    {
+        private readonly List<bool> endings = [];
+
+        public IReadOnlyList<bool> Endings => this.endings;
+
+        public void PublishAfterSession(bool sessionCommitted) => this.endings.Add(sessionCommitted);
     }
 }
