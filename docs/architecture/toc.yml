@@ -8,6 +8,9 @@
 - name: Solution structure
   href: solution-structure.md
   description: The projects, which way their dependencies point, and what belongs inside each boundary.
+- name: The arrival pipeline
+  href: arrival-pipeline.md
+  description: The order a newly arrived message passes through — classification, rules, redaction, chunking, embedding — drawn once, with what each stage waits for and what each classification outcome permits.
 - name: The stored email schema
   href: stored-email-schema.md
   description: The columns, constraints, and indexes the mail timeline is read from, and why raw MIME and search text live in tables of their own.

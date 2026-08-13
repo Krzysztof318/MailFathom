@@ -80,9 +80,17 @@ internal sealed class PersistenceSessionFactory(MailFathomDbContext dbContext) :
         /// is that a different reindex is already running.
         /// </para>
         /// <para>
-        /// The last is the mutation identity's case once more, for the account's whole-mailbox rule run: two requests
+        /// The next is the mutation identity's case once more, for the account's whole-mailbox rule run: two requests
         /// for an account that has never had one reach the database together, and the retry reads back the run the
         /// winner asked for instead of the second caller starting a second walk of one mailbox.
+        /// </para>
+        /// <para>
+        /// The last is the passage ordinal, and it is two cutters meeting over one message. The account run's cut and
+        /// the embedding sweep select the same rows and walk them in the same order, and the sweep runs on its own
+        /// interval while a run is still fetching, so on a first synchronization both can reach one message. Each reads
+        /// the stored ordinals inside its own transaction, so the one that commits second read none and writes a second
+        /// ordinal zero. The retry is exactly right there: it re-reads the winner's passages, finds them identical to
+        /// what it would have written, and writes nothing.
         /// </para>
         /// </remarks>
         public bool IsConcurrencyConflict(DbUpdateException exception) =>
@@ -96,7 +104,8 @@ internal sealed class PersistenceSessionFactory(MailFathomDbContext dbContext) :
                     or MailFathomDbContext.MailboxMutationAuditEntryMutationUniqueIndexName
                     or MailFathomDbContext.EmbeddingProfileFingerprintUniqueIndexName
                     or MailFathomDbContext.EmbeddingProfileLifecycleUniqueIndexName
-                    or MailFathomDbContext.MailRuleEvaluationRunPrimaryKeyConstraintName,
+                    or MailFathomDbContext.MailRuleEvaluationRunPrimaryKeyConstraintName
+                    or MailFathomDbContext.EmailChunkOrdinalUniqueIndexName,
             };
 
         public void ClearTrackedState() => dbContext.ChangeTracker.Clear();

@@ -5,10 +5,12 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
+using MailFathom.Application.Emails.Chunking;
 using MailFathom.Application.Folders;
 using MailFathom.Application.Mail.Mutations;
 using MailFathom.Application.Persistence;
 using MailFathom.Application.Rules.Evaluation;
+using MailFathom.Application.Spam.Runs;
 using MailFathom.Application.Synchronization;
 using MailFathom.Application.Synchronization.Sessions;
 using MailFathom.Common.Observability;
@@ -154,14 +156,14 @@ public sealed class AccountSynchronizationSupervisorTests
             new TaskCompletionSource(),
             expectedFolderCount: 1,
             _ => new InvalidOperationException("connect failed"));
-        var localStepsReached = new TaskCompletionSource();
+        var ruleEvaluationReached = new TaskCompletionSource();
         using var harness = CreateHarness(
             CreateOptionsWithArchiveUnmirrored(),
             sessionFactory,
-            ruleEvaluationStore: CreateRuleStoreReporting(localStepsReached));
+            ruleEvaluationStore: CreateRuleStoreReporting(ruleEvaluationReached));
 
-        // Act, waiting on the last local step, which follows every folder the run scheduled.
-        await harness.SuperviseUntilAsync(localStepsReached.Task);
+        // Act, waiting on the rule pass, which follows every folder the run scheduled.
+        await harness.SuperviseUntilAsync(ruleEvaluationReached.Task);
 
         // Assert
         Assert.Equal(["INBOX"], attemptedFolders);
@@ -176,15 +178,15 @@ public sealed class AccountSynchronizationSupervisorTests
     {
         // Arrange
         var mirrorStore = new RecordingMailFolderMirrorStore();
-        var localStepsReached = new TaskCompletionSource();
+        var ruleEvaluationReached = new TaskCompletionSource();
         using var harness = CreateHarness(
             CreateOptionsWithArchiveUnmirrored(),
             Substitute.For<IMailboxSessionFactory>(),
             folderMirrorStore: mirrorStore,
-            ruleEvaluationStore: CreateRuleStoreReporting(localStepsReached));
+            ruleEvaluationStore: CreateRuleStoreReporting(ruleEvaluationReached));
 
-        // Act, waiting on the last of the run's local steps, which is past where an erasure pass would have run.
-        await harness.SuperviseUntilAsync(localStepsReached.Task);
+        // Act, waiting on the rule pass, which is past where an erasure pass would have run.
+        await harness.SuperviseUntilAsync(ruleEvaluationReached.Task);
 
         // Assert
         Assert.Empty(mirrorStore.ErasedFolders);
@@ -210,15 +212,15 @@ public sealed class AccountSynchronizationSupervisorTests
         options.Accounts[0].Folders[1].GenerateEmbeddings = generateEmbeddings;
         options.Accounts[0].Folders[1].VisibleToTools = visibleToTools;
         var mirrorStore = new RecordingMailFolderMirrorStore();
-        var localStepsReached = new TaskCompletionSource();
+        var ruleEvaluationReached = new TaskCompletionSource();
         using var harness = CreateHarness(
             options,
             Substitute.For<IMailboxSessionFactory>(),
             folderMirrorStore: mirrorStore,
-            ruleEvaluationStore: CreateRuleStoreReporting(localStepsReached));
+            ruleEvaluationStore: CreateRuleStoreReporting(ruleEvaluationReached));
 
         // Act
-        await harness.SuperviseUntilAsync(localStepsReached.Task);
+        await harness.SuperviseUntilAsync(ruleEvaluationReached.Task);
 
         // Assert
         Assert.Empty(mirrorStore.ErasedFolders);
@@ -855,6 +857,103 @@ public sealed class AccountSynchronizationSupervisorTests
         Assert.True(await evaluatedAfterTheFolder.Task);
     }
 
+    /// <summary>
+    /// The arrival pipeline's order, asserted where it is composed. Classification runs first so that every later stage
+    /// reads a verdict instead of deciding without one, the rules run over what it did not settle, and the cut runs last
+    /// because a rule may still move the message into a folder mapped differently from the one it arrived in.
+    /// </summary>
+    /// <remarks>
+    /// Classification is a seam in this release rather than a running job — nothing scores a message because it arrived,
+    /// and what reaches this call site today is an operator asking for a run over a mailbox. What is asserted here is
+    /// that the call site sits where the order requires it and that the run reaches it, which is the half of the stage
+    /// that ships now.
+    /// </remarks>
+    [Fact]
+    public async Task RunAsync_EveryRun_ClassifiesThenEvaluatesRulesThenCutsPassages()
+    {
+        // Arrange
+        var localSteps = new ConcurrentQueue<string>();
+        var cutReached = new TaskCompletionSource();
+        var classificationRunStore = Substitute.For<ISpamClassificationRunStore>();
+        classificationRunStore
+            .FindOutstandingAsync(Arg.Any<MailAccountId>(), Arg.Any<CancellationToken>())
+            .Returns(_ =>
+            {
+                localSteps.Enqueue("classification");
+
+                return Task.FromResult<SpamClassificationRun?>(null);
+            });
+        var ruleStore = Substitute.For<IMailRuleEvaluationStore>();
+        ruleStore
+            .GetEmailsAwaitingFirstEvaluationAsync(
+                Arg.Any<MailAccountId>(),
+                Arg.Any<StoredEmailId?>(),
+                Arg.Any<int>(),
+                Arg.Any<CancellationToken>())
+            .Returns(_ =>
+            {
+                localSteps.Enqueue("rules");
+
+                return Task.FromResult<IReadOnlyList<StoredEmailAwaitingRuleEvaluation>>([]);
+            });
+        var chunkingStore = Substitute.For<IStoredEmailChunkingStore>();
+        chunkingStore
+            .GetEmailsAwaitingChunkingAsync(Arg.Any<MailAccountId>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns(_ =>
+            {
+                localSteps.Enqueue("cut");
+                cutReached.TrySetResult();
+
+                return Task.FromResult<IReadOnlyList<StoredEmailAwaitingChunking>>([]);
+            });
+        using var harness = CreateHarness(
+            SynchronizationTestHost.CreateSingleAccountOptions(enabled: true),
+            Substitute.For<IMailboxSessionFactory>(),
+            ruleEvaluationStore: ruleStore,
+            classificationRunStore: classificationRunStore,
+            chunkingStore: chunkingStore);
+
+        // Act
+        await harness.SuperviseUntilAsync(cutReached.Task);
+
+        // Assert
+        Assert.Equal(["classification", "rules", "cut"], localSteps.Take(3));
+    }
+
+    /// <summary>The cut reaches no mail server either, so failing one must not make the account fetch its mail less often.</summary>
+    [Fact]
+    public async Task RunAsync_CuttingPassagesFails_DoesNotDeferTheAccountsNextRun()
+    {
+        // Arrange
+        var passFailed = new TaskCompletionSource();
+        var chunkingStore = Substitute.For<IStoredEmailChunkingStore>();
+        chunkingStore
+            .GetEmailsAwaitingChunkingAsync(Arg.Any<MailAccountId>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns<Task<IReadOnlyList<StoredEmailAwaitingChunking>>>(_ =>
+            {
+                passFailed.TrySetResult();
+
+                throw new InvalidOperationException("the cut failed");
+            });
+        using var harness = CreateHarness(
+            SynchronizationTestHost.CreateSingleAccountOptions(enabled: true),
+            Substitute.For<IMailboxSessionFactory>(),
+            chunkingStore: chunkingStore);
+
+        // Act
+        await harness.SuperviseUntilAsync(passFailed.Task);
+
+        // Assert
+        Assert.Contains(
+            harness.Logger.Messages,
+            message => message.Contains(
+                "Cutting the passages of the evaluated mail of account primary ended unexpectedly",
+                StringComparison.Ordinal));
+        Assert.DoesNotContain(
+            harness.Logger.Messages,
+            message => message.Contains("runs in a row", StringComparison.Ordinal));
+    }
+
     /// <summary>Evaluation reaches no mail server, so failing one must not make the account fetch its mail less often.</summary>
     [Fact]
     public async Task RunAsync_RuleEvaluationFails_DoesNotDeferTheAccountsNextRun()
@@ -894,10 +993,15 @@ public sealed class AccountSynchronizationSupervisorTests
     }
 
     /// <summary>
-    /// Reports that a run has reached its last local step, which is the signal a test waits on when what it asserts is
-    /// that something did not happen: everything an account run does locally is behind it by then.
+    /// Reports that a run has reached its rule pass, which is the signal a test waits on when what it asserts is that
+    /// something did not happen: every folder the run scheduled is behind it by then.
     /// </summary>
-    private static IMailRuleEvaluationStore CreateRuleStoreReporting(TaskCompletionSource localStepsReached)
+    /// <remarks>
+    /// The cut runs after this signal rather than before it, so the absences a test may assert on it are the ones the
+    /// folders produce — a connection opened, an eraser reached for. An absence the cut could still fill is not one of
+    /// them, and a test wanting that waits on something the pass itself reports.
+    /// </remarks>
+    private static IMailRuleEvaluationStore CreateRuleStoreReporting(TaskCompletionSource ruleEvaluationReached)
     {
         var ruleStore = Substitute.For<IMailRuleEvaluationStore>();
         ruleStore
@@ -908,7 +1012,7 @@ public sealed class AccountSynchronizationSupervisorTests
                 Arg.Any<CancellationToken>())
             .Returns(_ =>
             {
-                localStepsReached.TrySetResult();
+                ruleEvaluationReached.TrySetResult();
 
                 return Task.FromResult<IReadOnlyList<StoredEmailAwaitingRuleEvaluation>>([]);
             });
@@ -1025,6 +1129,8 @@ public sealed class AccountSynchronizationSupervisorTests
         IMailboxMutationRecordStore? mutationRecordStore = null,
         IStoredMailFolderMirrorStore? folderMirrorStore = null,
         IMailRuleEvaluationStore? ruleEvaluationStore = null,
+        ISpamClassificationRunStore? classificationRunStore = null,
+        IStoredEmailChunkingStore? chunkingStore = null,
         params string[] unadvertisedAliases)
     {
         var clock = new FakeTimeProvider();
@@ -1039,6 +1145,8 @@ public sealed class AccountSynchronizationSupervisorTests
             mutationRecordStore,
             folderMirrorStore,
             ruleEvaluationStore,
+            classificationRunStore,
+            chunkingStore,
             unadvertisedAliases);
 
         return new SupervisorHarness(

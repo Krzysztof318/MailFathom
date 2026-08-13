@@ -161,7 +161,13 @@ public sealed class OrchestratedEmbeddingWorkloadTests(MailFathomOrchestrationFi
             },
             cancellationToken);
 
-    /// <summary>Stores one synthetic message, whose passages the chunk writer derives in the same session.</summary>
+    /// <summary>Stores one synthetic message with no passages, as an instance that predates chunking holds it.</summary>
+    /// <remarks>
+    /// The metadata write cuts nothing — the cut is a step of the account run rather than something a store does on its
+    /// way past — so the message is stamped as one the rules have finished with, which is the state every cutting path
+    /// waits for and the state a run would have left it in. What this seeds is therefore exactly the sweep's first
+    /// group: text, no passages, and nothing still to happen to the message before it may be cut.
+    /// </remarks>
     private static async Task<StoredEmailId> StoreOneMessageAsync(
         OrchestratedMailFathomServices services,
         uint uid,
@@ -188,6 +194,8 @@ public sealed class OrchestratedEmbeddingWorkloadTests(MailFathomOrchestrationFi
             cancellationToken);
 
         Assert.Equal(PersistenceCommitResult.Committed, commitResult);
+
+        await OrchestratedRuleEvaluationStamp.ApplyAsync(services, storedEmailId, SyntheticEmail.SentAt, cancellationToken);
 
         return storedEmailId;
     }

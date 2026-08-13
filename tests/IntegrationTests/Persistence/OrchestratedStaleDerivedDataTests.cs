@@ -213,6 +213,120 @@ public sealed class OrchestratedStaleDerivedDataTests(MailFathomOrchestrationFix
         Assert.True(countedWithoutTheExclusion > staleCount);
     }
 
+    /// <summary>A message the rules have not reached gets its extraction and none of its passages.</summary>
+    /// <remarks>
+    /// This walk is the one path that writes derived text for a message no rule pass has read, so it is the one place
+    /// the ordering could be broken silently: writing the document takes the message out of the walk, and cutting it in
+    /// the same transaction would derive passages under a folder mapping the pass that runs next may still change.
+    /// What makes the absence readable is the case below, which cuts through this same store against this same folder.
+    /// </remarks>
+    [Fact]
+    public async Task ApplyExtractionAsync_AMessageTheRulesHaveNotReached_AppliesTheExtractionAndCutsNoPassages()
+    {
+        // Arrange
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var services = await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken);
+        var binding = await OrchestratedFolderBinding.CommitAsync(services, FolderAlias, cancellationToken);
+        var stored = await InsertDocumentedEmailsAsync(services, binding, firstUid: 3030, cancellationToken);
+        var unevaluated = stored.WrittenBeforeAnyScannerWasOn;
+
+        // Act
+        await this.ApplyExtractionAsync(services, binding, unevaluated, uid: 3032, "unevaluated", cancellationToken);
+
+        // Assert
+        var document = await ReadDocumentAsync(services, unevaluated, cancellationToken);
+        Assert.Equal(CurrentStamp.Value, document.Stamp);
+        Assert.Contains("unevaluated", document.BodyText, StringComparison.Ordinal);
+
+        Assert.Empty(await ReadPassageHashesAsync(services, unevaluated, cancellationToken));
+    }
+
+    /// <summary>A message that already carries passages has them replaced, whichever stage has not reached it.</summary>
+    /// <remarks>
+    /// The waiting above is for a <em>first</em> cut. A rebuild is the only path that can replace a passage — every
+    /// other one selects on having none — so a message whose text it rewrites and whose passages it then withheld would
+    /// keep passages, and vectors built from them, derived under exactly the configuration the rebuild exists to
+    /// replace, while its stored text reported the new one. The arrangement is the state that makes that reachable: the
+    /// passages are cut while the rules have finished with the message, and the stamp is then taken back off, which is
+    /// what a rule pass rerun for a later configuration leaves behind.
+    /// </remarks>
+    [Fact]
+    public async Task ApplyExtractionAsync_AMessageThatAlreadyCarriesPassages_ReplacesThemBeforeTheRulesReachItAgain()
+    {
+        // Arrange
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var services = await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken);
+        var binding = await OrchestratedFolderBinding.CommitAsync(services, FolderAlias, cancellationToken);
+        var stored = await InsertDocumentedEmailsAsync(services, binding, firstUid: 3040, cancellationToken);
+        var rebuilt = stored.WrittenUnderAnOlderConfiguration;
+
+        await OrchestratedRuleEvaluationStamp.ApplyAsync(services, rebuilt, SyntheticEmail.SentAt, cancellationToken);
+        await this.ApplyExtractionAsync(services, binding, rebuilt, uid: 3041, "firstcut", cancellationToken);
+        var afterTheFirstCut = await ReadPassageHashesAsync(services, rebuilt, cancellationToken);
+
+        await OrchestratedRuleEvaluationStamp.ClearAsync(services, rebuilt, cancellationToken);
+
+        // Act
+        await this.ApplyExtractionAsync(services, binding, rebuilt, uid: 3041, "secondcut", cancellationToken);
+
+        // Assert
+        var afterTheRebuild = await ReadPassageHashesAsync(services, rebuilt, cancellationToken);
+
+        // The control the case above needs: this store, this folder, and this message do produce passages, so an empty
+        // answer there is the ordering rather than an arrangement nothing could ever have cut.
+        Assert.NotEmpty(afterTheFirstCut);
+        Assert.NotEmpty(afterTheRebuild);
+        Assert.Empty(afterTheRebuild.Intersect(afterTheFirstCut, StringComparer.Ordinal));
+    }
+
+    /// <summary>Applies one extraction through the rebuilding walk's own store, in a session of its own.</summary>
+    private async Task ApplyExtractionAsync(
+        OrchestratedMailFathomServices services,
+        MailFolderResolution binding,
+        StoredEmailId storedEmailId,
+        uint uid,
+        string term,
+        CancellationToken cancellationToken)
+    {
+        var commitResult = await services.CommitAsync(
+            (scope, session, token) => this.StoreIn(scope, rebuildsStaleDerivedData: true).ApplyExtractionAsync(
+                session,
+                storedEmailId,
+                SyntheticEmail.ExtractionOf(
+                    SyntheticEmail.OccurrenceIn(binding, uid),
+                    term,
+                    SyntheticEmail.BodyTextContaining(term, wordCount: 12)),
+                token),
+            cancellationToken);
+
+        Assert.Equal(PersistenceCommitResult.Committed, commitResult);
+    }
+
+    /// <summary>Reads back what the derived document now holds for one message.</summary>
+    private static Task<DerivedDocument> ReadDocumentAsync(
+        OrchestratedMailFathomServices services,
+        StoredEmailId storedEmailId,
+        CancellationToken cancellationToken) => services.InScopeAsync(
+        (scope, token) => scope.GetRequiredService<MailFathomDbContext>().EmailSearchDocuments
+            .AsNoTracking()
+            .Where(document => document.StoredEmailId == storedEmailId.Value)
+            .Select(document => new DerivedDocument(document.SensitiveContentStamp, document.BodyText))
+            .SingleAsync(token),
+        cancellationToken);
+
+    /// <summary>Reads the passages one message carries, as the digests that say which text they were cut from.</summary>
+    private static Task<IReadOnlyList<string>> ReadPassageHashesAsync(
+        OrchestratedMailFathomServices services,
+        StoredEmailId storedEmailId,
+        CancellationToken cancellationToken) => services.InScopeAsync(
+        async (scope, token) => (IReadOnlyList<string>)await scope.GetRequiredService<MailFathomDbContext>().EmailChunks
+            .AsNoTracking()
+            .Where(chunk => chunk.StoredEmailId == storedEmailId.Value)
+            .OrderBy(chunk => chunk.Ordinal)
+            .Select(chunk => chunk.ContentHash)
+            .ToArrayAsync(token),
+        cancellationToken);
+
     private async Task<IReadOnlyList<StoredEmailId>> SelectAsync(
         OrchestratedMailFathomServices services,
         bool rebuildsStaleDerivedData,
@@ -397,6 +511,9 @@ public sealed class OrchestratedStaleDerivedDataTests(MailFathomOrchestrationFix
             StoredEmailId.Create(insertedIds[1]),
             StoredEmailId.Create(insertedIds[2]));
     }
+
+    /// <summary>The derived document of one message, as the two values a rebuild is judged by.</summary>
+    private sealed record DerivedDocument(string? Stamp, string? BodyText);
 
     /// <summary>The three emails one arrangement stored, named by the configuration their text was written under.</summary>
     private sealed record StoredDocuments(

@@ -313,14 +313,16 @@ mail content.
 
 ### Where in-scope mail is cut and embedded instead
 
-Withholding a message from chunking on the arrival path means the arrival path is over by the time its verdict exists,
-so something else has to cut it. That is the [embedding backfill](embedding-backfill.md) sweep, which already selects a
-message with extracted text and no passages, and whose selection this gate narrows: junk never appears in it, and a
-message waiting on a verdict appears the moment the verdict admits it or the wait runs out. Such a message ends up cut
-and embedded exactly as it would have been on arrival, later by at most a sweep.
+The cut is the last local step of the account's synchronization run, after this pass and after the rule pass, so a
+message whose verdict this gate is still waiting for reaches that step and is passed over. Nothing else has to remember
+it: the same run repeats on the account's next interval, and the moment the verdict admits the message or its wait runs
+out, the rule pass evaluates it and the cut that follows in that same run cuts it. The
+[embedding backfill](embedding-backfill.md) sweep is the second reader of the same condition and what reaches whatever
+one run's batch budget did not. Such a message ends up cut and embedded exactly as it would have been on arrival, later
+by at most an interval.
 
-This is the one behavior change a deployment that switches classification on will notice. With classification off, mail
-is still cut in the transaction that stores it, as it always was.
+This is the one behavior change a deployment that switches classification on will notice.
+[The arrival pipeline](../architecture/arrival-pipeline.md) draws where this gate sits among the stages it orders.
 
 ### What an operator can see
 

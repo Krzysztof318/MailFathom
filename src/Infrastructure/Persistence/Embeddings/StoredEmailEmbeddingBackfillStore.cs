@@ -4,7 +4,6 @@
 
 using MailFathom.Application.Emails.Embeddings;
 using MailFathom.Application.Emails.Embeddings.Backfill;
-using MailFathom.Application.Emails.Extraction;
 using MailFathom.Application.Folders;
 using MailFathom.Application.Persistence;
 using MailFathom.Application.Spam.Gating;
@@ -12,6 +11,7 @@ using MailFathom.CodeCoverage;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Folders;
+using MailFathom.Domain.Mutations;
 using MailFathom.Domain.Spam;
 using MailFathom.Infrastructure.Persistence.Emails;
 using MailFathom.Infrastructure.Persistence.Entities;
@@ -101,30 +101,14 @@ internal sealed class StoredEmailEmbeddingBackfillStore(
     /// existed when it arrived. A message whose extraction produced no text is left as it is, and the walk steps past
     /// it.
     /// </remarks>
-    public async Task DeriveChunksAsync(
+    public Task DeriveChunksAsync(
         IPersistenceSession session,
         StoredEmailId storedEmailId,
-        CancellationToken cancellationToken)
-    {
-        var sessionContext = EfCorePersistenceSessionAccessor.DbContextOf(session);
-        var storedEmail = await sessionContext.StoredEmails.FindAsync([storedEmailId.Value], cancellationToken)
-            ?? throw new InvalidOperationException("Passages cannot be derived for a stored email that no longer exists.");
-
-        var extraction = await sessionContext.EmailSearchDocuments
-            .Where(document => document.StoredEmailId == storedEmailId.Value)
-            .Select(document => new StoredExtractionRow(
-                document.TextSource,
-                document.BodyTextBeforeTrimming,
-                document.BodyText))
-            .SingleOrDefaultAsync(cancellationToken);
-
-        if (extraction is null || RestoreExtractedText(extraction) is not { } text)
-        {
-            return;
-        }
-
-        await chunkWriter.SaveAsync(sessionContext, storedEmail, text, cancellationToken);
-    }
+        CancellationToken cancellationToken) =>
+        chunkWriter.SaveFromStoredExtractionAsync(
+            EfCorePersistenceSessionAccessor.DbContextOf(session),
+            storedEmailId,
+            cancellationToken);
 
     /// <inheritdoc />
     public async Task SaveResumePositionAsync(
@@ -181,10 +165,20 @@ internal sealed class StoredEmailEmbeddingBackfillStore(
     /// reader.
     /// </remarks>
     /// <remarks>
-    /// The classification narrowing is what makes this sweep the place a held message is released. Junk never appears
-    /// here at all, and a message waiting on a verdict appears the moment the verdict admits it or its wait runs out —
-    /// so the sweep both keeps spam away from the provider and stops a wedged scanner from turning the index into one
-    /// that quietly stopped filling.
+    /// The second group carries both of the conditions the account run's own cut waits for, because cutting is what
+    /// this walk would do to it: the rule pass's stamp, and no relocation still converging.
+    /// <see cref="MailAwaitingRelocation" /> holds the second and why a completed or abandoned one holds nothing
+    /// back. The stamp is a
+    /// correctness condition rather than a tidiness one: this sweep runs on its own interval while a run is still
+    /// fetching a mailbox, so without it a first synchronization would have its mail cut here, by whichever of the two
+    /// got there first, before the rules had read a single message. What the stamp costs is nothing — an unevaluated
+    /// message is cut a sweep later, by which time the pass that may still move it has run.
+    /// </remarks>
+    /// <remarks>
+    /// The classification narrowing keeps junk out of this walk entirely, and the rule stamp beside it means a message
+    /// still waiting on a verdict cannot appear here at all: the rule pass is narrowed by the same admission, so such a
+    /// message is never stamped. What releases it is therefore the next account run — its rule pass, and the cut one
+    /// step behind that pass — rather than this sweep, which reaches what a run's own batch budget left behind.
     /// </remarks>
     /// <remarks>
     /// The walk is scoped to the folders a mapping admits to embedding, which is the same decision that stops their
@@ -204,31 +198,18 @@ internal sealed class StoredEmailEmbeddingBackfillStore(
                 .Where(email => email.Chunks.Any(chunk =>
                         !chunk.Embeddings.Any(vector => vector.EmbeddingProfileId == profileId))
                     || (!email.Chunks.Any()
+                        && email.RulesEvaluatedAt != null
                         && email.SearchDocument != null
-                        && email.SearchDocument.BodyText != null)),
+                        && email.SearchDocument.BodyText != null
+                        // Composed inline rather than as a second Where, so it narrows the uncut group alone: a message
+                        // whose passages already exist and are missing a vector is embedded wherever it is sitting,
+                        // because the vectors hang on passages this walk is not deciding whether to derive.
+                        && !email.Mutations.Any(mutation =>
+                            mutation.Mutation == MailAwaitingRelocation.RelocateMutationName
+                            && mutation.Stage != MailboxMutationStage.Completed
+                            && mutation.Stage != MailboxMutationStage.Abandoned))),
             folderParticipation.FoldersGeneratingEmbeddings),
         terms);
-
-    /// <summary>Rebuilds the extraction the chunker reads from the two readings the search document stored.</summary>
-    /// <remarks>
-    /// Only the two sources that produced words can be restored, and both readings have to be there: the chunking rules
-    /// choose between the trimmed and the untrimmed form, so restoring one of them and inventing the other would cut a
-    /// backfilled message differently from the same message arriving today.
-    /// </remarks>
-    private static ExtractedEmailText? RestoreExtractedText(StoredExtractionRow extraction)
-    {
-        if (extraction.BodyTextBeforeTrimming is not { } originalText || extraction.BodyText is not { } trimmedText)
-        {
-            return null;
-        }
-
-        return extraction.TextSource switch
-        {
-            ExtractedEmailTextSource.PlainTextBodyPart => ExtractedEmailText.FromPlainTextBody(originalText, trimmedText),
-            ExtractedEmailTextSource.DerivedFromHtmlBodyPart => ExtractedEmailText.DerivedFromHtmlBody(originalText, trimmedText),
-            _ => null,
-        };
-    }
 
     /// <summary>Names the answer the predicate above already reached about one selected row.</summary>
     /// <remarks>
@@ -254,10 +235,4 @@ internal sealed class StoredEmailEmbeddingBackfillStore(
         DateTimeOffset StoredAt,
         StoredEmailContentAvailability ContentAvailability,
         SpamVerdict? Verdict);
-
-    /// <summary>The stored reading of one message's body, as the chunking projection returns it.</summary>
-    private sealed record StoredExtractionRow(
-        ExtractedEmailTextSource TextSource,
-        string? BodyTextBeforeTrimming,
-        string? BodyText);
 }

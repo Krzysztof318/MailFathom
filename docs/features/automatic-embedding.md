@@ -26,16 +26,19 @@ states that switch beside the other two, and [message chunks](message-chunks.md#
 passages cut before it was set.
 
 A second narrowing applies wherever spam classification is switched on: junk is never embedded and its content never
-reaches a provider, and a message no verdict has been reached about is not offered here while it waits. The consequence
-for this path is that a message of a classified folder is not cut or offered as it arrives — the
-[backfill](embedding-backfill.md) sweep is what reaches it once a verdict admits it or its wait runs out.
+reaches a provider, and a message no verdict has been reached about is neither cut nor offered here while it waits. The
+account's own next run is what reaches such a message once a verdict admits it or its wait runs out — the same two
+steps in the same order, one interval later — and the [backfill](embedding-backfill.md) sweep is what reaches whatever
+a run's batch budget left behind.
 [Junk is kept out of what a deployment derives from mail](spam-classification.md#junk-is-kept-out-of-what-a-deployment-derives-from-mail)
 holds the whole of it, and none of it applies with classification off.
 
 ## The backlog between synchronization and the provider
 
-A message is offered for embedding **after** it and its passages are committed, never inside the transaction that
-stored them. Two things follow from that ordering, and both are the reason for it:
+A message is offered for embedding by the last local step of its account's synchronization run — the step that cuts its
+passages, after classification and after the owner's rules have had their turn — and never inside the transaction that
+stored the message. [The arrival pipeline](../architecture/arrival-pipeline.md) draws that order in full. Two things
+follow from it, and both are the reason for it:
 
 - **A provider outage cannot stall a mailbox fetch.** The embedding worker consumes committed local state, so the
   slowest thing it can make slower is itself.
