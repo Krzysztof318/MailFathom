@@ -3936,6 +3936,21 @@ github_api_call_does_not_retry_an_answer_the_api_produced() {
   assert_contains 'Attempts made: 1 of 4' "$error_file"
 }
 
+# The other side of the rule above, and the arm no other contract reaches: `408`, `429`, and every
+# `5xx` are statuses that say *ask again*. Without this, deleting that arm or mistyping its glob
+# would send a `502` to the `*)` branch and fail it on the first attempt — losing a run to the exact
+# class of failure the helper was written for, while every other contract stayed green.
+github_api_call_retries_a_status_that_says_ask_again() {
+  local output_file="$test_directory/api-retry-server-error"
+  local error_file="$test_directory/api-retry-server-error-message"
+
+  run_github_api_call 9 3 "$output_file" "$error_file" 'gh: Server Error (HTTP 502)'
+
+  (( api_call_status != 0 ))
+  assert_api_attempts 3
+  assert_contains 'Attempts made: 3 of 3' "$error_file"
+}
+
 # A retry that exhausts its budget still fails the job. Nothing here turns an unreachable API into a
 # review that silently covered less, and the count is reported because the caller's own failure says
 # only that the call did not succeed.
@@ -3963,6 +3978,18 @@ set -euo pipefail
 
 : "${FAKE_CLOSING_ISSUES_FILE:?FAKE_CLOSING_ISSUES_FILE must name the answer to return}"
 
+# A stated number of leading attempts drop the connection before answering, which is what lets a
+# contract watch what the script does with a call the helper recovered rather than only with one
+# that worked first time.
+if [[ -n "${FAKE_CLOSING_ISSUES_ATTEMPT_LOG:-}" ]]; then
+  printf 'attempt\n' >> "$FAKE_CLOSING_ISSUES_ATTEMPT_LOG"
+
+  if (( "$(wc -l < "$FAKE_CLOSING_ISSUES_ATTEMPT_LOG")" <= "${FAKE_CLOSING_ISSUES_FAILURES:-0}" )); then
+    printf "invalid character 'u' looking for beginning of value\n" >&2
+    exit 1
+  fi
+fi
+
 cat "$FAKE_CLOSING_ISSUES_FILE"
 FAKE_GH
 chmod +x "$closing_issues_bin_directory/gh"
@@ -3979,13 +4006,16 @@ prepare_closing_issues_answer() {
 }
 
 run_closing_issues() {
-  local nodes="$1" output_file="$2" note_file="${3:-/dev/null}" limit="${4:-0}"
+  local nodes="$1" output_file="$2" note_file="${3:-/dev/null}" limit="${4:-0}" failures="${5:-0}"
 
   prepare_closing_issues_answer "$nodes"
+  : > "$test_directory/closing-issues-attempts.log"
 
   (
     export PATH="$closing_issues_bin_directory:$PATH"
     export FAKE_CLOSING_ISSUES_FILE="$test_directory/closing-issues-answer.json"
+    export FAKE_CLOSING_ISSUES_ATTEMPT_LOG="$test_directory/closing-issues-attempts.log"
+    export FAKE_CLOSING_ISSUES_FAILURES="$failures"
     export_api_retry_environment
 
     bash "$source_repository_root/.github/pull-request/collect-closing-issues.sh" \
@@ -4138,6 +4168,23 @@ closing_issues_report_nothing_when_the_ceiling_is_not_reached() {
     "$output_file" "$note_file" 5
 
   assert_file_content $'1\n2' "$output_file"
+  assert_file_content '' "$note_file"
+}
+
+# Standard error is this script's second output rather than its log: `Fathom review` redirects it
+# into `truncation.txt` and pastes that file verbatim into the published review body, under the
+# heading for what a ceiling dropped. A recovered retry announcing itself there would arrive in the
+# review as coverage the pass did not have, so the helper's notices are held back and forwarded only
+# when the call finally fails.
+closing_issues_keep_a_recovered_retry_off_standard_error() {
+  local output_file="$test_directory/closing-issues-recovered"
+  local note_file="$test_directory/closing-issues-recovered-note"
+
+  run_closing_issues \
+    '[{"number": 265, "repository": {"nameWithOwner": "Krzysztof318/MailFathom"}}]' \
+    "$output_file" "$note_file" 0 1
+
+  assert_file_content '265' "$output_file"
   assert_file_content '' "$note_file"
 }
 
@@ -5603,6 +5650,7 @@ run_test the_docker_hub_overview_fits_what_docker_hub_accepts
 run_test github_api_call_asks_once_when_the_call_succeeds
 run_test github_api_call_returns_the_answer_after_a_dropped_connection
 run_test github_api_call_does_not_retry_an_answer_the_api_produced
+run_test github_api_call_retries_a_status_that_says_ask_again
 run_test github_api_call_fails_after_the_budgeted_attempts
 run_test referenced_issues_collect_a_mention_as_well_as_a_closing_reference
 run_test referenced_issues_collect_a_link_to_an_issue_in_this_repository
@@ -5614,6 +5662,7 @@ run_test closing_issues_print_nothing_when_the_merge_closes_nothing
 run_test closing_issues_ignore_another_repository
 run_test closing_issues_report_what_the_ceiling_cut
 run_test closing_issues_report_nothing_when_the_ceiling_is_not_reached
+run_test closing_issues_keep_a_recovered_retry_off_standard_error
 run_test closing_issues_report_each_issue_once
 run_test obligation_index_reports_a_changed_source_no_test_reaches
 run_test obligation_index_credits_a_test_the_change_adds

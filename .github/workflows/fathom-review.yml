@@ -800,9 +800,30 @@ jobs:
           # The resulting file, not just the hunk. A hunk states what moved; whether the change is
           # correct is a property of the file it leaves behind. Content is fetched as bytes and read
           # as bytes: nothing here is executed, imported, or built.
+          #
+          # This is the one call made in a loop, so the retry budget is per path rather than per
+          # step: a contents endpoint that has started failing costs every remaining path its whole
+          # budget, and `fetched` advances only on a successful under-limit fetch, so the count
+          # ceiling bounds successes rather than iterations. A hundred paths each spending seconds
+          # of backoff would burn the job's thirty minutes before the reviewer starts — killing the
+          # run and leaving no verdict, which is the failure the retries exist to remove.
+          #
+          # A wall-clock bound over the whole loop is what stops that, under every mix of causes,
+          # and it reports what it cut for a reason the count ceiling above does not share: a path
+          # missing from `head/` reads to the reviewer as content too large to collect, so a gap
+          # left by an unreachable API would arrive as a statement about the file.
+          head_content_limit_seconds=120
+          head_content_started_at="$(date -u +%s)"
+
           fetched=0
           while IFS= read -r path; do
             if (( fetched >= head_content_file_limit )); then
+              break
+            fi
+
+            if (( $(date -u +%s) - head_content_started_at >= head_content_limit_seconds )); then
+              printf 'Reading the changed files at the head took longer than %ss, so this review covers the content of the first %s of them.\n' \
+                "$head_content_limit_seconds" "$fetched" >> "$REVIEW_DIRECTORY/truncation.txt"
               break
             fi
 
@@ -811,9 +832,13 @@ jobs:
 
             # The one read here whose stderr is thrown away, because a file the head does not carry
             # is an ordinary outcome of this loop rather than a failure to report, and sixty paths
-            # would otherwise each write a line about it. Nothing is lost by it: a reply saying the
-            # file is not there is not transient, so the helper returns it on the first attempt
-            # instead of spending a budget on it.
+            # would otherwise each write a line about it. A reply saying the file is not there costs
+            # one attempt rather than a budget, since it is not transient.
+            #
+            # What that discards is the notice for a path dropped after four failed attempts, which
+            # then leaves the same gap as one the head never had. The bound above is what answers
+            # for it: the loop cannot spend more than its window, and the note it writes says the
+            # content of the later files is missing whatever the reason.
             if "$GITHUB_API_SCRIPT" "repos/${REPOSITORY}/contents/${path}?ref=${head_sha}" \
                  -H 'Accept: application/vnd.github.raw' > "$destination" 2>/dev/null; then
               if (( $(stat -c '%s' "$destination") > head_content_byte_limit )); then

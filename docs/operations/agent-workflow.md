@@ -746,9 +746,23 @@ this pipeline is least able to report on itself.
 The bound is **four attempts**, the first included, with the wait doubling from
 two seconds and carrying up to two further seconds of jitter so several calls
 failing at once do not come back in step. That recovers a request that was dropped
-and deliberately cannot wait out an outage: a call that exhausts its budget still
-fails the job, and it says how many attempts it made, because the caller's own
-failure says only that the call did not succeed.
+and deliberately cannot wait out an outage: a call that exhausts its budget
+returns the failure rather than swallowing it, and says how many attempts it made,
+because the caller's own failure would otherwise say only that the call did not
+succeed.
+
+**What the caller does with that failure is the caller's**, and several reads here
+deliberately carry on: the per-pull-request ceiling counts zero and reviews anyway,
+the model decision keeps the default model, the settle loop collects at once, and
+an issue the run could not fetch is recorded as its number with a null body and
+null labels. Each is argued at its own call site, and each is a place where the
+retries narrow how often a read degrades without removing it. The head-content
+fetch is the one that degrades *silently*: its standard error is discarded because
+a path the head does not carry is an ordinary outcome of that loop, so a file
+dropped after four failed attempts leaves the same gap as one that was never
+there — which the reviewer reads as content too large to collect. The loop is
+bounded in time as well as in count for the same reason, and what that bound cuts
+is written into `truncation.txt` and reaches the review body.
 
 What is retried is decided from what the API said rather than from the fact that
 something failed. A reply carrying a client status is an answer — the endpoint

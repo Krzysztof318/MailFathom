@@ -49,14 +49,20 @@ page_limit=50
 
 references_file="$(mktemp)"
 numbers_file="$(mktemp)"
-trap 'rm -f "$references_file" "$numbers_file"' EXIT
+call_error_file="$(mktemp)"
+trap 'rm -f "$references_file" "$numbers_file" "$call_error_file"' EXIT
 
 # Resolved as a sibling rather than taken from the caller, so every workflow that runs this script
 # gets the same bound on the same call without having to know the helper exists. What it retries and
 # what it refuses to is written there.
 call_github_api="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)/call-github-api.sh"
 
-"$call_github_api" graphql \
+# The helper's own standard error is held back and forwarded only if the call finally fails, because
+# on this script that channel is data rather than a log — the note above about what the ceiling cut,
+# which `Fathom review` redirects into `truncation.txt` and pastes verbatim into the published review
+# body. A recovered retry writing `failed on attempt 1 of 4` there would arrive in the review under
+# the heading reserved for what was dropped, and be read as coverage the pass did not have.
+if ! "$call_github_api" graphql \
   -f owner="${repository%/*}" \
   -f name="${repository#*/}" \
   -F number="$pull_request_number" \
@@ -70,7 +76,10 @@ call_github_api="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)/call-github-ap
           }
         }
       }
-    }' > "$references_file"
+    }' > "$references_file" 2> "$call_error_file"; then
+  cat "$call_error_file" >&2
+  exit 1
+fi
 
 jq -r --arg repository "$repository" '
   [.data.repository.pullRequest.closingIssuesReferences.nodes[]?
