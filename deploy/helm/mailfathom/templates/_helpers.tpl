@@ -48,6 +48,24 @@ second written version number Chart.yaml exists to avoid.
 {{- end -}}
 {{- end -}}
 
+{{/*
+Where the documentation for the version this release installed is published. The site holds one directory per version,
+so somebody who has just run `helm install` gets the pages describing what they now have rather than whichever release
+the site happens to open on.
+
+The nightly channel resolves to `latest`, for the reason the version label above resolves to the nightly identifier: a
+nightly is named after a release that does not exist yet, and what it carries is `main`, which is what `latest`
+documents. An unpackaged chart renders no address at all, because it states no application version to name one from —
+the notes then say nothing about documentation instead of offering an address assembled from a blank.
+*/}}
+{{- define "mailfathom.documentationAddress" -}}
+{{- if eq .Values.image.channel "nightly" -}}
+https://krzysztof318.github.io/MailFathom/latest/
+{{- else if .Chart.AppVersion -}}
+{{- printf "https://krzysztof318.github.io/MailFathom/v%s/" .Chart.AppVersion -}}
+{{- end -}}
+{{- end -}}
+
 {{- define "mailfathom.labels" -}}
 helm.sh/chart: {{ include "mailfathom.chart" . }}
 {{ include "mailfathom.selectorLabels" . }}

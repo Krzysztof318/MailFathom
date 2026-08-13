@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Common;
 using MailFathom.Mcp.Observability;
 using MailFathom.Mcp.Serialization;
 using MailFathom.Mcp.Tools;
@@ -36,7 +37,12 @@ public static class McpServiceCollectionExtensions
 
         services.AddSingleton<McpToolCallReporter>();
 
-        return services.AddMcpServer(serverOptions => serverOptions.ServerInfo = ProtocolSurfaceIdentity)
+        return services
+            .AddMcpServer(serverOptions =>
+            {
+                serverOptions.ServerInfo = ProtocolSurfaceIdentity;
+                serverOptions.ServerInstructions = ProtocolSurfaceInstructions;
+            })
             // Stateless without a switch: every MailFathom tool answers one request from the local mailbox copy and sends
             // nothing back on its own, so a session would carry no state and only cost a client something to lose across
             // a restart. A tool that pushes notifications would change this surface rather than a deployment's settings.
@@ -78,6 +84,28 @@ public static class McpServiceCollectionExtensions
         Name = nameof(MailFathom),
         Version = StampedAssemblyVersion.ReadFrom(typeof(McpServiceCollectionExtensions).Assembly).Version,
     };
+
+    /// <summary>What the server tells a client about using it, which is where to read about the version it is talking to.</summary>
+    /// <remarks>
+    /// <para>
+    /// A client that connected over MCP may be the only way its user meets MailFathom at all, so the session itself is
+    /// what has to say where the documentation is: nothing else in that arrangement knows the running version, and an
+    /// agent asked to consult it would otherwise reach whichever version a search engine ranked first. One sentence
+    /// and an address is the whole of it. The protocol places no bound on what instructions may carry, and serving
+    /// documentation through them would put a copy of the pages inside the handshake — this makes them findable and
+    /// nothing more.
+    /// </para>
+    /// <para>
+    /// The version is taken from what the handshake already reports rather than read a second time, so the pages named
+    /// here cannot come to describe a different build from the one the client was told it is talking to. A build whose
+    /// version cannot be read carries no instructions rather than an address that goes nowhere, which is the same
+    /// reading every other surface applies to the same absence.
+    /// </para>
+    /// </remarks>
+    private static string? ProtocolSurfaceInstructions =>
+        DocumentationAddress.ForVersion(ProtocolSurfaceIdentity.Version) is { } address
+            ? $"Documentation for the MailFathom version serving this session is at {address}."
+            : null;
 
     /// <summary>Resolves the reporter from the scope the call arrived in.</summary>
     /// <remarks>

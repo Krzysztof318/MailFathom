@@ -118,6 +118,8 @@ jobs:
         env:
           REPOSITORY: ${{ github.repository }}
           IMAGE_TAGS: ${{ inputs.tags }}
+          IMAGE_CHANNEL: ${{ inputs.channel }}
+          IMAGE_VERSION: ${{ inputs.version }}
         run: |
           set -euo pipefail
 
@@ -145,6 +147,18 @@ jobs:
             printf '%s\n' "$tags" | sed "s|^|${docker_hub_image}:|"
             printf 'REFERENCES\n'
           } >> "$GITHUB_OUTPUT"
+
+          # Which directory of the documentation site this image's `org.opencontainers.image.documentation` label sends
+          # a reader to. A release is documented under its own version; a nightly is named after a release that does
+          # not exist yet, and what it carries is `main`, which the site publishes as `latest`. The Dockerfile defaults
+          # to the release form and this is what overrides it, because a Dockerfile cannot read a channel.
+          if [[ "$IMAGE_CHANNEL" == 'nightly' ]]; then
+            documentation_version='latest'
+          else
+            documentation_version="v${IMAGE_VERSION}"
+          fi
+
+          printf 'documentation-version=%s\n' "$documentation_version" >> "$GITHUB_OUTPUT"
 
           # `created` names the instant the source was committed rather than the instant a runner happened to start.
           # A re-run of the same commit then produces the same label instead of a second image that differs only in
@@ -284,6 +298,7 @@ jobs:
             IMAGE_REVISION=${{ inputs.ref }}
             IMAGE_CREATED=${{ steps.reference.outputs.created }}
             IMAGE_RELEASE_CHANNEL=${{ inputs.channel }}
+            IMAGE_DOCUMENTATION_VERSION=${{ steps.reference.outputs.documentation-version }}
             VERSION_SUFFIX=${{ inputs.version-suffix }}
           cache-from: type=gha,scope=publish-${{ inputs.channel }}
           cache-to: type=gha,mode=max,scope=publish-${{ inputs.channel }}
@@ -400,6 +415,7 @@ jobs:
             IMAGE_REVISION=${{ inputs.ref }}
             IMAGE_CREATED=${{ steps.reference.outputs.created }}
             IMAGE_RELEASE_CHANNEL=${{ inputs.channel }}
+            IMAGE_DOCUMENTATION_VERSION=${{ steps.reference.outputs.documentation-version }}
             VERSION_SUFFIX=${{ inputs.version-suffix }}
           provenance: mode=max
           sbom: true
@@ -491,6 +507,7 @@ jobs:
           EXPECTED_VERSION: ${{ inputs.version }}
           EXPECTED_REVISION: ${{ inputs.ref }}
           EXPECTED_CHANNEL: ${{ inputs.channel }}
+          EXPECTED_DOCUMENTATION_VERSION: ${{ steps.reference.outputs.documentation-version }}
         run: |
           set -euo pipefail
 
@@ -526,6 +543,10 @@ jobs:
           assert_label 'org.opencontainers.image.version' "$EXPECTED_VERSION"
           assert_label 'org.opencontainers.image.revision' "$EXPECTED_REVISION"
           assert_label 'io.mailfathom.release-channel' "$EXPECTED_CHANNEL"
+          # Asserted off the manifest like the rest, because this is the label somebody reads instead of asking anyone:
+          # a published image whose documentation address is composed wrong sends every reader of it to a page that
+          # does not exist, and nothing downstream of a publication would ever report that.
+          assert_label 'org.opencontainers.image.documentation' "https://krzysztof318.github.io/MailFathom/${EXPECTED_DOCUMENTATION_VERSION}/"
 
           echo "${DIGEST} is in both registries, carries both platforms, and identifies itself as ${EXPECTED_CHANNEL} ${EXPECTED_VERSION}."
 

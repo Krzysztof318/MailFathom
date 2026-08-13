@@ -141,6 +141,15 @@ prerelease identifier and a release never carries one — and this label is what
 reference has been re-tagged, mirrored, or reduced to a digest, which is the state a reference reaches long before
 anyone asks what it is. It arrives as `IMAGE_RELEASE_CHANNEL`, and its default is deliberately neither channel.
 
+`org.opencontainers.image.documentation` names the documentation site's directory for the version this image carries,
+so `docker inspect` answers where to read about what you are holding without anybody having to work out which version's
+pages apply. It is the version's own directory rather than the site root, because the site opens on the newest release
+and an older tag would otherwise be read against pages describing settings it does not accept. `IMAGE_DOCUMENTATION_VERSION`
+is where it comes from, and its default is the whole derivation for a release: the site names a version's directory
+after that version's tag, so a version reads as `v<version>`. The nightly publication is the one build that passes something
+else, `latest`, because a nightly is named after a release the site publishes nothing for yet and what it actually
+carries is `main` — which is what `latest` documents.
+
 `org.opencontainers.image.licenses` is fixed rather than passed in, at `Apache-2.0`, because it states MailFathom's own
 license and a build must not be able to say otherwise. The label is only the claim a registry indexes; the terms
 themselves are `/app/LICENSE` and `/app/NOTICE`, which arrive as part of the publish output the runtime stage copies.
@@ -316,8 +325,11 @@ schema](database-schema.md) is what that artifact is and how it is applied.
 
 Only then is the multi-architecture manifest list built and pushed — once, to both registries, because every reference
 it takes in either of them is in one tag list. After the push it is inspected by digest and required to carry both
-platforms, to identify itself as the channel and version it was published as, and to resolve to the same digest in each
-registry. A failure anywhere above publishes nothing.
+platforms, to identify itself as the channel and version it was published as, to name the documentation address that
+channel and version compose to, and to resolve to the same digest in each registry. A failure anywhere above publishes
+nothing. The documentation address is asserted there rather than trusted because it is the label somebody reads instead
+of asking anyone: composed wrongly, it sends every reader of the image to a page that does not exist, and nothing
+downstream of a publication would ever report that.
 
 A release additionally synchronizes `deploy/docker/README.md` onto the Docker Hub repository page, which is the one
 registry overview that is not rendered from the repository itself, together with the short description that sits above

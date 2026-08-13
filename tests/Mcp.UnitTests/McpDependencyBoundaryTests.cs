@@ -22,6 +22,12 @@ public sealed class McpDependencyBoundaryTests
     /// this assertion refuses — including the case where somebody adds one to answer a question a tool description
     /// already says the tool does not answer.
     /// </summary>
+    /// <remarks>
+    /// The list is an exact set rather than a prohibition, so a reference added for an ordinary reason lands here for
+    /// review instead of passing unread. <c>MailFathom.Common</c> is on it because the protocol surface and the
+    /// administrative command answer one question — where a version's documentation is — and Common's own reference
+    /// set is Domain alone, so admitting it reaches nothing this assertion exists to keep out.
+    /// </remarks>
     [Fact]
     public void McpAssembly_ReferencesNoAiBoundary()
     {
@@ -38,7 +44,9 @@ public sealed class McpDependencyBoundaryTests
             .ToArray();
 
         // Assert
-        Assert.Equal(["MailFathom.Application", "MailFathom.Domain"], referencedMailFathomAssemblies);
+        Assert.Equal(
+            ["MailFathom.Application", "MailFathom.Common", "MailFathom.Domain"],
+            referencedMailFathomAssemblies);
     }
 
     /// <summary>No tool can obtain the one session able to change a mailbox, so no MCP request can mark mail read.</summary>

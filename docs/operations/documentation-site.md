@@ -179,6 +179,15 @@ addresses moves with the pages rather than being maintained beside them: a page 
 address on the next publish. The API reference is left out — it is a thousand generated pages whose names are type
 names, nothing links into it by hand, and mirroring it would treble the file count of the site for nothing.
 
+**A running deployment is the exception, and it names a version deliberately.** Four surfaces print the version
+directory rather than the version-agnostic address: the container image's `org.opencontainers.image.documentation`
+label, the chart's install notes, `mfctl status`, and the instructions an MCP session carries. Each of them knows a
+version at the moment it speaks, and what its reader wants is the pages for the release in front of them rather than
+the one the site currently opens on — an address that follows the newest release would show somebody running an older
+one a setting their deployment does not accept. A prerelease resolves to `latest` there, because a nightly is named
+after a release the site publishes nothing for yet and what it carries is `main`. The rule stands unchanged for
+everything written down: a link in a file names no version, because a file outlives the release it was written in.
+
 ## Building it locally
 
 ```bash

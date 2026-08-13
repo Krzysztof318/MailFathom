@@ -1,3 +1,5 @@
+{{- $documentation := include "mailfathom.documentationAddress" . -}}
+{{- $documentationRoot := $documentation | default "https://krzysztof318.github.io/MailFathom/" -}}
 MailFathom {{ include "mailfathom.versionLabel" . }} is installed as release {{ .Release.Name }} in namespace {{ .Release.Namespace }}.
 
 Image:    {{ include "mailfathom.image" . }}
@@ -5,6 +7,9 @@ Database: {{ include "mailfathom.databaseHost" . }}:{{ .Values.database.port }}/
 Secrets:  {{ .Values.secrets.existingSecret }}, mounted read-only at {{ .Values.secrets.mountPath }}
 {{- if .Values.database.deploy.enabled }}
           {{ .Values.database.deploy.superuserPasswordSecret }}, read by the database alone and never by MailFathom
+{{- end }}
+{{- if $documentation }}
+Docs:     {{ $documentation }}
 {{- end }}
 {{ if eq .Values.image.channel "nightly" }}
   ############################################################################
@@ -25,8 +30,8 @@ MailFathom verifies the database schema while starting and refuses to serve agai
 applies a migration itself, in any environment, and neither does this chart: a hook Job would be the automatic
 migration that arrangement prevents, and an initContainer would run one apply per replica. If the pod reports a pending
 migration, back up {{ .Values.database.name }}, read the release's mailfathom-schema-<version>.sql, apply it, and
-let the rollout continue. docs/operations/database-schema.md states the privileges it needs and what each failure
-means.
+let the rollout continue. {{ $documentationRoot }}operations/database-schema.html states the privileges it needs and
+what each failure means.
 {{ if .Values.database.deploy.enabled }}
 The database is this release's own: a single-replica StatefulSet, its claim retained when the release is uninstalled.
 The role MailFathom connects as owns its database and is not a superuser; the schema goes in through the server it runs:

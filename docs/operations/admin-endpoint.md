@@ -879,11 +879,19 @@ address:
 ```console
 $ mfctl status --endpoint production
 'production' (https://mail.example.test:8443) accepts the stored credential as 'workstation' (MailFathom 0.2.0).
+Documentation for that version: https://krzysztof318.github.io/MailFathom/v0.2.0/
 ```
 
 The order is the option, then `MAILFATHOM_ENDPOINT`, then the profile last switched to: what you typed beats what your
 shell was told, and both beat what you chose last time. `status` is what asks a deployment whether the stored credential
 still works, which is how a revoked or expired key is distinguished from an unreachable host.
+
+The documentation line names the **deployment's** version rather than the command's. The two are separate builds — that
+is the whole reason `status` reports the deployment's version at all — and a command from one release line pointed at a
+deployment on another would otherwise name pages for something nobody is running. A deployment on the nightly channel
+resolves to `latest`, which is what a nightly carries, and a deployment reporting a version the command cannot read is
+told nothing about documentation at all: that is the same absence of evidence the version check warns on rather than
+acts on, and naming a directory for it would be a guess printed as a fact.
 
 `mfctl logout` forgets one profile — the selected one, or whichever `--endpoint` names. It does not revoke anything: the
 credential stays valid until the deployment stops accepting it. Forgetting the selected profile leaves none selected

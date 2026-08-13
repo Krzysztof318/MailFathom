@@ -359,6 +359,52 @@ public sealed class LoginCommandTests : IDisposable
         Assert.Contains(this.console.Lines, line => line.Contains("production", StringComparison.Ordinal));
     }
 
+    /// <summary>
+    /// The command that tells an operator what they are administering is also where they learn where to read about it,
+    /// and the version that decides which pages those are is the deployment's rather than this command's.
+    /// </summary>
+    [Fact]
+    public async Task Status_ADeploymentReportingAVersion_PointsAtTheDocumentationForThatVersion()
+    {
+        // Arrange
+        var store = this.CreateStore();
+        store.Save("production", EndpointAddress, "not-a-real-key", "workstation");
+        using var handler = FakeAdminEndpoint.Accepting("workstation", FakeAdminEndpoint.AnotherBuildOfThisLine);
+
+        // Act
+        var exitCode = await RunAsync(this.Context(store, handler), "status");
+
+        // Assert
+        Assert.Equal(0, exitCode);
+        Assert.Contains(
+            this.console.Lines,
+            line => line.Contains(
+                "https://krzysztof318.github.io/MailFathom/latest/",
+                StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// An unreadable version is an absence of evidence rather than evidence of a break, which the version agreement
+    /// already warns on rather than acts on. Naming a documentation directory for it would be a guess printed as fact.
+    /// </summary>
+    [Fact]
+    public async Task Status_ADeploymentReportingNoReadableVersion_SaysNothingAboutDocumentation()
+    {
+        // Arrange
+        var store = this.CreateStore();
+        store.Save("production", EndpointAddress, "not-a-real-key", "workstation");
+        using var handler = FakeAdminEndpoint.Accepting("workstation", "unknown");
+
+        // Act
+        var exitCode = await RunAsync(this.Context(store, handler), "status");
+
+        // Assert
+        Assert.Equal(0, exitCode);
+        Assert.DoesNotContain(
+            this.console.Lines,
+            line => line.Contains("krzysztof318.github.io", StringComparison.Ordinal));
+    }
+
     /// <summary>The whole point of the override: one invocation goes elsewhere without changing what the next one does.</summary>
     [Fact]
     public async Task Status_WithAnEndpointOverride_ReachesThatProfileAndLeavesTheSelectionAlone()
