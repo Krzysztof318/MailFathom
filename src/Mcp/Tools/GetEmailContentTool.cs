@@ -87,7 +87,10 @@ internal sealed class GetEmailContentTool(EmailContentReader emailContentReader)
         + "each. No response ever carries an attachment's bytes: set includeAttachmentDownloadLinks to receive, for "
         + "each file, a short-lived URL in downloadUrl that fetches it over HTTP with no credential attached, and "
         + "downloadState says why one was not issued when it was not. Name each email by the storedEmailId a listing "
-        + "or a search returned.")]
+        + "or a search returned. Where the deployment scans mail for sensitive content, what a message's author wrote "
+        + "is scanned on every call and returned with each detection replaced by a [redacted:category] marker: the "
+        + "marker means material of that kind stood there and was withheld, it is never message text, and asking again "
+        + "returns the same marker. Nothing stored is rewritten by it.")]
     public async Task<GetEmailContentToolResult> GetEmailContentAsync(
         [Description("The storedEmailIds a listing or a search returned, at most 10, each named at most once. Each is a UUID and does not change when the mail server renumbers or moves the message. Results come back in the order given, and the call is refused rather than truncated when it names more than 10.")]
         IReadOnlyList<string> storedEmailIds,

@@ -162,6 +162,30 @@ public sealed class GetEmailContentToolTests
             ContentOf(Assert.Single(result.Emails)).Body.PlainText.TruncatedBy);
     }
 
+    /// <summary>A body the scan ceiling ended is one no call returns more of, which a caller can only act on if it is told.</summary>
+    [Fact]
+    public async Task GetEmailContentAsync_BodyCutByTheScanCeiling_PublishesThatBoundRatherThanACallLimit()
+    {
+        // Arrange
+        var tool = ToolOver(
+            renderer: new StubEmailContentRenderer(
+                EmailContentRenderingResult.Rendered(
+                    RenderingOf(plainText: new EmailBodyRepresentation(
+                        "The inv",
+                        41_000,
+                        EmailBodyTruncation.SensitiveContentScanCeiling)))));
+
+        // Act
+        var result = await tool.GetEmailContentAsync(
+            [Guid.CreateVersion7().ToString()],
+            cancellationToken: TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(
+            EmailBodyTruncationCause.SensitiveContentScanCeiling,
+            ContentOf(Assert.Single(result.Emails)).Body.PlainText.TruncatedBy);
+    }
+
     [Fact]
     public async Task GetEmailContentAsync_SanitizedHtmlRequested_AsksForItAndPublishesItWithItsOwnTruncation()
     {
@@ -915,6 +939,7 @@ public sealed class GetEmailContentToolTests
                 StubJunkMailFolderCatalog.None,
                 StubMailFolderMappings.ResolvingNothing),
             linkIssuer ?? new StubAttachmentDownloadLinkIssuer(),
+            SensitiveContentEgressGuards.Inactive(),
             new EmailContentReadOptions()));
 
     /// <summary>The one folder this deployment maps, which is what makes the mail these tests store readable at all.</summary>

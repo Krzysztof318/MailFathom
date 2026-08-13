@@ -16,6 +16,11 @@ using MailFathom.Application.Emails.GetEmailContent;
 using MailFathom.Application.Emails.Mailboxes;
 using MailFathom.Application.Emails.Summaries;
 using MailFathom.Application.Folders;
+using MailFathom.Application.SensitiveContent;
+using MailFathom.Application.SensitiveContent.Derivation;
+using MailFathom.Application.SensitiveContent.Detection;
+using MailFathom.Application.SensitiveContent.Egress;
+using MailFathom.Application.SensitiveContent.Redaction;
 using MailFathom.Application.Synchronization;
 using MailFathom.Application.Synchronization.Sessions;
 using MailFathom.Application.UnitTests.TestDoubles;
@@ -32,6 +37,9 @@ namespace MailFathom.Application.UnitTests.Emails.GetEmailContent;
 /// <summary>Covers the email content use case: what it serves, what it refuses, and what it records when it refuses.</summary>
 public sealed class EmailContentReaderTests
 {
+    /// <summary>The literal the switched-on deployment in these tests detects, standing in for a credential in mail.</summary>
+    private const string Marker = "AKIAEXAMPLEKEY";
+
     private static readonly byte[] StoredRawMime = Encoding.UTF8.GetBytes("From: sender@example.test\r\n\r\nBody");
 
     [Fact]
@@ -971,6 +979,289 @@ public sealed class EmailContentReaderTests
         Assert.Empty(dependencies.Intersect(mailboxPorts));
     }
 
+    /// <summary>Reading one's own mail through an assistant must not put a live credential into the conversation.</summary>
+    [Theory]
+    [InlineData(SensitiveContentScannerKind.Secrets)]
+    [InlineData(SensitiveContentScannerKind.Pii)]
+    public async Task ReadContentAsync_ABodyCarryingACredential_ReturnsItRedacted(
+        SensitiveContentScannerKind scanner)
+    {
+        // Arrange
+        using var egress = ScanningSensitiveContentEgress.Finding(Marker, TimeProvider.System, scanner);
+        var summary = SyntheticEmailSummaries.Create();
+        var reader = ReaderOver(
+            summary,
+            RendererReturning(RenderingOf(plainText: $"the key is {Marker}, use it")),
+            egressGuard: egress.Guard);
+
+        // Act
+        var result = await reader.ReadContentAsync(
+            RequestFor([summary.StoredEmailId]),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        var content = ContentOf(Assert.Single(result.Emails));
+        Assert.Equal("the key is [redacted:CloudKey], use it", content.Body.PlainText.Text);
+    }
+
+    /// <summary>Both representations are message content, so a credential the markup kept is a credential handed out.</summary>
+    [Fact]
+    public async Task ReadContentAsync_ACredentialInBothRepresentations_ReturnsBothRedacted()
+    {
+        // Arrange
+        using var egress = ScanningSensitiveContentEgress.Finding(Marker, TimeProvider.System);
+        var summary = SyntheticEmailSummaries.Create();
+        var reader = ReaderOver(
+            summary,
+            RendererReturning(RenderingOf(
+                new EmailBodyRepresentation($"the key is {Marker}", 19, EmailBodyTruncation.None),
+                new EmailBodyRepresentation($"<p>the key is {Marker}</p>", 26, EmailBodyTruncation.None))),
+            egressGuard: egress.Guard);
+
+        // Act
+        var result = await reader.ReadContentAsync(
+            RequestFor([summary.StoredEmailId], includeSanitizedHtml: true),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        var content = ContentOf(Assert.Single(result.Emails));
+        Assert.Equal("the key is [redacted:CloudKey]", content.Body.PlainText.Text);
+        Assert.Equal("<p>the key is [redacted:CloudKey]</p>", content.Body.SanitizedHtml?.Text);
+    }
+
+    /// <summary>A listing redacts a subject and a display name, and two tools disagreeing about one message is what a caller cannot resolve.</summary>
+    [Fact]
+    public async Task ReadContentAsync_ACredentialInTheHeaders_RedactsTheSubjectAndTheDisplayNameAndKeepsTheAddress()
+    {
+        // Arrange
+        using var egress = ScanningSensitiveContentEgress.Finding(Marker, TimeProvider.System);
+        var summary = SyntheticEmailSummaries.Create();
+        var reader = ReaderOver(
+            summary,
+            RendererReturning(RenderingOf(headers: HeadersOf(
+                subject: $"fwd: {Marker}",
+                participants: [ParticipantOf($"{Marker} bot", "alerts@example.test")]))),
+            egressGuard: egress.Guard);
+
+        // Act
+        var result = await reader.ReadContentAsync(
+            RequestFor([summary.StoredEmailId]),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        var content = ContentOf(Assert.Single(result.Emails));
+        var participant = Assert.Single(content.Headers.Participants);
+        Assert.Equal("fwd: [redacted:CloudKey]", content.Headers.Subject);
+        Assert.Equal("[redacted:CloudKey] bot", participant.Address.DisplayName);
+        Assert.Equal("alerts@example.test", participant.Address.Address);
+    }
+
+    /// <summary>Text nothing analyzed is text this deployment does not hand out, and a caller has to be told which bound ended it.</summary>
+    [Fact]
+    public async Task ReadContentAsync_ABodyBeyondTheAnalyzedCeiling_ReturnsWhatWasScannedAndNamesTheCeiling()
+    {
+        // Arrange
+        using var egress = ScanningSensitiveContentEgress.Finding(
+            Marker,
+            TimeProvider.System,
+            bounds: SensitiveContentScanBounds.Create(11, TimeSpan.FromSeconds(5), 4));
+        var summary = SyntheticEmailSummaries.Create();
+        var reader = ReaderOver(
+            summary,
+            RendererReturning(RenderingOf(plainText: "the key is beyond what one scan reads")),
+            egressGuard: egress.Guard);
+
+        // Act
+        var result = await reader.ReadContentAsync(
+            RequestFor([summary.StoredEmailId]),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        var plainText = ContentOf(Assert.Single(result.Emails)).Body.PlainText;
+        Assert.Equal("the key is ", plainText.Text);
+        Assert.Equal(EmailBodyTruncation.SensitiveContentScanCeiling, plainText.Truncation);
+        Assert.Equal(37, plainText.OriginalCharacterCount);
+    }
+
+    /// <summary>The ceiling is where the returned text now ends, whichever bound had already cut it.</summary>
+    [Fact]
+    public async Task ReadContentAsync_ABodyTheReadHadAlreadyCut_NamesTheCeilingWhenTheScanCutItFurther()
+    {
+        // Arrange
+        using var egress = ScanningSensitiveContentEgress.Finding(
+            Marker,
+            TimeProvider.System,
+            bounds: SensitiveContentScanBounds.Create(11, TimeSpan.FromSeconds(5), 4));
+        var summary = SyntheticEmailSummaries.Create();
+        var reader = ReaderOver(
+            summary,
+            RendererReturning(RenderingOf(new EmailBodyRepresentation(
+                "the key is beyond what one scan reads",
+                OriginalCharacterCount: 4096,
+                EmailBodyTruncation.BodyCharacterLimit))),
+            egressGuard: egress.Guard);
+
+        // Act
+        var result = await reader.ReadContentAsync(
+            RequestFor([summary.StoredEmailId]),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(
+            EmailBodyTruncation.SensitiveContentScanCeiling,
+            ContentOf(Assert.Single(result.Emails)).Body.PlainText.Truncation);
+    }
+
+    /// <summary>A read that fell back to the stored text would hand out the one message nobody scanned.</summary>
+    [Fact]
+    public async Task ReadContentAsync_ADetectorThatCannotAnswer_FailsTheReadRatherThanServingItUnscanned()
+    {
+        // Arrange
+        using var egress = ScanningSensitiveContentEgress.Unavailable(TimeProvider.System);
+        var summary = SyntheticEmailSummaries.Create();
+        var reader = ReaderOver(
+            summary,
+            RendererReturning(RenderingOf(plainText: "whatever the message said")),
+            egressGuard: egress.Guard);
+
+        // Act
+        var refusal = await Assert.ThrowsAsync<SensitiveContentScannerUnavailableException>(() =>
+            reader.ReadContentAsync(RequestFor([summary.StoredEmailId]), TestContext.Current.CancellationToken));
+
+        // Assert
+        Assert.Equal(SensitiveContentScannerKind.Secrets, refusal.Scanner);
+        Assert.DoesNotContain("whatever the message said", refusal.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>Scanning in flight is what keeps the local copy the artifact it was fetched as.</summary>
+    [Fact]
+    public async Task ReadContentAsync_ABodyCarryingACredential_RewritesNothingItRead()
+    {
+        // Arrange
+        using var egress = ScanningSensitiveContentEgress.Finding(Marker, TimeProvider.System);
+        var summary = SyntheticEmailSummaries.Create();
+        var contentStore = ContentStoreReturning(IntactContent());
+        var repairRequestStore = new RecordingEmailContentRepairRequestStore();
+        var reader = ReaderOver(
+            summary,
+            RendererReturning(RenderingOf(plainText: $"the key is {Marker}")),
+            repairRequestStore,
+            contentStore,
+            egressGuard: egress.Guard);
+
+        // Act
+        await reader.ReadContentAsync(RequestFor([summary.StoredEmailId]), TestContext.Current.CancellationToken);
+
+        // Assert
+        await contentStore.DidNotReceiveWithAnyArgs().SaveContentAsync(
+            default!,
+            default!,
+            default!,
+            CancellationToken.None);
+        Assert.Empty(repairRequestStore.Recorded);
+    }
+
+    /// <summary>A message with no words to scan must cost no scan at all, whichever reason it has none.</summary>
+    [Theory]
+    [InlineData(StoredEmailContentAvailability.ExceededSizeLimit)]
+    [InlineData(StoredEmailContentAvailability.AwaitingStorageHeadroom)]
+    public async Task ReadContentAsync_AnEmailWhoseContentWasNeverStored_ReachesNoScannerForItsBody(
+        StoredEmailContentAvailability availability)
+    {
+        // Arrange
+        using var egress = ScanningSensitiveContentEgress.Finding(Marker, TimeProvider.System);
+        var summary = SyntheticEmailSummaries.Create() with { ContentAvailability = availability };
+        var reader = ReaderOver(summary, RendererReturning(RenderingOf()), egressGuard: egress.Guard);
+
+        // Act
+        var result = await reader.ReadContentAsync(
+            RequestFor([summary.StoredEmailId]),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.NotEqual(EmailBodyAvailability.Readable, ContentOf(Assert.Single(result.Emails)).Body.Availability);
+        Assert.Empty(egress.Scanner.ScannedTexts);
+    }
+
+    /// <summary>
+    /// A citation drawn from a redacted chunk has to land on the same redacted text when the reader opens the message,
+    /// or the citation reads as wrong and the assistant looks like it invented the quote. Asserted over both paths
+    /// directly rather than inferred from their sharing a port: what has to agree is the text, not the wiring.
+    /// </summary>
+    [Fact]
+    public async Task ReadContentAsync_TheBodyTheDerivedPathIndexed_RedactsToExactlyTheSameText()
+    {
+        // Arrange
+        const string body = $"the key is {Marker}, and {Marker} again, in a message somebody sent";
+
+        var scanner = new MarkerSensitiveContentScanner(
+            Marker,
+            SensitiveContentScannerKind.Secrets,
+            TimeProvider.System);
+        var plan = SensitiveContentPlan.Create(
+            SensitiveContentScanBounds.Default,
+            [
+                SensitiveContentScannerPlan.Create(
+                    scanner.Scanner,
+                    [MarkerSensitiveContentScanner.Category],
+                    []),
+            ]);
+        using var redactor = new SensitiveContentRedactor(plan, [scanner], TimeProvider.System);
+        var summary = SyntheticEmailSummaries.Create();
+        var reader = ReaderOver(
+            summary,
+            RendererReturning(RenderingOf(plainText: body)),
+            egressGuard: new SensitiveContentEgressGuard(
+                redactor,
+                new RecordingSensitiveContentEgressTelemetry(),
+                TimeProvider.System));
+        var derivedReader = new RedactingEmailMimeReader(
+            MimeReaderYielding(body),
+            new SensitiveContentDerivationGuard(
+                redactor,
+                SensitiveContentDerivationStamp.Compute(plan, [scanner]),
+                new RecordingSensitiveContentDerivationTelemetry(),
+                TimeProvider.System));
+
+        // Act
+        var read = await reader.ReadContentAsync(
+            RequestFor([summary.StoredEmailId]),
+            TestContext.Current.CancellationToken);
+        var derived = await derivedReader.ReadMetadataAsync(
+            RemoteContentOf(),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal("the key is [redacted:CloudKey], and [redacted:CloudKey] again, in a message somebody sent", derived.Metadata?.Text.OriginalText);
+        Assert.Equal(derived.Metadata?.Text.OriginalText, ContentOf(Assert.Single(read.Emails)).Body.PlainText.Text);
+    }
+
+    /// <summary>With both switches off the read is the one it was, and no detector is constructed to prove it.</summary>
+    [Fact]
+    public async Task ReadContentAsync_ADeploymentThatScansNothing_ReturnsWhatTheRenderingProduced()
+    {
+        // Arrange
+        var summary = SyntheticEmailSummaries.Create();
+        var reader = ReaderOver(
+            summary,
+            RendererReturning(RenderingOf(
+                plainText: $"the key is {Marker}",
+                headers: HeadersOf(
+                    subject: $"fwd: {Marker}",
+                    participants: [ParticipantOf($"{Marker} bot", "alerts@example.test")]))));
+
+        // Act
+        var result = await reader.ReadContentAsync(
+            RequestFor([summary.StoredEmailId]),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        var content = ContentOf(Assert.Single(result.Emails));
+        Assert.Equal($"the key is {Marker}", content.Body.PlainText.Text);
+        Assert.Equal($"fwd: {Marker}", content.Headers.Subject);
+        Assert.Equal($"{Marker} bot", Assert.Single(content.Headers.Participants).Address.DisplayName);
+    }
+
     private static GetEmailContentRequest RequestFor(
         IReadOnlyList<StoredEmailId> storedEmailIds,
         bool includeSanitizedHtml = false,
@@ -998,7 +1289,8 @@ public sealed class EmailContentReaderTests
         IMailAccountCatalog? accountCatalog = null,
         IAttachmentDownloadLinkIssuer? linkIssuer = null,
         EmailContentReadOptions? readOptions = null,
-        IMailFolderParticipationReader? folderParticipation = null) => new(
+        IMailFolderParticipationReader? folderParticipation = null,
+        SensitiveContentEgressGuard? egressGuard = null) => new(
         SummaryReaderReturning(summary),
         contentStore ?? ContentStoreReturning(IntactContent()),
         renderer,
@@ -1009,6 +1301,7 @@ public sealed class EmailContentReaderTests
             StubJunkMailFolderCatalog.None,
             StubMailFolderMappings.ResolvingNothing),
         linkIssuer ?? new RecordingAttachmentDownloadLinkIssuer(),
+        egressGuard ?? SensitiveContentEgressGuards.Inactive(),
         readOptions ?? new EmailContentReadOptions());
 
     private static EmailContentReader ReaderOver(
@@ -1018,7 +1311,8 @@ public sealed class EmailContentReaderTests
         IEmailContentStore? contentStore = null,
         IMailAccountCatalog? accountCatalog = null,
         IAttachmentDownloadLinkIssuer? linkIssuer = null,
-        EmailContentReadOptions? readOptions = null) => new(
+        EmailContentReadOptions? readOptions = null,
+        SensitiveContentEgressGuard? egressGuard = null) => new(
         SummaryReaderOver(summaries),
         contentStore ?? ContentStoreReturning(IntactContent()),
         renderer,
@@ -1029,6 +1323,7 @@ public sealed class EmailContentReaderTests
             StubJunkMailFolderCatalog.None,
             StubMailFolderMappings.ResolvingNothing),
         linkIssuer ?? new RecordingAttachmentDownloadLinkIssuer(),
+        egressGuard ?? SensitiveContentEgressGuards.Inactive(),
         readOptions ?? new EmailContentReadOptions());
 
     /// <summary>Maps the folders these emails were stored from, which is what a deployment holding them has configured.</summary>
@@ -1112,26 +1407,24 @@ public sealed class EmailContentReaderTests
         EmailBodyRepresentation? sanitizedHtml = null,
         bool bodyIsEncrypted = false,
         IReadOnlyList<ExtractedEmailAttachment>? attachments = null,
-        int inlineResourceCount = 0) =>
+        int inlineResourceCount = 0,
+        EmailContentHeaders? headers = null) =>
         RenderingOf(
             new EmailBodyRepresentation(plainText, plainText.Length, EmailBodyTruncation.None),
             sanitizedHtml,
             bodyIsEncrypted,
             attachments,
-            inlineResourceCount);
+            inlineResourceCount,
+            headers);
 
     private static EmailContentRendering RenderingOf(
         EmailBodyRepresentation plainText,
         EmailBodyRepresentation? sanitizedHtml = null,
         bool bodyIsEncrypted = false,
         IReadOnlyList<ExtractedEmailAttachment>? attachments = null,
-        int inlineResourceCount = 0) => new(
-        new EmailContentHeaders(
-            "Subject",
-            SentAt: null,
-            ReceivedAt: null,
-            [],
-            EmailThreadReferences.None),
+        int inlineResourceCount = 0,
+        EmailContentHeaders? headers = null) => new(
+        headers ?? HeadersOf("Subject"),
         plainText,
         sanitizedHtml,
         bodyIsEncrypted,
@@ -1142,6 +1435,49 @@ public sealed class EmailContentReaderTests
             carriesUnverifiedSignature: false,
             containsUnexpandedTnefPart: false),
         attachments ?? []);
+
+    /// <summary>The extraction the derived path performs over one body, which is the reading the index is built from.</summary>
+    private static IEmailMimeReader MimeReaderYielding(string body)
+    {
+        var reader = Substitute.For<IEmailMimeReader>();
+
+        reader.ReadMetadataAsync(Arg.Any<RemoteEmailContent>(), Arg.Any<CancellationToken>())
+            .Returns(call => Task.FromResult(EmailMimeExtractionResult.Extracted(new ExtractedEmailMetadata(
+                call.Arg<RemoteEmailContent>()!.OccurrenceId,
+                Subject: "Subject",
+                SentAt: null,
+                ReceivedAt: null,
+                Participants: [],
+                EmailThreadReferences.None,
+                EmailAttachmentSummary.None,
+                ExtractedEmailText.FromPlainTextBody(body, body)))));
+
+        return reader;
+    }
+
+    private static RemoteEmailContent RemoteContentOf() => new(
+        EmailOccurrenceId.Create(
+            MailAccountId.Create(SyntheticEmailSummaries.DefaultAccountId),
+            new MailFolderResolutionId(
+                MailFolderAlias.Create(SyntheticEmailSummaries.DefaultFolderAlias),
+                MailFolderResolutionGeneration.First),
+            ImapUidValidity.Create(5),
+            ImapUid.Create(11)),
+        StoredRawMime);
+
+    private static EmailContentHeaders HeadersOf(
+        string? subject,
+        IReadOnlyList<EmailParticipant>? participants = null) => new(
+        subject,
+        SentAt: null,
+        ReceivedAt: null,
+        participants ?? [],
+        EmailThreadReferences.None);
+
+    private static EmailParticipant ParticipantOf(string? displayName, string address) =>
+        EmailAddress.TryCreate(displayName, address, out var emailAddress)
+            ? new EmailParticipant(EmailAddressRole.From, emailAddress)
+            : throw new InvalidOperationException($"'{address}' is not a usable address.");
 
     /// <summary>Builds the description of one attachment a rendering returned.</summary>
     private static ExtractedEmailAttachment AttachmentOf(

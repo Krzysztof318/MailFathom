@@ -144,6 +144,28 @@ public sealed class SensitiveContentEgressTelemetryTests
         Assert.Equal(1, refusal.Value);
     }
 
+    /// <summary>A dashboard and an alert are written against the tag value, so every point has to publish its own.</summary>
+    [Theory]
+    [InlineData(nameof(SensitiveContentEgressPoint.ChatPrompt), "chat_prompt")]
+    [InlineData(nameof(SensitiveContentEgressPoint.HostedEmbeddingInput), "hosted_embedding_input")]
+    [InlineData(nameof(SensitiveContentEgressPoint.McpSnippet), "mcp_snippet")]
+    [InlineData(nameof(SensitiveContentEgressPoint.McpEmailContent), "mcp_email_content")]
+    public void RecordGuarded_EachEgressPoint_PublishesItsOwnTagValue(string egressPointName, string expectedTag)
+    {
+        // Arrange
+        using var collector = new MeasurementCollector();
+        var egressPoint = Enum.Parse<SensitiveContentEgressPoint>(egressPointName);
+
+        // Act
+        this.telemetry.RecordGuarded(
+            egressPoint,
+            RedactedText.Create("nothing here", [], omittedCharacterCount: 0),
+            TimeSpan.FromMilliseconds(10));
+
+        // Assert
+        Assert.Equal(1, Assert.Single(collector.Read(GuardedInstrumentName, expectedTag)).Value);
+    }
+
     private static SensitiveContentFinding FindingOf(string category, int start) =>
         SensitiveContentFinding.Create(
             SensitiveContentRule.Create(SensitiveContentCategory.Create(category), $"{category}-rule"),

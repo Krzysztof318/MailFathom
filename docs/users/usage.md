@@ -106,12 +106,14 @@ Reading the top few results of a search is therefore one call rather than one pe
 order you named them, and each carries either `content` or a `failure` saying why there is none, so one message this
 deployment cannot serve does not discard the others.
 
-Six parts of the result exist so that an agent does not misreport a message:
+Seven parts of the result exist so that an agent does not misreport a message:
 
 - **Truncation is explicit, and says which limit cut.** Each body representation carries `truncatedBy` and the original
   character count, so a cut message is never summarized as a whole one. `bodyCharacterLimit` means the message is longer
   than any single call returns; `readCharacterBudget` means the messages named before it used up the call's shared
-  budget, and naming fewer at once returns more of this one.
+  budget, and naming fewer at once returns more of this one; `sensitiveContentScanCeiling` means the deployment scans
+  mail for sensitive content and analyzed as much of this body as it may, so the rest is withheld from every call rather
+  than served unscanned.
 - **An absent body has a reason.** `availability` distinguishes a message that displayed nothing from one MailFathom
   cannot decrypt, from one whose content the size limit deliberately kept out of storage, and from one that is simply
   waiting for storage room — which is the one case where asking again later returns the body.
@@ -128,6 +130,11 @@ Six parts of the result exist so that an agent does not misreport a message:
   normalized name, with a flag saying whether it had to be rewritten.
 - **A too-long or repetitive list is refused, not trimmed.** More than ten identifiers, none at all, or the same one
   twice ends the call with a code rather than returning part of what you asked for.
+- **A `[redacted:…]` marker is not message text.** On a server whose operator switched sensitive-content scanning on,
+  the body, the subject, and the display names come back with each detected credential or piece of personal data
+  replaced by `[redacted:<category>]`. Report it as material of that kind withheld rather than quoting it as words the
+  sender wrote, and expect the same marker every time; [sensitive-content
+  scanning](../features/sensitive-content-scanning.md#reading-a-message-is-scanned-in-flight) records what is scanned.
 
 The HTML body, when requested, is aggressively sanitized — no scripts, no styles, no remote loads — and
 [email content](../features/email-content.md) records exactly what survives.
