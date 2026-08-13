@@ -80,6 +80,12 @@
     <PackageVersion Include="Polly.Core" Version="8.7.0" />
     <PackageVersion Include="Polly.Extensions" Version="8.7.0" />
     <PackageVersion Include="Polly.RateLimiting" Version="8.7.0" />
+    <!-- The boundary rules that read compiled intermediate language rather than assembly metadata, referenced by
+         Boundaries.UnitTests alone. The pin is the xUnit v3 integration, which carries the analyzer itself and with it
+         Mono.Cecil, the reader that makes a method body visible at all, plus Newtonsoft.Json, JetBrains.Annotations,
+         CycleDetection, and System.ValueTuple. Seven packages for one test project is the whole cost of the
+         mechanism, and THIRD_PARTY_LICENSES.md records every one of them. -->
+    <PackageVersion Include="TngTech.ArchUnitNET.xUnitV3" Version="0.13.3" />
     <PackageVersion Include="xRetry.v3" Version="1.0.0-rc3" />
     <PackageVersion Include="xunit.analyzers" Version="1.27.0" />
     <PackageVersion Include="xunit.v3.mtp-v2" Version="3.2.2" />
