@@ -1,6 +1,6 @@
 # Administering a deployment
 
-<!-- describes: src/Host/Configuration/Endpoints/AdminEndpointOptions.cs, src/Host/Api/Admin*.cs, src/Host/Api/Embedding*.cs, src/Host/Api/Mail*.cs, src/Host/Api/Spam*.cs, src/Host/Hosting/Startup/SurfaceIsolation.cs, src/Host/Hosting/Warnings/AdminTransportSecurityWarning.cs, src/Host/Security/Endpoints/TransportListenerBinder.cs, src/Host/Security/Transport/TransportRateLimiting.cs, src/Cli/**, scripts/install-mfctl.sh -->
+<!-- describes: src/Host/Configuration/Endpoints/AdminEndpointOptions.cs, src/Host/Api/Admin*.cs, src/Host/Api/Embedding*.cs, src/Host/Api/Job*.cs, src/Host/Api/Mail*.cs, src/Host/Api/Spam*.cs, src/Host/Hosting/Startup/SurfaceIsolation.cs, src/Host/Hosting/Warnings/AdminTransportSecurityWarning.cs, src/Host/Security/Endpoints/TransportListenerBinder.cs, src/Host/Security/Transport/TransportRateLimiting.cs, src/Cli/**, scripts/install-mfctl.sh -->
 
 How the `mfctl` command reaches a running deployment, and what that deployment has to have enabled before it will
 answer.
@@ -85,6 +85,9 @@ reverse proxy, write the public URL and keep the path: `https://mail.example.tes
 | `POST /api/admin/spam/runs` | Asks for every message already stored for one account to be [classified](../features/spam-classification.md), and answers with the run already under way where there is one. It is a dry run unless the body asks to apply. |
 | `GET /api/admin/spam/runs` | Reports where that run has got to, or how the last one ended. |
 | `GET /api/admin/spam/classifications` | Reads one account's classifications, newest first, and the changes each verdict asked the mailbox for. |
+| `GET /api/admin/jobs/dead-letters` | Reads the background work that stopped and will not be attempted again, newest first, with what ended each piece of it. |
+| `POST /api/admin/jobs/dead-letters/retry` | Returns one stopped job to the queue under the identity it was enqueued with. |
+| `POST /api/admin/jobs/dead-letters/drop` | Decides one stopped job will never run, keeping the record of it. |
 | `POST /api/admin/folders/erasure` | Erases one bounded pass of the mail stored for a folder the account no longer mirrors. **This is the one route that disposes of mail.** |
 
 The write route's body carries a long-lived credential for a named mailbox owner, which is what makes the clear-text
@@ -430,6 +433,54 @@ answers.
 Nothing any of these three routes answers with is mail: counts, verdicts, scores, signal names, folder aliases,
 mutation names, instants, and identifiers are the whole of it. Every refusal is `400` naming what to change, including
 an account this deployment does not configure, and the run route reads at most 8 KB of body.
+
+### Reading the background work that stopped, and deciding what becomes of it
+
+Three routes, and the first of them is the only way a dead letter becomes visible without a database client. Work that
+has stopped is claimed by nobody and delays nothing, so it is invisible everywhere else: nothing retries it, no queue
+grows because of it, and the only signal it produces at all is
+[`mailfathom.jobs.dead_letters`](telemetry.md#durable-background-work). [Deciding what becomes of stopped
+work](../users/administering.md#background-work-that-stopped) is what the three commands do with them.
+
+The reading is deployment-wide unless a filter narrows it, because *what has stopped* is one question about the instance
+rather than one per configured mailbox. It serves one bounded, keyset-paginated page, newest first:
+
+| Query parameter | What it does |
+| --- | --- |
+| `type` | Narrows to one kind of work, by the job type's own name. A name this build does not run is refused. |
+| `account` | Narrows to work belonging to one configured account. |
+| `pageSize` | Between 1 and 200; 50 when omitted. |
+| `cursor` | The `nextCursor` the previous page returned. A cursor issued under different filters is refused. |
+
+```console
+$ mfctl jobs dead-letters
+2026-08-13 09:30:00Z  classify-email-spam 0199c3d0-0000-7000-8000-000000000002
+  Failed:  Permanent PayloadUnreadable after 5 attempt(s)
+  Work:    account:work|email:0199c3d0-0000-7000-8000-000000000001 for work
+  Queued:  2026-08-13 09:00:00Z
+
+Run one again with 'mfctl jobs retry --job <id>', or write it off with 'mfctl jobs drop --job <id>'.
+```
+
+**Nothing any of the three routes answers with is mail.** A job's payload names a message occurrence, and it is never
+read: the reading projects the identity, the kind of work, the attempts spent, the failure classification and its
+recorded reason, and two instants. The idempotency key is the one field composed from a folder alias and a message
+identifier, and it is reported because a retry runs under it — an operator deciding whether to run something again is
+told which piece of work it is, never what the message said.
+
+A row naming a job type this build does not run is left out rather than reported. A rolling deployment leaves rows
+written by a build declaring more types than this one, and offering a retry no worker could ever claim would be worse
+than an absence.
+
+Both decisions name one job, read at most 4 KB of body, and answer `200` with what happened. `Accepted` is the decision
+having taken effect; `JobUnknown` and `JobNotDeadLettered` are outcomes rather than refusals, because two operators — or
+one operator and a list a few minutes old — reach them ordinarily and the caller asked a question the deployment could
+answer. `400` is kept for a body naming no job at all.
+
+Retrying returns the same row to the queue with its attempts given back, so the work runs under the identity it was
+enqueued with rather than as a second piece of work; that is safe because a handler is registered on the promise that
+running it twice with one payload is the same as running it once. Dropping removes nothing: the row stays terminal,
+keeps the failure that ended it, and goes on holding the identity that stops the same trigger enqueuing the work again.
 
 ### Erasing a folder you have stopped mirroring
 

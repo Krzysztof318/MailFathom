@@ -827,6 +827,10 @@ runs out of attempts and what could never succeed both become dead letters: term
 hold up no other job and keep the classification and the reason they ended on. A shutdown is neither, and spends no
 attempt: the job goes straight back to the queue with the attempt it was claimed for given back.
 
+No key decides what becomes of a dead letter, because an operator does. [`mfctl
+jobs`](../users/administering.md#background-work-that-stopped) reads what has stopped and either returns one to the
+queue or writes it off, and [durable background work](telemetry.md#durable-background-work) is what says one is there.
+
 `RetryMaxDelay` must be at least `RetryBaseDelay`, and startup refuses a pair that inverts them. A retry delay doubles
 per attempt from `RetryBaseDelay`, is capped at `RetryMaxDelay`, and is drawn from a range rather than computed exactly
 — jobs that failed together failed on the same dependency, and an exact delay would return all of them to it in the same
@@ -844,7 +848,7 @@ instant.
 | `Jobs:MaxAttempts` | int | `5` | 1 – 20; how many attempts one job may be handed out for before a transient failure dead-letters it. `1` leaves no retry at all. A permanent failure ends the job whatever this says | restart |
 | `Jobs:RetryBaseDelay` | TimeSpan | `00:00:30` | 1 s – 1 h; the delay the first retry is drawn around, doubling per attempt | restart |
 | `Jobs:RetryMaxDelay` | TimeSpan | `00:30:00` | 1 s – 24 h, and at least `Jobs:RetryBaseDelay`; the ceiling a grown retry delay never exceeds | restart |
-| `Jobs:PollInterval` | TimeSpan | `00:00:10` | 1 s – 10 min; how long an idle worker waits before looking again. A pass that filled its batch looks again at once | restart |
+| `Jobs:PollInterval` | TimeSpan | `00:00:10` | 1 s – 10 min; how long an idle worker waits before looking again, and how often at most it measures the queue depth it publishes. A pass that filled its batch looks again at once | restart |
 
 ## `MailRules`
 

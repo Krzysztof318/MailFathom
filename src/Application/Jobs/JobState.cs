@@ -35,6 +35,26 @@ public enum JobState
     /// key is its attempt count and the classification and reason of the failure that ended it, which is what an
     /// operator acts on.
     /// </para>
+    /// <para>
+    /// Terminal but not permanent: an operator who has fixed what caused the failure returns the job to
+    /// <see cref="Pending" />, and one who never wants it run moves it to <see cref="Dropped" />. Neither happens on
+    /// its own, which is the whole point of the state — it waits for somebody.
+    /// </para>
     /// </remarks>
     DeadLettered = 3,
+
+    /// <summary>An operator decided the work will never be run. The row is terminal and keeps its idempotency key, exactly as a dead-lettered one does.</summary>
+    /// <remarks>
+    /// <para>
+    /// A state of its own rather than a deleted row, because what an operator did to a job is itself a fact worth
+    /// keeping: a queue that answered "nothing is dead-lettered" identically for a queue somebody emptied and a queue
+    /// nothing ever failed in would make the decision invisible the moment it was taken. The row keeps the failure that
+    /// dead-lettered it, so what was dropped and why it stopped are both still readable.
+    /// </para>
+    /// <para>
+    /// It is reachable only from <see cref="DeadLettered" />. Dropping work that is pending or claimed would race the
+    /// worker holding it, and there is nothing to decide about a job that has not yet failed.
+    /// </para>
+    /// </remarks>
+    Dropped = 4,
 }

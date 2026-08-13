@@ -56,6 +56,20 @@ internal static class AdminEndpointRoutes
     /// <summary>Where a deployment reports what classification concluded about an account's mail.</summary>
     internal const string SpamClassificationsPath = $"{Prefix}/spam/classifications";
 
+    /// <summary>Where a deployment reports the background work it will not attempt again.</summary>
+    internal const string JobDeadLettersPath = $"{Prefix}/jobs/dead-letters";
+
+    /// <summary>Where one dead letter is asked to be run again, under the identity it already carries.</summary>
+    internal const string JobRetryPath = $"{JobDeadLettersPath}/retry";
+
+    /// <summary>Where one dead letter is recorded as work that will never be run.</summary>
+    /// <remarks>
+    /// A path of its own rather than a field on the retry request, because the two are opposite decisions and a body
+    /// that carried which one was meant would make a mistyped value the difference between running somebody's work
+    /// again and writing it off.
+    /// </remarks>
+    internal const string JobDropPath = $"{JobDeadLettersPath}/drop";
+
     /// <summary>Where a deployment is asked to erase one bounded pass of a folder's stored mail.</summary>
     /// <remarks>
     /// One pass per request, so the command repeats it until the folder is empty. That is what makes an erasure the

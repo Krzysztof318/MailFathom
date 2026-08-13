@@ -227,6 +227,50 @@ carries no age. Only a change is written: every provider call records a state, s
 with the mailbox instead of with what an operator would act on. A first call that succeeded is the one change that is
 not written, because it restored nothing; a first call that failed is.
 
+### Durable background work
+
+The queue of durable background work publishes four instruments, all broken down by `mailfathom.job.type` — the job
+type's own name, which is the same word the log line, the span, and the stored row use. Nothing else about a job reaches
+any of them: not its identifier, not the idempotency key it was enqueued under, not the account it belongs to, and not
+the reason recorded against a failure. The key is the one that would carry mail, because it is composed of folder
+aliases and message occurrences; the reason is unbounded in the way a metric dimension may not be. Both are read from
+the queue itself, through the commands [administering a deployment](../users/administering.md#background-work-that-stopped)
+describes.
+
+`mailfathom.jobs.attempts` counts every attempt at a job and `mailfathom.jobs.attempt.duration` records how long each
+one took, both tagged with `mailfathom.job.outcome` as one of `succeeded`, `handler_failed`, `handler_missing`,
+`timed_out`, `released_for_shutdown`, or `lease_lost`. The last two are counted like any other attempt on purpose: both
+occupied a worker and neither is a failure of the work, so a rolling deployment reads as released attempts rather than
+as an unexplained gap in the count.
+
+`mailfathom.jobs.retries` counts the failed attempts the queue scheduled again, tagged with the outcome that failed. It
+is a separate instrument rather than a tag on the attempts, because it answers the question that separates an instance
+that is busy from one that is failing and trying again — a retry rate rising while the attempt rate holds steady is work
+being repeated rather than work arriving.
+
+`mailfathom.jobs.dead_letters` counts the jobs nothing will attempt again, tagged with the outcome that ended each one
+and with `mailfathom.job.failure` as `transient` or `permanent`. **This is the one worth alerting on outright**: a dead
+letter is claimed by nobody and delays nothing, so it is invisible everywhere else and stays where it is until an
+operator acts. The classification says which act is right — `permanent` names something to fix before a retry could do
+anything, and `transient` names a dependency that stayed broken for longer than the queue was willing to wait. It
+carries that dimension and the other three instruments do not, which is why it is an instrument of its own rather than a
+tag on the attempts.
+
+`mailfathom.jobs.queue.depth` reports how many jobs of each type are waiting to be claimed, as the worker last measured
+it. Waiting is the pending state alone — a job a worker holds is running, and what bounds that is `Jobs:MaxConcurrentJobs`
+rather than the queue's depth — which is the same reading `Jobs:MaxQueueDepthPerType` is applied against, so the depth an
+operator watches and the depth an enqueue is refused at are one number. Two things follow from that. It **saturates** at
+`Jobs:MaxQueueDepthPerType`, because the count stops there so that measuring costs the same on a queue of a thousand and
+on a queue of a million; a reading sitting at the bound is a queue already refusing work as backpressure. And it is
+measured at most once per `Jobs:PollInterval` by the worker rather than read live, so an instance draining a backlog
+pass after pass pays for it no more often than an idle one. A type whose queue emptied reports zero rather than its last
+non-zero depth; a type nothing has ever measured is absent from the gauge entirely, so a flat zero always means measured
+and empty.
+
+An instance with `Jobs:Enabled` switched off, or one with no registered handler, publishes none of the four: its worker
+does not start, so it neither runs work nor measures the queue. The depth of a queue that instance is not draining is
+somebody else's replica to report.
+
 ### Answering spend
 
 Answering a question sends mail to a model provider on demand, so what it costs is published while it is being spent

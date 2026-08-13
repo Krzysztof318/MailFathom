@@ -26,6 +26,8 @@ using MailFathom.Application.Emails.SearchEmails;
 using MailFathom.Application.Emails.Summaries;
 using MailFathom.Application.Folders;
 using MailFathom.Application.Jobs;
+using MailFathom.Application.Jobs.DeadLetters;
+using MailFathom.Application.Jobs.Execution;
 using MailFathom.Application.Mail.Mutations;
 using MailFathom.Application.Mail.Mutations.Audit;
 using MailFathom.Application.Mail.Mutations.Convergence;
@@ -331,6 +333,13 @@ public static class ServiceCollectionExtensions
         // takes no persistence session either, so a caller cannot enlist an enqueue in the transaction that stored the
         // message the work is about.
         services.AddScoped<IJobStore, JobStore>();
+        // Beside it because they read and write the same table, and apart from it because the callers are: the worker
+        // acts under a lease it holds, and these two answer an operator who holds none.
+        services.AddScoped<IJobQueueDepthReader, JobQueueDepthReader>();
+        services.AddScoped<IDeadLetteredJobStore, DeadLetteredJobStore>();
+        // A singleton with the instruments on it, for the reason every other telemetry type here is one: an instrument
+        // created per scope would publish a second time series for the same measurement.
+        services.AddSingleton<JobQueueTelemetry>();
 
         // Registered whether or not classification is switched on, for the reason every other store here is: what a
         // deployment decides is whether anything calls it, and a port resolvable only under one configuration is a

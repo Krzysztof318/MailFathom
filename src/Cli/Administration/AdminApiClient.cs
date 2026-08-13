@@ -9,6 +9,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization.Metadata;
 using MailFathom.Cli.Administration.Embeddings;
 using MailFathom.Cli.Administration.Folders;
+using MailFathom.Cli.Administration.Jobs;
 using MailFathom.Cli.Administration.Rules;
 using MailFathom.Cli.Administration.Spam;
 using MailFathom.Cli.Transport;
@@ -381,6 +382,71 @@ internal sealed class AdminApiClient
             CliJsonContext.Default.SpamClassificationPage,
             cancellationToken);
     }
+
+    /// <summary>Asks the deployment which background work it will not attempt again.</summary>
+    /// <param name="token">The bearer credential to present.</param>
+    /// <param name="query">How the page is narrowed and continued.</param>
+    /// <param name="cancellationToken">Cancels the request.</param>
+    /// <returns>One page of the dead letters, and the cursor the next page is asked with where one exists.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
+    /// <exception cref="CliFailure">Thrown when the deployment refused the request or the credential, could not be reached, or answered with something that is not a page.</exception>
+    internal Task<DeadLetteredJobPage> ReadDeadLetteredJobsAsync(
+        string token,
+        DeadLetteredJobQuery query,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(query);
+
+        return this.RequestAsync(
+            HttpMethod.Get,
+            $"{AdminEndpointRoutes.JobDeadLettersPath}{query.ToQueryString()}",
+            token,
+            CliJsonContext.Default.DeadLetteredJobPage,
+            cancellationToken);
+    }
+
+    /// <summary>Asks the deployment to run one dead letter again, under the identity it already carries.</summary>
+    /// <param name="token">The bearer credential to present.</param>
+    /// <param name="job">The job to attempt again.</param>
+    /// <param name="cancellationToken">Cancels the request.</param>
+    /// <returns>What became of the job.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="token" /> is <see langword="null" />.</exception>
+    /// <exception cref="CliFailure">Thrown when the deployment refused the request or the credential, could not be reached, or answered with something that is not an outcome.</exception>
+    /// <remarks>
+    /// It returns as soon as the deployment has written the decision down. The work itself is run by whichever worker
+    /// claims the job next, so this command is never what carries it out and closing the terminal cannot stop it.
+    /// </remarks>
+    internal Task<JobRecovery> RetryDeadLetteredJobAsync(
+        string token,
+        Guid job,
+        CancellationToken cancellationToken) =>
+        this.RequestAsync(
+            HttpMethod.Post,
+            AdminEndpointRoutes.JobRetryPath,
+            token,
+            CliJsonContext.Default.JobRecovery,
+            cancellationToken,
+            JsonContent.Create(new JobRecoveryRequest(job), CliJsonContext.Default.JobRecoveryRequest));
+
+    /// <summary>Asks the deployment to record that one dead letter will never be run.</summary>
+    /// <param name="token">The bearer credential to present.</param>
+    /// <param name="job">The job to drop.</param>
+    /// <param name="cancellationToken">Cancels the request.</param>
+    /// <returns>What became of the job.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="token" /> is <see langword="null" />.</exception>
+    /// <exception cref="CliFailure">Thrown when the deployment refused the request or the credential, could not be reached, or answered with something that is not an outcome.</exception>
+    /// <remarks>The record is kept rather than removed, so the job goes on being readable as one somebody decided about.</remarks>
+    internal Task<JobRecovery> DropDeadLetteredJobAsync(
+        string token,
+        Guid job,
+        CancellationToken cancellationToken) =>
+        this.RequestAsync(
+            HttpMethod.Post,
+            AdminEndpointRoutes.JobDropPath,
+            token,
+            CliJsonContext.Default.JobRecovery,
+            cancellationToken,
+            JsonContent.Create(new JobRecoveryRequest(job), CliJsonContext.Default.JobRecoveryRequest));
 
     /// <summary>Asks the deployment to erase one bounded pass of a folder's stored mail.</summary>
     /// <param name="token">The bearer credential to present.</param>

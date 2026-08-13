@@ -304,6 +304,46 @@ erasing is gone, the rest is untouched, and running the same command again conti
 have stopped mirroring](../operations/admin-endpoint.md#erasing-a-folder-you-have-stopped-mirroring) is the operator's
 reference, including what goes with the mail and what survives it.
 
+## Background work that stopped
+
+MailFathom does most of what it does in the background: classifying a message, embedding a passage, carrying out what a
+rule asked for. A piece of that work that keeps failing is eventually given up on rather than retried forever, and what
+is left behind is called a *dead letter* — a record of work nobody will attempt again. Nothing waits on one, so nothing
+tells you it is there:
+
+| What you want | Command |
+| --- | --- |
+| See what has stopped | `mfctl jobs dead-letters` |
+| See what has stopped for one account | `mfctl jobs dead-letters --account work` |
+| Run one again, after fixing what broke it | `mfctl jobs retry --job <id>` |
+| Decide one will never run | `mfctl jobs drop --job <id>` |
+
+```console
+$ mfctl jobs dead-letters
+2026-08-13 09:30:00Z  classify-email-spam 0199c3d0-0000-7000-8000-000000000002
+  Failed:  Permanent PayloadUnreadable after 5 attempt(s)
+  Work:    account:work|email:0199c3d0-0000-7000-8000-000000000001 for work
+  Queued:  2026-08-13 09:00:00Z
+
+Run one again with 'mfctl jobs retry --job <id>', or write it off with 'mfctl jobs drop --job <id>'.
+```
+
+**`Failed:` is what decides which of the two commands is right.** `Permanent` names something that will fail the same
+way every time — a credential, a setting, a message the deployment cannot read — so retrying before you have changed
+something achieves nothing. `Transient` names a dependency that stayed broken for longer than the queue was willing to
+wait, which is the case `retry` exists for: fix it, or wait for it to come back, and ask again.
+
+`retry` runs the same piece of work rather than enqueuing a second one, so it is safe on work that reaches your mailbox.
+`drop` deletes nothing — the record stays, keeping what stopped it, and it goes on being the reason the same work is not
+enqueued again. Neither command waits for anything: the deployment writes the decision down and the next worker to come
+along carries it out, so closing the terminal changes nothing.
+
+An empty reading is the ordinary state of a healthy deployment, and it says so rather than printing nothing. [Reading the
+background work that stopped, and deciding what becomes of
+it](../operations/admin-endpoint.md#reading-the-background-work-that-stopped-and-deciding-what-becomes-of-it) is the
+operator's reference, and [durable background work](../operations/telemetry.md#durable-background-work) is what your
+monitoring can watch instead of you reading this by hand.
+
 ## Where to go next
 
 - [Administering a deployment](../operations/admin-endpoint.md) — the operator's reference for everything above
