@@ -241,5 +241,6 @@ public sealed class SyntheticMimeComposerTests
         shape,
         "The tidal buoy surveys the quay.",
         "<html><body><p>The tidal buoy surveys the quay.</p></body></html>",
-        characterSet);
+        characterSet,
+        Decoy: null);
 }

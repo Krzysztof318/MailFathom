@@ -46,6 +46,7 @@ internal static class CorpusFingerprint
              text={email.Body.PlainText}
              html={email.Body.Html}
              attachment={attachment}
+             decoy={email.Body.Decoy?.Kind.Rule ?? "-"}
              """);
     }
 

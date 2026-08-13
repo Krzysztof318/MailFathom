@@ -341,6 +341,10 @@ internal sealed class OrchestratedMailbox(OrchestratedMailServerEndpoints endpoi
     /// One fixed seed and a count of one, so the message is the same on every run; only the subject is replaced,
     /// because the subject is how a test recognizes its own message among the mailbox's. Attachments are switched off
     /// because nothing here asserts about one and every byte of one would cross the container boundary per delivery.
+    /// Fabricated sensitive material is switched off for a stronger reason than that: every test in this suite reads
+    /// mail through a deployment that scans nothing, so a planted credential would be a paragraph of noise in every
+    /// assertion about a body — and a suite that did switch a scanner on would want to say which decoy it planted
+    /// rather than inherit a share of them.
     /// </para>
     /// </remarks>
     private static MimeMessage CreateSyntheticMessage(string subject)
@@ -350,7 +354,8 @@ internal sealed class OrchestratedMailbox(OrchestratedMailServerEndpoints endpoi
             Count: 1,
             LatestSentAt: new DateTimeOffset(2026, 1, 1, 12, 0, 0, TimeSpan.Zero),
             SpanDays: 1,
-            MaximumAttachmentBytes: 0);
+            MaximumAttachmentBytes: 0,
+            SensitivePercentage: 0);
 
         var generated = SyntheticEmailGenerator.Generate(plan)[0] with { Subject = subject };
 

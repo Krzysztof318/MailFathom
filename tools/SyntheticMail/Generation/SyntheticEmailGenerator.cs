@@ -6,6 +6,7 @@ using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Text.Encodings.Web;
 using System.Text.Unicode;
+using MailFathom.SyntheticMail.Generation.SensitiveDecoys;
 
 namespace MailFathom.SyntheticMail.Generation;
 
@@ -52,6 +53,8 @@ internal sealed class SyntheticEmailGenerator
     private readonly Random source;
     private readonly IReadOnlyList<SyntheticParticipant> participants;
     private readonly List<SyntheticEmail> produced;
+    private readonly int firstDecoyOrdinal;
+    private int plantedDecoys;
 
     private SyntheticEmailGenerator(SyntheticCorpusPlan plan)
     {
@@ -59,6 +62,13 @@ internal sealed class SyntheticEmailGenerator
         this.source = new Random(plan.Seed);
         this.participants = BuildParticipantPool(this.source);
         this.produced = new List<SyntheticEmail>(plan.Count);
+
+        // Nothing is drawn when the corpus carries no decoys, which is what keeps a run asking for none identical to
+        // one from before this generator could plant any: a draw made and discarded would still move the sequence
+        // every other value comes out of.
+        this.firstDecoyOrdinal = plan.SensitivePercentage > 0
+            ? this.source.Next(SensitiveDecoyCatalog.Kinds.Count)
+            : 0;
     }
 
     /// <summary>Produces the corpus a plan describes.</summary>
@@ -232,13 +242,43 @@ internal sealed class SyntheticEmailGenerator
             _ => string.Empty,
         };
 
-        string[] blocks = closing.Length == 0 ? paragraphs : [.. paragraphs, closing];
+        var decoy = this.PlantDecoy();
+
+        // The decoy stands after what the message was about and before whatever closes it, which is where somebody
+        // pasting a credential into a thread puts it. Its own sentence is a paragraph rather than a clause inside one,
+        // so a redacted body still reads as a message with one line replaced.
+        List<string> blocks = [.. paragraphs];
+
+        if (decoy is not null)
+        {
+            blocks.Add(decoy.Sentence);
+        }
+
+        if (closing.Length > 0)
+        {
+            blocks.Add(closing);
+        }
 
         return new SyntheticEmailBody(
             shape,
             string.Join("\n\n", blocks),
             BuildHtml(blocks),
-            characterSet);
+            characterSet,
+            decoy);
+    }
+
+    private SensitiveDecoy? PlantDecoy()
+    {
+        if (this.plan.SensitivePercentage <= 0 || this.source.Next(100) >= this.plan.SensitivePercentage)
+        {
+            return null;
+        }
+
+        var decoy = SensitiveDecoyCatalog.Plant(this.source, this.firstDecoyOrdinal + this.plantedDecoys);
+
+        this.plantedDecoys++;
+
+        return decoy;
     }
 
     /// <summary>Wraps the paragraphs in the smallest HTML document that is still one.</summary>

@@ -372,16 +372,17 @@ against rather than something to look at, so a run that names none chooses one a
 invocation that repeats the batch:
 
 ```text
-Seed 481923: 200 messages dated 2026-05-10..2026-08-08, attachments up to 65536 bytes.
-Repeat this batch with: developer@example.com --seed 481923 --count 200 --days 90 --until 2026-08-08 --attachment-bytes 65536
+Seed 481923: 200 messages dated 2026-05-10..2026-08-08, attachments up to 65536 bytes, 20% carrying fabricated sensitive material.
+Repeat this batch with: developer@example.com --seed 481923 --count 200 --days 90 --until 2026-08-08 --attachment-bytes 65536 --sensitive-percentage 20
 ```
 
 What the corpus varies is what the product actually reads: subject and body length, how many participants a message
 names, threading through `In-Reply-To` and `References`, dates spread over the requested range, plain text against HTML
-against `multipart/alternative`, `us-ascii` against `iso-8859-1` against `utf-8`, and messages with and without an
-attachment. Every invented participant is under a domain in the reserved `.test` top-level domain, which RFC 6761
-guarantees resolves to nothing, so a generated address cannot reach a person even if it is echoed into a reply. The
-recipient you name is the only real address a run touches, and it is the only one the envelope ever carries.
+against `multipart/alternative`, `us-ascii` against `iso-8859-1` against `utf-8`, messages with and without an
+attachment, and messages with and without something a scanner should find in them. Every invented participant is under
+a domain in the reserved `.test` top-level domain, which RFC 6761 guarantees resolves to nothing, so a generated
+address cannot reach a person even if it is echoed into a reply. The recipient you name is the only real address a run
+touches, and it is the only one the envelope ever carries.
 
 | Option | What it decides |
 | --- | --- |
@@ -390,9 +391,53 @@ recipient you name is the only real address a run touches, and it is the only on
 | `--days` | How far back from `--until` the dates reach, 1..3650. Defaults to 90. |
 | `--until` | The newest day a message is dated, as `yyyy-MM-dd`. Defaults to today and is reported either way. |
 | `--attachment-bytes` | The ceiling on one attachment, 0..10485760. Zero generates a corpus carrying none. Defaults to 65536. |
+| `--sensitive-percentage` | How often a message carries a fabricated secret or personal identifier, 0..100. Zero generates a corpus carrying none. Defaults to 20. |
 | `--interval` | Milliseconds between two submissions, 0..60000, so a real server is not hit with a burst. Defaults to 250. |
 | `--config` | The credential file to read, when it is not the one beside the built command. |
 | `--dry-run` | Generate and list the corpus on standard output without connecting to anything. |
+
+### Mail with something in it to find
+
+A fifth of a generated batch carries a fabricated credential or a fabricated personal identifier, written into a
+paragraph the way somebody pastes one into a thread. That is what makes
+[sensitive-content scanning](../features/sensitive-content-scanning.md) something you can watch working: fill a mailbox,
+synchronize it, switch a scanner on, and compare what a search or an `ask_mail` answer returns against the same corpus
+scanned with it off. `--sensitive-percentage 0` produces a corpus with nothing in it to find, and `100` one where every
+message carries something; both are ordinary answers, and a run says which it produced in the line that repeats it.
+
+The kinds are taken in turn rather than drawn, so a batch large enough to plant a dozen carries every one of them
+equally often. They cover each category the two scanners look for unless a deployment names categories of its own:
+
+| What a message carries | Reported as | Found by |
+| --- | --- | --- |
+| A hosting provider's access token | `Secrets` / `ProviderToken` | the secret rule corpus |
+| A cloud access-key identifier | `Secrets` / `CloudAccessKey` | the secret rule corpus |
+| An armoured private key | `Secrets` / `PrivateKey` | the secret rule corpus |
+| A JSON Web Token | `Secrets` / `JsonWebToken` | the secret rule corpus |
+| A database connection string carrying its password | `Secrets` / `ConnectionString` | the secret rule corpus |
+| A download link whose query string is the credential | `Secrets` / `CredentialUrl` | the secret rule corpus |
+| A payment card number | `Pii` / `PaymentCard` | the analyzer, in any language |
+| An IBAN | `Pii` / `BankAccount` | the analyzer, in any language |
+| A medical licence number | `Pii` / `HealthIdentifier` | the analyzer, in any language |
+| A PESEL | `Pii` / `NationalIdentifier` | the analyzer, asked in Polish |
+| A social security number | `Pii` / `NationalIdentifier` | the analyzer, asked in English |
+| A passport number | `Pii` / `IdentityDocument` | the analyzer, asked in English |
+
+**Which of the personal identifiers a deployment finds follows the language it asks the analyzer in**, because a
+recogniser for a country's identification number is registered for one language and is not loaded for the others. A
+deployment on the default `en` finds the social security and passport numbers and never the PESEL; one configured for
+`pl` finds the PESEL and neither of the other two. The three global ones are found either way. A decoy nothing reports
+is therefore worth checking against `SensitiveContent:PersonalDataAnalyzer:Language` before it is read as a defect.
+
+**Every value is fabricated at run time and is structurally valid.** A payment card passes Luhn, an IBAN its
+remainder, a PESEL its weighted sum, a medical licence its own check digit — an identifier that failed its validator
+would be discarded by the analyzer and the corpus would quietly test nothing. Structural validity is not identity: the
+digits before the check digit are drawn from the seed, every host is under `.test`, and no value here belongs to
+anybody or opens anything. Nothing shaped like a credential is committed to this repository either — a value exists
+only in a running process and in the mailbox it was delivered to.
+
+A dry run names the category a message carries and never the value, exactly as a scanner's finding does. The seed is
+what reproduces a value; the message is where it is.
 
 The corpus listing goes to standard output and everything the run says about itself to standard error, so two dry runs
 of one seed are compared with an ordinary `diff`:

@@ -4,6 +4,7 @@
 
 using MailFathom.SyntheticMail.Commands;
 using MailFathom.SyntheticMail.Generation;
+using MailFathom.SyntheticMail.Generation.SensitiveDecoys;
 
 using Xunit;
 
@@ -34,7 +35,7 @@ public sealed class CorpusListingTests
 
         // Assert
         Assert.Equal(
-            "2026-03-14T09:05:07+00:00 | <first@synthetic.test> | in-reply-to=parent@synthetic.test | TextAndHtmlAlternative | Utf8 | from=author@example.test | cc=2 | attachment=notes.csv (4096 bytes) | Quarterly figures",
+            "2026-03-14T09:05:07+00:00 | <first@synthetic.test> | in-reply-to=parent@synthetic.test | TextAndHtmlAlternative | Utf8 | from=author@example.test | cc=2 | attachment=notes.csv (4096 bytes) | sensitive=none | Quarterly figures",
             line);
     }
 
@@ -51,7 +52,7 @@ public sealed class CorpusListingTests
         // Both absences print a placeholder rather than an empty field, so the columns of two listings stay aligned
         // and a `diff` points at the value that moved instead of at every line after it.
         Assert.Equal(
-            "2026-03-14T09:05:07+00:00 | <first@synthetic.test> | in-reply-to=- | TextAndHtmlAlternative | Utf8 | from=author@example.test | cc=0 | attachment=none | Quarterly figures",
+            "2026-03-14T09:05:07+00:00 | <first@synthetic.test> | in-reply-to=- | TextAndHtmlAlternative | Utf8 | from=author@example.test | cc=0 | attachment=none | sensitive=none | Quarterly figures",
             line);
     }
 
@@ -83,7 +84,7 @@ public sealed class CorpusListingTests
         var characterSet = Enum.Parse<SyntheticCharacterSet>(characterSetName);
         var email = Build(inReplyTo: null, carbonCopies: 0, attachment: null) with
         {
-            Body = new SyntheticEmailBody(shape, "text", "<p>text</p>", characterSet),
+            Body = new SyntheticEmailBody(shape, "text", "<p>text</p>", characterSet, Decoy: null),
         };
 
         // Act
@@ -91,6 +92,29 @@ public sealed class CorpusListingTests
 
         // Assert
         Assert.Contains($"| {shape} | {characterSet} |", line, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Describe_AMessageCarryingFabricatedSensitiveMaterial_NamesTheCategoryAndNeverTheValue()
+    {
+        // Arrange
+        var decoy = SensitiveDecoyCatalog.Kinds.Single(kind => kind.Rule == "aws-access-token").Plant(new Random(4));
+        var email = Build(inReplyTo: null, carbonCopies: 0, attachment: null) with
+        {
+            Body = new SyntheticEmailBody(
+                SyntheticBodyShape.PlainTextOnly,
+                decoy.Sentence,
+                $"<p>{decoy.Sentence}</p>",
+                SyntheticCharacterSet.Ascii,
+                decoy),
+        };
+
+        // Act
+        var line = CorpusListing.Describe(email);
+
+        // Assert
+        Assert.Contains("| sensitive=Secrets:CloudAccessKey |", line, StringComparison.Ordinal);
+        Assert.DoesNotContain("AKIA", line, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -112,6 +136,7 @@ public sealed class CorpusListingTests
                 SyntheticBodyShape.TextAndHtmlAlternative,
                 "text",
                 "<p>text</p>",
-                SyntheticCharacterSet.Utf8),
+                SyntheticCharacterSet.Utf8,
+                Decoy: null),
             Attachment: attachment);
 }

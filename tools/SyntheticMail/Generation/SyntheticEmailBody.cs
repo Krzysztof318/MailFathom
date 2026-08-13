@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.Text;
+using MailFathom.SyntheticMail.Generation.SensitiveDecoys;
 
 namespace MailFathom.SyntheticMail.Generation;
 
@@ -11,16 +12,25 @@ namespace MailFathom.SyntheticMail.Generation;
 /// <param name="PlainText">The text alternative.</param>
 /// <param name="Html">The HTML alternative.</param>
 /// <param name="CharacterSet">The charset both are encoded in.</param>
+/// <param name="Decoy">The fabricated sensitive material one paragraph carries, or <see langword="null" /> when the body carries none.</param>
 /// <remarks>
+/// <para>
 /// Both alternatives are always generated and <see cref="Shape" /> decides which of them a message carries, rather
 /// than one of them being absent. The absent one would otherwise have to be modelled as a null that means something
 /// different from the other null beside it, and there is nothing to gain from the two lines it saves.
+/// </para>
+/// <para>
+/// The decoy is recorded beside the text rather than only inside it, because the run has to be able to say what a
+/// message carries without a reader having to recognise a credential in a paragraph — which is the same reason a
+/// scanner's finding names a rule rather than a substring.
+/// </para>
 /// </remarks>
 internal sealed record SyntheticEmailBody(
     SyntheticBodyShape Shape,
     string PlainText,
     string Html,
-    SyntheticCharacterSet CharacterSet)
+    SyntheticCharacterSet CharacterSet,
+    SensitiveDecoy? Decoy)
 {
     /// <summary>Resolves the encoding this body is written in.</summary>
     /// <returns>The encoding, which is always one the base class library supplies.</returns>

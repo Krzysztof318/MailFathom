@@ -9,9 +9,17 @@ namespace MailFathom.SyntheticMail.Commands;
 
 /// <summary>Writes one generated message as one line, which is what a dry run produces.</summary>
 /// <remarks>
+/// <para>
 /// The line carries every axis the generator varies, so two runs of one seed are compared with an ordinary
 /// <c>diff</c> and a difference points at the field that moved rather than at "the mail is different". Nothing about
 /// the run itself appears here, which is why it can be compared at all.
+/// </para>
+/// <para>
+/// The fabricated sensitive material a message carries appears as its category and never as its value, which is the
+/// rule a finding follows for the reason a finding follows it: a listing that printed the credential would put it in
+/// a terminal, a scrollback, and whatever the developer pasted the output into. The seed is what reproduces the
+/// value, and the message itself is where it is.
+/// </para>
 /// </remarks>
 internal static class CorpusListing
 {
@@ -27,8 +35,10 @@ internal static class CorpusListing
             ? string.Create(CultureInfo.InvariantCulture, $"{carried.FileName} ({carried.Length} bytes)")
             : "none";
 
+        var sensitive = email.Body.Decoy is { } planted ? planted.Kind.Label : "none";
+
         return string.Create(
             CultureInfo.InvariantCulture,
-            $"{email.SentAt:yyyy-MM-dd'T'HH:mm:ssK} | <{email.MessageId}> | in-reply-to={email.InReplyTo ?? "-"} | {email.Body.Shape} | {email.Body.CharacterSet} | from={email.Author.Address} | cc={email.CarbonCopies.Count} | attachment={attachment} | {email.Subject}");
+            $"{email.SentAt:yyyy-MM-dd'T'HH:mm:ssK} | <{email.MessageId}> | in-reply-to={email.InReplyTo ?? "-"} | {email.Body.Shape} | {email.Body.CharacterSet} | from={email.Author.Address} | cc={email.CarbonCopies.Count} | attachment={attachment} | sensitive={sensitive} | {email.Subject}");
     }
 }

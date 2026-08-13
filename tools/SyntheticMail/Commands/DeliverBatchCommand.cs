@@ -22,6 +22,16 @@ internal static class DeliverBatchCommand
     private const int DefaultAttachmentBytes = 64 * 1024;
     private const int DefaultIntervalMilliseconds = 250;
 
+    /// <summary>How much of a batch carries fabricated sensitive material when the invocation says nothing.</summary>
+    /// <remarks>
+    /// Not zero, because a mailbox with nothing to find in it is one a scanner cannot be seen working on, and this
+    /// tool exists so that nobody has to reach for their own mail to get material worth scanning. A fifth is enough
+    /// that an ordinary batch carries several of every kind and low enough that the corpus still reads as mail rather
+    /// than as a credential dump. A run that wants a clean corpus asks for one, and the line it prints says which it
+    /// produced either way.
+    /// </remarks>
+    private const int DefaultSensitivePercentage = 20;
+
     /// <summary>Builds the command tree.</summary>
     /// <param name="context">What the command needs from its surroundings.</param>
     /// <returns>The root command.</returns>
@@ -63,6 +73,12 @@ internal static class DeliverBatchCommand
             DefaultValueFactory = _ => DefaultAttachmentBytes,
         };
 
+        Option<int> sensitivePercentageOption = new("--sensitive-percentage")
+        {
+            Description = $"How often a message carries a fabricated secret or personal identifier, 0..{BatchArguments.MaximumSensitivePercentage}. Zero generates a corpus carrying none.",
+            DefaultValueFactory = _ => DefaultSensitivePercentage,
+        };
+
         Option<int> intervalOption = new("--interval")
         {
             Description = $"Milliseconds between two submissions, 0..{BatchArguments.MaximumIntervalMilliseconds}, so a real server is not hit with a burst.",
@@ -87,6 +103,7 @@ internal static class DeliverBatchCommand
             daysOption,
             untilOption,
             attachmentBytesOption,
+            sensitivePercentageOption,
             intervalOption,
             configurationOption,
             dryRunOption,
@@ -101,6 +118,7 @@ internal static class DeliverBatchCommand
                 result.GetValue(untilOption),
                 result.GetValue(daysOption),
                 result.GetValue(attachmentBytesOption),
+                result.GetValue(sensitivePercentageOption),
                 result.GetValue(intervalOption),
                 result.GetValue(configurationOption),
                 result.GetValue(dryRunOption),
@@ -161,7 +179,7 @@ internal static class DeliverBatchCommand
     {
         context.Console.WriteError(string.Create(
             CultureInfo.InvariantCulture,
-            $"Seed {arguments.Seed}: {arguments.Count} messages dated {arguments.EarliestDate:yyyy-MM-dd}..{arguments.LatestDate:yyyy-MM-dd}, attachments up to {arguments.MaximumAttachmentBytes} bytes."));
+            $"Seed {arguments.Seed}: {arguments.Count} messages dated {arguments.EarliestDate:yyyy-MM-dd}..{arguments.LatestDate:yyyy-MM-dd}, attachments up to {arguments.MaximumAttachmentBytes} bytes, {arguments.SensitivePercentage}% carrying fabricated sensitive material."));
 
         context.Console.WriteError($"Repeat this batch with: {arguments.RepeatCommandLine}");
     }
