@@ -88,8 +88,18 @@ internal sealed class DeploymentAuthorizationDiscovery
             tokenEndpoint,
             ReadEndpoint(serverMetadata.DeviceAuthorizationEndpoint),
             resource,
-            string.Join(' ', resourceMetadata.ScopesSupported ?? []));
+            ReadPublishedScopes(resourceMetadata.ScopesSupported));
     }
+
+    /// <summary>Reads the scope list the deployment published, in the space-separated form RFC 6749 sends it in.</summary>
+    /// <remarks>
+    /// Blank entries are dropped rather than joined, because this document comes from a machine the process does not own
+    /// and a list of them would compose into a scope parameter made of spaces — which is the empty parameter an absent
+    /// one is deliberately not, and which several authorization servers refuse. What survives is sent verbatim: a value
+    /// this command does not recognize is still the operator's to publish.
+    /// </remarks>
+    private static string ReadPublishedScopes(IReadOnlyList<string>? publishedScopes) =>
+        string.Join(' ', (publishedScopes ?? []).Where(scope => !string.IsNullOrWhiteSpace(scope)));
 
     /// <summary>Names the one authorization server this sign-in will use.</summary>
     /// <remarks>

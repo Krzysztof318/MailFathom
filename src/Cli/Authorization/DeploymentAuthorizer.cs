@@ -109,7 +109,7 @@ internal sealed class DeploymentAuthorizer
         // scope the document never named would ask an authorization server for something the operator did not intend,
         // and a session that outlives the first hour is the deployment's decision to publish rather than this client's
         // to assume.
-        if (authorization.Scope is { Length: > 0 })
+        if (!string.IsNullOrWhiteSpace(authorization.Scope))
         {
             query["scope"] = authorization.Scope;
         }
@@ -252,10 +252,10 @@ internal sealed class DeploymentAuthorizer
     }
 
     /// <summary>Asks for the scopes the deployment published, and asks for nothing where it published none.</summary>
-    /// <remarks>An empty <c>scope</c> parameter is not the same thing as an absent one, and a deployment that requires and advertises no scope publishes an empty list — so the parameter is left out rather than sent empty to a server that may well refuse it.</remarks>
+    /// <remarks>An empty <c>scope</c> parameter is not the same thing as an absent one, and a deployment that requires and advertises no scope publishes an empty list — so the parameter is left out rather than sent empty to a server that may well refuse it. Blank is read as absent as well, because a stored session predating this reading may carry one.</remarks>
     private static void AddPublishedScopes(Dictionary<string, string> form, DeploymentAuthorization authorization)
     {
-        if (authorization.Scope is { Length: > 0 })
+        if (!string.IsNullOrWhiteSpace(authorization.Scope))
         {
             form["scope"] = authorization.Scope;
         }

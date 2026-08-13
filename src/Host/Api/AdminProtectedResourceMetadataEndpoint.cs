@@ -53,7 +53,7 @@ internal static class AdminProtectedResourceMetadataEndpoint
 /// <summary>What a client learns about this resource before it has a credential for it.</summary>
 /// <param name="Resource">The identifier a token must be issued for, which the client sends as RFC 8707's <c>resource</c> parameter.</param>
 /// <param name="AuthorizationServers">The issuers whose tokens this endpoint accepts, each of which publishes its own discovery document.</param>
-/// <param name="ScopesSupported">The scopes a token must carry, so a client asks for what it will need rather than for everything.</param>
+/// <param name="ScopesSupported">The scopes a client should ask for, which is what RFC 9728 defines the field as rather than what a token is checked against — so a scope this endpoint advertises without requiring is in it too.</param>
 /// <param name="BearerMethodsSupported">How a token may be presented; the header alone, because a credential in a query reaches every access log on the path.</param>
 /// <param name="ResourceName">The product's own name, which is what a consent screen shows the person approving.</param>
 /// <remarks>

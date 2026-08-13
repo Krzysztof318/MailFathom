@@ -72,6 +72,11 @@ internal sealed class FakeOAuthDeployment
     internal IReadOnlyDictionary<string, string> LastTokenRequest { get; private set; } =
         new Dictionary<string, string>(StringComparer.Ordinal);
 
+    /// <summary>Gets the form the device authorization endpoint was last posted.</summary>
+    /// <remarks>Recorded separately from the token endpoint's because a device sign-in asks for its scopes here, before any code exists to exchange — so a request that asked for the wrong ones would otherwise reach no assertion at all.</remarks>
+    internal IReadOnlyDictionary<string, string> LastDeviceAuthorizationRequest { get; private set; } =
+        new Dictionary<string, string>(StringComparer.Ordinal);
+
     /// <summary>Builds a deployment that publishes OAuth metadata and an authorization server that answers.</summary>
     /// <returns>The scenario, whose <see cref="Handler" /> the context is built over.</returns>
     internal static FakeOAuthDeployment Answering() => new();
@@ -114,14 +119,25 @@ internal sealed class FakeOAuthDeployment
             OpenIdConnectDiscoveryPath => Json(HttpStatusCode.OK, this.AuthorizationServerMetadata()),
             "/realms/mailfathom/protocol/openid-connect/token" =>
                 await this.AnswerTokenEndpointAsync(request, cancellationToken),
-            "/realms/mailfathom/protocol/openid-connect/auth/device" => Json(
-                HttpStatusCode.OK,
-                $$"""{"device_code":"a-device-code","user_code":"WDJB-MJHT","verification_uri":"{{this.VerificationUri}}","expires_in":600,"interval":1}"""),
+            "/realms/mailfathom/protocol/openid-connect/auth/device" =>
+                await this.AnswerDeviceAuthorizationEndpointAsync(request, cancellationToken),
             "/api/admin/session" => Json(
                 HttpStatusCode.OK,
                 FakeAdminEndpoint.SessionBody("kasia", FakeAdminEndpoint.CommandVersion)),
             _ => new HttpResponseMessage(HttpStatusCode.NotFound),
         };
+    }
+
+    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "The response is handed to the HttpClient that asked for it, which disposes it.")]
+    private async Task<HttpResponseMessage> AnswerDeviceAuthorizationEndpointAsync(
+        HttpRequestMessage request,
+        CancellationToken cancellationToken)
+    {
+        this.LastDeviceAuthorizationRequest = await ReadFormAsync(request, cancellationToken);
+
+        return Json(
+            HttpStatusCode.OK,
+            $$"""{"device_code":"a-device-code","user_code":"WDJB-MJHT","verification_uri":"{{this.VerificationUri}}","expires_in":600,"interval":1}""");
     }
 
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "The response is handed to the HttpClient that asked for it, which disposes it.")]

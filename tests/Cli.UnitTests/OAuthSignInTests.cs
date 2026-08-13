@@ -352,6 +352,82 @@ public sealed class OAuthSignInTests : IDisposable
         Assert.Equal("urn:ietf:params:oauth:grant-type:device_code", deployment.LastTokenRequest["grant_type"]);
     }
 
+    /// <summary>
+    /// A device sign-in asks for its scopes at the device authorization endpoint, before any code exists to exchange,
+    /// so that request is the only place a wrong scope list would appear. Dropping a scope the deployment advertises
+    /// costs the person a refresh token they were meant to have and shows up as nothing else.
+    /// </summary>
+    [Fact]
+    public async Task Login_ADeviceSignIn_AsksTheDeviceEndpointForTheScopesTheDeploymentPublishes()
+    {
+        // Arrange
+        var deployment = FakeOAuthDeployment.Answering();
+        deployment.PublishedScopes = ["mailfathom.admin", "offline_access"];
+        using var handler = deployment.Handler();
+
+        // The device grant polls, and the poll waits on the injected clock rather than on a real delay.
+        var signIn = RunAsync(
+            this.Context(this.CreateStore(), handler, FakeMailboxRedirect.Silent()),
+            "login",
+            "--endpoint",
+            FakeOAuthDeployment.DeploymentAddress,
+            "--mode",
+            "device",
+            "--client-id",
+            ClientId);
+
+        // Act
+        await this.AdvanceUntilCompleteAsync(signIn);
+
+        // Assert
+        Assert.Equal(0, await signIn);
+        Assert.Equal("mailfathom.admin offline_access", deployment.LastDeviceAuthorizationRequest["scope"]);
+    }
+
+    /// <summary>The same guard as the interactive request, on the request that carries it: an empty <c>scope</c> parameter is not an absent one.</summary>
+    [Fact]
+    public async Task Login_ADeviceSignInAgainstADeploymentPublishingNoScope_AsksWithNoScopeParameter()
+    {
+        // Arrange
+        var deployment = FakeOAuthDeployment.Answering();
+        deployment.PublishedScopes = [];
+        using var handler = deployment.Handler();
+
+        // The device grant polls, and the poll waits on the injected clock rather than on a real delay.
+        var signIn = RunAsync(
+            this.Context(this.CreateStore(), handler, FakeMailboxRedirect.Silent()),
+            "login",
+            "--endpoint",
+            FakeOAuthDeployment.DeploymentAddress,
+            "--mode",
+            "device",
+            "--client-id",
+            ClientId);
+
+        // Act
+        await this.AdvanceUntilCompleteAsync(signIn);
+
+        // Assert
+        Assert.Equal(0, await signIn);
+        Assert.DoesNotContain("scope", deployment.LastDeviceAuthorizationRequest.Keys);
+    }
+
+    /// <summary>A document answering with blanks composes into a scope parameter made of spaces, which is the empty one the guard exists to avoid — and it comes from a machine this process does not own.</summary>
+    [Fact]
+    public async Task Login_ADeploymentPublishingBlankScopes_AsksWithNoScopeParameter()
+    {
+        // Arrange
+        var deployment = FakeOAuthDeployment.Answering();
+        deployment.PublishedScopes = [" ", string.Empty];
+        using var handler = deployment.Handler();
+
+        // Act
+        await this.RunInteractiveAsync(this.CreateStore(), handler);
+
+        // Assert
+        Assert.Null(HttpUtility.ParseQueryString(new Uri(this.AuthorizationAddress()).Query)["scope"]);
+    }
+
     /// <summary>A server publishing no device endpoint is reported as that, rather than as a sign-in that hangs on a grant it will never answer.</summary>
     [Fact]
     public async Task Login_ADeviceSignInAtAServerOfferingNone_SaysSoRatherThanPolling()
@@ -479,6 +555,9 @@ public sealed class OAuthSignInTests : IDisposable
         Assert.Equal(0, exitCode);
         Assert.Equal("refresh_token", deployment.LastTokenRequest["grant_type"]);
         Assert.Equal("a-renewed-access-token", store.Resolve(requestedDeployment: null).Token);
+
+        // The renewal asks for the same scopes the sign-in did, so a session does not quietly narrow as it is renewed.
+        Assert.Equal("mailfathom.admin", deployment.LastTokenRequest["scope"]);
     }
 
     /// <summary>
