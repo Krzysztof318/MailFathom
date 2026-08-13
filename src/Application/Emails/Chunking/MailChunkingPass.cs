@@ -19,6 +19,13 @@ namespace MailFathom.Application.Emails.Chunking;
 /// the two stages allowed to change it had run — and passages are not undone by the message moving afterwards.
 /// </para>
 /// <para>
+/// Running after the rule pass is not the whole of that, and the selection carries the rest: a rule declares a move
+/// rather than performing one, and the account's next run is what carries it to the mail server, so a message this
+/// pass meets may be one still on its way out of the folder it is sitting in. Such a message is passed over and cut
+/// once it has arrived where the rule sent it. <c>StoredEmailChunkingStore.Selecting</c> states which records hold a
+/// cut back and which have stopped mattering.
+/// </para>
+/// <para>
 /// A step of the account's synchronization run rather than a schedule of its own, for the reason the classification and
 /// rule passes are: that run already has per-account isolation, a slot count, a jittered backoff, and a failure path
 /// that defers the account instead of the process, and only one pass per account is ever in flight because of it.
