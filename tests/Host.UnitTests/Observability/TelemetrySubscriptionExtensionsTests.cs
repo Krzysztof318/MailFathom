@@ -9,6 +9,7 @@ using MailFathom.Common.Observability;
 using MailFathom.Host.Observability;
 using MailFathom.Host.UnitTests.TestDoubles;
 using Microsoft.EntityFrameworkCore.Infrastructure.Internal;
+using Microsoft.Extensions.AI;
 using ModelContextProtocol.Server;
 using OpenTelemetry.Metrics;
 using Xunit;
@@ -34,6 +35,29 @@ public sealed class TelemetrySubscriptionExtensionsTests
     /// </remarks>
     private static Type ModelContextProtocolDiagnostics =>
         typeof(McpServerTool).Assembly.GetType("ModelContextProtocol.Diagnostics", throwOnError: true)!;
+
+    /// <summary>The name the AI telemetry decorators publish under when a client is built without one of its own.</summary>
+    /// <remarks>
+    /// Read from the library for the same reason the MCP SDK's is, and with more at stake: the AI boundary passes no
+    /// source name to <c>UseOpenTelemetry</c>, so what its spans and instruments arrive under is entirely the library's
+    /// default. A rename under a package bump would leave every provider call uncollected while the code went on
+    /// looking instrumented, and the declaration is internal, so reflection is what turns that into a failing test
+    /// here. One name serves both registries because the decorators construct their activity source and their meter
+    /// from the same string; a release that split them would fail the meter assertion rather than pass it silently.
+    /// </remarks>
+    private static string DeclaredExtensionsAiTelemetryName
+    {
+        get
+        {
+            var declaration = typeof(OpenTelemetryChatClient).Assembly
+                .GetType("Microsoft.Extensions.AI.OpenTelemetryConsts", throwOnError: true)!
+                .GetField("DefaultSourceName", BindingFlags.Static | BindingFlags.NonPublic | BindingFlags.Public);
+
+            Assert.NotNull(declaration);
+
+            return Assert.IsType<string>(declaration.GetValue(null));
+        }
+    }
 
     [Fact]
     public void AddMailFathomActivitySources_SubscribesTheDeclaredName()
@@ -71,7 +95,9 @@ public sealed class TelemetrySubscriptionExtensionsTests
         tracing.AddLibraryActivitySources();
 
         // Assert
-        Assert.Equal(["Experimental.ModelContextProtocol"], tracing.SubscribedSources);
+        Assert.Equal(
+            ["Experimental.ModelContextProtocol", "Experimental.Microsoft.Extensions.AI"],
+            tracing.SubscribedSources);
     }
 
     [Fact]
@@ -85,7 +111,12 @@ public sealed class TelemetrySubscriptionExtensionsTests
 
         // Assert
         Assert.Equal(
-            ["Polly", "Experimental.ModelContextProtocol", "Microsoft.EntityFrameworkCore"],
+            [
+                "Polly",
+                "Experimental.ModelContextProtocol",
+                "Microsoft.EntityFrameworkCore",
+                "Experimental.Microsoft.Extensions.AI",
+            ],
             metrics.SubscribedMeters);
     }
 
@@ -168,6 +199,32 @@ public sealed class TelemetrySubscriptionExtensionsTests
 #pragma warning disable EF1001
         Assert.Contains(EntityFrameworkMetrics.MeterName, metrics.SubscribedMeters);
 #pragma warning restore EF1001
+    }
+
+    [Fact]
+    public void AddLibraryActivitySources_SubscribesTheNameTheAiDecoratorsStartTheirSpansFrom()
+    {
+        // Arrange
+        var tracing = new RecordingTracerProviderBuilder();
+
+        // Act
+        tracing.AddLibraryActivitySources();
+
+        // Assert
+        Assert.Contains(DeclaredExtensionsAiTelemetryName, tracing.SubscribedSources);
+    }
+
+    [Fact]
+    public void AddLibraryMeters_SubscribesTheNameTheAiDecoratorsCreateTheirInstrumentsOn()
+    {
+        // Arrange
+        var metrics = new RecordingMeterProviderBuilder();
+
+        // Act
+        metrics.AddLibraryMeters();
+
+        // Assert
+        Assert.Contains(DeclaredExtensionsAiTelemetryName, metrics.SubscribedMeters);
     }
 
     [Fact]
