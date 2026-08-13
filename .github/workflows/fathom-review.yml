@@ -1232,8 +1232,8 @@ jobs:
 
           unread_file="$(mktemp)"
 
-          # `unique` on both sides, so a path named twice counts once and a `files.json` that lists a
-          # rename under both of its names is not reported as two unread files.
+          # `unique` on both sides, so a path the answer names twice counts once and the difference
+          # below stays set arithmetic over two normalized lists.
           #
           # The ledger is read for its type before its contents. The schema requires an array of
           # strings and the action refuses an answer that does not conform, so an answer reaching
