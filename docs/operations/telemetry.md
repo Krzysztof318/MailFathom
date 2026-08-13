@@ -1,6 +1,6 @@
 # Telemetry and the Aspire dashboard
 
-<!-- describes: src/Application/Observability/**, src/Common/Observability/**, src/Host/Observability/**, src/Host/ServiceDefaultsExtensions.cs, src/Host/Hosting/Workers/MailExtractionBackfillWorker.cs, src/Infrastructure/Observability/**, src/Infrastructure/Mail/MailKit/MailKitImapClientFactory.cs, src/Infrastructure/HostApplicationBuilderExtensions.cs, src/Mcp/Observability/**, src/AppHost/** -->
+<!-- describes: src/Application/Observability/**, src/Common/Observability/**, src/Host/Observability/**, src/Host/ServiceDefaultsExtensions.cs, src/Host/Hosting/Workers/MailExtractionBackfillWorker.cs, src/Infrastructure/Observability/**, src/Infrastructure/Mail/MailKit/MailKitImapClientFactory.cs, src/Infrastructure/HostApplicationBuilderExtensions.cs, src/Mcp/Observability/**, src/AppHost/**, src/AI/ProviderAdapters/OpenAiCompatibleClientFactory.cs -->
 
 The host instruments itself with OpenTelemetry throughout — logs, metrics, and traces — and exports none of it unless
 the environment names a destination. Today exactly one environment does that out of the box: a local run under the
@@ -20,7 +20,7 @@ and a duration, never as what was searched for. [What the endpoint records](mcp-
 states that boundary precisely.
 
 **Metrics** cover the request pipeline (ASP.NET Core), outbound HTTP (`HttpClient`), and the .NET runtime through their
-instrumentation packages, and four meters that the libraries publishing them name themselves:
+instrumentation packages, and five meters that the libraries publishing them name themselves:
 
 | Meter | What it reports | Subscribed by |
 | --- | --- | --- |
@@ -28,16 +28,18 @@ instrumentation packages, and four meters that the libraries publishing them nam
 | `Microsoft.EntityFrameworkCore` | Active contexts, queries, save operations, compiled-query cache hits and misses, execution-strategy failures, and optimistic-concurrency failures | The host |
 | `Experimental.ModelContextProtocol` | MCP session duration, and per-operation duration broken down by protocol method and — for a tool call — tool name | The host |
 | `Polly` | Every outbound-resilience pipeline's attempts, outcomes, timeouts, and circuit-breaker state transitions | The host |
+| `Experimental.Microsoft.Extensions.AI` | One provider call's duration and the tokens it consumed, broken down by operation, provider, model, and token type | The host |
 
 The split in the last column is where a meter is registered, not how important it is: the Aspire enrichment that gives
 the EF Core context its health check and its database tracing subscribes `Npgsql` as part of the same call, and the
-host subscribes the three it leaves out. Nothing is subscribed twice.
+host subscribes the four it leaves out. Nothing is subscribed twice.
 [Outbound resilience](../architecture/outbound-resilience.md#telemetry-and-privacy) records which tags the `Polly`
 events carry and which they never do; the optimistic-concurrency counter is the aggregate view of the same conflicts
 that surface individually as a persistence conflict failure.
 
-**Traces** cover incoming requests, outbound HTTP, database commands, and MCP protocol operations, correlated end to
-end: the trace a request arrives with is the trace its log records and its failure diagnostics carry. The MCP spans
+**Traces** cover incoming requests, outbound HTTP, database commands, MCP protocol operations, and calls to an AI
+provider, correlated end to end: the trace a request arrives with is the trace its log records and its failure
+diagnostics carry, and a model call appears inside the MCP request that caused it rather than beside it. The MCP spans
 come from the SDK's own `Experimental.ModelContextProtocol` activity source and carry the protocol method, the
 negotiated protocol version, the transport, the session identifier, the JSON-RPC request identifier, and the tool name
 for a tool call — which is what makes a slow call attributable to a tool before anything inside the tool is
@@ -61,9 +63,40 @@ turns scopes on for the console output rather than for the exporter — and
 [the MCP endpoint](mcp-endpoint.md#the-one-route-on-this-surface-that-admits-no-credential) states what each one costs.
 
 Every tag on the metrics above is a bounded set — a protocol method, a transport kind, a negotiated version, one of the
-three tool names, an outcome — so none of them opens a time series per message or per person. The MCP SDK does tag a
-metric with a resource URI, but only for the protocol's resource methods, and MailFathom's server publishes tools
-alone: no resources and no prompts, so the tag never arises.
+three tool names, an outcome, and on the AI instruments the operation, the provider, the requested and answered model
+names, the configured endpoint's address and port, and the token type — so none of them opens a time series per message
+or per person. The MCP SDK does tag a metric with a resource URI, but only for the protocol's resource methods, and
+MailFathom's server publishes tools alone: no resources and no prompts, so the tag never arises.
+
+### What a call to a model emits, and what it never does
+
+A chat model and an embedding model are reached through one client construction, and every client it builds is wrapped
+in the telemetry decorators `Microsoft.Extensions.AI` publishes. That is a property of the construction rather than of
+any call site: an adapter added later reaches a provider the same way and is spanned without anything else being
+written. The decorator sits innermost, beneath the resilience pipeline and the spend ceiling, so a span measures one
+attempt against the provider — a call retried three times is three spans rather than one slow one, which is what makes
+a provider's own latency separable from the retrying around it. Spans and instruments both arrive under
+`Experimental.Microsoft.Extensions.AI`, which is the library's name for them and follows OpenTelemetry's semantic
+conventions for generative AI, still marked experimental upstream.
+
+**The spans are complete; the instruments are not, under sustained load.** A client is built per provider call, so each
+call constructs the decorator anew — and the decorator creates a meter of its own with it. Every construction therefore
+allocates two fresh metric streams, and the OpenTelemetry SDK caps a provider at 1000 of them; the cap is reached after
+roughly 250 provider calls within one export interval, and the streams are reclaimed at the next export. Measured
+against the pinned SDK: 400 calls in one interval produce 400 spans and 250 measured calls. An ordinary interval's worth
+of questions is far below that and is measured in full, and an embedding backfill running at full concurrency is the
+shape that exceeds it — which shows up as an undercounted call rate and an undercounted token total for that interval,
+never as a missing span or a wrong duration on the calls that were recorded. Reading a backfill's cost from the provider's
+own accounting rather than from this meter is the remedy while that holds.
+
+**A prompt and a completion are never recorded.** The library will capture both — the question somebody asked of their
+mailbox, the answer a model gave, the passages an embedding request carried — and it turns that capture on from the
+environment variable `OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT`. MailFathom sets the switch explicitly where
+it builds the client, and an explicit value takes precedence, so **that variable has no effect on this process**. There
+is no configuration key for it either: a collector holding every question and answer would be a second copy of the mail,
+under a retention nobody chose and an access rule the mail store never granted, and this is not a trade an operator is
+offered. What remains is metadata — which operation ran, against which model and endpoint, how long it took, how many
+tokens it consumed, and whether it failed.
 
 ## The build every record names
 
