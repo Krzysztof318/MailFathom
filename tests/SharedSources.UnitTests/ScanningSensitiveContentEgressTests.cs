@@ -40,6 +40,48 @@ public sealed class ScanningSensitiveContentEgressTests
         Assert.Equal(SensitiveContentEgressPoint.ChatPrompt, recorded.EgressPoint);
     }
 
+    /// <summary>A consumer has to behave identically under either switch, so either one can be the deployment's.</summary>
+    [Theory]
+    [InlineData(SensitiveContentScannerKind.Secrets)]
+    [InlineData(SensitiveContentScannerKind.Pii)]
+    public async Task Finding_ADeploymentWithOneSwitchOn_ScansUnderTheSwitchItWasGiven(
+        SensitiveContentScannerKind scanner)
+    {
+        // Arrange
+        using var egress = ScanningSensitiveContentEgress.Finding(Marker, this.timeProvider, scanner);
+
+        // Act
+        var guarded = await egress.Guard.GuardAsync(
+            SensitiveContentEgressPoint.McpEmailContent,
+            $"the key is {Marker}",
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(scanner, egress.Scanner.Scanner);
+        Assert.Equal("the key is [redacted:CloudKey]", guarded);
+    }
+
+    /// <summary>The analyzed ceiling is the one bound that truncates rather than refusing, so a test has to be able to reach it.</summary>
+    [Fact]
+    public async Task Finding_ADeploymentWhoseCeilingCutsTheText_DropsWhatItDidNotAnalyze()
+    {
+        // Arrange
+        using var egress = ScanningSensitiveContentEgress.Finding(
+            Marker,
+            this.timeProvider,
+            bounds: SensitiveContentScanBounds.Create(8, TimeSpan.FromSeconds(5), 4));
+
+        // Act
+        var guarded = await egress.Guard.GuardWithOmissionAsync(
+            SensitiveContentEgressPoint.McpEmailContent,
+            "12345678 and everything after it",
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal("12345678", guarded.Text);
+        Assert.Equal(24, guarded.OmittedCharacterCount);
+    }
+
     [Fact]
     public async Task Unavailable_ADeploymentWhoseDetectorCannotAnswer_RefusesEveryTextItIsHanded()
     {

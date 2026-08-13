@@ -297,6 +297,7 @@ different actions.
 | `None` | The text is the whole of what the message displayed in this representation | Nothing |
 | `BodyCharacterLimit` | The per-representation bound cut it | Nothing; this message is longer than any single call returns |
 | `ReadCharacterBudget` | The call's total budget cut it, because the emails named before it had already spent it | Name this email in a call of its own, or fewer emails at once |
+| `SensitiveContentScanCeiling` | A switched-on scanner analyzed as much of the body as it may, and the rest is withheld rather than served unscanned | Nothing a call can do; only raising `SensitiveContent:MaximumAnalyzedCharacters` returns more |
 
 `EmailContent:MaxBodyCharacters` sets the per-representation bound, defaults to 100,000, and is validated at startup
 within 1,000–1,000,000. `EmailContent:MaxCharactersPerRead` sets the whole call's budget, defaults to 200,000, and is
@@ -344,6 +345,48 @@ spend its whole allowance on opening tags and then need as much again to close t
 would hand back exactly the unbalanced fragment the source-first cut avoids, the source is shrunk and sanitized again
 until the result fits. The retry terminates because a shorter prefix opens no more elements than a longer one, and
 ordinary mail never reaches a second pass.
+
+### A scanned deployment redacts what it returns
+
+Where [sensitive-content scanning](sensitive-content-scanning.md#reading-a-message-is-scanned-in-flight) is switched on,
+what the message's author wrote is scanned on every read and returned with each detection replaced by
+`[redacted:<category>]`: both body representations, the subject, and each participant's display name. The addresses
+beside those names, the identifiers, the sizes, the flags, and every attachment's file name are left as they are, on the
+line that page draws between a routing identity and free text.
+
+The display names of the first 40 named participants of a message are scanned, and past that the address is published
+with no display name at all. A scan is a round trip where the personal-data analyzer runs in a container of its own, and
+a parse publishes up to 256 addresses per header role, so a list expansion would otherwise turn one read into thousands
+of sequential requests holding the scan permits every listing and answering run shares. Losing a name past the fortieth
+participant is the cheaper side of that bound, and a withheld name is never a name nothing scanned.
+
+The scan is what the read hands over rather than what it stored: nothing rewrites the raw MIME or the extracted text,
+and no span, offset, or finding location for a stored message is written anywhere. That is why it is paid per call.
+
+Three consequences reach this contract. The redaction runs over the text this read would have returned, so every
+character a caller receives is one a scanner saw, and the placeholders can carry a representation slightly past the
+bound that cut it — the same property re-serialized markup already has, and the reason `Truncation` is stated rather
+than derived from the two lengths. A body longer than the scan's own ceiling comes back cut at it and says
+`SensitiveContentScanCeiling`, over whichever bound had cut it already, because that is where the returned text now
+ends. And a detector that cannot answer fails the call rather than serving the message unscanned: the server log records
+`81001` naming the scanner while the caller receives `54001`, under the category rule
+[MCP tools § error reporting](mcp-tools.md#error-reporting) states.
+
+**A ceiling cut lands on a UTF-16 boundary rather than a text-element one.** It never hands back an unpaired surrogate —
+the cut steps back off a high surrogate before it is taken — but a combining sequence, a ZWJ emoji, or a
+regional-indicator pair standing exactly at the ceiling is split, so a body can end in a bare base letter or half a flag.
+The text-element guarantee above therefore holds for the two call bounds alone, which are the ones applied to text the
+message wrote rather than to text a scan had already stopped reading.
+
+**That ceiling is also the one place the balanced-markup guarantee above stops applying.** It cuts what the sanitizer had
+already serialized rather than the source it was serialized from, so a `sanitizedHtml` representation reporting
+`SensitiveContentScanCeiling` can end inside an element — the fragment the source-first cut exists to avoid. The
+alternative is worse in the way this whole feature is written against: sanitizing again would hand back markup the scan
+never analyzed. A caller that renders the markup treats this truncation as it would a broken document; the plain text
+beside it is unaffected, since nothing re-serializes it.
+
+With both switches off none of this happens: no detector is constructed, nothing is scanned, and the read is
+byte-identical to the one the same message produced before the feature existed.
 
 ## HTML sanitization
 

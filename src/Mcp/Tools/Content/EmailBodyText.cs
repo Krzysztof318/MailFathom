@@ -25,7 +25,7 @@ internal sealed record EmailBodyText
     public required int OriginalCharacterCount { get; init; }
 
     /// <summary>Gets which bound removed something, or that none did.</summary>
-    [Description("Which bound cut the text: 'none' when it is the whole representation, 'bodyCharacterLimit' when this email alone is longer than one call returns, or 'readCharacterBudget' when the emails named before it had already spent the call's total budget. Anything other than 'none' means the text ends mid-message, so state that the message continues rather than presenting it as complete; 'readCharacterBudget' additionally means that naming fewer emails in one call returns more of this one.")]
+    [Description("Which bound cut the text: 'none' when it is the whole representation, 'bodyCharacterLimit' when this email alone is longer than one call returns, 'readCharacterBudget' when the emails named before it had already spent the call's total budget, or 'sensitiveContentScanCeiling' when the deployment's sensitive-content scan analyzed as much as it may and the rest is withheld rather than served unscanned. Anything other than 'none' means the text ends mid-message, so state that the message continues rather than presenting it as complete; 'readCharacterBudget' additionally means that naming fewer emails in one call returns more of this one, while 'sensitiveContentScanCeiling' means no call returns more of it.")]
     public required EmailBodyTruncationCause TruncatedBy { get; init; }
 
     /// <summary>Publishes one bounded representation.</summary>
@@ -55,6 +55,7 @@ internal sealed record EmailBodyText
             EmailBodyTruncation.None => EmailBodyTruncationCause.None,
             EmailBodyTruncation.BodyCharacterLimit => EmailBodyTruncationCause.BodyCharacterLimit,
             EmailBodyTruncation.ReadCharacterBudget => EmailBodyTruncationCause.ReadCharacterBudget,
+            EmailBodyTruncation.SensitiveContentScanCeiling => EmailBodyTruncationCause.SensitiveContentScanCeiling,
             _ => throw new ArgumentOutOfRangeException(
                 nameof(truncation),
                 truncation,

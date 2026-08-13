@@ -20,4 +20,7 @@ internal enum EmailBodyTruncationCause
 
     /// <summary>The call's total character budget cut it, because the emails named before it had already spent the budget.</summary>
     ReadCharacterBudget = 2,
+
+    /// <summary>The sensitive-content scan's analyzed ceiling cut it, so the remainder is withheld from every call rather than from this one.</summary>
+    SensitiveContentScanCeiling = 3,
 }

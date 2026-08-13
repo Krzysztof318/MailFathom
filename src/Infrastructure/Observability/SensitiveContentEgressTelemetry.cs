@@ -114,6 +114,7 @@ public sealed class SensitiveContentEgressTelemetry : ISensitiveContentEgressTel
         SensitiveContentEgressPoint.ChatPrompt => "chat_prompt",
         SensitiveContentEgressPoint.HostedEmbeddingInput => "hosted_embedding_input",
         SensitiveContentEgressPoint.McpSnippet => "mcp_snippet",
+        SensitiveContentEgressPoint.McpEmailContent => "mcp_email_content",
         _ => "unknown",
     };
 

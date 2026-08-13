@@ -23,4 +23,12 @@ public enum EmailBodyTruncation
     /// <summary>The read's total character budget cut it, because earlier emails in the same call had already spent it.</summary>
     /// <remarks>Naming this email in a call of its own returns more of it, which is the action the state exists to make visible.</remarks>
     ReadCharacterBudget = 2,
+
+    /// <summary>The sensitive-content scan's analyzed ceiling cut it, because text nothing scanned is text this deployment does not hand out.</summary>
+    /// <remarks>
+    /// The only one of the three a caller cannot act on by asking differently: the remainder is withheld for every call
+    /// and every client until an operator raises <c>SensitiveContent:MaximumAnalyzedCharacters</c>, which is the whole
+    /// reason it is named apart from the two bounds that describe how much was asked for.
+    /// </remarks>
+    SensitiveContentScanCeiling = 3,
 }

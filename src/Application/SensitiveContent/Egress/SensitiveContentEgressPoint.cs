@@ -37,4 +37,12 @@ public enum SensitiveContentEgressPoint
 
     /// <summary>Text an MCP tool returns: a search snippet, a subject a listing publishes, and an answer a run produced.</summary>
     McpSnippet = 2,
+
+    /// <summary>The message an MCP client asked for by identity: its body representations, its subject, and the display names its headers wrote.</summary>
+    /// <remarks>
+    /// Apart from the snippets above because it is the one point that publishes a whole body rather than an extract of
+    /// one, and therefore the one whose latency an operator reads as the cost of scanning a read. Sharing a tag with
+    /// the listing would average the two into a number describing neither.
+    /// </remarks>
+    McpEmailContent = 3,
 }

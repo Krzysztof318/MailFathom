@@ -11,6 +11,8 @@ using MailFathom.Application.EmailContent.Storage;
 using MailFathom.Application.Emails.Extraction;
 using MailFathom.Application.Emails.Mailboxes;
 using MailFathom.Application.Emails.Summaries;
+using MailFathom.Application.SensitiveContent.Detection;
+using MailFathom.Application.SensitiveContent.Egress;
 using MailFathom.Domain.Emails;
 
 namespace MailFathom.Application.Emails.GetEmailContent;
@@ -46,15 +48,32 @@ namespace MailFathom.Application.Emails.GetEmailContent;
 /// local copy is answered with a failure and a repair request instead of a fetch. The use case holds no mailbox port,
 /// which is what makes the guarantee structural rather than a rule someone has to keep.
 /// </para>
+/// <para>
+/// Where a scanner is switched on, what the message's author wrote is scanned on the way out of every read and returned
+/// with its findings replaced. Nothing stored is rewritten by that — not the raw MIME and not the extracted text — so
+/// the redaction is paid for per call and the local copy stays the artifact it was fetched as. It is the same redaction
+/// the derived path applies, which is what makes a citation drawn from a redacted chunk land on the same redacted text
+/// when a reader opens the message.
+/// </para>
 /// </remarks>
 public sealed class EmailContentReader
 {
+    /// <summary>How many of one message's display names a scanned read analyzes before it publishes addresses alone.</summary>
+    /// <remarks>
+    /// Set where a real message stops and a list expansion begins: correspondence a person reads names a handful of
+    /// people, a thread across two departments names a few dozen, and an addressee list beyond that is a distribution
+    /// somebody expanded rather than a set of names anybody reads. Both sides of the bound cost something, and the
+    /// cheaper one is losing a display name past the fortieth participant of one message.
+    /// </remarks>
+    private const int MaximumScannedDisplayNames = 40;
+
     private readonly IStoredEmailSummaryReader summaryReader;
     private readonly IEmailContentStore contentStore;
     private readonly IEmailContentRenderer renderer;
     private readonly IEmailContentRepairRequestStore repairRequestStore;
     private readonly MailboxScopeResolver scopeResolver;
     private readonly IAttachmentDownloadLinkIssuer linkIssuer;
+    private readonly SensitiveContentEgressGuard egressGuard;
     private readonly EmailContentReadOptions readOptions;
 
     /// <summary>Initializes the use case.</summary>
@@ -64,6 +83,7 @@ public sealed class EmailContentReader
     /// <param name="repairRequestStore">Records durably that a local copy has to be fetched or read again.</param>
     /// <param name="scopeResolver">Answers whether a tool may read the mailbox an email was stored from.</param>
     /// <param name="linkIssuer">Mints the short-lived capability a caller fetches an attachment with.</param>
+    /// <param name="egressGuard">Scans what the message's author wrote before a read publishes it.</param>
     /// <param name="readOptions">The bounds on how much body text one call returns.</param>
     /// <exception cref="ArgumentNullException">Thrown when any argument is <see langword="null" />.</exception>
     public EmailContentReader(
@@ -73,6 +93,7 @@ public sealed class EmailContentReader
         IEmailContentRepairRequestStore repairRequestStore,
         MailboxScopeResolver scopeResolver,
         IAttachmentDownloadLinkIssuer linkIssuer,
+        SensitiveContentEgressGuard egressGuard,
         EmailContentReadOptions readOptions)
     {
         ArgumentNullException.ThrowIfNull(summaryReader);
@@ -81,6 +102,7 @@ public sealed class EmailContentReader
         ArgumentNullException.ThrowIfNull(repairRequestStore);
         ArgumentNullException.ThrowIfNull(scopeResolver);
         ArgumentNullException.ThrowIfNull(linkIssuer);
+        ArgumentNullException.ThrowIfNull(egressGuard);
         ArgumentNullException.ThrowIfNull(readOptions);
 
         this.summaryReader = summaryReader;
@@ -89,6 +111,7 @@ public sealed class EmailContentReader
         this.repairRequestStore = repairRequestStore;
         this.scopeResolver = scopeResolver;
         this.linkIssuer = linkIssuer;
+        this.egressGuard = egressGuard;
         this.readOptions = readOptions;
     }
 
@@ -97,6 +120,7 @@ public sealed class EmailContentReader
     /// <param name="cancellationToken">Propagates caller cancellation.</param>
     /// <returns>One outcome per named email, in the order they were named.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="request" /> is <see langword="null" />.</exception>
+    /// <exception cref="SensitiveContentScannerUnavailableException">Thrown when a switched-on scanner could not establish what an email carries, which fails the read rather than serving it unscanned.</exception>
     /// <remarks>
     /// <para>
     /// Reading writes nothing about the emails themselves and is safe to repeat. The one write it can perform is the
@@ -153,7 +177,8 @@ public sealed class EmailContentReader
         // neither schedules a repair. They are answered apart because only one of them is worth asking about again.
         if (BodyOfUnstoredContent(summary.ContentAvailability) is { } unstoredBody)
         {
-            return EmailContentReadOutcome.Read(ContentWithoutStoredMime(summary, unstoredBody));
+            return EmailContentReadOutcome.Read(
+                await this.GuardedAsync(ContentWithoutStoredMime(summary, unstoredBody), cancellationToken));
         }
 
         var content = await this.contentStore.FindStoredContentAsync(storedEmailId, cancellationToken);
@@ -186,7 +211,174 @@ public sealed class EmailContentReader
             request.IncludeAttachmentDownloadLinks,
             cancellationToken);
 
-        return EmailContentReadOutcome.Read(ContentFrom(summary, rendered, attachments));
+        return EmailContentReadOutcome.Read(
+            await this.GuardedAsync(ContentFrom(summary, rendered, attachments), cancellationToken));
+    }
+
+    /// <summary>Scans what the message's author wrote, before any of it becomes a caller's.</summary>
+    /// <remarks>
+    /// <para>
+    /// The body is the reason this exists — it is the whole of what a message says and the one place a credential is
+    /// actually pasted — and the subject and the display names are here because the listing and the search already scan
+    /// theirs. A tool that returned the subject a listing had redacted would leave the two disagreeing about what the
+    /// same message says, which is exactly what a caller cannot resolve on its own.
+    /// </para>
+    /// <para>
+    /// Everything else is left as it was read. The account, the folder alias, the stored identity, the addresses, the
+    /// sizes, the flags, and every attachment's file name are what a caller acts on rather than text to read, and
+    /// redacting the address a reply has to go to would remove the read's whole use while protecting nothing the body
+    /// did not already carry. The line falls between a routing identity and free text, which is why a display name is
+    /// scanned and the address behind it is not.
+    /// </para>
+    /// <para>
+    /// Each value is scanned on its own and the message is composed afterwards, because a scan of the composed thing
+    /// could report a region covering the end of one field and the start of the next. The cost is one scan per value
+    /// per read, paid on every call and stored nowhere: keeping a map of where a message's credentials sit would be a
+    /// new artifact pointing straight at them, which a cheaper read does not justify.
+    /// </para>
+    /// </remarks>
+    private async Task<ReadEmailContent> GuardedAsync(ReadEmailContent content, CancellationToken cancellationToken)
+    {
+        if (!this.egressGuard.IsActive)
+        {
+            return content;
+        }
+
+        return content with
+        {
+            Headers = await this.GuardedAsync(content.Headers, cancellationToken),
+            Body = await this.GuardedAsync(content.Body, cancellationToken),
+        };
+    }
+
+    /// <summary>Scans the two things a header block carries that a message's author wrote.</summary>
+    private async Task<EmailContentHeaders> GuardedAsync(
+        EmailContentHeaders headers,
+        CancellationToken cancellationToken)
+    {
+        return headers with
+        {
+            Subject = await this.egressGuard.GuardOptionalAsync(
+                SensitiveContentEgressPoint.McpEmailContent,
+                headers.Subject,
+                cancellationToken),
+            Participants = await this.GuardedAsync(headers.Participants, cancellationToken),
+        };
+    }
+
+    /// <summary>Scans the display name each participant carries, leaving the address it sits in front of alone.</summary>
+    /// <remarks>
+    /// <para>
+    /// The count is bounded here rather than left to the message, because a scan is a round trip on the deployment that
+    /// runs the personal-data analyzer in a container: a parse publishes up to
+    /// <see cref="EmailParticipant.MaximumPerRole" /> addresses for each header role, so a list expansion would
+    /// otherwise turn one read into thousands of sequential requests taking the process-wide scan permits from every
+    /// listing and answering run behind it. Past <see cref="MaximumScannedDisplayNames" /> the address is published with
+    /// no display name at all, which withholds rather than serves a name nothing scanned. A participant the sender wrote
+    /// no name for costs nothing and counts towards nothing.
+    /// </para>
+    /// <para>
+    /// A participant whose guarded name cannot be put back is dropped rather than published unguarded, which is the
+    /// answer this use case already gives an address it cannot use. The address itself is unchanged and was accepted
+    /// when the participant was built, so nothing a scanner returns reaches that branch.
+    /// </para>
+    /// </remarks>
+    private async Task<IReadOnlyList<EmailParticipant>> GuardedAsync(
+        IReadOnlyList<EmailParticipant> participants,
+        CancellationToken cancellationToken)
+    {
+        var guarded = new List<EmailParticipant>(participants.Count);
+        var named = 0;
+
+        foreach (var participant in participants)
+        {
+            if (participant.Address.DisplayName is not { } displayName)
+            {
+                guarded.Add(participant);
+
+                continue;
+            }
+
+            var guardedName = named++ < MaximumScannedDisplayNames
+                ? await this.egressGuard.GuardAsync(
+                    SensitiveContentEgressPoint.McpEmailContent,
+                    displayName,
+                    cancellationToken)
+                : null;
+
+            if (EmailAddress.TryCreate(guardedName, participant.Address.Address, out var address))
+            {
+                guarded.Add(participant with { Address = address });
+            }
+        }
+
+        return guarded;
+    }
+
+    /// <summary>Scans each representation of a body that could be read.</summary>
+    /// <remarks>
+    /// A body nothing could read carries no text in either representation, so an encrypted message and one whose
+    /// content was never stored reach a scanner no more often than they reach a parser.
+    /// </remarks>
+    private async Task<EmailContentBody> GuardedAsync(EmailContentBody body, CancellationToken cancellationToken)
+    {
+        if (body.Availability is not EmailBodyAvailability.Readable)
+        {
+            return body;
+        }
+
+        return EmailContentBody.Readable(
+            await this.GuardedAsync(body.PlainText, cancellationToken),
+            body.SanitizedHtml is { } sanitizedHtml
+                ? await this.GuardedAsync(sanitizedHtml, cancellationToken)
+                : null);
+    }
+
+    /// <summary>Scans one representation and states the analyzed ceiling as the bound it is.</summary>
+    /// <remarks>
+    /// <para>
+    /// The scan runs over the text this read would have returned, so every character a caller receives is one a scanner
+    /// saw. What the placeholders then do to the length is left alone: replacing a short credential with a longer
+    /// marker can carry the text past the bound that cut it, exactly as re-serializing sanitized markup can, and the
+    /// truncation metadata is stated rather than derived from the length for that reason.
+    /// </para>
+    /// <para>
+    /// Text beyond the analyzed ceiling is dropped rather than handed on, so the representation says so — and says it
+    /// over whichever bound had cut it already, because the ceiling is where the returned text now ends. It is the one
+    /// of the three a caller cannot act on: naming fewer emails returns no more of this message, and only raising
+    /// <c>SensitiveContent:MaximumAnalyzedCharacters</c> does.
+    /// </para>
+    /// <para>
+    /// That cut is the one place the balanced-markup property of the sanitized representation stops holding. The
+    /// renderer keeps markup balanced by shrinking its source and sanitizing again, and a ceiling applied here cuts what
+    /// the sanitizer had already serialized, so a representation carrying this truncation can end inside an element. It
+    /// is preferred to the alternative: re-serializing would mean handing back text the scan never analyzed.
+    /// </para>
+    /// <para>
+    /// The source length is untouched by all of this. It states what the message held, which redaction does not change.
+    /// </para>
+    /// </remarks>
+    private async Task<EmailBodyRepresentation> GuardedAsync(
+        EmailBodyRepresentation representation,
+        CancellationToken cancellationToken)
+    {
+        if (representation.Text.Length == 0)
+        {
+            return representation;
+        }
+
+        var guarded = await this.egressGuard.GuardWithOmissionAsync(
+            SensitiveContentEgressPoint.McpEmailContent,
+            representation.Text,
+            cancellationToken);
+
+        return representation with
+        {
+            Text = guarded.Text,
+            Truncation = guarded.WasCutAtAnalyzedCeiling
+                ? EmailBodyTruncation.SensitiveContentScanCeiling
+                : representation.Truncation,
+        };
     }
 
     /// <summary>Pairs each described attachment with the way its content is reached, or with the reason it is not.</summary>

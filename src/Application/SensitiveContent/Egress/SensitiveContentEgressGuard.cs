@@ -87,6 +87,31 @@ public sealed class SensitiveContentEgressGuard
             : Task.FromResult(text);
     }
 
+    /// <summary>Guards one text and reports what the analyzed ceiling kept out of it.</summary>
+    /// <param name="egressPoint">Where the text is going.</param>
+    /// <param name="text">The text to guard, which must be a value rather than a document composed around one.</param>
+    /// <param name="cancellationToken">Cancels the scan.</param>
+    /// <returns>The guarded text and how many characters lay beyond what one scan analyzes.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="text" /> is <see langword="null" />.</exception>
+    /// <exception cref="SensitiveContentScannerUnavailableException">Thrown when a switched-on scanner could not establish what the text carries, which refuses the egress.</exception>
+    /// <exception cref="OperationCanceledException">Thrown when <paramref name="cancellationToken" /> is cancelled.</exception>
+    /// <remarks>
+    /// For the consumer that publishes how complete what it hands over is. The ceiling is the one bound in this feature
+    /// that never raises a failure — text beyond it is dropped rather than passed on unscanned — so a consumer that
+    /// could not see the drop would report a message as whole that a scan had ended early.
+    /// </remarks>
+    public Task<GuardedText> GuardWithOmissionAsync(
+        SensitiveContentEgressPoint egressPoint,
+        string text,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(text);
+
+        return this.redactor is { } active
+            ? this.RedactReportingOmissionAsync(active, egressPoint, text, cancellationToken)
+            : Task.FromResult(new GuardedText(text, OmittedCharacterCount: 0));
+    }
+
     /// <summary>Guards a text that a message need not carry at all.</summary>
     /// <param name="egressPoint">Where the text is going.</param>
     /// <param name="text">The text to guard, or <see langword="null" /> where the message carried none.</param>
@@ -152,12 +177,34 @@ public sealed class SensitiveContentEgressGuard
         return guarded;
     }
 
+    private async Task<string> RedactAsync(
+        SensitiveContentRedactor active,
+        SensitiveContentEgressPoint egressPoint,
+        string text,
+        CancellationToken cancellationToken)
+    {
+        var redacted = await this.RedactAndReportAsync(active, egressPoint, text, cancellationToken);
+
+        return redacted.Text;
+    }
+
+    private async Task<GuardedText> RedactReportingOmissionAsync(
+        SensitiveContentRedactor active,
+        SensitiveContentEgressPoint egressPoint,
+        string text,
+        CancellationToken cancellationToken)
+    {
+        var redacted = await this.RedactAndReportAsync(active, egressPoint, text, cancellationToken);
+
+        return new GuardedText(redacted.Text, redacted.OmittedCharacterCount);
+    }
+
     /// <summary>Runs the shared redaction and reports what it found, or reports the refusal and re-raises it.</summary>
     /// <remarks>
     /// The refusal reaches the caller unchanged. It already names the scanner and no text, and translating it here would
     /// cost the error code an operator reads the failure by while adding nothing this layer knows.
     /// </remarks>
-    private async Task<string> RedactAsync(
+    private async Task<RedactedText> RedactAndReportAsync(
         SensitiveContentRedactor active,
         SensitiveContentEgressPoint egressPoint,
         string text,
@@ -171,7 +218,7 @@ public sealed class SensitiveContentEgressGuard
 
             this.telemetry.RecordGuarded(egressPoint, redacted, this.timeProvider.GetElapsedTime(startedAt));
 
-            return redacted.Text;
+            return redacted;
         }
         catch (SensitiveContentScannerUnavailableException refusal)
         {

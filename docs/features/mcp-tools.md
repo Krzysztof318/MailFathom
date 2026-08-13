@@ -412,15 +412,26 @@ in it.
 | `attachmentCounts` | What the email carries besides its body, returned either way, or `null` when nothing has ever read its parts |
 | `remoteFlags` | The flags a server last showed, and when they were read |
 
-Six parts of it are worth reading before a caller writes against them:
+Seven parts of it are worth reading before a caller writes against them:
 
 - **Truncation travels inside each representation, and names the bound.** `plainText` and `sanitizedHtml` each carry
   `text`, `originalCharacterCount`, and `truncatedBy`, because a body and the fact that it is incomplete are never useful
   apart: a model handed only the text would summarize a cut message as a whole one. `truncatedBy` is `none`,
-  `bodyCharacterLimit` when this email alone is longer than one call returns, or `readCharacterBudget` when the emails
+  `bodyCharacterLimit` when this email alone is longer than one call returns, `readCharacterBudget` when the emails
   named before it had already spent the call's total budget — the one case where naming fewer emails at once returns
-  more. A message can exceed a bound in one representation and not in the other, which is why the metadata is not shared
-  between them.
+  more — or `sensitiveContentScanCeiling` when a switched-on scanner analyzed as much of the body as it may and the
+  remainder is withheld rather than served unscanned, which no call returns more of. A message can exceed a bound in one
+  representation and not in the other, which is why the metadata is not shared between them.
+- **The content may come back redacted.** Where the deployment scans mail for sensitive content, what the message's
+  author wrote — both body representations, the subject, and the display names of at most the first 40 named
+  participants of the email — is scanned on every call and returned with each detection replaced by
+  `[redacted:<category>]`. The marker means material of that kind stood there and was withheld; it is never text the
+  message contained, and the same call returns the same marker. Every participant past that fortieth name is published
+  with no display name at all rather than with one nothing scanned, so on such a deployment an absent `displayName` can
+  mean either that the sender wrote none or that the bound was reached. Addresses, identifiers, sizes, and flags are
+  never redacted, nothing stored is rewritten, and a detector that cannot answer fails the call rather than returning
+  unfiltered content. [Sensitive-content
+  scanning](sensitive-content-scanning.md#reading-a-message-is-scanned-in-flight) is the whole contract.
 - **`availability` rather than an empty body.** `readable` means the text is the message, and an empty body under it
   means the message displayed nothing. `encryptedNotReadableLocally` is mail this deployment cannot decrypt,
   `notStoredExceededSizeLimit` is mail whose bytes the configured size limit deliberately kept out of storage, and

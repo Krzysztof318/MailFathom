@@ -12,8 +12,7 @@ a detection is, what replaces it, what one scan may spend, and what happens when
 
 ## What is scanned, and what is never touched
 
-The boundary is **egress and derived data**, never ingestion. The table names the paths this contract is written for;
-the note below it states the one that does not redact through it yet.
+The boundary is **egress and derived data**, never ingestion. The table names the paths this contract is written for.
 
 | Kind of text | What scanning does to it |
 | --- | --- |
@@ -40,10 +39,6 @@ entirely rather than accept the second.
 All four combinations are supported configurations. With both off nothing is scanned, nothing is constructed, and no
 cost lands on any path.
 
-> **One egress point is not yet covered.** The second row of the table above is covered at the points the next section
-> names, with one exception: the mail body an MCP client asks for by identity is served as it was stored. That arrives
-> with its own change, and this note goes with it.
-
 The first row is what a message stores rather than what leaves, so what it covers, what a derived row records about the
 configuration behind it, and what a late switch does to text already written are in [derived data](#derived-data-is-written-redacted-and-stamped)
 below.
@@ -51,7 +46,7 @@ below.
 ## The guarded egress points
 
 Every place text leaves this deployment goes through one guard, and the guard is told which place it is. There are
-three, and the register is closed: a fourth is a code change rather than a configuration one, which is what makes the
+four, and the register is closed: a fifth is a code change rather than a configuration one, which is what makes the
 list below answerable by reading it.
 
 | Egress point | What crosses it |
@@ -59,6 +54,7 @@ list below answerable by reading it.
 | `chat_prompt` | Everything a model is sent: the question a client asked, and the subjects and passages of the mail retrieved to answer it |
 | `hosted_embedding_input` | Every passage sent to a hosted embedding endpoint |
 | `mcp_snippet` | The mail text an MCP tool answers with: the subjects and sender display names of a listing, the same plus the extracts of a search, and an answer with its citations |
+| `mcp_email_content` | The message `get_email_content` returns: both body representations, the subject, and every participant's display name |
 
 **A value is guarded, never a composed document.** A snippet, a subject, and a question are each scanned on their own
 and the result is composed afterwards. Scanning the composed thing instead would let one detection cover the end of one
@@ -95,10 +91,50 @@ contracts already hold rather than something redaction would enforce. MailFathom
 deterministic in-process embedding generator is exempt for a different reason: nothing leaves the process, so there is
 nothing for a guard to sit in front of.
 
-A refusal at any of the three fails the operation it guards, as [failing closed](#failing-closed) describes — the
-question is not answered, the passages are not embedded, the listing is not served. What each guarded call found,
-refused, and cost is published; [telemetry § what guarding an egress point
+A refusal at any of the four fails the operation it guards, as [failing closed](#failing-closed) describes — the
+question is not answered, the passages are not embedded, the listing is not served, the message is not returned. What
+each guarded call found, refused, and cost is published; [telemetry § what guarding an egress point
 publishes](../operations/telemetry.md#what-guarding-an-egress-point-publishes) names the instruments.
+
+## Reading a message is scanned in flight
+
+`get_email_content` is the one egress point that publishes a whole body rather than an extract of one, and it scans on
+every call rather than serving something scanned earlier.
+
+**Nothing stored is rewritten by it.** Not the raw MIME, which is byte-exact everywhere in this feature, and not the
+extracted text either — a read redacts a copy on its way out and leaves the store as it was. Scanning per call is also
+what keeps the store free of a map naming where each message's credentials sit: a persisted span list would be a new
+artifact pointing straight at the sensitive material, which a cheaper read does not justify. No offset, no finding
+location, and no span list for a stored message is written anywhere.
+
+**One message reads the same through both paths.** The redaction here is the same implementation the derived path runs,
+so for a given rule corpus, analyzer profile, and category set, the text `ask_mail` cited out of a redacted chunk is the
+text `get_email_content` returns for the same message. That agreement is the point: a citation that landed on different
+words would read as invented.
+
+**What is scanned is what the message's author wrote** — both body representations, the subject, and the display names
+of the first 40 named participants, past which the address is published with no display name rather than one nothing
+scanned. That count is bounded here rather than by the message because a parse publishes up to 256 addresses per header
+role and a scan is a round trip on a deployment running the analyzer in a container. The addresses, the account, the
+folder alias, the stored identity, the sizes, the flags, and every attachment's file name are left as they are, on the
+same line the guarded points above draw: a routing identity is what a caller acts on, and redacting the address a reply
+goes to would remove the read's whole use while protecting nothing the body did not already carry. Each value is scanned
+on its own and the message is composed afterwards.
+
+**The analyzed ceiling is stated rather than hidden.** A body longer than `SensitiveContent:MaximumAnalyzedCharacters`
+comes back cut at that ceiling, with `truncatedBy` reading `sensitiveContentScanCeiling` — the third bound a
+representation can name, beside the per-body limit and the read's budget, and the only one a caller cannot act on:
+naming fewer emails in a call returns no more of that message, and only raising the ceiling does. The default ceiling
+matches what one whole read may return, so an ordinary message never reaches it.
+
+**A detector that cannot answer fails the read.** It is not degraded to serving the stored text: the caller keeps
+nothing, and the same read succeeds once the detector answers again. What each side sees follows the rule
+[MCP tools § error reporting](mcp-tools.md#error-reporting) already states — the server log records `81001` naming the
+scanner, and the client receives `54001`, because only the MCP boundary's own category is described to a caller. An
+operator diagnosing a refused read therefore reads the log rather than the client's message.
+
+With both switches off the read is exactly the read it was before this feature existed — no detector is constructed, no
+text is scanned, and no representation names a ceiling.
 
 ## Derived data is written redacted and stamped
 

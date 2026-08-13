@@ -184,6 +184,97 @@ public sealed class SensitiveContentEgressGuardTests
         Assert.Equal("re: [redacted:CloudKey]", guarded);
     }
 
+    /// <summary>A consumer that states how complete its text is has to be told when the ceiling ended it early.</summary>
+    [Fact]
+    public async Task GuardWithOmissionAsync_ATextTheCeilingCut_ReportsWhatWasDroppedBesideTheGuardedText()
+    {
+        // Arrange
+        using var egress = ScanningSensitiveContentEgress.Finding(
+            Marker,
+            this.timeProvider,
+            bounds: SensitiveContentScanBounds.Create(25, TimeSpan.FromSeconds(5), 4));
+
+        // Act
+        var guarded = await egress.Guard.GuardWithOmissionAsync(
+            SensitiveContentEgressPoint.McpEmailContent,
+            $"the key is {Marker} and the rest of the message",
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal("the key is [redacted:CloudKey]", guarded.Text);
+        Assert.True(guarded.WasCutAtAnalyzedCeiling);
+        Assert.Equal(28, guarded.OmittedCharacterCount);
+    }
+
+    /// <summary>A text the ceiling never reached is whole, and saying otherwise would report every message as cut.</summary>
+    [Fact]
+    public async Task GuardWithOmissionAsync_ATextWithinTheCeiling_ReportsNothingDropped()
+    {
+        // Arrange
+        using var egress = ScanningSensitiveContentEgress.Finding(Marker, this.timeProvider);
+
+        // Act
+        var guarded = await egress.Guard.GuardWithOmissionAsync(
+            SensitiveContentEgressPoint.McpEmailContent,
+            $"the key is {Marker}",
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal("the key is [redacted:CloudKey]", guarded.Text);
+        Assert.False(guarded.WasCutAtAnalyzedCeiling);
+    }
+
+    [Fact]
+    public async Task GuardWithOmissionAsync_ADeploymentThatScansNothing_HandsTheTextBackWhole()
+    {
+        // Arrange
+        var guard = SensitiveContentEgressGuards.Inactive();
+
+        // Act
+        var guarded = await guard.GuardWithOmissionAsync(
+            SensitiveContentEgressPoint.McpEmailContent,
+            $"the key is {Marker}",
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal($"the key is {Marker}", guarded.Text);
+        Assert.Equal(0, guarded.OmittedCharacterCount);
+    }
+
+    /// <summary>Reporting the ceiling is not a licence to hand on text a detector never cleared.</summary>
+    [Fact]
+    public async Task GuardWithOmissionAsync_ADetectorThatCannotAnswer_RefusesTheEgressRatherThanServingItUnscanned()
+    {
+        // Arrange
+        using var egress = ScanningSensitiveContentEgress.Unavailable(this.timeProvider);
+
+        // Act
+        var refusal = await Assert.ThrowsAsync<SensitiveContentScannerUnavailableException>(() =>
+            egress.Guard.GuardWithOmissionAsync(
+                SensitiveContentEgressPoint.McpEmailContent,
+                "whatever the message said",
+                TestContext.Current.CancellationToken));
+
+        // Assert
+        Assert.Equal(SensitiveContentScannerKind.Secrets, refusal.Scanner);
+        Assert.Equal(
+            [SensitiveContentEgressPoint.McpEmailContent],
+            egress.Telemetry.Refused.Select(recorded => recorded.EgressPoint));
+    }
+
+    [Fact]
+    public async Task GuardWithOmissionAsync_NoText_IsRefusedAsAnArgument()
+    {
+        // Arrange
+        var guard = SensitiveContentEgressGuards.Inactive();
+
+        // Act, Assert
+        await Assert.ThrowsAsync<ArgumentNullException>(() => guard.GuardWithOmissionAsync(
+            SensitiveContentEgressPoint.McpEmailContent,
+            null!,
+            TestContext.Current.CancellationToken));
+    }
+
     [Fact]
     public async Task GuardAsync_NoText_IsRefusedAsAnArgument()
     {

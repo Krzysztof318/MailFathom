@@ -291,10 +291,17 @@ is counted.
 ### What guarding an egress point publishes
 
 Sensitive-content scanning publishes five instruments, all of them tagged with
-`mailfathom.sensitive_content.egress_point` — `chat_prompt`, `hosted_embedding_input`, or `mcp_snippet`. The egress
-point is on every one of them because it is what an operator acts on: "something was redacted" says nothing, while a
-scanner finding credentials in retrieved extracts and nothing in subjects, or adding two seconds to a listing and
-nothing to an embedding call, is where a category list or a bound gets changed.
+`mailfathom.sensitive_content.egress_point` — `chat_prompt`, `hosted_embedding_input`, `mcp_snippet`, or
+`mcp_email_content`. The egress point is on every one of them because it is what an operator acts on: "something was
+redacted" says nothing, while a scanner finding credentials in retrieved extracts and nothing in subjects, or adding two
+seconds to a listing and nothing to an embedding call, is where a category list or a bound gets changed. It is also how
+the cost of scanning a whole message is read: `mcp_email_content` is the point a reader waits on, kept apart from the
+snippet scanning that would otherwise average it away.
+
+**Every one of these series counts a guarded value rather than a guarded operation**, because a value is what a scan
+runs over. One `get_email_content` call scans each body representation, the subject, and each display name it publishes,
+for every email it names, so what the caller waits for is the sum of the durations that call recorded rather than any
+one of them — read the count beside the duration before sizing the feature or alerting on a percentile.
 
 | Instrument | What it answers |
 | --- | --- |
