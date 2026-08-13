@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <PackageReference Include="TngTech.ArchUnitNET.xUnitV3" />
+    <PackageReference Include="xunit.v3.mtp-v2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The rules read every compiled boundary, and these two entry assemblies reference all of them between them:
+         Host composes AI, Application, Common, Domain, Infrastructure, and Mcp, and Cli is the second executable and
+         reaches only Common. Referencing the two rather than the eight keeps this list a statement about entry points
+         instead of a copy of the solution's own reference graph, which is what the rules exist to read. -->
+    <ProjectReference Include="..\..\src\Host\Host.csproj" />
+    <ProjectReference Include="..\..\src\Cli\Cli.csproj" />
+  </ItemGroup>
+</Project>
