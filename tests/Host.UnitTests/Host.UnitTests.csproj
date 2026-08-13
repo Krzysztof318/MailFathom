@@ -18,6 +18,10 @@
     <Compile Include="..\shared\RecordingDerivedWorkGateTelemetry.cs" Link="RecordingDerivedWorkGateTelemetry.cs" />
     <Compile Include="..\shared\StubMailFolderMappings.cs" Link="StubMailFolderMappings.cs" />
     <Compile Include="..\shared\SyntheticServedAccount.cs" Link="SyntheticServedAccount.cs" />
+
+    <!-- Every boundary that publishes instruments asserts them the same way, through a listener over the one
+         process-wide meter, so the recorder is built once rather than per suite. -->
+    <Compile Include="..\shared\RecordedMailFathomMeasurements.cs" Link="RecordedMailFathomMeasurements.cs" />
   </ItemGroup>
 
   <ItemGroup>
