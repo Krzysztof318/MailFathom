@@ -13,9 +13,9 @@ namespace MailFathom.Infrastructure.Spam;
 /// <summary>Speaks the spam daemon's line protocol, under this deployment's bounds.</summary>
 /// <remarks>
 /// <para>
-/// One connection per exchange, which is the protocol rather than a choice: each side shuts its own half down when it
-/// has finished writing, and the daemon serves one command per connection. Nothing is pooled, so there is no handler
-/// chain to grow stale and no socket held open across a scan that never came.
+/// One connection per exchange, which is the protocol rather than a choice: the daemon serves one command per
+/// connection and closes its side when it has answered. Nothing is pooled, so there is no handler chain to grow stale
+/// and no socket held open across a scan that never came.
 /// </para>
 /// <para>
 /// The three bounds all live here so that no caller can be the one that forgot: the concurrency permit is taken before
@@ -195,11 +195,11 @@ internal sealed class SpamAssassinDaemon : IDisposable
             await stream.WriteAsync(message, cancellationToken);
             await stream.FlushAsync(cancellationToken);
 
-            // The protocol says each side shuts its own half down when it has finished writing, and the daemon waits
-            // for that rather than counting the bytes it was promised. Without it both ends wait for the other until
-            // the budget above expires.
-            connection.Client.Shutdown(SocketShutdown.Send);
-
+            // The request states its own length, so the daemon reads exactly what it was promised and answers without
+            // being told that nothing more is coming. Shutting the write half down would say the same thing one way
+            // further: a half-close is carried by a direct connection and by nothing that has to relay one, so an
+            // exchange that depended on it would turn every intermediary between here and the daemon — a proxied
+            // endpoint, a load balancer, a forwarded port — into an answer that never arrives.
             var answer = await ReadAnswerAsync(stream, cancellationToken);
 
             return SpamdReply.TryParse(answer.Span, out var reply)

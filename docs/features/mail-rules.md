@@ -607,9 +607,10 @@ applies holds nothing up on arrival, and a rule declaring `Arrival` does: such a
 evaluated once its text has been
 derived, rather than evaluated against a fact that would answer absent and then never reconsidered. Mail whose payload
 local storage has not had headroom for is waited on the same way, because a later run fetches it as soon as the ceiling
-permits. A message whose content will never yield text — one above the size limit, which every later run refuses for
-the same reason — is evaluated now with the fact absent, because waiting for text that is not coming would stall the
-queue behind it.
+permits. A message whose content will never yield text is evaluated now with the fact absent, because waiting for text
+that is not coming would stall the queue behind it. Two messages are that: one above the size limit, which every later
+run refuses for the same reason, and one whose stored payload a reader has already failed to read, which every later
+run would fail to read the same way.
 
 **A rule that cannot answer for one message costs that message's rule and nothing else.** It is recorded as a failed
 rule with a reason, the rules below it still run, the remaining messages of the batch are still evaluated, and the

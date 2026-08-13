@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Application.Emails.Extraction;
 using MailFathom.Application.Folders;
 using MailFathom.Application.Persistence;
 using MailFathom.Application.Rules.Evaluation;
@@ -129,12 +130,20 @@ internal sealed class MailRuleEvaluationStore(
     /// ordering and never has to agree with how the CLR compares two identifiers.
     /// </para>
     /// <para>
-    /// Text is still expected wherever content is stored or is going to be, which is why
-    /// <see cref="StoredEmailContentAvailability.AwaitingStorageHeadroom" /> counts alongside
-    /// <see cref="StoredEmailContentAvailability.Available" />: a later run fetches that payload as soon as the ceiling
-    /// permits, and evaluating the email now would stamp it as evaluated and leave a rule naming the body text never
-    /// seeing it. <see cref="StoredEmailContentAvailability.ExceededSizeLimit" /> is the opposite future — every later
-    /// run refuses it for the same reason — so such an email is evaluated now with the fact absent rather than waited on.
+    /// Text is still expected wherever content is stored or is going to be:
+    /// <see cref="StoredEmailContentAvailability.AwaitingStorageHeadroom" /> because a later run fetches that payload as
+    /// soon as the ceiling permits, and <see cref="StoredEmailContentAvailability.Available" /> with no document at all
+    /// because that is mail stored before extraction reached it and the backfill still owes it a reading. Evaluating
+    /// either now would stamp it as evaluated and leave a rule naming the body text never seeing it.
+    /// <see cref="StoredEmailContentAvailability.ExceededSizeLimit" /> is the opposite future — every later run refuses
+    /// it for the same reason — so such an email is evaluated now with the fact absent rather than waited on.
+    /// </para>
+    /// <para>
+    /// Neither question is answered by whether a search document exists, because every stored occurrence has one: a
+    /// message whose MIME nothing read is given a document built from its envelope alone, so that it is findable rather
+    /// than invisible. Such a document records <see cref="ExtractedEmailTextSource.BodyNotExtracted" />, which is what
+    /// separates the two cases the existence of a row cannot — a message that carries derived body text, and one whose
+    /// stored MIME a reader already refused and no later pass will read differently.
     /// </para>
     /// </remarks>
     private async Task<IReadOnlyList<StoredEmailAwaitingRuleEvaluation>> ReadCandidatesAsync(
@@ -186,10 +195,12 @@ internal sealed class MailRuleEvaluationStore(
                 email.IsRemotelyAnswered,
                 email.IsRemotelyFlagged,
                 email.IsRemotelyDraft,
-                HasExtractedContent = email.SearchDocument != null,
-                AwaitsExtraction = (email.ContentAvailability == StoredEmailContentAvailability.Available
-                        || email.ContentAvailability == StoredEmailContentAvailability.AwaitingStorageHeadroom)
-                    && email.SearchDocument == null,
+                HasExtractedContent = email.SearchDocument != null
+                    && email.SearchDocument.TextSource != ExtractedEmailTextSource.BodyNotExtracted,
+                AwaitsExtraction =
+                    email.ContentAvailability == StoredEmailContentAvailability.AwaitingStorageHeadroom
+                    || (email.ContentAvailability == StoredEmailContentAvailability.Available
+                        && email.SearchDocument == null),
             })
             .ToArrayAsync(cancellationToken);
 

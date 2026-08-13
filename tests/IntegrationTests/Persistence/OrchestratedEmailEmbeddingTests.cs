@@ -129,21 +129,28 @@ public sealed class OrchestratedEmailEmbeddingTests(MailFathomOrchestrationFixtu
         CancellationToken cancellationToken)
     {
         var subject = $"embedding-{occurrenceId.Uid.Value}";
+        var storedEmailId = default(StoredEmailId);
 
         var commitResult = await services.CommitAsync(
-            (scope, session, token) => scope.GetRequiredService<IEmailMetadataRepository>().UpsertMetadataAsync(
-                session,
-                SyntheticEmail.RemoteMetadataOf(occurrenceId, subject),
-                SyntheticEmail.ExtractionOf(
-                    occurrenceId,
-                    subject,
-                    SyntheticEmail.BodyTextContaining(subject, wordCount: 60),
-                    "recipient@mailfathom.test"),
-                StoredEmailContentAvailability.Available,
-                token),
+            async (scope, session, token) => storedEmailId = await scope
+                .GetRequiredService<IEmailMetadataRepository>()
+                .UpsertMetadataAsync(
+                    session,
+                    SyntheticEmail.RemoteMetadataOf(occurrenceId, subject),
+                    SyntheticEmail.ExtractionOf(
+                        occurrenceId,
+                        subject,
+                        SyntheticEmail.BodyTextContaining(subject, wordCount: 60),
+                        "recipient@mailfathom.test"),
+                    StoredEmailContentAvailability.Available,
+                    token),
             cancellationToken);
 
         Assert.Equal(PersistenceCommitResult.Committed, commitResult);
+
+        // A vector hangs on a passage, and storing cuts none: the cut is the account run's own step, so a fixture that
+        // needs a passage to embed asks for one here.
+        await OrchestratedPassages.CutAsync(services, storedEmailId, cancellationToken);
 
         return await services.InScopeAsync(
             async (scope, token) =>

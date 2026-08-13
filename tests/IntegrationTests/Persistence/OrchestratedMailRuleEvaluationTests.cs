@@ -83,9 +83,15 @@ public sealed class OrchestratedMailRuleEvaluationTests(MailFathomOrchestrationF
 
         var arrival = Assert.Single(queued, candidate => candidate.StoredEmailId == evaluated);
         Assert.Equal(SyntheticMailAccount.AccountId.Value, arrival.Facts.Account);
-        Assert.Equal(FolderAlias, arrival.Facts.Folder);
-        Assert.Equal(SyntheticEmail.DefaultSenderAddress, arrival.Facts.SenderAddress);
-        Assert.Contains(RecipientAddress, arrival.Facts.RecipientAddresses);
+
+        // The alias in its normalized form, which is the one thing a condition compares against: MailFolderAlias
+        // upper-cases what configuration wrote, and the fact surface publishes what the row holds rather than what a
+        // test typed.
+        Assert.Equal(MailFolderAlias.Create(FolderAlias).Value, arrival.Facts.Folder);
+        // Both addresses for the same reason as the alias: EmailAddress upper-cases what a header wrote, and the fact
+        // surface publishes the comparison form a condition is matched against rather than the spelling of the message.
+        Assert.Equal(NormalizedAddress(SyntheticEmail.DefaultSenderAddress), arrival.Facts.SenderAddress);
+        Assert.Contains(NormalizedAddress(RecipientAddress), arrival.Facts.RecipientAddresses);
         Assert.Equal(SyntheticEmail.ReceivedAt, arrival.Facts.ReceivedAt);
         Assert.True(arrival.Facts.HasExtractedContent);
 
@@ -99,14 +105,17 @@ public sealed class OrchestratedMailRuleEvaluationTests(MailFathomOrchestrationF
     }
 
     /// <summary>
-    /// The two ways an email can be sitting in the queue without extracted text, which the projection has to tell apart:
-    /// content the ceiling has not had headroom for is still coming, and content above the size limit never is.
+    /// The three ways an email can be sitting in the queue without extracted text, which the projection has to tell
+    /// apart: content the ceiling has not had headroom for is still coming, content above the size limit never is, and
+    /// content that was fetched whole and could not be parsed never is either.
     /// </summary>
     /// <remarks>
     /// The distinction decides whether a message is waited for or evaluated with the body-text fact absent, and getting
     /// it wrong is silent — the email is stamped as evaluated, leaves the queue for good, and a rule naming its text
     /// never sees it. It is a <c>CASE</c> PostgreSQL evaluates over a string-converted enum column beside a correlated
-    /// existence check, so only a real database settles what it produces.
+    /// existence check, so only a real database settles what it produces. The third message is the one no column
+    /// separates from the first two: its payload was stored, so its availability says <c>Available</c>, and what says
+    /// nothing was read out of it is the source recorded on the document its envelope alone produced.
     /// </remarks>
     [Fact]
     public async Task TheArrivalQueue_MailWhoseTextWasNeverExtracted_WaitsOnlyForContentThatIsStillComing()
@@ -126,20 +135,35 @@ public sealed class OrchestratedMailRuleEvaluationTests(MailFathomOrchestrationF
             StoredEmailContentAvailability.ExceededSizeLimit,
             cancellationToken);
 
+        // The payload was fetched whole and nothing could be read out of its MIME, which is what a synchronization run
+        // stores when parsing fails inside the limits. Nothing about the row says so except the document its envelope
+        // produced, and no later pass reads that MIME differently — so it is evaluated now rather than waited on.
+        var unparseable = await StoreOneUnextractedMessageAsync(
+            services,
+            uid: 9433,
+            StoredEmailContentAvailability.Available,
+            cancellationToken);
+
         // Act
         var queued = await ReadArrivalQueueAsync(services, resumeAfter: null, DrainBatchSize, cancellationToken);
 
         // Assert
         var waited = Assert.Single(queued, candidate => candidate.StoredEmailId == headroomPending);
         var evaluatedWithoutText = Assert.Single(queued, candidate => candidate.StoredEmailId == oversized);
+        var evaluatedUnparseable = Assert.Single(queued, candidate => candidate.StoredEmailId == unparseable);
 
         Assert.False(waited.Facts.HasExtractedContent);
         Assert.False(evaluatedWithoutText.Facts.HasExtractedContent);
 
-        // The control the assertion below needs: both rows look identical to a reader of the search document, so an
-        // observation that reported nothing would pass the first assertion and fail the second.
+        // The one a document's existence cannot answer: this message has one, so reading the row rather than the source
+        // recorded on it would report text that was never derived.
+        Assert.False(evaluatedUnparseable.Facts.HasExtractedContent);
+
+        // The control the assertions below need: all three rows look identical to a reader of the search document, so
+        // an observation that reported nothing would pass the assertions above and fail the first of these.
         Assert.True(waited.AwaitsExtraction);
         Assert.False(evaluatedWithoutText.AwaitsExtraction);
+        Assert.False(evaluatedUnparseable.AwaitsExtraction);
     }
 
     /// <summary>
@@ -322,8 +346,11 @@ public sealed class OrchestratedMailRuleEvaluationTests(MailFathomOrchestrationF
         await using (var whileMirrored =
             await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken))
         {
-            parked = await StoreOneMessageAsync(whileMirrored, uid: 9441, cancellationToken, ParkedFolderAlias);
-            mirrored = await StoreOneMessageAsync(whileMirrored, uid: 9442, cancellationToken);
+            // Numbers of this test's own, because a UID names an occurrence: repeating one another test stored in the
+            // same folder would upsert that row rather than write one, and the message would arrive already carrying
+            // whatever that test left on it — an evaluation stamp above all, which takes it out of the arrival queue.
+            parked = await StoreOneMessageAsync(whileMirrored, uid: 9451, cancellationToken, ParkedFolderAlias);
+            mirrored = await StoreOneMessageAsync(whileMirrored, uid: 9452, cancellationToken);
         }
 
         await using var services = await OrchestratedMailFathomServices.StartAsync(
@@ -347,6 +374,18 @@ public sealed class OrchestratedMailRuleEvaluationTests(MailFathomOrchestrationF
     }
 
     private static string SubjectOf(uint uid) => $"{FolderAlias}-{uid}";
+
+    /// <summary>Normalizes an address the way extraction does, which is the form a stored row holds.</summary>
+    /// <remarks>
+    /// Asked of the domain type rather than upper-cased here, so that a test states the rule's own answer instead of a
+    /// second copy of it that would survive the rule changing.
+    /// </remarks>
+    private static string NormalizedAddress(string address)
+    {
+        Assert.True(EmailAddress.TryCreate(displayName: null, address, out var emailAddress));
+
+        return emailAddress.NormalizedAddress;
+    }
 
     /// <summary>Stores one synthetic message, whose extraction the same session derives its search document from.</summary>
     private static async Task<StoredEmailId> StoreOneMessageAsync(

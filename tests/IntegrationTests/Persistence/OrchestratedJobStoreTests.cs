@@ -72,8 +72,10 @@ public sealed class OrchestratedJobStoreTests(MailFathomOrchestrationFixture orc
 
         // Assert
         Assert.Equal(results[0].JobId, results[1].JobId);
+        // Ordered, because which caller won the race is not what this proves; the pair is stated in the order the
+        // enum declares, which is what Order produces.
         Assert.Equal(
-            [JobEnqueueOutcome.AlreadyEnqueued, JobEnqueueOutcome.Created],
+            [JobEnqueueOutcome.Created, JobEnqueueOutcome.AlreadyEnqueued],
             results.Select(result => result.Outcome).Order());
         Assert.Equal(1, await CountJobsWithKeyAsync(services, request.Key, cancellationToken));
     }

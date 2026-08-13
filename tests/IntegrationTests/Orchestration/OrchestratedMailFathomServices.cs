@@ -198,6 +198,11 @@ internal sealed class OrchestratedMailFathomServices : IAsyncDisposable
         // options section. Every mailbox read composes a reference resolver over it, so a harness without it would fail
         // to compose rather than behave like a deployment whose folders carry no role.
         builder.Services.AddSingleton<IMailFolderMappingReader>(account);
+        // Which of an account's folders its server files junk into, read from the same mappings and registered by the
+        // composition root for the same reason. Every mailbox scope, the classification, and the gate in front of
+        // derived work resolve it, so a harness without it fails to compose rather than behaving like the deployment
+        // that maps no junk folder — which is the deployment this account is.
+        builder.Services.AddSingleton<IJunkMailFolderCatalog>(account);
         // How much of a message's body one search result may show, which a composition root composes from the
         // MailboxSearch section. It is the deployment's control on what a query draws out of a mailbox rather than a
         // request's, so the shipped default is what this suite searches under.
@@ -265,6 +270,11 @@ internal sealed class OrchestratedMailFathomServices : IAsyncDisposable
             BatchSize = 2,
             MaxBatchesPerRun = 10,
         });
+        // The extraction walk's own bounds, read by a composition root from the MailExtractionBackfill section. Left at
+        // the shipped values, because a test that pages this walk states its batch size on the call and what matters
+        // here is the rebuild switch: off, which is the deployment every test runs under but the one that constructs
+        // the store itself to prove what turning it on re-derives.
+        builder.Services.AddSingleton(new StoredEmailExtractionBackfillOptions());
 
         // Registered by a composition root rather than by AddInfrastructure, because persistence writes what the AI
         // boundary derives and may not reference it. Without this the chunk writer resolves nothing.
