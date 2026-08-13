@@ -331,9 +331,13 @@ jobs:
             printf '[Administering a deployment](https://github.com/%s/blob/%s/docs/operations/admin-endpoint.md)' \
               "$REPOSITORY" "$RELEASE_TAG"
             printf ' states what the service has to have enabled before it will answer.\n\n'
-            printf 'On Windows there is a packaged path as well. `winget install MailFathom.mfctl` installs this '
-            printf 'version once the Windows Package Manager community repository has accepted the manifest this '
-            printf 'release submits to it, which is a review by somebody else rather than a step of this pipeline.\n\n'
+            printf 'On Linux there is a shorter path, which downloads the binary for the machine it runs on, checks '
+            printf 'it against the checksum file above, and installs it into `~/.local/bin`:\n\n'
+            printf '```bash\ncurl -fsSL https://raw.githubusercontent.com/%s/%s/scripts/install-mfctl.sh \\\n' \
+              "$REPOSITORY" "$RELEASE_TAG"
+            printf '  | bash -s -- --version %s\n```\n\n' "$VERSION"
+            printf 'The script is fetched at the tag of this release, so what it installs is this version rather than '
+            printf 'whatever is newest. Read it before you run it: it is one file and it is short.\n\n'
             printf 'None of the binaries carries a code signature, so Windows warns about an unknown publisher and '
             printf '`mfctl-%s.sha256` is what verifies a download — on every platform.\n' "$VERSION"
           } > "$notes_file"
@@ -358,19 +362,31 @@ jobs:
             gh release upload "$RELEASE_TAG" artifacts/cli/* --clobber
           fi
 
-  # The Windows Package Manager channel, offered from the assets the job above has just attached. It is last because it
-  # has to be: winget's validation downloads the installer the manifest names, and that URL is a release asset which
-  # does not resolve until the release exists.
+  # The Windows Package Manager channel, offered from the assets the job above has just attached. It is paused, and the
+  # condition below is where that is said; what follows is why the job has the shape it has, for whoever resumes it.
+  #
+  # It is last because it has to be: winget's validation downloads the installer the manifest names, and that URL is a
+  # release asset which does not resolve until the release exists.
   #
   # It gates nothing, like the build it consumes. A submission that failed leaves every published artifact in place and
   # costs a Windows operator the packaged path to a command they can still download, which is the same trade the
   # command build already makes.
   submit-winget-manifest:
     name: Submit the winget manifest
-    # No `if`, unlike every other job here that tolerates something. This one tolerates nothing: a manifest is worth
-    # submitting only when the binaries were built and the release that carries them exists, which is exactly what the
-    # default `needs` semantics already say. Writing the same condition out would additionally have to say
-    # `!cancelled()` to be read at all, and that would let a cancelled release submit a manifest anyway.
+    # Paused, per #791. The community repository's review is what accepts a submission, two of MailFathom's are open
+    # against it and neither has been reached, and their one-pull-request-per-version rule means a release cannot
+    # shorten that wait by submitting again — it can only add a version behind the ones already queued. So this stops
+    # submitting until those are accepted, and the whole of what resumes it is deleting this condition.
+    #
+    # `false` rather than the job being deleted, because nothing about the channel is decided against: the reusable
+    # workflow, the manifest renderer, and their tests all stay, and a paused job that reappears in the run graph as
+    # skipped is what says so where a release is read. `docs/operations/release-procedure.md` carries the same pause,
+    # in the section describing this submission, together with the pages resuming it obliges.
+    if: false
+    # The condition above is the only one. There is deliberately no `!cancelled()` beside it and there was none before
+    # the pause either: a manifest is worth submitting only when the binaries were built and the release that carries
+    # them exists, which is exactly what the default `needs` semantics already say, and writing that out would let a
+    # cancelled release submit a manifest anyway.
     needs:
       - assert
       - cli-binaries

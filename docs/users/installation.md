@@ -13,7 +13,8 @@ release's digest in both. The chart is `oci://ghcr.io/krzysztof318/charts/mailfa
 also attaches `mailfathom-schema-<version>.sql` and its checksum, which is the schema step below, and one `mfctl`
 binary per platform with a checksum file covering all of them —
 [getting the command](../operations/admin-endpoint.md#getting-the-command) is where that one is picked up, including
-the winget package the Windows binaries are also offered as. Both packages are public, so pulling one needs no login.
+the [install script](../operations/admin-endpoint.md#on-linux-with-the-install-script) that does it in one line on
+Linux. Both packages are public, so pulling one needs no login.
 
 **`<version>` is the release you are installing**, and
 [the releases page](https://github.com/Krzysztof318/MailFathom/releases) is where the current one is named. Pin it

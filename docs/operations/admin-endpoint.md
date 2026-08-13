@@ -1,6 +1,6 @@
 # Administering a deployment
 
-<!-- describes: src/Host/Configuration/Endpoints/AdminEndpointOptions.cs, src/Host/Api/Admin*.cs, src/Host/Api/Embedding*.cs, src/Host/Api/Mail*.cs, src/Host/Api/Spam*.cs, src/Host/Hosting/Startup/SurfaceIsolation.cs, src/Host/Hosting/Warnings/AdminTransportSecurityWarning.cs, src/Host/Security/Endpoints/TransportListenerBinder.cs, src/Host/Security/Transport/TransportRateLimiting.cs, src/Cli/** -->
+<!-- describes: src/Host/Configuration/Endpoints/AdminEndpointOptions.cs, src/Host/Api/Admin*.cs, src/Host/Api/Embedding*.cs, src/Host/Api/Mail*.cs, src/Host/Api/Spam*.cs, src/Host/Hosting/Startup/SurfaceIsolation.cs, src/Host/Hosting/Warnings/AdminTransportSecurityWarning.cs, src/Host/Security/Endpoints/TransportListenerBinder.cs, src/Host/Security/Transport/TransportRateLimiting.cs, src/Cli/**, scripts/install-mfctl.sh -->
 
 How the `mfctl` command reaches a running deployment, and what that deployment has to have enabled before it will
 answer.
@@ -538,6 +538,8 @@ application port, so a deployment can proxy the MCP surface publicly and keep th
 ## Getting the command
 
 Each release attaches a self-contained binary per platform, plus one checksum file covering all of them.
+[The install script](#on-linux-with-the-install-script) is one command that performs the whole of what follows on Linux;
+this is what it performs, and what to do on Windows.
 
 Download the one for the machine you administer *from* — the command talks to a deployment over HTTP, so it does not
 have to run where the service runs.
@@ -568,28 +570,36 @@ download — the checksum says the bytes are the ones published, and an attestat
 produced them — and the image and the chart are where this repository answers it.
 [The container image](container-image.md#published-images) records how.
 
-### On Windows, through winget
+### On Linux, with the install script
 
-The two Windows binaries are offered through the Windows Package Manager as well, so a Windows machine has a packaged
-path beside the download:
+Everything above as one command. It resolves the newest release, downloads the binary for the architecture it is
+running on, checks it against that release's own checksum file, and installs it as `~/.local/bin/mfctl`:
 
-```console
-> winget install MailFathom.mfctl
+```bash
+curl -fsSL https://raw.githubusercontent.com/Krzysztof318/MailFathom/main/scripts/install-mfctl.sh | bash
 ```
 
-It is a portable package: winget places the binary, puts `mfctl` on your `PATH`, and `winget upgrade` carries you to
-the next release. The manifest names the same release asset the table above does and carries the same hash the checksum
-file does, so both paths install the same bytes and check them the same way. That is the whole of what it checks: what
-the two paragraphs above say about signatures and provenance is unchanged, and a package the Windows Package Manager
-offers is not thereby a package Windows knows a publisher for.
+**Pass the version when the deployment is not on the newest release**, because the two have to agree on `major.minor`
+— which is the next section. `--directory` chooses where it goes. `MFCTL_VERSION` and `MFCTL_INSTALL_DIR` set the same
+two things, so a shell profile can carry the answer instead of the command line, and an argument wins over either:
 
-A release submits its own manifest and the community repository's review is what accepts it, so a version reaches
-winget a little after it is attached here, and one the review has not reached is not installable this way at all.
-**`winget search MailFathom.mfctl` is what answers which versions winget currently carries** — ask it before the
-install above, because a release newer than what the review has accepted is the ordinary state rather than a fault, and
-this page cannot know which. Whenever the answer is none,
-[the releases page](https://github.com/Krzysztof318/MailFathom/releases) is where the command comes from on every
-platform.
+```bash
+curl -fsSL https://raw.githubusercontent.com/Krzysztof318/MailFathom/main/scripts/install-mfctl.sh \
+  | bash -s -- --version 0.5.0 --directory ~/bin
+```
+
+It installs into your own directory and never runs `sudo`; a system-wide installation is `--directory /usr/local/bin`
+under a `sudo` you write yourself. If the directory it installed into is not on your `PATH`, it says so and prints the
+line that fixes it rather than leaving you to find out at the next prompt. Re-running it installs over what is there,
+which is how a version is changed.
+
+**Nothing is installed that could not be verified.** The checksum check above is the script's, not a step it saves you:
+a download that does not match what the release publishes stops it, and the file it downloaded goes with the temporary
+directory. What the script does not do is tell you whether the release is the one you meant — it is fetched over HTTPS
+from this repository, and reading it before running it is a reasonable thing to do, which is why it is one short file
+with no second script behind it.
+
+Windows has no equivalent. Take the `.exe` from the table above and check it as the section above describes.
 
 ### Take the command from the deployment's own release line
 

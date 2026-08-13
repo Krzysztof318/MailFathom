@@ -4238,6 +4238,133 @@ winget_manifests_refuse_a_missing_windows_binary() {
   assert_contains 'mfctl-9.9.9-win-arm64.exe' "$output_file"
 }
 
+# `install-mfctl.sh` is the one script here that runs on somebody else's machine, from a URL rather than a checkout, so
+# what these three cover is what a reader cannot check before running it: that the checksum is enforced rather than
+# fetched, that a refusal installs nothing, and that a platform no release publishes is told so instead of being handed
+# a download. The release itself is a fixture — `curl` and `uname` are replaced on the PATH — because a test that
+# reached GitHub would assert the network rather than the script.
+stage_install_script_release() {
+  local case_name="$1"
+  local checksum_source="$2"
+  local release_directory="$test_directory/$case_name-release"
+  local stub_directory="$test_directory/$case_name-bin"
+
+  mkdir -p "$release_directory" "$stub_directory"
+  printf 'mfctl bytes' > "$release_directory/mfctl-9.9.9-linux-x64"
+
+  # `sha256sum ./*` is how the release builds this file, which is why every entry names its file as `./mfctl-…` and
+  # why the script checks from the directory it downloaded into rather than from wherever it was invoked.
+  ( cd "$release_directory" && sha256sum ./mfctl-9.9.9-linux-x64 > 'mfctl-9.9.9.sha256' )
+
+  if [[ "$checksum_source" == 'tampered' ]]; then
+    printf 'mfctl bytes, altered after the release published them' > "$release_directory/mfctl-9.9.9-linux-x64"
+  fi
+
+  # Serves the fixture directory by asset name and answers 22 for anything else, which is what curl reports for a 404
+  # under `-f`. Nothing here parses a URL beyond its last segment: the script builds one download base and the test
+  # asserts what it downloaded, not how it spelled the address.
+  printf '%s\n' \
+    '#!/usr/bin/env bash' \
+    'set -euo pipefail' \
+    'output=""' \
+    'url=""' \
+    'while [[ $# -gt 0 ]]; do' \
+    '  case "$1" in' \
+    '    --output) output="$2"; shift 2 ;;' \
+    '    -*) shift ;;' \
+    '    *) url="$1"; shift ;;' \
+    '  esac' \
+    'done' \
+    "release_directory='$release_directory'" \
+    'asset="${url##*/}"' \
+    '[[ -f "$release_directory/$asset" ]] || exit 22' \
+    'cat "$release_directory/$asset" > "$output"' \
+    > "$stub_directory/curl"
+
+  # Pinned rather than read from the runner, so the asset the script asks for is the same one on every machine the
+  # suite runs on. `uname` is also what the platform refusal below is asserted through.
+  printf '%s\n' \
+    '#!/usr/bin/env bash' \
+    'case "$1" in' \
+    "  -s) printf '%s\\n' \"\${FAKE_UNAME_SYSTEM:-Linux}\" ;;" \
+    "  -m) printf '%s\\n' \"\${FAKE_UNAME_MACHINE:-x86_64}\" ;;" \
+    'esac' \
+    > "$stub_directory/uname"
+
+  chmod +x "$stub_directory/curl" "$stub_directory/uname"
+
+  printf '%s\n' "$stub_directory"
+}
+
+install_script_installs_the_binary_the_release_published() {
+  local stub_directory
+  local install_directory="$test_directory/install-verified-target"
+  local output_file="$test_directory/install-verified-log"
+
+  stub_directory="$(stage_install_script_release 'install-verified' 'published')"
+
+  (
+    cd "$source_repository_root"
+    PATH="$stub_directory:$PATH" bash scripts/install-mfctl.sh \
+      --version 9.9.9 --directory "$install_directory"
+  ) > "$output_file" 2>&1
+
+  assert_file_content 'mfctl bytes' "$install_directory/mfctl"
+  assert_contains "Installed mfctl 9.9.9 to $install_directory/mfctl" "$output_file"
+
+  if [[ ! -x "$install_directory/mfctl" ]]; then
+    printf 'The command was installed without the execute bit, so it cannot be run.\n' >&2
+    return 1
+  fi
+}
+
+# The failure the script exists to make impossible to skip. Nothing may be installed, because a binary that fails its
+# checksum is either a broken download or bytes somebody else substituted, and the two are indistinguishable here.
+install_script_refuses_a_binary_the_checksum_file_disowns() {
+  local stub_directory
+  local install_directory="$test_directory/install-tampered-target"
+  local output_file="$test_directory/install-tampered-log"
+
+  stub_directory="$(stage_install_script_release 'install-tampered' 'tampered')"
+
+  if (
+    cd "$source_repository_root"
+    PATH="$stub_directory:$PATH" bash scripts/install-mfctl.sh \
+      --version 9.9.9 --directory "$install_directory"
+  ) > "$output_file" 2>&1; then
+    printf 'A binary that does not match the published checksum was installed\n' >&2
+    return 1
+  fi
+
+  assert_contains 'does not match the checksum' "$output_file"
+
+  if [[ -e "$install_directory/mfctl" ]]; then
+    printf 'The refusal left a command behind at %s\n' "$install_directory/mfctl" >&2
+    return 1
+  fi
+}
+
+# A release publishes four binaries and no macOS build, so the useful failure names what exists. The alternative is a
+# download that 404s under an asset name the reader has no way to check against.
+install_script_refuses_a_platform_no_release_publishes() {
+  local stub_directory
+  local install_directory="$test_directory/install-unsupported-target"
+  local output_file="$test_directory/install-unsupported-log"
+
+  stub_directory="$(stage_install_script_release 'install-unsupported' 'published')"
+
+  if (
+    cd "$source_repository_root"
+    PATH="$stub_directory:$PATH" FAKE_UNAME_SYSTEM='Darwin' FAKE_UNAME_MACHINE='arm64' \
+      bash scripts/install-mfctl.sh --version 9.9.9 --directory "$install_directory"
+  ) > "$output_file" 2>&1; then
+    printf 'The script installed a Linux binary on a system no release publishes one for\n' >&2
+    return 1
+  fi
+
+  assert_contains 'linux-x64, linux-arm64, win-x64, and win-arm64' "$output_file"
+}
+
 # The Actions policy, as far as a committed file can state it. Half of that policy lives in GitHub's
 # repository settings — which action owners are allowed at all, whether a mutable `uses:` is
 # accepted, how long an artifact is kept — and settings do not fail a pull request. These five
@@ -5009,6 +5136,9 @@ run_test changelog_section_reading_returns_only_the_requested_release
 run_test winget_manifests_name_the_release_assets_they_hash
 run_test winget_manifest_names_the_product_and_the_command
 run_test winget_manifests_refuse_a_missing_windows_binary
+run_test install_script_installs_the_binary_the_release_published
+run_test install_script_refuses_a_binary_the_checksum_file_disowns
+run_test install_script_refuses_a_platform_no_release_publishes
 run_test every_external_action_names_an_approved_owner
 run_test every_workflow_job_declares_its_permissions
 run_test every_write_scope_is_one_the_policy_records
