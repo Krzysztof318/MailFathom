@@ -25,7 +25,7 @@ internal sealed record EmailHeaderParticipant
     public required string Address { get; init; }
 
     /// <summary>Gets the display name the message carried, or <see langword="null" /> when it carried none.</summary>
-    [Description("The display name the message wrote for the address, or null when it wrote none. A sender chooses it freely, so it names nobody reliably; the address is the identifying part.")]
+    [Description("The display name the message wrote for the address, or null when it wrote none. A sender chooses it freely, so it names nobody reliably; the address is the identifying part. Where the deployment scans mail for sensitive content, only the first 40 named participants of an email have their display name published, so null can also mean that bound was reached rather than that the message wrote no name.")]
     public string? DisplayName { get; init; }
 
     /// <summary>Publishes one participant.</summary>

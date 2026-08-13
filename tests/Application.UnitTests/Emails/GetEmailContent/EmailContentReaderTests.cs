@@ -1277,6 +1277,40 @@ public sealed class EmailContentReaderTests
         Assert.Equal(derived.Metadata?.Text.OriginalText, ContentOf(Assert.Single(read.Emails)).Body.PlainText.Text);
     }
 
+    /// <summary>
+    /// A message whose content was never stored is answered from the listing row, and that row's subject and sender
+    /// name are the whole of what it publishes that a message's author wrote. Serving them here while
+    /// <c>list_emails</c> redacts the same two would be the two tools disagreeing about one message.
+    /// </summary>
+    [Fact]
+    public async Task ReadContentAsync_UnstoredContentWhoseRowCarriesACredential_RedactsWhatTheRowPublishes()
+    {
+        // Arrange
+        using var egress = ScanningSensitiveContentEgress.Finding(Marker, TimeProvider.System);
+        var summary = SyntheticEmailSummaries.Create(
+            subject: $"re: {Marker}",
+            senderAddress: "alerts@example.test") with
+        {
+            ContentAvailability = StoredEmailContentAvailability.ExceededSizeLimit,
+            SenderDisplayName = $"{Marker} bot",
+        };
+        var reader = ReaderOver(summary, RendererReturning(RenderingOf()), egressGuard: egress.Guard);
+
+        // Act
+        var result = await reader.ReadContentAsync(
+            RequestFor([summary.StoredEmailId]),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        var content = ContentOf(Assert.Single(result.Emails));
+        var sender = Assert.Single(content.Headers.Participants);
+
+        Assert.Equal(EmailBodyAvailability.NotStoredExceededSizeLimit, content.Body.Availability);
+        Assert.Equal("re: [redacted:CloudKey]", content.Headers.Subject);
+        Assert.Equal("[redacted:CloudKey] bot", sender.Address.DisplayName);
+        Assert.Equal("alerts@example.test", sender.Address.Address);
+    }
+
     /// <summary>With both switches off the read is the one it was, and no detector is constructed to prove it.</summary>
     [Fact]
     public async Task ReadContentAsync_ADeploymentThatScansNothing_ReturnsWhatTheRenderingProduced()
