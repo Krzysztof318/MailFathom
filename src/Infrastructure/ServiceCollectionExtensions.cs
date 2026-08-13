@@ -32,6 +32,7 @@ using MailFathom.Application.Mail.Mutations;
 using MailFathom.Application.Mail.Mutations.Audit;
 using MailFathom.Application.Mail.Mutations.Convergence;
 using MailFathom.Application.Mail.Mutations.Destinations;
+using MailFathom.Application.Observability;
 using MailFathom.Application.Persistence;
 using MailFathom.Application.Resilience;
 using MailFathom.Application.Retrieval;
@@ -424,6 +425,10 @@ public static class ServiceCollectionExtensions
         services.AddScoped<MailboxReconciler>();
         services.AddScoped<StoredEmailExtractionBackfill>();
         services.AddScoped<MailboxScopeResolver>();
+        // Singletons for the reason every other publisher here is one: a span source is a fact about the process, and a
+        // scoped instance would build one per request for no gain.
+        services.AddSingleton<IMailboxReadTelemetry, MailboxReadTelemetry>();
+        services.AddSingleton<StoredEmailContentTelemetry>();
         services.AddScoped<MailAccountDirectoryReader>();
         // The guard every egress point calls, registered for every deployment rather than only where a scanner is
         // switched on. What is conditional is the redaction behind it: with both switches off the provider hands over

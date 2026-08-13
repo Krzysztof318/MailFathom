@@ -4,6 +4,7 @@
 
 using MailFathom.Application.Accounts;
 using MailFathom.Application.Emails.Mailboxes;
+using MailFathom.Application.Observability;
 using MailFathom.Application.Synchronization.Checkpoints;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Folders;
@@ -12,6 +13,7 @@ using MailFathom.Mcp.Tools;
 using MailFathom.Mcp.Tools.Results;
 using MailFathom.Mcp.UnitTests.TestDoubles;
 using MailFathom.TestSupport;
+using NSubstitute;
 using Xunit;
 
 namespace MailFathom.Mcp.UnitTests.Tools;
@@ -177,6 +179,7 @@ public sealed class ListAccountsToolTests
                     catalog,
                     StubMailFolderParticipation.Nothing,
                     StubJunkMailFolderCatalog.None,
-                    StubMailFolderMappings.ResolvingNothing)),
+                    StubMailFolderMappings.ResolvingNothing),
+                Substitute.For<IMailboxReadTelemetry>()),
             catalog);
 }

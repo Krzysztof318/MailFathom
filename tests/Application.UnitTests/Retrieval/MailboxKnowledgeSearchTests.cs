@@ -450,7 +450,8 @@ public sealed class MailboxKnowledgeSearchTests
                 StubJunkMailFolderCatalog.None,
                 StubMailFolderMappings.ResolvingNothing),
             EmailSearchSnippetBounds.Default,
-            egressGuard ?? SensitiveContentEgressGuards.Inactive()),
+            egressGuard ?? SensitiveContentEgressGuards.Inactive(),
+            new RecordingMailboxReadTelemetry()),
         bounds ?? EmailKnowledgeBounds.Default);
 
     /// <summary>Builds the semantic half of a deployment that configured no embedding provider and activated nothing.</summary>

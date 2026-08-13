@@ -11,6 +11,7 @@ using MailFathom.Application.EmailContent.Storage;
 using MailFathom.Application.Emails.Extraction;
 using MailFathom.Application.Emails.Mailboxes;
 using MailFathom.Application.Emails.Summaries;
+using MailFathom.Application.Observability;
 using MailFathom.Application.SensitiveContent.Detection;
 using MailFathom.Application.SensitiveContent.Egress;
 using MailFathom.Domain.Emails;
@@ -75,6 +76,7 @@ public sealed class EmailContentReader
     private readonly IAttachmentDownloadLinkIssuer linkIssuer;
     private readonly SensitiveContentEgressGuard egressGuard;
     private readonly EmailContentReadOptions readOptions;
+    private readonly IMailboxReadTelemetry readTelemetry;
 
     /// <summary>Initializes the use case.</summary>
     /// <param name="summaryReader">Reads one stored email's summary by its identity.</param>
@@ -85,6 +87,7 @@ public sealed class EmailContentReader
     /// <param name="linkIssuer">Mints the short-lived capability a caller fetches an attachment with.</param>
     /// <param name="egressGuard">Scans what the message's author wrote before a read publishes it.</param>
     /// <param name="readOptions">The bounds on how much body text one call returns.</param>
+    /// <param name="readTelemetry">Publishes the read as the operation it is, beside the call it happened inside.</param>
     /// <exception cref="ArgumentNullException">Thrown when any argument is <see langword="null" />.</exception>
     public EmailContentReader(
         IStoredEmailSummaryReader summaryReader,
@@ -94,7 +97,8 @@ public sealed class EmailContentReader
         MailboxScopeResolver scopeResolver,
         IAttachmentDownloadLinkIssuer linkIssuer,
         SensitiveContentEgressGuard egressGuard,
-        EmailContentReadOptions readOptions)
+        EmailContentReadOptions readOptions,
+        IMailboxReadTelemetry readTelemetry)
     {
         ArgumentNullException.ThrowIfNull(summaryReader);
         ArgumentNullException.ThrowIfNull(contentStore);
@@ -104,6 +108,7 @@ public sealed class EmailContentReader
         ArgumentNullException.ThrowIfNull(linkIssuer);
         ArgumentNullException.ThrowIfNull(egressGuard);
         ArgumentNullException.ThrowIfNull(readOptions);
+        ArgumentNullException.ThrowIfNull(readTelemetry);
 
         this.summaryReader = summaryReader;
         this.contentStore = contentStore;
@@ -113,6 +118,7 @@ public sealed class EmailContentReader
         this.linkIssuer = linkIssuer;
         this.egressGuard = egressGuard;
         this.readOptions = readOptions;
+        this.readTelemetry = readTelemetry;
     }
 
     /// <summary>Reads every email the request names.</summary>
@@ -138,6 +144,8 @@ public sealed class EmailContentReader
     {
         ArgumentNullException.ThrowIfNull(request);
 
+        using var read = this.readTelemetry.BeginRead(MailboxReadOperation.ReadEmailContent, cancellationToken);
+
         var outcomes = new List<EmailContentReadOutcome>(request.StoredEmailIds.Count);
         var remainingCharacters = this.readOptions.MaxCharactersPerRead;
 
@@ -152,6 +160,11 @@ public sealed class EmailContentReader
             remainingCharacters -= CharactersReturnedBy(outcome);
             outcomes.Add(outcome);
         }
+
+        // The emails that were served rather than the emails that were named, because the gap between the two is the
+        // whole of what this read can report: a call naming ten identifiers and answering for one is a caller working
+        // from a stale listing, and the count of what it asked for would say nothing about that.
+        read.Completed(outcomes.Count(outcome => outcome.Content is not null));
 
         return new GetEmailContentResult(new ReadOnlyCollection<EmailContentReadOutcome>(outcomes));
     }

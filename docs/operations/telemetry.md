@@ -1,6 +1,6 @@
 # Telemetry and the Aspire dashboard
 
-<!-- describes: src/Common/Observability/**, src/Host/Observability/**, src/Host/ServiceDefaultsExtensions.cs, src/Infrastructure/Observability/**, src/Infrastructure/Mail/MailKit/MailKitImapClientFactory.cs, src/Infrastructure/HostApplicationBuilderExtensions.cs, src/AppHost/** -->
+<!-- describes: src/Application/Observability/**, src/Common/Observability/**, src/Host/Observability/**, src/Host/ServiceDefaultsExtensions.cs, src/Host/Hosting/Workers/MailExtractionBackfillWorker.cs, src/Infrastructure/Observability/**, src/Infrastructure/Mail/MailKit/MailKitImapClientFactory.cs, src/Infrastructure/HostApplicationBuilderExtensions.cs, src/AppHost/** -->
 
 The host instruments itself with OpenTelemetry throughout — logs, metrics, and traces — and exports none of it unless
 the environment names a destination. Today exactly one environment does that out of the box: a local run under the
@@ -42,7 +42,9 @@ come from the SDK's own `Experimental.ModelContextProtocol` activity source and 
 negotiated protocol version, the transport, the session identifier, the JSON-RPC request identifier, and the tool name
 for a tool call — which is what makes a slow call attributable to a tool before anything inside the tool is
 instrumented. Database commands are spanned by the `Npgsql` source rather than by EF Core, which reports through
-`DiagnosticSource` and would need a bridging package to span the same commands a second time.
+`DiagnosticSource` and would need a bridging package to span the same commands a second time. Between those two ends
+sit MailFathom's own spans, which say which use case ran; [what a request-path trace contains](#what-a-request-path-trace-contains)
+is where they are named.
 
 One filter is deliberate: requests to the health-probe paths are not traced at all, because a probe arrives every few
 seconds for the life of the process and says the same thing every time — tracing it would fill a trace store with
@@ -226,6 +228,60 @@ now and the record says when it stopped being true, which is the question the st
 carries no age. Only a change is written: every provider call records a state, so a record per call would scale the log
 with the mailbox instead of with what an operator would act on. A first call that succeeded is the one change that is
 not written, because it restored nothing; a first call that failed is.
+
+### What a request-path trace contains
+
+A tool call arrives with a span from the request pipeline and leaves a set of database spans behind it, and neither of
+those says which use case ran in between. Every read the MCP surface serves therefore opens a span of its own, named
+after the use case rather than after the tool — the tool's own name is already on the SDK's span above it, and a second
+entrypoint over the same use case is work of the same kind:
+
+| Span | The read it reports |
+| --- | --- |
+| `read_account_directory` | Which accounts this deployment serves, and how current the local copy of each is |
+| `list_mailbox_timeline` | One bounded page of the stored email timeline |
+| `search_mailbox` | One window of a ranking over the stored emails |
+| `read_email_content` | The stored content of the emails one call named |
+| `answer_mail_question` | One answering run, described in full [below](#what-a-run-records) |
+
+The nesting is what they are for. Each is started inside the protocol span, so it is that span's child, and the database
+commands and content-store reads it issues are its children — which is what separates a tool call that was slow in the
+use case from one that was slow in a query, and both from one that spent its time waiting on a scanner. A search made
+inside an answering run is reported by that run's span instead of opening a second `search_mailbox` beside it, so the
+same work is never counted twice.
+
+| Tag | What it carries |
+| --- | --- |
+| `mailfathom.mailbox.read.results` | How many accounts, summaries, matches, or emails the read returned |
+| `mailfathom.mailbox.read.outcome` | How it ended: `succeeded`, `cancelled`, or `failed` |
+
+`cancelled` is deliberately not `failed`. A client that disconnects mid-read is ordinary traffic on this surface, and
+counting it as a failure would make an impatient assistant read as a broken deployment. A read that returned nothing is
+`succeeded` with a count of zero: matching nothing is a normal answer everywhere here, and the outcome describes the
+read rather than what the mailbox held.
+
+For `read_email_content` the count is the emails that were **served** rather than the emails that were named. The gap
+between the two is the whole of what that number can say — a call naming ten identifiers and answering for one is a
+caller working from a listing that has moved on.
+
+Beneath a read, one span answers a question the database span cannot. **`read_stored_email_content`** is opened
+wherever raw MIME is read out of local storage, and carries `mailfathom.mail.content.bytes` with the size of what came
+back and `mailfathom.mail.content.found` with whether anything was there. Every other query this deployment issues
+returns columns sized like a row; this one returns a whole message, so a command duration on its own cannot tell a
+forty-megabyte message from a two-kilobyte one. An email whose content was never stored reports `found` as false and no
+size, which is an answer rather than a failure.
+
+One more span belongs to no request at all. The extraction backfill opens **`backfill_email_extraction`** once per
+bounded pass, which is what tells work an interval caused apart from work a caller caused — without it the pass appears
+as parentless database commands competing with the requests around them. It carries
+`mailfathom.mail.extraction.backfill.extracted`, `…unreadable`, and `…missing_content` as the counts the pass reached,
+`…remaining` as whether any stored email still awaits extraction, and `…outcome` as one of `succeeded`, `deferred`,
+`failed`, or `interrupted`. `deferred` is a competing writer the pass could not resolve against and `interrupted` is
+shutdown; neither is a failure, and the next interval resumes from the committed position in both cases.
+
+Nothing on any of these spans is derived from a message. There is nowhere on them to put a query text, a filter value, a
+cursor, a subject, an address, or a stored identity — the values are counts, sizes, and closed sets of MailFathom's own
+words, which is a cardinality rule as much as a privacy one.
 
 ### Durable background work
 

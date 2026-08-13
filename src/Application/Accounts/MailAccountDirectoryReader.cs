@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.Emails.Mailboxes;
+using MailFathom.Application.Observability;
 using MailFathom.Application.Synchronization.Checkpoints;
 using MailFathom.Domain.Accounts;
 
@@ -30,24 +31,29 @@ public sealed class MailAccountDirectoryReader
     private readonly IMailAccountCatalog accountCatalog;
     private readonly ISynchronizationFreshnessReader freshnessReader;
     private readonly MailboxScopeResolver scopeResolver;
+    private readonly IMailboxReadTelemetry readTelemetry;
 
     /// <summary>Initializes the use case.</summary>
     /// <param name="accountCatalog">Describes the accounts this deployment serves.</param>
     /// <param name="freshnessReader">Reads how current the local copy of each folder is.</param>
     /// <param name="scopeResolver">Answers which folders of those accounts a tool may see.</param>
+    /// <param name="readTelemetry">Publishes the read as the operation it is, beside the call it happened inside.</param>
     /// <exception cref="ArgumentNullException">Thrown when any argument is <see langword="null" />.</exception>
     public MailAccountDirectoryReader(
         IMailAccountCatalog accountCatalog,
         ISynchronizationFreshnessReader freshnessReader,
-        MailboxScopeResolver scopeResolver)
+        MailboxScopeResolver scopeResolver,
+        IMailboxReadTelemetry readTelemetry)
     {
         ArgumentNullException.ThrowIfNull(accountCatalog);
         ArgumentNullException.ThrowIfNull(freshnessReader);
         ArgumentNullException.ThrowIfNull(scopeResolver);
+        ArgumentNullException.ThrowIfNull(readTelemetry);
 
         this.accountCatalog = accountCatalog;
         this.freshnessReader = freshnessReader;
         this.scopeResolver = scopeResolver;
+        this.readTelemetry = readTelemetry;
     }
 
     /// <summary>Reads the served accounts and their synchronization freshness.</summary>
@@ -59,10 +65,16 @@ public sealed class MailAccountDirectoryReader
     /// </remarks>
     public async Task<MailAccountDirectory> ReadAsync(CancellationToken cancellationToken)
     {
+        using var read = this.readTelemetry.BeginRead(
+            MailboxReadOperation.ReadAccountDirectory,
+            cancellationToken);
+
         var servedAccounts = this.accountCatalog.ServedAccounts;
 
         if (servedAccounts.Count is 0)
         {
+            read.Completed(0);
+
             return new MailAccountDirectory(this.accountCatalog.SynchronizationEnabled, []);
         }
 
@@ -77,6 +89,8 @@ public sealed class MailAccountDirectoryReader
         var foldersByAccount = folderFreshness
             .GroupBy(static freshness => freshness.AccountId)
             .ToDictionary(static group => group.Key, FoldersOrderedByAlias);
+
+        read.Completed(servedAccounts.Count);
 
         return new MailAccountDirectory(
             this.accountCatalog.SynchronizationEnabled,

@@ -16,6 +16,7 @@ using MailFathom.Application.Emails.GetEmailContent;
 using MailFathom.Application.Emails.Mailboxes;
 using MailFathom.Application.Emails.Summaries;
 using MailFathom.Application.Folders;
+using MailFathom.Application.Observability;
 using MailFathom.Application.SensitiveContent;
 using MailFathom.Application.SensitiveContent.Derivation;
 using MailFathom.Application.SensitiveContent.Detection;
@@ -1337,6 +1338,58 @@ public sealed class EmailContentReaderTests
         Assert.Equal($"{Marker} bot", Assert.Single(content.Headers.Participants).Address.DisplayName);
     }
 
+    /// <summary>
+    /// The read is reported as the operation it is, so the content-store reads it causes have a use case above them in
+    /// a trace rather than only the protocol call that reached it.
+    /// </summary>
+    [Fact]
+    public async Task ReadContentAsync_EmailsThatWereServed_ReportsTheReadAndHowManyItServed()
+    {
+        // Arrange
+        var readTelemetry = new RecordingMailboxReadTelemetry();
+        var summaries = SummariesOf(2);
+        var reader = ReaderOver(
+            summaries,
+            RendererReturning(RenderingOf()),
+            readTelemetry: readTelemetry);
+
+        // Act
+        await reader.ReadContentAsync(
+            RequestFor(IdentitiesOf(summaries)),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        var read = Assert.Single(readTelemetry.Reads);
+
+        Assert.Equal(MailboxReadOperation.ReadEmailContent, read.Operation);
+        Assert.Equal(2, read.ResultCount);
+        Assert.True(read.WasClosed);
+    }
+
+    /// <summary>
+    /// What is counted is what was served rather than what was named, because the gap between the two is a caller
+    /// working from a listing that has moved on.
+    /// </summary>
+    [Fact]
+    public async Task ReadContentAsync_AnIdentifierThisDeploymentDoesNotServe_CountsOnlyTheEmailsItServed()
+    {
+        // Arrange
+        var readTelemetry = new RecordingMailboxReadTelemetry();
+        var summaries = SummariesOf(1);
+        var reader = ReaderOver(
+            summaries,
+            RendererReturning(RenderingOf()),
+            readTelemetry: readTelemetry);
+
+        // Act
+        await reader.ReadContentAsync(
+            RequestFor([.. IdentitiesOf(summaries), StoredEmailId.Create(Guid.CreateVersion7())]),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(1, Assert.Single(readTelemetry.Reads).ResultCount);
+    }
+
     private static GetEmailContentRequest RequestFor(
         IReadOnlyList<StoredEmailId> storedEmailIds,
         bool includeSanitizedHtml = false,
@@ -1365,7 +1418,8 @@ public sealed class EmailContentReaderTests
         IAttachmentDownloadLinkIssuer? linkIssuer = null,
         EmailContentReadOptions? readOptions = null,
         IMailFolderParticipationReader? folderParticipation = null,
-        SensitiveContentEgressGuard? egressGuard = null) => new(
+        SensitiveContentEgressGuard? egressGuard = null,
+        IMailboxReadTelemetry? readTelemetry = null) => new(
         SummaryReaderReturning(summary),
         contentStore ?? ContentStoreReturning(IntactContent()),
         renderer,
@@ -1377,7 +1431,8 @@ public sealed class EmailContentReaderTests
             StubMailFolderMappings.ResolvingNothing),
         linkIssuer ?? new RecordingAttachmentDownloadLinkIssuer(),
         egressGuard ?? SensitiveContentEgressGuards.Inactive(),
-        readOptions ?? new EmailContentReadOptions());
+        readOptions ?? new EmailContentReadOptions(),
+        readTelemetry ?? new RecordingMailboxReadTelemetry());
 
     private static EmailContentReader ReaderOver(
         IReadOnlyList<EmailSummary> summaries,
@@ -1387,7 +1442,8 @@ public sealed class EmailContentReaderTests
         IMailAccountCatalog? accountCatalog = null,
         IAttachmentDownloadLinkIssuer? linkIssuer = null,
         EmailContentReadOptions? readOptions = null,
-        SensitiveContentEgressGuard? egressGuard = null) => new(
+        SensitiveContentEgressGuard? egressGuard = null,
+        IMailboxReadTelemetry? readTelemetry = null) => new(
         SummaryReaderOver(summaries),
         contentStore ?? ContentStoreReturning(IntactContent()),
         renderer,
@@ -1399,7 +1455,8 @@ public sealed class EmailContentReaderTests
             StubMailFolderMappings.ResolvingNothing),
         linkIssuer ?? new RecordingAttachmentDownloadLinkIssuer(),
         egressGuard ?? SensitiveContentEgressGuards.Inactive(),
-        readOptions ?? new EmailContentReadOptions());
+        readOptions ?? new EmailContentReadOptions(),
+        readTelemetry ?? new RecordingMailboxReadTelemetry());
 
     /// <summary>Maps the folders these emails were stored from, which is what a deployment holding them has configured.</summary>
     /// <remarks>

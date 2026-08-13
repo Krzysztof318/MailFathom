@@ -5,6 +5,7 @@
 using MailFathom.Application.Accounts;
 using MailFathom.Application.Emails.Mailboxes;
 using MailFathom.Application.Emails.Search;
+using MailFathom.Application.Observability;
 using MailFathom.Application.SensitiveContent.Detection;
 using MailFathom.Application.SensitiveContent.Egress;
 using MailFathom.Application.Synchronization.Checkpoints;
@@ -71,6 +72,7 @@ public sealed class MailboxSearchReader
     private readonly MailboxScopeResolver scopeResolver;
     private readonly EmailSearchSnippetBounds snippetBounds;
     private readonly SensitiveContentEgressGuard egressGuard;
+    private readonly IMailboxReadTelemetry readTelemetry;
 
     /// <summary>Initializes the use case.</summary>
     /// <param name="searchIndexReader">Ranks mail against the query text and reads the window a ranking selected.</param>
@@ -79,6 +81,7 @@ public sealed class MailboxSearchReader
     /// <param name="scopeResolver">Decides which accounts and folders the search runs against.</param>
     /// <param name="snippetBounds">How much of a message's body one result may show.</param>
     /// <param name="egressGuard">Scans what the window is about to publish, where this deployment scans anything.</param>
+    /// <param name="readTelemetry">Publishes the search as the operation it is, beside the call it happened inside.</param>
     /// <exception cref="ArgumentNullException">Thrown when any argument is <see langword="null" />.</exception>
     public MailboxSearchReader(
         IEmailSearchIndexReader searchIndexReader,
@@ -86,7 +89,8 @@ public sealed class MailboxSearchReader
         ISynchronizationFreshnessReader freshnessReader,
         MailboxScopeResolver scopeResolver,
         EmailSearchSnippetBounds snippetBounds,
-        SensitiveContentEgressGuard egressGuard)
+        SensitiveContentEgressGuard egressGuard,
+        IMailboxReadTelemetry readTelemetry)
     {
         ArgumentNullException.ThrowIfNull(searchIndexReader);
         ArgumentNullException.ThrowIfNull(semanticSearch);
@@ -94,6 +98,7 @@ public sealed class MailboxSearchReader
         ArgumentNullException.ThrowIfNull(scopeResolver);
         ArgumentNullException.ThrowIfNull(snippetBounds);
         ArgumentNullException.ThrowIfNull(egressGuard);
+        ArgumentNullException.ThrowIfNull(readTelemetry);
 
         this.searchIndexReader = searchIndexReader;
         this.semanticSearch = semanticSearch;
@@ -101,6 +106,7 @@ public sealed class MailboxSearchReader
         this.scopeResolver = scopeResolver;
         this.snippetBounds = snippetBounds;
         this.egressGuard = egressGuard;
+        this.readTelemetry = readTelemetry;
     }
 
     /// <summary>Searches for one window of ranked emails and publishes it to a caller outside this process.</summary>
@@ -113,17 +119,30 @@ public sealed class MailboxSearchReader
     /// <exception cref="EmailSearchResultLimitOutOfRangeException">Thrown when the request names a result count outside the accepted range.</exception>
     /// <exception cref="SensitiveContentScannerUnavailableException">Thrown when a switched-on scanner could not establish what the window carries, which refuses the search rather than serving it unscanned.</exception>
     /// <remarks>
+    /// <para>
     /// The guard belongs to publishing rather than to searching, which is why it is here and not in
     /// <see cref="SearchWindowAsync" />: this window becomes an MCP tool's answer, while the one that method returns is
     /// read inside the process by something that guards it at its own egress point.
+    /// </para>
+    /// <para>
+    /// The span is reported around the same boundary and for the same reason. What it has to measure is what an MCP
+    /// caller waited for, which includes the scan of everything the window publishes; a span around the ranking alone
+    /// would report a fast search on a deployment whose reads are slow because they are being scanned. The retrieval an
+    /// answering run makes is reported by that run's own span instead, so the two do not report the same work twice.
+    /// </para>
     /// </remarks>
     public async Task<SearchEmailsResult> SearchEmailsAsync(
         SearchEmailsRequest request,
         CancellationToken cancellationToken)
     {
-        var window = await this.SearchWindowAsync(request, cancellationToken);
+        using var read = this.readTelemetry.BeginRead(MailboxReadOperation.SearchMailbox, cancellationToken);
 
-        return window with { Matches = await this.GuardedAsync(window.Matches, cancellationToken) };
+        var window = await this.SearchWindowAsync(request, cancellationToken);
+        var matches = await this.GuardedAsync(window.Matches, cancellationToken);
+
+        read.Completed(matches.Count);
+
+        return window with { Matches = matches };
     }
 
     /// <summary>Searches for one window of ranked emails, for a reader inside this process.</summary>

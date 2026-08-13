@@ -9,6 +9,7 @@ using MailFathom.Application.EmailContent.Storage;
 using MailFathom.Application.Persistence;
 using MailFathom.CodeCoverage;
 using MailFathom.Domain.Emails;
+using MailFathom.Infrastructure.Observability;
 using MailFathom.Infrastructure.Persistence.Entities;
 using MailFathom.Infrastructure.Persistence.Sessions;
 using Microsoft.EntityFrameworkCore;
@@ -17,7 +18,10 @@ namespace MailFathom.Infrastructure.Persistence.Emails;
 
 /// <summary>EF Core raw MIME content store.</summary>
 [RequiresIntegrationCoverage]
-internal sealed class EmailContentStore(MailFathomDbContext dbContext, TimeProvider timeProvider) : IEmailContentStore
+internal sealed class EmailContentStore(
+    MailFathomDbContext dbContext,
+    TimeProvider timeProvider,
+    StoredEmailContentTelemetry telemetry) : IEmailContentStore
 {
     /// <inheritdoc />
     /// <remarks>
@@ -25,23 +29,36 @@ internal sealed class EmailContentStore(MailFathomDbContext dbContext, TimeProvi
     /// kept alive by the change tracker after the caller is done with it. The recorded length and digest are read in
     /// the same round trip as the payload they describe, because a second query could read them from a row a
     /// re-synchronization had rewritten in between and report a mismatch nothing is wrong with.
+    /// <para>
+    /// The read is spanned because this is where a request meets a whole message: the command's own span reports how
+    /// long it took and never how much it moved, and those are the same question here.
+    /// </para>
     /// </remarks>
     public async Task<StoredEmailContent?> FindStoredContentAsync(
         StoredEmailId storedEmailId,
         CancellationToken cancellationToken)
     {
+        using var read = telemetry.BeginRead();
+
         var storedContent = await dbContext.EmailMessageContents
             .AsNoTracking()
             .Where(content => content.StoredEmailId == storedEmailId.Value)
             .Select(content => new StoredEmailContentRow(content.RawMime, content.MimeByteLength, content.Sha256Hash))
             .SingleOrDefaultAsync(cancellationToken);
 
-        return storedContent is null
-            ? null
-            : new StoredEmailContent(
-                storedContent.RawMime.AsMemory(),
-                storedContent.MimeByteLength,
-                storedContent.Sha256Hash.AsMemory());
+        if (storedContent is null)
+        {
+            read.Absent();
+
+            return null;
+        }
+
+        read.Found(storedContent.RawMime.LongLength);
+
+        return new StoredEmailContent(
+            storedContent.RawMime.AsMemory(),
+            storedContent.MimeByteLength,
+            storedContent.Sha256Hash.AsMemory());
     }
 
     /// <inheritdoc />

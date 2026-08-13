@@ -2,9 +2,11 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using MailFathom.Application.Emails.Extraction;
 using MailFathom.Application.Persistence;
+using MailFathom.Common.Observability;
 using MailFathom.Host.Configuration.Mail;
 using Microsoft.Extensions.Options;
 
@@ -19,6 +21,31 @@ namespace MailFathom.Host.Hosting.Workers;
 [SuppressMessage("Performance", "CA1812:Avoid uninstantiated internal classes", Justification = "The dependency injection container materializes this hosted service.")]
 internal sealed partial class MailExtractionBackfillWorker : BackgroundService
 {
+    /// <summary>The name one bounded backfill pass opens its span under.</summary>
+    /// <remarks>
+    /// A run of this worker is the one piece of extraction nothing else in a trace explains: it is caused by an
+    /// interval rather than by a request, so without a span of its own its database commands appear as parentless work
+    /// beside the requests they compete with. Named after what the pass does rather than after the worker, so it reads
+    /// as the work that was done if the pass is ever scheduled from somewhere else.
+    /// </remarks>
+    internal const string RunSpanName = "backfill_email_extraction";
+
+    internal const string ExtractedTagName = "mailfathom.mail.extraction.backfill.extracted";
+    internal const string UnreadableTagName = "mailfathom.mail.extraction.backfill.unreadable";
+    internal const string MissingContentTagName = "mailfathom.mail.extraction.backfill.missing_content";
+    internal const string RemainingTagName = "mailfathom.mail.extraction.backfill.remaining";
+    internal const string OutcomeTagName = "mailfathom.mail.extraction.backfill.outcome";
+
+    internal const string SucceededOutcomeName = "succeeded";
+
+    /// <summary>Names a pass a competing writer deferred, which the next interval resumes from.</summary>
+    internal const string DeferredOutcomeName = "deferred";
+
+    internal const string FailedOutcomeName = "failed";
+
+    /// <summary>Names a pass the host stopped, which is shutdown rather than a failure.</summary>
+    internal const string InterruptedOutcomeName = "interrupted";
+
     private readonly IServiceScopeFactory scopeFactory;
     private readonly MailExtractionBackfillOptions settings;
     private readonly ILogger<MailExtractionBackfillWorker> logger;
@@ -70,12 +97,21 @@ internal sealed partial class MailExtractionBackfillWorker : BackgroundService
     [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "The hosted worker isolates an unexpected failure so a later interval can resume from the committed position.")]
     private async Task<bool> RunOnceAsync(CancellationToken cancellationToken)
     {
+        using var run = Telemetry.ActivitySource.StartActivity(RunSpanName);
+
         try
         {
             using var scope = this.scopeFactory.CreateScope();
 
             var backfill = scope.ServiceProvider.GetRequiredService<StoredEmailExtractionBackfill>();
             var result = await backfill.RunAsync(cancellationToken);
+
+            run?.SetTag(ExtractedTagName, result.ExtractedEmailCount);
+            run?.SetTag(UnreadableTagName, result.UnreadableEmailCount);
+            run?.SetTag(MissingContentTagName, result.MissingContentEmailCount);
+            run?.SetTag(RemainingTagName, result.EmailsRemain);
+            run?.SetTag(OutcomeTagName, SucceededOutcomeName);
+            run?.SetStatus(ActivityStatusCode.Ok);
 
             this.LogBackfillProgressed(
                 result.ExtractedEmailCount,
@@ -92,16 +128,25 @@ internal sealed partial class MailExtractionBackfillWorker : BackgroundService
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
+            // Shutdown rather than a failure, exactly as an interrupted synchronization cycle is, so a rolling restart
+            // does not read as a backfill that broke.
+            run?.SetTag(OutcomeTagName, InterruptedOutcomeName);
+
             throw;
         }
         catch (PersistenceConcurrencyConflictException exception)
         {
+            run?.SetTag(OutcomeTagName, DeferredOutcomeName);
+
             this.LogBackfillDeferredAfterConcurrencyConflict(exception);
 
             return true;
         }
         catch (Exception exception)
         {
+            run?.SetTag(OutcomeTagName, FailedOutcomeName);
+            run?.SetStatus(ActivityStatusCode.Error);
+
             this.LogBackfillFailed(exception);
 
             return true;

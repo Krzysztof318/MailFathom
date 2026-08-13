@@ -8,6 +8,7 @@ using MailFathom.Application.Accounts;
 using MailFathom.Application.Emails.ListEmails;
 using MailFathom.Application.Emails.Mailboxes;
 using MailFathom.Application.Emails.Summaries;
+using MailFathom.Application.Observability;
 using MailFathom.Application.SensitiveContent.Detection;
 using MailFathom.Application.SensitiveContent.Egress;
 using MailFathom.Application.Synchronization.Checkpoints;
@@ -797,11 +798,57 @@ public sealed class MailboxTimelineReaderTests
         Assert.Equal($"the key is {Marker}", Assert.Single(result.Emails).Subject);
     }
 
+    /// <summary>
+    /// The listing is reported as the operation it is, so a page a caller waited on has a use case above its queries in
+    /// a trace rather than only the protocol call that reached it.
+    /// </summary>
+    [Fact]
+    public async Task ListEmailsAsync_APageThatWasServed_ReportsTheListingAndWhatItReturned()
+    {
+        // Arrange
+        var readTelemetry = new RecordingMailboxReadTelemetry();
+        var timeline = new InMemoryStoredEmailTimeline().WithAll(
+            SyntheticEmailSummaries.CreateDailyRun(3, FirstJuly));
+        var reader = ReaderOver(timeline, readTelemetry: readTelemetry);
+
+        // Act
+        await reader.ListEmailsAsync(new ListEmailsRequest(), TestContext.Current.CancellationToken);
+
+        // Assert
+        var read = Assert.Single(readTelemetry.Reads);
+
+        Assert.Equal(MailboxReadOperation.ListMailboxTimeline, read.Operation);
+        Assert.Equal(3, read.ResultCount);
+        Assert.True(read.WasClosed);
+    }
+
+    /// <summary>A refused listing reports no result, which is what makes the span say the read did not finish.</summary>
+    [Fact]
+    public async Task ListEmailsAsync_ARefusedRequest_ReportsAReadThatReturnedNothing()
+    {
+        // Arrange
+        var readTelemetry = new RecordingMailboxReadTelemetry();
+        var reader = ReaderOver(new InMemoryStoredEmailTimeline(), readTelemetry: readTelemetry);
+
+        // Act
+        await Assert.ThrowsAsync<MailboxQueryCursorMalformedException>(
+            () => reader.ListEmailsAsync(
+                new ListEmailsRequest { Cursor = "not a cursor at all" },
+                TestContext.Current.CancellationToken));
+
+        // Assert
+        var read = Assert.Single(readTelemetry.Reads);
+
+        Assert.Null(read.ResultCount);
+        Assert.True(read.WasClosed);
+    }
+
     private static MailboxTimelineReader ReaderOver(
         InMemoryStoredEmailTimeline timeline,
         IMailAccountCatalog? accountCatalog = null,
         ISynchronizationFreshnessReader? freshnessReader = null,
-        SensitiveContentEgressGuard? egressGuard = null) => new(
+        SensitiveContentEgressGuard? egressGuard = null,
+        IMailboxReadTelemetry? readTelemetry = null) => new(
         timeline,
         freshnessReader ?? FreshnessReaderReturning(InboxFreshness),
         new MailboxScopeResolver(
@@ -809,7 +856,8 @@ public sealed class MailboxTimelineReaderTests
             StubMailFolderParticipation.Nothing,
             StubJunkMailFolderCatalog.None,
             StubMailFolderMappings.ResolvingNothing),
-        egressGuard ?? SensitiveContentEgressGuards.Inactive());
+        egressGuard ?? SensitiveContentEgressGuards.Inactive(),
+        readTelemetry ?? new RecordingMailboxReadTelemetry());
 
     /// <summary>Builds a catalog that serves exactly the accounts named, in the order the port promises.</summary>
     private static IMailAccountCatalog CatalogServing(params MailAccountId[] servedAccountIds)
