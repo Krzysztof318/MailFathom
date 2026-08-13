@@ -197,8 +197,8 @@ internal sealed class MailRuleEvaluationStore(
                 email.IsRemotelyDraft,
                 HasExtractedContent = email.SearchDocument != null
                     && email.SearchDocument.TextSource != ExtractedEmailTextSource.BodyNotExtracted,
-                AwaitsExtraction = email.ContentAvailability
-                        == StoredEmailContentAvailability.AwaitingStorageHeadroom
+                AwaitsExtraction =
+                    email.ContentAvailability == StoredEmailContentAvailability.AwaitingStorageHeadroom
                     || (email.ContentAvailability == StoredEmailContentAvailability.Available
                         && email.SearchDocument == null),
             })

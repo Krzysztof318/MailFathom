@@ -130,6 +130,16 @@ internal sealed class SyntheticMailAccount(
     /// </remarks>
     internal const string UnmappedFolderAlias = "no-mapping-names-this";
 
+    /// <summary>Gets the account identifier every occurrence this suite stores belongs to.</summary>
+    /// <remarks>
+    /// Declared above every static that reads it, and that is load-bearing rather than tidy: static initializers run in
+    /// the order they are written, so a folder set built above this line would name the default account — an empty
+    /// identifier that narrows every account-scoped query to nothing and reads as a store that lost the mail the same
+    /// run wrote, in every test at once rather than in the one that got it wrong.
+    /// </remarks>
+    public static MailAccountId AccountId { get; } =
+        MailAccountId.Create(OrchestrationContract.ServedMailAccountId);
+
     private static readonly MailFolderMapping Inbox = MailFolderMapping.ToSpecialUse(
         MailFolderAlias.Create(nameof(MailFolderSpecialUse.Inbox)),
         MailFolderSpecialUse.Inbox);
@@ -143,10 +153,6 @@ internal sealed class SyntheticMailAccount(
 
     /// <summary>The window this account keeps an answering entry for, which a retention test writes an older entry than.</summary>
     internal static readonly TimeSpan AnsweringAuditRetention = TimeSpan.FromDays(30);
-
-    /// <summary>Gets the account identifier every occurrence this suite stores belongs to.</summary>
-    public static MailAccountId AccountId { get; } =
-        MailAccountId.Create(OrchestrationContract.ServedMailAccountId);
 
     /// <inheritdoc />
     /// <remarks>

@@ -270,6 +270,11 @@ internal sealed class OrchestratedMailFathomServices : IAsyncDisposable
             BatchSize = 2,
             MaxBatchesPerRun = 10,
         });
+        // The extraction walk's own bounds, read by a composition root from the MailExtractionBackfill section. Left at
+        // the shipped values, because a test that pages this walk states its batch size on the call and what matters
+        // here is the rebuild switch: off, which is the deployment every test runs under but the one that constructs
+        // the store itself to prove what turning it on re-derives.
+        builder.Services.AddSingleton(new StoredEmailExtractionBackfillOptions());
 
         // Registered by a composition root rather than by AddInfrastructure, because persistence writes what the AI
         // boundary derives and may not reference it. Without this the chunk writer resolves nothing.
