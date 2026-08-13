@@ -15,7 +15,7 @@ reconstruction has one shape: a new derived step placed on the wrong side of a g
 
 ```mermaid
 flowchart TD
-    subgraph run["One account's synchronization run, one folder at a time"]
+    subgraph run["One account's synchronization run, MaxConcurrentFoldersPerAccount folders at a time"]
         direction TB
         converge["Converge the previous run's mutations"]
         fetch["Fetch raw MIME, without setting the remote Seen flag"]
@@ -68,10 +68,16 @@ classification existed.
 
 ## What the run waits for, and what it hands off
 
-Everything inside the account run is sequential and the run waits for all of it. The one hand-off is the last arrow:
-offering a message to the embedding backlog is a non-blocking enqueue into a bounded in-process queue, and **a full
-backlog is not an error**. An initial synchronization of a large mailbox produces work faster than any provider accepts
-it, so the bound refuses rather than waits; the message is stored with its passages, and the
+The run waits for everything inside it, and the order drawn is the order each message meets. What the drawing does not
+say is how many messages are in it at once: the steps at the top and the bottom of the run happen once per run, while
+the folders between them are walked by `MaxConcurrentFoldersPerAccount` at a time — one by default, and up to twenty, so
+a deployment that raises it has several folders fetching, extracting, and committing side by side.
+[Synchronizing a mailbox](../features/imap-synchronization.md) states that bound and what else it costs.
+
+The one hand-off is the last arrow: offering a message to the embedding backlog is a non-blocking enqueue into a
+bounded in-process queue, and **a full backlog is not an error**. An initial synchronization of a large mailbox produces
+work faster than any provider accepts it, so the bound refuses rather than waits; the message is stored with its
+passages, and the
 [embedding backfill](../features/embedding-backfill.md) is what reaches mail the live path did not.
 
 Nothing else about the pipeline crosses a process boundary while a transaction is open. The two sidecar calls happen
