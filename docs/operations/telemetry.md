@@ -1,6 +1,6 @@
 # Telemetry and the Aspire dashboard
 
-<!-- describes: src/Common/Observability/**, src/Host/Observability/**, src/Host/ServiceDefaultsExtensions.cs, src/Infrastructure/Observability/**, src/Infrastructure/HostApplicationBuilderExtensions.cs, src/AppHost/** -->
+<!-- describes: src/Common/Observability/**, src/Host/Observability/**, src/Host/ServiceDefaultsExtensions.cs, src/Infrastructure/Observability/**, src/Infrastructure/Mail/MailKit/MailKitImapClientFactory.cs, src/Infrastructure/HostApplicationBuilderExtensions.cs, src/AppHost/** -->
 
 The host instruments itself with OpenTelemetry throughout — logs, metrics, and traces — and exports none of it unless
 the environment names a destination. Today exactly one environment does that out of the box: a local run under the
@@ -270,6 +270,65 @@ and empty.
 An instance with `Jobs:Enabled` switched off, or one with no registered handler, publishes none of the four: its worker
 does not start, so it neither runs work nor measures the queue. The depth of a queue that instance is not draining is
 somebody else's replica to report.
+
+### What a synchronization cycle emits
+
+No instrumentation package exists for the mail library, so without what follows the part of MailFathom that spends the
+most wall-clock time would publish nothing of its own at all. Two spans and eight instruments answer the two questions
+an operator opens a dashboard with: is this account still synchronizing, and if it is slow, which part of it is.
+
+One account's cycle opens **`synchronize_account`**, and each folder it works opens **`synchronize_folder`** beneath it.
+That nesting is the whole point of the pair — a cycle whose duration doubled is attributable to the folder it doubled
+in rather than to the account as a whole — and the records the same cycle already logs carry the trace and span
+identifiers of whichever of the two they were written inside, so a count in a log line and the span it belongs to are
+one thing.
+
+| Tag | Where | What it carries |
+| --- | --- | --- |
+| `mailfathom.mail.account` | Both | MailFathom's own configured alias for the account |
+| `mailfathom.mail.folder` | Folder | MailFathom's own configured alias for the folder |
+| `mailfathom.mail.sync.outcome` | Both | How it ended: `succeeded`, `failed`, `interrupted`, and for a folder also `alias_unresolved` or `alias_ambiguous` |
+| `mailfathom.mail.sync.failure` | Folder | What stopped it: `concurrency_conflict`, `mail_server_unavailable`, or `unexpected` |
+| `mailfathom.mail.sync.folders`, `…folders.failed` | Cycle | How many folders the cycle scheduled, and how many did not complete |
+| `mailfathom.mail.sync.stored`, `…skipped` | Folder | What the folder stored with its content, and what it recorded from the envelope alone |
+
+`interrupted` is deliberately not `failed`. Shutdown is what produces it, and an account backed off for every restart
+would be an account approached less often for having been stopped. An alias that named no single advertised folder is
+kept apart for the same reason: it is a configuration mistake an edit remedies, so it is an outcome rather than a
+failure, and it counts against nothing.
+
+| Instrument | What it answers |
+| --- | --- |
+| `mailfathom.mail.sync.run.duration` | How long one account's cycle took, by account and outcome |
+| `mailfathom.mail.sync.emails.stored` | Messages a folder run stored with their content, by account and folder |
+| `mailfathom.mail.sync.emails.skipped` | Messages it recorded from their envelope alone because they exceeded the size limit |
+| `mailfathom.mail.sync.failures` | Folder runs that did not complete, by what stopped them |
+| `mailfathom.mail.sync.backoff` | How long each account waits before its next run, which is its configured interval until a run fails |
+| `mailfathom.mail.sync.consecutive_failures` | How many of that account's runs failed in a row |
+| `mailfathom.mail.sync.runs.queued` | Account cycles waiting for one of the slots that bound how many accounts run at once |
+| `mailfathom.mail.sync.runs.active` | Account cycles holding one of those slots |
+
+The counts are separate from the byte volume above rather than a second view of it: one message is anywhere between a
+kilobyte and the size limit, so how much a mailbox costs and how much of it has arrived are different questions.
+
+The wait and the failure count are published together because neither is readable alone — a wait says nothing about
+health without the interval it is being compared against, and a failure count says nothing about when the server will
+next be approached. Both are republished on every pass rather than only while an account is backing off, so an account
+that recovered stops reporting the wait it was deferred by instead of holding it, and an account nothing supervises any
+more stops reporting altogether. A rising `consecutive_failures` against a flat `runs.active` is the reading worth
+alerting on: an account being deferred rather than run.
+
+The queue depth is the wait for a slot, which is why the cycle's span opens only once the account holds one — a
+duration that included the wait would report the accounts in front of it as this account's own work.
+`runs.queued` standing at the account count while `runs.active` sits at the configured bound is a pipeline saturated by
+that bound rather than an idle one, which is a distinction nothing else here makes.
+
+Nothing published by any of this is derived from a message. The dimensions are the two configured aliases and closed
+sets of MailFathom's own words, and the values are counts and durations — no UID, no message identifier, no address, no
+subject, and no remote folder path, each of which would open a time series per message or per person. The mail library
+itself reaches none of it either: every IMAP client this deployment opens is constructed without a protocol logger, so
+the commands, responses, and payloads of a session are written nowhere for a log level or a setting to expose, and no
+configuration key exists that could attach one.
 
 ### Answering spend
 

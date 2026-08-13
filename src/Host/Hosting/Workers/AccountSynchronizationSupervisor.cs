@@ -43,8 +43,8 @@ internal sealed partial class AccountSynchronizationSupervisor
     private readonly ISettingsSnapshot<MailSynchronizationOptions> settings;
     private readonly SemaphoreSlim accountRunSlots;
     private readonly AccountPushNotificationWatch pushNotifications;
+    private readonly MailSynchronizationTelemetry telemetry;
     private readonly ILogger<AccountSynchronizationSupervisor> logger;
-    private readonly TimeProvider timeProvider;
 
     /// <summary>Initializes a supervisor for one configured account.</summary>
     /// <param name="accountId">The account this supervisor synchronizes and names in every line it logs.</param>
@@ -52,24 +52,24 @@ internal sealed partial class AccountSynchronizationSupervisor
     /// <param name="settings">Supplies the snapshot every run is scheduled from.</param>
     /// <param name="accountRunSlots">Bounds how many accounts run at once; owned by the coordinator and never released beyond what this supervisor took.</param>
     /// <param name="pushNotifications">Ends the wait between runs early when a watched folder changes; owned by this supervisor and disposed with it.</param>
+    /// <param name="telemetry">Publishes the run as a span with its folders beneath it, and the counts and waits an operator reads without opening a log; it also measures how long a run took.</param>
     /// <param name="logger">Records run outcomes, which carry account and folder aliases and no message-level data.</param>
-    /// <param name="timeProvider">Measures run duration and the wait between runs.</param>
     public AccountSynchronizationSupervisor(
         MailAccountId accountId,
         IServiceScopeFactory scopeFactory,
         ISettingsSnapshot<MailSynchronizationOptions> settings,
         SemaphoreSlim accountRunSlots,
         AccountPushNotificationWatch pushNotifications,
-        ILogger<AccountSynchronizationSupervisor> logger,
-        TimeProvider timeProvider)
+        MailSynchronizationTelemetry telemetry,
+        ILogger<AccountSynchronizationSupervisor> logger)
     {
         this.accountId = accountId;
         this.scopeFactory = scopeFactory;
         this.settings = settings;
         this.accountRunSlots = accountRunSlots;
         this.pushNotifications = pushNotifications;
+        this.telemetry = telemetry;
         this.logger = logger;
-        this.timeProvider = timeProvider;
     }
 
     /// <summary>Supervises the account until scheduling stops or the account leaves configuration.</summary>
@@ -109,6 +109,10 @@ internal sealed partial class AccountSynchronizationSupervisor
             // ended by starting a new one, and a connection left open by the previous one would be a connection nothing
             // is left to close.
             await this.pushNotifications.DisposeAsync();
+
+            // The schedule goes with them, for the same reason: an account nothing is scheduling any more would
+            // otherwise publish the wait it was last scheduled behind for the life of the process.
+            this.telemetry.RecordSupervisionEnded(this.accountId);
         }
     }
 
@@ -142,6 +146,10 @@ internal sealed partial class AccountSynchronizationSupervisor
                 runSettings.Interval,
                 runSettings.MaxFailureBackoff,
                 consecutiveFailureCount);
+
+            // Published on every pass rather than only on a backed-off one, because a gauge that stops being written
+            // holds its last value: an account that recovered would go on reporting the wait it was backing off by.
+            this.telemetry.RecordScheduledDelay(this.accountId, delayBeforeNextRun, consecutiveFailureCount);
 
             if (consecutiveFailureCount > 0)
             {
@@ -194,9 +202,14 @@ internal sealed partial class AccountSynchronizationSupervisor
         var failedFolderCount = 0;
         var convergenceFailed = false;
 
-        await this.accountRunSlots.WaitAsync(schedulingToken);
+        // The wait for a slot is counted and the run itself is spanned, which is the split that keeps a cycle's
+        // duration the cycle rather than the cycle plus however long the accounts in front of it took.
+        using (this.telemetry.EnterRunQueue())
+        {
+            await this.accountRunSlots.WaitAsync(schedulingToken);
+        }
 
-        var startedAt = this.timeProvider.GetTimestamp();
+        using var run = this.telemetry.BeginAccountRun(this.accountId);
 
         try
         {
@@ -252,13 +265,23 @@ internal sealed partial class AccountSynchronizationSupervisor
             this.accountRunSlots.Release();
         }
 
-        var runDuration = this.timeProvider.GetElapsedTime(startedAt);
+        // A cycle the host stopped scheduling did not finish, and its failure count says nothing about that: a folder
+        // still queued behind the folder bound returns without being started, so it raises no count and would leave
+        // a cycle that skipped most of its work reporting a clean run. Leaving the scope unreported publishes it as
+        // interrupted, which is what a folder cut off by the same shutdown already reports, and the line is withheld
+        // for the same reason — the supervisor logs the stop itself, and there is no finished run to announce.
+        if (schedulingToken.IsCancellationRequested)
+        {
+            return new AccountRunOutcome(failedFolderCount > 0 || convergenceFailed, [.. resolvedFolders]);
+        }
+
+        run.Completed(scheduledFolders.Length, failedFolderCount, convergenceFailed);
 
         this.LogAccountRunFinished(
             this.accountId.Value,
             scheduledFolders.Length,
             failedFolderCount,
-            runDuration);
+            run.Elapsed);
 
         return new AccountRunOutcome(failedFolderCount > 0 || convergenceFailed, [.. resolvedFolders]);
     }
@@ -633,6 +656,11 @@ internal sealed partial class AccountSynchronizationSupervisor
     {
         var folderAlias = configuredFolder.Alias;
 
+        // Opened before the mapping is built, so a folder whose configuration reached the run unusable is a span with
+        // a failure on it rather than a gap under the cycle. The alias is carried by the outcome for the same reason:
+        // until the mapping exists there is only the configured spelling of it.
+        using var folderRun = this.telemetry.BeginFolderRun(this.accountId);
+
         try
         {
             var folderMapping = configuredFolder.CreateMapping();
@@ -652,29 +680,37 @@ internal sealed partial class AccountSynchronizationSupervisor
                 folderAlias,
                 remotelyDeletedEmailDisposition,
                 result,
-                scope.ServiceProvider.GetRequiredService<MailboxContentVolumeTelemetry>());
+                scope.ServiceProvider.GetRequiredService<MailboxContentVolumeTelemetry>(),
+                folderRun);
 
             return new FolderRunOutcome(Succeeded: true, result.Folder);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
+            // Shutdown rather than a defect, so the folder is recorded as interrupted and counted under no failure:
+            // an account backed off for every restart would be an account approached less often for being stopped.
+            folderRun.Interrupted(folderAlias);
+
             throw;
         }
         catch (PersistenceConcurrencyConflictException exception)
         {
             this.LogFolderSynchronizationDeferredAfterConcurrencyConflict(exception, this.accountId.Value, folderAlias);
+            folderRun.ConcurrencyConflict(folderAlias);
 
             return FolderRunOutcome.Failed;
         }
         catch (MailboxUnavailableException exception)
         {
             this.LogFolderSynchronizationDeferredAfterMailServerUnavailable(exception, this.accountId.Value, folderAlias);
+            folderRun.MailServerUnavailable(folderAlias);
 
             return FolderRunOutcome.Failed;
         }
         catch (Exception exception)
         {
             this.LogFolderSynchronizationFailed(exception, this.accountId.Value, folderAlias);
+            folderRun.UnexpectedFailure(folderAlias);
 
             return FolderRunOutcome.Failed;
         }
@@ -685,11 +721,13 @@ internal sealed partial class AccountSynchronizationSupervisor
         string folderAlias,
         RemotelyDeletedEmailDisposition remotelyDeletedEmailDisposition,
         MailboxSynchronizationResult result,
-        MailboxContentVolumeTelemetry contentVolumeTelemetry)
+        MailboxContentVolumeTelemetry contentVolumeTelemetry,
+        MailSynchronizationTelemetry.FolderRunScope folderRun)
     {
         if (result.Outcome == MailboxSynchronizationOutcome.FolderAliasUnresolved)
         {
             this.LogFolderAliasUnresolved(this.accountId.Value, folderAlias);
+            folderRun.AliasUnresolved(folderAlias);
 
             return;
         }
@@ -697,6 +735,7 @@ internal sealed partial class AccountSynchronizationSupervisor
         if (result.Outcome == MailboxSynchronizationOutcome.FolderAliasAmbiguous)
         {
             this.LogFolderAliasAmbiguous(this.accountId.Value, folderAlias);
+            folderRun.AliasAmbiguous(folderAlias);
 
             return;
         }
@@ -717,6 +756,8 @@ internal sealed partial class AccountSynchronizationSupervisor
                 result.RelocatedEmailCount,
                 result.Reconciliation.OwnMutationCompletedEmailCount);
         }
+
+        folderRun.Synchronized(folderAlias, result.StoredEmailCount, result.SkippedOversizedEmailCount);
 
         // Published only for a folder the run actually reached, because the level it carries is a measurement rather
         // than a count: an alias that resolved to nothing measured nothing, and publishing its empty volume would move

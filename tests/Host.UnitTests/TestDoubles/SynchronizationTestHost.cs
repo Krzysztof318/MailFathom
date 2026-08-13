@@ -159,6 +159,10 @@ internal static class SynchronizationTestHost
         services.AddSingleton(Substitute.For<IMailboxWriteSessionFactory>());
         services.AddSingleton<MailboxConvergenceTelemetry>();
         services.AddSingleton<MailboxContentVolumeTelemetry>();
+        // Resolved by the coordinator and handed to every supervisor it starts, so it is composed here rather than
+        // constructed per harness: a supervisor built with one instance and a coordinator with another would publish
+        // two sets of the levels that describe the process.
+        services.AddSingleton<MailSynchronizationTelemetry>();
         services.AddScoped<IMailboxMutationPerformer, MailboxMutationPerformer>();
         services.AddScoped<MailboxMutationConverger>();
 

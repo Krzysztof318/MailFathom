@@ -87,7 +87,6 @@ using MailFathom.Infrastructure.Security.OAuth;
 using MailFathom.Infrastructure.SensitiveContent.PersonalData;
 using MailFathom.Infrastructure.SensitiveContent.Secrets;
 using MailFathom.Infrastructure.Spam;
-using MailKit.Net.Imap;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
@@ -536,14 +535,14 @@ public static class ServiceCollectionExtensions
             provider.GetRequiredService<TimeProvider>(),
             provider.GetRequiredService<ILogger<MailOAuthAccessTokenSource>>()));
         services.AddScoped<IMailboxSessionFactory>(provider => new MailKitImapMailboxSessionFactory(
-            static () => new ImapClient(),
+            MailKitImapClientFactory.CreateWithoutProtocolLogging,
             provider.GetRequiredService<IImapAccountSettingsProvider>(),
             provider.GetRequiredService<IMailAccessTokenSource>(),
             provider.GetRequiredService<OutboundOperationExecutor>(),
             provider.GetRequiredService<ITransientFailureClassifier>(),
             provider.GetRequiredService<TimeProvider>()));
         services.AddScoped<IMailboxNotificationSessionFactory>(provider => new MailKitImapNotificationSessionFactory(
-            static () => new ImapClient(),
+            MailKitImapClientFactory.CreateWithoutProtocolLogging,
             provider.GetRequiredService<IImapAccountSettingsProvider>(),
             provider.GetRequiredService<IMailAccessTokenSource>(),
             provider.GetRequiredService<OutboundOperationExecutor>(),
@@ -555,7 +554,7 @@ public static class ServiceCollectionExtensions
         // front of it stays scoped like every other mail adapter, and carries no state of its own.
         services.AddSingleton<MailboxMutationTelemetry>();
         services.AddSingleton(provider => new MailboxWriteConnectionPool(
-            static () => new ImapClient(),
+            MailKitImapClientFactory.CreateWithoutProtocolLogging,
             provider.GetRequiredService<IServiceScopeFactory>(),
             provider.GetRequiredService<OutboundOperationExecutor>(),
             provider.GetRequiredService<ITransientFailureClassifier>(),
@@ -591,10 +590,14 @@ public static class ServiceCollectionExtensions
         // A singleton for the same reason: the level it publishes belongs to the deployment's one content store rather
         // than to any run, and the counters beside it accumulate across every account.
         services.AddSingleton<MailboxContentVolumeTelemetry>();
+        // A singleton for the third time, and for the strongest form of the reason: the levels it publishes — how many
+        // account runs are queued behind the concurrency bound, and how long each account waits before its next run —
+        // describe the process rather than any run, and a second instance would publish a second set of them.
+        services.AddSingleton<MailSynchronizationTelemetry>();
         services.AddScoped<MailboxMutationConverger>();
         services.AddScoped<MailboxDestinationResolver>();
         services.AddScoped<IRemoteFolderCatalog>(provider => new MailKitRemoteFolderCatalog(
-            static () => new ImapClient(),
+            MailKitImapClientFactory.CreateWithoutProtocolLogging,
             provider.GetRequiredService<IImapAccountSettingsProvider>(),
             provider.GetRequiredService<IMailAccessTokenSource>(),
             provider.GetRequiredService<OutboundOperationExecutor>(),

@@ -6,6 +6,7 @@ using System.Diagnostics.CodeAnalysis;
 using MailFathom.Domain.Accounts;
 using MailFathom.Host.Configuration;
 using MailFathom.Host.Configuration.Mail;
+using MailFathom.Infrastructure.Observability;
 
 namespace MailFathom.Host.Hosting.Workers;
 
@@ -29,6 +30,7 @@ internal sealed partial class MailSynchronizationCoordinator : BackgroundService
     private readonly Dictionary<string, Task> supervisedAccounts = new(StringComparer.Ordinal);
     private readonly IServiceScopeFactory scopeFactory;
     private readonly ISettingsSnapshot<MailSynchronizationOptions> settings;
+    private readonly MailSynchronizationTelemetry telemetry;
     private readonly ILoggerFactory loggerFactory;
     private readonly ILogger<MailSynchronizationCoordinator> logger;
     private readonly TimeProvider timeProvider;
@@ -36,11 +38,13 @@ internal sealed partial class MailSynchronizationCoordinator : BackgroundService
     /// <summary>Initializes a new mail synchronization coordinator.</summary>
     /// <param name="scopeFactory">Creates the scope each folder work unit runs in.</param>
     /// <param name="settings">Supplies the snapshot the supervised account set is read from.</param>
+    /// <param name="telemetry">Published to by every supervisor this coordinator starts, which is why one instance is handed to all of them.</param>
     /// <param name="loggerFactory">Supplies this coordinator's logger and the logger of every supervisor it starts, so a supervisor logs under its own category.</param>
     /// <param name="timeProvider">Drives the supervision interval and bounds the shutdown drain.</param>
     public MailSynchronizationCoordinator(
         IServiceScopeFactory scopeFactory,
         ISettingsSnapshot<MailSynchronizationOptions> settings,
+        MailSynchronizationTelemetry telemetry,
         ILoggerFactory loggerFactory,
         TimeProvider timeProvider)
     {
@@ -48,6 +52,7 @@ internal sealed partial class MailSynchronizationCoordinator : BackgroundService
 
         this.scopeFactory = scopeFactory;
         this.settings = settings;
+        this.telemetry = telemetry;
         this.loggerFactory = loggerFactory;
         this.logger = loggerFactory.CreateLogger<MailSynchronizationCoordinator>();
         this.timeProvider = timeProvider;
@@ -143,8 +148,8 @@ internal sealed partial class MailSynchronizationCoordinator : BackgroundService
             this.settings,
             accountRunSlots,
             pushNotifications,
-            this.loggerFactory.CreateLogger<AccountSynchronizationSupervisor>(),
-            this.timeProvider);
+            this.telemetry,
+            this.loggerFactory.CreateLogger<AccountSynchronizationSupervisor>());
 
         return supervisor.RunAsync(schedulingToken, workUnitToken);
     }
