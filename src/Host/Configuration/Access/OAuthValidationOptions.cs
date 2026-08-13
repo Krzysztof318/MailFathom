@@ -157,11 +157,13 @@ internal sealed class OAuthValidationOptions
 
     /// <summary>Finds what an operator must fix in the scopes this entry advertises without checking.</summary>
     /// <remarks>
-    /// A malformed value is refused exactly as a malformed required one is, because both are published in the metadata
-    /// document and named in a challenge, where a space or a quotation mark would split one scope into two or end the
-    /// header parameter early. A value that is already required is refused as well: every required scope is published
-    /// regardless, so repeating one here states nothing and would leave the list reading as the whole advertised set
-    /// rather than as what is advertised beyond what is checked.
+    /// A malformed value is refused exactly as a malformed required one is, and for the metadata document alone: a
+    /// client composes the space-separated <c>scope</c> parameter of its own authorization request out of what it reads
+    /// there, so a space or a quotation mark splits one scope into two. No challenge carries one — only a required scope
+    /// reaches a <c>WWW-Authenticate</c> header, because that is the only kind a token is turned away for lacking. A
+    /// value that is already required is refused as well: every required scope is published regardless, so repeating one
+    /// here states nothing and would leave the list reading as the whole advertised set rather than as what is
+    /// advertised beyond what is checked.
     /// </remarks>
     private IEnumerable<string> FindAdvertisedScopeErrors()
     {
