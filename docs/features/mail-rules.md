@@ -172,7 +172,7 @@ a queue being full, or a previous run still walking cost, the dispatch takes the
 ones before it — a mailbox does not want six walks because the host was off for a day, and each of those walks would
 apply the same rules to the same mail. What the skip leaves is a count:
 `mailfathom.jobs.schedule.skipped_occurrences`, broken down by why they were passed over, beside
-`mailfathom.jobs.schedule.dispatches` for the decisions themselves. [Telemetry](../operations/telemetry.md#background-jobs)
+`mailfathom.jobs.schedule.dispatches` for the decisions themselves. [Telemetry](../operations/telemetry.md#durable-background-work)
 lists both.
 
 **One run per schedule at a time.** An occasion arriving while that schedule's previous run is still in the queue or
