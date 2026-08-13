@@ -110,8 +110,19 @@ else, so a fragment of one is confidently incomplete rather than merely partial.
 here means the architectural decision records including superseded ones, the workflow contract every `AGENTS.md`
 carries, and the architecture draft under `specs/` that states intent where every page here states fact — none of them
 product documentation, and each of them read as such by an agent that found it under this project's name. The file
-therefore names the three sections that are: the user guide, the operations pages, and the feature reference. Three
-things about how it is matched are worth knowing before editing it, because none is a general JSON convention:
+therefore names three of the four sections [this site carries](#what-the-site-carries): the user guide, the operations
+pages, and the feature reference.
+
+**The architecture pages are left out, and that is a decision about the reader rather than about the pages.** They are
+product documentation and the site publishes them as such; what they answer is where the boundaries of the code are
+drawn and why, which is a question somebody changing MailFathom asks with the repository open in front of them. The
+mirror answers an agent helping somebody install, configure, and use a deployment, and that agent has no more use for
+the project structure than it has for the API reference the map already leaves out. Widening the mirror to them is
+reversible and costs one entry; what it would buy has to be a reader who arrives at the architecture through a
+documentation lookup rather than through the repository.
+
+Three things about how the file is matched are worth knowing before editing it, because none is a general JSON
+convention:
 
 - **`excludeFolders` wins over `folders`**, so a path named in both is excluded.
 - **`excludeFiles` matches a bare filename**, with no path and no pattern. That is what lets two entries — `AGENTS.md`
