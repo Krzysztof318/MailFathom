@@ -1430,6 +1430,9 @@ fathom_review_reviews_a_push_to_a_published_pull_request() {
   run_fathom_review_gate 'synchronize' "$output_file" "$step_output_file"
 
   assert_contains 'review=true' "$step_output_file"
+  # A push started this run, so the review it produces is one of the six the ceiling counts, and the
+  # marker the submission writes into the body is what makes it countable.
+  assert_contains 'explicit=false' "$step_output_file"
   assert_contains 'the branch was pushed to' "$output_file"
 }
 
@@ -1509,6 +1512,9 @@ fathom_review_answers_a_request_past_the_automatic_ceiling() {
   run_fathom_review_gate 'labeled' "$output_file" "$step_output_file" 'Krzysztof318' 'fathom-review' "$reviews_file"
 
   assert_contains 'review=true' "$step_output_file"
+  # The other half of the same decision: a maintainer asked for this one, so it carries the requested
+  # marker and never joins the count that refused the push.
+  assert_contains 'explicit=true' "$step_output_file"
 }
 
 # A merge, the owner's ruleset bypass included, arrives as this event, and its whole purpose is the
