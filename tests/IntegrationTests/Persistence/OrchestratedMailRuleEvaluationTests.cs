@@ -105,14 +105,17 @@ public sealed class OrchestratedMailRuleEvaluationTests(MailFathomOrchestrationF
     }
 
     /// <summary>
-    /// The two ways an email can be sitting in the queue without extracted text, which the projection has to tell apart:
-    /// content the ceiling has not had headroom for is still coming, and content above the size limit never is.
+    /// The three ways an email can be sitting in the queue without extracted text, which the projection has to tell
+    /// apart: content the ceiling has not had headroom for is still coming, content above the size limit never is, and
+    /// content that was fetched whole and could not be parsed never is either.
     /// </summary>
     /// <remarks>
     /// The distinction decides whether a message is waited for or evaluated with the body-text fact absent, and getting
     /// it wrong is silent — the email is stamped as evaluated, leaves the queue for good, and a rule naming its text
     /// never sees it. It is a <c>CASE</c> PostgreSQL evaluates over a string-converted enum column beside a correlated
-    /// existence check, so only a real database settles what it produces.
+    /// existence check, so only a real database settles what it produces. The third message is the one no column
+    /// separates from the first two: its payload was stored, so its availability says <c>Available</c>, and what says
+    /// nothing was read out of it is the source recorded on the document its envelope alone produced.
     /// </remarks>
     [Fact]
     public async Task TheArrivalQueue_MailWhoseTextWasNeverExtracted_WaitsOnlyForContentThatIsStillComing()
@@ -132,20 +135,35 @@ public sealed class OrchestratedMailRuleEvaluationTests(MailFathomOrchestrationF
             StoredEmailContentAvailability.ExceededSizeLimit,
             cancellationToken);
 
+        // The payload was fetched whole and nothing could be read out of its MIME, which is what a synchronization run
+        // stores when parsing fails inside the limits. Nothing about the row says so except the document its envelope
+        // produced, and no later pass reads that MIME differently — so it is evaluated now rather than waited on.
+        var unparseable = await StoreOneUnextractedMessageAsync(
+            services,
+            uid: 9433,
+            StoredEmailContentAvailability.Available,
+            cancellationToken);
+
         // Act
         var queued = await ReadArrivalQueueAsync(services, resumeAfter: null, DrainBatchSize, cancellationToken);
 
         // Assert
         var waited = Assert.Single(queued, candidate => candidate.StoredEmailId == headroomPending);
         var evaluatedWithoutText = Assert.Single(queued, candidate => candidate.StoredEmailId == oversized);
+        var evaluatedUnparseable = Assert.Single(queued, candidate => candidate.StoredEmailId == unparseable);
 
         Assert.False(waited.Facts.HasExtractedContent);
         Assert.False(evaluatedWithoutText.Facts.HasExtractedContent);
 
-        // The control the assertion below needs: both rows look identical to a reader of the search document, so an
-        // observation that reported nothing would pass the first assertion and fail the second.
+        // The one a document's existence cannot answer: this message has one, so reading the row rather than the source
+        // recorded on it would report text that was never derived.
+        Assert.False(evaluatedUnparseable.Facts.HasExtractedContent);
+
+        // The control the assertions below need: all three rows look identical to a reader of the search document, so
+        // an observation that reported nothing would pass the assertions above and fail the first of these.
         Assert.True(waited.AwaitsExtraction);
         Assert.False(evaluatedWithoutText.AwaitsExtraction);
+        Assert.False(evaluatedUnparseable.AwaitsExtraction);
     }
 
     /// <summary>
