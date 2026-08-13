@@ -197,6 +197,19 @@ from, and the vectors of the one it replaced going away in bounded batches. Both
 which generation is current, because an identifier is a dimension of unbounded cardinality for a value the switch's own
 log line already carries. [Changing the embedding model](embedding-profiles.md) is what those two are read against.
 
+Spam classification publishes two counters, and they exist because what they describe leaves no other trace. Where
+classification is switched on, a message it has not decided about yet is not chunked, not embedded, and not offered to
+the rule set — so a deployment withholding everything and a deployment with nothing to do publish exactly the same
+absence of embedding and rule activity. `mailfathom.spam.derived_work.admissions` is what separates them: one
+measurement per decision, tagged with `mailfathom.spam.admission` as one of `admitted`, `withheld_as_junk`,
+`awaiting_classification`, `released_as_unclassifiable`, or `released_after_waiting`. The last is the reading worth
+alerting on, because a deployment releasing mail on the wait rather than on a verdict is one whose classification is not
+running. `mailfathom.spam.derived_work.discarded` counts the passages removed when a junk verdict arrived after they had
+already been cut, and publishes nothing where a verdict removed none. Both are counts, the tag is a closed set of
+MailFathom's own names, and nothing about a message reaches either. [Junk is kept out of what a deployment derives from
+mail](../features/spam-classification.md#junk-is-kept-out-of-what-a-deployment-derives-from-mail) holds what each answer
+means and what the wait is.
+
 Each outbound AI provider publishes what its last call established about it, as `mailfathom.ai.provider.health` tagged
 with `mailfathom.ai.provider.role` — `embedding` or `chat`. The two roles carry one measurement each rather than one
 combined figure, because an instance may hold a working embedding provider and a failing chat one and the two ask

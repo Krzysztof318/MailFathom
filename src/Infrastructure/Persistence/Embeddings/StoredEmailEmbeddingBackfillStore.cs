@@ -7,11 +7,16 @@ using MailFathom.Application.Emails.Embeddings.Backfill;
 using MailFathom.Application.Emails.Extraction;
 using MailFathom.Application.Folders;
 using MailFathom.Application.Persistence;
+using MailFathom.Application.Spam.Gating;
 using MailFathom.CodeCoverage;
+using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
+using MailFathom.Domain.Folders;
+using MailFathom.Domain.Spam;
 using MailFathom.Infrastructure.Persistence.Emails;
 using MailFathom.Infrastructure.Persistence.Entities;
 using MailFathom.Infrastructure.Persistence.Sessions;
+using MailFathom.Infrastructure.Persistence.Spam;
 using Microsoft.EntityFrameworkCore;
 
 namespace MailFathom.Infrastructure.Persistence.Embeddings;
@@ -22,7 +27,8 @@ internal sealed class StoredEmailEmbeddingBackfillStore(
     MailFathomDbContext dbContext,
     TimeProvider timeProvider,
     EmailChunkWriter chunkWriter,
-    IMailFolderParticipationReader folderParticipation)
+    IMailFolderParticipationReader folderParticipation,
+    DerivedWorkGate derivedWorkGate)
     : IStoredEmailEmbeddingBackfillStore
 {
     /// <inheritdoc />
@@ -41,7 +47,7 @@ internal sealed class StoredEmailEmbeddingBackfillStore(
     public Task<int> CountEmailsAwaitingEmbeddingAsync(
         EmbeddingProfileId profileId,
         CancellationToken cancellationToken) =>
-        this.EmailsAwaitingEmbedding(profileId.Value).CountAsync(cancellationToken);
+        this.EmailsAwaitingEmbedding(profileId.Value, derivedWorkGate.ReadTerms()).CountAsync(cancellationToken);
 
     /// <inheritdoc />
     /// <remarks>
@@ -59,18 +65,30 @@ internal sealed class StoredEmailEmbeddingBackfillStore(
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(batchSize);
 
         var resumeAfterId = resumeAfter?.Value;
-        var candidates = await this.EmailsAwaitingEmbedding(profileId.Value)
+        // One snapshot for both halves. The predicate narrows the batch and the answer below names which of the gate's
+        // decisions admitted each row, so a second reading taken microseconds later would let the query select a row
+        // the answer then reported as still waiting.
+        var terms = derivedWorkGate.ReadTerms();
+        var candidates = await this.EmailsAwaitingEmbedding(profileId.Value, terms)
             .Where(email => resumeAfterId == null || email.Id > resumeAfterId)
             .OrderBy(email => email.Id)
             .Take(batchSize)
-            .Select(email => new OutstandingEmailRow(email.Id, !email.Chunks.Any()))
+            .Select(email => new OutstandingEmailRow(
+                email.Id,
+                !email.Chunks.Any(),
+                email.MailFolder.MailboxAccountId,
+                email.MailFolder.Alias,
+                email.StoredAt,
+                email.ContentAvailability,
+                email.SpamClassification == null ? null : email.SpamClassification.Verdict))
             .ToArrayAsync(cancellationToken);
 
         return
         [
             .. candidates.Select(candidate => new StoredEmailAwaitingEmbedding(
                 StoredEmailId.Create(candidate.Id),
-                candidate.RequiresChunking)),
+                candidate.RequiresChunking,
+                AdmissionOf(terms, candidate))),
         ];
     }
 
@@ -157,9 +175,16 @@ internal sealed class StoredEmailEmbeddingBackfillStore(
     /// <remarks>
     /// A message with a passage that carries no vector under this profile was stored before the profile existed, or was
     /// turned away by the live backlog's bound, or was left part-way through by a failed turn. A message with extracted
-    /// text and no passages at all was stored before chunking existed, and nothing can be embedded for it until they are
-    /// cut. A message an expunge has been observed for is in neither group: vectors nothing may retrieve are a provider
-    /// bill with no reader.
+    /// text and no passages at all is one the arrival path did not cut — because it was stored before chunking existed,
+    /// or because classification was holding it — and nothing can be embedded for it until they are cut. A message an
+    /// expunge has been observed for is in neither group: vectors nothing may retrieve are a provider bill with no
+    /// reader.
+    /// </remarks>
+    /// <remarks>
+    /// The classification narrowing is what makes this sweep the place a held message is released. Junk never appears
+    /// here at all, and a message waiting on a verdict appears the moment the verdict admits it or its wait runs out —
+    /// so the sweep both keeps spam away from the provider and stops a wedged scanner from turning the index into one
+    /// that quietly stopped filling.
     /// </remarks>
     /// <remarks>
     /// The walk is scoped to the folders a mapping admits to embedding, which is the same decision that stops their
@@ -169,16 +194,20 @@ internal sealed class StoredEmailEmbeddingBackfillStore(
     /// every sweep for the rest of the deployment's life, since a message with a body and no passages is exactly what
     /// the second group selects.
     /// </remarks>
-    private IQueryable<StoredEmailEntity> EmailsAwaitingEmbedding(Guid profileId) => AccountScopedMailFolders.Admitting(
-        dbContext.StoredEmails
-            .AsNoTracking()
-            .Where(StoredEmailTombstone.IsNotTombstoned)
-            .Where(email => email.Chunks.Any(chunk =>
-                    !chunk.Embeddings.Any(vector => vector.EmbeddingProfileId == profileId))
-                || (!email.Chunks.Any()
-                    && email.SearchDocument != null
-                    && email.SearchDocument.BodyText != null)),
-        folderParticipation.FoldersGeneratingEmbeddings);
+    private IQueryable<StoredEmailEntity> EmailsAwaitingEmbedding(
+        Guid profileId,
+        DerivedWorkAdmissionTerms terms) => DerivedWorkAdmittedEmails.Admitting(
+        AccountScopedMailFolders.Admitting(
+            dbContext.StoredEmails
+                .AsNoTracking()
+                .Where(StoredEmailTombstone.IsNotTombstoned)
+                .Where(email => email.Chunks.Any(chunk =>
+                        !chunk.Embeddings.Any(vector => vector.EmbeddingProfileId == profileId))
+                    || (!email.Chunks.Any()
+                        && email.SearchDocument != null
+                        && email.SearchDocument.BodyText != null)),
+            folderParticipation.FoldersGeneratingEmbeddings),
+        terms);
 
     /// <summary>Rebuilds the extraction the chunker reads from the two readings the search document stored.</summary>
     /// <remarks>
@@ -201,8 +230,30 @@ internal sealed class StoredEmailEmbeddingBackfillStore(
         };
     }
 
+    /// <summary>Names the answer the predicate above already reached about one selected row.</summary>
+    /// <remarks>
+    /// The query admits the message; this says which of the gate's answers admitted it, which is the only place a
+    /// release is decidable per message. A withheld one never reaches here, so the answer is always an admitting one.
+    /// </remarks>
+    private static DerivedWorkAdmission AdmissionOf(DerivedWorkAdmissionTerms terms, OutstandingEmailRow candidate) =>
+        DerivedWorkGate.Admit(
+            terms,
+            new DerivedWorkCandidate(
+                MailAccountId.Create(candidate.MailboxAccountId),
+                MailFolderAlias.Create(candidate.Alias),
+                candidate.StoredAt,
+                candidate.ContentAvailability,
+                candidate.Verdict));
+
     /// <summary>One outstanding message, as the walk's projection returns it.</summary>
-    private sealed record OutstandingEmailRow(Guid Id, bool RequiresChunking);
+    private sealed record OutstandingEmailRow(
+        Guid Id,
+        bool RequiresChunking,
+        string MailboxAccountId,
+        string Alias,
+        DateTimeOffset StoredAt,
+        StoredEmailContentAvailability ContentAvailability,
+        SpamVerdict? Verdict);
 
     /// <summary>The stored reading of one message's body, as the chunking projection returns it.</summary>
     private sealed record StoredExtractionRow(

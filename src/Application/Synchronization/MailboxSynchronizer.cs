@@ -3,12 +3,14 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.EmailContent.Storage;
+using MailFathom.Application.Emails.Chunking;
 using MailFathom.Application.Emails.Embeddings.Generation;
 using MailFathom.Application.Emails.Extraction;
 using MailFathom.Application.Folders;
 using MailFathom.Application.Mail;
 using MailFathom.Application.Mail.Mutations;
 using MailFathom.Application.Persistence;
+using MailFathom.Application.Spam.Gating;
 using MailFathom.Application.Synchronization.Checkpoints;
 using MailFathom.Application.Synchronization.Reconciliation;
 using MailFathom.Application.Synchronization.Sessions;
@@ -39,6 +41,9 @@ public sealed class MailboxSynchronizer
     private readonly IMailboxMutationReconciliationStore mutationStore;
     private readonly MailboxReconciler reconciler;
     private readonly IEmailEmbeddingBacklog embeddingBacklog;
+    private readonly IEmailChunkStore chunkStore;
+    private readonly DerivedWorkGate derivedWorkGate;
+    private readonly IDerivedWorkGateTelemetry gateTelemetry;
     private readonly OptimisticConcurrencyRetryPolicy concurrencyRetryPolicy;
     private readonly TimeProvider timeProvider;
     private readonly MailboxSynchronizationOptions options;
@@ -60,6 +65,9 @@ public sealed class MailboxSynchronizer
         IMailboxMutationReconciliationStore mutationStore,
         MailboxReconciler reconciler,
         IEmailEmbeddingBacklog embeddingBacklog,
+        IEmailChunkStore chunkStore,
+        DerivedWorkGate derivedWorkGate,
+        IDerivedWorkGateTelemetry gateTelemetry,
         OptimisticConcurrencyRetryPolicy concurrencyRetryPolicy,
         TimeProvider timeProvider,
         MailboxSynchronizationOptions options)
@@ -79,6 +87,9 @@ public sealed class MailboxSynchronizer
         this.mutationStore = mutationStore;
         this.reconciler = reconciler;
         this.embeddingBacklog = embeddingBacklog;
+        this.chunkStore = chunkStore;
+        this.derivedWorkGate = derivedWorkGate;
+        this.gateTelemetry = gateTelemetry;
         this.concurrencyRetryPolicy = concurrencyRetryPolicy;
         this.timeProvider = timeProvider;
         this.options = options;
@@ -644,6 +655,19 @@ public sealed class MailboxSynchronizer
         // only what the server's envelope reported, and the folder checkpoint still advances past it.
         var extraction = await this.mimeReader.ReadMetadataAsync(content, cancellationToken);
 
+        // Decided before the commit rather than after it, because it decides what the commit contains. A message this
+        // run is storing for the first time carries no verdict yet, so the answer here is whatever classification's
+        // scope and the account's junk folder say — which is exactly the ordering this exists for: nothing is cut,
+        // nothing is offered to a provider, and nothing is offered to a rule until classification has had its turn.
+        var admission = this.derivedWorkGate.Admit(new DerivedWorkCandidate(
+            metadata.OccurrenceId.AccountId,
+            metadata.OccurrenceId.FolderResolutionId.Alias,
+            this.timeProvider.GetUtcNow(),
+            StoredEmailContentAvailability.Available,
+            Verdict: null));
+
+        this.gateTelemetry.RecordAdmission(admission);
+
         var storedEmailId = default(StoredEmailId);
 
         await this.concurrencyRetryPolicy.CommitAsync(
@@ -661,6 +685,18 @@ public sealed class MailboxSynchronizer
                     content,
                     attemptCancellationToken);
 
+                // Cut in the same session as the text it derives from, so a message the gate admits is never one whose
+                // passages a later reader has to wait for. A message the gate holds is cut by the embedding backfill
+                // once a verdict admits it, which is the same sweep that reaches whatever else the live path missed.
+                if (admission.PermitsDerivedWork() && extraction.Metadata is { } extracted)
+                {
+                    await this.chunkStore.DeriveChunksAsync(
+                        persistenceSession,
+                        storedEmailId,
+                        extracted.Text,
+                        attemptCancellationToken);
+                }
+
                 await this.ObservePlacementAsync(persistenceSession, placement, attemptCancellationToken);
             },
             cancellationToken);
@@ -669,11 +705,14 @@ public sealed class MailboxSynchronizer
         storageClaim.Settle(content.RawMime.Length);
 
         // Offered after the commit and never inside it, which is what keeps a provider outage out of this run: the
-        // message and the passages the chunk writer derived beside it are durable by now, so the worker consumes
-        // committed state and nothing it does can extend or fail the transaction that produced it. A refusal by a full
-        // backlog is deliberately not an error here — the message is stored, and the backfill is what reaches mail the
-        // live path did not. The identity is the one the commit resolved, which is the same value this outcome reports.
-        this.embeddingBacklog.TryEnqueue(storedEmailId);
+        // message and the passages cut beside it are durable by now, so the worker consumes committed state and nothing
+        // it does can extend or fail the transaction that produced it. A refusal by a full backlog is deliberately not
+        // an error here — the message is stored, and the backfill is what reaches mail the live path did not. The
+        // identity is the one the commit resolved, which is the same value this outcome reports.
+        if (admission.PermitsDerivedWork())
+        {
+            this.embeddingBacklog.TryEnqueue(storedEmailId);
+        }
 
         return new OccurrenceSynchronizationOutcome(
             storedEmailId,

@@ -96,6 +96,22 @@ internal sealed class StoredEmailEntity
 
     public bool ContainsUnexpandedTnefPart { get; set; }
 
+    /// <summary>Gets or sets when this occurrence was first recorded locally.</summary>
+    /// <remarks>
+    /// <para>
+    /// A statement about this deployment rather than about the message, which is why it is neither
+    /// <see cref="SentAt" /> nor <see cref="ReceivedAt" />: both of those are what the mail server said, and an initial
+    /// synchronization of a ten-year-old mailbox stores a decade of them in one afternoon.
+    /// </para>
+    /// <para>
+    /// What reads it is the wait a spam verdict is allowed. Derived work is ordered behind classification, so a message
+    /// with no verdict is held — and the only thing that distinguishes one still waiting from one nothing is ever going
+    /// to reach is how long it has been here. Writing it once and never updating it is what makes that a wait rather
+    /// than a value a later write could reset.
+    /// </para>
+    /// </remarks>
+    public DateTimeOffset StoredAt { get; set; }
+
     /// <summary>
     /// Gets or sets when the remote flags below were last read from the server, or <see langword="null" /> while they
     /// have never been read. The timestamp is what separates "the server reports none of these flags" from "nobody has

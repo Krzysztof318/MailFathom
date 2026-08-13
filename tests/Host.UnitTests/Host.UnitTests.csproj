@@ -14,6 +14,9 @@
     <Compile Include="..\shared\TestCertificates.cs" Link="TestCertificates.cs" />
     <Compile Include="..\shared\StubMailFolderParticipation.cs" Link="StubMailFolderParticipation.cs" />
     <Compile Include="..\shared\StubJunkMailFolderCatalog.cs" Link="StubJunkMailFolderCatalog.cs" />
+    <!-- The synchronization harness composes the classification gate, which needs both. -->
+    <Compile Include="..\shared\StubSpamClassificationSettingsReader.cs" Link="StubSpamClassificationSettingsReader.cs" />
+    <Compile Include="..\shared\RecordingDerivedWorkGateTelemetry.cs" Link="RecordingDerivedWorkGateTelemetry.cs" />
     <Compile Include="..\shared\StubMailFolderMappings.cs" Link="StubMailFolderMappings.cs" />
     <Compile Include="..\shared\SyntheticServedAccount.cs" Link="SyntheticServedAccount.cs" />
   </ItemGroup>

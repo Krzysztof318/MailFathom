@@ -432,6 +432,7 @@ described below.
 | `SpamClassification:UseScanner` | bool | `false` | Asking for a scanner while `Enabled` is false fails startup, because a scanner is only consulted where classification runs | restart |
 | `SpamClassification:ScannedFolders:<n>` | string | unset | A usable folder alias; an absent list is every account's inbox mapping, and an explicitly empty list is no folder at all | reload |
 | `SpamClassification:ScannerThreshold` | double | unset | 0.1 – 1000; unset keeps the threshold the scanner itself answered with | reload |
+| `SpamClassification:ClassificationWait` | TimeSpan | `00:15:00` | 1 s – 7 days; how long a stored message may wait for a verdict before it is derived from anyway | reload |
 | `SpamClassification:RunBatchSize` | int | `50` | 1 – 10 000 | reload |
 | `SpamClassification:MaxRunBatchesPerPass` | int | `4` | 1 – 1 000 | reload |
 | `SpamClassification:Scanner:Host` | string | unset | Required once `UseScanner` is on, and a host name or IP address rather than a URL or an address with the port on it | restart |
@@ -447,6 +448,15 @@ described below.
 `UseScanner` and the `Scanner` block are read once, at startup: whether a scanner exists at all decides what is
 constructed and whether the host refuses to start without a daemon, which a reload cannot revisit. Everything else in
 this section is read per classification.
+
+`ClassificationWait` bounds the ordering rather than a scan. Wherever classification is on, a message it covers is not
+chunked, embedded, or offered to the rule set until a verdict exists — and this is how long that may hold before the
+message is derived from regardless, which is what stops a classifier nobody noticed was wedged from silently stopping
+the index. Lengthening it delays mail of a classified folder by that much longer in the worst case; shortening it
+narrows the window in which a verdict can arrive first. Zero is refused, because a wait of none releases every message
+before anything could have scored it.
+[Junk is kept out of what a deployment derives from mail](../features/spam-classification.md#junk-is-kept-out-of-what-a-deployment-derives-from-mail)
+records what each answer means and what is counted.
 
 **A scanner switched on with no daemon answering fails startup**, with error code `81003` naming the key to repair
 rather than the address it tried. That is deliberate asymmetry with what one message gets, where a failed scan leaves

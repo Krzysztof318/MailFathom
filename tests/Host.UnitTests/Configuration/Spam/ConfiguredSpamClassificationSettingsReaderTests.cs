@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Application.Spam;
 using MailFathom.Domain.Folders;
 using MailFathom.Host.Configuration.Mail;
 using MailFathom.Host.Configuration.Spam;
@@ -30,6 +31,40 @@ public sealed class ConfiguredSpamClassificationSettingsReaderTests
         // Assert
         Assert.True(settings.IsEnabled);
         Assert.Equal([MailFolderAlias.Create("PRIMARY-MAIL")], settings.ScannedFolderAliases);
+    }
+
+    /// <summary>The bound on the ordering is the operator's, and it is what stops a wedged scanner stopping the index.</summary>
+    [Fact]
+    public void Settings_AClassificationWaitConfigured_CarriesItToTheGate()
+    {
+        // Arrange
+        var reader = ReaderFor(
+            new SpamClassificationOptions { Enabled = true, ClassificationWait = TimeSpan.FromHours(2) },
+            AccountMapping("inbox", "Inbox"));
+
+        // Act
+        var settings = reader.Settings;
+
+        // Assert
+        Assert.Equal(TimeSpan.FromHours(2), settings.MaximumClassificationWait);
+    }
+
+    /// <summary>An operator who named no wait gets one anyway, because a wait of none would release every message.</summary>
+    [Fact]
+    public void Settings_NoClassificationWaitConfigured_TakesTheDefaultWait()
+    {
+        // Arrange
+        var reader = ReaderFor(
+            new SpamClassificationOptions { Enabled = true },
+            AccountMapping("inbox", "Inbox"));
+
+        // Act
+        var settings = reader.Settings;
+
+        // Assert
+        Assert.Equal(
+            SpamClassificationSettings.DefaultMaximumClassificationWait,
+            settings.MaximumClassificationWait);
     }
 
     /// <summary>An operator who wrote no folders at all asked for none, which the default must not quietly overrule.</summary>

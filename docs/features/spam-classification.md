@@ -1,6 +1,6 @@
 # Spam classification
 
-<!-- describes: src/Domain/Spam/**, src/Application/Spam/**, src/Application/Folders/IJunkMailFolderCatalog.cs, src/Infrastructure/Persistence/Spam/**, src/Infrastructure/Spam/**, src/Infrastructure/Mail/Mime/MimeKitEmailSpamHeaderReader.cs, src/Host/Configuration/Spam/** -->
+<!-- describes: src/Domain/Spam/**, src/Application/Spam/**, src/Application/Folders/IJunkMailFolderCatalog.cs, src/Infrastructure/Persistence/Spam/**, src/Infrastructure/Spam/**, src/Infrastructure/Observability/DerivedWorkGateTelemetry.cs, src/Infrastructure/Mail/Mime/MimeKitEmailSpamHeaderReader.cs, src/Host/Configuration/Spam/** -->
 
 A mailbox that an assistant reads is a mailbox somebody else can write to. Mail written to deceive a reader is
 indistinguishable from correspondence once it is a row in a timeline, and the receiving mail server has usually already
@@ -8,9 +8,10 @@ decided what it thought of it — in an `Authentication-Results` header, in a pr
 the message in the junk folder. Spam classification is what keeps that decision rather than discarding it, and records
 it as derived data beside the message.
 
-Three things ship here and are independent of each other: the classification record with the stage that fills it, the
-two switches that let a verdict reach the mail server, and the junk folder becoming a fact that mailbox reads act on.
-The last is true of a mailbox with no classification at all.
+Four things ship here and are independent of each other: the classification record with the stage that fills it, the two
+switches that let a verdict reach the mail server, the junk folder becoming a fact that mailbox reads act on, and junk
+being kept out of everything this deployment derives from mail. The third is true of a mailbox with no classification at
+all.
 
 ## The junk folder is left out of listing and search
 
@@ -245,6 +246,92 @@ including a `\Seen` change asked for beside it. The same holds for an account a 
 about mail it files away is then nobody's to guess. Marking spam read while leaving it in the inbox takes the unread
 marker off mail that is still there, which is worse than waiting; a later attempt performs the pair whole.
 
+## Junk is kept out of what a deployment derives from mail
+
+The section above is about what a verdict may do to somebody's mailbox, and it is off by default. This one is about what
+a verdict does here, and it is not a switch at all: wherever classification is on, junk is withheld from everything
+MailFathom derives from a message — it is never cut into [passages](message-chunks.md), never embedded, its content
+never reaches an embedding provider, and it is never offered to the [rule set](mail-rules.md).
+
+Two costs are what that is for. Embedding unsolicited mail pays a provider, per message, to make it retrievable; and a
+rule set is the owner's automation, so mail somebody else chose to send is mail somebody else would otherwise be firing
+it with. Both are spent before anybody reads a verdict, which is why the ordering matters rather than only the answer:
+**classification is scheduled ahead of chunking, embedding, and rule evaluation**, and a message classification has not
+decided about yet waits rather than being derived from ahead of the answer.
+
+With classification off, nothing is gated. Chunking, embedding, and rule evaluation reach exactly the mail they reached
+before any of this existed, and no folder is looked at to decide it.
+
+### What is decided about one message
+
+| Answer | When | What follows |
+| --- | --- | --- |
+| Withheld as junk | The message is in the account's junk folder, or its classification says spam | Nothing is cut, nothing is embedded, and it is not offered to the rule set |
+| Awaiting classification | Classification covers the folder and has reached no verdict about this message yet | The same, until one of the answers below replaces it |
+| Released after waiting | It has waited longer than `SpamClassification:ClassificationWait` | Derived from like any other message |
+| Released as unclassifiable | Its content was never stored, because it exceeded the size limit, so no verdict is coming | Derived from like any other message |
+| Admitted | Classification is off, or does not cover the folder, or the verdict is anything but spam | Derived from like any other message |
+
+The junk folder is read before any verdict, so a mailbox whose own filter already took a message needs no classification
+of its own for it to be withheld — the same fact the deterministic stage reads as a signal, acted on one step earlier.
+
+### Waiting is bounded, and running out of patience is not a failure
+
+A verdict that never arrives is the case this bound exists for: a run nobody asked for, a scanner nobody noticed was
+wedged, a pass that keeps failing. Without a bound each of those would hold mail out of the index indefinitely, and an
+instance withholding everything publishes the same silence as one with nothing to do.
+
+`SpamClassification:ClassificationWait` is how long a message may wait, measured from when it was stored, and it is
+fifteen minutes unless a deployment says otherwise. Past it the message is released and derived from, verdict or no
+verdict — the index staying current is worth more than the small chance that the message nobody scored was spam. A
+message still inside the bound and a message the bound released are separate counts, because *waiting* and *given up on*
+are different things for an operator to act on.
+
+A classification that failed, timed out, or spent every attempt leaves the message exactly as it was: no verdict, and
+therefore eligible on the same terms as one nothing has looked at yet. Nothing records a failure as a decision.
+
+### Eligibility is derived, and there is no flag to clear
+
+Nothing marks a message as withheld. What is read is where the message is now and what its classification currently
+says, so the answer changes the moment either does and no record has to be found and cleared.
+
+That is what makes correcting a false positive work without a MailFathom-specific undo. Mail the owner drags out of junk
+in any client arrives in the destination as a new occurrence — a new UID in a different folder — with no classification
+of its own, so it is admitted like any newly stored message and cut, embedded, and offered to the rules from then on. A
+move MailFathom itself made keeps the row and its verdict, which is right, because such a move files a message *into*
+junk rather than out of it.
+
+### What a junk verdict removes
+
+A message decided spam after it was already cut is stripped of its passages, in the same transaction the verdict is
+written in, and the vectors hanging off them go with them. Two ordinary sequences produce derived data before a verdict
+exists — mail stored while classification was off and classified by a run afterwards, and mail the wait released and a
+later run scored — and neither may leave the index holding spam.
+
+The count of what was removed is reported. Nothing else is: which message, which passage, and what any of it said are
+mail content.
+
+### Where in-scope mail is cut and embedded instead
+
+Withholding a message from chunking on the arrival path means the arrival path is over by the time its verdict exists,
+so something else has to cut it. That is the [embedding backfill](embedding-backfill.md) sweep, which already selects a
+message with extracted text and no passages, and whose selection this gate narrows: junk never appears in it, and a
+message waiting on a verdict appears the moment the verdict admits it or the wait runs out. Such a message ends up cut
+and embedded exactly as it would have been on arrival, later by at most a sweep.
+
+This is the one behavior change a deployment that switches classification on will notice. With classification off, mail
+is still cut in the transaction that stores it, as it always was.
+
+### What an operator can see
+
+| Signal | What it answers |
+| --- | --- |
+| `mailfathom.spam.derived_work.admissions` | Each answer above under its own `mailfathom.spam.admission` tag: how much is withheld, how much is waiting, and how much was released without a verdict |
+| `mailfathom.spam.derived_work.discarded` | Passages removed because a junk verdict arrived after they were cut |
+
+The tag is one of five names of MailFathom's own, and both signals are counts. No message identity, subject, address, or
+passage reaches either of them, or a log line about them.
+
 ## Classifying is idempotent, and reclassifying is explicit
 
 Classification is keyed to the occurrence, so repeating it either leaves the existing record alone or replaces it with
@@ -323,6 +410,10 @@ The action switches are the same shape. With both off, deciding what a verdict c
 else: no mailbox is looked at, **no write session is ever obtained**, and no account holds the write connection that
 would carry a change.
 
+So is the gate over derived work. Whether classification is on at all is the first thing it asks, and the answer being
+no ends it: no folder is resolved, no query is narrowed, and every walk that would otherwise be narrowed is handed back
+unchanged rather than wrapped in a predicate that admits everything.
+
 ## Configuration
 
 The `SpamClassification` section, in full, is in the
@@ -367,6 +458,13 @@ exactly the second copy of the mailbox a record read back over an administrative
 Nothing classifies a message as it arrives. The trigger that would do it is not built, so every verdict this deployment
 holds was reached by a run somebody asked for, and mail stored since the last one carries none until the next one is
 asked for.
+
+That is what the wait above currently absorbs, and it is worth stating plainly rather than leaving to be inferred: with
+no arrival trigger, a newly stored message of a classified folder waits out `SpamClassification:ClassificationWait` and
+is then released, unless a run scores it first. So what the gate withholds today without anybody asking for a run is
+mail the receiving server already filed in the junk folder, and mail a run already decided is spam — both of which are
+facts that exist before this deployment does anything. Every other message is delayed rather than withheld, and it is
+delayed into the sweep that would have reached it anyway.
 
 ## Privacy
 
