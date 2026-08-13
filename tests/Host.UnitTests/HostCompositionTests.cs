@@ -9,7 +9,9 @@ using Microsoft.AspNetCore.DataProtection.KeyManagement;
 using Microsoft.AspNetCore.DataProtection.Repositories;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Options;
 using Xunit;
 
 namespace MailFathom.Host.UnitTests;
@@ -21,7 +23,9 @@ namespace MailFathom.Host.UnitTests;
 /// registered is not a failure the composition reports: it is an exception out of whichever worker asked first, minutes
 /// after the process reported itself healthy. <c>ValidateOnBuild</c> answers half of that and no more — it inspects the
 /// constructors the container can see, and most of what the composition root registers is a factory it cannot see
-/// through. The other half is why every registration this repository owns is resolved here rather than validated.
+/// through. The other half is why every registration this repository owns is resolved here rather than validated,
+/// health checks included — those are appended to an options object rather than to the service collection, so
+/// nothing else in this pass would reach the factory each one is built by.
 /// </para>
 /// <para>
 /// Which registrations exist at all follows from configuration, so one composition proves one deployment. The shapes
@@ -181,21 +185,33 @@ public sealed class HostCompositionTests
             await starting.StartingAsync(TestContext.Current.CancellationToken);
         }
 
-        var unresolvable = services
-            .Where(IsWorthResolving)
-            .Where(static descriptor => !descriptor.ServiceType.IsGenericTypeDefinition)
-            .Select(descriptor => ReportResolving(scope.ServiceProvider, descriptor))
-            .OfType<string>()
-            .ToArray();
+        string[] unbuildable =
+        [
+            .. services
+                .Where(IsWorthResolving)
+                .Where(static descriptor => !descriptor.ServiceType.IsGenericTypeDefinition)
+                .Select(descriptor => ReportResolving(scope.ServiceProvider, descriptor))
+                .OfType<string>(),
+
+            // Health checks are the one thing the composition registers that the service collection does not carry.
+            // Both overloads used here append a HealthCheckRegistration to an options object instead of adding a
+            // descriptor, so the check is built by HealthCheckService rather than by the container: neither
+            // ValidateOnBuild nor the pass above ever runs its factory, and a port it resolves that nobody registered
+            // would first be missed by a probe answering in production.
+            .. scope.ServiceProvider.GetRequiredService<IOptions<HealthCheckServiceOptions>>()
+                .Value.Registrations
+                .Select(registration => ReportBuilding(scope.ServiceProvider, registration))
+                .OfType<string>(),
+        ];
 
         // Assert
         // Reported together rather than through Assert.Empty, which abbreviates a collection: one missing registration
         // usually leaves several services unbuildable, and the reader needs the one that is actually absent.
-        if (unresolvable.Length > 0)
+        if (unbuildable.Length > 0)
         {
             Assert.Fail(
                 $"The '{shape}' deployment registered services it cannot build:{Environment.NewLine}  "
-                + string.Join($"{Environment.NewLine}  ", unresolvable));
+                + string.Join($"{Environment.NewLine}  ", unbuildable));
         }
     }
 
@@ -309,6 +325,27 @@ public sealed class HostCompositionTests
         catch (Exception failure)
         {
             return $"{descriptor.ServiceType.FullName} ({descriptor.Lifetime}): {failure.Message}";
+        }
+    }
+
+    /// <summary>Builds one health check, reporting what its factory could not resolve.</summary>
+    /// <returns>The failure, or <see langword="null" /> where the check was built.</returns>
+    /// <remarks>Named by the check rather than by a service type, because that is the only identity a registration carries and the one the probe would report it under.</remarks>
+    [SuppressMessage(
+        "Design",
+        "CA1031:Do not catch general exception types",
+        Justification = "A check that cannot be built is what this pass reports, and a factory throws whatever it throws — the reasoning is the one ReportResolving carries.")]
+    private static string? ReportBuilding(IServiceProvider provider, HealthCheckRegistration registration)
+    {
+        try
+        {
+            _ = registration.Factory(provider);
+
+            return null;
+        }
+        catch (Exception failure)
+        {
+            return $"health check '{registration.Name}': {failure.Message}";
         }
     }
 
