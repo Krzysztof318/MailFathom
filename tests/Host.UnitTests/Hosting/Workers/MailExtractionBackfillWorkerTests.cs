@@ -142,6 +142,56 @@ public sealed class MailExtractionBackfillWorkerTests : IDisposable
         Assert.Contains(
             logger.Messages,
             message => message.Contains("optimistic concurrency conflict", StringComparison.Ordinal));
+        Assert.Equal(
+            "deferred",
+            Assert.Single(this.publishedRuns).GetTagItem("mailfathom.mail.extraction.backfill.outcome"));
+    }
+
+    /// <summary>
+    /// Shutdown is not a failure, and the span says which it was: a rolling deployment would otherwise read as a
+    /// backfill that broke on every replica it stopped.
+    /// </summary>
+    [Fact]
+    public async Task ExecuteAsync_APassTheHostStopped_PublishesItAsInterruptedRatherThanFailed()
+    {
+        // Arrange
+        var firstRunStarted = new TaskCompletionSource();
+        var backfillStore = Substitute.For<IStoredEmailExtractionBackfillStore>();
+        backfillStore
+            .FindResumePositionAsync(Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                firstRunStarted.TrySetResult();
+
+                return BlockedUntilStopped(call.Arg<CancellationToken>());
+            });
+        using var worker = CreateWorker(new MailExtractionBackfillOptions(), backfillStore, out _);
+
+        // Act
+        await worker.StartAsync(CancellationToken.None);
+        await firstRunStarted.Task.WaitAsync(DeadlockGuard, TestContext.Current.CancellationToken);
+        await worker.StopAsync(CancellationToken.None);
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => worker.ExecuteTask!);
+
+        // Assert
+        var span = Assert.Single(this.publishedRuns);
+
+        Assert.Equal("interrupted", span.GetTagItem("mailfathom.mail.extraction.backfill.outcome"));
+        Assert.NotEqual(ActivityStatusCode.Error, span.Status);
+    }
+
+    /// <summary>A run that reaches the host's shutdown instead of finishing, which is what the interrupted outcome names.</summary>
+    /// <remarks>
+    /// It waits on the stopping token rather than on a clock, so nothing here depends on how long the test host takes
+    /// to get to <c>StopAsync</c>.
+    /// </remarks>
+    private static Task<StoredEmailId?> BlockedUntilStopped(CancellationToken stoppingToken)
+    {
+        var blocked = new TaskCompletionSource<StoredEmailId?>(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        stoppingToken.Register(() => blocked.TrySetCanceled(stoppingToken));
+
+        return blocked.Task;
     }
 
     /// <summary>
