@@ -44,6 +44,19 @@ internal static class CliOptions
         Required = true,
     };
 
+    /// <summary>Builds the option naming which folder of an account a command acts on.</summary>
+    /// <returns>The option.</returns>
+    /// <remarks>
+    /// An alias rather than a folder reference, so a role such as <c>role:Junk</c> is not accepted. A role is resolved
+    /// through the mapping that declares it, and the folder this names is one whose mapping may have been removed —
+    /// which is precisely the case a role could never reach.
+    /// </remarks>
+    internal static Option<string> MailFolder() => new("--folder")
+    {
+        Description = "The folder to act on, by the alias the deployment's configuration gave it.",
+        Required = true,
+    };
+
     /// <summary>Builds the option naming the profile a sign-in is remembered under.</summary>
     /// <returns>The option.</returns>
     internal static Option<string?> ProfileName() => new("--name")

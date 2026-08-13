@@ -281,6 +281,29 @@ judged by, and what happens to junk are configuration, so you change them by edi
 concluded](../operations/admin-endpoint.md#classifying-the-mail-you-already-have-and-reading-what-was-concluded) is the
 operator's reference for all three.
 
+## Getting a folder's storage back
+
+MailFathom never takes local mail away because a file changed. Switching a folder's `Synchronize` off stops mirroring it
+and keeps what it already stored; removing its mapping leaves those rows where they are as well. Both are the right
+default — an edit to a configuration file should not dispose of mail — and both leave you with storage you may actually
+want back:
+
+```console
+$ mfctl folder erase --account work --folder archive
+1043 stored emails erased from ARCHIVE under work. The folder holds none, and its checkpoint went with them, so
+mirroring it again starts from the beginning rather than resuming.
+```
+
+This is the only command that erases mail, and it acts on one folder of one account. It refuses a folder your
+deployment still mirrors, because the next synchronization run would simply fetch it all again — switch that folder off,
+or take its mapping out, and ask again. A folder whose mapping you already removed is accepted, which is the case this
+exists for.
+
+Erasing a large folder takes a while and the command prints how far it has got. Stopping it is safe: what it reported
+erasing is gone, the rest is untouched, and running the same command again continues from there. [Erasing a folder you
+have stopped mirroring](../operations/admin-endpoint.md#erasing-a-folder-you-have-stopped-mirroring) is the operator's
+reference, including what goes with the mail and what survives it.
+
 ## Where to go next
 
 - [Administering a deployment](../operations/admin-endpoint.md) — the operator's reference for everything above

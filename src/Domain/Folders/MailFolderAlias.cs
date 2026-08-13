@@ -40,6 +40,33 @@ public readonly record struct MailFolderAlias
         return new MailFolderAlias(trimmed.ToUpperInvariant());
     }
 
+    /// <summary>Reads an alias a caller outside this system wrote, without raising on text that is not one.</summary>
+    /// <param name="value">The text the caller wrote.</param>
+    /// <param name="alias">The alias when the text is one; otherwise the struct default.</param>
+    /// <returns><see langword="true" /> when the text is an alias.</returns>
+    /// <remarks>
+    /// <see cref="Create" /> raises because configuration is refused rather than negotiated with, which is the wrong
+    /// shape at a boundary an operator types into: an administrative route reading a request body owes a stated refusal
+    /// rather than a failure the process reports as its own. Both admit exactly the same text, so an alias that reaches
+    /// one reaches the other.
+    /// </remarks>
+    public static bool TryCreate(string? value, out MailFolderAlias alias)
+    {
+        // Trimmed before the control characters are looked for, in that order, because that is the order
+        // Create applies and a tab is both a control character and whitespace: checking the untrimmed text would
+        // refuse padding Create accepts, which is the one way these two could disagree about what an alias is.
+        if (string.IsNullOrWhiteSpace(value) || value.Trim().Any(char.IsControl))
+        {
+            alias = default;
+
+            return false;
+        }
+
+        alias = Create(value);
+
+        return true;
+    }
+
     /// <inheritdoc />
     public override string ToString() => this.Value;
 }

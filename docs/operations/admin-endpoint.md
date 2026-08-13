@@ -62,9 +62,9 @@ reverse proxy, write the public URL and keep the path: `https://mail.example.tes
 >
 > Weigh that against what the operations are. The endpoint serves reads — who a credential makes the caller, two
 > records of what a mailbox has had done to it and what has been read from it, and where semantic search stands — and
-> writes that store a mailbox refresh token and start a provider bill. Any credential that can do the first can
-> therefore do all of them, so an administrative key is as sensitive as the mailbox credentials it can place, the
-> histories it can read, and the spend it can begin.
+> writes that store a mailbox refresh token, start a provider bill, and erase what a folder has stored. Any credential
+> that can do the first can therefore do all of them, so an administrative key is as sensitive as the mailbox
+> credentials it can place, the histories it can read, the spend it can begin, and the mail it can dispose of.
 
 ## What the endpoint serves
 
@@ -85,6 +85,7 @@ reverse proxy, write the public URL and keep the path: `https://mail.example.tes
 | `POST /api/admin/spam/runs` | Asks for every message already stored for one account to be [classified](../features/spam-classification.md), and answers with the run already under way where there is one. It is a dry run unless the body asks to apply. |
 | `GET /api/admin/spam/runs` | Reports where that run has got to, or how the last one ended. |
 | `GET /api/admin/spam/classifications` | Reads one account's classifications, newest first, and the changes each verdict asked the mailbox for. |
+| `POST /api/admin/folders/erasure` | Erases one bounded pass of the mail stored for a folder the account no longer mirrors. **This is the one route that disposes of mail.** |
 
 The write route's body carries a long-lived credential for a named mailbox owner, which is what makes the clear-text
 warning below matter more here than it does for a session probe. It refuses, with `400` and a sentence naming what was
@@ -429,6 +430,39 @@ answers.
 Nothing any of these three routes answers with is mail: counts, verdicts, scores, signal names, folder aliases,
 mutation names, instants, and identifiers are the whole of it. Every refusal is `400` naming what to change, including
 an account this deployment does not configure, and the run route reads at most 8 KB of body.
+
+### Erasing a folder you have stopped mirroring
+
+**`mfctl folder erase --account <id> --folder <alias>` is the only thing in MailFathom that takes a folder's local mail
+away.** Nothing else does, deliberately: switching a folder's `Synchronize` off keeps what it stored, and removing its
+mapping leaves the rows where they are, so that [editing a configuration
+file](../features/imap-synchronization.md#what-a-mapping-decides-beyond-where-the-folder-is) can never dispose of
+somebody's mail. That leaves an operator who means it with nothing to ask, and this is the ask.
+
+```console
+$ mfctl folder erase --account work --folder archive
+500 stored emails erased so far
+1000 stored emails erased so far
+1043 stored emails erased from ARCHIVE under work. The folder holds none, and its checkpoint went with them, so
+mirroring it again starts from the beginning rather than resuming.
+```
+
+The row goes and PostgreSQL takes its raw MIME, its search document, its passages, their vectors, and any outstanding
+repair request with it — the same deletion path an erasing disposition already uses rather than a second one. The
+folder's checkpoint goes too, in the pass that empties it, which is what makes a folder erased and then switched back
+on mirror from the start instead of resuming in front of mail that is no longer there. **The alias survives**: its
+binding stays, so the folder goes on resolving and goes on being somewhere a rule can file mail into.
+
+**A folder the account still mirrors is refused**, naming the alias and saying what makes it erasable. Erasing one
+would open a hole the next run silently refills, so the two ways to mean it are to switch the folder's `Synchronize`
+off or to remove its mapping — and an alias no mapping names at all is accepted rather than refused, because a mapping
+somebody withdrew is exactly the case that needs erasing and the one case no configuration value can express.
+
+One request is one bounded pass, and the command repeats it until the deployment reports nothing left, printing a
+running total as it goes. That is what makes an interrupted erasure resumable rather than a folder in a state nothing
+can finish: a pass either committed or did not, so interrupting the command leaves the rest where it was and running it
+again continues from there. Running it against a folder that already holds nothing succeeds having removed nothing,
+which is the ordinary end of every erasure.
 
 ## Rate limiting
 
@@ -969,6 +1003,8 @@ encryption answers the copy. Holding the credential in the platform's own secret
 | `answered 429` | The endpoint refused the request for its rate limit rather than for its credential. `Retry-After` on the response says when capacity returns where the limiter can compute one. The whole endpoint shares one bucket, so another caller's burst — including somebody guessing keys — is enough to cause this. |
 | `serves no administrative endpoint at /api/admin/…` | The address answered, but on a listener that serves something else. Check the port, and check that `AdminEndpoint:Enabled` is true. |
 | `This deployment configures no mail account named …` | `mailbox authorize --account` named an identifier no `MailSynchronization:Accounts` entry carries, or you are signed in to the wrong deployment. Nothing was stored. |
+| `is still mirrored, so erasing it would only cost a remirror` | `folder erase` named a folder the account still synchronizes, and nothing was erased. Switch that folder's `Synchronize` off, or remove its mapping, and ask again. |
+| `before the erasure was interrupted` | `folder erase` was stopped part way. What it reported erasing is gone and the rest is still there; run the same command again to continue from where it stopped. |
 | `The deployment refused the grant without saying why.` | The request was refused with no reason in the answer, which is what something in front of the endpoint answering `400` looks like. Check that `--endpoint` reaches the deployment itself. |
 | `rather than storing the token` | The endpoint answered with neither an acceptance nor an explained refusal. The token was not stored and the account is unchanged. A `500` here is most often a deployment with no `DataEncryption` key ring, which is what a stored token is sealed under; its own log names the cause. |
 | `did not identify itself as MailFathom` | Something else is answering on that port — a proxy, or another service. |

@@ -41,6 +41,15 @@ public sealed class AdminEndpointRoutesTests
     }
 
     /// <summary>
+    /// The route the one operation that disposes of mail is asked for on, pinned for the reason every other path here
+    /// is: the deployment's own suite pins the same literal, and a rename on either side would compile cleanly and
+    /// leave the erase command reaching a 404 that reads exactly like an endpoint nobody enabled.
+    /// </summary>
+    [Fact]
+    public void FolderErasurePath_IsTheRouteTheDeploymentErasesAFolderAt() =>
+        Assert.Equal("/api/admin/folders/erasure", AdminEndpointRoutes.FolderErasurePath);
+
+    /// <summary>
     /// RFC 9728 places the document under a well-known segment with the resource's path appended, and the deployment
     /// refuses to start unless its resource path is the route prefix. Composing it here rather than reading it from a
     /// challenge is what makes a sign-in one request instead of two, and this is the assertion that keeps the

@@ -44,11 +44,16 @@ namespace MailFathom.Host.Api;
 /// over.
 /// </para>
 /// <para>
-/// The last are what an operator does about this deployment's mail rules, which <see cref="MailRuleEndpoints" />
+/// The next are what an operator does about this deployment's mail rules, which <see cref="MailRuleEndpoints" />
 /// describes: reading which rules are loaded, asking for them to be run over a whole mailbox, and reading what they
 /// did. They are here because a pass over a whole mailbox changes mail on the server, and what bounds who may ask for
 /// that should be what bounds everything else administrative — and because the history is an operator's account of an
 /// automation over their mailbox rather than anything a model reasons over.
+/// </para>
+/// <para>
+/// The last takes a folder's local mail away, which <see cref="MailFolderErasureEndpoint" /> describes. It is the only
+/// route that disposes of stored mail, which is why it is bounded by the same credential as everything else here and
+/// reachable from nowhere a model can write to.
 /// </para>
 /// <para>
 /// Every one of them is mapped into one group so a route cannot be added outside the requirement the endpoint attaches
@@ -74,6 +79,7 @@ internal static class AdminApiEndpoints
         api.MapEmbeddingProfile();
         api.MapMailRules();
         api.MapSpamClassification();
+        api.MapMailFolderErasure();
 
         return api;
     }

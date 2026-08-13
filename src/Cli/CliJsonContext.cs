@@ -5,6 +5,7 @@
 using System.Text.Json.Serialization;
 using MailFathom.Cli.Administration;
 using MailFathom.Cli.Administration.Embeddings;
+using MailFathom.Cli.Administration.Folders;
 using MailFathom.Cli.Administration.Rules;
 using MailFathom.Cli.Administration.Spam;
 using MailFathom.Cli.Authorization;
@@ -47,6 +48,8 @@ namespace MailFathom.Cli;
 [JsonSerializable(typeof(SpamClassificationRunStart))]
 [JsonSerializable(typeof(SpamClassificationRunState))]
 [JsonSerializable(typeof(SpamClassificationPage))]
+[JsonSerializable(typeof(MailFolderErasureRequest))]
+[JsonSerializable(typeof(MailFolderErasure))]
 [JsonSerializable(typeof(StoredCredentials))]
 [JsonSerializable(typeof(ProtectedResourceMetadata))]
 [JsonSerializable(typeof(AuthorizationServerMetadata))]
