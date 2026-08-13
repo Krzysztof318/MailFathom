@@ -59,6 +59,28 @@ public sealed class DerivedWorkGateTests
         Assert.False(admission.PermitsDerivedWork());
     }
 
+    /// <summary>Placement outranks the record, so a message somebody's filter took is withheld whatever a scan concluded.</summary>
+    /// <remarks>
+    /// The order of the two questions is what this asserts and the only thing that can prove it: with the questions
+    /// swapped, every other test here still passes and a message the mail server filed as junk that a scanner scored as
+    /// ordinary mail would quietly be chunked, embedded, and offered to the rules.
+    /// </remarks>
+    [Theory]
+    [InlineData(SpamVerdict.NotSpam)]
+    [InlineData(SpamVerdict.Undetermined)]
+    public void Admit_AnOccurrenceInTheJunkFolderScoredAsAnythingElse_IsStillWithheld(SpamVerdict verdict)
+    {
+        // Arrange
+        var gate = Gate(Enabled(Junk), StubJunkMailFolderCatalog.Naming(new MailFolderIdentity(Primary, Junk)));
+
+        // Act
+        var admission = gate.Admit(Occurrence(Junk, Now, verdict));
+
+        // Assert
+        Assert.Equal(DerivedWorkAdmission.WithheldAsJunk, admission);
+        Assert.False(admission.PermitsDerivedWork());
+    }
+
     /// <summary>An alias is unique inside an account and nowhere else, so one account's junk folder is not another's.</summary>
     [Fact]
     public void Admit_AnotherAccountsFolderOfTheSameName_IsNotWithheldAsJunk()

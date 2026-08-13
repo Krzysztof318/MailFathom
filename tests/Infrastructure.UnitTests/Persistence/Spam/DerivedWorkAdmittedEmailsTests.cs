@@ -67,6 +67,26 @@ public sealed class DerivedWorkAdmittedEmailsTests
             admitted.AsEnumerable().Select(email => (email.MailboxAccountId, email.MailFolder.Alias)));
     }
 
+    /// <summary>Placement outranks the record here too, so a scan concluding otherwise does not put junk back in the walk.</summary>
+    /// <remarks>
+    /// Asserted separately from the clause order it rests on, because the folder exclusion and the verdict clause are
+    /// two `Where` calls and a message carrying both facts is the only row that proves the first still applies.
+    /// </remarks>
+    [Fact]
+    public void Admitting_MailInAJunkFolderScoredAsAnythingElse_StillLeavesItOut()
+    {
+        // Arrange
+        var emails = Emails(
+            Email("work", "JUNK", WaitedLongEnough, SpamVerdict.NotSpam),
+            Email("work", "JUNK", WaitedLongEnough, SpamVerdict.Undetermined));
+
+        // Act
+        var admitted = DerivedWorkAdmittedEmails.Admitting(emails, Terms(WorkJunk));
+
+        // Assert
+        Assert.Empty(admitted.AsEnumerable());
+    }
+
     /// <summary>A verdict withholds wherever the message sits, which is what an operator scoring without filing gets.</summary>
     [Fact]
     public void Admitting_MailScoredAsSpamAndNeverFiled_LeavesItOut()

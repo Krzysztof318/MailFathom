@@ -128,12 +128,13 @@ internal static class SynchronizationTestHost
         // offer it. Nothing here reads the backlog back; these tests are about the run, not about what embeds afterwards.
         services.AddSingleton<IEmailEmbeddingBacklog>(new ScriptedEmailEmbeddingBacklog());
         // A committed message is also cut into passages and asked about by the classification gate, so both are composed
-        // for the same reason the backlog is. Classification is off, which is what every account these tests configure
-        // runs with: the gate then admits everything and the run behaves exactly as it did before the gate existed.
+        // for the same reason the backlog is. The gate's own two dependencies are registered with the classification
+        // pass further down rather than again here — the container resolves the last registration of a type, so a second
+        // pair would leave these the ones nothing reads. Classification is off there, which is what every account these
+        // tests configure runs with: the gate then admits everything and the run behaves exactly as it did before it
+        // existed.
         services.AddSingleton(Substitute.For<IEmailChunkStore>());
         services.AddSingleton<IDerivedWorkGateTelemetry>(new RecordingDerivedWorkGateTelemetry());
-        services.AddSingleton<ISpamClassificationSettingsReader>(StubSpamClassificationSettingsReader.Disabled);
-        services.AddSingleton<IJunkMailFolderCatalog>(StubJunkMailFolderCatalog.None);
         services.AddScoped<DerivedWorkGate>();
 
         var (catalog, resolutionStore) = CreateResolvedFolders(options, unadvertisedAliases);
@@ -211,7 +212,9 @@ internal static class SynchronizationTestHost
         services.AddSingleton(Substitute.For<IClassifiableEmailReader>());
         services.AddSingleton(Substitute.For<IEmailSpamClassificationStore>());
         services.AddSingleton(Substitute.For<IEmailSpamHeaderReader>());
-        services.AddSingleton(Substitute.For<IJunkMailFolderCatalog>());
+        // A stub rather than a substitute, because the gate resolved above enumerates the folder list: a substituted
+        // IReadOnlyList happens to enumerate as empty today, which is the right answer reached by accident.
+        services.AddSingleton<IJunkMailFolderCatalog>(StubJunkMailFolderCatalog.None);
         services.AddSingleton(Substitute.For<ISpamActionOccurrenceReader>());
         services.AddScoped(_ => new SpamClassificationRunOptions());
         services.AddScoped(_ => CreateClassificationSettingsReader());
