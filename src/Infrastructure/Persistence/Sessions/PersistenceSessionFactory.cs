@@ -5,6 +5,7 @@
 using System.Diagnostics.CodeAnalysis;
 using MailFathom.Application.Persistence;
 using MailFathom.CodeCoverage;
+using MailFathom.Infrastructure.Observability;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
 using Npgsql;
@@ -13,7 +14,9 @@ namespace MailFathom.Infrastructure.Persistence.Sessions;
 
 /// <summary>Creates EF Core-backed persistence sessions for application write transactions.</summary>
 [RequiresIntegrationCoverage]
-internal sealed class PersistenceSessionFactory(MailFathomDbContext dbContext) : IPersistenceSessionFactory
+internal sealed class PersistenceSessionFactory(
+    MailFathomDbContext dbContext,
+    PersistenceCommitTelemetry telemetry) : IPersistenceSessionFactory
 {
     /// <inheritdoc />
     [SuppressMessage(
@@ -25,7 +28,8 @@ internal sealed class PersistenceSessionFactory(MailFathomDbContext dbContext) :
         var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
 
         return new EfCorePersistenceSession(
-            new EfCorePersistenceSessionResources(dbContext, transaction));
+            new EfCorePersistenceSessionResources(dbContext, transaction),
+            telemetry);
     }
 
     private sealed class EfCorePersistenceSessionResources(

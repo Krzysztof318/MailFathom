@@ -175,6 +175,13 @@ The tool name a call arrived with is recorded only when it is spelled the way a 
 recorded as one fixed placeholder. On an unknown tool that name is unvalidated caller input on its way into a retained
 log, and a log is not a place to let a caller write.
 
+The same filter publishes what it measured as instruments, from the one measurement rather than from a second timing
+path, so how often each tool is called and how long it takes are readable as a rate and a distribution rather than as a
+pile of records. Those are stricter about the tool name still: a name is used as a dimension only when this surface
+publishes a tool answering to it, because a dimension a caller can choose is a time series a caller can create.
+[Telemetry](../operations/telemetry.md#what-mailfathom-publishes-under-its-own-name) names both instruments and every
+outcome they distinguish.
+
 ## `list_accounts`
 
 Returns the mail accounts this deployment serves, with the names a request may use for each and how current the local

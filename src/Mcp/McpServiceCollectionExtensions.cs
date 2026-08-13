@@ -35,6 +35,7 @@ public static class McpServiceCollectionExtensions
     {
         ArgumentNullException.ThrowIfNull(services);
 
+        services.AddSingleton<McpToolCallTelemetry>();
         services.AddSingleton<McpToolCallReporter>();
 
         return services

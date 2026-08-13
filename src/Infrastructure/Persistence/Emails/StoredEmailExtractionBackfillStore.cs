@@ -115,6 +115,16 @@ internal sealed class StoredEmailExtractionBackfillStore(
     }
 
     /// <inheritdoc />
+    /// <remarks>
+    /// The whole remaining walk rather than what is left beyond the resume position, because the position is where the
+    /// last run stopped and not a claim that everything behind it is done: a message the walk stepped over is still
+    /// outstanding, and a rebuild discards the position outright. Counting the predicate answers the question an
+    /// operator asks — how much is left — for either shape of the walk.
+    /// </remarks>
+    public Task<int> CountEmailsAwaitingExtractionAsync(CancellationToken cancellationToken) =>
+        this.Outstanding().CountAsync(cancellationToken);
+
+    /// <inheritdoc />
     /// <exception cref="InvalidOperationException">Thrown when the email disappeared between the batch query and this write.</exception>
     public async Task ApplyExtractionAsync(
         IPersistenceSession session,

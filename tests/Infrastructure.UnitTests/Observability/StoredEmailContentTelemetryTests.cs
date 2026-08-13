@@ -6,17 +6,29 @@ using System.Collections.Concurrent;
 using System.Diagnostics;
 using MailFathom.Common.Observability;
 using MailFathom.Infrastructure.Observability;
+using MailFathom.TestSupport;
+using Microsoft.Extensions.Time.Testing;
 using Xunit;
 
 namespace MailFathom.Infrastructure.UnitTests.Observability;
 
-/// <summary>Covers the span a read of stored raw MIME publishes, which is the one place a read's size is visible.</summary>
+/// <summary>Covers the span and the instruments a read and a write of stored raw MIME publish.</summary>
 /// <remarks>
 /// It listens to the real activity source and narrows to this span's own name, so a span published by another test class
 /// at the same moment is not mistaken for one of these.
 /// </remarks>
 public sealed class StoredEmailContentTelemetryTests : IDisposable
 {
+    private const string ReadBytesInstrument = "mailfathom.mail.content.read.bytes";
+
+    private const string ReadDurationInstrument = "mailfathom.mail.content.read.duration";
+
+    private const string WriteBytesInstrument = "mailfathom.mail.content.write.bytes";
+
+    private const string WriteDurationInstrument = "mailfathom.mail.content.write.duration";
+
+    private const string OutcomeTagName = "mailfathom.mail.content.outcome";
+
     private readonly ConcurrentBag<Activity> published = [];
     private readonly ActivityListener listener;
 
@@ -46,7 +58,7 @@ public sealed class StoredEmailContentTelemetryTests : IDisposable
     public void BeginRead_ContentThatWasFound_PublishesItsSize()
     {
         // Arrange
-        var telemetry = new StoredEmailContentTelemetry();
+        var telemetry = TelemetryOver(out _);
 
         // Act
         using (var read = telemetry.BeginRead())
@@ -72,7 +84,7 @@ public sealed class StoredEmailContentTelemetryTests : IDisposable
     public void BeginRead_ContentThatIsNotStored_PublishesTheAbsenceWithoutASize()
     {
         // Arrange
-        var telemetry = new StoredEmailContentTelemetry();
+        var telemetry = TelemetryOver(out _);
 
         // Act
         using (var read = telemetry.BeginRead())
@@ -93,7 +105,7 @@ public sealed class StoredEmailContentTelemetryTests : IDisposable
     public void BeginRead_AReadThatReportedNothing_PublishesItAsAnError()
     {
         // Arrange
-        var telemetry = new StoredEmailContentTelemetry();
+        var telemetry = TelemetryOver(out _);
 
         // Act
         using (telemetry.BeginRead())
@@ -115,7 +127,7 @@ public sealed class StoredEmailContentTelemetryTests : IDisposable
     public void BeginRead_AnyRead_PublishesNothingBeyondASizeAndWhetherAnythingWasThere()
     {
         // Arrange
-        var telemetry = new StoredEmailContentTelemetry();
+        var telemetry = TelemetryOver(out _);
 
         // Act
         using (var read = telemetry.BeginRead())
@@ -127,5 +139,206 @@ public sealed class StoredEmailContentTelemetryTests : IDisposable
         Assert.Equal(
             ["mailfathom.mail.content.found", "mailfathom.mail.content.bytes"],
             Assert.Single(this.published).TagObjects.Select(tag => tag.Key));
+    }
+
+    /// <summary>
+    /// A span answers why one read was slow; the histograms answer whether reads are getting slower and whether the
+    /// messages are getting larger, which is what a per-read span cannot be asked.
+    /// </summary>
+    [Fact]
+    public void BeginRead_ContentThatWasFound_RecordsItsSizeAndDurationAsDistributions()
+    {
+        // Arrange
+        var telemetry = TelemetryOver(out var timeProvider);
+        using var measurements = new RecordedMailFathomMeasurements(ReadBytesInstrument, ReadDurationInstrument);
+
+        // Act
+        using (var read = telemetry.BeginRead())
+        {
+            timeProvider.Advance(TimeSpan.FromMilliseconds(250));
+            read.Found(42_000);
+        }
+
+        // Assert
+        Assert.Equal([42_000d], measurements.ValuesOf(ReadBytesInstrument));
+        Assert.Equal([0.25], measurements.ValuesOf(ReadDurationInstrument));
+        Assert.Equal(["found"], measurements.DimensionOf(ReadDurationInstrument, OutcomeTagName));
+    }
+
+    /// <summary>
+    /// An absent message is timed and not sized, because there was nothing to size — a zero there would pull the
+    /// distribution an operator sizes storage from towards a message that never existed.
+    /// </summary>
+    [Fact]
+    public void BeginRead_ContentThatIsNotStored_RecordsADurationAndNoSize()
+    {
+        // Arrange
+        var telemetry = TelemetryOver(out _);
+        using var measurements = new RecordedMailFathomMeasurements(ReadBytesInstrument, ReadDurationInstrument);
+
+        // Act
+        using (var read = telemetry.BeginRead())
+        {
+            read.Absent();
+        }
+
+        // Assert
+        Assert.Empty(measurements.ValuesOf(ReadBytesInstrument));
+        Assert.Equal(["absent"], measurements.DimensionOf(ReadDurationInstrument, OutcomeTagName));
+    }
+
+    /// <summary>A read that threw is timed under its own outcome, so a store that started failing is not simply absent.</summary>
+    [Fact]
+    public void BeginRead_AReadThatReportedNothing_TimesItAsAFailure()
+    {
+        // Arrange
+        var telemetry = TelemetryOver(out _);
+        using var measurements = new RecordedMailFathomMeasurements(ReadDurationInstrument);
+
+        // Act
+        using (telemetry.BeginRead())
+        {
+        }
+
+        // Assert
+        Assert.Equal(["failed"], measurements.DimensionOf(ReadDurationInstrument, OutcomeTagName));
+    }
+
+    /// <summary>A write is measured and not spanned, because one span per stored message would say less than this does.</summary>
+    [Fact]
+    public void BeginWrite_ASessionThatCommitted_RecordsItsSizeAndDurationAndNoSpan()
+    {
+        // Arrange
+        var telemetry = TelemetryOver(out var timeProvider);
+        using var measurements = new RecordedMailFathomMeasurements(WriteBytesInstrument, WriteDurationInstrument);
+
+        // Act
+        var write = telemetry.BeginWrite();
+        using (write)
+        {
+            timeProvider.Advance(TimeSpan.FromMilliseconds(500));
+            write.Stored(96_000);
+        }
+
+        write.PublishAfterSession(sessionCommitted: true);
+
+        // Assert
+        Assert.Equal([96_000d], measurements.ValuesOf(WriteBytesInstrument));
+        Assert.Equal([0.5], measurements.ValuesOf(WriteDurationInstrument));
+        Assert.Equal(["stored"], measurements.DimensionOf(WriteDurationInstrument, OutcomeTagName));
+        Assert.Empty(this.published);
+    }
+
+    /// <summary>
+    /// The staging body is what an optimistic-concurrency retry runs again, so a payload carried by an attempt that
+    /// lost the race is a cost this deployment paid and never a message it holds. Publishing it as `stored` would
+    /// report a message twice in exactly the deployment under contention.
+    /// </summary>
+    [Fact]
+    public void BeginWrite_ASessionThatDidNotCommit_RecordsItAsDiscardedRatherThanStored()
+    {
+        // Arrange
+        var telemetry = TelemetryOver(out var timeProvider);
+        using var measurements = new RecordedMailFathomMeasurements(WriteBytesInstrument, WriteDurationInstrument);
+
+        // Act
+        var write = telemetry.BeginWrite();
+        using (write)
+        {
+            timeProvider.Advance(TimeSpan.FromMilliseconds(250));
+            write.Stored(96_000);
+        }
+
+        write.PublishAfterSession(sessionCommitted: false);
+
+        // Assert
+        Assert.Equal([96_000d], measurements.ValuesOf(WriteBytesInstrument));
+        Assert.Equal([0.25], measurements.ValuesOf(WriteDurationInstrument));
+        Assert.Equal(["discarded"], measurements.DimensionOf(WriteDurationInstrument, OutcomeTagName));
+    }
+
+    /// <summary>A session ends once, and disposal runs after both endings, so the same write is never published twice.</summary>
+    [Fact]
+    public void PublishAfterSession_CalledAgainForOneWrite_PublishesNothingFurther()
+    {
+        // Arrange
+        var telemetry = TelemetryOver(out _);
+        using var measurements = new RecordedMailFathomMeasurements(WriteBytesInstrument, WriteDurationInstrument);
+
+        // Act
+        var write = telemetry.BeginWrite();
+        using (write)
+        {
+            write.Stored(1_024);
+        }
+
+        write.PublishAfterSession(sessionCommitted: true);
+        write.PublishAfterSession(sessionCommitted: false);
+
+        // Assert
+        Assert.Equal([1_024d], measurements.ValuesOf(WriteBytesInstrument));
+        Assert.Equal(["stored"], measurements.DimensionOf(WriteDurationInstrument, OutcomeTagName));
+    }
+
+    /// <summary>
+    /// A write that reported nothing is one that threw. It is counted rather than left out, because a store that starts
+    /// failing would otherwise show up as writes that stopped arriving, which reads as an idle deployment.
+    /// </summary>
+    [Fact]
+    public void BeginWrite_AWriteThatReportedNothing_TimesItAsAFailureWithoutASize()
+    {
+        // Arrange
+        var telemetry = TelemetryOver(out _);
+        using var measurements = new RecordedMailFathomMeasurements(WriteBytesInstrument, WriteDurationInstrument);
+
+        // Act
+        using (telemetry.BeginWrite())
+        {
+        }
+
+        // Assert
+        Assert.Empty(measurements.ValuesOf(WriteBytesInstrument));
+        Assert.Equal(["failed"], measurements.DimensionOf(WriteDurationInstrument, OutcomeTagName));
+    }
+
+    /// <summary>The outcome is the only dimension either family carries; a size is mail's shape and an identity is mail.</summary>
+    [Fact]
+    public void Begin_AnyReadOrWrite_PublishesNoDimensionBeyondTheOutcome()
+    {
+        // Arrange
+        var telemetry = TelemetryOver(out _);
+        using var measurements = new RecordedMailFathomMeasurements(
+            ReadBytesInstrument,
+            ReadDurationInstrument,
+            WriteBytesInstrument,
+            WriteDurationInstrument);
+
+        // Act
+        using (var read = telemetry.BeginRead())
+        {
+            read.Found(10);
+        }
+
+        var write = telemetry.BeginWrite();
+        using (write)
+        {
+            write.Stored(10);
+        }
+
+        write.PublishAfterSession(sessionCommitted: true);
+
+        // Assert
+        Assert.All(
+            measurements.Recorded,
+            measurement => Assert.All(
+                measurement.Tags.Keys,
+                dimension => Assert.Equal(OutcomeTagName, dimension)));
+    }
+
+    private static StoredEmailContentTelemetry TelemetryOver(out FakeTimeProvider timeProvider)
+    {
+        timeProvider = new FakeTimeProvider();
+
+        return new StoredEmailContentTelemetry(timeProvider);
     }
 }

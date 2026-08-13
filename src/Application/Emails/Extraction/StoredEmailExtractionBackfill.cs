@@ -94,6 +94,7 @@ public sealed class StoredEmailExtractionBackfill
                     extractedCount,
                     unreadableCount,
                     missingContentCount,
+                    await this.CountOutstandingAsync(cancellationToken),
                     EmailsRemain: false);
             }
 
@@ -123,8 +124,21 @@ public sealed class StoredEmailExtractionBackfill
             extractedCount,
             unreadableCount,
             missingContentCount,
+            await this.CountOutstandingAsync(cancellationToken),
             emailsRemain);
     }
+
+    /// <summary>Measures what the walk still owes work on, once this run has done as much of it as it is going to.</summary>
+    /// <remarks>
+    /// Once per run and after the walk rather than before it, for two reasons. A figure taken before would describe a
+    /// backlog this run has already reduced, so a run's throughput and the amount left would never line up; and the last
+    /// run of a backfill is the one that finds nothing to do and then ends the worker, so a figure from its start would
+    /// be the one left published for the life of the process. It is a count over every message the walk still owes work
+    /// on, which is why it is measured here rather than inside the meter's callback, where a collector's own interval
+    /// would decide how often that scan ran.
+    /// </remarks>
+    private Task<int> CountOutstandingAsync(CancellationToken cancellationToken) =>
+        this.backfillStore.CountEmailsAwaitingExtractionAsync(cancellationToken);
 
     /// <summary>Re-reads a batch's emails outside any transaction, stopping early once it is holding enough text.</summary>
     /// <remarks>
@@ -243,13 +257,22 @@ public sealed class StoredEmailExtractionBackfill
 /// <param name="ExtractedEmailCount">How many stored emails were re-read and had their metadata and text written.</param>
 /// <param name="UnreadableEmailCount">How many stored emails carried MIME no reader could parse, which the run stepped over.</param>
 /// <param name="MissingContentEmailCount">How many stored emails no longer had raw MIME to re-read.</param>
+/// <param name="OutstandingEmailCount">How many stored emails still awaited extraction when this run ended.</param>
 /// <param name="EmailsRemain">Whether emails still await extraction after this run's batch budget was spent.</param>
 /// <remarks>
 /// Every field is a count. Nothing derived from a message — no subject, address, or fragment of body text — belongs in
 /// a result a worker logs.
+/// <para>
+/// The backlog and the remaining flag answer different questions and neither replaces the other: the flag is whether
+/// the worker has more to do, which is what decides its next interval, and the backlog is how much, which is what
+/// answers whether the walk is converging. The two disagree at the end of a backfill and are both right: a message no
+/// reader can parse, and one whose raw MIME is no longer there, never gain an extraction, so they stay in the backlog
+/// while the flag says there is nothing left to attempt.
+/// </para>
 /// </remarks>
 public sealed record StoredEmailExtractionBackfillResult(
     int ExtractedEmailCount,
     int UnreadableEmailCount,
     int MissingContentEmailCount,
+    int OutstandingEmailCount,
     bool EmailsRemain);

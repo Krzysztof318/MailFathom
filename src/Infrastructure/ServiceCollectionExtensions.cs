@@ -260,6 +260,9 @@ public static class ServiceCollectionExtensions
         services.AddDbContext<MailFathomDbContext>((provider, options) => options
             .UseNpgsql(provider.GetRequiredService<NpgsqlDataSource>(), npgsql => npgsql.UseVector())
             .ConfigureWarnings(warnings => warnings.Log((RelationalEventId.CommandExecuted, LogLevel.Debug))));
+        // The counter every session reports its ending to is a singleton, because the instrument it holds belongs to the
+        // process rather than to a scope: one per request would create the same instrument again on every call.
+        services.AddSingleton<PersistenceCommitTelemetry>();
         services.AddScoped<IPersistenceSessionFactory, PersistenceSessionFactory>();
         services.AddScoped<ISynchronizationCheckpointStore, SynchronizationCheckpointStore>();
         // Registered here rather than beside the chunker it calls, because what it is is a table: it decides which
@@ -329,6 +332,9 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IEmailContentStore, EmailContentStore>();
         services.AddScoped<IStoredEmailContentInventory, StoredEmailContentInventory>();
         services.AddScoped<IStoredEmailExtractionBackfillStore, StoredEmailExtractionBackfillStore>();
+        // A singleton for the reason the embedding backfill's is: the backlog it publishes is one figure about the whole
+        // instance, and a gauge answering per scope would report whichever scope last ran a pass.
+        services.AddSingleton<MailExtractionBackfillTelemetry>();
         services.AddScoped<IStoredEmailReconciliationStore, StoredEmailReconciliationStore>();
         services.AddScoped<IMailRuleEvaluationStore, MailRuleEvaluationStore>();
         services.AddScoped<IMailRuleEvaluationRunStore, MailRuleEvaluationRunStore>();

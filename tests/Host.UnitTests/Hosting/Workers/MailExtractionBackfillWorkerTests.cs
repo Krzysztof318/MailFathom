@@ -12,6 +12,8 @@ using MailFathom.Domain.Emails;
 using MailFathom.Host.Configuration.Mail;
 using MailFathom.Host.Hosting.Workers;
 using MailFathom.Host.UnitTests.TestDoubles;
+using MailFathom.Infrastructure.Observability;
+using MailFathom.TestSupport;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Time.Testing;
@@ -22,6 +24,12 @@ namespace MailFathom.Host.UnitTests.Hosting.Workers;
 
 public sealed class MailExtractionBackfillWorkerTests : IDisposable
 {
+    private const string RunDurationInstrument = "mailfathom.mail.extraction.backfill.run.duration";
+
+    private const string OutstandingGauge = "mailfathom.mail.extraction.backfill.outstanding";
+
+    private const string OutcomeTagName = "mailfathom.mail.extraction.backfill.outcome";
+
     /// <summary>Guards against a hung worker. No assertion depends on how long the run actually takes.</summary>
     private static readonly TimeSpan DeadlockGuard = TimeSpan.FromSeconds(30);
 
@@ -131,6 +139,7 @@ public sealed class MailExtractionBackfillWorkerTests : IDisposable
 
                 throw new PersistenceConcurrencyConflictException("A competing writer won the race.");
             });
+        using var measurements = new RecordedMailFathomMeasurements(RunDurationInstrument);
         using var worker = CreateWorker(new MailExtractionBackfillOptions(), backfillStore, out var logger);
 
         // Act
@@ -144,7 +153,8 @@ public sealed class MailExtractionBackfillWorkerTests : IDisposable
             message => message.Contains("optimistic concurrency conflict", StringComparison.Ordinal));
         Assert.Equal(
             "deferred",
-            Assert.Single(this.publishedRuns).GetTagItem("mailfathom.mail.extraction.backfill.outcome"));
+            Assert.Single(this.publishedRuns).GetTagItem(OutcomeTagName));
+        Assert.Contains("deferred", measurements.DimensionOf(RunDurationInstrument, OutcomeTagName));
     }
 
     /// <summary>
@@ -165,6 +175,7 @@ public sealed class MailExtractionBackfillWorkerTests : IDisposable
 
                 return BlockedUntilStopped(call.Arg<CancellationToken>());
             });
+        using var measurements = new RecordedMailFathomMeasurements(RunDurationInstrument);
         using var worker = CreateWorker(new MailExtractionBackfillOptions(), backfillStore, out _);
 
         // Act
@@ -176,8 +187,9 @@ public sealed class MailExtractionBackfillWorkerTests : IDisposable
         // Assert
         var span = Assert.Single(this.publishedRuns);
 
-        Assert.Equal("interrupted", span.GetTagItem("mailfathom.mail.extraction.backfill.outcome"));
+        Assert.Equal("interrupted", span.GetTagItem(OutcomeTagName));
         Assert.NotEqual(ActivityStatusCode.Error, span.Status);
+        Assert.Contains("interrupted", measurements.DimensionOf(RunDurationInstrument, OutcomeTagName));
     }
 
     /// <summary>A run that reaches the host's shutdown instead of finishing, which is what the interrupted outcome names.</summary>
@@ -242,6 +254,7 @@ public sealed class MailExtractionBackfillWorkerTests : IDisposable
 
                 throw new InvalidOperationException("the database is unavailable");
             });
+        using var measurements = new RecordedMailFathomMeasurements(RunDurationInstrument);
         using var worker = CreateWorker(new MailExtractionBackfillOptions(), backfillStore, out _);
 
         // Act
@@ -252,9 +265,36 @@ public sealed class MailExtractionBackfillWorkerTests : IDisposable
         // Assert
         var span = Assert.Single(
             this.publishedRuns,
-            run => run.GetTagItem("mailfathom.mail.extraction.backfill.outcome") is "failed");
+            run => run.GetTagItem(OutcomeTagName) is "failed");
 
         Assert.Equal(ActivityStatusCode.Error, span.Status);
+        Assert.Contains("failed", measurements.DimensionOf(RunDurationInstrument, OutcomeTagName));
+    }
+
+    /// <summary>
+    /// The instruments answer over every pass what the span answers about one, so the worker's four endings have to
+    /// reach the right one of them: a run that deferred and a run that broke are the same line on a dashboard
+    /// otherwise, and the backlog beside them is what says whether the walk is converging at all.
+    /// </summary>
+    [Fact]
+    public async Task ExecuteAsync_APassThatFinished_RecordsItsEndingAndTheBacklogItLeftBehind()
+    {
+        // Arrange
+        var backfillStore = Substitute.For<IStoredEmailExtractionBackfillStore>();
+        backfillStore
+            .GetEmailsAwaitingExtractionAsync(Arg.Any<StoredEmailId?>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IReadOnlyList<StoredEmailAwaitingExtraction>>([]));
+        using var measurements = new RecordedMailFathomMeasurements(RunDurationInstrument, OutstandingGauge);
+        using var worker = CreateWorker(new MailExtractionBackfillOptions(), backfillStore, out _);
+
+        // Act
+        await worker.StartAsync(CancellationToken.None);
+        await worker.ExecuteTask!.WaitAsync(DeadlockGuard, TestContext.Current.CancellationToken);
+        measurements.ObserveGauges();
+
+        // Assert
+        Assert.Contains("succeeded", measurements.DimensionOf(RunDurationInstrument, OutcomeTagName));
+        Assert.Contains(0d, measurements.ValuesOf(OutstandingGauge));
     }
 
     private static MailExtractionBackfillWorker CreateWorker(
@@ -285,6 +325,7 @@ public sealed class MailExtractionBackfillWorkerTests : IDisposable
         return new MailExtractionBackfillWorker(
             serviceProvider.GetRequiredService<IServiceScopeFactory>(),
             Options.Create(settings),
+            new MailExtractionBackfillTelemetry(),
             logger,
             timeProvider);
     }

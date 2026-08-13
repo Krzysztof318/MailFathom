@@ -263,13 +263,75 @@ public sealed class McpToolCallReporterTests
         Assert.Equal(true, Assert.Contains("IsError", Assert.Single(logs.Records).Properties));
     }
 
+    /// <summary>
+    /// The duration an operator reads off the instruments and the one the record carries are the same measurement, so a
+    /// timing path added beside this one could not make them disagree about a call.
+    /// </summary>
+    [Fact]
+    public async Task ReportAsync_SuccessfulCall_PublishesTheSameDurationItRecorded()
+    {
+        // Arrange
+        using var logs = new RecordingLoggerProvider();
+        var reporter = ReporterOver(logs, out var timeProvider);
+        using var recorded = new RecordedMailFathomMeasurements();
+
+        // Act
+        _ = await reporter.ReportAsync(
+            (_, _) =>
+            {
+                timeProvider.Advance(TimeSpan.FromMilliseconds(2500));
+
+                return ValueTask.FromResult(new CallToolResult { Content = [] });
+            },
+            CallContext(),
+            CancellationToken.None);
+
+        // Assert
+        var duration = Assert.Single(
+            recorded.Read("mailfathom.mcp.tool.call.duration"),
+            measurement => Equals(measurement.Tags["mailfathom.mcp.tool"], ToolName)
+                && measurement.Value == 2.5);
+
+        Assert.Equal("succeeded", duration.Tags["mailfathom.mcp.tool.outcome"]);
+        Assert.Equal(2500L, Assert.Contains("DurationMilliseconds", Assert.Single(logs.Records).Properties));
+    }
+
+    /// <summary>
+    /// The two destinations treat an unknown name differently on purpose: the log keeps what a client sent so somebody
+    /// can diagnose it, and the instruments must not let that name become a series of its own.
+    /// </summary>
+    [Fact]
+    public async Task ReportAsync_ShapedNameOfNoPublishedTool_LogsItButMeasuresThePlaceholder()
+    {
+        // Arrange
+        const string PlausibleButUnpublished = "list_email";
+        using var logs = new RecordingLoggerProvider();
+        var reporter = ReporterOver(logs, out _);
+        using var recorded = new RecordedMailFathomMeasurements();
+
+        // Act
+        _ = await reporter.ReportAsync(
+            (_, _) => throw new InvalidOperationException("no such tool"),
+            CallContext(PlausibleButUnpublished),
+            CancellationToken.None);
+
+        // Assert
+        Assert.Equal(PlausibleButUnpublished, Assert.Contains("ToolName", Assert.Single(logs.Records).Properties));
+        Assert.DoesNotContain(
+            recorded.Read("mailfathom.mcp.tool.calls"),
+            measurement => Equals(measurement.Tags["mailfathom.mcp.tool"], PlausibleButUnpublished));
+    }
+
     private static McpToolCallReporter ReporterOver(RecordingLoggerProvider logs, out FakeTimeProvider timeProvider)
     {
         timeProvider = new FakeTimeProvider();
 
         using var loggerFactory = LoggerFactory.Create(logging => logging.AddProvider(logs));
 
-        return new McpToolCallReporter(timeProvider, loggerFactory.CreateLogger<McpToolCallReporter>());
+        return new McpToolCallReporter(
+            timeProvider,
+            new McpToolCallTelemetry(),
+            loggerFactory.CreateLogger<McpToolCallReporter>());
     }
 
     private static RequestContext<CallToolRequestParams> CallContext(string requestedName = ToolName) =>

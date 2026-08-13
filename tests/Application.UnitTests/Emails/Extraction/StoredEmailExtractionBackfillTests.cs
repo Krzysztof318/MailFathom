@@ -133,6 +133,11 @@ public sealed class StoredEmailExtractionBackfillTests
         Assert.Equal(2, result.UnreadableEmailCount);
         Assert.Empty(store.AppliedExtractions);
         Assert.Equal(awaiting[^1].StoredEmailId, store.SavedResumePosition);
+
+        // Such a message never gains an extraction, so it stays in the backlog while the run reports nothing left to
+        // attempt. The two figures disagree and both are right, which is why neither is derived from the other.
+        Assert.False(result.EmailsRemain);
+        Assert.Equal(2, result.OutstandingEmailCount);
     }
 
     /// <summary>A row whose raw MIME is gone is its own outcome, distinct from a message that cannot be parsed.</summary>
@@ -242,6 +247,48 @@ public sealed class StoredEmailExtractionBackfillTests
         // Act, Assert
         await Assert.ThrowsAnyAsync<OperationCanceledException>(
             () => backfill.RunAsync(cancellation.Token));
+    }
+
+    /// <summary>
+    /// The backlog is what is left once the run has done what it is going to, so a run's throughput and the amount
+    /// remaining describe the same moment. Measured before the walk it would describe a backlog this run had already
+    /// reduced, and the two would never line up.
+    /// </summary>
+    [Fact]
+    public async Task RunAsync_EmailsAwaitingExtraction_ReportsTheBacklogLeftBehindByTheRun()
+    {
+        // Arrange
+        var store = new FakeBackfillStore(EmailsAwaitingExtraction(10));
+        var contentStore = CreateContentStoreWithReadableMime();
+        var backfill = CreateBackfill(store, contentStore, CreateReaderThatExtractsEverything(), batchSize: 4, maxBatchesPerRun: 1);
+
+        // Act
+        var result = await backfill.RunAsync(CancellationToken.None);
+
+        // Assert
+        Assert.Equal(4, result.ExtractedEmailCount);
+        Assert.Equal(6, result.OutstandingEmailCount);
+        Assert.True(result.EmailsRemain);
+    }
+
+    /// <summary>
+    /// The last run of a backfill is the one that finds nothing to do and then ends the worker, so its figure is the one
+    /// left published for the life of the process. Taken after the walk, that figure is what is genuinely left.
+    /// </summary>
+    [Fact]
+    public async Task RunAsync_NothingLeftToExtract_ReportsAnEmptyBacklog()
+    {
+        // Arrange
+        var store = new FakeBackfillStore([]);
+        var contentStore = CreateContentStoreWithReadableMime();
+        var backfill = CreateBackfill(store, contentStore, CreateReaderThatExtractsEverything(), batchSize: 4);
+
+        // Act
+        var result = await backfill.RunAsync(CancellationToken.None);
+
+        // Assert
+        Assert.Equal(0, result.OutstandingEmailCount);
+        Assert.False(result.EmailsRemain);
     }
 
     private static StoredEmailExtractionBackfill CreateBackfill(
@@ -383,6 +430,15 @@ public sealed class StoredEmailExtractionBackfillTests
 
             return Task.CompletedTask;
         }
+
+        /// <summary>Counts what this fake still holds work for, through the same state the batch query is served from.</summary>
+        /// <remarks>
+        /// Answered from the walk's own state rather than as a fixed number, so the count moves as the walk does — which
+        /// is what makes the moment it is taken at observable. It counts a message the walk stepped over as outstanding
+        /// exactly as the real predicate does, because such a message never gains an extraction.
+        /// </remarks>
+        public Task<int> CountEmailsAwaitingExtractionAsync(CancellationToken cancellationToken) =>
+            Task.FromResult(awaitingExtraction.Count(email => !this.extractedEmails.Contains(email.StoredEmailId)));
 
         /// <summary>Answered as nothing outstanding, because the staleness figure is a query rather than walk state.</summary>
         /// <remarks>
