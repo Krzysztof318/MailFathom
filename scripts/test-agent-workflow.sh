@@ -110,10 +110,6 @@ printf '%s' "$FAKE_CHANGED_PATHS"
 FAKE_GH
 chmod +x "$typo_check_bin_directory/gh"
 
-# The `Fathom review` gate makes one API call, counting the reviews its App has already submitted on
-# the pull request. This fake `gh` prints the per-page count the real `--jq` would leave, so the
-# ceiling arithmetic in the step runs unchanged. It answers zero, which is a pull request the App has
-# not reviewed yet — the state both contracts below are about.
 # The gate asks one endpoint — the reviews already on this pull request — and counts the automatic
 # ones among them. The filter that decides which those are is the contract worth testing, so this
 # runs the step's own `--jq` against whatever reviews a contract set up rather than answering with a
@@ -1437,7 +1433,7 @@ fathom_review_reviews_a_push_to_a_published_pull_request() {
   assert_contains 'the branch was pushed to' "$output_file"
 }
 
-# The ceiling is what stops a branch pushed to forty times being reviewed forty times. These four
+# The ceiling is what stops a branch pushed to forty times being reviewed forty times. These five
 # contracts fix both halves of it: which reviews are counted, and which runs the count refuses.
 fathom_review_reviews_a_push_below_the_automatic_ceiling() {
   local output_file="$test_directory/fathom-review-below-ceiling-output"
@@ -2292,7 +2288,12 @@ fathom_review_marks_a_review_with_what_started_it() {
     "$output_file" "$payload_file" 'success' '' '<!-- fathom-review: requested -->'
 
   ((submit_status == 0))
-  assert_contains '<!-- fathom-review: requested -->' "$payload_file"
+  # The position, not the presence. The gate counts a review whose *last non-empty line* is the
+  # automatic marker, so the submission placing it last is load-bearing and pinned nowhere else: a
+  # later change appending a footer after it would leave a presence assertion green while the count
+  # went to zero, the ceiling stopped refusing, and every push of a busy branch spent a review.
+  assert_json '"<!-- fathom-review: requested -->"' \
+    '.body | split("\n") | map(select(. != "")) | last' "$payload_file"
   assert_excludes '<!-- fathom-review: automatic -->' "$payload_file"
 
   run_fathom_review_submit \
@@ -2300,7 +2301,10 @@ fathom_review_marks_a_review_with_what_started_it() {
     "$output_file" "$payload_file"
 
   ((submit_status == 0))
-  assert_contains '<!-- fathom-review: automatic -->' "$payload_file"
+  # A review carrying findings ends with the marker too, which is the branch the ceiling actually
+  # counts: the automatic passes it refuses a seventh of are the ones that found something.
+  assert_json '"<!-- fathom-review: automatic -->"' \
+    '.body | split("\n") | map(select(. != "")) | last' "$payload_file"
 }
 
 fathom_review_publishes_the_coverage_gap_beside_its_findings() {
