@@ -372,7 +372,13 @@ ends. And a detector that cannot answer fails the call rather than serving the m
 `81001` naming the scanner while the caller receives `54001`, under the category rule
 [MCP tools § error reporting](mcp-tools.md#error-reporting) states.
 
-**That ceiling is the one place the balanced-markup guarantee above stops applying.** It cuts what the sanitizer had
+**A ceiling cut lands on a UTF-16 boundary rather than a text-element one.** It never hands back an unpaired surrogate —
+the cut steps back off a high surrogate before it is taken — but a combining sequence, a ZWJ emoji, or a
+regional-indicator pair standing exactly at the ceiling is split, so a body can end in a bare base letter or half a flag.
+The text-element guarantee above therefore holds for the two call bounds alone, which are the ones applied to text the
+message wrote rather than to text a scan had already stopped reading.
+
+**That ceiling is also the one place the balanced-markup guarantee above stops applying.** It cuts what the sanitizer had
 already serialized rather than the source it was serialized from, so a `sanitizedHtml` representation reporting
 `SensitiveContentScanCeiling` can end inside an element — the fragment the source-first cut exists to avoid. The
 alternative is worse in the way this whole feature is written against: sanitizing again would hand back markup the scan
