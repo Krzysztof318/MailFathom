@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.Jobs;
+using MailFathom.Application.Jobs.Execution;
 using MailFathom.CodeCoverage;
 using Microsoft.EntityFrameworkCore;
 
@@ -24,14 +25,31 @@ namespace MailFathom.Infrastructure.Persistence.Jobs;
 /// </para>
 /// </remarks>
 [RequiresIntegrationCoverage]
-internal sealed class JobStore(MailFathomDbContext dbContext, TimeProvider timeProvider) : IJobStore
+internal sealed class JobStore(
+    MailFathomDbContext dbContext,
+    JobCapacitySettings capacity,
+    TimeProvider timeProvider) : IJobStore
 {
     /// <inheritdoc />
     /// <remarks>
+    /// <para>
     /// The insert names the conflict target explicitly, so a duplicate is recognized as one the unique index refused
     /// rather than as any other constraint. A losing insert writes nothing at all — the existing row keeps its state,
     /// its attempts, and its lease — and the identifier is then read back, which is what answers a retrying enqueuer
     /// instead of refusing it.
+    /// </para>
+    /// <para>
+    /// The depth of this type's queue is read before anything is written, and a full one is answered rather than
+    /// inserted into. It is deliberately a read and not a condition on the insert: a full queue still has to tell a
+    /// retrying enqueuer that its own work is already there, which means looking the identity up, and folding both into
+    /// one statement would make the ordinary path pay for the exceptional one.
+    /// </para>
+    /// <para>
+    /// Two enqueuers meeting the bound together can therefore both pass it, and the depth overshoots by as many callers
+    /// as raced. That is the bound behaving as backpressure rather than as an invariant, which is what it is for: it
+    /// exists to stop a backlog growing without limit, and a handful of rows past the ceiling costs nothing that
+    /// serializing every enqueue behind a lock would not cost far more of.
+    /// </para>
     /// </remarks>
     public async Task<JobEnqueueResult> EnqueueAsync(
         JobEnqueueRequest request,
@@ -44,6 +62,15 @@ internal sealed class JobStore(MailFathomDbContext dbContext, TimeProvider timeP
         var jobTypeName = request.JobType.Name;
         var idempotencyKey = request.Key.Value;
 
+        if (await this.IsQueueFullAsync(jobTypeName, cancellationToken))
+        {
+            var queuedId = await this.FindJobIdAsync(jobTypeName, idempotencyKey, cancellationToken);
+
+            return queuedId is { } alreadyEnqueuedId
+                ? JobEnqueueResult.AlreadyEnqueued(JobId.Create(alreadyEnqueuedId))
+                : JobEnqueueResult.RefusedAtCapacity();
+        }
+
         var createdIds = await dbContext.Database
             .SqlQuery<Guid>(JobEnqueueStatement.Compose(
                 Guid.CreateVersion7(enqueuedAt),
@@ -54,7 +81,7 @@ internal sealed class JobStore(MailFathomDbContext dbContext, TimeProvider timeP
 
         if (createdIds is [var createdId])
         {
-            return new JobEnqueueResult(JobId.Create(createdId), JobEnqueueOutcome.Created);
+            return JobEnqueueResult.Created(JobId.Create(createdId));
         }
 
         var existingId = await dbContext.Jobs
@@ -63,7 +90,7 @@ internal sealed class JobStore(MailFathomDbContext dbContext, TimeProvider timeP
             .Select(job => job.Id)
             .SingleAsync(cancellationToken);
 
-        return new JobEnqueueResult(JobId.Create(existingId), JobEnqueueOutcome.AlreadyEnqueued);
+        return JobEnqueueResult.AlreadyEnqueued(JobId.Create(existingId));
     }
 
     /// <inheritdoc />
@@ -283,4 +310,29 @@ internal sealed class JobStore(MailFathomDbContext dbContext, TimeProvider timeP
 
         return releasedRows == 1;
     }
+
+    /// <summary>Answers whether this job type already has as much waiting as the configured depth allows.</summary>
+    /// <remarks>
+    /// Waiting is the pending state alone. A job a worker holds is running, and what bounds that is the concurrency
+    /// ceiling rather than this; counting it here would make an instance that is draining its queue look like one that
+    /// is filling it.
+    /// </remarks>
+    private async Task<bool> IsQueueFullAsync(string jobTypeName, CancellationToken cancellationToken)
+    {
+        var waitingCount = await JobQueueDepthQuery
+            .Compose(dbContext.Jobs.AsNoTracking(), jobTypeName, capacity.MaxQueueDepthPerType)
+            .CountAsync(cancellationToken);
+
+        return waitingCount >= capacity.MaxQueueDepthPerType;
+    }
+
+    /// <summary>Finds the job already carrying an identity, which is what a refused enqueue asks before it refuses.</summary>
+    private async Task<Guid?> FindJobIdAsync(
+        string jobTypeName,
+        string idempotencyKey,
+        CancellationToken cancellationToken) => await dbContext.Jobs
+        .AsNoTracking()
+        .Where(job => job.JobType == jobTypeName && job.IdempotencyKey == idempotencyKey)
+        .Select(job => (Guid?)job.Id)
+        .SingleOrDefaultAsync(cancellationToken);
 }

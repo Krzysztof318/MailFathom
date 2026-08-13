@@ -791,11 +791,29 @@ The worker that extracts text for messages stored before extraction existed or b
 
 ## `Jobs`
 
-The worker that runs durable background work. A root of its own rather than a block inside any feature, because the
-queue is a mechanism every consumer shares: what a job does belongs to the feature that enqueues it, and how much of
-the instance the queue may take belongs here. Nothing here names a job type, and an instance whose build registers no
-handler runs no pass at all — the worker says so once at startup and stops, which is what leaves work an older replica
-cannot run for a newer one.
+The queue of durable background work, and the worker that runs it. A root of its own rather than a block inside any
+feature, because the queue is a mechanism every consumer shares: what a job does belongs to the feature that enqueues
+it, and how much of the instance the queue may take belongs here. Nothing here names a job type, and an instance whose
+build registers no handler runs no pass at all — the worker says so once at startup and stops, which is what leaves work
+an older replica cannot run for a newer one.
+
+`MaxConcurrentJobs` decides how much of the instance background work may take, and it is stated here rather than left to
+emerge from the database connection pool. A limit nobody wrote down moves whenever anything else in the process opens a
+connection, and it arrives as a query waiting on a pool rather than as a job waiting for its turn. `BatchSize` is a
+different number — what one claim takes — so a claimed job waits for a slot like any other, and raising the batch buys
+fewer round trips rather than more work in flight.
+
+`MaxConcurrentJobsPerType` bounds one kind of work on its own, and startup refuses a value above `MaxConcurrentJobs`,
+which already caps it. A job waiting on the per-type ceiling holds none of the instance-wide one, so a bulk
+re-evaluation of one kind of work is never the reason another kind never runs.
+
+`MaxQueueDepthPerType` bounds what may be waiting rather than what is running. An enqueue against a queue already
+holding that many jobs of a type is refused and says so, and the caller slows down, asks again later, or stops
+producing — the work is neither queued nor lost, and a request whose work is already queued is answered with that job
+rather than turned away. It is the one setting here that still applies with `Enabled` switched off, because it bounds
+enqueuing rather than running. Two callers meeting the bound together can both pass it, so a queue may overshoot by as
+many enqueuers as raced; this is backpressure rather than an invariant, and what it exists to stop is a backlog growing
+without limit.
 
 `ExecutionTimeout` must be shorter than `LeaseDuration`, and startup refuses a pair that inverts them. That ordering is
 what keeps two workers off one job: an attempt is cancelled before its lease can expire underneath it. The lease is
@@ -817,7 +835,10 @@ instant.
 | Key | Type | Default | Constraint | Change |
 | --- | --- | --- | --- | --- |
 | `Jobs:Enabled` | bool | `true` | turning it off leaves enqueued work where it is, for a replica that runs it | restart |
-| `Jobs:BatchSize` | int | `5` | 1 – 100; how many jobs one pass claims. They run one after another, so this bounds what a pass holds rather than what runs at once | restart |
+| `Jobs:BatchSize` | int | `5` | 1 – 100; how many jobs one pass claims. Each of them waits for a concurrency slot, so this bounds what one claim takes rather than what runs at once | restart |
+| `Jobs:MaxConcurrentJobs` | int | `4` | 1 – 32; how many jobs this instance runs at once, across every type together. Kept well below the connection pool a stock connection string provides, so the pool is never what expresses the limit | restart |
+| `Jobs:MaxConcurrentJobsPerType` | int | `2` | 1 – 32, and at most `Jobs:MaxConcurrentJobs`; how many jobs of one type run at once. A job waiting on this holds none of the instance-wide ceiling | restart |
+| `Jobs:MaxQueueDepthPerType` | int | `10000` | 1 – 1000000; how many jobs of one type may be waiting before enqueuing is refused as backpressure. Applies whether or not `Jobs:Enabled` is on | restart |
 | `Jobs:LeaseDuration` | TimeSpan | `00:05:00` | 2 s – 1 h; how long work stays held after the process running it stops existing, which is the delay before a crash is recovered from | restart |
 | `Jobs:ExecutionTimeout` | TimeSpan | `00:02:00` | 1 s – 1 h, and strictly shorter than `Jobs:LeaseDuration`; exceeding it cancels the job, which counts as a transient failure and is attempted again. Raise it where this kind of work legitimately takes longer | restart |
 | `Jobs:MaxAttempts` | int | `5` | 1 – 20; how many attempts one job may be handed out for before a transient failure dead-letters it. `1` leaves no retry at all. A permanent failure ends the job whatever this says | restart |

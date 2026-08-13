@@ -28,13 +28,22 @@ namespace MailFathom.Application.Jobs;
 /// </remarks>
 public interface IJobStore
 {
-    /// <summary>Writes the execution down, or reports the job that already carries this type and key.</summary>
+    /// <summary>Writes the execution down, reports the job that already carries this type and key, or refuses a queue that is full.</summary>
     /// <param name="request">The execution to enqueue.</param>
     /// <param name="cancellationToken">Cancels the write or the read that follows a losing insert.</param>
-    /// <returns>The job for this request, and whether this call is the one that created it.</returns>
+    /// <returns>What the queue did with the request, and the job it names when one exists.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="request" /> is <see langword="null" />.</exception>
     /// <exception cref="JobPayloadTooLargeException">Thrown when the serialized payload exceeds the bound the enqueue boundary applies.</exception>
-    /// <remarks>The job starts claimable, with no attempt counted and no lease, so enqueuing runs nothing by itself.</remarks>
+    /// <remarks>
+    /// <para>The job starts claimable, with no attempt counted and no lease, so enqueuing runs nothing by itself.</para>
+    /// <para>
+    /// A queue holding as many jobs of this type as its configured depth allows refuses the request rather than
+    /// accepting work nothing can drain, and says so as an outcome the caller acts on. The refusal is per job type, so a
+    /// consumer that floods its own queue does not stop another consumer enqueuing; and a request whose identity is
+    /// already queued is answered with that job rather than refused, because a retrying enqueuer needs to be told the
+    /// work is there, not turned away from work it already produced.
+    /// </para>
+    /// </remarks>
     Task<JobEnqueueResult> EnqueueAsync(JobEnqueueRequest request, CancellationToken cancellationToken);
 
     /// <summary>Takes up to a batch of due jobs this process can run, and leases each of them to one attempt.</summary>
