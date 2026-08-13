@@ -16,11 +16,13 @@ namespace MailFathom.Infrastructure.Persistence.Emails;
 
 /// <summary>Cuts one stored email's extracted text into passages and writes them inside the caller's open session.</summary>
 /// <remarks>
-/// Both writers of extracted text use this, for the reason both use the search-document writer: synchronization has
-/// just read a message it fetched, the backfill re-derives from raw MIME stored before extraction existed, and one
-/// writer is what stops the two paths from storing passages built to different rules. Deriving in the same session as
-/// the metadata is what makes a message and its passages durable together, so nothing downstream has to handle a
-/// message that is committed and has not been cut.
+/// Every path that produces passages arrives here, which is what stops them from storing passages built to different
+/// rules. They arrive by two routes. The extraction backfill has just read a message's raw MIME and cuts what it
+/// derived, in the transaction that writes the extraction. The account run's own cut and the embedding sweep read the
+/// stored reading back through <see cref="SaveFromStoredExtractionAsync" /> and cut it in a transaction of their own,
+/// one step behind the stages that may still redact that text or move the message out of the folder its passages would
+/// describe. So a committed message is one whose passages a later step produces: storing a message no longer derives
+/// them, and the steps that do are what a message committed and not yet cut is waiting for.
 /// </remarks>
 [RequiresIntegrationCoverage]
 internal sealed class EmailChunkWriter(
