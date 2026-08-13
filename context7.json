@@ -1,0 +1,21 @@
+{
+  "$schema": "https://context7.com/schema/context7.json",
+  "projectTitle": "MailFathom",
+  "description": "Self-hosted MCP server that synchronizes IMAP mail into PostgreSQL and serves it to AI agents as read-only tools",
+  "folders": [
+    "docs/users/**",
+    "docs/operations/**",
+    "docs/features/**"
+  ],
+  "excludeFolders": [
+    "docs/decisions/**",
+    "specs/**",
+    ".agents/**",
+    ".claude/**",
+    ".github/**"
+  ],
+  "excludeFiles": [
+    "AGENTS.md",
+    "CLAUDE.md"
+  ]
+}

@@ -45,6 +45,8 @@ Read https://krzysztof318.github.io/MailFathom/llms.txt and follow it to the pag
 
 That address is the current release's map: every published page, its title, and one line saying what it answers, linking each page's Markdown source. The agent loads the map in full and then fetches only the page that owns your question, so its answer comes from the page carrying the contract instead of from fragments of several. The map also names the two bundles beside it — the operator path, from choosing an installation to administering the deployment, and the mailbox user path, from connecting a client to what each tool returns — for when the question is a whole path rather than one page of it. Every version the site documents carries its own copy of all three, and the address above is the version the site opens on.
 
+MailFathom also resolves in [Context7](https://context7.com/krzysztof318/mailfathom), as `/krzysztof318/mailfathom`, for an agent that already has that connector. It is a mirror and the map above is what it mirrors: it indexes the default branch rather than a release, so it can answer from documentation of work no version carries yet, and it is refreshed on its own schedule rather than by a publish here.
+
 → [Handing this guide to your own agent](https://krzysztof318.github.io/MailFathom/users/README.html#handing-this-guide-to-your-own-agent)
 
 ## What exists today

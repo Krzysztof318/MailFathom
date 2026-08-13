@@ -1,6 +1,6 @@
 # The documentation site
 
-<!-- describes: docfx/**, docs/toc.yml, docs/*/toc.yml, docs/index.md, docs/api/index.md, scripts/build-docs-site.sh, scripts/compose-docs-site.sh, scripts/list-documented-versions.sh, scripts/write-docs-agent-artifacts.sh, scripts/rebase-markdown-links.sh, .github/workflows/publish-documentation.yml -->
+<!-- describes: docfx/**, docs/toc.yml, docs/*/toc.yml, docs/index.md, docs/api/index.md, context7.json, scripts/build-docs-site.sh, scripts/compose-docs-site.sh, scripts/list-documented-versions.sh, scripts/write-docs-agent-artifacts.sh, scripts/rebase-markdown-links.sh, .github/workflows/publish-documentation.yml -->
 
 The pages under `docs/` are published as a browsable site at
 <https://krzysztof318.github.io/MailFathom/>. The site is generated from this repository by
@@ -96,6 +96,43 @@ The version's own landing page links the map, which is what makes the artifacts 
 surface prints. docfx cannot resolve that link — the map is written into the build's output after docfx has finished —
 so `scripts/build-docs-site.sh` exempts exactly those targets from the link gate, and the artifact script's own check
 that every entry names a page the version carries is what covers them instead.
+
+## The mirror on Context7
+
+MailFathom is registered with [Context7](https://context7.com/krzysztof318/mailfathom) as
+`/krzysztof318/mailfathom`, so an agent that already has that connector reaches this documentation without being given
+an address. It is a mirror of the artifacts above rather than a second channel, and two properties are why: it indexes
+the default branch, so nothing binds an answer to the release a reader is running, and retrieval over chunks returns a
+rule without the pointer that completes it — these pages state a rule in one place and point at it from everywhere
+else, so a fragment of one is confidently incomplete rather than merely partial.
+
+`context7.json` at the repository root is what bounds what it reads. Without it the service scans the whole tree, which
+here means the architectural decision records including superseded ones, the workflow contract every `AGENTS.md`
+carries, and the architecture draft under `specs/` that states intent where every page here states fact — none of them
+product documentation, and each of them read as such by an agent that found it under this project's name. The file
+therefore names three of the four sections [this site carries](#what-the-site-carries): the user guide, the operations
+pages, and the feature reference.
+
+**The architecture pages are left out, and that is a decision about the reader rather than about the pages.** They are
+product documentation and the site publishes them as such; what they answer is where the boundaries of the code are
+drawn and why, which is a question somebody changing MailFathom asks with the repository open in front of them. The
+mirror answers an agent helping somebody install, configure, and use a deployment, and that agent has no more use for
+the project structure than it has for the API reference the map already leaves out. Widening the mirror to them is
+reversible and costs one entry; what it would buy has to be a reader who arrives at the architecture through a
+documentation lookup rather than through the repository.
+
+Three things about how the file is matched are worth knowing before editing it, because none is a general JSON
+convention:
+
+- **`excludeFolders` wins over `folders`**, so a path named in both is excluded.
+- **`excludeFiles` matches a bare filename**, with no path and no pattern. That is what lets two entries — `AGENTS.md`
+  and `CLAUDE.md` — cover every copy of them at any depth.
+- **The repository's `README.md` is read whatever `folders` says.** The parser keeps it deliberately, which is why the
+  README states that this site is canonical and that the mirror can lag it.
+
+**A change here reaches the mirror at its next refresh, not at the merge.** Context7 refreshes a library on a schedule
+set by its own popularity ranking, and a logged-in user can force one from the library page. So editing `context7.json`
+is half the act; the other half happens on the service, and until it does the mirror still carries what it last read.
 
 ## Which versions are published, and which one opens
 
