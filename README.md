@@ -32,7 +32,20 @@ To evaluate MailFathom from the checkout instead of deploying it, the local Aspi
 | Deciding whether MailFathom is for you | [What it does well](https://github.com/Krzysztof318/MailFathom#what-it-does-well) below, then [the user guide](https://krzysztof318.github.io/MailFathom/users/README.html) |
 | Installing or operating it | [Installing MailFathom](https://krzysztof318.github.io/MailFathom/users/installation.html), then [getting started](https://krzysztof318.github.io/MailFathom/users/getting-started.html) |
 | Connecting an agent to a running instance | [Using the tools](https://krzysztof318.github.io/MailFathom/users/usage.html) |
+| Reading any of that with an AI assistant beside you | [Hand it the documentation](https://github.com/Krzysztof318/MailFathom#hand-the-documentation-to-your-agent) below |
 | Contributing | [CONTRIBUTING.md](https://github.com/Krzysztof318/MailFathom/blob/main/CONTRIBUTING.md) |
+
+### Hand the documentation to your agent
+
+If an AI assistant is helping you install, configure, or use MailFathom, give it the documentation rather than a search over the site. One line is the whole of it:
+
+```text
+Read https://krzysztof318.github.io/MailFathom/llms.txt and follow it to the pages that answer my question.
+```
+
+That address is the current release's map: every published page, its title, and one line saying what it answers, linking each page's Markdown source. The agent loads the map in full and then fetches only the page that owns your question, so its answer comes from the page carrying the contract instead of from fragments of several. The map also names the two bundles beside it — the operator path, from choosing an installation to administering the deployment, and the mailbox user path, from connecting a client to what each tool returns — for when the question is a whole path rather than one page of it. Every version the site documents carries its own copy of all three, and the address above is the version the site opens on.
+
+→ [Handing this guide to your own agent](https://krzysztof318.github.io/MailFathom/users/README.html#handing-this-guide-to-your-own-agent)
 
 ## What exists today
 
