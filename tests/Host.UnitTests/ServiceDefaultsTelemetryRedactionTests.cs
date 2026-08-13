@@ -5,6 +5,7 @@
 using System.Diagnostics;
 using MailFathom.Host.Api;
 using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.Configuration;
 using OpenTelemetry.Logs;
 using Xunit;
 
@@ -39,6 +40,86 @@ public sealed class ServiceDefaultsTelemetryRedactionTests
         // Assert
         Assert.False(logging.IncludeScopes);
         Assert.True(logging.IncludeFormattedMessage);
+    }
+
+    /// <summary>A deployment that named no collector exports nothing, however many publishers have been added.</summary>
+    /// <remarks>
+    /// The default this asserts is a privacy one rather than a convenience: every signal describes activity around
+    /// personal mail, so a deployment sends it somewhere only by saying where. A blank value counts as unset on both
+    /// sides, because templating a manifest routinely emits an empty string for a setting nobody chose.
+    /// </remarks>
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public void ExportsOverOtlp_NoEndpointNamed_KeepsEverySignalInTheProcess(string? configuredEndpoint)
+    {
+        // Arrange
+        var configuration = ConfigurationWith(configuredEndpoint);
+
+        // Act
+        var exports = ServiceDefaultsExtensions.ExportsOverOtlp(configuration);
+
+        // Assert
+        Assert.False(exports);
+    }
+
+    /// <summary>Naming a collector is what attaches the exporter, which is the control for the absence above.</summary>
+    [Fact]
+    public void ExportsOverOtlp_AnEndpointNamed_ExportsToIt()
+    {
+        // Arrange
+        var configuration = ConfigurationWith("http://localhost:4317");
+
+        // Act
+        var exports = ServiceDefaultsExtensions.ExportsOverOtlp(configuration);
+
+        // Assert
+        Assert.True(exports);
+    }
+
+    /// <summary>A probe is never traced, however many sibling changes have been made to the pipeline since.</summary>
+    /// <remarks>
+    /// Every probe path is driven rather than one, and the trailing-slash form with them, because routing serves
+    /// <c>/health/</c> as readiness and a filter written for exact equality would trace the polling it was added to
+    /// keep out.
+    /// </remarks>
+    [Theory]
+    [InlineData("/started")]
+    [InlineData("/health")]
+    [InlineData("/health/")]
+    [InlineData("/alive")]
+    [InlineData("/ALIVE")]
+    public void IsWorthTracing_AProbePath_KeepsThePollingOutOfTheTraceStore(string path)
+    {
+        // Arrange
+        var context = new DefaultHttpContext();
+        context.Request.Path = path;
+
+        // Act
+        var traced = ServiceDefaultsExtensions.IsWorthTracing(context);
+
+        // Assert
+        Assert.False(traced);
+    }
+
+    /// <summary>Everything a client actually calls is still traced, which is what makes the absence above readable.</summary>
+    [Theory]
+    [InlineData("/mcp")]
+    [InlineData("/api/admin/embeddings/profiles")]
+    [InlineData("/health/details")]
+    [InlineData("/aliveness")]
+    public void IsWorthTracing_AnyOtherPath_IsTraced(string path)
+    {
+        // Arrange
+        var context = new DefaultHttpContext();
+        context.Request.Path = path;
+
+        // Act
+        var traced = ServiceDefaultsExtensions.IsWorthTracing(context);
+
+        // Assert
+        Assert.True(traced);
     }
 
     /// <summary>The capability is replaced by the route it was served under, so the span still says what was fetched.</summary>
@@ -79,4 +160,14 @@ public sealed class ServiceDefaultsTelemetryRedactionTests
         var recordedPath = Assert.Single(activity.TagObjects, tag => tag.Key == "url.path");
         Assert.Equal(path, recordedPath.Value);
     }
+
+    private static IConfiguration ConfigurationWith(string? configuredEndpoint) =>
+        new ConfigurationBuilder()
+            .AddInMemoryCollection(
+            [
+                new KeyValuePair<string, string?>(
+                    ServiceDefaultsExtensions.ExporterEndpointVariableName,
+                    configuredEndpoint),
+            ])
+            .Build();
 }

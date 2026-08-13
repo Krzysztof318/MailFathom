@@ -32,5 +32,11 @@
     <!-- Every boundary that publishes instruments asserts them the same way, through a listener over the one
          process-wide meter, so the recorder is built once rather than per suite. -->
     <Compile Include="..\shared\RecordedMailFathomMeasurements.cs" Link="RecordedMailFathomMeasurements.cs" />
+
+    <!-- The redaction contract is asserted in every assembly that publishes a signal, so the recorder that reads the
+         whole surface and the rules it is held against are shared rather than restated. The recorder reuses the
+         measurement record the file above declares, so the two are included together. -->
+    <Compile Include="..\shared\EmittedTelemetrySurface.cs" Link="EmittedTelemetrySurface.cs" />
+    <Compile Include="..\shared\TelemetryRedactionContract.cs" Link="TelemetryRedactionContract.cs" />
   </ItemGroup>
 </Project>
