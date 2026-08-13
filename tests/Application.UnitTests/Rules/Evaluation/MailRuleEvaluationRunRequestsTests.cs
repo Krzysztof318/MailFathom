@@ -135,6 +135,52 @@ public sealed class MailRuleEvaluationRunRequestsTests
         Assert.Equal(0, this.runStore.Find(Account)?.EvaluatedEmailCount);
     }
 
+    /// <summary>The row at the moment of the write decides, so a run that arrived first is answered with, not overwritten.</summary>
+    [Fact]
+    public async Task SubmitScheduledAsync_ARunCommittedWhileTheOccasionWasBeingRecorded_StandsDownRatherThanReplacingIt()
+    {
+        // Arrange
+        this.runStore.WhenAStartIsAttempted = () => this.runStore.Arrange(new MailRuleEvaluationRun
+        {
+            AccountId = Account,
+            RequestedAt = RequestedAt.AddSeconds(-1),
+            Trigger = MailRuleExecutionTrigger.RequestedRun,
+            EvaluatedEmailCount = 12,
+        });
+
+        // Act
+        var request = await this.CreateRequests().SubmitScheduledAsync(Account, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.False(request.Accepted);
+        Assert.Equal(MailRuleExecutionTrigger.RequestedRun, request.Run.Trigger);
+        Assert.Equal(12, this.runStore.Find(Account)?.EvaluatedEmailCount);
+        Assert.Empty(this.runStore.Saves);
+    }
+
+    /// <summary>The same window on the operator's path: a walk already under way keeps its position rather than restarting.</summary>
+    [Fact]
+    public async Task SubmitAsync_ARequestedRunCommittedWhileThisOneWasBeingRecorded_StandsDownRatherThanResettingIt()
+    {
+        // Arrange
+        this.runStore.WhenAStartIsAttempted = () => this.runStore.Arrange(new MailRuleEvaluationRun
+        {
+            AccountId = Account,
+            RequestedAt = RequestedAt.AddSeconds(-1),
+            Trigger = MailRuleExecutionTrigger.RequestedRun,
+            EvaluatedEmailCount = 40,
+        });
+
+        // Act
+        var request = await this.CreateRequests().SubmitAsync(Account, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.False(request.Accepted);
+        Assert.Equal(40, request.Run.EvaluatedEmailCount);
+        Assert.Equal(40, this.runStore.Find(Account)?.EvaluatedEmailCount);
+        Assert.Empty(this.runStore.Saves);
+    }
+
     private MailRuleEvaluationRunRequests CreateRequests()
     {
         var sessionFactory = Substitute.For<IPersistenceSessionFactory>();

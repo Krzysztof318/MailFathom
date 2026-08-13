@@ -14,9 +14,11 @@ namespace MailFathom.Infrastructure.Persistence.Jobs;
 /// <remarks>
 /// The write is one upsert rather than a read followed by an insert, for the reason enqueuing is one statement: two
 /// replicas advancing one schedule together must resolve to one row, and a check between the two statements would leave
-/// exactly the window that resolution exists to close. Both writers agree on the value they write — the occasion is
-/// derived from the declaration and the clock, not from either of them — so last one wins is the right resolution rather
-/// than a conflict to report.
+/// exactly the window that resolution exists to close. Both writers derive the occasion from the declaration and the
+/// clock rather than from each other, so they agree about every occasion they both saw and disagree only about how far
+/// they have got — which is why the update keeps the later of the two instead of the later of the two writes. Without
+/// that, a pass delayed behind a slower replica would move the schedule backwards and the occasions between the two
+/// would be dispatched a second time.
 /// </remarks>
 [RequiresIntegrationCoverage]
 internal sealed class JobScheduleStore(MailFathomDbContext dbContext) : IJobScheduleStore
@@ -44,6 +46,11 @@ internal sealed class JobScheduleStore(MailFathomDbContext dbContext) : IJobSche
     }
 
     /// <inheritdoc />
+    /// <remarks>
+    /// The <c>WHERE</c> clause is what makes the upsert monotonic. A row still carrying no occasion accepts anything,
+    /// because a seeded schedule has nothing to move backwards from; after that only a later occasion is written, and a
+    /// write carrying none compares as unknown and is therefore refused rather than clearing the row.
+    /// </remarks>
     public async Task SaveAsync(JobScheduleState state, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(state);
@@ -60,6 +67,8 @@ internal sealed class JobScheduleStore(MailFathomDbContext dbContext) : IJobSche
              ON CONFLICT ("ScheduleId") DO UPDATE
              SET "LastOccurrenceAt" = EXCLUDED."LastOccurrenceAt",
                  "LastDispatchedJobId" = EXCLUDED."LastDispatchedJobId"
+             WHERE job_schedules."LastOccurrenceAt" IS NULL
+                OR EXCLUDED."LastOccurrenceAt" > job_schedules."LastOccurrenceAt"
              """,
             cancellationToken);
     }

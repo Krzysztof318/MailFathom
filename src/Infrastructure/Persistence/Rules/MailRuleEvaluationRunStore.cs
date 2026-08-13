@@ -74,6 +74,46 @@ internal sealed class MailRuleEvaluationRunStore(MailFathomDbContext dbContext) 
         Write(stored, run);
     }
 
+    /// <inheritdoc />
+    /// <remarks>
+    /// The read this decides from is the session's own, taken immediately before the write, so the window a request's
+    /// earlier read left open closes here: a run another request or another schedule's occasion committed in between is
+    /// found and stood down from rather than overwritten. What that read cannot see is a competing insert that has not
+    /// committed yet, and it does not have to — both inserts meet the account's primary key, and the loser is retried
+    /// from a fresh read that finds the winner's row.
+    /// </remarks>
+    public async Task<MailRuleEvaluationRun?> TryStartAsync(
+        IPersistenceSession session,
+        MailRuleEvaluationRun run,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(run);
+
+        var sessionContext = EfCorePersistenceSessionAccessor.DbContextOf(session);
+        var stored = await sessionContext.MailRuleEvaluationRuns.FindAsync(
+            [run.AccountId.Value],
+            cancellationToken);
+
+        if (stored is null)
+        {
+            stored = new MailRuleEvaluationRunEntity { MailboxAccountId = run.AccountId.Value };
+            sessionContext.MailRuleEvaluationRuns.Add(stored);
+        }
+        else
+        {
+            var claimed = Read(stored, run.AccountId);
+
+            if (!run.Supersedes(claimed))
+            {
+                return claimed;
+            }
+        }
+
+        Write(stored, run);
+
+        return null;
+    }
+
     private static MailRuleEvaluationRun Read(MailRuleEvaluationRunEntity entity, MailAccountId accountId) => new()
     {
         AccountId = accountId,

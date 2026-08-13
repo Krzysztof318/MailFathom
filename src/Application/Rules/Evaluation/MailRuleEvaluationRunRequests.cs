@@ -61,7 +61,7 @@ public sealed class MailRuleEvaluationRunRequests
     /// <exception cref="PersistenceConcurrencyConflictException">Thrown when two requests raced past the bounded retries.</exception>
     /// <exception cref="OperationCanceledException">Thrown when the caller cancels.</exception>
     /// <remarks>
-    /// The read and the write are one committed decision rather than a check followed by an insert, because two requests
+    /// Whether the account is free is decided at the write rather than by a check in front of it, because two requests
     /// arriving together must resolve to one run. The loser of that race meets the account's own key, is retried from a
     /// fresh read, and is answered with the run the winner asked for.
     /// <para>
@@ -75,13 +75,6 @@ public sealed class MailRuleEvaluationRunRequests
         this.commitPolicy.CommitAsync(
             async (session, attemptCancellationToken) =>
             {
-                var outstanding = await this.runStore.FindOutstandingAsync(accountId, attemptCancellationToken);
-
-                if (outstanding is { Trigger: not MailRuleExecutionTrigger.ScheduledRun })
-                {
-                    return new MailRuleEvaluationRunRequest(outstanding, Accepted: false);
-                }
-
                 var requested = new MailRuleEvaluationRun
                 {
                     AccountId = accountId,
@@ -89,9 +82,7 @@ public sealed class MailRuleEvaluationRunRequests
                     Trigger = MailRuleExecutionTrigger.RequestedRun,
                 };
 
-                await this.runStore.SaveAsync(session, requested, attemptCancellationToken);
-
-                return new MailRuleEvaluationRunRequest(requested, Accepted: true);
+                return await this.StartAsync(session, requested, attemptCancellationToken);
             },
             cancellationToken);
 
@@ -113,13 +104,6 @@ public sealed class MailRuleEvaluationRunRequests
         this.commitPolicy.CommitAsync(
             async (session, attemptCancellationToken) =>
             {
-                var outstanding = await this.runStore.FindOutstandingAsync(accountId, attemptCancellationToken);
-
-                if (outstanding is not null)
-                {
-                    return new MailRuleEvaluationRunRequest(outstanding, Accepted: false);
-                }
-
                 var scheduled = new MailRuleEvaluationRun
                 {
                     AccountId = accountId,
@@ -127,9 +111,30 @@ public sealed class MailRuleEvaluationRunRequests
                     Trigger = MailRuleExecutionTrigger.ScheduledRun,
                 };
 
-                await this.runStore.SaveAsync(session, scheduled, attemptCancellationToken);
-
-                return new MailRuleEvaluationRunRequest(scheduled, Accepted: true);
+                return await this.StartAsync(session, scheduled, attemptCancellationToken);
             },
             cancellationToken);
+
+    /// <summary>Starts the run unless the account's row already holds one this request must not replace.</summary>
+    /// <param name="session">The session the write is staged in.</param>
+    /// <param name="starting">The run this request wants to start.</param>
+    /// <param name="cancellationToken">Cancels the write.</param>
+    /// <returns>The run the account now has, and whether this request is what put it there.</returns>
+    /// <remarks>
+    /// The precedence between the two triggers is asked at the write rather than at a read before it, because a read
+    /// answers about the instant it happened and the row is what the next pass will act on. A request that finds the
+    /// account claimed is answered with the claim, which is the same answer it would have given from a read — the
+    /// difference is that it cannot now be an answer given about a row that has since changed.
+    /// </remarks>
+    private async Task<MailRuleEvaluationRunRequest> StartAsync(
+        IPersistenceSession session,
+        MailRuleEvaluationRun starting,
+        CancellationToken cancellationToken)
+    {
+        var claimed = await this.runStore.TryStartAsync(session, starting, cancellationToken);
+
+        return claimed is null
+            ? new MailRuleEvaluationRunRequest(starting, Accepted: true)
+            : new MailRuleEvaluationRunRequest(claimed, Accepted: false);
+    }
 }

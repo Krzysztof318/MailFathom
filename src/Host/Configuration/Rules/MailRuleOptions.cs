@@ -85,7 +85,8 @@ internal sealed class MailRuleOptions
     /// <summary>Gets or sets the occasions a scheduled walk of this rule happens on.</summary>
     /// <remarks>
     /// <para>
-    /// Written as <c>Every &lt;hh:mm:ss&gt;</c> or as <c>Daily at &lt;HH:mm&gt;</c> with an optional IANA time zone —
+    /// Written as <c>Every &lt;hh:mm:ss&gt;</c>, or <c>Every &lt;d.hh:mm:ss&gt;</c> for an interval of a day or more —
+    /// <c>Every 7.00:00:00</c> — or as <c>Daily at &lt;HH:mm&gt;</c> with an optional IANA time zone —
     /// <c>Daily at 03:30 Europe/Warsaw</c>. <strong>A time with no zone is UTC</strong>, which is worth reading twice: a
     /// housekeeping rule an owner believes runs at night is the one place that answer is noticed.
     /// </para>
@@ -97,13 +98,6 @@ internal sealed class MailRuleOptions
     /// </remarks>
     public string? Schedule { get; set; }
 
-    /// <summary>Reads the declared triggers, leaving out a name this system cannot read.</summary>
-    /// <returns>The triggers, empty for a rule only a requested walk runs.</returns>
-    /// <remarks>
-    /// A name this system cannot read is left out rather than thrown over, because it is reported by validation against
-    /// the key an operator edits and reading it here would raise instead. <see cref="MailRuleSetMapper" /> refuses a set
-    /// that reaches it with one, so the dropped name cannot become a rule nothing runs.
-    /// </remarks>
     /// <summary>Reads the declared schedule, or nothing where the rule declares none or wrote one this system cannot read.</summary>
     /// <returns>The occasions a scheduled walk happens on, or <see langword="null" />.</returns>
     /// <remarks>
@@ -114,6 +108,13 @@ internal sealed class MailRuleOptions
     internal JobRecurrence? ToSchedule() =>
         JobRecurrence.TryParse(this.Schedule, out var recurrence, out _) ? recurrence : null;
 
+    /// <summary>Reads the declared triggers, leaving out a name this system cannot read.</summary>
+    /// <returns>The triggers, empty for a rule only a requested walk runs.</returns>
+    /// <remarks>
+    /// A name this system cannot read is left out rather than thrown over, because it is reported by validation against
+    /// the key an operator edits and reading it here would raise instead. <see cref="MailRuleSetMapper" /> refuses a set
+    /// that reaches it with one, so the dropped name cannot become a rule nothing runs.
+    /// </remarks>
     internal IReadOnlyList<MailRuleTrigger> ToTriggers() =>
     [
         .. this.Triggers

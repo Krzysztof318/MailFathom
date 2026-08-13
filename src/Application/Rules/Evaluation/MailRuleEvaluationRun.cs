@@ -70,4 +70,24 @@ public sealed record MailRuleEvaluationRun
 
     /// <summary>Gets whether the run is still waiting to be carried further by an account run.</summary>
     public bool IsOutstanding => this.EndedAt is null;
+
+    /// <summary>Answers whether this run, which is starting, may take the place of one the account already has.</summary>
+    /// <param name="outstanding">The run the account currently has recorded.</param>
+    /// <returns><see langword="true" /> when starting this run is right, <see langword="false" /> when it must stand down.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="outstanding" /> is <see langword="null" />.</exception>
+    /// <remarks>
+    /// The whole precedence rule between the two triggers, in the one place both the request path and the write that
+    /// claims the account's row read it from. A run that has ended is not in anybody's way. An operator's request
+    /// replaces a scheduled walk, because it reaches every rule the account has while the scheduled one reaches only the
+    /// rules that opted into a schedule — answering the wider request with the narrower run would report a rule set as
+    /// applied when part of it never was. Everything else stands down, including a schedule meeting a schedule.
+    /// </remarks>
+    public bool Supersedes(MailRuleEvaluationRun outstanding)
+    {
+        ArgumentNullException.ThrowIfNull(outstanding);
+
+        return !outstanding.IsOutstanding
+            || (this.Trigger is MailRuleExecutionTrigger.RequestedRun
+                && outstanding.Trigger is MailRuleExecutionTrigger.ScheduledRun);
+    }
 }

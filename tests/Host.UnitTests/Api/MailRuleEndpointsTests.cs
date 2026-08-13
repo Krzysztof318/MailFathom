@@ -185,7 +185,11 @@ public sealed class MailRuleEndpointsTests
     public async Task StartRunAsync_AnAccountWithNoRunOutstanding_ReportsThatThisRequestStartedIt()
     {
         // Arrange
-        this.runs.FindOutstandingAsync(Account, Arg.Any<CancellationToken>()).Returns((MailRuleEvaluationRun?)null);
+        this.runs.TryStartAsync(
+                Arg.Any<IPersistenceSession>(),
+                Arg.Any<MailRuleEvaluationRun>(),
+                Arg.Any<CancellationToken>())
+            .Returns((MailRuleEvaluationRun?)null);
 
         // Act
         var result = await this.StartRunAsync(new MailRuleRunRequest(Account.Value));
@@ -209,7 +213,11 @@ public sealed class MailRuleEndpointsTests
             Trigger = MailRuleExecutionTrigger.RequestedRun,
             EvaluatedEmailCount = 120,
         };
-        this.runs.FindOutstandingAsync(Account, Arg.Any<CancellationToken>()).Returns(outstanding);
+        this.runs.TryStartAsync(
+                Arg.Any<IPersistenceSession>(),
+                Arg.Any<MailRuleEvaluationRun>(),
+                Arg.Any<CancellationToken>())
+            .Returns(outstanding);
 
         // Act
         var result = await this.StartRunAsync(new MailRuleRunRequest(Account.Value));
@@ -220,10 +228,6 @@ public sealed class MailRuleEndpointsTests
         Assert.Equal(outstanding.RequestedAt, started.Value.Run.RequestedAt);
         Assert.Equal(nameof(MailRuleExecutionTrigger.RequestedRun), started.Value.Run.Trigger);
         Assert.Equal(120, started.Value.Run.EvaluatedEmailCount);
-        await this.runs.DidNotReceive().SaveAsync(
-            Arg.Any<IPersistenceSession>(),
-            Arg.Any<MailRuleEvaluationRun>(),
-            Arg.Any<CancellationToken>());
     }
 
     [Theory]
@@ -238,7 +242,7 @@ public sealed class MailRuleEndpointsTests
 
         // Assert
         AssertRefused(result.Result);
-        await this.runs.DidNotReceive().SaveAsync(
+        await this.runs.DidNotReceive().TryStartAsync(
             Arg.Any<IPersistenceSession>(),
             Arg.Any<MailRuleEvaluationRun>(),
             Arg.Any<CancellationToken>());

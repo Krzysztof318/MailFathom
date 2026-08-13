@@ -146,6 +146,36 @@ public sealed class JobRecurrenceTests
         Assert.Equal(Instant("2026-10-25T00:30:00Z"), next);
     }
 
+    /// <summary>The dispatch decides from the latest occasion, so the skipped local time has to resolve the same way looking back as looking forward.</summary>
+    [Fact]
+    public void LatestOccurrenceAtOrBefore_ALocalTimeTheClockSkipsOver_AnswersWithTheInstantTheGapEnded()
+    {
+        // Arrange
+        // Warsaw springs forward at 02:00 local on 29 March 2026, so 02:30 that day never happens.
+        var recurrence = Parse($"Daily at 02:30 {WarsawZoneId}");
+
+        // Act
+        var latest = recurrence.LatestOccurrenceAtOrBefore(Instant("2026-03-29T01:30:00Z"));
+
+        // Assert
+        Assert.Equal(Instant("2026-03-29T01:00:00Z"), latest);
+    }
+
+    /// <summary>Asked between the two readings of a repeated local time, the day's occasion is the earlier one and has already happened.</summary>
+    [Fact]
+    public void LatestOccurrenceAtOrBefore_ALocalTimeTheClockPassesThroughTwice_AnswersWithTheFirstOfThem()
+    {
+        // Arrange
+        // Warsaw falls back at 03:00 local on 25 October 2026, so 02:30 that day happens at 00:30Z and again at 01:30Z.
+        var recurrence = Parse($"Daily at 02:30 {WarsawZoneId}");
+
+        // Act
+        var latest = recurrence.LatestOccurrenceAtOrBefore(Instant("2026-10-25T01:00:00Z"));
+
+        // Assert
+        Assert.Equal(Instant("2026-10-25T00:30:00Z"), latest);
+    }
+
     /// <summary>The count is what a skipped occasion is reported by, so a window holding several has to say how many.</summary>
     [Theory]
     [InlineData("Every 01:00:00", "2026-08-13T00:00:00Z", "2026-08-13T05:00:00Z", 5)]
