@@ -394,6 +394,30 @@ The row is never amended. An execution states a reading that has already happene
 
 Nothing in either table is personal data. Rule names, folder aliases, mutation names, fact names, a derived revision, two identifiers, an instant, and a duration are the whole of it, and none is derived from what a message said.
 
+## Durable background work
+
+`jobs` holds work that is enqueued now and done later: what it is, what it points at, who is holding it, and until when. Nothing in the running system enqueues into it yet — it is the record every consumer of durable background work is written against, and [ADR 0009](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0009-durable-job-store-and-execution-identity.md) is the decision it implements.
+
+| Column | What it records |
+|---|---|
+| `Id` | What addresses the job, and the primary key. A version-7 identifier, so one batch's inserts land together in the index rather than scattering across it |
+| `JobType` | The kind of work, held as the closed enumeration's own name. The name is the identity — the word in a log line, the name of a span, the dimension a counter is broken down by — and it names exactly one payload contract, which is what lets the document beside it be read back as the shape it was written as. A name the running build does not declare is left alone rather than failed, because a type an older replica has never heard of is a fact about the deployment and not about the work |
+| `IdempotencyKey` | The identity of one execution, composed by whoever knows what the work is and opaque here. It is unique with the type across the whole table, which is the idempotency guarantee itself rather than a support for one |
+| `Payload` | The references the work is described by, as one `jsonb` document. Nothing queries into it — the key, the type, the account, and the available instant are all columns — so it is a document rather than a schema, and it is bounded at the enqueue boundary so a payload that copied content into it is refused instead of stored |
+| `MailboxAccountId` | The account the work belongs to, null when it belongs to none. A foreign key onto `mailbox_accounts` that cascades, so removing an account takes its queued work with it |
+| `State` | `Pending` while the job is claimable, `Claimed` while an attempt holds it, `Succeeded` once it is done. Text for the reason every other bounded value here is: it stays readable in an ad-hoc query and survives a reordering of the enum |
+| `AvailableAt`, `EnqueuedAt`, `StateChangedAt` | When the job becomes claimable, when it was written, and when its state last moved. The first is a column rather than a schedule elsewhere, because it is what the claim orders and selects on |
+| `AttemptCount` | How many attempts have been handed out. Counted by the claim rather than by whatever runs the work, because a process that dies mid-execution never reaches a line that would have counted it and a crash loop would otherwise be invisible |
+| `LeaseOwner`, `LeaseExpiresAt` | The attempt holding the job and the instant after which it is claimable again, both null while nothing holds it |
+
+A claim is one statement: it selects the oldest due row of a type the asking process runs, under `FOR UPDATE SKIP LOCKED`, and stamps it with a lease owner and an expiry in the same statement. Two things follow. Two workers claiming at the same moment take different jobs instead of waiting on each other, which is what makes the queue drainable by more than one process. And a job is due either because it is pending and its available instant has passed **or** because it is claimed under a lease that has run out — so work in flight when a process died is picked up without an operator doing anything, and nothing has to be told the process is gone.
+
+Renewal, completion, and release are each a single update conditional on the lease owner still matching. An attempt that lost its lease, finished late, and tried to write its result finds the row owned by the attempt that replaced it and writes nothing. That compare-and-set is why the table carries no `xmin` token: the fact that decides whether a writer still owns the work is the lease, and a row version beside it would report a conflict for a renewal that changed nothing an attempt cares about.
+
+A terminal row keeps its key. That is what stops a repeating trigger enqueuing work that has already been done, and it is why a finished job stays in this table rather than moving to another one. It also makes pruning a correctness setting rather than housekeeping: erasing terminal rows is what ends the deduplication, so whichever change adds pruning inherits a retention floor of the longest window in which one trigger can legitimately fire again.
+
+What the store delivers is at-least-once execution and nothing stronger. Uniqueness stops the same work being *enqueued* twice; only a handler can stop a re-run after a crash from having a second effect.
+
 ## Indexes
 
 | Index | Columns | Purpose |
@@ -425,6 +449,9 @@ Nothing in either table is personal data. Rule names, folder aliases, mutation n
 | `ix_mail_answering_audit_entries_account_completed` | `(MailboxAccountId, CompletedAt, Id)` | The same two readers the trail above has: a keyset-paginated page of an account's runs, and the retention pass beside it |
 | `IX_mail_answering_audited_emails_StoredEmailId` | `(StoredEmailId)` | The foreign key back to the message, which is what makes erasing one reach the runs that read it without scanning the table |
 | `ix_email_spam_classification_signals_classification_ordinal` | `(StoredEmailId, Ordinal)`, unique | One classification's signals in the order the stages produced them, and the constraint a replaced record cannot write an ordinal twice past |
+| `ix_jobs_identity` | `(JobType, IdempotencyKey)`, unique | A job's idempotency identity, which is what makes the same execution enqueued twice one job. It spans terminal rows deliberately: a row that succeeded is what stops the same trigger asking again |
+| `ix_jobs_claimable` | `(JobType, AvailableAt)` where the state is not `Succeeded` | The claim, which is the only query this table runs at any volume. The filter keeps the index the size of the backlog rather than of the queue's whole history, and the claim repeats that same inequality in its own predicate so PostgreSQL can prove the index applies to it rather than having to derive it through a disjunction |
+| `ix_jobs_account` | `(MailboxAccountId, EnqueuedAt)` | An account's queued work, which is what erasure and any per-account bound reach a job by |
 
 The recipient and search-vector indexes are GIN rather than B-tree because both serve containment tests. A B-tree over an array column serves only equality against a whole array, and over a `tsvector` it serves nothing search asks for; a GIN index is what turns either into an index scan.
 
@@ -487,6 +514,8 @@ is what makes that structural rather than a pass somebody has to remember. A sig
 authentication outcome, or a rule — never the value of a header — and nothing in either table reaches a log, a metric, a
 trace, or an error message.
 
+`jobs` is derived personal data by the same reading as a chunk or a classification: a row says that something is to be done about somebody's message, and it points at that message by its occurrence identity. What keeps it a pointer rather than a copy is the payload contract — a document of references with no property a subject, an address, or a body could go in, bounded in size at the enqueue boundary so a payload that grew into a copy is refused instead of stored. The account column and the cascade from `mailbox_accounts` are what erasure reaches queued work by. The message the payload names is deliberately not a foreign key: the identity in the document is the remote occurrence rather than the local row, so there is nothing for a constraint to point at, and reaching the message is a lookup by that identity like every other read of it.
+
 `embedding_profiles` is the exception on this page: it holds no personal data at all. It describes a model, and the credential that reaches that model is configuration rather than a column here, so nothing in this table is a secret or is derived from anybody's mail.
 
 ## How this schema reaches a database
@@ -516,4 +545,5 @@ Every claim on this page that is a claim about PostgreSQL rather than about the 
 - The generated search vector is computed by PostgreSQL from the subject, participants, and body beside it; the GIN index serves the query shape search issues; and query text carrying SQL statements and `tsquery` operators is read as words, matching documents whose text holds those words and leaving the table intact.
 - A stored vector cannot disagree with its profile: a vector whose length differs from the `Dimension` beside it, and a `Dimension` the named profile never declared, are both refused at the write, while the matching width is stored. Two profiles of different widths coexist in the one dimensionless column, re-registering a geometry already present is refused by the fingerprint index, and deleting a message erases the vectors derived from it while the profile they named survives.
 - The [search read model](../features/email-search.md) composes that vector, `websearch_to_tsquery`, `ts_rank`, and `ts_headline` into commands PostgreSQL accepts — a malformed headline option list is a runtime failure rather than a compiler error — ranks the window it returns, cuts snippets inside the configured bounds, and leaves the change tracker empty across every query it issues.
+- Both guarantees the job store gets from PostgreSQL rather than from its own code: two callers racing to enqueue one execution produce one job, because the unique index refuses the second insert; and two workers claiming at the same moment take different jobs, because the claim selects and stamps under `FOR UPDATE SKIP LOCKED` in one statement. A lease that has run out is reclaimed with a second attempt counted, the attempt it was taken from writes nothing afterwards, a completed job keeps the key that refuses the same execution again, and a row whose type this build does not declare is left where it is.
 - The same read model's vector half ranks the eligible mail by a correlated minimum over each message's own embedded passages, measured by the operator the active profile's metric names. Mail carrying no vector under that profile is absent from the ranking rather than distant, and the ordering is the part only a server can settle: whether the distance operator, the aggregate, and the caller's filters compose into one statement at all is a translation question rather than a compile-time one.

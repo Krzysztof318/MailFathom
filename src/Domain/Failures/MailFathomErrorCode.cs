@@ -157,6 +157,15 @@ public readonly record struct MailFathomErrorCode
     /// </remarks>
     public static MailFathomErrorCode EmbeddingVectorIndexUnavailable { get; } = new(33001);
 
+    /// <summary>Gets subcategory 4, durable jobs: a job payload serialized to more than the enqueue boundary accepts.</summary>
+    /// <remarks>
+    /// It is a subcategory of its own rather than one more schema-state failure, because nothing about the database is
+    /// wrong when it is raised. A payload holds references and every reference this system composes is short, so a
+    /// document over the bound is evidence that something copied content into job state — which is a defect in the
+    /// enqueuer and the one thing the payload contract exists to keep out of the queue.
+    /// </remarks>
+    public static MailFathomErrorCode JobPayloadTooLarge { get; } = new(34001);
+
     #endregion
 
     #region Category 4 — Outbound resilience
@@ -371,6 +380,7 @@ public readonly record struct MailFathomErrorCode
         DatabaseSchemaStateUnreadable,
         DatabaseSchemaTextSearchConfigurationMismatch,
         EmbeddingVectorIndexUnavailable,
+        JobPayloadTooLarge,
         OutboundDependencyUnavailable,
         MailboxQueryPageSizeOutOfRange,
         MailboxQueryFilterInvalid,
