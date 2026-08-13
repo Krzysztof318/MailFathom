@@ -1335,6 +1335,17 @@ typo_check_falls_back_to_the_whole_checkout_for_a_pull_request_beyond_the_report
   assert_contains '3001 files' "$output_file"
 }
 
+# Every read in `fathom-review.yml` goes through `call-github-api.sh`, so a step extracted below
+# reaches it the way the runner does — out of the checkout, at the path the workflow's `env` block
+# names. The backoff base is zeroed for the same reason the settle windows are seconds: what a
+# contract asserts is the decision, and a retry these fakes provoke by accident must not cost the
+# suite its own timeout. The attempt budget is left at the value the script declares, because that
+# is what the contracts below are about.
+export_api_retry_environment() {
+  export GITHUB_API_SCRIPT="$source_repository_root/.github/pull-request/call-github-api.sh"
+  export API_RETRY_DELAY_SECONDS='0'
+}
+
 # The steps these contracts run are shell blocks inside `fathom-review.yml`, and they cannot be
 # scripts in `scripts/` for the reason the protected-paths guard cannot: the workflow never checks
 # the branch out. Extracting one verbatim is again what makes these contracts run the runner's own
@@ -1403,6 +1414,7 @@ run_fathom_review_gate() {
     export AUTOMATIC_REVIEW_MARKER='<!-- fathom-review: automatic -->'
     export REQUESTED_REVIEW_MARKER='<!-- fathom-review: requested -->'
     export GITHUB_OUTPUT="$step_output_file"
+    export_api_retry_environment
     bash "$step_script"
   ) > "$output_file" 2>&1
 }
@@ -1583,6 +1595,7 @@ run_fathom_review_settle() {
     export SETTLE_QUIET_SECONDS='3'
     export SETTLE_LIMIT_SECONDS='4'
     export SETTLE_POLL_SECONDS='1'
+    export_api_retry_environment
     bash "$step_script"
   ) > "$output_file" 2>&1
 }
@@ -1874,6 +1887,7 @@ run_fathom_review_collect() {
     export GITHUB_WORKSPACE="$source_repository_root"
     export GITHUB_OUTPUT="$step_output_file"
     export FAKE_UNFETCHABLE_ISSUES='12'
+    export_api_retry_environment
     bash "$step_script"
   ) > "$output_file" 2>&1
 }
@@ -1942,6 +1956,7 @@ run_fathom_review_model() {
     export FAKE_PULL_REQUEST_LABELS="$pull_request_labels"
     export FAKE_LABELLING_COUNTDOWN="$countdown_file"
     export GITHUB_OUTPUT="$step_output_file"
+    export_api_retry_environment
     bash "$step_script"
   ) > "$output_file" 2>&1
 }
@@ -2610,6 +2625,7 @@ export_fathom_review_board_environment() {
   export CLOSING_ISSUE_LIMIT='5'
   export BOARD_STATUS_SCRIPT="$source_repository_root/.github/pull-request/write-board-status.sh"
   export FAKE_BOARD_DIRECTORY="$board_directory"
+  export_api_retry_environment
 }
 
 run_fathom_review_board() {
@@ -2967,6 +2983,7 @@ run_pull_request_rules_board() {
     export MERGEABILITY_LIMIT_SECONDS="$limit_seconds"
     export MERGEABILITY_POLL_SECONDS='1'
     export FAKE_BOARD_DIRECTORY="$board_directory"
+    export_api_retry_environment
     bash "$step_script"
   ) > "$output_file" 2>&1
   board_status=$?
@@ -3800,6 +3817,139 @@ obligation_index_caps_the_tests_it_lists_for_one_type() {
   assert_json '1' '.notes | length' "$output_file"
 }
 
+# Every read `Fathom review` makes goes through one script, so what a dropped connection costs is one
+# decision rather than fifteen. That workflow lost a whole run to a single reply that never arrived,
+# and the shape of that failure is what these contracts pin: a call that works is not asked twice, a
+# call that fails once still returns its answer, a call the API answered is not retried at all, and a
+# call that never succeeds fails after exactly the budgeted attempts rather than quietly.
+api_retry_bin_directory="$test_directory/api-retry-bin"
+mkdir -p "$api_retry_bin_directory"
+
+# A `gh` that fails a stated number of leading attempts and then answers. It writes a line per
+# attempt, which is what lets a contract assert how many times the call was actually made rather than
+# only what came back.
+#
+# The failing attempt writes to standard output before it fails, standing in for `--paginate` having
+# already streamed a page when a later one drops. That is what the buffering in the script under test
+# is for, so it is provoked here rather than assumed.
+cat > "$api_retry_bin_directory/gh" <<'FAKE_GH'
+#!/usr/bin/env bash
+set -euo pipefail
+
+: "${FAKE_API_ATTEMPT_LOG:?FAKE_API_ATTEMPT_LOG must name where the attempts are recorded}"
+
+printf '%s\n' "$*" >> "$FAKE_API_ATTEMPT_LOG"
+
+if (( "$(wc -l < "$FAKE_API_ATTEMPT_LOG")" <= "${FAKE_API_FAILURES:-0}" )); then
+  printf 'partial\n'
+  printf '%s\n' "${FAKE_API_ERROR:-invalid character 'u' looking for beginning of value}" >&2
+  exit 1
+fi
+
+printf 'answered\n'
+FAKE_GH
+chmod +x "$api_retry_bin_directory/gh"
+
+api_call_status=0
+
+run_github_api_call() {
+  local failures="$1"
+  local attempt_limit="$2"
+  local output_file="$3"
+  local error_file="$4"
+  # The error text `gh` writes, which is what tells a reply the API produced from one that never
+  # arrived. The default is the message the lost run actually failed on.
+  local gh_error="${5:-}"
+
+  : > "$test_directory/api-retry-attempts.log"
+
+  set +e
+  (
+    export PATH="$api_retry_bin_directory:$PATH"
+    export FAKE_API_ATTEMPT_LOG="$test_directory/api-retry-attempts.log"
+    export FAKE_API_FAILURES="$failures"
+    export FAKE_API_ERROR="$gh_error"
+    export API_ATTEMPT_LIMIT="$attempt_limit"
+    # No backoff, because what a contract asserts is how many attempts were made rather than how long
+    # the script waited between them.
+    export API_RETRY_DELAY_SECONDS='0'
+
+    bash "$source_repository_root/.github/pull-request/call-github-api.sh" \
+      'repos/Krzysztof318/MailFathom/pulls/1' --jq '.head.sha'
+  ) > "$output_file" 2> "$error_file"
+  api_call_status=$?
+  set -e
+}
+
+assert_api_attempts() {
+  local expected_attempts="$1"
+  local actual_attempts
+
+  actual_attempts="$(wc -l < "$test_directory/api-retry-attempts.log")"
+
+  if (( actual_attempts != expected_attempts )); then
+    printf 'Expected %s attempts, but the call was made %s times\n' \
+      "$expected_attempts" "$actual_attempts" >&2
+    return 1
+  fi
+}
+
+github_api_call_asks_once_when_the_call_succeeds() {
+  local output_file="$test_directory/api-retry-first-time"
+  local error_file="$test_directory/api-retry-first-time-error"
+
+  run_github_api_call 0 4 "$output_file" "$error_file"
+
+  (( api_call_status == 0 ))
+  assert_file_content 'answered' "$output_file"
+  assert_api_attempts 1
+}
+
+# The whole point of the change: the run that was lost failed on its first call and recovered on
+# nobody. What comes back is the successful answer alone — the page the failed attempt had already
+# written is dropped, because a caller reading one record per line would otherwise be handed the
+# first page twice.
+github_api_call_returns_the_answer_after_a_dropped_connection() {
+  local output_file="$test_directory/api-retry-recovered"
+  local error_file="$test_directory/api-retry-recovered-error"
+
+  run_github_api_call 1 4 "$output_file" "$error_file"
+
+  (( api_call_status == 0 ))
+  assert_file_content 'answered' "$output_file"
+  assert_excludes 'partial' "$output_file"
+  assert_api_attempts 2
+}
+
+# A reply carrying a client error is the API answering, and asking again produces the same answer
+# more slowly. The head-content loop depends on this: it fetches sixty paths and reads a missing one
+# as an ordinary outcome, so a budget spent on each would cost minutes of a run that is already
+# bounded.
+github_api_call_does_not_retry_an_answer_the_api_produced() {
+  local output_file="$test_directory/api-retry-client-error"
+  local error_file="$test_directory/api-retry-client-error-message"
+
+  run_github_api_call 9 4 "$output_file" "$error_file" 'gh: Not Found (HTTP 404)'
+
+  (( api_call_status != 0 ))
+  assert_api_attempts 1
+  assert_contains 'Attempts made: 1 of 4' "$error_file"
+}
+
+# A retry that exhausts its budget still fails the job. Nothing here turns an unreachable API into a
+# review that silently covered less, and the count is reported because the caller's own failure says
+# only that the call did not succeed.
+github_api_call_fails_after_the_budgeted_attempts() {
+  local output_file="$test_directory/api-retry-exhausted"
+  local error_file="$test_directory/api-retry-exhausted-error"
+
+  run_github_api_call 9 3 "$output_file" "$error_file"
+
+  (( api_call_status != 0 ))
+  assert_api_attempts 3
+  assert_contains 'Attempts made: 3 of 3' "$error_file"
+}
+
 # Which issues a pull request closes is its stated contract, and merging closes every one of them.
 # The answer comes from GitHub rather than from a reading of the body, so what is pinned here is what
 # the script does with that answer: which of the returned issues it acts on, and what it says about
@@ -3836,6 +3986,7 @@ run_closing_issues() {
   (
     export PATH="$closing_issues_bin_directory:$PATH"
     export FAKE_CLOSING_ISSUES_FILE="$test_directory/closing-issues-answer.json"
+    export_api_retry_environment
 
     bash "$source_repository_root/.github/pull-request/collect-closing-issues.sh" \
       'Krzysztof318/MailFathom' '1' "$limit"
@@ -5172,6 +5323,7 @@ workflow_scripts_use_flat_manual_layout() {
   [[ -x "$source_repository_root/.github/pull-request/write-board-status.sh" ]]
   [[ -x "$source_repository_root/.github/pull-request/select-labels.sh" ]]
   [[ -x "$source_repository_root/.github/pull-request/collect-referenced-issues.sh" ]]
+  [[ -x "$source_repository_root/.github/pull-request/call-github-api.sh" ]]
 }
 
 # The per-file licensing mark, everywhere the analyzer that applies it cannot reach. IDE0073 reads
@@ -5448,6 +5600,10 @@ run_test a_documentation_bundle_resolves_a_link_out_of_its_own_section
 run_test every_readme_site_link_names_a_page_that_exists
 run_test no_readme_link_reaches_a_published_page_through_the_repository
 run_test the_docker_hub_overview_fits_what_docker_hub_accepts
+run_test github_api_call_asks_once_when_the_call_succeeds
+run_test github_api_call_returns_the_answer_after_a_dropped_connection
+run_test github_api_call_does_not_retry_an_answer_the_api_produced
+run_test github_api_call_fails_after_the_budgeted_attempts
 run_test referenced_issues_collect_a_mention_as_well_as_a_closing_reference
 run_test referenced_issues_collect_a_link_to_an_issue_in_this_repository
 run_test referenced_issues_ignore_another_repository

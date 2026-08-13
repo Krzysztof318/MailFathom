@@ -729,6 +729,50 @@ expressions stay here, where they are six short lines; the prose sits where no
 length limit reaches it. The template is read from the workspace, which holds the
 base commit, so a pull request cannot supply the prompt that reviews it.
 
+### What a dropped connection costs
+
+Every read the workflow makes goes through
+`.github/pull-request/call-github-api.sh`, and so does every read in the two
+scripts it shells out to. The helper exists because a single request that never
+arrived used to end the run that contained it: on 2026-08-13 the collection step
+failed 0.35 seconds into its first call with `invalid character 'u' looking for
+beginning of value`, which is `gh` decoding an `upstream connect error or
+disconnect/reset before headers` from the proxy in front of the API as if it were
+JSON. Nothing about that run was wrong. It published no review, left the pull
+request with a red check and no verdict, and waited for somebody to notice and
+re-run the job by hand — a review that silently does not happen being the failure
+this pipeline is least able to report on itself.
+
+The bound is **four attempts**, the first included, with the wait doubling from
+two seconds and carrying up to two further seconds of jitter so several calls
+failing at once do not come back in step. That recovers a request that was dropped
+and deliberately cannot wait out an outage: a call that exhausts its budget still
+fails the job, and it says how many attempts it made, because the caller's own
+failure says only that the call did not succeed.
+
+What is retried is decided from what the API said rather than from the fact that
+something failed. A reply carrying a client status is an answer — the endpoint
+does not exist, the token cannot see it — and asking again produces it more
+slowly, so it is returned on the first attempt; `408`, `429`, and every `5xx` are
+retried, and so is a failure carrying no status at all, which is the shape the
+lost run took. That distinction is what keeps the head-content loop, which reads
+a path the head does not carry as an ordinary outcome, from spending a budget on
+each of sixty files.
+
+**Two calls are excluded by name**, both of them the submission of a review. Every
+read may be repeated because asking twice returns the same answer; a submission
+creates a record, so a reply lost after the review was already accepted would, on
+a retry, publish a second review of the same pass — and since the per-pull-request
+ceiling counts submitted reviews, spend a second automatic pass on one push. The
+board write is not among them: it writes an option id the same run has already
+read, so repeating it converges on the value rather than adding a record.
+
+The helper buffers the whole answer and prints it only once the call has
+succeeded, which is what makes `--paginate` safe to retry. Pages stream as they
+arrive, so a call that dropped on the third page would otherwise have written the
+first two already, and the retry would hand a filter expecting one record per line
+a second copy of them.
+
 ### The verdict is the run's answer, not a file it might not write
 
 `--json-schema` in `claude_args` is what makes it one. Under that flag the

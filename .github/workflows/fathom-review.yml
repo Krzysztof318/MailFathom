@@ -138,6 +138,18 @@ jobs:
       # the gate itself relies on when it declines to review and no model is ever read.
       model: ${{ steps.security.outputs.model || steps.gate.outputs.model }}
     steps:
+      # This job used to check out nothing, because it only reads the event and asks the API two
+      # questions. It checks out now for one file: `call-github-api.sh`, which every read in this
+      # workflow goes through and which has to be one script rather than a loop pasted into each
+      # step. The base commit for the reason every other checkout here names — the branch under
+      # review must not supply the code that decides whether it is reviewed — and the cost is a
+      # shallow clone on an event that already starts a runner.
+      - name: Check out the base commit
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.base.sha || github.event.repository.default_branch }}
+          persist-credentials: false
+
       - name: Decide whether this event asks for a review
         id: gate
         shell: bash
@@ -167,6 +179,9 @@ jobs:
           # is the whole of why it is singled out; a second bot would earn its own line and its own
           # argument rather than a widened match on `[bot]`.
           UPDATER_LOGIN: 'dependabot[bot]'
+          # Every read in this workflow goes through it, so a dropped connection costs a wait rather
+          # than the run that contains it. What it retries and what it refuses to is written there.
+          GITHUB_API_SCRIPT: ${{ github.workspace }}/.github/pull-request/call-github-api.sh
         run: |
           set -euo pipefail
 
@@ -320,7 +335,8 @@ jobs:
             # A failed count reads as zero and the review proceeds. This is a cost guard rather than
             # a security one, so one extra review is a better outcome than failing a run over a
             # transient API error — and the workflow gates nothing, so a red run here would be noise
-            # a reader has to dismiss rather than a signal.
+            # a reader has to dismiss rather than a signal. The retries in front of that fallback
+            # are what keep the ceiling from being lifted by a single dropped connection.
             # The marker is matched as the body's last line rather than anywhere in it. A review body
             # carries the reviewer's summary and findings, which are model text derived from the
             # diff, so a requested review of a change to *this file* — whose finding quotes the
@@ -333,7 +349,7 @@ jobs:
             # string interpolation: the login carries `[bot]` brackets and the marker carries `<!--`,
             # and either arriving as filter syntax would be a broken filter rather than a wrong count.
             automatic_reviews=$(
-              gh api "repos/${REPOSITORY}/pulls/${PULL_REQUEST_NUMBER}/reviews?per_page=100" --paginate \
+              "$GITHUB_API_SCRIPT" "repos/${REPOSITORY}/pulls/${PULL_REQUEST_NUMBER}/reviews?per_page=100" --paginate \
                 --jq '[.[]
                        | select(.user.login == env.REVIEWER_LOGIN)
                        | select(((.body // "")
@@ -404,13 +420,14 @@ jobs:
           # labelling run must not hold a review open or fail one.
           LABELLING_LIMIT_SECONDS: '120'
           LABELLING_POLL_SECONDS: '10'
+          GITHUB_API_SCRIPT: ${{ github.workspace }}/.github/pull-request/call-github-api.sh
         run: |
           set -euo pipefail
 
           # Every read here leaves the default in place when it fails rather than failing the step.
           # Nothing downstream survives a failed `decide`, so an unreachable API would cost the whole
           # review to answer a question about which model performs it.
-          head_sha="$(gh api "repos/${REPOSITORY}/pulls/${PULL_REQUEST_NUMBER}" --jq '.head.sha')" \
+          head_sha="$("$GITHUB_API_SCRIPT" "repos/${REPOSITORY}/pulls/${PULL_REQUEST_NUMBER}" --jq '.head.sha')" \
             || head_sha=''
 
           # Every run for this head that has not concluded, asked for without a `status` filter and
@@ -430,7 +447,7 @@ jobs:
             [[ -n "$head_sha" ]] || return 1
 
             pending="$(
-              gh api "repos/${REPOSITORY}/actions/workflows/${LABELLING_WORKFLOW}/runs?head_sha=${head_sha}&per_page=100" \
+              "$GITHUB_API_SCRIPT" "repos/${REPOSITORY}/actions/workflows/${LABELLING_WORKFLOW}/runs?head_sha=${head_sha}&per_page=100" \
                 --jq '[.workflow_runs[] | select(.status != "completed")] | length'
             )" || pending='0'
 
@@ -454,7 +471,7 @@ jobs:
           model="$MODEL"
           reason="the pull request carries no ${SECURITY_LABEL} label"
 
-          if gh api "repos/${REPOSITORY}/pulls/${PULL_REQUEST_NUMBER}" --jq '.labels[].name' \
+          if "$GITHUB_API_SCRIPT" "repos/${REPOSITORY}/pulls/${PULL_REQUEST_NUMBER}" --jq '.labels[].name' \
                | grep -qxF "$SECURITY_LABEL"; then
             security_review='true'
             model="$SECURITY_MODEL"
@@ -617,6 +634,7 @@ jobs:
           SETTLE_QUIET_SECONDS: '45'
           SETTLE_LIMIT_SECONDS: '300'
           SETTLE_POLL_SECONDS: '15'
+          GITHUB_API_SCRIPT: ${{ github.workspace }}/.github/pull-request/call-github-api.sh
         run: |
           set -euo pipefail
 
@@ -646,9 +664,9 @@ jobs:
                 newest="$epoch"
               fi
             done < <(
-              gh api "repos/${REPOSITORY}/pulls/${PULL_REQUEST_NUMBER}/comments?per_page=100" \
+              "$GITHUB_API_SCRIPT" "repos/${REPOSITORY}/pulls/${PULL_REQUEST_NUMBER}/comments?per_page=100" \
                 --paginate --jq '.[].created_at'
-              gh api "repos/${REPOSITORY}/issues/${PULL_REQUEST_NUMBER}/comments?per_page=100" \
+              "$GITHUB_API_SCRIPT" "repos/${REPOSITORY}/issues/${PULL_REQUEST_NUMBER}/comments?per_page=100" \
                 --paginate --jq '.[].created_at'
             )
 
@@ -698,6 +716,7 @@ jobs:
           # contexts a job-level `env` block may read and a workflow that names it there fails
           # validation before a job exists.
           REVIEW_DIRECTORY: ${{ runner.temp }}/review
+          GITHUB_API_SCRIPT: ${{ github.workspace }}/.github/pull-request/call-github-api.sh
         run: |
           set -euo pipefail
 
@@ -734,7 +753,7 @@ jobs:
           # what puts it here. The prompt turns it into a pass over every file, and the job above
           # reads the same label to decide which model performs that pass — one label, read twice,
           # written once.
-          gh api "repos/${REPOSITORY}/pulls/${PULL_REQUEST_NUMBER}" \
+          "$GITHUB_API_SCRIPT" "repos/${REPOSITORY}/pulls/${PULL_REQUEST_NUMBER}" \
             --jq '{number, title, body, draft, author: .user.login, labels: [.labels[].name], head_sha: .head.sha, base_sha: .base.sha, base_ref: .base.ref, changed_files, additions, deletions}' \
             > "$REVIEW_DIRECTORY/pull-request.json"
 
@@ -747,7 +766,11 @@ jobs:
           # as a pull request passed one page: `lines.json` below would inherit that shape, and the
           # submission step's `--slurpfile` would then validate every anchor against the first
           # page's files alone and push every other finding into the review body.
-          gh api "repos/${REPOSITORY}/pulls/${PULL_REQUEST_NUMBER}/files?per_page=100" --paginate \
+          #
+          # A page that fails restarts the whole call rather than resuming, which is why the helper
+          # buffers the answer instead of streaming it: a retry that appended to what the first
+          # attempt already printed would produce exactly the duplicated stream described above.
+          "$GITHUB_API_SCRIPT" "repos/${REPOSITORY}/pulls/${PULL_REQUEST_NUMBER}/files?per_page=100" --paginate \
             --jq '.[] | {filename, previous_filename, status, additions, deletions, patch}' \
             | jq -s --argjson limit "$file_limit" '.[0:$limit]' \
             > "$REVIEW_DIRECTORY/files.json"
@@ -786,7 +809,12 @@ jobs:
             destination="$REVIEW_DIRECTORY/head/${path}"
             mkdir -p "$(dirname "$destination")"
 
-            if gh api "repos/${REPOSITORY}/contents/${path}?ref=${head_sha}" \
+            # The one read here whose stderr is thrown away, because a file the head does not carry
+            # is an ordinary outcome of this loop rather than a failure to report, and sixty paths
+            # would otherwise each write a line about it. Nothing is lost by it: a reply saying the
+            # file is not there is not transient, so the helper returns it on the first attempt
+            # instead of spending a budget on it.
+            if "$GITHUB_API_SCRIPT" "repos/${REPOSITORY}/contents/${path}?ref=${head_sha}" \
                  -H 'Accept: application/vnd.github.raw' > "$destination" 2>/dev/null; then
               if (( $(stat -c '%s' "$destination") > head_content_byte_limit )); then
                 rm -f "$destination"
@@ -820,7 +848,7 @@ jobs:
           # the most recent threads and the most recent replies within a thread once a pull request
           # passed the ceiling — which is to say it would drop this reviewer's own last pass and the
           # answers to it, the exact records a re-review is collecting them for.
-          gh api graphql \
+          "$GITHUB_API_SCRIPT" graphql \
             -F owner="${REPOSITORY%/*}" \
             -F name="${REPOSITORY#*/}" \
             -F number="$PULL_REQUEST_NUMBER" \
@@ -859,13 +887,13 @@ jobs:
           # given for, so a run can tell its own previous pass from one given before the last push,
           # and `state` distinguishes a review that still stands from one `dismiss_stale_reviews_on_push`
           # discarded.
-          gh api "repos/${REPOSITORY}/pulls/${PULL_REQUEST_NUMBER}/reviews?per_page=100" --paginate \
+          "$GITHUB_API_SCRIPT" "repos/${REPOSITORY}/pulls/${PULL_REQUEST_NUMBER}/reviews?per_page=100" --paginate \
             --jq '.[] | {author: .user.login, state, commit_id, submitted_at, body}' \
             | jq -s --argjson limit "$comment_limit" --argjson bytes "$comment_body_limit" \
                  '[.[-$limit:][] | .body |= .[0:$bytes]]' \
             > "$REVIEW_DIRECTORY/reviews.json"
 
-          gh api "repos/${REPOSITORY}/issues/${PULL_REQUEST_NUMBER}/comments?per_page=100" --paginate \
+          "$GITHUB_API_SCRIPT" "repos/${REPOSITORY}/issues/${PULL_REQUEST_NUMBER}/comments?per_page=100" --paginate \
             --jq '.[] | {author: .user.login, created_at, body}' \
             | jq -s --argjson limit "$comment_limit" --argjson bytes "$comment_body_limit" \
                  '[.[-$limit:][] | .body |= .[0:$bytes]]' \
@@ -900,7 +928,7 @@ jobs:
             # reviewer can say the contract was unreadable instead of silently reviewing without it.
             # Its labels are `null` for the same reason its title is: an empty array would say this
             # issue carries no `security` label, which is the one thing the run does not know.
-            gh api "repos/${REPOSITORY}/issues/${issue_number}" \
+            "$GITHUB_API_SCRIPT" "repos/${REPOSITORY}/issues/${issue_number}" \
               --jq '{number, title, body, labels: [.labels[].name]}' \
               >> "$REVIEW_DIRECTORY/issues.ndjson" \
               || jq -nc --argjson number "$issue_number" \
@@ -1433,6 +1461,13 @@ jobs:
                 )
               }' "$findings_file" > "$payload_file"
 
+            # Bare `gh api`, and one of the two calls in this workflow that deliberately does not go
+            # through `call-github-api.sh`. Every read there may be repeated because asking twice
+            # returns the same answer; this creates a record. A reply lost in transit after the
+            # review was already accepted would, on a retry, publish a second review of the same
+            # pass — and since the per-pull-request ceiling counts submitted reviews, spend a second
+            # automatic pass on one push. A submission that fails leaves the run red with the cause
+            # in the log, which is the outcome to keep.
             gh api "repos/${REPOSITORY}/pulls/${PULL_REQUEST_NUMBER}/reviews" \
               --method POST --input "$payload_file" --silent
 
@@ -1532,6 +1567,8 @@ jobs:
                 ))
               }' "$findings_file" > "$payload_file"
 
+          # The second of the two submissions, excluded from the retry helper for the reason the
+          # approval above gives: it creates a review rather than reading one.
           gh api "repos/${REPOSITORY}/pulls/${PULL_REQUEST_NUMBER}/reviews" \
             --method POST --input "$payload_file" --silent
 

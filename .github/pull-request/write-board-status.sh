@@ -61,6 +61,12 @@ if [[ -z "${BOARD_TOKEN:-}" ]]; then
   exit 0
 fi
 
+# Resolved as a sibling for the reason `collect-closing-issues.sh` resolves it that way: the bound
+# belongs to the call rather than to whichever workflow made it. Every project call below goes
+# through it, the mutation included — it writes an option id this run already read, so repeating it
+# converges on the same value rather than adding a second record.
+call_github_api="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)/call-github-api.sh"
+
 issues_file="$(mktemp)"
 
 # A pull request that closes nothing moves nothing, which is the ordinary shape of a release's
@@ -78,7 +84,7 @@ field_file="$(mktemp)"
 
 # The field and its options are read once for the whole run rather than per issue, and they are read
 # by name because a name is what the workflow can state and an id is not.
-if ! GH_TOKEN="$BOARD_TOKEN" gh api graphql \
+if ! GH_TOKEN="$BOARD_TOKEN" "$call_github_api" graphql \
     -f owner="$BOARD_OWNER" \
     -F number="$BOARD_NUMBER" \
     -f field="$STATUS_FIELD" \
@@ -124,7 +130,7 @@ while IFS= read -r issue_number; do
   # Per-issue failures are warnings rather than errors. This workflow gates nothing, so a red run
   # over a board that can be corrected by hand is noise a reader has to dismiss, and the warning
   # still says which issue was not moved.
-  if ! GH_TOKEN="$BOARD_TOKEN" gh api graphql \
+  if ! GH_TOKEN="$BOARD_TOKEN" "$call_github_api" graphql \
       -f owner="${REPOSITORY%/*}" \
       -f name="${REPOSITORY#*/}" \
       -F number="$issue_number" \
@@ -188,7 +194,7 @@ while IFS= read -r issue_number; do
     continue
   fi
 
-  if ! GH_TOKEN="$BOARD_TOKEN" gh api graphql \
+  if ! GH_TOKEN="$BOARD_TOKEN" "$call_github_api" graphql \
       -f project="$project_id" \
       -f item="$item_id" \
       -f field="$field_id" \

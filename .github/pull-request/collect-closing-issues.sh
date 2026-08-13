@@ -51,7 +51,12 @@ references_file="$(mktemp)"
 numbers_file="$(mktemp)"
 trap 'rm -f "$references_file" "$numbers_file"' EXIT
 
-gh api graphql \
+# Resolved as a sibling rather than taken from the caller, so every workflow that runs this script
+# gets the same bound on the same call without having to know the helper exists. What it retries and
+# what it refuses to is written there.
+call_github_api="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)/call-github-api.sh"
+
+"$call_github_api" graphql \
   -f owner="${repository%/*}" \
   -f name="${repository#*/}" \
   -F number="$pull_request_number" \
