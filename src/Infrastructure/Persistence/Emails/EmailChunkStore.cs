@@ -3,7 +3,6 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.Emails.Chunking;
-using MailFathom.Application.Emails.Extraction;
 using MailFathom.Application.Persistence;
 using MailFathom.CodeCoverage;
 using MailFathom.Domain.Emails;
@@ -12,36 +11,14 @@ using Microsoft.EntityFrameworkCore;
 
 namespace MailFathom.Infrastructure.Persistence.Emails;
 
-/// <summary>EF Core state for the passages a message is cut into and the removal that takes them away again.</summary>
+/// <summary>EF Core state for the removal that takes a message's passages away again.</summary>
 /// <remarks>
-/// The cut itself is <see cref="EmailChunkWriter" />'s, which every path that produces passages goes through, so this
-/// adapter is the port's shape over it rather than a second implementation of the rules. What it adds is the removal,
-/// which no other path performs.
+/// The cut itself is <see cref="EmailChunkWriter" />'s, which every path that produces passages goes through. This
+/// adapter performs the removal, which no other path does.
 /// </remarks>
 [RequiresIntegrationCoverage]
-internal sealed class EmailChunkStore(EmailChunkWriter chunkWriter) : IEmailChunkStore
+internal sealed class EmailChunkStore : IEmailChunkStore
 {
-    /// <inheritdoc />
-    public async Task DeriveChunksAsync(
-        IPersistenceSession session,
-        StoredEmailId emailId,
-        ExtractedEmailText text,
-        CancellationToken cancellationToken)
-    {
-        ArgumentNullException.ThrowIfNull(text);
-
-        var dbContext = EfCorePersistenceSessionAccessor.DbContextOf(session);
-
-        // Found rather than queried, because the arrival path cuts a message the same session inserted moments ago and
-        // has not committed. FindAsync resolves a staged row from the change tracker, which a set-based read could not
-        // see at all.
-        var storedEmail = await dbContext.StoredEmails.FindAsync([emailId.Value], cancellationToken)
-            ?? throw new InvalidOperationException(
-                $"No stored email carries the identifier {emailId}, so no passages can be cut for it.");
-
-        await chunkWriter.SaveAsync(dbContext, storedEmail, text, cancellationToken);
-    }
-
     /// <inheritdoc />
     public async Task<int> DiscardChunksAsync(
         IPersistenceSession session,

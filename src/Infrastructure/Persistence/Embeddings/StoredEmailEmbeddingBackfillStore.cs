@@ -4,7 +4,6 @@
 
 using MailFathom.Application.Emails.Embeddings;
 using MailFathom.Application.Emails.Embeddings.Backfill;
-using MailFathom.Application.Emails.Extraction;
 using MailFathom.Application.Folders;
 using MailFathom.Application.Persistence;
 using MailFathom.Application.Spam.Gating;
@@ -101,30 +100,14 @@ internal sealed class StoredEmailEmbeddingBackfillStore(
     /// existed when it arrived. A message whose extraction produced no text is left as it is, and the walk steps past
     /// it.
     /// </remarks>
-    public async Task DeriveChunksAsync(
+    public Task DeriveChunksAsync(
         IPersistenceSession session,
         StoredEmailId storedEmailId,
-        CancellationToken cancellationToken)
-    {
-        var sessionContext = EfCorePersistenceSessionAccessor.DbContextOf(session);
-        var storedEmail = await sessionContext.StoredEmails.FindAsync([storedEmailId.Value], cancellationToken)
-            ?? throw new InvalidOperationException("Passages cannot be derived for a stored email that no longer exists.");
-
-        var extraction = await sessionContext.EmailSearchDocuments
-            .Where(document => document.StoredEmailId == storedEmailId.Value)
-            .Select(document => new StoredExtractionRow(
-                document.TextSource,
-                document.BodyTextBeforeTrimming,
-                document.BodyText))
-            .SingleOrDefaultAsync(cancellationToken);
-
-        if (extraction is null || RestoreExtractedText(extraction) is not { } text)
-        {
-            return;
-        }
-
-        await chunkWriter.SaveAsync(sessionContext, storedEmail, text, cancellationToken);
-    }
+        CancellationToken cancellationToken) =>
+        chunkWriter.SaveFromStoredExtractionAsync(
+            EfCorePersistenceSessionAccessor.DbContextOf(session),
+            storedEmailId,
+            cancellationToken);
 
     /// <inheritdoc />
     public async Task SaveResumePositionAsync(
@@ -209,27 +192,6 @@ internal sealed class StoredEmailEmbeddingBackfillStore(
             folderParticipation.FoldersGeneratingEmbeddings),
         terms);
 
-    /// <summary>Rebuilds the extraction the chunker reads from the two readings the search document stored.</summary>
-    /// <remarks>
-    /// Only the two sources that produced words can be restored, and both readings have to be there: the chunking rules
-    /// choose between the trimmed and the untrimmed form, so restoring one of them and inventing the other would cut a
-    /// backfilled message differently from the same message arriving today.
-    /// </remarks>
-    private static ExtractedEmailText? RestoreExtractedText(StoredExtractionRow extraction)
-    {
-        if (extraction.BodyTextBeforeTrimming is not { } originalText || extraction.BodyText is not { } trimmedText)
-        {
-            return null;
-        }
-
-        return extraction.TextSource switch
-        {
-            ExtractedEmailTextSource.PlainTextBodyPart => ExtractedEmailText.FromPlainTextBody(originalText, trimmedText),
-            ExtractedEmailTextSource.DerivedFromHtmlBodyPart => ExtractedEmailText.DerivedFromHtmlBody(originalText, trimmedText),
-            _ => null,
-        };
-    }
-
     /// <summary>Names the answer the predicate above already reached about one selected row.</summary>
     /// <remarks>
     /// The query admits the message; this says which of the gate's answers admitted it, which is the only place a
@@ -254,10 +216,4 @@ internal sealed class StoredEmailEmbeddingBackfillStore(
         DateTimeOffset StoredAt,
         StoredEmailContentAvailability ContentAvailability,
         SpamVerdict? Verdict);
-
-    /// <summary>The stored reading of one message's body, as the chunking projection returns it.</summary>
-    private sealed record StoredExtractionRow(
-        ExtractedEmailTextSource TextSource,
-        string? BodyTextBeforeTrimming,
-        string? BodyText);
 }

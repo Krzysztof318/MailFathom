@@ -7,6 +7,7 @@ using MailFathom.Application.Emails.Embeddings.Limits;
 using MailFathom.Application.Emails.Extraction;
 using MailFathom.Application.Folders;
 using MailFathom.CodeCoverage;
+using MailFathom.Domain.Emails;
 using MailFathom.Infrastructure.Observability;
 using MailFathom.Infrastructure.Persistence.Entities;
 using Microsoft.EntityFrameworkCore;
@@ -30,6 +31,46 @@ internal sealed class EmailChunkWriter(
     IMailFolderParticipationReader folderParticipation,
     TimeProvider timeProvider)
 {
+    /// <summary>Saves the passages the extraction already stored for one message yields, reading that message as it goes.</summary>
+    /// <param name="dbContext">The context whose transaction this write joins.</param>
+    /// <param name="storedEmailId">The message to cut.</param>
+    /// <param name="cancellationToken">Propagates caller cancellation.</param>
+    /// <returns>A task that completes when the passages are staged, or immediately when there is no text to cut.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="dbContext" /> is <see langword="null" />.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when the message disappeared between its selection and this write.</exception>
+    /// <remarks>
+    /// The text comes from the search document rather than from the raw MIME, which is what keeps this a local write: an
+    /// earlier extraction already read the message and stored both the trimmed and the untrimmed reading, redacted by
+    /// whatever scanners were switched on, and cutting the stored reading again produces exactly the passages that
+    /// message would have been given had it been cut when the reading was taken. A message whose extraction produced no
+    /// text is left as it is, and the caller steps past it.
+    /// </remarks>
+    public async Task SaveFromStoredExtractionAsync(
+        MailFathomDbContext dbContext,
+        StoredEmailId storedEmailId,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(dbContext);
+
+        var storedEmail = await dbContext.StoredEmails.FindAsync([storedEmailId.Value], cancellationToken)
+            ?? throw new InvalidOperationException("Passages cannot be derived for a stored email that no longer exists.");
+
+        var extraction = await dbContext.EmailSearchDocuments
+            .Where(document => document.StoredEmailId == storedEmailId.Value)
+            .Select(document => new StoredExtractionRow(
+                document.TextSource,
+                document.BodyTextBeforeTrimming,
+                document.BodyText))
+            .SingleOrDefaultAsync(cancellationToken);
+
+        if (extraction is null || RestoreExtractedText(extraction) is not { } text)
+        {
+            return;
+        }
+
+        await this.SaveAsync(dbContext, storedEmail, text, cancellationToken);
+    }
+
     /// <summary>Saves the passages one extraction yields, leaving an unchanged message's rows untouched.</summary>
     /// <param name="dbContext">The context whose transaction this write joins.</param>
     /// <param name="storedEmail">The email the passages belong to, tracked or already persisted.</param>
@@ -199,6 +240,33 @@ internal sealed class EmailChunkWriter(
         }));
     }
 
+    /// <summary>Rebuilds the extraction the chunker reads from the two readings the search document stored.</summary>
+    /// <remarks>
+    /// Only the two sources that produced words can be restored, and both readings have to be there: the chunking rules
+    /// choose between the trimmed and the untrimmed form, so restoring one of them and inventing the other would cut a
+    /// message differently from the same message cut at the moment it was extracted.
+    /// </remarks>
+    private static ExtractedEmailText? RestoreExtractedText(StoredExtractionRow extraction)
+    {
+        if (extraction.BodyTextBeforeTrimming is not { } originalText || extraction.BodyText is not { } trimmedText)
+        {
+            return null;
+        }
+
+        return extraction.TextSource switch
+        {
+            ExtractedEmailTextSource.PlainTextBodyPart => ExtractedEmailText.FromPlainTextBody(originalText, trimmedText),
+            ExtractedEmailTextSource.DerivedFromHtmlBodyPart => ExtractedEmailText.DerivedFromHtmlBody(originalText, trimmedText),
+            _ => null,
+        };
+    }
+
     /// <summary>What a stored passage has to report for re-chunking to decide it is unchanged.</summary>
     private sealed record StoredChunkIdentity(int Ordinal, string ContentHash);
+
+    /// <summary>The stored reading of one message's body, as the chunking projection returns it.</summary>
+    private sealed record StoredExtractionRow(
+        ExtractedEmailTextSource TextSource,
+        string? BodyTextBeforeTrimming,
+        string? BodyText);
 }

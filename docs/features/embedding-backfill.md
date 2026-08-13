@@ -50,8 +50,8 @@ states both cases.
 
 **This sweep is where spam classification lets a held message through.** Where classification is switched on, the query
 leaves out junk entirely and leaves out a message no verdict has been reached about, so a message of a classified folder
-appears here the moment its verdict admits it or its wait runs out — and the cut it gets is the one the arrival path did
-not make. That makes the sweep both the thing that keeps spam away from a provider and the thing that stops a wedged
+appears here the moment its verdict admits it or its wait runs out — and the cut it gets is the one the account run's own
+last step passed over. That makes the sweep both the thing that keeps spam away from a provider and the thing that stops a wedged
 classifier turning the index into one that quietly stopped filling; cutting a message's first passages is also the one
 place a release is countable per message, which is what
 `mailfathom.spam.derived_work.admissions` reports.

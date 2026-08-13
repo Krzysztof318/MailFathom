@@ -91,6 +91,8 @@ internal static class SynchronizationTestHost
     /// <param name="mutationRecordStore">Replaces the record store that reports nothing outstanding to converge.</param>
     /// <param name="folderMirrorStore">Replaces the store an unmirrored folder's local copy would be erased through, which no run reaches.</param>
     /// <param name="ruleEvaluationStore">Replaces the store a rule pass reads its candidates from; one with nothing to evaluate is the default.</param>
+    /// <param name="classificationRunStore">Replaces the store the classification pass reads its outstanding run from; one with nothing outstanding is the default.</param>
+    /// <param name="chunkingStore">Replaces the store the cut reads its candidates from; one with nothing awaiting passages is the default.</param>
     /// <param name="unadvertisedAliases">Aliases the modelled server does not advertise.</param>
     /// <returns>A provider whose scopes resolve a synchronizer over substituted infrastructure.</returns>
     internal static ServiceProvider BuildServiceProvider(
@@ -103,6 +105,8 @@ internal static class SynchronizationTestHost
         IMailboxMutationRecordStore? mutationRecordStore = null,
         IStoredMailFolderMirrorStore? folderMirrorStore = null,
         IMailRuleEvaluationStore? ruleEvaluationStore = null,
+        ISpamClassificationRunStore? classificationRunStore = null,
+        IStoredEmailChunkingStore? chunkingStore = null,
         params string[] unadvertisedAliases)
     {
         var services = new ServiceCollection();
@@ -124,17 +128,17 @@ internal static class SynchronizationTestHost
         services.AddSingleton(new PersistenceConcurrencyOptions());
         services.AddSingleton(new MailboxSynchronizationOptions());
         services.AddSingleton(timeProvider);
-        // Every committed message is offered for embedding, so a synchronizer cannot be composed without somewhere to
+        // The run's cut offers each message it cuts for embedding, so the pass cannot be composed without somewhere to
         // offer it. Nothing here reads the backlog back; these tests are about the run, not about what embeds afterwards.
         services.AddSingleton<IEmailEmbeddingBacklog>(new ScriptedEmailEmbeddingBacklog());
-        // A committed message is also cut into passages and asked about by the classification gate, so both are composed
-        // for the same reason the backlog is. The gate's own two dependencies are registered with the classification
-        // pass further down rather than again here — the container resolves the last registration of a type, so a second
-        // pair would leave these the ones nothing reads. Classification is off there, which is what every account these
-        // tests configure runs with: the gate then admits everything and the run behaves exactly as it did before it
-        // existed.
-        services.AddSingleton(Substitute.For<IEmailChunkStore>());
         services.AddSingleton<IDerivedWorkGateTelemetry>(new RecordingDerivedWorkGateTelemetry());
+        // The classifier below reaches this to take a junk message's passages away again, which is the one thing the
+        // port does; nothing in these tests scores a message, so it is composed and never called.
+        services.AddSingleton(Substitute.For<IEmailChunkStore>());
+        // The gate's own two dependencies are registered with the classification pass further down rather than again
+        // here — the container resolves the last registration of a type, so a second pair would leave these the ones
+        // nothing reads. Classification is off there, which is what every account these tests configure runs with: the
+        // gate then admits everything and the run behaves exactly as it did before it existed.
         services.AddScoped<DerivedWorkGate>();
 
         var (catalog, resolutionStore) = CreateResolvedFolders(options, unadvertisedAliases);
@@ -212,7 +216,7 @@ internal static class SynchronizationTestHost
         // The classification walk rides the same run, one step before the rules, and a supervisor resolves it from the
         // same scope. These tests ask for no run over any mailbox, so the store below answers that the account has none
         // outstanding and the pass returns without reading a message — which is what an account nobody asked costs.
-        services.AddSingleton(CreateClassificationRunStoreWithNothingOutstanding());
+        services.AddSingleton(classificationRunStore ?? CreateClassificationRunStoreWithNothingOutstanding());
         services.AddSingleton(Substitute.For<IClassifiableEmailReader>());
         services.AddSingleton(Substitute.For<IEmailSpamClassificationStore>());
         services.AddSingleton(Substitute.For<IEmailSpamHeaderReader>());
@@ -227,6 +231,12 @@ internal static class SynchronizationTestHost
         services.AddScoped<EmailSpamClassifier>();
         services.AddScoped<SpamActionRecorder>();
         services.AddScoped<SpamClassificationPass>();
+
+        // The cut is the run's last local step, after the rules for the ordering the arrival pipeline is built on, and a
+        // supervisor resolves it from the same scope. The store answers that no message is awaiting passages, which is
+        // the state a test about folders wants: the pass issues one query and returns.
+        services.AddSingleton(chunkingStore ?? CreateChunkingStoreWithNothingToCut());
+        services.AddScoped<MailChunkingPass>();
 
         // The history's retention pass rides the same run, and a supervisor resolves it from the same scope. These
         // tests configure no mail to evaluate, so it answers that there is nothing to erase.
@@ -263,6 +273,20 @@ internal static class SynchronizationTestHost
                 Arg.Any<int>(),
                 Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<IReadOnlyList<StoredEmailAwaitingRuleEvaluation>>([]));
+
+        return store;
+    }
+
+    /// <summary>Answers that no message is awaiting passages, which is what a run these tests configure produces.</summary>
+    private static IStoredEmailChunkingStore CreateChunkingStoreWithNothingToCut()
+    {
+        var store = Substitute.For<IStoredEmailChunkingStore>();
+
+        store.GetEmailsAwaitingChunkingAsync(
+                Arg.Any<MailAccountId>(),
+                Arg.Any<int>(),
+                Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IReadOnlyList<StoredEmailAwaitingChunking>>([]));
 
         return store;
     }

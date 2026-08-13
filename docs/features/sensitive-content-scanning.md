@@ -142,6 +142,8 @@ Everything MailFathom derives from a message's body — the extracted text, the 
 built from those passages — is derived from redacted text while a scanner is on. The redaction happens once, where the
 body is read out of the stored MIME, so a placeholder is what is stored, what is embedded, and what a search or an
 answer later returns; nothing downstream scans a second time and nothing downstream sees the original.
+[The arrival pipeline](../architecture/arrival-pipeline.md) draws where that read sits among the stages around it, and
+why the spam scanner beside it is deliberately shown the message unredacted.
 
 **Only the body goes through it.** A subject, a display name, an address, a folder alias, and a thread identity are
 routing identity rather than free text, exactly as the egress rule above draws the line, and they are guarded where they

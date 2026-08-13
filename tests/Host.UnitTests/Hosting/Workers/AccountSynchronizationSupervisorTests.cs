@@ -5,10 +5,12 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
+using MailFathom.Application.Emails.Chunking;
 using MailFathom.Application.Folders;
 using MailFathom.Application.Mail.Mutations;
 using MailFathom.Application.Persistence;
 using MailFathom.Application.Rules.Evaluation;
+using MailFathom.Application.Spam.Runs;
 using MailFathom.Application.Synchronization;
 using MailFathom.Application.Synchronization.Sessions;
 using MailFathom.Common.Observability;
@@ -855,6 +857,103 @@ public sealed class AccountSynchronizationSupervisorTests
         Assert.True(await evaluatedAfterTheFolder.Task);
     }
 
+    /// <summary>
+    /// The arrival pipeline's order, asserted where it is composed. Classification runs first so that every later stage
+    /// reads a verdict instead of deciding without one, the rules run over what it did not settle, and the cut runs last
+    /// because a rule may still move the message into a folder mapped differently from the one it arrived in.
+    /// </summary>
+    /// <remarks>
+    /// Classification is a seam in this release rather than a running job — nothing scores a message because it arrived,
+    /// and what reaches this call site today is an operator asking for a run over a mailbox. What is asserted here is
+    /// that the call site sits where the order requires it and that the run reaches it, which is the half of the stage
+    /// that ships now.
+    /// </remarks>
+    [Fact]
+    public async Task RunAsync_EveryRun_ClassifiesThenEvaluatesRulesThenCutsPassages()
+    {
+        // Arrange
+        var localSteps = new ConcurrentQueue<string>();
+        var cutReached = new TaskCompletionSource();
+        var classificationRunStore = Substitute.For<ISpamClassificationRunStore>();
+        classificationRunStore
+            .FindOutstandingAsync(Arg.Any<MailAccountId>(), Arg.Any<CancellationToken>())
+            .Returns(_ =>
+            {
+                localSteps.Enqueue("classification");
+
+                return Task.FromResult<SpamClassificationRun?>(null);
+            });
+        var ruleStore = Substitute.For<IMailRuleEvaluationStore>();
+        ruleStore
+            .GetEmailsAwaitingFirstEvaluationAsync(
+                Arg.Any<MailAccountId>(),
+                Arg.Any<StoredEmailId?>(),
+                Arg.Any<int>(),
+                Arg.Any<CancellationToken>())
+            .Returns(_ =>
+            {
+                localSteps.Enqueue("rules");
+
+                return Task.FromResult<IReadOnlyList<StoredEmailAwaitingRuleEvaluation>>([]);
+            });
+        var chunkingStore = Substitute.For<IStoredEmailChunkingStore>();
+        chunkingStore
+            .GetEmailsAwaitingChunkingAsync(Arg.Any<MailAccountId>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns(_ =>
+            {
+                localSteps.Enqueue("cut");
+                cutReached.TrySetResult();
+
+                return Task.FromResult<IReadOnlyList<StoredEmailAwaitingChunking>>([]);
+            });
+        using var harness = CreateHarness(
+            SynchronizationTestHost.CreateSingleAccountOptions(enabled: true),
+            Substitute.For<IMailboxSessionFactory>(),
+            ruleEvaluationStore: ruleStore,
+            classificationRunStore: classificationRunStore,
+            chunkingStore: chunkingStore);
+
+        // Act
+        await harness.SuperviseUntilAsync(cutReached.Task);
+
+        // Assert
+        Assert.Equal(["classification", "rules", "cut"], localSteps.Take(3));
+    }
+
+    /// <summary>The cut reaches no mail server either, so failing one must not make the account fetch its mail less often.</summary>
+    [Fact]
+    public async Task RunAsync_CuttingPassagesFails_DoesNotDeferTheAccountsNextRun()
+    {
+        // Arrange
+        var passFailed = new TaskCompletionSource();
+        var chunkingStore = Substitute.For<IStoredEmailChunkingStore>();
+        chunkingStore
+            .GetEmailsAwaitingChunkingAsync(Arg.Any<MailAccountId>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns<Task<IReadOnlyList<StoredEmailAwaitingChunking>>>(_ =>
+            {
+                passFailed.TrySetResult();
+
+                throw new InvalidOperationException("the cut failed");
+            });
+        using var harness = CreateHarness(
+            SynchronizationTestHost.CreateSingleAccountOptions(enabled: true),
+            Substitute.For<IMailboxSessionFactory>(),
+            chunkingStore: chunkingStore);
+
+        // Act
+        await harness.SuperviseUntilAsync(passFailed.Task);
+
+        // Assert
+        Assert.Contains(
+            harness.Logger.Messages,
+            message => message.Contains(
+                "Cutting the passages of the evaluated mail of account primary ended unexpectedly",
+                StringComparison.Ordinal));
+        Assert.DoesNotContain(
+            harness.Logger.Messages,
+            message => message.Contains("runs in a row", StringComparison.Ordinal));
+    }
+
     /// <summary>Evaluation reaches no mail server, so failing one must not make the account fetch its mail less often.</summary>
     [Fact]
     public async Task RunAsync_RuleEvaluationFails_DoesNotDeferTheAccountsNextRun()
@@ -1025,6 +1124,8 @@ public sealed class AccountSynchronizationSupervisorTests
         IMailboxMutationRecordStore? mutationRecordStore = null,
         IStoredMailFolderMirrorStore? folderMirrorStore = null,
         IMailRuleEvaluationStore? ruleEvaluationStore = null,
+        ISpamClassificationRunStore? classificationRunStore = null,
+        IStoredEmailChunkingStore? chunkingStore = null,
         params string[] unadvertisedAliases)
     {
         var clock = new FakeTimeProvider();
@@ -1039,6 +1140,8 @@ public sealed class AccountSynchronizationSupervisorTests
             mutationRecordStore,
             folderMirrorStore,
             ruleEvaluationStore,
+            classificationRunStore,
+            chunkingStore,
             unadvertisedAliases);
 
         return new SupervisorHarness(

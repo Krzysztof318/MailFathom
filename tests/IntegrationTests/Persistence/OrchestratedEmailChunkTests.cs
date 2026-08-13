@@ -247,6 +247,13 @@ public sealed class OrchestratedEmailChunkTests(MailFathomOrchestrationFixture o
             },
             cancellationToken);
 
+    /// <summary>Stores the message and then cuts it, which is the two-transaction shape the account run performs.</summary>
+    /// <remarks>
+    /// The cut is a second commit rather than part of the first, because that is the ordering the arrival pipeline is
+    /// built on: classification and the owner's rules run between the two, and the store reached here reads the message
+    /// back through the search document the first commit wrote. Cutting through the port the run uses is also what gives
+    /// these tests their subject — a substitute for the database could not show that a re-derivation writes nothing.
+    /// </remarks>
     private static async Task StoreAsync(
         OrchestratedMailFathomServices services,
         EmailOccurrenceId occurrenceId,
@@ -254,7 +261,7 @@ public sealed class OrchestratedEmailChunkTests(MailFathomOrchestrationFixture o
         string body,
         CancellationToken cancellationToken)
     {
-        var commitResult = await services.CommitAsync(
+        var storedResult = await services.CommitAsync(
             (scope, session, token) => scope.GetRequiredService<IEmailMetadataRepository>().UpsertMetadataAsync(
                 session,
                 SyntheticEmail.RemoteMetadataOf(occurrenceId, subject),
@@ -263,8 +270,38 @@ public sealed class OrchestratedEmailChunkTests(MailFathomOrchestrationFixture o
                 token),
             cancellationToken);
 
-        Assert.Equal(PersistenceCommitResult.Committed, commitResult);
+        Assert.Equal(PersistenceCommitResult.Committed, storedResult);
+
+        var storedEmailId = await FindStoredEmailIdAsync(services, occurrenceId, cancellationToken);
+        var cutResult = await services.CommitAsync(
+            (scope, session, token) => scope.GetRequiredService<IStoredEmailChunkingStore>().DeriveChunksAsync(
+                session,
+                storedEmailId,
+                token),
+            cancellationToken);
+
+        Assert.Equal(PersistenceCommitResult.Committed, cutResult);
     }
+
+    private static Task<StoredEmailId> FindStoredEmailIdAsync(
+        OrchestratedMailFathomServices services,
+        EmailOccurrenceId occurrenceId,
+        CancellationToken cancellationToken) => services.InScopeAsync(
+            async (scope, token) =>
+            {
+                var alias = occurrenceId.FolderResolutionId.Alias.Value;
+
+                return StoredEmailId.Create(
+                    await scope.GetRequiredService<MailFathomDbContext>().StoredEmails
+                        .AsNoTracking()
+                        .Where(email => email.MailFolder.MailboxAccountId == occurrenceId.AccountId.Value
+                            && email.MailFolder.Alias == alias
+                            && email.UidValidity == occurrenceId.UidValidity.Value
+                            && email.Uid == occurrenceId.Uid.Value)
+                        .Select(email => email.Id)
+                        .SingleAsync(token));
+            },
+            cancellationToken);
 
     private static Task<IReadOnlyList<StoredPassage>> ReadPassagesAsync(
         OrchestratedMailFathomServices services,

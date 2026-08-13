@@ -43,6 +43,8 @@ MailFathom synchronizes mailboxes read-only, on a bounded schedule, and — for 
 `MailSynchronizationCoordinator` is a hosted service that reaches no mail server and holds no scoped service. It
 starts one `AccountSynchronizationSupervisor` per configured account and supervises those supervisors; everything a
 run actually does belongs to the supervisor of the account it runs for.
+[The arrival pipeline](../architecture/arrival-pipeline.md) draws what a run does after its folders have finished — the
+classification pass, the rules, and the cut that produces a message's passages — and in what order.
 
 Each supervisor owns its own schedule, its own consecutive-failure count, and its own backoff, and creates a scope per
 folder work unit. That is what a server which stops answering can no longer reach: no other account inherits its

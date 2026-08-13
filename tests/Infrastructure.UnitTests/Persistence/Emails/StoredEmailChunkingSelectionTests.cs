@@ -1,0 +1,256 @@
+// Copyright © 2026 Krzysztof Kasprowicz
+// Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
+// Project repository: https://github.com/Krzysztof318/MailFathom
+
+using MailFathom.Application.Spam.Gating;
+using MailFathom.Domain.Accounts;
+using MailFathom.Domain.Emails;
+using MailFathom.Domain.Folders;
+using MailFathom.Domain.Spam;
+using MailFathom.Infrastructure.Persistence.Emails;
+using MailFathom.Infrastructure.Persistence.Entities;
+using Xunit;
+
+namespace MailFathom.Infrastructure.UnitTests.Persistence.Emails;
+
+/// <summary>Covers which mail the account run's cut selects, which is where the arrival pipeline's ordering is enforced.</summary>
+/// <remarks>
+/// The predicate is composed here and evaluated by PostgreSQL, so what these tests establish is which rows it selects
+/// rather than what SQL it becomes. Every clause it carries is one of the pipeline's orderings, and each of them fails
+/// silently when it lapses: passages cut from a message the rules were about to move, passages of junk, passages of a
+/// folder an operator asked not to have embedded, or a mailbox re-cut on every run.
+/// </remarks>
+public sealed class StoredEmailChunkingSelectionTests
+{
+    private static readonly DateTimeOffset Now = new(2026, 8, 13, 10, 0, 0, TimeSpan.Zero);
+
+    private static readonly MailFolderIdentity WorkInbox = new(
+        MailAccountId.Create("work"),
+        MailFolderAlias.Create("INBOX"));
+
+    private static readonly MailFolderIdentity WorkArchive = new(
+        MailAccountId.Create("work"),
+        MailFolderAlias.Create("ARCHIVE"));
+
+    /// <summary>The ordinary arrival: extracted, evaluated, admitted, and not cut yet.</summary>
+    [Fact]
+    public void Selecting_MailTheRulesHaveFinishedWith_SelectsIt()
+    {
+        // Arrange
+        var emails = Emails(Email("work", "INBOX"));
+
+        // Act
+        var selected = StoredEmailChunkingStore.Selecting(emails, "work", [WorkInbox], ClassificationOff);
+
+        // Assert
+        Assert.Single(selected.AsEnumerable());
+    }
+
+    /// <summary>
+    /// The ordering this pass exists for. A rule may file the message into a folder mapped differently from the one it
+    /// arrived in, so passages cut before the rules ran would be passages of a placement that had not been settled.
+    /// </summary>
+    [Fact]
+    public void Selecting_MailTheRulesHaveNotReachedYet_LeavesItOut()
+    {
+        // Arrange
+        var email = Email("work", "INBOX");
+        email.RulesEvaluatedAt = null;
+
+        // Act
+        var selected = StoredEmailChunkingStore.Selecting(Emails(email), "work", [WorkInbox], ClassificationOff);
+
+        // Assert
+        Assert.Empty(selected.AsEnumerable());
+    }
+
+    /// <summary>Cutting is what removes a message from this query, which is what lets the pass run without a cursor.</summary>
+    [Fact]
+    public void Selecting_MailThatAlreadyHasPassages_LeavesItOut()
+    {
+        // Arrange
+        var email = Email("work", "INBOX");
+        email.Chunks.Add(new EmailChunkEntity { StoredEmailId = email.Id, StoredEmail = email, Text = "a", ContentHash = "h" });
+
+        // Act
+        var selected = StoredEmailChunkingStore.Selecting(Emails(email), "work", [WorkInbox], ClassificationOff);
+
+        // Assert
+        Assert.Empty(selected.AsEnumerable());
+    }
+
+    /// <summary>A message nobody could extract text from has nothing to cut, and no later run will produce any.</summary>
+    [Fact]
+    public void Selecting_MailWithNoExtractedBody_LeavesItOut()
+    {
+        // Arrange
+        var withoutDocument = Email("work", "INBOX");
+        withoutDocument.SearchDocument = null;
+        var withoutBody = Email("work", "INBOX");
+        withoutBody.SearchDocument!.BodyText = null;
+
+        // Act
+        var selected = StoredEmailChunkingStore.Selecting(
+            Emails(withoutDocument, withoutBody),
+            "work",
+            [WorkInbox],
+            ClassificationOff);
+
+        // Assert
+        Assert.Empty(selected.AsEnumerable());
+    }
+
+    /// <summary>A folder mapped to embed is cut whatever the tool switch says, which is the row the table states explicitly.</summary>
+    [Fact]
+    public void Selecting_AFolderMappedToEmbedButWithheldFromTools_SelectsItsMail()
+    {
+        // Arrange
+        var emails = Emails(Email("work", "INBOX"));
+
+        // Act — the tool switch reaches no admission here, so a folder that generates embeddings is admitted either way.
+        var selected = StoredEmailChunkingStore.Selecting(emails, "work", [WorkInbox], ClassificationOff);
+
+        // Assert
+        Assert.Single(selected.AsEnumerable());
+    }
+
+    /// <summary>A folder an operator asked not to embed cuts no passages, on this path as on every other.</summary>
+    [Fact]
+    public void Selecting_AFolderNotMappedToEmbed_LeavesItsMailOut()
+    {
+        // Arrange
+        var emails = Emails(Email("work", "INBOX"));
+
+        // Act
+        var selected = StoredEmailChunkingStore.Selecting(emails, "work", [WorkArchive], ClassificationOff);
+
+        // Assert
+        Assert.Empty(selected.AsEnumerable());
+    }
+
+    /// <summary>An admitted set that is empty admits nothing, which is what a deployment mapping no folder to embed means.</summary>
+    [Fact]
+    public void Selecting_NoFolderMappedToEmbed_LeavesEverythingOut()
+    {
+        // Arrange
+        var emails = Emails(Email("work", "INBOX"));
+
+        // Act
+        var selected = StoredEmailChunkingStore.Selecting(emails, "work", [], ClassificationOff);
+
+        // Assert
+        Assert.Empty(selected.AsEnumerable());
+    }
+
+    /// <summary>One account's pass never cuts another account's mail, even under a folder alias of the same name.</summary>
+    [Fact]
+    public void Selecting_AnotherAccountsMail_LeavesItOut()
+    {
+        // Arrange
+        var emails = Emails(Email("home", "INBOX"));
+
+        // Act
+        var selected = StoredEmailChunkingStore.Selecting(
+            emails,
+            "work",
+            [WorkInbox, new MailFolderIdentity(MailAccountId.Create("home"), MailFolderAlias.Create("INBOX"))],
+            ClassificationOff);
+
+        // Assert
+        Assert.Empty(selected.AsEnumerable());
+    }
+
+    /// <summary>Nothing expensive happens to a message on its way to the junk folder, and the cut is where that starts.</summary>
+    [Fact]
+    public void Selecting_MailAVerdictCalledJunk_LeavesItOut()
+    {
+        // Arrange
+        var email = Email("work", "INBOX");
+        email.SpamClassification = new EmailSpamClassificationEntity
+        {
+            StoredEmailId = email.Id,
+            Verdict = SpamVerdict.Spam,
+            DecidedBy = SpamClassificationStage.Deterministic,
+            EvaluatedAt = Now,
+        };
+
+        // Act
+        var selected = StoredEmailChunkingStore.Selecting(Emails(email), "work", [WorkInbox], ClassificationOn);
+
+        // Assert
+        Assert.Empty(selected.AsEnumerable());
+    }
+
+    /// <summary>A message still inside the wait a verdict is allowed is held rather than cut.</summary>
+    [Fact]
+    public void Selecting_MailStillWaitingOnAVerdict_LeavesItOut()
+    {
+        // Arrange
+        var emails = Emails(Email("work", "INBOX"));
+
+        // Act
+        var selected = StoredEmailChunkingStore.Selecting(emails, "work", [WorkInbox], ClassificationOn);
+
+        // Assert
+        Assert.Empty(selected.AsEnumerable());
+    }
+
+    /// <summary>A row the local mailbox no longer holds is not worth a passage.</summary>
+    [Fact]
+    public void Selecting_TombstonedMail_LeavesItOut()
+    {
+        // Arrange
+        var email = Email("work", "INBOX");
+        email.RemoteExpungeObservedAt = Now;
+
+        // Act
+        var selected = StoredEmailChunkingStore.Selecting(Emails(email), "work", [WorkInbox], ClassificationOff);
+
+        // Assert
+        Assert.Empty(selected.AsEnumerable());
+    }
+
+    private static DerivedWorkAdmissionTerms ClassificationOff { get; } = new(
+        IsApplied: false,
+        [],
+        [],
+        Now);
+
+    private static DerivedWorkAdmissionTerms ClassificationOn { get; } = new(
+        IsApplied: true,
+        [],
+        [MailFolderAlias.Create("INBOX")],
+        Now - TimeSpan.FromMinutes(15));
+
+    private static IQueryable<StoredEmailEntity> Emails(params StoredEmailEntity[] emails) => emails.AsQueryable();
+
+    /// <summary>Builds the message the pass is meant to cut, which every test then takes one fact away from.</summary>
+    private static StoredEmailEntity Email(string accountId, string alias)
+    {
+        var email = new StoredEmailEntity
+        {
+            MailboxAccountId = accountId,
+            MailFolder = new MailFolderEntity
+            {
+                MailboxAccountId = accountId,
+                Alias = alias,
+                RemotePath = alias,
+                MailboxAccount = new MailboxAccountEntity { Id = accountId },
+            },
+            StoredAt = Now,
+            ContentAvailability = StoredEmailContentAvailability.Available,
+            RulesEvaluatedAt = Now,
+        };
+
+        email.SearchDocument = new EmailSearchDocumentEntity
+        {
+            StoredEmailId = email.Id,
+            StoredEmail = email,
+            BodyText = "a body",
+            BodyTextBeforeTrimming = "a body",
+            ExtractedAt = Now,
+        };
+
+        return email;
+    }
+}

@@ -15,18 +15,22 @@ describes the table they are stored in.
 
 ## When chunking runs
 
-A message is cut in the same database transaction that stores what was extracted from it, on both paths that extract:
-the synchronization run that has just fetched a message, and the backfill that re-derives text for mail stored before
-extraction existed. A committed message is therefore never one whose passages something else still has to produce.
+A message is cut **after** it has been stored and never in the transaction that stored it. Two stages stand between the
+two, and both can change what the cut should produce: spam classification can decide the message is not derived from at
+all, and the owner's rules can file it into a folder mapped differently from the one it arrived in. Passages are not
+undone by a message moving afterwards, so the account's synchronization run cuts as its last local step — after the
+classification pass and after the rule pass — and offers each message it cut for embedding.
+[The arrival pipeline](../architecture/arrival-pipeline.md) draws the whole order and states what each stage waits for.
 
-**Unless spam classification is deciding whether it may be cut at all.** With classification configured over a folder,
-whether that folder's mail is cut is a question the message's verdict answers, and the verdict does not exist while the
-message is being stored — so the cut is not made on the arrival path and the
-[embedding backfill](embedding-backfill.md) sweep makes it once the message is admitted. A message classification files
-as junk is never cut on any path, and one already cut when a junk verdict arrives has its passages removed.
+Both paths that extract text obey it. The backfill that re-derives text for mail stored before extraction existed cuts
+through the same writer, and the [embedding backfill](embedding-backfill.md) sweep cuts whatever the account run's own
+batch budget did not reach. A message classification was holding needs neither of them: the account's next run
+re-evaluates it and cuts it in the same run, once a verdict admits it or its wait runs out.
+
+A message classification files as junk is never cut on any path, and one already cut when a junk verdict arrives has its
+passages removed.
 [Junk is kept out of what a deployment derives from mail](spam-classification.md#junk-is-kept-out-of-what-a-deployment-derives-from-mail)
-holds all of it, including what a message waiting on a verdict costs. None of it applies with classification off, which
-is the default: the sentence above then describes every message.
+holds all of it, including what a message waiting on a verdict costs.
 
 A message that yielded no text is cut into nothing. That covers a body that carried no words and a body that arrived
 encrypted: both keep the search document that makes them findable on their subject and participants, and neither gains a

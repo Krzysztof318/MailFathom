@@ -265,10 +265,14 @@ public static class ServiceCollectionExtensions
         // passage rows a message owns. Its `IEmailTextChunker` comes from the AI boundary, which this project may not
         // reference, so a composition root that registers persistence without the local derivations resolves nothing.
         services.AddScoped<EmailChunkWriter>();
-        // The port over it, which is what the synchronization run and a junk verdict reach it through. Deriving is a
-        // call the run makes rather than something the metadata write does on its way past, because what decides whether
-        // a message is cut is what classification says about it.
+        // The port a verdict that turned out to be junk discards a message's passages through. It carries the discarding
+        // half alone, because nothing outside the arrival pipeline decides when passages are cut.
         services.AddScoped<IEmailChunkStore, EmailChunkStore>();
+        // The port the pipeline's own cut reaches the writer through, and the pass that performs it. Cutting is a call
+        // the account run makes after classification and the rules have finished with a message rather than something
+        // the metadata write does on its way past, because both of those stages may still change what a message is.
+        services.AddScoped<IStoredEmailChunkingStore, StoredEmailChunkingStore>();
+        services.AddScoped<MailChunkingPass>();
         // The backlog is a singleton because the bound it enforces is one process-wide limit on how much embedding work
         // is held in memory; a scoped one would hold that bound per scope, and a synchronization run would be offering
         // into a backlog no worker is reading. Registered whether or not this deployment embeds, because the

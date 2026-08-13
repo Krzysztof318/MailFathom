@@ -4,6 +4,7 @@
 
 using System.Collections.Concurrent;
 using System.Diagnostics.CodeAnalysis;
+using MailFathom.Application.Emails.Chunking;
 using MailFathom.Application.Mail.Mutations.Audit;
 using MailFathom.Application.Mail.Mutations.Convergence;
 using MailFathom.Application.Persistence;
@@ -258,6 +259,7 @@ internal sealed partial class AccountSynchronizationSupervisor
                 await this.EraseExpiredAuditEntriesAsync(runSettings, workUnitToken);
                 await this.ClassifyRequestedMailAsync(runSettings, workUnitToken);
                 await this.EvaluateMailRulesAsync(runSettings, workUnitToken);
+                await this.CutPassagesOfEvaluatedMailAsync(runSettings, workUnitToken);
             }
         }
         finally
@@ -536,6 +538,55 @@ internal sealed partial class AccountSynchronizationSupervisor
         catch (Exception exception)
         {
             this.LogMailRuleEvaluationFailed(exception, this.accountId.Value);
+        }
+    }
+
+    /// <summary>Cuts the passages of the mail the stages in front of this one have finished with, and offers each message for embedding.</summary>
+    /// <remarks>
+    /// <para>
+    /// Last of the run's local passes, which is the ordering the arrival pipeline is built on rather than an arbitrary
+    /// place to put it. A message may be withheld by the classification pass above and may be moved by the rule pass
+    /// above that, and passages cut before either had its turn are passages of a placement and a verdict that had not
+    /// been settled — so the cut waits for both, and the message is offered to the embedding worker only once its
+    /// passages are durable.
+    /// </para>
+    /// <para>
+    /// A failure never fails the run, for the reason the two passes above it do not: nothing here reaches a mail server,
+    /// what it reads is already stored, and what a pass did not cut stays outstanding for the next run and for the
+    /// embedding sweep, which selects on exactly the same condition.
+    /// </para>
+    /// </remarks>
+    [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "A local cut that failed is logged and repeated by the next run rather than putting the account into backoff; the embedding sweep selects on the same outstanding condition.")]
+    private async Task CutPassagesOfEvaluatedMailAsync(
+        MailSynchronizationOptions runSettings,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            using var scope = this.scopeFactory.CreateScope();
+
+            scope.ServiceProvider.GetRequiredService<ScopedMailSynchronizationSettings>().UseRunSnapshot(runSettings);
+
+            var report = await scope.ServiceProvider
+                .GetRequiredService<MailChunkingPass>()
+                .RunAsync(this.accountId, cancellationToken);
+
+            if (!report.IsEmpty)
+            {
+                this.LogPassagesCut(
+                    this.accountId.Value,
+                    report.ChunkedEmailCount,
+                    report.RefusedOfferCount,
+                    report.EmailsRemain);
+            }
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception exception)
+        {
+            this.LogPassageCutFailed(exception, this.accountId.Value);
         }
     }
 
@@ -1063,6 +1114,21 @@ internal sealed partial class AccountSynchronizationSupervisor
         Level = LogLevel.Warning,
         Message = "Evaluating the rules of account {AccountId} ended unexpectedly; the account is not backed off for it and its next run resumes from the batches this one committed.")]
     private partial void LogMailRuleEvaluationFailed(Exception exception, string accountId);
+
+    /// <summary>Reports one account's cut in counts alone; no subject, address, or passage may reach a log.</summary>
+    [LoggerMessage(
+        Level = LogLevel.Debug,
+        Message = "Cut the passages of {ChunkedEmailCount} messages of account {AccountId}; the embedding backlog refused {RefusedOfferCount} of them, and messages remain: {EmailsRemain}.")]
+    private partial void LogPassagesCut(
+        string accountId,
+        int chunkedEmailCount,
+        int refusedOfferCount,
+        bool emailsRemain);
+
+    [LoggerMessage(
+        Level = LogLevel.Warning,
+        Message = "Cutting the passages of the evaluated mail of account {AccountId} ended unexpectedly; the account is not backed off for it, and what was not cut stays outstanding for the next run and for the embedding sweep.")]
+    private partial void LogPassageCutFailed(Exception exception, string accountId);
 
     /// <summary>Reports one account run's share of a whole-mailbox classification run, in counts and the profile alone.</summary>
     [LoggerMessage(
