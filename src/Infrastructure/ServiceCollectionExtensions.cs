@@ -496,6 +496,10 @@ public static class ServiceCollectionExtensions
         // every deployment because the paths that obey it are unconditional: with classification off the gate admits
         // everything and every one of them behaves exactly as it did before the gate existed.
         services.AddScoped<DerivedWorkGate>();
+        // The arrival trigger, scoped beside the synchronization run that reaches it and beside the job store it writes
+        // through. It is registered whatever the switches say, for the reason the gate is: with classification off it
+        // reads one property per stored message and enqueues nothing.
+        services.AddScoped<SpamClassificationArrivals>();
         // Registered beside the classifier and independent of it: what a verdict causes is a decision of its own, and the
         // classifier resolves nothing from here, which is what keeps a deployment that records verdicts and touches
         // nothing genuinely unable to reach a mailbox through classification.

@@ -8,10 +8,10 @@ decided what it thought of it — in an `Authentication-Results` header, in a pr
 the message in the junk folder. Spam classification is what keeps that decision rather than discarding it, and records
 it as derived data beside the message.
 
-Four things ship here and are independent of each other: the classification record with the stage that fills it, the two
-switches that let a verdict reach the mail server, the junk folder becoming a fact that mailbox reads act on, and junk
-being kept out of everything this deployment derives from mail. The third is true of a mailbox with no classification at
-all.
+Five things ship here and are independent of each other: the classification record with the stage that fills it, mail
+being classified as it arrives, the two switches that let a verdict reach the mail server, the junk folder becoming a
+fact that mailbox reads act on, and junk being kept out of everything this deployment derives from mail. The fourth is
+true of a mailbox with no classification at all.
 
 ## The junk folder is left out of listing and search
 
@@ -277,9 +277,10 @@ of its own for it to be withheld — the same fact the deterministic stage reads
 
 ### Waiting is bounded, and running out of patience is not a failure
 
-A verdict that never arrives is the case this bound exists for: a run nobody asked for, a scanner nobody noticed was
-wedged, a pass that keeps failing. Without a bound each of those would hold mail out of the index indefinitely, and an
-instance withholding everything publishes the same silence as one with nothing to do.
+A verdict that never arrives is the case this bound exists for: a scanner nobody noticed was wedged, a queue deep enough
+that a message waits hours for a worker, a job that spent every attempt and was dead-lettered, a run nobody asked for.
+Without a bound each of those would hold mail out of the index indefinitely, and an instance withholding everything
+publishes the same silence as one with nothing to do.
 
 `SpamClassification:ClassificationWait` is how long a message may wait, measured from when it was stored, and it is
 fifteen minutes unless a deployment says otherwise. Past it the message is released and derived from, verdict or no
@@ -347,11 +348,54 @@ Content comes from the local content store, which already holds it, so no classi
 none can affect a remote `\Seen` flag. A message stored without content — one that exceeded the size limit — is
 reported as unclassifiable rather than fetched.
 
+## Mail is classified as it arrives
+
+A message is classified because it arrived, without an operator asking for anything. Synchronization asks for one as
+soon as it has committed the message and its content, and the work then runs as an execution of the same durable queue
+that carries every other background job: leased to one worker, bounded by a timeout, retried with a jittered backoff,
+and dead-lettered once it has spent its attempts. A job that stopped is read and acted on through
+[administering a deployment](../operations/admin-endpoint.md#reading-the-background-work-that-stopped-and-deciding-what-becomes-of-it),
+under the job type `classify-email-spam`.
+
+**Why a job rather than another step of the synchronization run.** Rule evaluation is a step of that run and needs
+nothing else, because evaluating a rule over committed local state has no transient failure and therefore nothing to
+retry. A scan does: it reaches a sidecar that can be unreachable, saturated, or restarting, so one message can fail for
+a reason the next attempt would not meet. The account run's only recovery is to defer the whole account, which cannot
+express one message out of three hundred deserving another attempt — and per-message backoff is the whole of what the
+queue is here for. Nothing about it is written onto the classification record: the attempt count, the next attempt, and
+the terminal failure all belong to the queue's own row.
+
+**What it costs a synchronization run is one insert per stored message.** The run does not wait for the verdict and does
+not read what the queue answered. A queue already holding as much of this type as `Jobs:MaxQueueDepthPerType` allows
+refuses the row rather than growing, and that refusal changes nothing about the message: it is stored, and the wait a
+verdict is allowed releases it to derived work without one. A classification backlog therefore degrades a secondary
+signal instead of stalling the pass that produced it, and it is watched where every other backlog is: the queue's depth
+per job type saturates at exactly the bound enqueuing is refused at, which
+[telemetry](../operations/telemetry.md#durable-background-work) states in full.
+
+**Two messages are deliberately not asked for.** One whose folder the configured scope does not cover, and one stored
+without its content — a message above the fetch size limit, or one waiting for storage headroom — because a message
+whose payload is not stored is reported unclassifiable rather than fetched. The second becomes classifiable the moment a
+later run stores its content, without the message being fetched a second time for classification's sake. With
+classification switched off, nothing is asked for at all: the switch and the scope are read before the queue is touched,
+which is the same shape every other path here has when it is off.
+
+Asking twice for one message is asking once. The queue compares the job type together with the message's own stored
+identity — the identifier `mfctl spam classifications --email` takes — so a folder walked again, or a run resumed after
+a crash, finds the classification already asked for rather than adding a second one. Where the message is stays readable
+beside it, in the job's own payload, which names the account, the folder, and the remote numbers and nothing else.
+
+The changes an operator's switches ask of the mailbox are applied to a verdict reached this way exactly as they are to
+one a run reached; [what an operator can let a verdict do](#what-an-operator-can-let-a-verdict-do) is the whole of that
+decision, and both switches are still off by default.
+[The arrival pipeline](../architecture/arrival-pipeline.md) draws where this sits among the stages it orders.
+
 ## Classifying the mail you already have
 
-Nothing classifies a message on its own yet — see [what is not here](#what-is-not-here) — so a **classification run** is
-what reaches the mail a deployment holds, and it is what switching classification on, moving a threshold, or switching
-filing on is applied to the mailbox with. `mfctl spam run --account <id>` asks for one, and
+The trigger above reaches mail as it arrives, so a **classification run** is what reaches the mail a deployment already
+holds: everything stored before this existed, everything stored while the feature was off, and everything a wedged
+sidecar or a full queue left without a verdict. It is also what switching classification on, moving a threshold, or
+switching filing on is applied to an existing mailbox with. `mfctl spam run --account <id>` asks for one, and
 [administering a deployment](../operations/admin-endpoint.md#classifying-the-mail-you-already-have-and-reading-what-was-concluded)
 is the command reference.
 
@@ -454,19 +498,6 @@ own answer, with its own retention.
 **The signals appear by name and never by value.** A name is an authentication method, a header field, a folder alias,
 or a scanner rule; the observation beside it is text a mail server wrote and can carry a sending domain, which is
 exactly the second copy of the mailbox a record read back over an administrative endpoint must not become.
-
-## What is not here
-
-Nothing classifies a message as it arrives. The trigger that would do it is not built, so every verdict this deployment
-holds was reached by a run somebody asked for, and mail stored since the last one carries none until the next one is
-asked for.
-
-That is what the wait above currently absorbs, and it is worth stating plainly rather than leaving to be inferred: with
-no arrival trigger, a newly stored message of a classified folder waits out `SpamClassification:ClassificationWait` and
-is then released, unless a run scores it first. So what the gate withholds today without anybody asking for a run is
-mail the receiving server already filed in the junk folder, and mail a run already decided is spam — both of which are
-facts that exist before this deployment does anything. Every other message is delayed rather than withheld, and it is
-delayed into the sweep that would have reached it anyway.
 
 ## Privacy
 

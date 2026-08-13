@@ -8,6 +8,7 @@ using MailFathom.Application.Emails.Embeddings.Generation;
 using MailFathom.Application.Emails.Extraction;
 using MailFathom.Application.Emails.Summaries;
 using MailFathom.Application.Folders;
+using MailFathom.Application.Jobs;
 using MailFathom.Application.Mail;
 using MailFathom.Application.Mail.Mutations;
 using MailFathom.Application.Mail.Mutations.Audit;
@@ -232,6 +233,11 @@ internal static class SynchronizationTestHost
         services.AddScoped<EmailSpamClassifier>();
         services.AddScoped<SpamActionRecorder>();
         services.AddScoped<SpamClassificationPass>();
+        // The arrival trigger the run reaches after each message it commits, and the queue it writes through. Every
+        // account these tests configure runs with classification off, so the trigger reads one property per stored
+        // message and the substituted queue is never asked for anything.
+        services.AddSingleton(Substitute.For<IJobStore>());
+        services.AddScoped<SpamClassificationArrivals>();
 
         // The cut is the run's last local step, after the rules for the ordering the arrival pipeline is built on, and a
         // supervisor resolves it from the same scope. The store answers that no message is awaiting passages, which is

@@ -6,6 +6,7 @@ using MailFathom.Application.EmailContent.Storage;
 using MailFathom.Application.Emails.Extraction;
 using MailFathom.Application.Emails.Summaries;
 using MailFathom.Application.Folders;
+using MailFathom.Application.Jobs;
 using MailFathom.Application.Mail;
 using MailFathom.Application.Persistence;
 using MailFathom.Application.Spam;
@@ -152,6 +153,107 @@ public sealed class MailboxSynchronizerTests
         // Assert
         Assert.Equal(1, result.StoredEmailCount);
         Assert.Equal([DerivedWorkAdmission.AwaitingClassification], gateTelemetry.Admissions);
+    }
+
+    /// <summary>A message committed with its content is asked to be classified, once the transaction that stored it has ended.</summary>
+    /// <remarks>
+    /// The trigger is the whole of what makes classification continuous rather than something an operator asks for. It
+    /// is one enqueue against committed state: the run neither waits for the verdict nor learns anything from the
+    /// queue's answer, so a classification backlog degrades a secondary signal instead of stalling the pass.
+    /// </remarks>
+    [Fact]
+    public async Task SynchronizeAsync_StoresAMessageWithItsContent_AsksForOneClassificationOfThatOccurrence()
+    {
+        // Arrange
+        var accountId = MailAccountId.Create("primary");
+        var uidValidity = ImapUidValidity.Create(5);
+        var uid = ImapUid.Create(10);
+        var occurrence = EmailOccurrenceId.Create(accountId, InboxFolder.Id, uidValidity, uid);
+        var checkpointStore = CreateCheckpointStoreAt(accountId, uidValidity);
+        var metadataRepository = Substitute.For<IEmailMetadataRepository>();
+        var sessionScopeFactory = Substitute.For<IPersistenceSessionFactory>();
+        var persistenceSession = Substitute.For<IPersistenceSession>();
+        var sessionFactory = Substitute.For<IMailboxSessionFactory>();
+        var session = Substitute.For<IMailboxSession>();
+        var jobStore = Substitute.For<IJobStore>();
+        var clock = new FakeTimeProvider(new DateTimeOffset(2026, 7, 24, 12, 0, 0, TimeSpan.Zero));
+        var options = new MailboxSynchronizationOptions { MaxMetadataBatchSize = 25, MaxRawMimeBytes = 1024 };
+        var metadata = new RemoteEmailMetadata(occurrence, "message-1@example.test", "Subject", new DateTimeOffset(2026, 7, 24, 8, 0, 0, TimeSpan.Zero), 128);
+        var synchronizer = CreateSynchronizer(
+            sessionFactory,
+            checkpointStore,
+            sessionScopeFactory,
+            metadataRepository,
+            contentStore: Substitute.For<IEmailContentStore>(),
+            clock,
+            options,
+            classificationSettings: ClassifyingTheInbox(),
+            jobStore: jobStore);
+
+        sessionScopeFactory.BeginSessionAsync(CancellationToken.None).Returns(persistenceSession);
+        sessionFactory.OpenReadOnlyAsync(accountId, InboxFolder, Arg.Any<MailTransportSecurityPolicy>(), CancellationToken.None).Returns(session);
+        session.GetUidValidityAsync(CancellationToken.None).Returns(uidValidity);
+        session.GetEmailBatchAfterAsync(null, 25, MailSynchronizationWindow.Unbounded, CancellationToken.None).Returns(new RemoteEmailMetadataBatch([metadata], uid, HasMore: false));
+        StubRetrievedContent(session, options, occurrence, payloadLength: 3);
+        metadataRepository
+            .UpsertMetadataAsync(persistenceSession, metadata, Arg.Any<ExtractedEmailMetadata?>(), StoredEmailContentAvailability.Available, CancellationToken.None)
+            .Returns(StoredEmailId.Create(Guid.CreateVersion7()));
+
+        // Act
+        var result = await synchronizer.SynchronizeAsync(accountId, InboxMapping, CancellationToken.None);
+
+        // Assert
+        Assert.Equal(1, result.StoredEmailCount);
+
+        var request = Assert.Single(EnqueuedJobs(jobStore));
+
+        Assert.Equal(JobType.ClassifyEmailSpam, request.JobType);
+        Assert.Equal(occurrence, Assert.IsType<EmailOccurrenceJobPayload>(request.Payload).ToOccurrenceId());
+    }
+
+    /// <summary>A message stored from its envelope alone is asked of nothing: no content means no verdict is coming.</summary>
+    [Fact]
+    public async Task SynchronizeAsync_RecordsAMessageAboveTheSizeLimit_AsksForNoClassificationOfIt()
+    {
+        // Arrange
+        var accountId = MailAccountId.Create("primary");
+        var uidValidity = ImapUidValidity.Create(5);
+        var uid = ImapUid.Create(10);
+        var occurrence = EmailOccurrenceId.Create(accountId, InboxFolder.Id, uidValidity, uid);
+        var checkpointStore = CreateCheckpointStoreAt(accountId, uidValidity);
+        var metadataRepository = Substitute.For<IEmailMetadataRepository>();
+        var sessionScopeFactory = Substitute.For<IPersistenceSessionFactory>();
+        var persistenceSession = Substitute.For<IPersistenceSession>();
+        var sessionFactory = Substitute.For<IMailboxSessionFactory>();
+        var session = Substitute.For<IMailboxSession>();
+        var jobStore = Substitute.For<IJobStore>();
+        var clock = new FakeTimeProvider(new DateTimeOffset(2026, 7, 24, 12, 0, 0, TimeSpan.Zero));
+        var options = new MailboxSynchronizationOptions { MaxMetadataBatchSize = 25, MaxRawMimeBytes = 1024 };
+        var metadata = new RemoteEmailMetadata(occurrence, "message-1@example.test", "Subject", new DateTimeOffset(2026, 7, 24, 8, 0, 0, TimeSpan.Zero), 4096);
+        var synchronizer = CreateSynchronizer(
+            sessionFactory,
+            checkpointStore,
+            sessionScopeFactory,
+            metadataRepository,
+            contentStore: Substitute.For<IEmailContentStore>(),
+            clock,
+            options,
+            classificationSettings: ClassifyingTheInbox(),
+            jobStore: jobStore);
+
+        sessionScopeFactory.BeginSessionAsync(CancellationToken.None).Returns(persistenceSession);
+        sessionFactory.OpenReadOnlyAsync(accountId, InboxFolder, Arg.Any<MailTransportSecurityPolicy>(), CancellationToken.None).Returns(session);
+        session.GetUidValidityAsync(CancellationToken.None).Returns(uidValidity);
+        session.GetEmailBatchAfterAsync(null, 25, MailSynchronizationWindow.Unbounded, CancellationToken.None).Returns(new RemoteEmailMetadataBatch([metadata], uid, HasMore: false));
+        metadataRepository
+            .UpsertMetadataAsync(persistenceSession, metadata, Arg.Any<ExtractedEmailMetadata?>(), StoredEmailContentAvailability.ExceededSizeLimit, CancellationToken.None)
+            .Returns(StoredEmailId.Create(Guid.CreateVersion7()));
+
+        // Act
+        await synchronizer.SynchronizeAsync(accountId, InboxMapping, CancellationToken.None);
+
+        // Assert
+        Assert.Empty(EnqueuedJobs(jobStore));
     }
 
     /// <summary>A message MailFathom relocated arrives in its new folder as an ordinary discovery, and is the email it already had.</summary>
@@ -1725,6 +1827,15 @@ public sealed class MailboxSynchronizerTests
     }
 
     /// <summary>Settings that put the folder every arrival test synchronizes inside classification's scope.</summary>
+    /// <summary>Reads back what the run asked the durable queue for, which is the whole of the arrival trigger's effect.</summary>
+    private static IReadOnlyList<JobEnqueueRequest> EnqueuedJobs(IJobStore jobStore) =>
+    [
+        .. jobStore
+            .ReceivedCalls()
+            .Where(call => call.GetMethodInfo().Name == nameof(IJobStore.EnqueueAsync))
+            .Select(call => (JobEnqueueRequest)call.GetArguments()[0]!),
+    ];
+
     private static SpamClassificationSettings ClassifyingTheInbox() => SpamClassificationSettings.Create(
         isEnabled: true,
         usesScanner: false,
@@ -2147,7 +2258,8 @@ public sealed class MailboxSynchronizerTests
         StoredContentCeiling? storedContentCeiling = null,
         SpamClassificationSettings? classificationSettings = null,
         IJunkMailFolderCatalog? junkFolders = null,
-        IDerivedWorkGateTelemetry? gateTelemetry = null)
+        IDerivedWorkGateTelemetry? gateTelemetry = null,
+        IJobStore? jobStore = null)
     {
         var concurrencyRetryPolicy = new OptimisticConcurrencyRetryPolicy(
             persistenceSessionFactory,
@@ -2182,6 +2294,10 @@ public sealed class MailboxSynchronizerTests
                 junkFolders ?? StubJunkMailFolderCatalog.None,
                 timeProvider),
             gateTelemetry ?? new RecordingDerivedWorkGateTelemetry(),
+            new SpamClassificationArrivals(
+                jobStore ?? Substitute.For<IJobStore>(),
+                new StubSpamClassificationSettingsReader(
+                    classificationSettings ?? SpamClassificationSettings.Disabled)),
             concurrencyRetryPolicy,
             timeProvider,
             options);
