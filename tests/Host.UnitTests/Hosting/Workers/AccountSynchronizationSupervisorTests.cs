@@ -156,14 +156,14 @@ public sealed class AccountSynchronizationSupervisorTests
             new TaskCompletionSource(),
             expectedFolderCount: 1,
             _ => new InvalidOperationException("connect failed"));
-        var localStepsReached = new TaskCompletionSource();
+        var ruleEvaluationReached = new TaskCompletionSource();
         using var harness = CreateHarness(
             CreateOptionsWithArchiveUnmirrored(),
             sessionFactory,
-            ruleEvaluationStore: CreateRuleStoreReporting(localStepsReached));
+            ruleEvaluationStore: CreateRuleStoreReporting(ruleEvaluationReached));
 
-        // Act, waiting on the last local step, which follows every folder the run scheduled.
-        await harness.SuperviseUntilAsync(localStepsReached.Task);
+        // Act, waiting on the rule pass, which follows every folder the run scheduled.
+        await harness.SuperviseUntilAsync(ruleEvaluationReached.Task);
 
         // Assert
         Assert.Equal(["INBOX"], attemptedFolders);
@@ -178,15 +178,15 @@ public sealed class AccountSynchronizationSupervisorTests
     {
         // Arrange
         var mirrorStore = new RecordingMailFolderMirrorStore();
-        var localStepsReached = new TaskCompletionSource();
+        var ruleEvaluationReached = new TaskCompletionSource();
         using var harness = CreateHarness(
             CreateOptionsWithArchiveUnmirrored(),
             Substitute.For<IMailboxSessionFactory>(),
             folderMirrorStore: mirrorStore,
-            ruleEvaluationStore: CreateRuleStoreReporting(localStepsReached));
+            ruleEvaluationStore: CreateRuleStoreReporting(ruleEvaluationReached));
 
-        // Act, waiting on the last of the run's local steps, which is past where an erasure pass would have run.
-        await harness.SuperviseUntilAsync(localStepsReached.Task);
+        // Act, waiting on the rule pass, which is past where an erasure pass would have run.
+        await harness.SuperviseUntilAsync(ruleEvaluationReached.Task);
 
         // Assert
         Assert.Empty(mirrorStore.ErasedFolders);
@@ -212,15 +212,15 @@ public sealed class AccountSynchronizationSupervisorTests
         options.Accounts[0].Folders[1].GenerateEmbeddings = generateEmbeddings;
         options.Accounts[0].Folders[1].VisibleToTools = visibleToTools;
         var mirrorStore = new RecordingMailFolderMirrorStore();
-        var localStepsReached = new TaskCompletionSource();
+        var ruleEvaluationReached = new TaskCompletionSource();
         using var harness = CreateHarness(
             options,
             Substitute.For<IMailboxSessionFactory>(),
             folderMirrorStore: mirrorStore,
-            ruleEvaluationStore: CreateRuleStoreReporting(localStepsReached));
+            ruleEvaluationStore: CreateRuleStoreReporting(ruleEvaluationReached));
 
         // Act
-        await harness.SuperviseUntilAsync(localStepsReached.Task);
+        await harness.SuperviseUntilAsync(ruleEvaluationReached.Task);
 
         // Assert
         Assert.Empty(mirrorStore.ErasedFolders);
@@ -993,10 +993,15 @@ public sealed class AccountSynchronizationSupervisorTests
     }
 
     /// <summary>
-    /// Reports that a run has reached its last local step, which is the signal a test waits on when what it asserts is
-    /// that something did not happen: everything an account run does locally is behind it by then.
+    /// Reports that a run has reached its rule pass, which is the signal a test waits on when what it asserts is that
+    /// something did not happen: every folder the run scheduled is behind it by then.
     /// </summary>
-    private static IMailRuleEvaluationStore CreateRuleStoreReporting(TaskCompletionSource localStepsReached)
+    /// <remarks>
+    /// The cut runs after this signal rather than before it, so the absences a test may assert on it are the ones the
+    /// folders produce — a connection opened, an eraser reached for. An absence the cut could still fill is not one of
+    /// them, and a test wanting that waits on something the pass itself reports.
+    /// </remarks>
+    private static IMailRuleEvaluationStore CreateRuleStoreReporting(TaskCompletionSource ruleEvaluationReached)
     {
         var ruleStore = Substitute.For<IMailRuleEvaluationStore>();
         ruleStore
@@ -1007,7 +1012,7 @@ public sealed class AccountSynchronizationSupervisorTests
                 Arg.Any<CancellationToken>())
             .Returns(_ =>
             {
-                localStepsReached.TrySetResult();
+                ruleEvaluationReached.TrySetResult();
 
                 return Task.FromResult<IReadOnlyList<StoredEmailAwaitingRuleEvaluation>>([]);
             });

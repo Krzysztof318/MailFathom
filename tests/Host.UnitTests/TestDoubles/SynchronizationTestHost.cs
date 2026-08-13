@@ -185,8 +185,9 @@ internal static class SynchronizationTestHost
         services.AddSingleton(folderMirrorStore ?? new RecordingMailFolderMirrorStore());
         services.AddScoped<UnmirroredMailFolderEraser>();
 
-        // The run's last local step. The default rule set declares nothing and the default store holds nothing, so a
-        // test that is not about rules pays for one query that finds no mail and no outstanding run.
+        // The step in front of the cut, which is what a run reaches after every folder it scheduled. The default rule
+        // set declares nothing and the default store holds nothing, so a test that is not about rules pays for one
+        // query that finds no mail and no outstanding run.
         services.AddSingleton(ruleEvaluationStore ?? CreateRuleStoreWithNothingToEvaluate());
         services.AddSingleton(CreateRunStoreWithNothingOutstanding());
         services.AddSingleton(CreateSourceOfAnEmptyRuleSet());

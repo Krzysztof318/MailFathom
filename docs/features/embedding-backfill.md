@@ -38,7 +38,11 @@ Two conditions select a message, and they are the two halves of what a pre-exist
   stamp is written by an account run's rule pass and once besides, by the migration that added the column, which stamped
   every message the previous version had already stored. So **a deployment running with `MailSynchronization:Enabled`
   set to `false` still cuts and embeds the mail it upgraded with** — that mail carries the stamp already — and what the
-  switch holds back here is mail a later run stored and no rule pass reached, which on such a deployment is none. Mail
+  switch holds back here is mail a later run stored and no rule pass reached, which on such a deployment is none. A
+  message a rule is still *moving* is passed over as well, however long it has been stamped: a rule declares a move
+  rather than performing one, so until the account's next run carries the relocation to the mail server the message is
+  sitting in a folder it is leaving, and passages cut there describe a mapping it is about to leave. The wait ends when
+  that run converges the move, and a relocation that completed or was abandoned holds nothing back at all. Mail
   that already carries passages is embedded either way, since that is the other group and it waits on nothing.
 - **A message with a passage that carries no vector** under the generation being walked towards was stored before that
   generation existed, or was turned away by `Embeddings:MaxQueuedEmails`, or was left part-way through by a provider

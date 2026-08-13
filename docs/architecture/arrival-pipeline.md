@@ -163,8 +163,9 @@ and, through them, the vectors the replacement cascades away.
   can replace a passage, and withholding one here would leave the passages — and the vectors built from them — derived
   under exactly the configuration a rebuild exists to replace, beside stored text reporting the new one.
 - **The embedding backfill** sweeps for messages with extracted text and no passages, and for passages with no vector.
-  It cuts through the same writer and is narrowed by the same classification predicate, the same rule stamp, and the
-  same folder switch, so it reaches whatever one account run's batch budget did not. The rule stamp is what stops it
+  It cuts through the same writer and is narrowed by the same classification predicate, the same rule stamp, the same
+  reading of a relocation still converging, and the same folder switch, so it reaches whatever one account run's batch
+  budget did not. The rule stamp is what stops it
   being a way around the order: it runs on its own interval while a run is still fetching a mailbox, so a first
   synchronization would otherwise have its mail cut here before the rules had read any of it. A held message needs no
   sweep to be released either: the account's own next run asks the gate again and cuts it in the same run the verdict
