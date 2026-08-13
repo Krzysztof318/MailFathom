@@ -43,6 +43,9 @@ public sealed class MailFathomOrchestrationFixture : IAsyncLifetime
     /// <summary>Bounds the composed host's own start, which builds and runs a project against an already-migrated database.</summary>
     private static readonly TimeSpan HostStartupTimeout = TimeSpan.FromMinutes(5);
 
+    /// <summary>Bounds one readiness exchange with the spam daemon, generously against a container that is still compiling its corpus.</summary>
+    private static readonly TimeSpan SpamScannerReadinessAttemptTimeout = TimeSpan.FromSeconds(10);
+
     private readonly SemaphoreSlim hostStartGate = new(1, 1);
 
     /// <summary>The host resources the suite has already started, so a second caller waits for one rather than starting it again.</summary>
@@ -285,10 +288,18 @@ public sealed class MailFathomOrchestrationFixture : IAsyncLifetime
 
     /// <summary>Waits until the spam daemon answers the one command its protocol defines for exactly this question.</summary>
     /// <remarks>
+    /// <para>
     /// Written here rather than expressed in the app model because no health check the app model can declare speaks this
     /// protocol. It asks the daemon directly, in the fixture that already owns waiting for the topology, and it is
     /// deliberately the readiness command rather than a scan: a daemon that answers it has compiled its corpus, and
     /// scoring a message to find that out would spend the most expensive request the suite makes on a wait.
+    /// </para>
+    /// <para>
+    /// The request is written and the answer read on a connection whose write half stays open, exactly as
+    /// <c>SpamAssassinDaemon</c> conducts a scan and for the reason stated there. Every attempt is bounded on its own,
+    /// because a read that stalls inside an unbounded loop would spend the whole start-up budget and then report a
+    /// cancelled fixture rather than a daemon that went quiet.
+    /// </para>
     /// </remarks>
     private static async Task WaitForSpamScannerAsync(Uri published, CancellationToken cancellationToken)
     {
@@ -300,18 +311,20 @@ public sealed class MailFathomOrchestrationFixture : IAsyncLifetime
 
             try
             {
+                using var attempt = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                attempt.CancelAfter(SpamScannerReadinessAttemptTimeout);
+
                 using var connection = new TcpClient();
 
-                await connection.ConnectAsync(published.Host, published.Port, cancellationToken);
+                await connection.ConnectAsync(published.Host, published.Port, attempt.Token);
 
                 var stream = connection.GetStream();
 
-                await stream.WriteAsync(readiness, cancellationToken);
-                connection.Client.Shutdown(SocketShutdown.Send);
+                await stream.WriteAsync(readiness, attempt.Token);
 
                 using var answer = new MemoryStream();
 
-                await stream.CopyToAsync(answer, cancellationToken);
+                await stream.CopyToAsync(answer, attempt.Token);
 
                 if (Encoding.ASCII.GetString(answer.ToArray()).Contains("PONG", StringComparison.Ordinal))
                 {
@@ -322,6 +335,10 @@ public sealed class MailFathomOrchestrationFixture : IAsyncLifetime
             {
                 // The container is up and the daemon is not listening yet, which is the ordinary state for the first
                 // half-minute of a cold start.
+            }
+            catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+            {
+                // This attempt's own bound, which is another attempt rather than a failed start-up.
             }
 
             await Task.Delay(TimeSpan.FromSeconds(2), cancellationToken);

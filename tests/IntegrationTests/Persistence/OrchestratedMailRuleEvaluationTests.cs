@@ -83,7 +83,11 @@ public sealed class OrchestratedMailRuleEvaluationTests(MailFathomOrchestrationF
 
         var arrival = Assert.Single(queued, candidate => candidate.StoredEmailId == evaluated);
         Assert.Equal(SyntheticMailAccount.AccountId.Value, arrival.Facts.Account);
-        Assert.Equal(FolderAlias, arrival.Facts.Folder);
+
+        // The alias in its normalized form, which is the one thing a condition compares against: MailFolderAlias
+        // upper-cases what configuration wrote, and the fact surface publishes what the row holds rather than what a
+        // test typed.
+        Assert.Equal(MailFolderAlias.Create(FolderAlias).Value, arrival.Facts.Folder);
         Assert.Equal(SyntheticEmail.DefaultSenderAddress, arrival.Facts.SenderAddress);
         Assert.Contains(RecipientAddress, arrival.Facts.RecipientAddresses);
         Assert.Equal(SyntheticEmail.ReceivedAt, arrival.Facts.ReceivedAt);

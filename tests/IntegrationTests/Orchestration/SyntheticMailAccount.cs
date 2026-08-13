@@ -55,7 +55,8 @@ internal sealed class SyntheticMailAccount(
     IMailAnsweringAuditSettingsReader,
     IMailAccountCatalog,
     IMailFolderParticipationReader,
-    IMailFolderMappingReader
+    IMailFolderMappingReader,
+    IJunkMailFolderCatalog
 {
     /// <summary>Every folder alias this suite's configuration maps, which is every alias its tests bind one to.</summary>
     /// <remarks>
@@ -236,6 +237,21 @@ internal sealed class SyntheticMailAccount(
                 this.FoldersVisibleToTools.Contains(folder))
             : MailFolderParticipation.Unmapped;
     }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Nothing, because the one mapping this account carries plays the inbox role and no test maps a junk folder. That
+    /// is a deployment an operator can have — the production reader answers with nothing for exactly the same reason,
+    /// an account whose configuration names no junk folder — and it is what makes every mailbox read here behave as it
+    /// did before junk was withheld from one. A test that needs the narrowing itself has to map a folder to the junk
+    /// role first, because a catalog answering with nothing withholds nothing and would report the narrowing as working
+    /// whatever the query did.
+    /// </remarks>
+    public IReadOnlyList<MailFolderIdentity> JunkFolders => [];
+
+    /// <inheritdoc />
+    /// <remarks>Answered from the same mapping the list above is read from, so the per-folder question and the per-query one cannot disagree.</remarks>
+    public bool IsJunkFolder(MailAccountId accountId, MailFolderAlias folderAlias) => false;
 
     /// <inheritdoc />
     /// <remarks>
