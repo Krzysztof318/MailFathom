@@ -512,6 +512,12 @@ try
         {
             BatchSize = backfillSettings.BatchSize,
             MaxBatchesPerRun = backfillSettings.MaxBatchesPerRun,
+
+            // Read from the sensitive-content section rather than from the backfill's own, because it answers a question
+            // about that section: an operator switching a scanner on is deciding what happens to the mail already
+            // stored. The walk that carries it out is this one, which is why the value arrives here.
+            RebuildsStaleDerivedData = provider.GetRequiredService<IOptions<SensitiveContentOptions>>()
+                .Value.RebuildStaleDerivedData,
         };
     });
     builder.Services.AddScoped(provider =>
@@ -781,6 +787,14 @@ try
     if (spamScannerIsConfigured)
     {
         builder.Services.AddHostedService<SpamScannerStartupGate>();
+    }
+
+    // Behind the schema gate, because it reads a table, and ahead of the walk that would reduce the figure it reports,
+    // so what an operator sees at start is the state the instance came up in. Registered only where a scanner is
+    // switched on, which is the only state in which anything can be stale against a configuration at all.
+    if (declaredSensitiveContent.IsAnyScannerEnabled)
+    {
+        builder.Services.AddHostedService<StaleDerivedDataStartupReport>();
     }
 
     builder.Services.AddHostedService<MailSynchronizationCoordinator>();

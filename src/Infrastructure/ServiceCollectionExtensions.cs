@@ -37,6 +37,7 @@ using MailFathom.Application.Retrieval.AskMail.Audit;
 using MailFathom.Application.Rules.Evaluation;
 using MailFathom.Application.Rules.History;
 using MailFathom.Application.SensitiveContent;
+using MailFathom.Application.SensitiveContent.Derivation;
 using MailFathom.Application.SensitiveContent.Detection;
 using MailFathom.Application.SensitiveContent.Egress;
 using MailFathom.Application.SensitiveContent.Redaction;
@@ -364,8 +365,18 @@ public static class ServiceCollectionExtensions
         services.AddScoped<MailboxRefreshTokenRecorder>();
         // MimeKit arrives with MailKit, so message parsing needs no dependency of its own; the adapter keeps its types
         // out of Application the same way the IMAP adapter keeps MailKit's out.
-        services.AddScoped<IEmailMimeReader>(provider => new MimeKitEmailMimeReader(
-            provider.GetRequiredService<EmailMimeExtractionOptions>()));
+        // Wrapped where a scanner is switched on, because this port is where every derived copy of a body begins: the
+        // search document, the passages cut from it, and the vectors built from those all descend from one extraction,
+        // and both writers of one reach it through here. Decided from the guard rather than from configuration this
+        // project does not bind, and left unwrapped where nothing is scanned so a message is read exactly as it was.
+        services.AddScoped<IEmailMimeReader>(provider =>
+        {
+            var reader = new MimeKitEmailMimeReader(provider.GetRequiredService<EmailMimeExtractionOptions>());
+
+            return provider.GetRequiredService<SensitiveContentDerivationGuard>() is { IsActive: true } guard
+                ? new RedactingEmailMimeReader(reader, guard)
+                : reader;
+        });
         // Beside the metadata reader and separate from it, because it parses only the header block and needs none of the
         // structural limits a body walk is bounded by: the parser stops at the blank line that ends the headers.
         services.AddScoped<IEmailSpamHeaderReader, MimeKitEmailSpamHeaderReader>();
@@ -409,6 +420,19 @@ public static class ServiceCollectionExtensions
         services.AddSingleton(provider => new SensitiveContentEgressGuard(
             provider.GetService<SensitiveContentRedactor>(),
             provider.GetRequiredService<ISensitiveContentEgressTelemetry>(),
+            provider.GetRequiredService<TimeProvider>()));
+
+        // Its counterpart on the way in, registered on the same terms and for the same reasons. The stamp is composed
+        // here rather than held by the redactor, because it is the derived store's question rather than the redaction's:
+        // what a row has to record is which detectors, revisions, categories, and suppressions produced its text, and
+        // that answer is fixed for the life of a process the moment the plan and the scanners are resolved.
+        services.AddSingleton<ISensitiveContentDerivationTelemetry, SensitiveContentDerivationTelemetry>();
+        services.AddSingleton(provider => new SensitiveContentDerivationGuard(
+            provider.GetService<SensitiveContentRedactor>(),
+            provider.GetService<SensitiveContentPlan>() is { } plan
+                ? SensitiveContentDerivationStamp.Compute(plan, provider.GetServices<ISensitiveContentScanner>())
+                : null,
+            provider.GetRequiredService<ISensitiveContentDerivationTelemetry>(),
             provider.GetRequiredService<TimeProvider>()));
         services.AddScoped<MailboxTimelineReader>();
         services.AddScoped<EmailContentReader>();

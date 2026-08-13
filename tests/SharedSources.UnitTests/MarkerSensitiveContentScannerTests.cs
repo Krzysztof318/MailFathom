@@ -75,6 +75,39 @@ public sealed class MarkerSensitiveContentScannerTests
             scanner.ScanAsync(Marker, TestContext.Current.CancellationToken));
     }
 
+    /// <summary>What a caller times around a scan is nothing at all unless the scan can be made to take time.</summary>
+    [Fact]
+    public async Task ScanAsync_AScannerGivenSomethingToDoWhileScanning_RunsItBeforeItAnswers()
+    {
+        // Arrange
+        var timeProvider = new FakeTimeProvider(ScannedAt);
+        var scanner = new MarkerSensitiveContentScanner(Marker, SensitiveContentScannerKind.Secrets, timeProvider);
+        scanner.WhileScanning = () => timeProvider.Advance(TimeSpan.FromMilliseconds(250));
+
+        // Act
+        var findings = await scanner.ScanAsync(Marker, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(ScannedAt.AddMilliseconds(250), timeProvider.GetUtcNow());
+
+        // Run before the answer rather than after it, so a finding is stamped with the clock the caller will read.
+        Assert.Equal(ScannedAt.AddMilliseconds(250), Assert.Single(findings).DetectedAt);
+    }
+
+    /// <summary>A scanner nobody gave anything to do must answer rather than fail on an absent callback.</summary>
+    [Fact]
+    public async Task ScanAsync_AScannerGivenNothingToDoWhileScanning_AnswersAsItAlwaysDid()
+    {
+        // Arrange
+        var scanner = ScannerOver(Marker);
+
+        // Act
+        var findings = await scanner.ScanAsync(Marker, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Single(findings);
+    }
+
     [Fact]
     public async Task ScanAsync_ACallerThatCancelled_StopsBeforeItScans()
     {

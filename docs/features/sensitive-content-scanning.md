@@ -1,6 +1,6 @@
 # Sensitive-content scanning
 
-<!-- describes: src/Application/SensitiveContent/**, src/Host/Configuration/SensitiveContent/**, src/Infrastructure/SensitiveContent/** -->
+<!-- describes: src/Application/SensitiveContent/**, src/Host/Configuration/SensitiveContent/**, src/Infrastructure/SensitiveContent/**, src/Application/Emails/Extraction/RedactingEmailMimeReader.cs, src/Host/Hosting/Warnings/StaleDerivedDataStartupReport.cs -->
 
 Mail carries credentials. A deployment key pasted into a thread, a connection string in a stack trace, an API token a
 colleague sent because it was quicker than a vault — all of it arrives in a mailbox and, from there, would otherwise
@@ -13,7 +13,7 @@ a detection is, what replaces it, what one scan may spend, and what happens when
 ## What is scanned, and what is never touched
 
 The boundary is **egress and derived data**, never ingestion. The table names the paths this contract is written for;
-the note below states which of them redact through it today.
+the note below it states the one that does not redact through it yet.
 
 | Kind of text | What scanning does to it |
 | --- | --- |
@@ -40,13 +40,13 @@ entirely rather than accept the second.
 All four combinations are supported configurations. With both off nothing is scanned, nothing is constructed, and no
 cost lands on any path.
 
-> **Egress redacts through the contract; the derived write does not yet.** The second row of the table above is covered
-> at the points the next section names, with one exception: the mail body an MCP client asks for by identity is served
-> as it was stored. The first row is narrower than it reads. A chunk is still stored as it was extracted, so nothing
-> writes a placeholder into the derived text yet — but a vector a hosted endpoint produced is computed from the guarded
-> passage, because the passage was redacted on its way out of the process. On a deployment with a scanner on and an
-> embedding endpoint declared, the chunk and the vector beside it are therefore derived from different text. The rest
-> arrives with its own change, and this note narrows as it does.
+> **One egress point is not yet covered.** The second row of the table above is covered at the points the next section
+> names, with one exception: the mail body an MCP client asks for by identity is served as it was stored. That arrives
+> with its own change, and this note goes with it.
+
+The first row is what a message stores rather than what leaves, so what it covers, what a derived row records about the
+configuration behind it, and what a late switch does to text already written are in [derived data](#derived-data-is-written-redacted-and-stamped)
+below.
 
 ## The guarded egress points
 
@@ -99,6 +99,92 @@ A refusal at any of the three fails the operation it guards, as [failing closed]
 question is not answered, the passages are not embedded, the listing is not served. What each guarded call found,
 refused, and cost is published; [telemetry § what guarding an egress point
 publishes](../operations/telemetry.md#what-guarding-an-egress-point-publishes) names the instruments.
+
+## Derived data is written redacted and stamped
+
+Everything MailFathom derives from a message's body — the extracted text, the passages cut from it, and the vectors
+built from those passages — is derived from redacted text while a scanner is on. The redaction happens once, where the
+body is read out of the stored MIME, so a placeholder is what is stored, what is embedded, and what a search or an
+answer later returns; nothing downstream scans a second time and nothing downstream sees the original.
+
+**Only the body goes through it.** A subject, a display name, an address, a folder alias, and a thread identity are
+routing identity rather than free text, exactly as the egress rule above draws the line, and they are guarded where they
+leave rather than where they are stored — otherwise a listing would name messages nobody could recognise and a reply
+would have nowhere to go. A subject an operator wants hidden from a model or an MCP client is hidden by the egress
+guard, which already covers it.
+
+**A refused scan writes nothing.** The derived path fails closed like every guarded one: a detector that is unreachable,
+over its budget, or answering nonsense refuses the extraction, and nothing downstream of it runs. On the synchronization
+path that message is not stored at all — its folder run stops on it and the checkpoint stays where it was, so the whole
+message is fetched again on the next run rather than landing half-derived. On the extraction backfill the message keeps
+whatever it already held, uncommitted work is discarded, and the walk resumes from its last committed position. Both
+retry on the next interval, and neither leaves text in the store that no scanner saw.
+
+### The stamp a derived row carries
+
+Each message's derived row records the sensitive-content configuration its text was written under, as a 64-character
+digest of: which scanners ran and in what order, each one's detector name and corpus or profile revision, the categories
+switched on for it, and the rules suppressed inside them. That is the whole of what decides the redacted result, which is
+what makes two rows with the same stamp comparable and two with different stamps not.
+
+**The analyzed ceiling is part of it**, because on this path it is not a cost control. A redaction returns the text cut
+at the ceiling, and here what is returned is what is stored — so a deployment that lowers
+`SensitiveContent:MaximumAnalyzedCharacters` indexes every message derived afterwards with its body cut at that length,
+and raising it back has to leave those rows stale or the missing text is never restored by anything.
+
+**The personal-data confidence floor is part of it too**, through the analyzer profile's revision, which names the
+mapping, the language, and the floor together. The floor is sent to the analyzer rather than applied to its answer, so a
+finding below it never crosses the process boundary: two deployments differing only there did not ask the same question,
+and a mailbox indexed under a higher floor holds personal data the lower one replaces.
+
+What the stamp does leave out is the per-call timeout and the concurrency limit. Neither changes one character of what a
+scan that finished produced, so folding them in would mark a whole mailbox stale for tuning a deployment does against
+its own load.
+
+**An absent stamp means the text predates any scanner.** It is a different value from every stamp, not a missing one,
+so a mailbox derived before the feature was switched on is counted and rebuilt exactly like one derived under an older
+configuration. A message indexed on its envelope alone — one whose stored MIME no reader could parse — is the one
+exception, and it is neither counted nor re-read: it holds no derived body text to correct, and re-reading it would
+produce nothing to write on every pass forever.
+
+### What a late switch does, and what it costs to fix
+
+Switching a scanner on, widening a category list, lifting a suppression, or moving to a build with a newer rule corpus
+changes the stamp. It does not change one byte of what is already stored: **stored raw MIME is never rewritten and
+stored derived text is never edited in place.** The way back is a rebuild, and the reason is the same one that keeps
+raw MIME byte-exact — an in-place edit of derived text would leave a chunk whose vector was built from something else,
+with nothing recording which half was which.
+
+So the deployment says so instead. At startup, a deployment with a scanner on counts the messages whose derived text was
+written under a different configuration and reports that count on its own log:
+
+- **A warning** when the count is above zero and no rebuild was asked for, naming `SensitiveContent:RebuildStaleDerivedData`
+  as what re-derives them. It is a warning rather than a refusal, because derived text written before a switch is a
+  state to act on rather than a misconfiguration, and refusing to start over it would take the deployment down for
+  something switching the scanner on had already improved.
+- **An informational line** when the rebuild is already switched on, saying the extraction backfill will re-derive them
+  and that it performs none while `MailExtractionBackfill:Enabled` is off.
+- **An informational line** when nothing is stale, because silence would otherwise read as a figure nobody looked up.
+
+The count is a count and nothing else — no subject, no address, no identity — like every other line this deployment
+writes. A database that cannot answer it is reported as unavailable and the host starts anyway: the report decides
+nothing, and a failed count is a worse reason to refuse a start than the stale rows it was counting.
+
+The rebuild is opt-in, off by default, and asked for with
+[`SensitiveContent:RebuildStaleDerivedData`](../operations/configuration-reference.md#sensitivecontent). Switched on,
+the extraction backfill stops selecting only messages that never had text and selects every message whose stamp is not
+the current one, walking them at its configured batch size and interval; its cursor is scoped to the stamp, so a switch
+flipped after a walk finished restarts that walk instead of resuming past the rows it must revisit.
+
+**What it costs is one full re-derivation of the mailbox.** Every selected message is read out of content storage,
+extracted again, scanned, re-chunked, and re-embedded — so it is the same spend as first indexing that mailbox: the
+stored text, the passages, and the vectors are all replaced, and on a deployment with a hosted embedding endpoint the
+embeddings are **billed again**, per message, at that provider's rate. It is off by default for exactly that reason.
+Nothing triggers it automatically: switching a scanner on protects what is derived from that moment onward, and spending
+a mailbox's worth of embedding credit is the operator's decision rather than a side effect of a protection switch.
+
+With both scanners off nothing here runs at all: no detector is constructed, no text is scanned on the way to storage,
+and no stamp is written — a derived row on such a deployment is byte-identical to one written before this existed.
 
 ## A finding names a position, never a value
 
@@ -349,10 +435,11 @@ number and a bank routing number, so raising the floor at all stops two of the f
 The floor is sent to the analyzer rather than applied to its answer, so the weakest guesses never cross the process
 boundary at all, and it is compared inclusively — a finding scored exactly 0.4 survives a floor of 0.4.
 
-It is not part of the detector revision a finding carries, and neither is the category list. The revision names *how*
-detection was performed — which mapping this build ships, and which model the analyzer loaded — while both of those name
-which of the results a deployment wanted. Two deployments on one revision may redact differently; what the revision
-promises is that they asked the same detector the same question.
+It is part of the detector revision a finding carries, beside the mapping this build ships and the model the analyzer
+loaded, because the analyzer applies it rather than this process: a finding below the floor is never reported, so it is
+part of the question asked rather than a filter over the answer. The category list is not, because that is which of the
+results a deployment wanted. What the revision promises is that two deployments carrying it asked the same detector the
+same question — which is also what makes it safe for a derived row's stamp to be computed from it.
 
 ### Two things the offsets have to survive
 

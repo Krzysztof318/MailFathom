@@ -137,7 +137,7 @@ public sealed class PersonalDataContentCatalogTests
 
     /// <summary>The revision travels with every finding, so a mapping change nobody recorded makes two results indistinguishable.</summary>
     [Fact]
-    public void Detector_NamesTheMappingRevisionAndTheLanguage()
+    public void Detector_NamesTheMappingRevisionTheLanguageAndTheFloor()
     {
         // Arrange
         var profile = PersonalDataScanningPlans.Profile;
@@ -147,6 +147,8 @@ public sealed class PersonalDataContentCatalogTests
 
         // Assert
         Assert.Equal("mailfathom-personal-data", detector.Name);
-        Assert.Equal($"presidio+entities.{PresidioEntityCorpus.MappingRevision}+lang.en", detector.Revision);
+        Assert.Equal(
+            $"presidio+entities.{PresidioEntityCorpus.MappingRevision}+lang.en+floor.0.42",
+            detector.Revision);
     }
 }

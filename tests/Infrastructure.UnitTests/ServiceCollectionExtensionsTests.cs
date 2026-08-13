@@ -4,6 +4,7 @@
 
 using MailFathom.Application.Emails.Embeddings.Backfill;
 using MailFathom.Application.Emails.Embeddings.Generation;
+using MailFathom.Application.Emails.Extraction;
 using MailFathom.Application.Emails.Search;
 using MailFathom.Application.Emails.SearchEmails;
 using MailFathom.Application.Retrieval;
@@ -314,6 +315,64 @@ public sealed class ServiceCollectionExtensionsTests
         using var provider = services.BuildServiceProvider();
 
         Assert.True(provider.GetRequiredService<SensitiveContentEgressGuard>().IsActive);
+    }
+
+    /// <summary>
+    /// The way in is where every derived copy of a body begins, so a deployment that switched a scanner on must get the
+    /// reader that redacts one. Nothing else would report the omission: both writers stamp the row from the guard rather
+    /// than from the reading, so an undecorated reader would store unredacted text under a stamp claiming otherwise.
+    /// </summary>
+    [Fact]
+    public void AddInfrastructure_WithARedactor_ResolvesAMimeReaderThatRedactsWhatItExtracts()
+    {
+        // Arrange
+        var services = new ServiceCollection();
+        services.AddSingleton(TimeProvider.System);
+        services.AddSingleton(new EmailMimeExtractionOptions());
+        services.AddSingleton(SensitiveContentPlan.Create(
+            SensitiveContentScanBounds.Default,
+            [
+                SensitiveContentScannerPlan.Create(
+                    SensitiveContentScannerKind.Secrets,
+                    [SensitiveContentCategory.Create("ProviderToken")],
+                    []),
+            ])!);
+        services.AddSingleton<SensitiveContentRedactor>();
+        services.AddSecretContentScanning();
+
+        // Act
+        services.AddInfrastructure(
+            _ => new PostgresConnectionSettings("Host=localhost;Database=mailfathom", null, null),
+            PostgresTextSearchConfiguration.Default,
+            MailAnsweringBudget.Default);
+
+        // Assert
+        using var provider = services.BuildServiceProvider();
+        using var scope = provider.CreateScope();
+
+        Assert.IsType<RedactingEmailMimeReader>(scope.ServiceProvider.GetRequiredService<IEmailMimeReader>());
+    }
+
+    /// <summary>The control the case above rests on: with both switches off the message is read exactly as it arrived.</summary>
+    [Fact]
+    public void AddInfrastructure_WithoutAScanner_ResolvesAMimeReaderThatRedactsNothing()
+    {
+        // Arrange
+        var services = new ServiceCollection();
+        services.AddSingleton(TimeProvider.System);
+        services.AddSingleton(new EmailMimeExtractionOptions());
+
+        // Act
+        services.AddInfrastructure(
+            _ => new PostgresConnectionSettings("Host=localhost;Database=mailfathom", null, null),
+            PostgresTextSearchConfiguration.Default,
+            MailAnsweringBudget.Default);
+
+        // Assert
+        using var provider = services.BuildServiceProvider();
+        using var scope = provider.CreateScope();
+
+        Assert.IsNotType<RedactingEmailMimeReader>(scope.ServiceProvider.GetRequiredService<IEmailMimeReader>());
     }
 
     /// <summary>

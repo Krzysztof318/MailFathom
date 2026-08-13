@@ -102,28 +102,9 @@ public sealed class PersonalDataAnalyzerProfileTests
         Assert.Equal(minimumConfidence, profile.MinimumConfidence);
     }
 
-    /// <summary>
-    /// The revision names how detection is performed, and the floor names which of its results this deployment wants — the
-    /// same distinction that keeps the configured categories out of it. Two deployments that redact differently over one
-    /// revision are expected; two that asked a different detector are not.
-    /// </summary>
-    [Fact]
-    public void Create_ConfidenceFloor_IsNotPartOfTheDetectorRevision()
-    {
-        // Arrange
-        var endpoint = new Uri("http://presidio-analyzer:3000", UriKind.Absolute);
-
-        // Act
-        var permissive = PersonalDataAnalyzerProfile.Create(endpoint, "en", 0.1);
-        var strict = PersonalDataAnalyzerProfile.Create(endpoint, "en", 0.9);
-
-        // Assert
-        Assert.Equal(permissive.Detector, strict.Detector);
-    }
-
     /// <summary>Two deployments asking in different languages produce different findings, so the revision has to say which.</summary>
     [Fact]
-    public void Create_Detector_CarriesTheLanguageBesideTheMappingRevision()
+    public void Create_Detector_CarriesTheLanguageAndTheFloorBesideTheMappingRevision()
     {
         // Arrange
         var endpoint = new Uri("http://presidio-analyzer:3000", UriKind.Absolute);
@@ -132,6 +113,29 @@ public sealed class PersonalDataAnalyzerProfileTests
         var profile = PersonalDataAnalyzerProfile.Create(endpoint, "de", 0.3);
 
         // Assert
-        Assert.Equal($"presidio+entities.{PresidioEntityCorpus.MappingRevision}+lang.de", profile.Detector.Revision);
+        Assert.Equal(
+            $"presidio+entities.{PresidioEntityCorpus.MappingRevision}+lang.de+floor.0.3",
+            profile.Detector.Revision);
+    }
+
+    /// <summary>The floor decides which regions are replaced, so what was derived under another one is not comparable.</summary>
+    /// <remarks>
+    /// A derived row's stamp is computed from this revision. An operator lowering the floor to catch more personal data
+    /// would otherwise leave every already-indexed message holding what this deployment now redacts, while the startup
+    /// report said the mailbox was current — the analyzer never reports below the floor, so nothing downstream could
+    /// tell the two apart.
+    /// </remarks>
+    [Fact]
+    public void Create_ADifferentConfidenceFloor_ProducesADifferentRevision()
+    {
+        // Arrange
+        var endpoint = new Uri("http://presidio-analyzer:3000", UriKind.Absolute);
+
+        // Act
+        var strict = PersonalDataAnalyzerProfile.Create(endpoint, "en", 0.85);
+        var permissive = PersonalDataAnalyzerProfile.Create(endpoint, "en", 0.4);
+
+        // Assert
+        Assert.NotEqual(strict.Detector.Revision, permissive.Detector.Revision);
     }
 }

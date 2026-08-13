@@ -1088,6 +1088,8 @@ indexed.
 
 Every message whose MIME is read also yields the searchable text of its body, on the same parse that produced the participants and the attachment summary. Running one walk for both answers is what keeps them consistent: a second walk under slightly different rules could classify a part as an attachment in one place and as the body in the other.
 
+On a deployment with a sensitive-content scanner switched on, that text is redacted before it is stored, so the placeholder is what the index, the chunks, and the vectors are built from; the row also records the configuration it was derived under. What is scanned, what a stamp covers, and what re-derives text written before a switch are in [derived data](sensitive-content-scanning.md#derived-data-is-written-redacted-and-stamped). With both scanners off — the default — nothing below changes in any way.
+
 ### Which part supplies the text
 
 The text comes from the parts the attachment rules already resolved as the **body branch**, not from every textual part in the message. A `.txt` file attached to an HTML message is a `text/plain` part that is not the body, and indexing it would put a document's contents into the body text of the mail carrying it.

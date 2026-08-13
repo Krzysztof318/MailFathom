@@ -29,6 +29,14 @@ public interface ISensitiveContentScanner
     /// <summary>Gets which of the two switches this scanner belongs to.</summary>
     SensitiveContentScannerKind Scanner { get; }
 
+    /// <summary>Gets the identity and revision every finding this scanner produces carries.</summary>
+    /// <remarks>
+    /// Readable without scanning anything, because a consumer that stores what it derived has to record the
+    /// configuration it derived under whether or not that particular text carried a finding. A revision reached only
+    /// through a finding would leave a clean message stamped with nothing.
+    /// </remarks>
+    SensitiveContentDetector Detector { get; }
+
     /// <summary>Scans text and reports every region of it the configured categories cover.</summary>
     /// <param name="text">The text to analyze, already bounded by the caller.</param>
     /// <param name="cancellationToken">Cancels the scan.</param>

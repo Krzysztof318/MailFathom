@@ -21,4 +21,20 @@ public sealed class StoredEmailExtractionBackfillOptions
 
     /// <summary>Gets or sets how many batches one run processes before it ends and reports that work remains.</summary>
     public int MaxBatchesPerRun { get; set; } = 10;
+
+    /// <summary>Gets or sets whether the walk also re-derives text written under an older sensitive-content configuration.</summary>
+    /// <remarks>
+    /// <para>
+    /// Off by default, because switching a scanner on must not spend a re-extraction of a whole mailbox on its own.
+    /// Enabling a scanner over mail that is already stored protects nothing already derived from it, and this is the
+    /// operator's answer to that: what it costs is one pass over every message's raw MIME, a re-cut of every passage,
+    /// and — where an embedding profile is active — a re-embedding of every passage whose text changed, which is a
+    /// provider bill.
+    /// </para>
+    /// <para>
+    /// It reaches nothing on a deployment that scans nothing. A rebuild towards no configuration would re-derive every
+    /// message back to the text it already holds.
+    /// </para>
+    /// </remarks>
+    public bool RebuildsStaleDerivedData { get; set; }
 }

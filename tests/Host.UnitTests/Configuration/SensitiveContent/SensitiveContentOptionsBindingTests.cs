@@ -61,6 +61,30 @@ public sealed class SensitiveContentOptionsBindingTests
         Assert.Equal(2, settings.MaximumConcurrentScans);
     }
 
+    /// <summary>
+    /// Switching a scanner on protects what is derived from now on and reaches nothing already indexed, so the key that
+    /// spends a re-derivation over a whole mailbox is separate and defaults to off. A binder that read it as anything
+    /// else would either start that spend without being asked or refuse to start it when it was.
+    /// </summary>
+    [Theory]
+    [InlineData("true", true)]
+    [InlineData("false", false)]
+    public void Bind_TheRebuildSwitch_ReadsWhatTheOperatorAskedFor(string configured, bool expected)
+    {
+        // Arrange
+        var configuration = ConfigurationFrom(new Dictionary<string, string?>
+        {
+            ["SensitiveContent:Secrets:Enabled"] = "true",
+            ["SensitiveContent:RebuildStaleDerivedData"] = configured,
+        });
+
+        // Act
+        var settings = Bind(configuration);
+
+        // Assert
+        Assert.Equal(expected, settings.RebuildStaleDerivedData);
+    }
+
     /// <summary>Each switch carries its own lists, and one bound into the other would scan for something nobody named.</summary>
     [Fact]
     public void Bind_OneSwitchConfigured_LeavesTheOtherOffAndCarryingNothing()

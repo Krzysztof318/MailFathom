@@ -21,6 +21,10 @@ internal sealed class ScriptedSensitiveContentScanner(SensitiveContentScannerKin
     /// <inheritdoc />
     public SensitiveContentScannerKind Scanner { get; } = scanner;
 
+    /// <inheritdoc />
+    public SensitiveContentDetector Detector { get; set; } =
+        SensitiveContentDetector.Create("scripted", "1");
+
     /// <summary>Gets or sets the findings every call reports.</summary>
     public IReadOnlyList<SensitiveContentFinding> Findings { get; set; } = [];
 

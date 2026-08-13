@@ -7,6 +7,7 @@ using MailFathom.Application.EmailContent.Storage;
 using MailFathom.Application.Emails.Extraction;
 using MailFathom.Application.Emails.Summaries;
 using MailFathom.Application.Persistence;
+using MailFathom.Application.SensitiveContent.Derivation;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Folders;
@@ -382,6 +383,16 @@ public sealed class StoredEmailExtractionBackfillTests
 
             return Task.CompletedTask;
         }
+
+        /// <summary>Answered as nothing outstanding, because the staleness figure is a query rather than walk state.</summary>
+        /// <remarks>
+        /// The predicate behind it is PostgreSQL's, so what it counts is proven against a real database rather than
+        /// against this fake; nothing the backfill itself does reads the answer.
+        /// </remarks>
+        public Task<int> CountEmailsWithStaleDerivedDataAsync(
+            SensitiveContentDerivationStamp current,
+            CancellationToken cancellationToken) =>
+            Task.FromResult(0);
 
         private void RecordSession(IPersistenceSession session)
         {

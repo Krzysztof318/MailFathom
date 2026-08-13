@@ -28,6 +28,14 @@ attachment is findable by its subject and its participants alone. That is a deli
 attachment extraction is an unbounded-cost path and document parsers are a far larger hostile-input surface than MIME
 parsing.
 
+**Where a sensitive-content scanner is switched on, the indexed body text is the redacted text.** Redaction happens as
+the message is extracted, so what `search_vector` is generated from is what a reader of a result would see, and a word
+inside a redacted region is not in the lexical index at all: no query matches it and no ranking counts it. That is the
+protection working rather than a search fault, and it applies to the passages and the vectors built from the same
+extraction. [Sensitive-content scanning § derived data is written redacted and
+stamped](sensitive-content-scanning.md#derived-data-is-written-redacted-and-stamped) records what a switch decides and
+what rebuilding an index costs after one moves.
+
 A message the extraction recorded as encrypted has no readable body and is indexed on its subject and participants for
 the same reason. It stays distinguishable from a message whose body was genuinely empty.
 
@@ -114,8 +122,9 @@ on its own rather than as one composed result. The display name is scanned rathe
 accompanies, because an address is a routing identity a server issued while the name in front of it is free text the
 sending side wrote. A scanner that cannot answer refuses the search. Both switches are off by default,
 and nothing on this path is scanned then. [Sensitive-content scanning § the guarded egress
-points](sensitive-content-scanning.md#the-guarded-egress-points) holds the contract; the ranking is unaffected, because
-it ran over the stored index before anything was redacted.
+points](sensitive-content-scanning.md#the-guarded-egress-points) holds the contract; that redaction leaves the ranking
+alone, because it happens after the query has run over the stored index. What the index itself holds is the earlier
+question the section above answers.
 
 The search vector carries no lexeme weights, so the lexical rank reflects how often and how densely a message's document
 mentions the query's words rather than where in the message they appear. A subject match and a body match count the

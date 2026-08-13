@@ -109,4 +109,29 @@ public sealed record ExtractedEmailText
 
         return new ExtractedEmailText(ExtractedEmailTextSource.DerivedFromHtmlBodyPart, originalText, trimmedText);
     }
+
+    /// <summary>Reports the same reading of the same body with both texts replaced by their redacted forms.</summary>
+    /// <param name="originalText">The untrimmed reading after redaction.</param>
+    /// <param name="trimmedText">The trimmed reading after redaction.</param>
+    /// <returns>The redacted text, keeping the source the body was read from.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when either argument is <see langword="null" />.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when this text carries no words to replace.</exception>
+    /// <remarks>
+    /// The source is carried rather than re-decided, because redaction changes what the words are and never where they
+    /// came from: a lossy reading of an HTML body stays a lossy reading of an HTML body once a credential inside it has
+    /// been replaced, and chunking weighs that marker.
+    /// </remarks>
+    public ExtractedEmailText WithRedactedText(string originalText, string trimmedText)
+    {
+        ArgumentNullException.ThrowIfNull(originalText);
+        ArgumentNullException.ThrowIfNull(trimmedText);
+
+        if (!this.HasText)
+        {
+            throw new InvalidOperationException(
+                "A message whose body yielded no words has nothing to redact, so its extracted text is carried through unchanged.");
+        }
+
+        return new ExtractedEmailText(this.Source, originalText, trimmedText);
+    }
 }

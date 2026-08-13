@@ -5,6 +5,7 @@
 using MailFathom.Application.Emails.Chunking;
 using MailFathom.Application.Emails.Embeddings;
 using MailFathom.Application.Jobs;
+using MailFathom.Application.SensitiveContent.Derivation;
 using MailFathom.CodeCoverage;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Mutations;
@@ -455,6 +456,9 @@ internal sealed class MailFathomDbContext : DbContext
             entity.ToTable("backfill_positions");
             entity.HasKey(position => position.Name);
             entity.Property(position => position.Name).HasMaxLength(BackfillPositionEntity.MaximumNameLength);
+            entity.Property(position => position.SensitiveContentStamp)
+                .HasMaxLength(SensitiveContentDerivationStamp.Length)
+                .IsFixedLength();
         });
 
         modelBuilder.Entity<SynchronizationCheckpointEntity>(entity =>
@@ -939,6 +943,14 @@ internal sealed class MailFathomDbContext : DbContext
             // Stored as text for the reason the content-availability reason is: the source stays readable in an audit
             // query and survives any later reordering of the enum.
             entity.Property(document => document.TextSource).HasConversion<string>().HasMaxLength(64).IsRequired();
+
+            // Carried without an index of its own. Both readers of the column ask which rows are *not* stamped with the
+            // current configuration, and a B-tree operator class holds no inequality operator, so nothing could use one;
+            // the staleness count and the rebuilding walk scan, which is what a once-per-start figure and a walk that
+            // reads whole rows anyway can afford.
+            entity.Property(document => document.SensitiveContentStamp)
+                .HasMaxLength(SensitiveContentDerivationStamp.Length)
+                .IsFixedLength();
 
             entity.HasOne(document => document.StoredEmail)
                 .WithOne(email => email.SearchDocument)
