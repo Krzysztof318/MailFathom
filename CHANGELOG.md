@@ -29,6 +29,386 @@ previous tag, and that same pull request is the one whose merge commit is tagged
 registries. `CHANGELOG.md` is a protected path for the same reason: an edit to it outside that flow changes what a
 release claims it shipped.
 
+## [0.6.0] - 2026-08-14
+
+The sixth release, and the first one that **does something with your mail rather than only reading it**. Rules you write
+in a configuration file move, copy, delete, and mark messages as read; a spam classification files junk on the server;
+and a durable queue underneath both means a crash loses none of it. The rules and the
+classification are off until you turn them on — the queue beneath them runs on every instance and is switched off only
+for a replica serving reads — and a rule is only ever authored in the file you provisioned, so what an instance will do
+to a mailbox is reviewable in a diff before it does anything.
+
+The other half of the release goes the opposite way. **A message's text can be redacted before anything is derived from
+it and before any of that text leaves this deployment**: secrets are found in this process, personal data by an analyzer
+you run beside it, and what MailFathom then chunks, embeds, retrieves, and returns is the redacted text. **An
+attachment's content is not text a scan reaches** — the signed link serves the file exactly as it was stored, so a
+credential inside an attached file is not covered by turning a scanner on. That is off by default as well, and off it
+costs nothing at all — no container is started, no image is pulled, and no memory is held.
+
+**Seven things need an edit before this release serves what `0.5.0` served.** The folder argument of `list_emails`,
+`search_emails`, and `ask_mail` is `folders` where it was `folderAliases`, and the old spelling is ignored rather than
+refused — so a client that keeps sending it reads every folder instead of the one it named. Every folder you want read
+is now named in configuration, and mail under an alias your file no longer names is unreachable until an entry names it
+again. `get_email_content` hands back a signed link per attachment instead of base64: a call asks for the links with
+`includeAttachmentDownloadLinks` where `0.5.0` asked with `includeAttachmentContent`, the old name is ignored rather
+than refused, and no link is issued at all unless `Deployment:PublicBaseAddress` is declared. **Delete
+`EmailContent:MaxAttachmentBytes` and `EmailContent:MaxAttachmentBytesPerRead` from your configuration file**, or the
+host refuses to start on a key it no longer knows. Mail in a folder your configuration maps as junk is withheld from
+listing and search unless the call asks for it, and withheld from answering with no way to ask. And a folder whose
+`Synchronize` you switch off now keeps its stored mail instead of erasing it.
+
+**The database schema moves by twelve migrations** that add eight tables, four columns on three tables that already held
+data, and the indexes for both, and that change nothing `0.5.0` reads — so the schema step applies while `0.5.0` is
+still serving, `0.5.0` serves the result unchanged if you roll the image back, and this release deploys over the
+previous release's data. Nothing else `0.5.0` promised is withdrawn: every setting not named below still means what it
+meant, no tool was removed, and every artifact a release publishes still publishes — the image, the chart, the schema
+script, and an `mfctl` binary per platform, Windows included. What is paused is the `winget` *submission*, which has
+never produced a package: the two already open are waiting for the community repository's review.
+
+### Added
+
+**Mail rules — what should happen to a message, written in your configuration file and applied to your mailbox.** A
+rule names the accounts it applies to, one condition over the message, and what a match asks for; a match moves the
+message to a folder, copies it, deletes it, or marks it as read, and MailFathom's convergence pass carries the change
+to the server the way every other change is carried, so a restart neither loses it nor repeats it
+([#712](https://github.com/Krzysztof318/MailFathom/pull/712),
+[#725](https://github.com/Krzysztof318/MailFathom/pull/725)).
+[Mail rules](https://krzysztof318.github.io/MailFathom/features/mail-rules.html) is the page, condition by condition.
+
+- **The condition is one expression over twenty-two facts about the message** — the account alias, the folder alias and
+  the role that folder plays, the subject, the sender's address and domain, the recipient addresses and domains, when it
+  was received and sent, its age, its size, the attachment count and bytes, seven flags the server or the extraction
+  reported, and the body text — with seven functions and the ordinary operators. Anything outside that set is refused when the file is read rather than at
+  the moment a message meets it, and a rule set with three mistakes reports all three at once
+  ([#696](https://github.com/Krzysztof318/MailFathom/pull/696)).
+- **A rule runs on the occasions it declares.** `MailRules:Rules:<n>:Triggers` names them: `Arrival` for mail as it is
+  synchronized, `Schedule` with a `Schedule` beside it for a recurring pass, and neither for a rule only an operator
+  starts ([#727](https://github.com/Krzysztof318/MailFathom/pull/727),
+  [#820](https://github.com/Krzysztof318/MailFathom/pull/820)).
+- **Each account states which of the four actions a rule may ask of it** under `RuleActions`, with deletion opt-in and
+  the three reversible actions opt-out. A rule asking for a refused action fails startup naming the rule, the action,
+  and the account ([#725](https://github.com/Krzysztof318/MailFathom/pull/725)).
+- **No IMAP command a rule asks for leaves the pass, and the pass touches no `\Seen` flag itself.** Every change a match
+  asks for is written down and carried by the account's convergence pass, the way every other change to a mailbox is.
+  The one thing the pass does reach a mail server for is finding a destination folder the account maps and does not
+  mirror, and only where a rule files into one; everything it reads about the mail was already stored, so no MCP read
+  waits on it however long it takes. It is a step of the account's own synchronization run, after the classification and
+  in front of the passages being cut.
+- **`mfctl` runs the rules and explains what they did.** `mfctl rules list` and `mfctl rules show` state which rules are
+  loaded, in the order they run, and what fires each; `mfctl rules run` applies them to mail that arrived before them
+  and returns at once rather than holding the terminal open; `mfctl rules run-status` says where that run has got to;
+  and `mfctl rules history` answers why a message is where it is, one row per rule per message, recording that a
+  condition read `senderDomain` and never what the domain was
+  ([#728](https://github.com/Krzysztof318/MailFathom/pull/728)).
+- **An edit takes effect on reload, and an invalid one changes nothing** and is reported instead of disappearing. A run
+  under way stays on the rule set it started with and reports itself superseded rather than half-applying two
+  ([#682](https://github.com/Krzysztof318/MailFathom/pull/682)).
+
+**Spam classification, and filing junk on the server.** The verdict is read from what the message already carries: the
+provider's own `X-Spam-*` headers, and the folder it arrived in, which outranks them because it is a decision somebody
+already acted on. **The authentication results, the ARC chain included, are recorded beside the verdict as signals
+rather than judged from** — a DMARC failure is something your receiving server saw and chose to deliver anyway, so
+turning it into a spam verdict here would file mail your own provider decided to accept
+([#731](https://github.com/Krzysztof318/MailFathom/pull/731)). `SpamClassification:Enabled` turns it on, and it is off.
+**It covers the folders `SpamClassification:ScannedFolders` names**, and where you name none, every account's inbox and
+nothing else — so a deployment whose own filter delivers somewhere other than the inbox names that folder there, or
+gets no verdict for the mail in it.
+[Spam classification](https://krzysztof318.github.io/MailFathom/features/spam-classification.html) is the page.
+
+- **An Apache SpamAssassin daemon beside the service scores what the headers cannot**, deployed only where
+  `SpamClassification:UseScanner` is on: the Helm chart renders no workload for it, the Compose deployment keeps it
+  behind an inactive profile, and the Quadlet unit is a file you never copy. Its DNS blocklists are **off**, because
+  those rules send the sender addresses and link hosts out of your mail to third-party lists
+  ([#777](https://github.com/Krzysztof318/MailFathom/pull/777)).
+- **What a verdict may do is two switches, both off.** `SpamClassification:Actions:FileInJunkFolder` files the message
+  into the account's junk folder and `MarkAsRead` marks it read, each through the same durable change record a rule
+  uses ([#779](https://github.com/Krzysztof318/MailFathom/pull/779)).
+- **Arriving mail is classified as it is stored**, as a queued job retried per message, so one unreachable scanner
+  delays one message rather than the whole account ([#826](https://github.com/Krzysztof318/MailFathom/pull/826)).
+- **`mfctl spam run` classifies a whole mailbox, and its default posture is a dry run** — the first thing you do with a
+  scanner is find out what it would do. `mfctl spam run-status` follows the walk and `mfctl spam classifications` reads
+  the verdicts back ([#795](https://github.com/Krzysztof318/MailFathom/pull/795)).
+- **Junk is withheld from everything derived from it.** Where classification is on, a message it calls spam — and one the
+  receiving server already filed in junk — is never cut into passages, never embedded, never sent to an embedding
+  provider, and never offered to the rule set. **A message still waiting for a verdict is held back only until
+  `SpamClassification:ClassificationWait` expires**, fifteen minutes unless you say otherwise, so a wedged scanner or a
+  deep queue does not stall the index: past the wait the message is derived from like any other, and a spam verdict
+  arriving afterwards discards the passages and vectors it produced, in the transaction that records the verdict. **A
+  shorter wait therefore costs more**, since more unscored mail is embedded and then stripped — budget the provider spend
+  accordingly if you lower it or run the scanner near its limit. Nothing else is written down,
+  so dragging a message out of junk in any mail client is the whole of the correction
+  ([#805](https://github.com/Krzysztof318/MailFathom/pull/805)).
+
+**Sensitive-content scanning: mail redacted before it is derived from or handed out.** Two switches under
+`SensitiveContent`, both off, and each finding is replaced by `[redacted:<category>]` — the category and nothing else,
+so no length and no surviving prefix narrows what stood there
+([#687](https://github.com/Krzysztof318/MailFathom/pull/687)).
+[Sensitive-content scanning](https://krzysztof318.github.io/MailFathom/features/sensitive-content-scanning.html) states
+the categories and what turning each on costs a search.
+
+- **`Secrets` runs in this process**, over a 204-rule corpus assembled from `Microsoft.Security.Utilities.Core`, the
+  gitleaks rule data, and three shapes both of those miss because both are written for source control: a database
+  connection URI, a connection string's password, and a link whose query string is the credential
+  ([#701](https://github.com/Krzysztof318/MailFathom/pull/701)).
+- **`Pii` reaches a Presidio analyzer you deploy beside the service**, mapped onto eleven categories you can suppress by
+  rule without switching a category off. Turning the switch on with nowhere to ask **fails startup** rather than running
+  unprotected ([#724](https://github.com/Krzysztof318/MailFathom/pull/724)).
+- **Everything stored that is derived from a body is derived from the redacted text**, and each derived row records a
+  digest of the configuration it was built under — so switching a scanner on later is visible rather than silent, and a
+  startup line names `SensitiveContent:RebuildStaleDerivedData` when rows predate the current settings. Stored raw MIME
+  is never rewritten ([#790](https://github.com/Krzysztof318/MailFathom/pull/790)).
+- **`get_email_content` is scanned on every call.** Both body representations, the subject, and participant display
+  names are redacted in flight, nothing is rewritten in the store, and a body cut short by the scan's ceiling says so
+  as `sensitiveContentScanCeiling` ([#803](https://github.com/Krzysztof318/MailFathom/pull/803)).
+
+**A folder mapping now says how far into MailFathom a folder is admitted**, through three switches on the entry that
+each default to `true`: `Synchronize` decides whether the folder is mirrored at all, `GenerateEmbeddings` whether what
+is stored is ever cut into passages and sent to a provider, and `VisibleToTools` whether any tool lists, searches,
+reads, or answers from it. A folder mapped with `Synchronize: false` is still a folder a rule can file mail *into*
+([#706](https://github.com/Krzysztof318/MailFathom/pull/706)).
+
+- **A mapping can ask for its folder to be created on the server.** `CreateIfMissing` defaults to `false` and applies
+  only to an entry naming a `RemotePath`, so a mistyped path stays an unresolved alias instead of becoming a folder
+  named after the mistake. Creation is issued where the alias is resolved, level by level, and the alias binds to the
+  folder as the server advertises it ([#723](https://github.com/Krzysztof318/MailFathom/pull/723),
+  [#726](https://github.com/Krzysztof318/MailFathom/pull/726)).
+- **A mapping states a role independent of how the folder is found.** An entry may name both a `RemotePath` and a
+  `SpecialUse`, a role is unique per account, and `role:Junk` is how a rule or the classification names a destination
+  without knowing what the server calls it ([#729](https://github.com/Krzysztof318/MailFathom/pull/729)).
+- **`mfctl folder erase` is the one thing in MailFathom that removes a folder's local copy**, one bounded pass per
+  request, printing a running total and taking the raw MIME, the search document, the passages, their vectors, the spam
+  verdicts and the signals behind them, the rule-execution history for that mail, and the checkpoint with the rows — so
+  `mfctl spam classifications` and `mfctl rules history` stop answering for a folder you erase
+  ([#789](https://github.com/Krzysztof318/MailFathom/pull/789)).
+
+**Durable background work, with the queue an operator can see and act on.** Jobs are persisted, leased, and claimed one
+statement at a time, so work in flight when a process dies is picked up again rather than stranded — **execution is
+at-least-once**, and every handler is registered on the promise that running it twice with one payload is the same as
+running it once, so the second attempt a crash produces is safe rather than absent. An attempt runs under a bounded
+timeout with its lease renewed while it works ([#797](https://github.com/Krzysztof318/MailFathom/pull/797),
+[#800](https://github.com/Krzysztof318/MailFathom/pull/800)).
+
+- **Failure is classified rather than counted.** What is transient is retried with jittered backoff up to
+  `Jobs:MaxAttempts`, what cannot succeed is dead-lettered at once, and the recorded reason carries nothing from the
+  message ([#806](https://github.com/Krzysztof318/MailFathom/pull/806)).
+- **Capacity is bounded at both ends.** `Jobs:MaxConcurrentJobs`, `Jobs:MaxConcurrentJobsPerType`, and
+  `Jobs:MaxQueueDepthPerType` govern how much runs at once and refuse an enqueue past the depth rather than accepting
+  work the deployment cannot reach ([#807](https://github.com/Krzysztof318/MailFathom/pull/807)).
+- **`mfctl jobs dead-letters`, `mfctl jobs retry`, and `mfctl jobs drop`** list what has stopped, put one back, and give
+  one up, and seven instruments publish what ran, how long it took, how much was repeated, what stopped, what is
+  waiting, what a recurring dispatch decided, and how many of its occasions were skipped — the last of those being the
+  one thing the others cannot show, since a skipped occasion enqueues nothing
+  ([#814](https://github.com/Krzysztof318/MailFathom/pull/814),
+  [#820](https://github.com/Krzysztof318/MailFathom/pull/820)).
+
+**A model server on a private address, reached with no credential at all.** `Unauthenticated` is a third way to declare
+what an endpoint presents, beside `ApiKey` and `EntraCredential`, and a plain `http` address is accepted for an endpoint
+that declares it — which is the shape every local inference server has. Needing no credential is written rather than
+inferred from the other two being absent, because an omission is what a forgotten key reference also looks like, and a
+startup warning names each endpoint reached in the clear and what crosses it readable
+([#695](https://github.com/Krzysztof318/MailFathom/pull/695)).
+[Provider endpoints](https://krzysztof318.github.io/MailFathom/operations/provider-endpoints.html) records which
+services were checked and what each check rests on ([#698](https://github.com/Krzysztof318/MailFathom/pull/698),
+[#702](https://github.com/Krzysztof318/MailFathom/pull/702)).
+
+**An inbound request now has an upper duration, and the process an upper connection count.** The MCP and administrative
+endpoints each carry `RequestTimeout` beside their rate limiting, defaulted so enabling an endpoint bounds it — the
+health probes stay outside it deliberately, since they have to keep answering while an endpoint is refusing — and
+`ConnectionLimits` bounds what the machine accepts at all, the probe listener included, because the accept, the TLS
+handshake, and the client certificate's chain building all happen before any rate limiter can see them
+([#684](https://github.com/Krzysztof318/MailFathom/pull/684)).
+
+**A Podman Quadlet deployment**, so a container can take the encrypted, machine-bound credentials systemd provisions.
+`deploy/quadlet/` holds the unit sources for the application, PostgreSQL, the two networks, the volume, and the two
+optional sidecars, and every secret reference in its configuration example is `systemd-credential:` rather than `file:`
+([#704](https://github.com/Krzysztof318/MailFathom/pull/704)).
+[The Quadlet deployment](https://krzysztof318.github.io/MailFathom/operations/deployment-quadlet.html) is the guide.
+
+**Traces and metrics over the parts of MailFathom no library instruments.** A synchronization cycle opens a span per
+account with one per folder beneath it, and eight instruments report how long a cycle took, what it stored and skipped,
+what stopped a folder run, and how far behind an account is ([#817](https://github.com/Krzysztof318/MailFathom/pull/817)).
+The local read path is spanned from the MCP call down to the content store
+([#819](https://github.com/Krzysztof318/MailFathom/pull/819)); tool calls, the content store, the extraction backfill,
+and database commits are metered ([#822](https://github.com/Krzysztof318/MailFathom/pull/822)); and every call to a
+model opens a span measuring one attempt against the provider, with prompt and completion capture explicitly off
+([#828](https://github.com/Krzysztof318/MailFathom/pull/828)). Tracing is parent-based always-on, and
+`OTEL_TRACES_SAMPLER` still decides where you set it ([#832](https://github.com/Krzysztof318/MailFathom/pull/832)).
+[Telemetry](https://krzysztof318.github.io/MailFathom/operations/telemetry.html) lists every span and instrument.
+
+**An authorization server's document can advertise a scope this deployment does not require.**
+`McpEndpoint:Authentication:<n>:OAuth:AdvertisedScopes` is published beside the required ones and never enforced, which
+is what lets a client be told to ask for `offline_access` without every token lacking it being refused
+([#818](https://github.com/Krzysztof318/MailFathom/pull/818)).
+
+**`ask_mail` can narrow its lookups the way a search can.** The seven structured filters `search_emails` publishes are
+now available to an answering run, validated by the same use case in the same words, and a filter it refuses is
+reported back to the model rather than absorbed into an empty answer
+([#686](https://github.com/Krzysztof318/MailFathom/pull/686)).
+
+**Documentation for the two questions the previous release left you to work out on your own.**
+[Configuring a mailbox at your provider](https://krzysztof318.github.io/MailFathom/users/mailbox-providers.html) states
+the address, port, and credential kind each popular mail service publishes and what each does differently once
+synchronization runs ([#703](https://github.com/Krzysztof318/MailFathom/pull/703)), and
+[connecting the chat client you already use](https://krzysztof318.github.io/MailFathom/users/mcp-clients.html) says
+where the dialog is in each one and which of them cannot present an API key at all
+([#710](https://github.com/Krzysztof318/MailFathom/pull/710)). An
+[MCP client OAuth connection](https://krzysztof318.github.io/MailFathom/operations/mcp-client-oauth.html) is documented
+end to end from the identity provider's side ([#700](https://github.com/Krzysztof318/MailFathom/pull/700)).
+
+**Every surface that knows a version now says where that version's documentation is** — the image's
+`org.opencontainers.image.documentation` label, the chart's install notes, `mfctl status` for the version the
+*deployment* reports, and the MCP server's own instructions to an initializing client
+([#798](https://github.com/Krzysztof318/MailFathom/pull/798)). The site publishes each version's pages as artifacts an
+AI agent can read as well: a map at the version's root, the Markdown source beside every documentation page the map
+links — the generated API reference is published as pages only — and one file per reading path ([#793](https://github.com/Krzysztof318/MailFathom/pull/793)).
+
+**`mfctl` installs on Linux with one command**, which fetches the binary for the platform, verifies it against the
+checksum published beside it, and installs it into `~/.local/bin`. Where that directory is not already on your `PATH`
+the script prints the `export PATH` line to add to a shell profile rather than editing one for you
+([#794](https://github.com/Krzysztof318/MailFathom/pull/794)).
+
+### Changed
+
+- **Breaking (MCP tool contract)** — **`list_emails`, `search_emails`, and `ask_mail` take `folders` where they took
+  `folderAliases`**, because the argument now accepts a role — `role:Junk` — as readily as an alias you chose. **An
+  argument the tool does not declare is ignored rather than refused**, so a client still sending `folderAliases` is not
+  stopped: its folder filter disappears and the call reads **every** folder in scope instead of the one it named.
+  Update any stored prompt, tool description, or client configuration that spells the argument out. Naming a *role* no
+  account in scope maps is now refused with `53003 MailFolderRoleUnmapped` rather than answered with an empty page; an
+  *alias* nothing maps still selects nothing, because an alias is a name the caller chose while an empty page for a role
+  would read as a folder holding no mail ([#729](https://github.com/Krzysztof318/MailFathom/pull/729)).
+- **Breaking (MCP tool contract)** — **`get_email_content` returns a signed download link per attachment instead of
+  base64 content, and asks for it with `includeAttachmentDownloadLinks` where `0.5.0` asked with
+  `includeAttachmentContent`.** An argument the tool does not declare is ignored rather than refused, so a client that
+  keeps sending the old name is not stopped: it receives every attachment described, no link, and no error. **Update
+  every client that fetches attachment content before the upgrade.** Every attachment is still described in full — file
+  name, media type, decoded size — and a call that asks for the files receives one `https` URL per attachment, valid for
+  `EmailContent:AttachmentDownloads:LinkLifetime`
+  and scoped to that one attachment. **Declare `Deployment:PublicBaseAddress`**, an absolute address with no path and
+  `https` unless the host is loopback: a deployment that declares none serves every other part of the read and reports
+  each attachment as `Unavailable`, and so does one that configures no data-encryption key ring, because the signing
+  key is derived from that ring. Nothing composes the address from a request header, so it cannot be guessed on your
+  behalf ([#679](https://github.com/Krzysztof318/MailFathom/pull/679)).
+- **Breaking (configuration schema)** — **`EmailContent:MaxAttachmentBytes` and `EmailContent:MaxAttachmentBytesPerRead`
+  are removed, and a configuration file still carrying either fails startup.** They bounded how many attachment octets
+  one response and one call could carry, and no response carries an attachment's octets any more — what a caller
+  receives is a link, and what bounds it is its lifetime rather than its size. The `EmailContent` section is bound
+  strictly, so an unknown key is refused rather than ignored: a `0.5.0` file reaches this release and the host declines
+  to start naming the key. **Delete both lines**, including the `MaxAttachmentBytes: 0` that `0.5.0` documented as the
+  way to return no attachment content at all — a deployment that wants the metadata and nothing else now simply does not
+  ask for links ([#679](https://github.com/Krzysztof318/MailFathom/pull/679)).
+- **Breaking (MCP tool contract)** — **junk mail is withheld from listing, search, and answering by default.**
+  `list_emails` and `search_emails` gain an optional `includeJunkMail`, defaulting to `false`, and every result of
+  either carries a new required `includedJunkMail` field — so a client parsing a result strictly sees a new field, and
+  one that names no new argument sees mail in a folder mapped as junk stop appearing. `ask_mail` excludes junk and
+  offers no override, because its answer is composed by a model out of the mail it retrieved and content written to
+  deceive a reader would arrive as ordinary correspondence. `get_email_content` is unaffected: a message reached by its
+  identifier is one somebody already has in hand ([#731](https://github.com/Krzysztof318/MailFathom/pull/731)).
+- **Breaking (configuration schema)** — **`MailSynchronization:Accounts:<n>:Folders` is now the whole of the folders the
+  deployment has**, rather than a list of folders it treats specially. A folder no entry names is unreachable for every
+  reader: no tool lists, searches, reads, or answers from it, no rule is evaluated against its mail, nothing embeds it,
+  and no alias of it resolves as a destination. **Anyone whose deployment holds mail under an alias the current file
+  does not name — a folder mapped once and later removed, or renamed in configuration — adds an entry for it to read
+  that mail again.** Nothing is deleted: the rows stay and become readable the moment a mapping names them, with the
+  folder resuming from its retained checkpoint. The default is untouched, so an account configuring no folder still
+  mirrors its inbox by role ([#784](https://github.com/Krzysztof318/MailFathom/pull/784)).
+- **Breaking (configuration schema)** — **switching a folder's `Synchronize` off now keeps the mail it had already
+  stored**, where `0.5.0` erased it. The rows go on occupying the database while staying unreadable by every tool,
+  query, embedding pass, and rule. **No configuration value erases them any more**; `mfctl folder erase` is what does,
+  and an operator who switched the flag off expecting the storage back runs it
+  ([#781](https://github.com/Krzysztof318/MailFathom/pull/781),
+  [#789](https://github.com/Krzysztof318/MailFathom/pull/789)).
+- **Breaking (configuration schema)** — **`SpamClassification:UseScanner` is read at startup, and a deployment that
+  turns it on without a reachable daemon fails to start** instead of quietly classifying from headers alone. Name a
+  daemon in `SpamClassification:Scanner:Host` and deploy one, or leave `UseScanner` off
+  ([#777](https://github.com/Krzysztof318/MailFathom/pull/777)). The personal-data analyzer refuses startup on the same
+  terms: `SensitiveContent:Pii` on with no analyzer that can answer for a switched-on category is a scanner that would
+  find nothing, which is indistinguishable from clean mail
+  ([#724](https://github.com/Krzysztof318/MailFathom/pull/724)).
+- **Breaking (configuration schema)** — **a folder entry may now name both `RemotePath` and `SpecialUse`** where exactly
+  one was required, and `CreateIfMissing` is refused only on an entry naming no `RemotePath`. Both are relaxations, so
+  configuration `0.5.0` accepted still binds. What is new is that two folders of one account naming the same role, or an
+  alias beginning `role:`, fail startup — neither of which a previous file could have relied on
+  ([#729](https://github.com/Krzysztof318/MailFathom/pull/729)).
+- **Twelve migrations**, adding eight tables for rules, their execution history, spam
+  classifications and their signals, classification runs, jobs, and rule schedules; four columns on `stored_emails`,
+  `email_search_documents`, and `backfill_positions`; and the indexes both need. One statement renames a column on a
+  table this release itself introduced. **Nothing `0.5.0` reads changes shape**, so the schema step applies while
+  `0.5.0` is still serving, this release deploys over the previous release's data, and rolling the image back leaves
+  `0.5.0` serving the result unchanged. Apply it the way every release's schema is applied
+  ([#797](https://github.com/Krzysztof318/MailFathom/pull/797),
+  [#814](https://github.com/Krzysztof318/MailFathom/pull/814),
+  [#820](https://github.com/Krzysztof318/MailFathom/pull/820)).
+- **The release no longer submits `winget` manifests.** Two submissions are open
+  against the community repository and neither has been reached, and it accepts exactly one pull request per package
+  version — so submitting again could only queue a version behind them. No page offers `winget` as a way to get `mfctl`
+  while that holds; take the binary from the release, or use the install script on Linux
+  ([#794](https://github.com/Krzysztof318/MailFathom/pull/794)).
+- **A message's passages are cut after classification and after the rules, not inside the transaction that stores it.**
+  Cutting is now the account run's last local step, so a message is never chunked before the classification could
+  withhold it or before a rule could file it somewhere mapped differently — and passages are not undone by a message
+  moving afterwards ([#811](https://github.com/Krzysztof318/MailFathom/pull/811)).
+  [The arrival pipeline](https://krzysztof318.github.io/MailFathom/architecture/arrival-pipeline.html) states the whole
+  order.
+- **The folder-count refusal on `list_emails`, `search_emails`, and `ask_mail` reads for the argument rather than for
+  aliases.** All three bind `folders` through the same resolver, so all three raise it. The
+  five-digit code `51002` is unchanged and its message and filter name are worded differently; a client that matched on
+  the text rather than the code sees new text, which is what the code exists so it need not do
+  ([#776](https://github.com/Krzysztof318/MailFathom/pull/776)).
+
+### Fixed
+
+- **A client following the published OAuth metadata was sent back through `/authorize` every time its token expired.**
+  The document listed only the scopes a token would be refused for lacking, so `offline_access` could not appear in it —
+  requiring it would refuse every token from an authorization server that grants offline access without echoing the
+  value into the access token. Clients therefore asked for the published scopes, were issued no refresh token, and
+  re-authorized on every expiry. Advertised and required scopes are two lists now, and `mfctl` no longer compensates by
+  appending the value itself ([#818](https://github.com/Krzysztof318/MailFathom/pull/818)).
+- **`ask_mail` answered worse than `search_emails` on questions a search alone handles.** An answering run could only
+  rank free text across the whole scope, which is the one shape both lexical and vector similarity are weakest at; it
+  can now narrow by sender, recipient, subject fragment, date bounds, read state, and attachments, and a filter it wrote
+  badly is reported back to it instead of arriving as an empty mailbox
+  ([#686](https://github.com/Krzysztof318/MailFathom/pull/686)).
+- **A folder mapped but not mirrored could not be reached as a destination.** It is resolved on demand the first time
+  something files mail into it, through the same resolver every other destination goes through — which also means
+  `CreateIfMissing` reaches such a folder ([#778](https://github.com/Krzysztof318/MailFathom/pull/778)).
+
+### Security
+
+- **Mail can be redacted before it crosses out of the deployment, and the guard fails closed.** Four egress points are
+  named and each is guarded: the question and the retrieved extracts sent to a chat endpoint, every passage sent to an
+  embedding endpoint, the subjects, snippets, and answers the MCP tools return, and — for a message a client asked for by
+  identifier — its body representations, its subject, and the display names its headers wrote. What is deliberately left
+  as read at that fourth point is what a caller acts on rather than reads: the addresses, the sizes, the flags, and every
+  attachment's file name. A detector that is unavailable, times out, or errors **fails the call** rather than serving
+  unredacted text
+  ([#772](https://github.com/Krzysztof318/MailFathom/pull/772),
+  [#803](https://github.com/Krzysztof318/MailFathom/pull/803)).
+- **No response carries an attachment's bytes any more.** A call asking for files receives a link per attachment,
+  carrying an opaque capability signed with a key derived from the deployment's existing key ring under HMAC-SHA256 and
+  compared in constant time, valid for minutes, scoped to one attachment, and resolved through the live mailbox so it
+  dies with the message it points at. A rotation leaves outstanding links verifiable for the rest of their own lifetime
+  and issues new ones under the new key ([#679](https://github.com/Krzysztof318/MailFathom/pull/679)).
+- **Both scanners are meant to stay inside your trust boundary, and the deployment assets say so.** The personal-data
+  analyzer and the spam daemon are reached over your own network by default, the analyzer's confidence floor is set
+  where every measured false positive drops while every category stays detectable, and the daemon's DNS blocklists —
+  which would send sender addresses and link hosts to third-party lists — are off unless you operate a resolver and
+  accept what it sends ([#724](https://github.com/Krzysztof318/MailFathom/pull/724),
+  [#777](https://github.com/Krzysztof318/MailFathom/pull/777)).
+- **A slow or numerous caller can no longer hold a surface out of service.** Twenty concurrent requests with no upper
+  duration was enough to do it, since a permit was held for as long as the request took; the MCP and administrative
+  endpoints now carry a request timeout, the probes staying outside it, and a process-wide connection ceiling bounds
+  what is accepted before any routing has happened
+  ([#684](https://github.com/Krzysztof318/MailFathom/pull/684)).
+- **Junk mail never reaches the model that answers a question.** `ask_mail` excludes it with no override, so a message
+  written to deceive a reader cannot arrive as ordinary correspondence in the material an answer is composed from
+  ([#731](https://github.com/Krzysztof318/MailFathom/pull/731)).
+- **A telemetry record still carries no mail.** Every publisher of a span or a measurement in the deployment is held
+  against the redaction contract — driven through a listener and judged on what it emitted where a test can drive it,
+  and read from its declarations where it cannot, which is how a span a background worker opens is covered — so the rule
+  is asserted over the whole surface rather than sampled where somebody remembered to check
+  ([#832](https://github.com/Krzysztof318/MailFathom/pull/832)).
+
 ## [0.5.0] - 2026-08-10
 
 The fifth release, and the one that lets a client **ask about your mail rather than only look through it**. `ask_mail`
@@ -774,6 +1154,7 @@ is the whole surface, key by key, including which keys reload and which need a r
   [`THIRD_PARTY_LICENSES.md`](https://github.com/Krzysztof318/MailFathom/blob/main/THIRD_PARTY_LICENSES.md) registers
   every dependency it ships beside ([#173](https://github.com/Krzysztof318/MailFathom/pull/173)).
 
+[0.6.0]: https://github.com/Krzysztof318/MailFathom/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/Krzysztof318/MailFathom/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/Krzysztof318/MailFathom/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/Krzysztof318/MailFathom/compare/v0.2.0...v0.3.0
