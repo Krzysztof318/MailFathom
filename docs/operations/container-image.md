@@ -92,11 +92,11 @@ port is asked from the host instead.
 The three answer different questions and are wired to different probes on purpose:
 
 - **`/started`** reports whether the host's startup gates have completed: every secret reference resolved, the database
-  schema verified, and — each only where its own switch is on — the analyzer answering for every category it was
-  configured with and the spam scanner naming the corpus it scores under. It is what an orchestrator's startup probe
-  reads, so a slow first start extends the grace period rather than counting as a failure.
-- **`/health`** consults the dependencies a request needs, the database among them. It is readiness: a process that
-  cannot reach its database stops receiving requests it cannot fulfil.
+  schema verified, and — only where its own switch is on — the spam scanner naming the corpus it scores under. It is what
+  an orchestrator's startup probe reads, so a slow first start extends the grace period rather than counting as a failure.
+- **`/health`** consults the dependencies a request needs: the database, and — only where its switch is on — the
+  personal-data analyzer answering for every configured category. It is readiness: a process that cannot reach either
+  stops receiving requests it cannot fulfil, and is not restarted for it.
 - **`/alive`** consults only process-local state. It is liveness: a database outage must never become a restart loop
   that cannot fix what is actually broken.
 
