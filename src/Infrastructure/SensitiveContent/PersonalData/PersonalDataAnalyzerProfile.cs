@@ -105,7 +105,7 @@ public sealed partial record PersonalDataAnalyzerProfile
                 nameof(endpoint));
         }
 
-        if (language is null || !AcceptedLanguage().IsMatch(language))
+        if (language is null || !AcceptedLanguage.IsMatch(language))
         {
             throw new ArgumentException(
                 $"'{language}' is not an acceptable analyzer language. State the two-letter lowercase code of a language the analyzer's own configuration loads a model for, such as en.",
@@ -153,5 +153,5 @@ public sealed partial record PersonalDataAnalyzerProfile
         : new Uri($"{endpoint.GetLeftPart(UriPartial.Path)}/", UriKind.Absolute);
 
     [GeneratedRegex(@"\A[a-z]{2}\z", RegexOptions.CultureInvariant)]
-    private static partial Regex AcceptedLanguage();
+    private static partial Regex AcceptedLanguage { get; }
 }

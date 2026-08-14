@@ -18,7 +18,9 @@ namespace MailFathom.SyntheticMail.Commands;
 /// The fabricated sensitive material a message carries appears as its category and never as its value, which is the
 /// rule a finding follows for the reason a finding follows it: a listing that printed the credential would put it in
 /// a terminal, a scrollback, and whatever the developer pasted the output into. The seed is what reproduces the
-/// value, and the message itself is where it is.
+/// value, and the message itself is where it is. The placement is printed beside the category, because a scanner that
+/// finds a category everywhere except at the end of a sentence and one that never finds it at all read identically
+/// otherwise.
 /// </para>
 /// </remarks>
 internal static class CorpusListing
@@ -35,7 +37,9 @@ internal static class CorpusListing
             ? string.Create(CultureInfo.InvariantCulture, $"{carried.FileName} ({carried.Length} bytes)")
             : "none";
 
-        var sensitive = email.Body.Decoy is { } planted ? planted.Kind.Label : "none";
+        var sensitive = email.Body.Decoy is { } planted
+            ? string.Create(CultureInfo.InvariantCulture, $"{planted.Kind.Label}@{planted.Placement}")
+            : "none";
 
         return string.Create(
             CultureInfo.InvariantCulture,

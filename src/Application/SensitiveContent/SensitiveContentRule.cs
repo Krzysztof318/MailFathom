@@ -42,7 +42,7 @@ public sealed partial record SensitiveContentRule
     {
         ArgumentNullException.ThrowIfNull(category);
 
-        if (name is null || !AcceptedName().IsMatch(name))
+        if (name is null || !AcceptedName.IsMatch(name))
         {
             throw new ArgumentException(
                 $"'{name}' is not an acceptable sensitive-content rule name. It may carry up to 128 letters, digits, dots, dashes, and underscores, and must begin with a letter or a digit.",
@@ -67,5 +67,5 @@ public sealed partial record SensitiveContentRule
     /// admits, because a rule name reaches a log line and a validation message.
     /// </remarks>
     [GeneratedRegex(@"\A[A-Za-z0-9][A-Za-z0-9._-]{0,127}\z", RegexOptions.CultureInvariant)]
-    private static partial Regex AcceptedName();
+    private static partial Regex AcceptedName { get; }
 }

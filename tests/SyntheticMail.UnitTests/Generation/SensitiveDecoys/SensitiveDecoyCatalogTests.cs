@@ -19,9 +19,15 @@ namespace MailFathom.SyntheticMail.UnitTests.Generation.SensitiveDecoys;
 /// </para>
 /// <para>
 /// The patterns are matched against the whole sentence rather than against the value, because that is what a scanner
-/// reads. Several of the corpus expressions end in a boundary the value alone would satisfy and a sentence might not —
-/// a token followed immediately by a full stop is not a match — so a sentence is where that can go wrong and where it
-/// is therefore checked.
+/// reads. Several of the corpus expressions end in a boundary the value alone would satisfy and a sentence might not,
+/// so a sentence is where that can go wrong and where it is therefore checked.
+/// </para>
+/// <para>
+/// <b>Every such check runs once per placement.</b> What a corpus expression ends in is a claim about the character
+/// after the credential, so a decoy proves that claim only in the position it was written in — and for a year every
+/// decoy was written in one position, followed by a space, which is the one position the expressions of the time
+/// could see. Sweeping the placements is what makes a rule that reads mail and a rule that reads a quoted assignment
+/// distinguishable here rather than in somebody's mailbox.
 /// </para>
 /// </remarks>
 public sealed class SensitiveDecoyCatalogTests
@@ -30,10 +36,10 @@ public sealed class SensitiveDecoyCatalogTests
     private const int Draws = 200;
 
     [Theory]
-    [InlineData("digitalocean-pat", @"\bdop_v1_[a-f0-9]{64}(?:[\s;]|$)")]
+    [InlineData("digitalocean-pat", @"\bdop_v1_[a-f0-9]{64}(?![a-f0-9])")]
     [InlineData("aws-access-token", @"\bAKIA[A-Z2-7]{16}\b")]
     [InlineData("private-key", @"-----BEGIN[ A-Z0-9_-]{0,100}PRIVATE KEY(?: BLOCK)?-----[\s\S-]{64,}?KEY(?: BLOCK)?-----")]
-    [InlineData("jwt", @"\bey[a-zA-Z0-9]{17,}\.ey[a-zA-Z0-9/\\_-]{17,}\.(?:[a-zA-Z0-9/\\_-]{10,}={0,2})?(?:[\s;]|$)")]
+    [InlineData("jwt", @"\bey[a-zA-Z0-9]{17,}\.ey[a-zA-Z0-9/\\_-]{17,}\.(?:[a-zA-Z0-9/\\_-]{10,}={0,2})?(?![a-zA-Z0-9/\\_=-])")]
     [InlineData("database-connection-uri-credential", @"\bpostgres(?:ql)?://[^\s:@/]{1,128}:[^\s:@/]{1,256}@")]
     [InlineData("url-credential-query-parameter", @"[?&]access_token=[A-Za-z0-9._~+/%-]{16,512}")]
     [InlineData("CREDIT_CARD", @"\b(?!1\d{12}(?!\d))(?:4\d{3}|5[0-5]\d{2}|6\d{3}|1\d{3}|3\d{3})[- ]?\d{3,4}[- ]?\d{3,4}[- ]?\d{3,5}\b")]
@@ -48,13 +54,20 @@ public sealed class SensitiveDecoyCatalogTests
         var expression = new Regex(pattern, RegexOptions.None, TimeSpan.FromSeconds(1));
 
         // Act
-        var sentences = Enumerable
-            .Range(0, Draws)
-            .Select(seed => Plant(rule, seed).Sentence)
+        var planted = SensitiveDecoyCatalog.Placements
+            .SelectMany(placement => Enumerable
+                .Range(0, Draws)
+                .Select(seed => (Placement: placement, Plant(rule, seed, placement).Sentence)))
             .ToArray();
 
         // Assert
-        var unmatched = sentences.Where(sentence => !expression.IsMatch(sentence)).ToArray();
+        // Reported as the placements that failed rather than as the sentences, because a rule blind to one delimiter
+        // fails every draw in that placement and the list of two hundred identical failures says less than its name.
+        var unmatched = planted
+            .Where(one => !expression.IsMatch(one.Sentence))
+            .Select(one => one.Placement)
+            .Distinct()
+            .ToArray();
 
         Assert.Empty(unmatched);
     }
@@ -152,11 +165,29 @@ public sealed class SensitiveDecoyCatalogTests
         Assert.Equal(rules.Distinct().Count(), rules.Length);
     }
 
+    /// <summary>Three of the four placements are cut from the sentence at the placeholder, so every sentence needs one.</summary>
     [Fact]
-    public void Plant_Always_LeavesNoPlaceholderBehind()
+    public void Kinds_EverySentence_CarriesThePlaceholderThePlacementsAreCutAt()
     {
         // Arrange, Act
-        var sentences = SensitiveDecoyCatalog.Kinds.Select(kind => kind.Plant(new Random(11)).Sentence).ToArray();
+        var without = SensitiveDecoyCatalog.Kinds
+            .Where(kind => !kind.Sentence.Contains(SensitiveDecoyKind.ValuePlaceholder, StringComparison.Ordinal))
+            .Select(kind => kind.Rule);
+
+        // Assert
+        // Named here rather than left to the range expression inside the planting, which would fail every placement of
+        // that kind at once with an index out of range and say nothing about which sentence was written wrong.
+        Assert.Empty(without);
+    }
+
+    [Fact]
+    public void Plant_EveryPlacement_LeavesNoPlaceholderBehind()
+    {
+        // Arrange, Act
+        var sentences = SensitiveDecoyCatalog.Placements
+            .SelectMany(placement =>
+                SensitiveDecoyCatalog.Kinds.Select(kind => kind.Plant(new Random(11), placement).Sentence))
+            .ToArray();
 
         // Assert
         Assert.All(sentences, sentence =>
@@ -169,7 +200,9 @@ public sealed class SensitiveDecoyCatalogTests
         // Arrange, Act
         var sentences = Enumerable
             .Range(0, Draws)
-            .SelectMany(seed => SensitiveDecoyCatalog.Kinds.Select(kind => kind.Plant(new Random(seed)).Sentence))
+            .SelectMany(seed => SensitiveDecoyCatalog.Placements
+                .SelectMany(placement => SensitiveDecoyCatalog.Kinds
+                    .Select(kind => kind.Plant(new Random(seed), placement).Sentence)))
             .ToArray();
 
         // Assert
@@ -182,8 +215,12 @@ public sealed class SensitiveDecoyCatalogTests
     public void Plant_TheSameSeed_FabricatesTheSameValue()
     {
         // Arrange, Act
-        var first = SensitiveDecoyCatalog.Kinds.Select(kind => kind.Plant(new Random(7)).Sentence).ToArray();
-        var second = SensitiveDecoyCatalog.Kinds.Select(kind => kind.Plant(new Random(7)).Sentence).ToArray();
+        var first = SensitiveDecoyCatalog.Kinds
+            .Select(kind => kind.Plant(new Random(7), SensitiveDecoyPlacement.MidSentence).Sentence)
+            .ToArray();
+        var second = SensitiveDecoyCatalog.Kinds
+            .Select(kind => kind.Plant(new Random(7), SensitiveDecoyPlacement.MidSentence).Sentence)
+            .ToArray();
 
         // Assert
         Assert.Equal(first, second);
@@ -193,8 +230,12 @@ public sealed class SensitiveDecoyCatalogTests
     public void Plant_ADifferentSeed_FabricatesADifferentValue()
     {
         // Arrange, Act
-        var first = SensitiveDecoyCatalog.Kinds.Select(kind => kind.Plant(new Random(7)).Sentence).ToArray();
-        var second = SensitiveDecoyCatalog.Kinds.Select(kind => kind.Plant(new Random(8)).Sentence).ToArray();
+        var first = SensitiveDecoyCatalog.Kinds
+            .Select(kind => kind.Plant(new Random(7), SensitiveDecoyPlacement.MidSentence).Sentence)
+            .ToArray();
+        var second = SensitiveDecoyCatalog.Kinds
+            .Select(kind => kind.Plant(new Random(8), SensitiveDecoyPlacement.MidSentence).Sentence)
+            .ToArray();
 
         // Assert
         Assert.All(first.Zip(second), pair => Assert.NotEqual(pair.First, pair.Second));
@@ -222,11 +263,68 @@ public sealed class SensitiveDecoyCatalogTests
     {
         // Arrange, Act, Assert
         Assert.Throws<ArgumentNullException>(() => SensitiveDecoyCatalog.Plant(null!, 0));
-        Assert.Throws<ArgumentNullException>(() => SensitiveDecoyCatalog.Kinds[0].Plant(null!));
+        Assert.Throws<ArgumentNullException>(() =>
+            SensitiveDecoyCatalog.Kinds[0].Plant(null!, SensitiveDecoyPlacement.MidSentence));
     }
 
-    private static SensitiveDecoy Plant(string rule, int seed) =>
-        SensitiveDecoyCatalog.Kinds.Single(kind => kind.Rule == rule).Plant(new Random(seed));
+    [Fact]
+    public void Plant_AnOrdinal_WalksEveryKindThroughEveryPlacement()
+    {
+        // Arrange
+        var kinds = SensitiveDecoyCatalog.Kinds.Count;
+        var placements = SensitiveDecoyCatalog.Placements.Count;
+
+        // Act
+        var planted = Enumerable
+            .Range(0, kinds * placements)
+            .Select(ordinal => SensitiveDecoyCatalog.Plant(new Random(3), ordinal))
+            .Select(decoy => (decoy.Kind.Rule, decoy.Placement))
+            .ToArray();
+
+        // Assert
+        // The two counts share a factor, so stepping both per planting would pair each kind with one placement and
+        // leave the other three untested for it — a corpus that looks varied while testing what it tested before.
+        Assert.Equal(kinds * placements, planted.Distinct().Count());
+    }
+
+    [Theory]
+    [InlineData(nameof(SensitiveDecoyPlacement.ClosingTheSentence), '.')]
+    [InlineData(nameof(SensitiveDecoyPlacement.InBrackets), ')')]
+    [InlineData(nameof(SensitiveDecoyPlacement.InATableCell), '|')]
+    public void Plant_APlacement_PutsItsOwnCharacterDirectlyAfterTheValue(string placementName, char expected)
+    {
+        // Arrange
+        // The placement crosses this signature as its name, because the enum is internal and a public test method
+        // cannot take one; nameof keeps the reference a compile-time one, so a rename still breaks the build.
+        var placement = Enum.Parse<SensitiveDecoyPlacement>(placementName);
+
+        // A token of fixed shape whose alphabet holds neither a full stop, a bracket, nor a bar, so whatever stands
+        // after the value is the placement's doing and nothing else's.
+        const string Rule = "digitalocean-pat";
+
+        var expression = new Regex(@"dop_v1_[a-f0-9]{64}", RegexOptions.None, TimeSpan.FromSeconds(1));
+
+        // Act
+        var sentences = Enumerable
+            .Range(0, Draws)
+            .Select(seed => Plant(Rule, seed, placement).Sentence)
+            .ToArray();
+        var values = sentences.Select(sentence => expression.Match(sentence)).ToArray();
+
+        // Assert
+        // The value has to survive whole before what follows it means anything: a placement that truncated it would
+        // otherwise pass by putting the right character after the wrong text.
+        Assert.All(values, value => Assert.True(value.Success));
+        Assert.All(
+            sentences.Zip(values),
+            planted => Assert.Equal(expected, planted.First[planted.Second.Index + planted.Second.Length]));
+    }
+
+    private static SensitiveDecoy Plant(
+        string rule,
+        int seed,
+        SensitiveDecoyPlacement placement = SensitiveDecoyPlacement.MidSentence) =>
+        SensitiveDecoyCatalog.Kinds.Single(kind => kind.Rule == rule).Plant(new Random(seed), placement);
 
     /// <summary>Reads the fabricated value back out of the sentence it was planted in.</summary>
     private static IReadOnlyList<string> Values(string rule, string pattern)

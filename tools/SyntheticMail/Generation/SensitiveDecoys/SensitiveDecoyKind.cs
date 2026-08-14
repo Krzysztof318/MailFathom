@@ -41,14 +41,38 @@ internal sealed record SensitiveDecoyKind(
 
     /// <summary>Fabricates one value of this kind and writes the sentence carrying it.</summary>
     /// <param name="source">What the draw comes from.</param>
+    /// <param name="placement">Where in the sentence the value goes, which decides what follows it.</param>
     /// <returns>The planted decoy.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="source" /> is <see langword="null" />.</exception>
-    internal SensitiveDecoy Plant(Random source)
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="placement" /> is not one of the declared placements.</exception>
+    internal SensitiveDecoy Plant(Random source, SensitiveDecoyPlacement placement)
     {
         ArgumentNullException.ThrowIfNull(source);
 
-        return new SensitiveDecoy(
-            this,
-            this.Sentence.Replace(ValuePlaceholder, this.Fabricate(source), StringComparison.Ordinal));
+        return new SensitiveDecoy(this, placement, this.Write(this.Fabricate(source), placement));
     }
+
+    /// <summary>Writes the sentence with the value placed the way this planting asks for.</summary>
+    /// <remarks>
+    /// The three placements that are not the sentence's own are derived from it rather than written a second time per
+    /// kind. Every sentence here states its recogniser's context words before the placeholder, so cutting the sentence
+    /// at the placeholder keeps everything a recogniser scores on and drops only the words that followed the value.
+    /// Writing a second sentence per kind and per placement would be forty-eight sentences to keep true instead of
+    /// twelve, and the words after the value are the ones that carry nothing.
+    /// </remarks>
+    private string Write(string value, SensitiveDecoyPlacement placement) => placement switch
+    {
+        SensitiveDecoyPlacement.MidSentence =>
+            this.Sentence.Replace(ValuePlaceholder, value, StringComparison.Ordinal),
+        SensitiveDecoyPlacement.ClosingTheSentence =>
+            string.Concat(this.Opening(), value, "."),
+        SensitiveDecoyPlacement.InBrackets =>
+            this.Sentence.Replace(ValuePlaceholder, $"({value})", StringComparison.Ordinal),
+        SensitiveDecoyPlacement.InATableCell =>
+            string.Concat(this.Opening().TrimEnd(), "\n|", value, "|"),
+        _ => throw new ArgumentOutOfRangeException(nameof(placement), placement, "That is not a declared placement."),
+    };
+
+    /// <summary>The part of the sentence that stands before the value.</summary>
+    private string Opening() => this.Sentence[..this.Sentence.IndexOf(ValuePlaceholder, StringComparison.Ordinal)];
 }

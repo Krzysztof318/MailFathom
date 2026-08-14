@@ -17,6 +17,45 @@ public sealed class SecretContentScannerTests
 {
     private static readonly DateTimeOffset ScannedAt = new(2026, 8, 12, 9, 30, 0, TimeSpan.Zero);
 
+    /// <summary>Every way a mailbox writes a value, as the text before it and the text after it.</summary>
+    /// <remarks>
+    /// A rule recognises a credential by its shape and then has to establish where that shape ends, so what follows
+    /// the value is half of what it is asked. Source control answers that with a quotation mark or a newline; prose
+    /// answers it with a full stop, a comma, a bracket, or the bar a client renders a table cell as. A corpus carried
+    /// across from the first reads the second as text carrying no credential at all rather than as a shorter one,
+    /// which is the defect these rows exist to keep out. Nothing about a category is under test here — what is under
+    /// test is that the answer is the same in all six.
+    /// </remarks>
+    private static readonly (string Before, string After)[] Surroundings =
+    [
+        (" ", " and please rotate it."),
+        (" ", "."),
+        (" ", ","),
+        (" (", ") — the one from yesterday."),
+        ("\n|", "|\n"),
+        ("Here it is: ", string.Empty),
+    ];
+
+    private static readonly SecretPositive[] Positives =
+    [
+        new("ProviderToken", SyntheticSecrets.ProviderToken, SyntheticSecrets.ProviderToken),
+        new("CloudAccessKey", SyntheticSecrets.CloudAccessKey, SyntheticSecrets.CloudAccessKey),
+        new("PrivateKey", SyntheticSecrets.PrivateKey, SyntheticSecrets.PrivateKey),
+        new("JsonWebToken", SyntheticSecrets.JsonWebToken, SyntheticSecrets.JsonWebToken),
+        new("ConnectionString", SyntheticSecrets.ConnectionString, SyntheticSecrets.ConnectionStringCredential),
+        new("CredentialUrl", SyntheticSecrets.CredentialUrl, SyntheticSecrets.CredentialUrlToken),
+
+        // Five whose rules were the ones ending in the source-control delimiter, so the surroundings above are the
+        // whole point of their being here. Each ends in a differently shaped lookahead — hexadecimal, an alphanumeric
+        // run, a case-insensitive class, a class carrying the full stop, and a word character — because one shape
+        // passing says nothing about the other four.
+        new("ProviderToken", SyntheticSecrets.HostingProviderToken, SyntheticSecrets.HostingProviderToken),
+        new("ProviderToken", SyntheticSecrets.PaymentPlatformKey, SyntheticSecrets.PaymentPlatformKey),
+        new("ProviderToken", SyntheticSecrets.PackageRegistryToken, SyntheticSecrets.PackageRegistryToken),
+        new("ProviderToken", SyntheticSecrets.MailPlatformKey, SyntheticSecrets.MailPlatformKey),
+        new("CloudAccessKey", SyntheticSecrets.CloudServiceKey, SyntheticSecrets.CloudServiceKey),
+    ];
+
     private readonly FakeTimeProvider timeProvider = new(ScannedAt);
 
     /// <summary>Each case is the text a mailbox would carry, and the part of it a placeholder has to replace.</summary>
@@ -25,15 +64,33 @@ public sealed class SecretContentScannerTests
     /// text is worth keeping: a connection string still says which database it reached and a link still says what it
     /// linked to, so only the credential inside each is covered.
     /// </remarks>
-    public static TheoryData<string, string, string> NamedCategoryPositives() => new()
+    public static TheoryData<string, string, string> NamedCategoryPositives()
     {
-        { "ProviderToken", SyntheticSecrets.ProviderToken, SyntheticSecrets.ProviderToken },
-        { "CloudAccessKey", SyntheticSecrets.CloudAccessKey, SyntheticSecrets.CloudAccessKey },
-        { "PrivateKey", SyntheticSecrets.PrivateKey, SyntheticSecrets.PrivateKey },
-        { "JsonWebToken", SyntheticSecrets.JsonWebToken, SyntheticSecrets.JsonWebToken },
-        { "ConnectionString", SyntheticSecrets.ConnectionString, SyntheticSecrets.ConnectionStringCredential },
-        { "CredentialUrl", SyntheticSecrets.CredentialUrl, SyntheticSecrets.CredentialUrlToken },
-    };
+        var cases = new TheoryData<string, string, string>();
+
+        foreach (var positive in Positives)
+        {
+            cases.Add(positive.Category, positive.Written, positive.Credential);
+        }
+
+        return cases;
+    }
+
+    /// <summary>Every default-category credential, written every way a mailbox writes one.</summary>
+    public static TheoryData<string, string, string, string, string> EveryPositiveInEverySurrounding()
+    {
+        var cases = new TheoryData<string, string, string, string, string>();
+
+        foreach (var positive in Positives)
+        {
+            foreach (var (before, after) in Surroundings)
+            {
+                cases.Add(positive.Category, positive.Written, positive.Credential, before, after);
+            }
+        }
+
+        return cases;
+    }
 
     [Theory]
     [MemberData(nameof(NamedCategoryPositives))]
@@ -50,8 +107,41 @@ public sealed class SecretContentScannerTests
         var findings = await scanner.ScanAsync(text, TestContext.Current.CancellationToken);
 
         // Assert
-        var finding = Assert.Single(findings, candidate => candidate.Category.Name == category);
-        Assert.Equal(credential, text.Substring(finding.Span.Start, finding.Span.Length));
+        // Asserted over the distinct regions rather than over a single finding, because two of the three corpora
+        // recognise some of the same credentials — an npm token is named by the gitleaks rule and by the detection
+        // engine's own — and both report the identical span. The redactor merges overlapping regions into one
+        // placeholder, so that is a correct state; what would be a defect is a region that is not the credential.
+        var regions = Regions(findings, text, category);
+
+        Assert.Equal([credential], regions);
+    }
+
+    [Theory]
+    [MemberData(nameof(EveryPositiveInEverySurrounding))]
+    public async Task ScanAsync_ACredentialOfADefaultCategory_IsFoundWhateverFollowsIt(
+        string category,
+        string written,
+        string credential,
+        string before,
+        string after)
+    {
+        // Arrange
+        var scanner = this.Scanner();
+        var text = before + written + after;
+
+        // Act
+        var findings = await scanner.ScanAsync(text, TestContext.Current.CancellationToken);
+
+        // Assert
+        // A region has to cover the credential rather than equal it here. Where a rule's own alphabet holds the
+        // character that follows — a link's query token and a full stop, say — the greedy quantifier takes that
+        // character into the match and one more character is redacted than had to be. That is the direction this
+        // feature errs in deliberately: a reader loses a full stop, and nobody loses the credential.
+        var covering = Regions(findings, text, category)
+            .Where(region => region.Contains(credential, StringComparison.Ordinal))
+            .ToArray();
+
+        Assert.NotEmpty(covering);
     }
 
     /// <summary>A mailbox is prose, and a rule that reported prose would cost every other rule its credibility.</summary>
@@ -358,6 +448,19 @@ public sealed class SecretContentScannerTests
             finding.Rule,
             finding.Span.Start,
             finding.Span.Length));
+
+    /// <summary>One credential of a default category: what a mailbox carries, and the part of it a placeholder replaces.</summary>
+    private sealed record SecretPositive(string Category, string Written, string Credential);
+
+    /// <summary>The distinct stretches of text the findings of one category cover.</summary>
+    private static string[] Regions(
+        IReadOnlyList<SensitiveContentFinding> findings,
+        string text,
+        string category) =>
+        [.. findings
+            .Where(finding => finding.Category.Name == category)
+            .Select(finding => text.Substring(finding.Span.Start, finding.Span.Length))
+            .Distinct(StringComparer.Ordinal)];
 
     private SecretContentScanner Scanner(
         IReadOnlyList<SensitiveContentCategory>? categories = null,

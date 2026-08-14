@@ -63,7 +63,7 @@ internal static partial class SpamAssassinCorpus
 
     private static string? DeclaredVersion(string rewrittenHeaders)
     {
-        var match = CheckerVersion().Match(rewrittenHeaders);
+        var match = CheckerVersion.Match(rewrittenHeaders);
 
         if (!match.Success)
         {
@@ -90,5 +90,5 @@ internal static partial class SpamAssassinCorpus
     [GeneratedRegex(
         @"^X-Spam-Checker-Version:[ \t]*SpamAssassin[ \t]+(?<release>[^\s()]+)(?:[ \t]+\((?<build>[^\s()]+)\))?",
         RegexOptions.CultureInvariant | RegexOptions.Multiline)]
-    private static partial Regex CheckerVersion();
+    private static partial Regex CheckerVersion { get; }
 }

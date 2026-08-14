@@ -195,7 +195,7 @@ public sealed partial class ChatGenerationPlan
     /// </para>
     /// </remarks>
     public static bool IsUsableReasoningEffort(string effort) =>
-        effort.Length is > 0 and <= MaximumReasoningEffortLength && ReasoningEffortShape().IsMatch(effort);
+        effort.Length is > 0 and <= MaximumReasoningEffortLength && ReasoningEffortShape.IsMatch(effort);
 
     /// <remarks>
     /// Anchored with <c>\A</c> and <c>\z</c> rather than <c>^</c> and <c>$</c>, because <c>$</c> also matches before a
@@ -204,5 +204,5 @@ public sealed partial class ChatGenerationPlan
     /// and the pattern's shape is the one that backtracks badly, though the length bound already caps it.
     /// </remarks>
     [GeneratedRegex(@"\A[a-zA-Z0-9]+([-_][a-zA-Z0-9]+)*\z", RegexOptions.NonBacktracking)]
-    private static partial Regex ReasoningEffortShape();
+    private static partial Regex ReasoningEffortShape { get; }
 }

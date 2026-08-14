@@ -126,6 +126,10 @@ internal static class SensitiveDecoyCatalog
             FabricatedIdentifiers.HealthIdentifier),
     ];
 
+    /// <summary>Every way a value is written into its sentence, in the order a cycle of kinds walks through them.</summary>
+    internal static IReadOnlyList<SensitiveDecoyPlacement> Placements { get; } =
+        [.. Enum.GetValues<SensitiveDecoyPlacement>()];
+
     /// <summary>Plants the decoy whose turn it is.</summary>
     /// <param name="source">What the draw comes from.</param>
     /// <param name="ordinal">Which planting this is, counted across the whole corpus.</param>
@@ -141,6 +145,16 @@ internal static class SensitiveDecoyCatalog
     {
         ArgumentNullException.ThrowIfNull(source);
 
-        return Kinds[ordinal % Kinds.Count].Plant(source);
+        return Kinds[ordinal % Kinds.Count].Plant(source, PlacementFor(ordinal));
     }
+
+    /// <summary>Which placement a planting takes, given how many have been planted before it.</summary>
+    /// <remarks>
+    /// The placement advances once per complete cycle of kinds rather than once per planting, and the difference is
+    /// the whole of whether this works: twelve kinds and four placements stepped together share a factor, so each kind
+    /// would meet one placement and never the other three, and the corpus would look varied while testing exactly what
+    /// it tested before. Advancing on the cycle walks every kind through every placement in forty-eight plantings.
+    /// </remarks>
+    private static SensitiveDecoyPlacement PlacementFor(int ordinal) =>
+        Placements[ordinal / Kinds.Count % Placements.Count];
 }

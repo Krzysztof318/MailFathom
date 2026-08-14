@@ -27,6 +27,21 @@ internal static class SyntheticSecrets
     /// <summary>An access key identifier of the shape one cloud platform issues.</summary>
     public static string CloudAccessKey { get; } = "AK" + "IA" + new string('B', 16);
 
+    /// <summary>A hosting provider's personal access token, whose rule ends in a lookahead over hexadecimal.</summary>
+    public static string HostingProviderToken { get; } = "dop" + "_v1_" + new string('a', 64);
+
+    /// <summary>A payment platform's test key, whose rule ends in a lookahead over an alphanumeric run.</summary>
+    public static string PaymentPlatformKey { get; } = "sk" + "_test_" + new string('b', 32);
+
+    /// <summary>A package registry's access token, whose rule reads case-insensitively.</summary>
+    public static string PackageRegistryToken { get; } = "npm" + "_" + new string('c', 36);
+
+    /// <summary>A mail platform's key, whose own alphabet holds the full stop that would otherwise end it.</summary>
+    public static string MailPlatformKey { get; } = "SG" + "." + new string('d', 22) + "." + new string('e', 43);
+
+    /// <summary>A second cloud platform's key, whose rule ends in a lookahead over a word character.</summary>
+    public static string CloudServiceKey { get; } = "AI" + "za" + new string('f', 35);
+
     /// <summary>A private key block, armoured the way an agent or a certificate tool emits one.</summary>
     public static string PrivateKey { get; } =
         "-----BEGIN RSA PRIVATE KEY-----\n"
