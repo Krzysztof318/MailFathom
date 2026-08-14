@@ -793,6 +793,82 @@ expressions stay here, where they are six short lines; the prose sits where no
 length limit reaches it. The template is read from the workspace, which holds the
 base commit, so a pull request cannot supply the prompt that reviews it.
 
+### What a dropped connection costs
+
+Every read the workflow makes goes through
+`.github/pull-request/call-github-api.sh`, and so does every read in the two
+scripts it shells out to. The helper exists because a single request that never
+arrived used to end the run that contained it: on 2026-08-13 the collection step
+failed 0.35 seconds into its first call with `invalid character 'u' looking for
+beginning of value`, which is `gh` decoding an `upstream connect error or
+disconnect/reset before headers` from the proxy in front of the API as if it were
+JSON. Nothing about that run was wrong. It published no review, left the pull
+request with a red check and no verdict, and waited for somebody to notice and
+re-run the job by hand — a review that silently does not happen being the failure
+this pipeline is least able to report on itself.
+
+The bound is **four attempts**, the first included, each of them killed after
+**thirty seconds**, with the wait doubling from two seconds and carrying up to two
+further seconds of jitter so several calls failing at once do not come back in
+step. The deadline is what makes the attempt budget a bound at all: `gh` sets none
+of its own, so a connection that stalls rather than drops — the same failure in
+its other shape — would otherwise hang with the budget never advancing, until the
+reviewing job's thirty minutes ran out. That recovers a request that was dropped
+and deliberately cannot wait out an outage: a call that exhausts its budget
+returns the failure rather than swallowing it, and says how many attempts it made,
+because the caller's own failure would otherwise say only that the call did not
+succeed.
+
+**What the caller does with that failure is the caller's**, and several reads here
+deliberately carry on: the per-pull-request ceiling counts zero and reviews anyway,
+the model decision keeps the default model, the settle loop collects at once, and
+an issue the run could not fetch is recorded as its number with a null body and
+null labels. Each is argued at its own call site, and each is a place where the
+retries narrow how often a read degrades without removing it. The head-content
+a path the head does not carry is an ordinary outcome of that loop, so a file
+dropped after four failed attempts leaves the same gap as one that was never
+there. The prompt names an unfetchable path among the causes of a missing
+`head/<path>`, so what stays silent is how many paths it happened to.
+there — which the reviewer reads as content too large to collect.
+
+**Three loops call once per record, and a retry budget is per call**, so each
+carries a wall-clock window: the head content, the issues the change closes, and
+the board write, which spends two budgets per issue and runs in two workflows that
+declare no `timeout-minutes` of their own. Without one, an endpoint that has
+started failing costs every remaining record a whole budget — minutes of a job
+whose thirty are mostly meant for the model, and a run killed before it starts is
+the failure the retries exist to remove. Each window is tested before a call rather
+than during one, so what it bounds is the record the loop *starts*: the real
+ceiling is the window plus one record's calls. The two collection ceilings write
+their line into `truncation.txt` and reach the review body, because a file missing
+from `head/` and an issue present as its number alone both say something specific
+to a reviewer, and a gap left by a ceiling would otherwise be read as that
+statement; the board write names the issues it left where they stand in a warning
+on the run instead, which is where the rest of its per-issue failures are reported.
+
+What is retried is decided from what the API said rather than from the fact that
+something failed. A reply carrying a client status is an answer — the endpoint
+does not exist, the token cannot see it — and asking again produces it more
+slowly, so it is returned on the first attempt; `408`, `429`, and every `5xx` are
+retried, and so is a failure carrying no status at all, which is the shape the
+lost run took. That distinction is what keeps the head-content loop, which reads
+a path the head does not carry as an ordinary outcome, from spending a budget on
+each of sixty files.
+
+**Two calls are excluded by name**, both of them the submission of a review. Every
+read may be repeated because asking twice returns the same answer; a submission
+creates a record, so a reply lost after the review was already accepted would, on
+a retry, publish a second review of the same pass — and since the per-pull-request
+ceiling counts submitted reviews, spend a second automatic pass on one push. The
+board write is not among them: it writes an option id the same run has already
+read, so repeating it converges on the value rather than adding a record.
+
+The helper buffers the whole answer and prints it only once the call has
+succeeded, which is what makes `--paginate` safe to retry. Pages stream as they
+arrive, so a call that dropped on the third page would otherwise have written the
+first two already, and the retry would hand a filter expecting one record per line
+a second copy of them.
+
 ### The verdict is the run's answer, not a file it might not write
 
 `--json-schema` in `claude_args` is what makes it one. Under that flag the

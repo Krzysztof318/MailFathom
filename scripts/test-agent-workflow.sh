@@ -1564,6 +1564,17 @@ typo_check_falls_back_to_the_whole_checkout_for_a_pull_request_beyond_the_report
   assert_contains '3001 files' "$output_file"
 }
 
+# Every read in `fathom-review.yml` goes through `call-github-api.sh`, so a step extracted below
+# reaches it the way the runner does — out of the checkout, at the path the workflow's `env` block
+# names. The backoff base is zeroed for the same reason the settle windows are seconds: what a
+# contract asserts is the decision, and a retry these fakes provoke by accident must not cost the
+# suite its own timeout. The attempt budget is left at the value the script declares, because that
+# is what the contracts below are about.
+export_api_retry_environment() {
+  export GITHUB_API_SCRIPT="$source_repository_root/.github/pull-request/call-github-api.sh"
+  export API_RETRY_DELAY_SECONDS='0'
+}
+
 # The steps these contracts run are shell blocks inside `fathom-review.yml`, and they cannot be
 # scripts in `scripts/` for the reason the protected-paths guard cannot: the workflow never checks
 # the branch out. Extracting one verbatim is again what makes these contracts run the runner's own
@@ -1632,6 +1643,7 @@ run_fathom_review_gate() {
     export AUTOMATIC_REVIEW_MARKER='<!-- fathom-review: automatic -->'
     export REQUESTED_REVIEW_MARKER='<!-- fathom-review: requested -->'
     export GITHUB_OUTPUT="$step_output_file"
+    export_api_retry_environment
     bash "$step_script"
   ) > "$output_file" 2>&1
 }
@@ -1812,6 +1824,7 @@ run_fathom_review_settle() {
     export SETTLE_QUIET_SECONDS='3'
     export SETTLE_LIMIT_SECONDS='4'
     export SETTLE_POLL_SECONDS='1'
+    export_api_retry_environment
     bash "$step_script"
   ) > "$output_file" 2>&1
 }
@@ -2001,7 +2014,16 @@ case "$endpoint" in
     exit 0
     ;;
   */pulls/*/files*)
-    response='[{"filename":"src/Sample.cs","previous_filename":null,"status":"modified","additions":1,"deletions":0,"patch":"@@ -1,2 +1,3 @@\n unchanged\n+added\n unchanged"}]'
+    # One changed file unless a contract asks for more, which is what lets the count ceiling on the
+    # head-content loop be reached — that ceiling is a literal in the step and the only way to a
+    # contract about it is a pull request wide enough to cross it.
+    response="$(
+      jq -nc --argjson count "${FAKE_CHANGED_FILE_COUNT:-1}" \
+        '[range($count) | {filename: "src/Sample\(.).cs", previous_filename: null,
+                           status: "modified", additions: 1, deletions: 0,
+                           patch: "@@ -1,2 +1,3 @@\n unchanged\n+added\n unchanged"}]
+         | if length == 1 then [.[0] + {filename: "src/Sample.cs"}] else . end'
+    )"
     ;;
   */pulls/*/reviews*)
     response='[]'
@@ -2082,6 +2104,15 @@ chmod +x "$collect_bin_directory/gh"
 
 run_fathom_review_collect() {
   local output_file="$1"
+  # How long the head-content loop may spend, from the step's own `env` block. The contracts about
+  # the collection give it a window nothing reaches; the one about the window itself gives it none.
+  local head_content_limit_seconds="${2:-120}"
+  # The same for the loop that fetches the issues the change closes, which calls once per record for
+  # the same reason and carries a window of its own.
+  local closing_issue_limit_seconds="${3:-120}"
+  # How many changed files the pull request carries, which decides whether the head-content loop
+  # reaches its count ceiling.
+  local changed_file_count="${4:-1}"
   local step_script="$test_directory/fathom-review-collect.sh"
   local step_output_file="$test_directory/fathom-review-collect-step-output"
 
@@ -2103,6 +2134,10 @@ run_fathom_review_collect() {
     export GITHUB_WORKSPACE="$source_repository_root"
     export GITHUB_OUTPUT="$step_output_file"
     export FAKE_UNFETCHABLE_ISSUES='12'
+    export HEAD_CONTENT_LIMIT_SECONDS="$head_content_limit_seconds"
+    export CLOSING_ISSUE_LIMIT_SECONDS="$closing_issue_limit_seconds"
+    export FAKE_CHANGED_FILE_COUNT="$changed_file_count"
+    export_api_retry_environment
     bash "$step_script"
   ) > "$output_file" 2>&1
 }
@@ -2134,6 +2169,63 @@ fathom_review_reports_unknown_labels_for_an_issue_it_could_not_fetch() {
   assert_json '12' '.[1].number' "$collect_review_directory/issues.json"
   assert_json 'null' '.[1].title' "$collect_review_directory/issues.json"
   assert_json 'null' '.[1].labels' "$collect_review_directory/issues.json"
+}
+
+# The head-content loop is the one call the collection makes per path, so a retry budget spent on
+# each of a hundred of them would burn the reviewing job's thirty minutes before the model starts —
+# the regression this window closes. What it reports is the count of files whose content is in the
+# bundle, never a prefix of the changed files: a file dropped for exceeding the byte limit is read
+# and left out, so a note claiming "the first N" would name a run of files that does not exist.
+fathom_review_stops_reading_head_content_when_its_window_is_gone() {
+  local output_file="$test_directory/fathom-review-collect-window-output"
+
+  run_fathom_review_collect "$output_file" 0
+
+  assert_contains 'the content of the changed files after that point was not read' \
+    "$collect_review_directory/truncation.txt"
+  assert_contains '0 of them have content here' "$collect_review_directory/truncation.txt"
+  [[ ! -e "$collect_review_directory/head/src/Sample.cs" ]]
+}
+
+# The window is a ceiling like every other one in the step, so an ordinary collection never reaches
+# it and writes nothing about it. A truncation file that always carried a line would put a sentence
+# about incomplete coverage into every review body.
+fathom_review_reads_head_content_within_its_window() {
+  local output_file="$test_directory/fathom-review-collect-within-window-output"
+
+  run_fathom_review_collect "$output_file"
+
+  assert_file_content '' "$collect_review_directory/truncation.txt"
+  [[ -s "$collect_review_directory/head/src/Sample.cs" ]]
+}
+
+# The count ceiling reports what it cut for the same reason the window does. Without a line, a pull
+# request of sixty-one to a hundred changed files leaves the later paths absent from `head/` with an
+# empty `truncation.txt`, and the prompt tells the reviewer that absence means too large or binary —
+# so the review says in its summary that files nobody fetched were too big to collect.
+fathom_review_reports_the_head_content_files_its_count_ceiling_cut() {
+  local output_file="$test_directory/fathom-review-collect-file-ceiling-output"
+
+  run_fathom_review_collect "$output_file" 120 120 61
+
+  assert_contains 'reached its ceiling' "$collect_review_directory/truncation.txt"
+  assert_contains '60 of them have content here' "$collect_review_directory/truncation.txt"
+}
+
+# The issues the change closes are its stated contract, and the loop that fetches them calls once per
+# record exactly as the head-content loop does — five references each spending a whole retry budget
+# is minutes of a job whose thirty are mostly meant for the model. What the window cuts is the record
+# a failed fetch already writes, because to the reviewer both mean the same thing: the number was
+# referenced and what it asks for is unknown.
+fathom_review_stops_reading_closing_issues_when_its_window_is_gone() {
+  local output_file="$test_directory/fathom-review-collect-issue-window-output"
+
+  run_fathom_review_collect "$output_file" 120 0
+
+  assert_json '[11,12]' '[.[].number]' "$collect_review_directory/issues.json"
+  assert_json 'null' '.[0].labels' "$collect_review_directory/issues.json"
+  assert_json 'null' '.[1].labels' "$collect_review_directory/issues.json"
+  assert_contains 'are here as their number alone' "$collect_review_directory/truncation.txt"
 }
 
 # Which model performs the review is the other half of what the `security` label decides, and the
@@ -2171,6 +2263,7 @@ run_fathom_review_model() {
     export FAKE_PULL_REQUEST_LABELS="$pull_request_labels"
     export FAKE_LABELLING_COUNTDOWN="$countdown_file"
     export GITHUB_OUTPUT="$step_output_file"
+    export_api_retry_environment
     bash "$step_script"
   ) > "$output_file" 2>&1
 }
@@ -2839,6 +2932,7 @@ export_fathom_review_board_environment() {
   export CLOSING_ISSUE_LIMIT='5'
   export BOARD_STATUS_SCRIPT="$source_repository_root/.github/pull-request/write-board-status.sh"
   export FAKE_BOARD_DIRECTORY="$board_directory"
+  export_api_retry_environment
 }
 
 run_fathom_review_board() {
@@ -3012,12 +3106,17 @@ run_board_status_write() {
   local required_statuses="$2"
   local current_status="$3"
   local output_file="$4"
+  local closing_issues="${5:-12}"
+  # The walk's wall-clock window, which every contract but the one about the window itself leaves at
+  # the default, because what those assert is which items moved rather than how long the walk took.
+  local limit_seconds="${6:-}"
 
-  prepare_fathom_review_board_state '12' "$current_status"
+  prepare_fathom_review_board_state "$closing_issues" "$current_status"
 
   set +e
   (
     export_fathom_review_board_environment 'classic-token-that-is-not-real'
+    [[ -z "$limit_seconds" ]] || export BOARD_WRITE_LIMIT_SECONDS="$limit_seconds"
     bash "$source_repository_root/.github/pull-request/write-board-status.sh" \
       "$status" '' "$required_statuses"
   ) > "$output_file" 2>&1
@@ -3051,6 +3150,20 @@ board_status_leaves_an_item_outside_the_required_statuses() {
     [[ ! -s "$board_mutations_file" ]]
     assert_contains 'so it is left where it stands' "$output_file"
   done
+}
+
+# The walk over the closing issues is the third loop that calls once per record, and it spends two
+# retry budgets on each — the item read and the mutation — in two workflows that declare no
+# `timeout-minutes`. What the window buys is a board write that gives up rather than one that holds a
+# job open, and the issues it did not reach are named so a hand can move them.
+board_status_stops_writing_when_its_window_is_gone() {
+  local output_file="$test_directory/board-status-window-output"
+
+  run_board_status_write 'Conflicts' 'Ready to merge' 'Ready to merge' "$output_file" '12,13' 0
+
+  ((board_status == 0))
+  [[ ! -s "$board_mutations_file" ]]
+  assert_contains 'issues 12, 13 were left where they stand' "$output_file"
 }
 
 # Every condition a pull request's state earns lives in one script, so a rule is an edit there rather
@@ -3196,6 +3309,7 @@ run_pull_request_rules_board() {
     export MERGEABILITY_LIMIT_SECONDS="$limit_seconds"
     export MERGEABILITY_POLL_SECONDS='1'
     export FAKE_BOARD_DIRECTORY="$board_directory"
+    export_api_retry_environment
     bash "$step_script"
   ) > "$output_file" 2>&1
   board_status=$?
@@ -4029,6 +4143,206 @@ obligation_index_caps_the_tests_it_lists_for_one_type() {
   assert_json '1' '.notes | length' "$output_file"
 }
 
+# Every read `Fathom review` makes goes through one script, so what a dropped connection costs is one
+# decision rather than fifteen. That workflow lost a whole run to a single reply that never arrived,
+# and the shape of that failure is what these contracts pin: a call that works is not asked twice, a
+# call that fails once still returns its answer, a call the API answered is not retried at all, and a
+# call that never succeeds fails after exactly the budgeted attempts rather than quietly.
+api_retry_bin_directory="$test_directory/api-retry-bin"
+mkdir -p "$api_retry_bin_directory"
+
+# A `gh` that fails a stated number of leading attempts and then answers. It writes a line per
+# attempt, which is what lets a contract assert how many times the call was actually made rather than
+# only what came back.
+#
+# The failing attempt writes to standard output before it fails, standing in for `--paginate` having
+# already streamed a page when a later one drops. That is what the buffering in the script under test
+# is for, so it is provoked here rather than assumed.
+cat > "$api_retry_bin_directory/gh" <<'FAKE_GH'
+#!/usr/bin/env bash
+set -euo pipefail
+
+: "${FAKE_API_ATTEMPT_LOG:?FAKE_API_ATTEMPT_LOG must name where the attempts are recorded}"
+
+printf '%s\n' "$*" >> "$FAKE_API_ATTEMPT_LOG"
+
+# A connection that stalls rather than drops, which is the failure `gh` has no deadline of its own
+# for: it answers nothing and never returns, so only the wrapper's own kill ends the attempt.
+if [[ -n "${FAKE_API_STALL_SECONDS:-}" ]]; then
+  sleep "$FAKE_API_STALL_SECONDS"
+fi
+
+if (( "$(wc -l < "$FAKE_API_ATTEMPT_LOG")" <= "${FAKE_API_FAILURES:-0}" )); then
+  printf 'partial\n'
+  printf '%s\n' "${FAKE_API_ERROR:-invalid character 'u' looking for beginning of value}" >&2
+  exit 1
+fi
+
+printf 'answered\n'
+FAKE_GH
+chmod +x "$api_retry_bin_directory/gh"
+
+api_call_status=0
+
+run_github_api_call() {
+  local failures="$1"
+  local attempt_limit="$2"
+  local output_file="$3"
+  local error_file="$4"
+  # The error text `gh` writes, which is what tells a reply the API produced from one that never
+  # arrived. The default is the message the lost run actually failed on.
+  local gh_error="${5:-}"
+  # How long each attempt stalls before answering, and how long the wrapper lets one run. Both are
+  # empty for every contract but the one about the deadline, where the stall is the failure.
+  local stall_seconds="${6:-}"
+  local timeout_seconds="${7:-30}"
+  # The backoff base. Every contract but the one about the wait itself zeroes it, because what those
+  # assert is how many attempts were made rather than how long the script waited between them.
+  local retry_delay_seconds="${8:-0}"
+
+  : > "$test_directory/api-retry-attempts.log"
+
+  set +e
+  (
+    export PATH="$api_retry_bin_directory:$PATH"
+    export FAKE_API_ATTEMPT_LOG="$test_directory/api-retry-attempts.log"
+    export FAKE_API_FAILURES="$failures"
+    export FAKE_API_ERROR="$gh_error"
+    export FAKE_API_STALL_SECONDS="$stall_seconds"
+    export API_ATTEMPT_LIMIT="$attempt_limit"
+    export API_TIMEOUT_SECONDS="$timeout_seconds"
+    export API_RETRY_DELAY_SECONDS="$retry_delay_seconds"
+
+    bash "$source_repository_root/.github/pull-request/call-github-api.sh" \
+      'repos/Krzysztof318/MailFathom/pulls/1' --jq '.head.sha'
+  ) > "$output_file" 2> "$error_file"
+  api_call_status=$?
+  set -e
+}
+
+assert_api_attempts() {
+  local expected_attempts="$1"
+  local actual_attempts
+
+  actual_attempts="$(wc -l < "$test_directory/api-retry-attempts.log")"
+
+  if (( actual_attempts != expected_attempts )); then
+    printf 'Expected %s attempts, but the call was made %s times\n' \
+      "$expected_attempts" "$actual_attempts" >&2
+    return 1
+  fi
+}
+
+github_api_call_asks_once_when_the_call_succeeds() {
+  local output_file="$test_directory/api-retry-first-time"
+  local error_file="$test_directory/api-retry-first-time-error"
+
+  run_github_api_call 0 4 "$output_file" "$error_file"
+
+  (( api_call_status == 0 ))
+  assert_file_content 'answered' "$output_file"
+  assert_api_attempts 1
+}
+
+# The whole point of the change: the run that was lost failed on its first call and recovered on
+# nobody. What comes back is the successful answer alone — the page the failed attempt had already
+# written is dropped, because a caller reading one record per line would otherwise be handed the
+# first page twice.
+github_api_call_returns_the_answer_after_a_dropped_connection() {
+  local output_file="$test_directory/api-retry-recovered"
+  local error_file="$test_directory/api-retry-recovered-error"
+
+  run_github_api_call 1 4 "$output_file" "$error_file"
+
+  (( api_call_status == 0 ))
+  assert_file_content 'answered' "$output_file"
+  assert_excludes 'partial' "$output_file"
+  assert_api_attempts 2
+}
+
+# A reply carrying a client error is the API answering, and asking again produces the same answer
+# more slowly. The head-content loop depends on this: it fetches sixty paths and reads a missing one
+# as an ordinary outcome, so a budget spent on each would cost minutes of a run that is already
+# bounded.
+github_api_call_does_not_retry_an_answer_the_api_produced() {
+  local output_file="$test_directory/api-retry-client-error"
+  local error_file="$test_directory/api-retry-client-error-message"
+
+  run_github_api_call 9 4 "$output_file" "$error_file" 'gh: Not Found (HTTP 404)'
+
+  (( api_call_status != 0 ))
+  assert_api_attempts 1
+  assert_contains 'Attempts made: 1 of 4' "$error_file"
+}
+
+# The other side of the rule above, and the arm no other contract reaches: `408`, `429`, and every
+# `5xx` are statuses that say *ask again*. Without this, deleting that arm or mistyping its glob
+# would send a `502` to the `*)` branch and fail it on the first attempt — losing a run to the exact
+# class of failure the helper was written for, while every other contract stayed green.
+github_api_call_retries_a_status_that_says_ask_again() {
+  local output_file="$test_directory/api-retry-server-error"
+  local error_file="$test_directory/api-retry-server-error-message"
+
+  run_github_api_call 9 3 "$output_file" "$error_file" 'gh: Server Error (HTTP 502)'
+
+  (( api_call_status != 0 ))
+  assert_api_attempts 3
+  assert_contains 'Attempts made: 3 of 3' "$error_file"
+}
+
+# A connection that stalls rather than drops is the same proxy failure in its other shape, and `gh`
+# sets no deadline for it: without the wrapper's own kill the attempt never returns, the budget never
+# advances, and a bound that cannot advance is not a bound — the collection would sit there until the
+# reviewing job's thirty minutes ran out, which is the outcome the retries exist to remove.
+github_api_call_kills_an_attempt_that_stalls() {
+  local output_file="$test_directory/api-retry-stalled"
+  local error_file="$test_directory/api-retry-stalled-error"
+
+  run_github_api_call 0 2 "$output_file" "$error_file" '' 5 1
+
+  (( api_call_status != 0 ))
+  assert_api_attempts 2
+  assert_contains 'Attempts made: 2 of 2' "$error_file"
+}
+
+# The wait between attempts, which every other contract zeroes so that it can assert a count. Nothing
+# would then observe that the helper waits at all: deleting the `sleep`, or the doubling, leaves the
+# four requests arriving back-to-back at the proxy that motivated the retries. The jitter is not one
+# of the two — removing it leaves exactly 1 + 2 + 4, which still clears the floor below — so nothing
+# here holds the property that several calls failing at once do not come back in step.
+#
+# The budget is the full four rather than the three the other contracts use, because the jitter is
+# what decides how long a shorter run takes. With a base of one second the three waits are 1-2s,
+# 2-3s and 4-5s, so the whole call takes 7 to 10 — while the same call with the doubling removed
+# takes 3 to 6, whatever the jitter rolls. Seven seconds is therefore the floor that separates them,
+# and no smaller budget separates them at all.
+github_api_call_waits_longer_between_each_attempt() {
+  local output_file="$test_directory/api-retry-backoff"
+  local error_file="$test_directory/api-retry-backoff-error"
+  local started_at
+  started_at="$(date -u +%s)"
+
+  run_github_api_call 9 4 "$output_file" "$error_file" '' '' 30 1
+
+  (( api_call_status != 0 ))
+  assert_api_attempts 4
+  assert_seconds_elapsed_at_least 7 "$started_at"
+}
+
+# A retry that exhausts its budget still fails the job. Nothing here turns an unreachable API into a
+# review that silently covered less, and the count is reported because the caller's own failure says
+# only that the call did not succeed.
+github_api_call_fails_after_the_budgeted_attempts() {
+  local output_file="$test_directory/api-retry-exhausted"
+  local error_file="$test_directory/api-retry-exhausted-error"
+
+  run_github_api_call 9 3 "$output_file" "$error_file"
+
+  (( api_call_status != 0 ))
+  assert_api_attempts 3
+  assert_contains 'Attempts made: 3 of 3' "$error_file"
+}
+
 # Which issues a pull request closes is its stated contract, and merging closes every one of them.
 # The answer comes from GitHub rather than from a reading of the body, so what is pinned here is what
 # the script does with that answer: which of the returned issues it acts on, and what it says about
@@ -4041,6 +4355,18 @@ cat > "$closing_issues_bin_directory/gh" <<'FAKE_GH'
 set -euo pipefail
 
 : "${FAKE_CLOSING_ISSUES_FILE:?FAKE_CLOSING_ISSUES_FILE must name the answer to return}"
+
+# A stated number of leading attempts drop the connection before answering, which is what lets a
+# contract watch what the script does with a call the helper recovered rather than only with one
+# that worked first time.
+if [[ -n "${FAKE_CLOSING_ISSUES_ATTEMPT_LOG:-}" ]]; then
+  printf 'attempt\n' >> "$FAKE_CLOSING_ISSUES_ATTEMPT_LOG"
+
+  if (( "$(wc -l < "$FAKE_CLOSING_ISSUES_ATTEMPT_LOG")" <= "${FAKE_CLOSING_ISSUES_FAILURES:-0}" )); then
+    printf "invalid character 'u' looking for beginning of value\n" >&2
+    exit 1
+  fi
+fi
 
 cat "$FAKE_CLOSING_ISSUES_FILE"
 FAKE_GH
@@ -4058,13 +4384,17 @@ prepare_closing_issues_answer() {
 }
 
 run_closing_issues() {
-  local nodes="$1" output_file="$2" note_file="${3:-/dev/null}" limit="${4:-0}"
+  local nodes="$1" output_file="$2" note_file="${3:-/dev/null}" limit="${4:-0}" failures="${5:-0}"
 
   prepare_closing_issues_answer "$nodes"
+  : > "$test_directory/closing-issues-attempts.log"
 
   (
     export PATH="$closing_issues_bin_directory:$PATH"
     export FAKE_CLOSING_ISSUES_FILE="$test_directory/closing-issues-answer.json"
+    export FAKE_CLOSING_ISSUES_ATTEMPT_LOG="$test_directory/closing-issues-attempts.log"
+    export FAKE_CLOSING_ISSUES_FAILURES="$failures"
+    export_api_retry_environment
 
     bash "$source_repository_root/.github/pull-request/collect-closing-issues.sh" \
       'Krzysztof318/MailFathom' '1' "$limit"
@@ -4216,6 +4546,23 @@ closing_issues_report_nothing_when_the_ceiling_is_not_reached() {
     "$output_file" "$note_file" 5
 
   assert_file_content $'1\n2' "$output_file"
+  assert_file_content '' "$note_file"
+}
+
+# Standard error is this script's second output rather than its log: `Fathom review` redirects it
+# into `truncation.txt` and pastes that file verbatim into the published review body, under the
+# heading for what a ceiling dropped. A recovered retry announcing itself there would arrive in the
+# review as coverage the pass did not have, so the helper's notices are held back and forwarded only
+# when the call finally fails.
+closing_issues_keep_a_recovered_retry_off_standard_error() {
+  local output_file="$test_directory/closing-issues-recovered"
+  local note_file="$test_directory/closing-issues-recovered-note"
+
+  run_closing_issues \
+    '[{"number": 265, "repository": {"nameWithOwner": "Krzysztof318/MailFathom"}}]' \
+    "$output_file" "$note_file" 0 1
+
+  assert_file_content '265' "$output_file"
   assert_file_content '' "$note_file"
 }
 
@@ -5401,6 +5748,7 @@ workflow_scripts_use_flat_manual_layout() {
   [[ -x "$source_repository_root/.github/pull-request/write-board-status.sh" ]]
   [[ -x "$source_repository_root/.github/pull-request/select-labels.sh" ]]
   [[ -x "$source_repository_root/.github/pull-request/collect-referenced-issues.sh" ]]
+  [[ -x "$source_repository_root/.github/pull-request/call-github-api.sh" ]]
 }
 
 # The per-file licensing mark, everywhere the analyzer that applies it cannot reach. IDE0073 reads
@@ -5628,6 +5976,10 @@ run_test fathom_review_stops_waiting_at_the_ceiling
 run_test fathom_review_reads_the_newest_comment_whatever_the_order
 run_test fathom_review_collects_the_labels_of_an_issue_the_change_closes
 run_test fathom_review_reports_unknown_labels_for_an_issue_it_could_not_fetch
+run_test fathom_review_reads_head_content_within_its_window
+run_test fathom_review_stops_reading_head_content_when_its_window_is_gone
+run_test fathom_review_stops_reading_closing_issues_when_its_window_is_gone
+run_test fathom_review_reports_the_head_content_files_its_count_ceiling_cut
 run_test fathom_review_reads_a_security_labelled_change_with_the_costlier_model
 run_test fathom_review_keeps_the_default_model_for_an_ordinary_change
 run_test fathom_review_waits_for_the_labelling_run_before_reading_the_labels
@@ -5665,6 +6017,7 @@ run_test fathom_review_announces_over_every_other_status
 run_test fathom_review_writes_no_status_without_the_board_token
 run_test board_status_moves_an_item_a_rule_is_entitled_to_move
 run_test board_status_leaves_an_item_outside_the_required_statuses
+run_test board_status_stops_writing_when_its_window_is_gone
 run_test select_board_status_earns_conflicts_from_ready_to_merge_alone
 run_test select_board_status_earns_nothing_until_github_has_decided
 run_test pull_request_rules_move_a_pull_request_that_stopped_merging
@@ -5687,6 +6040,13 @@ run_test a_documentation_bundle_resolves_a_link_out_of_its_own_section
 run_test every_readme_site_link_names_a_page_that_exists
 run_test no_readme_link_reaches_a_published_page_through_the_repository
 run_test the_docker_hub_overview_fits_what_docker_hub_accepts
+run_test github_api_call_asks_once_when_the_call_succeeds
+run_test github_api_call_returns_the_answer_after_a_dropped_connection
+run_test github_api_call_does_not_retry_an_answer_the_api_produced
+run_test github_api_call_retries_a_status_that_says_ask_again
+run_test github_api_call_kills_an_attempt_that_stalls
+run_test github_api_call_waits_longer_between_each_attempt
+run_test github_api_call_fails_after_the_budgeted_attempts
 run_test referenced_issues_collect_a_mention_as_well_as_a_closing_reference
 run_test referenced_issues_collect_a_link_to_an_issue_in_this_repository
 run_test referenced_issues_ignore_another_repository
@@ -5697,6 +6057,7 @@ run_test closing_issues_print_nothing_when_the_merge_closes_nothing
 run_test closing_issues_ignore_another_repository
 run_test closing_issues_report_what_the_ceiling_cut
 run_test closing_issues_report_nothing_when_the_ceiling_is_not_reached
+run_test closing_issues_keep_a_recovered_retry_off_standard_error
 run_test closing_issues_report_each_issue_once
 run_test obligation_index_reports_a_changed_source_no_test_reaches
 run_test obligation_index_credits_a_test_the_change_adds

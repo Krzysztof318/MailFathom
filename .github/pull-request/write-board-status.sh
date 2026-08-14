@@ -42,6 +42,7 @@
 #   STATUS_FIELD            the single-select field to write
 #   CLOSING_ISSUES_SCRIPT   path to `collect-closing-issues.sh`
 #   CLOSING_ISSUE_LIMIT     how many closing issues to act on
+#   BOARD_WRITE_LIMIT_SECONDS  how long the walk over those issues may take
 
 set -euo pipefail
 
@@ -61,6 +62,12 @@ if [[ -z "${BOARD_TOKEN:-}" ]]; then
   exit 0
 fi
 
+# Resolved as a sibling for the reason `collect-closing-issues.sh` resolves it that way: the bound
+# belongs to the call rather than to whichever workflow made it. Every project call below goes
+# through it, the mutation included — it writes an option id this run already read, so repeating it
+# converges on the same value rather than adding a second record.
+call_github_api="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)/call-github-api.sh"
+
 issues_file="$(mktemp)"
 
 # A pull request that closes nothing moves nothing, which is the ordinary shape of a release's
@@ -78,7 +85,7 @@ field_file="$(mktemp)"
 
 # The field and its options are read once for the whole run rather than per issue, and they are read
 # by name because a name is what the workflow can state and an id is not.
-if ! GH_TOKEN="$BOARD_TOKEN" gh api graphql \
+if ! GH_TOKEN="$BOARD_TOKEN" "$call_github_api" graphql \
     -f owner="$BOARD_OWNER" \
     -F number="$BOARD_NUMBER" \
     -f field="$STATUS_FIELD" \
@@ -115,16 +122,37 @@ if [[ -z "$project_id" || -z "$field_id" || -z "$option_id" ]]; then
 fi
 
 moved=0
+unmoved=''
+
+# The third loop in this pipeline that calls once per record, and a retry budget is per call: this
+# one spends two of them per issue, the item read and the mutation, so a project endpoint that has
+# started stalling turns a walk over five issues into minutes rather than the second it takes when
+# the API answers. Neither workflow that calls this declares `timeout-minutes`, and
+# `Apply pull request rules` calls it once per open pull request, so the degradation multiplies
+# there rather than being capped by the job.
+#
+# The bound is therefore the window plus one issue's calls: the check is made before an issue is
+# read, so an issue already in flight finishes, and what a caller can predict is that the walk stops
+# asking for more work once the window is gone. What it buys is a board write that gives up rather
+# than one that holds a job open, which is the right trade for a step that gates nothing — the
+# issues it did not reach are named, and a hand moves them.
+board_write_limit_seconds="${BOARD_WRITE_LIMIT_SECONDS:-120}"
+board_write_started_at="$(date -u +%s)"
 
 while IFS= read -r issue_number; do
   [[ -n "$issue_number" ]] || continue
+
+  if (( $(date -u +%s) - board_write_started_at >= board_write_limit_seconds )); then
+    unmoved="${unmoved:+$unmoved, }$issue_number"
+    continue
+  fi
 
   item_file="$(mktemp)"
 
   # Per-issue failures are warnings rather than errors. This workflow gates nothing, so a red run
   # over a board that can be corrected by hand is noise a reader has to dismiss, and the warning
   # still says which issue was not moved.
-  if ! GH_TOKEN="$BOARD_TOKEN" gh api graphql \
+  if ! GH_TOKEN="$BOARD_TOKEN" "$call_github_api" graphql \
       -f owner="${REPOSITORY%/*}" \
       -f name="${REPOSITORY#*/}" \
       -F number="$issue_number" \
@@ -188,7 +216,7 @@ while IFS= read -r issue_number; do
     continue
   fi
 
-  if ! GH_TOKEN="$BOARD_TOKEN" gh api graphql \
+  if ! GH_TOKEN="$BOARD_TOKEN" "$call_github_api" graphql \
       -f project="$project_id" \
       -f item="$item_id" \
       -f field="$field_id" \
@@ -212,5 +240,10 @@ while IFS= read -r issue_number; do
   printf 'Issue %s moved from %s to %s.\n' \
     "$issue_number" "${current_status:-no status}" "$status"
 done < "$issues_file"
+
+if [[ -n "$unmoved" ]]; then
+  printf '::warning::Writing the board took longer than %ss, so issues %s were left where they stand.\n' \
+    "$board_write_limit_seconds" "$unmoved"
+fi
 
 printf 'Moved %s issues to %s.\n' "$moved" "$status"
