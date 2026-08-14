@@ -178,7 +178,7 @@ public sealed class SecretContentScannerTests
     [InlineData(nameof(SyntheticSecrets.ModelProviderKey), '_')]
     [InlineData(nameof(SyntheticSecrets.SecretStoreLegacyToken), '-')]
     [InlineData(nameof(SyntheticSecrets.SecretStoreLegacyToken), '_')]
-    public async Task ScanAsync_ACredentialFollowedByAnotherBranchsAlphabet_IsStillFound(
+    public async Task ScanAsync_ACredentialFollowedByTheAlphabetOfASiblingBranch_IsStillFound(
         string credentialName,
         char following)
     {

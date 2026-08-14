@@ -43,7 +43,7 @@ internal static class SyntheticSecrets
     public static string CloudServiceKey { get; } = "AI" + "za" + new string('f', 35);
 
     /// <summary>An edge platform's token, in the first of the three forms its one rule alternates between.</summary>
-    public static string EdgePlatformToken { get; } = "fo" + "1_" + new string('a', 43);
+    public static string EdgePlatformToken { get; } = "f" + "o1_" + new string('a', 43);
 
     /// <summary>The same platform's second form, spelled in base64 where the first is spelled in word characters.</summary>
     public static string EdgePlatformBase64Token { get; } = "fm" + "1a_" + new string('b', 100) + "==";
