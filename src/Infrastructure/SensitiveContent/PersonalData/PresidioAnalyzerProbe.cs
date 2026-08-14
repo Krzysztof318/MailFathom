@@ -10,7 +10,7 @@ using MailFathom.CodeCoverage;
 
 namespace MailFathom.Infrastructure.SensitiveContent.PersonalData;
 
-/// <summary>Asks the analyzer what it can recognise, so a deployment that cannot scan does not start.</summary>
+/// <summary>Asks the analyzer what it can recognise, so a deployment that cannot scan says so on its readiness probe.</summary>
 /// <remarks>
 /// <para>
 /// The probe asks for the entities the analyzer supports in the configured language rather than for its health, and the
@@ -20,9 +20,10 @@ namespace MailFathom.Infrastructure.SensitiveContent.PersonalData;
 /// no findings is indistinguishable from a clean message.
 /// </para>
 /// <para>
-/// It is deliberately not a repeated check. Once the host has come up the scanner's own fail-closed contract covers an
-/// analyzer that disappears afterwards, and a periodic probe would be a second opinion about the same dependency that no
-/// caller reads.
+/// It is asked repeatedly, on every readiness scrape, because the analyzer is a container with a lifetime of its own:
+/// one that becomes ready after this process and one that stops answering hours later are the same question, and an
+/// answer from start-up settles neither. What that costs is one request per scrape against a route the analyzer answers
+/// from its own registry, which is why the question is this one rather than a scan.
 /// </para>
 /// <para>
 /// Marked beside the scanner, and for the same reason: what this class claims is that the entities MailFathom's categories
@@ -107,7 +108,7 @@ internal sealed class PresidioAnalyzerProbe : IPersonalDataAnalyzerProbe
             {
                 // The status alone, as its number and .NET's own name for it. A refusal's body is written by a service this
                 // process does not own, and so is the reason phrase beside the status line — a proxy or a wrong service at
-                // the configured address composes both, and this message reaches a startup log.
+                // the configured address composes both, and this message reaches the readiness probe's log.
                 throw PersonalDataAnalyzerUnavailableException.Refused(
                     this.profile.Endpoint.ToString(),
                     string.Format(

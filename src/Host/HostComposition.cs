@@ -113,7 +113,7 @@ internal static class HostComposition
         AddMailRules(builder);
         AddSettingsSnapshots(builder);
         AddApplicationBounds(builder);
-        AddStartupReporting(builder, declaredSensitiveContent, spamScannerIsConfigured);
+        AddStartupReporting(builder, spamScannerIsConfigured);
 
         var embedsMail = AddPersistenceAndProviders(builder);
 
@@ -300,6 +300,16 @@ internal static class HostComposition
             builder.Services.AddSingleton(provider => SensitiveContentPlanMapper.MapAnalyzerProfile(
                 provider.GetRequiredService<IOptions<SensitiveContentOptions>>().Value));
             builder.Services.AddPersonalDataContentScanning();
+
+            // Readiness alone, and unhealthy rather than degraded, which is the fail-closed contract read from the other
+            // side: an instance whose analyzer cannot answer refuses every read, derived write, and egress the scanner
+            // guards, so it must leave the load balancer rather than stay in it answering nothing. It must never reach
+            // the liveness probe — restarting this process cannot start the container beside it. A singleton because the
+            // check holds the last observation it made, which is what keeps one outage to one pair of log records
+            // instead of one per scrape.
+            builder.Services.AddSingleton<PersonalDataAnalyzerHealthCheck>();
+            builder.Services.AddHealthChecks()
+                .Add(PersonalDataAnalyzerHealthCheck.Registration());
         }
 
         if (declaredSensitiveContent.IsAnyScannerEnabled)
@@ -658,24 +668,20 @@ internal static class HostComposition
     }
 
     /// <summary>Declares the gates the startup probe waits on, and the validators that report before the workers run.</summary>
-    private static void AddStartupReporting(
-        WebApplicationBuilder builder,
-        SensitiveContentOptions declaredSensitiveContent,
-        bool spamScannerIsConfigured)
+    private static void AddStartupReporting(WebApplicationBuilder builder, bool spamScannerIsConfigured)
     {
         // What the startup probe reports. Every gate reaches a remote dependency, so each takes as long as that dependency
         // does, and an orchestrator's startup probe is what turns that interval into an extended grace period rather than
         // into a failing instance. The probe answers from this tracker rather than from the order the framework happens to
-        // start its hosted services in. The analyzer gate is expected only where the personal-data scanner is switched on,
-        // because nothing else in this process asks an analyzer anything, and a gate expected but never reported would leave
-        // the probe unhealthy for the life of the instance.
+        // start its hosted services in. The spam gate is expected only where that scanner is switched on, because nothing
+        // else in this process asks a daemon for a score, and a gate expected but never reported would leave the probe
+        // unhealthy for the life of the instance. The personal-data analyzer is deliberately not among them: it is a
+        // sidecar that may become ready after this process and may stop answering long afterwards, which is a readiness
+        // question rather than a startup one, and PersonalDataAnalyzerHealthCheck is where it is asked.
         builder.Services.AddSingleton(new HostStartupGates(
         [
             HostStartupGate.SecretConfiguration,
             HostStartupGate.DatabaseSchema,
-            .. declaredSensitiveContent.Pii.Enabled
-                ? (HostStartupGate[])[HostStartupGate.PersonalDataAnalyzer]
-                : [],
             .. spamScannerIsConfigured
                 ? (HostStartupGate[])[HostStartupGate.SpamScanner]
                 : [],
@@ -913,16 +919,7 @@ internal static class HostComposition
         // after the infrastructure that registers the inspector it resolves.
         builder.Services.AddHostedService<DatabaseSchemaStartupGate>();
 
-        // Ahead of the workers for the reason the schema gate is: with the personal-data scanner switched on, every derived
-        // write and every read the scanner guards fails closed, so a worker that started first would spend a synchronization
-        // run discovering one refusal at a time. Registered only where that switch is on, which is the only state in which
-        // anything here has an analyzer to ask.
-        if (declaredSensitiveContent.Pii.Enabled)
-        {
-            builder.Services.AddHostedService<PersonalDataAnalyzerStartupGate>();
-        }
-
-        // Ahead of the workers for a different reason from the two gates above, because the spam scanner does not fail
+        // Ahead of the workers for a different reason from the gate above, because the spam scanner does not fail
         // closed: a deployment whose daemon is absent would classify every message from its headers alone and look
         // perfectly healthy doing it. Proving it here is what keeps a switched-on scanner from being a line in a
         // configuration file that describes nothing. Registered only where that switch is on.

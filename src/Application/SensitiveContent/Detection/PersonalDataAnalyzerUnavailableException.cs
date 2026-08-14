@@ -7,13 +7,13 @@ using MailFathom.Domain.Failures;
 
 namespace MailFathom.Application.SensitiveContent.Detection;
 
-/// <summary>The failure that stops a host whose personal-data scanner is switched on with no analyzer behind it.</summary>
+/// <summary>The failure a personal-data analyzer that cannot answer is reported as, for a deployment whose scanner is switched on.</summary>
 /// <remarks>
 /// <para>
-/// Raised by <see cref="IPersonalDataAnalyzerProbe" /> while the host is coming up, and by nothing on a serving path.
-/// The scanner fails closed, so a deployment reaching this state would refuse every guarded read, derived write, and
-/// egress for as long as it ran; refusing to start instead is diagnosed at once, while an instance that logged and
-/// carried on is not.
+/// Raised by <see cref="IPersonalDataAnalyzerProbe" /> and by nothing on a serving path. The scanner fails closed, so an
+/// instance in this state refuses every guarded read, derived write, and egress for as long as it lasts; what the
+/// readiness probe does with that is take the instance out of traffic, which is diagnosed at once, while an instance
+/// that logged and went on serving is not.
 /// </para>
 /// <para>
 /// <b>No message here carries the analyzer's address</b>, because a message is what reaches a log and
@@ -42,7 +42,7 @@ public sealed class PersonalDataAnalyzerUnavailableException : MailFathomExcepti
     /// <inheritdoc />
     public override MailFathomErrorCode ErrorCode => MailFathomErrorCode.PersonalDataAnalyzerUnavailable;
 
-    /// <summary>Refuses to start because the configured analyzer could not be reached at all.</summary>
+    /// <summary>Reports that the configured analyzer could not be reached at all.</summary>
     /// <param name="endpoint">The address the probe asked.</param>
     /// <param name="failure">The transport failure, which stays diagnostic detail for a log.</param>
     /// <returns>The failure to raise.</returns>
@@ -53,12 +53,12 @@ public sealed class PersonalDataAnalyzerUnavailableException : MailFathomExcepti
         ArgumentNullException.ThrowIfNull(failure);
 
         return new PersonalDataAnalyzerUnavailableException(
-            "The personal-data scanner is switched on and the analyzer named by SensitiveContent:PersonalDataAnalyzer:Endpoint could not be reached. Personal-data scanning fails closed, so this deployment would refuse every read, derived write, and egress it guards. Start the analyzer beside this service, correct that address, or switch the scanner off.",
+            "The personal-data scanner is switched on and the analyzer named by SensitiveContent:PersonalDataAnalyzer:Endpoint could not be reached. Personal-data scanning fails closed, so this instance refuses every read, derived write, and egress it guards and reports unready until the analyzer answers. Start the analyzer beside this service, correct that address, or switch the scanner off.",
             endpoint,
             failure);
     }
 
-    /// <summary>Refuses to start because the analyzer answered the probe with a refusal.</summary>
+    /// <summary>Reports that the analyzer answered the probe with a refusal.</summary>
     /// <param name="endpoint">The address the probe asked.</param>
     /// <param name="status">The status line it answered with.</param>
     /// <returns>The failure to raise.</returns>
@@ -75,12 +75,12 @@ public sealed class PersonalDataAnalyzerUnavailableException : MailFathomExcepti
         return new PersonalDataAnalyzerUnavailableException(
             string.Format(
                 CultureInfo.InvariantCulture,
-                "The analyzer named by SensitiveContent:PersonalDataAnalyzer:Endpoint answered the personal-data scanner's startup probe with {0}. Check that the address serves a Presidio analyzer rather than another service, and that the language this deployment is configured for is one its own configuration loads a model for.",
+                "The analyzer named by SensitiveContent:PersonalDataAnalyzer:Endpoint answered the personal-data scanner's availability probe with {0}. Check that the address serves a Presidio analyzer rather than another service, and that the language this deployment is configured for is one its own configuration loads a model for.",
                 status),
             endpoint);
     }
 
-    /// <summary>Refuses to start because the analyzer detects nothing the switched-on categories map onto.</summary>
+    /// <summary>Reports that the analyzer detects nothing the switched-on categories map onto.</summary>
     /// <param name="endpoint">The address the probe asked.</param>
     /// <param name="category">The category the analyzer could not answer for.</param>
     /// <returns>The failure to raise.</returns>

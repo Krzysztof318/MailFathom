@@ -331,8 +331,8 @@ with nothing to authenticate to and one more thing to steal.
 
 | Probe | Path | Consults |
 | --- | --- | --- |
-| Startup | `/started` | The host's own startup gates: every secret reference resolved, the database schema verified, and — only with `personalDataScanning.enabled` — the analyzer answering for every configured category. Its budget is what a slow first start is allowed, and it holds liveness off until it succeeds. |
-| Readiness | `/health` | The dependencies a request needs, the database included. A pod that cannot serve leaves the Service's endpoints. |
+| Startup | `/started` | The host's own startup gates: every secret reference resolved, the database schema verified, and — only with `spamScanning.enabled` — the daemon naming the corpus it scores under. Its budget is what a slow first start is allowed, and it holds liveness off until it succeeds. |
+| Readiness | `/health` | The dependencies a request needs: the database, and — only with `personalDataScanning.enabled` — the analyzer answering for every configured category. A pod that cannot serve leaves the Service's endpoints. |
 | Liveness | `/alive` | The process alone, so a database outage never becomes a restart loop that cannot fix it. |
 
 All three are served on a container port of their own — `probes.port`, `8081` by default — which sets both the port the
@@ -398,9 +398,10 @@ service-account token. It is the pod in the release that reads mail content in t
 
 **Resources and readiness.** The analyzer requests a gigabyte of memory and is limited to two, because it loads a language
 model before it serves anything and holds it for the life of the pod; below roughly a gigabyte it is killed while loading.
-Its startup probe allows five minutes of that, and MailFathom's own startup gate refuses to come up while the analyzer is
-not answering — so on a first install the application pod may restart a few times before the analyzer is ready. `resources`,
-`nodeSelector`, `tolerations`, `affinity`, and both security contexts are values under `personalDataScanning.analyzer`.
+Its startup probe allows five minutes of that. MailFathom itself comes up regardless and reports **unready** until the
+analyzer answers, so on a first install the application pod is started, stays out of the Service, and joins it when the
+analyzer is ready — no restart, and no ordering for the operator to arrange. `resources`, `nodeSelector`, `tolerations`,
+`affinity`, and both security contexts are values under `personalDataScanning.analyzer`.
 
 ## Spam scanning
 

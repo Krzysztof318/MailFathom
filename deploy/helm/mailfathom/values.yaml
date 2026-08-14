@@ -205,8 +205,8 @@ personalDataScanning:
     endpoint: ""
 
     # The two-letter code of the language every request states. The image below carries an English model and nothing
-    # else, so changing this means supplying an analyzer configured for the language in the same edit; MailFathom refuses
-    # to start when the analyzer has no model for what is named here.
+    # else, so changing this means supplying an analyzer configured for the language in the same edit; the pod reports
+    # unready for as long as the analyzer has no model for what is named here.
     language: en
 
     # How sure the analyzer must be before a finding is redacted, from 0 to 1. Redaction acts on every finding whatever

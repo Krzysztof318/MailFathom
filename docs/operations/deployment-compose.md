@@ -380,10 +380,11 @@ MAILFATHOM_PERSONAL_DATA_SCANNING=true
 ```
 
 Then `docker compose up -d`. The first start is slow — the analyzer loads a language model before it answers anything,
-which takes tens of seconds — and MailFathom refuses to serve while it cannot reach one. There is no `depends_on` in
-either direction, deliberately: a dependency on a service behind a profile is one Compose resolves differently depending
-on which profiles are active, so `restart: unless-stopped` is what carries MailFathom's startup refusal into a retry
-until the model has loaded. `docker compose ps` shows the analyzer's own health check while that is happening.
+which takes tens of seconds — and MailFathom answers `Unhealthy` on `/health` while it cannot reach one. It does not
+exit and it is not restarted: it becomes ready by itself once the model has loaded. There is no `depends_on` in either
+direction, deliberately, and none is needed: a dependency on a service behind a profile is one Compose resolves
+differently depending on which profiles are active, and nothing about the start sequence has to be ordered when the
+application waits on its own probe. `docker compose ps` shows the analyzer's own health check while that is happening.
 
 To use an analyzer you already operate, set `MAILFATHOM_PERSONAL_DATA_ANALYZER` to its address and leave
 `COMPOSE_PROFILES` alone — nothing is then started for it. Keep that address **inside your own network**: the point of

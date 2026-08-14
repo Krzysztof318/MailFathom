@@ -297,8 +297,9 @@ no switch at all, because the operator would believe it was in force.
 Every one of those failures reports error code `81001` and names the scanner. None of them names the text or the
 finding: the content the scan was about is exactly what must not appear in a failure written to a log.
 
-One failure in this feature is a startup failure rather than a scan's: `81002`, raised when the personal-data analyzer
-cannot be reached, answers the startup probe with a refusal, or recognises nothing the configured categories need. It
+One failure in this feature is an availability failure rather than a scan's: `81002`, raised when the personal-data
+analyzer cannot be reached, answers the availability probe with a refusal, or recognises nothing the configured
+categories need. It is what the readiness probe reports on rather than what a guarded operation raises. It
 names `SensitiveContent:PersonalDataAnalyzer:Endpoint` — the key an operator edits — rather than the address that key
 resolved to, because a message reaches a log and no message in this feature carries a host name. Neither does it carry
 the analyzer's own words: a refusal is reported as its status number and .NET's name for that status, because a proxy or
@@ -391,20 +392,32 @@ the Compose deployment leaves its analyzer service behind a profile that is not 
 analyzer unit is a file an operator never copies. An opt-in nobody took pulls no image, holds no memory, and adds no
 listener.
 
-Switching it on without a reachable analyzer **fails startup** and names `SensitiveContent:PersonalDataAnalyzer:Endpoint`,
-the key to correct. So does an analyzer that answers but recognises nothing for one of the switched-on categories — a narrower registry than the
-shipped image, or a language it has no model for. Both are refusals rather than warnings, because the alternative is a
-deployment whose configuration reads as protection in force while every scan finds nothing, and nothing finding anything
-is indistinguishable from a clean message.
+Switching it on **without naming an address at all** fails startup and names
+`SensitiveContent:PersonalDataAnalyzer:Endpoint`, the key to correct. That is a configuration error, and configuration is
+validated before anything is dialled.
 
-That probe runs once, while the host comes up. Afterwards the fail-closed contract above is what covers an analyzer that
-disappears: a scan that cannot reach it refuses the operation it guards.
+An address that names an analyzer which does not answer is a different thing, and it does **not** fail startup. The host
+comes up and reports itself **unready** — `/health` answers `Unhealthy`, so an orchestrator takes the instance out of
+traffic without restarting it. So does an analyzer that answers but recognises nothing for one of the switched-on
+categories — a narrower registry than the shipped image, or a language it has no model for. Both are refusals to serve
+rather than warnings, because the alternative is a deployment whose configuration reads as protection in force while
+every scan finds nothing, and nothing finding anything is indistinguishable from a clean message.
+
+**The probe runs on every readiness scrape**, not once at startup, because the analyzer is a container with a lifetime of
+its own: one that becomes ready a minute after MailFathom and one that stops answering hours later are the same question,
+and an answer taken while the host came up settles neither. A transition into unavailability is written to the log at
+`Error` and the recovery at `Information` — the probe response is one word by design, so the log is the only place the
+reason is readable. Beneath the probe, the fail-closed contract above is what covers each individual operation: a scan
+that cannot reach the analyzer refuses the operation it guards.
+
+See [the health endpoints](../operations/health-endpoints.md#the-three-probes) for what each probe consults and what a
+failure of it costs.
 
 **What it costs to run.** The analyzer loads a language model into memory before it answers anything and holds it for the
 life of the container, so the deployment assets give it roughly a gigabyte to request and two as a ceiling; below about a
 gigabyte it is killed while loading, which reaches MailFathom as an analyzer that never became ready. That load is also
-why the first start after switching the feature on is slow — tens of seconds — and why MailFathom's own startup is
-ordered behind an analyzer that answers rather than one that merely exists. Whether it needs a CPU of its own depends
+why the first start after switching the feature on is slow — tens of seconds — and why MailFathom reports itself unready
+for that interval rather than refusing to come up in it. Whether it needs a CPU of its own depends
 entirely on how much mail flows through the guarded paths; the concurrency bound above is what keeps a burst from becoming
 a queue at the analyzer. The per-shape figures are on the deployment pages:
 [Compose](../operations/deployment-compose.md), [Kubernetes](../operations/deployment-kubernetes.md), and
@@ -462,7 +475,7 @@ on its own.
 
 **A category is only as good as the analyzer behind it.** The shipped image registers nineteen entities for English, so
 most of the entries in each category above — the national identifiers of two dozen countries, the passport formats of
-several — are recognised only by an analyzer configured with the recognizers for them. The startup probe checks that
+several — are recognised only by an analyzer configured with the recognizers for them. The readiness probe checks that
 every switched-on category has **at least one** entity the analyzer knows, which is what catches a category that would be
 scanned for and never found; it deliberately does not require all of them, because a narrower registry costs recall
 inside a category that still works.

@@ -4,6 +4,8 @@
 
 using System.Diagnostics.CodeAnalysis;
 using System.Xml.Linq;
+using MailFathom.Host.Hosting;
+using MailFathom.Host.Hosting.Startup;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.DataProtection.KeyManagement;
 using Microsoft.AspNetCore.DataProtection.Repositories;
@@ -260,6 +262,51 @@ public sealed class HostCompositionTests
         // Assert
         Assert.NotNull(refusal);
         Assert.Contains("No network surface is enabled", refusal.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The analyzer is a sidecar with a lifetime of its own, so whether it answers is a readiness question rather than a
+    /// startup one. Composition is where that is decided, and the only place both halves of the decision are observable
+    /// together: that the startup probe turns healthy without it, and that the readiness probe asks about it.
+    /// </summary>
+    [Fact]
+    public async Task Compose_WithThePersonalDataScannerOn_AsksTheAnalyzerOnReadinessRatherThanAtStartup()
+    {
+        // Arrange
+        await using var provider = ComposeServices("personal-data scanning").BuildServiceProvider();
+
+        var startupGates = provider.GetRequiredService<HostStartupGates>();
+
+        // Act
+        startupGates.MarkCompleted(HostStartupGate.SecretConfiguration);
+        startupGates.MarkCompleted(HostStartupGate.DatabaseSchema);
+
+        // Assert
+        Assert.True(startupGates.Completed);
+
+        var analyzer = Assert.Single(
+            provider.GetRequiredService<IOptions<HealthCheckServiceOptions>>().Value.Registrations,
+            registration => registration.Name == PersonalDataAnalyzerHealthCheck.Name);
+
+        Assert.True(HealthProbe.Readiness.Selects(analyzer));
+        Assert.False(HealthProbe.Startup.Selects(analyzer));
+        Assert.False(HealthProbe.Liveness.Selects(analyzer));
+    }
+
+    /// <summary>An opt-in nobody took reaches no analyzer, so it must not report unready for one it never deployed.</summary>
+    [Fact]
+    public async Task Compose_WithThePersonalDataScannerOff_ReportsNothingAboutAnAnalyzer()
+    {
+        // Arrange
+        await using var provider = ComposeServices("probes only").BuildServiceProvider();
+
+        // Act
+        var registrations = provider.GetRequiredService<IOptions<HealthCheckServiceOptions>>().Value.Registrations;
+
+        // Assert
+        Assert.DoesNotContain(
+            registrations,
+            registration => registration.Name == PersonalDataAnalyzerHealthCheck.Name);
     }
 
     /// <summary>Composes one shape and hands back what it registered.</summary>
