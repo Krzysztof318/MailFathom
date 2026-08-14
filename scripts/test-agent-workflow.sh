@@ -13,6 +13,13 @@ if [[ "$(basename "$0")" == 'dotnet' ]]; then
     exit 19
   fi
 
+  # The repairing formatting pass is the one invocation in either gate that rewrites the tree, and
+  # what it rewrites decides whether the run may record anything. A contract asks for that by naming
+  # the file this stands in for.
+  if [[ -n "${FAKE_DOTNET_REWRITE:-}" && "$*" == *'format'* ]]; then
+    printf 'rewritten\n' >> "$FAKE_DOTNET_REWRITE"
+  fi
+
   if [[ "$*" == '--version' ]]; then
     printf '10.0.110\n'
   fi
@@ -63,15 +70,20 @@ git -C "$repository_root" config user.email agent-workflow@example.invalid
 git -C "$repository_root" config user.name 'Agent Workflow Tests'
 printf '<Solution />\n' > "$repository_root/MailFathom.slnx"
 printf 'clean\n' > "$repository_root/tracked.txt"
+# The gates record what they verified under `artifacts/`, which the real repository ignores. Without
+# the same line here the full gate would refuse its own record as an untracked file, and the digest
+# of the tree would include the digest of the tree.
+printf 'artifacts/\n' > "$repository_root/.gitignore"
 printf '%s\n' \
   '#!/usr/bin/env bash' \
   'set -euo pipefail' \
   ': "${FAKE_WORKFLOW_LOG:?FAKE_WORKFLOW_LOG must identify the invocation log}"' \
   "printf 'workflow-contracts\\n' >> \"\$FAKE_WORKFLOW_LOG\"" \
+  "printf 'the contract suite ran\\n'" \
   'if [[ -n "${FAKE_WORKFLOW_FAIL:-}" ]]; then exit 23; fi' \
   > "$repository_root/scripts/test-agent-workflow.sh"
 chmod +x "$repository_root/scripts/test-agent-workflow.sh"
-git -C "$repository_root" add MailFathom.slnx scripts/test-agent-workflow.sh tracked.txt
+git -C "$repository_root" add .gitignore MailFathom.slnx scripts/test-agent-workflow.sh tracked.txt
 git -C "$repository_root" commit --quiet -m 'test fixture'
 
 git clone --quiet "$repository_root" "$remote_repository_root"
@@ -221,6 +233,11 @@ run_test() {
   local test_name="$1"
   local test_status
 
+  # Every contract below states what a gate does when it is asked to verify something, so each one
+  # starts from a checkout no gate has recorded a verdict about. The contracts that are *about* the
+  # records write them themselves, within one test.
+  rm -rf "$repository_root/artifacts/verify"
+
   set +e
   (
     set -e
@@ -333,7 +350,12 @@ verify_full_runs_workflow_contracts_when_the_branch_removed_a_path() {
   assert_file_content 'workflow-contracts' "$workflow_invocation_log"
 }
 
-verify_full_stops_when_workflow_contracts_fail() {
+# The suite runs beside the dotnet chain rather than in front of it, so a failing suite no longer
+# means an unspent build: both are already running when either fails. What the gate owes is the
+# verdict, and it still refuses — having reported both answers rather than only the first. This
+# contract asserts the consequence rather than the concurrency: a test that timed two clocks against
+# each other would be measuring the machine.
+verify_full_fails_when_workflow_contracts_fail_beside_a_running_chain() {
   : > "$invocation_log"
   : > "$workflow_invocation_log"
   stage_documentation_change
@@ -350,7 +372,190 @@ verify_full_stops_when_workflow_contracts_fail() {
 
   discard_documentation_change
   assert_file_content 'workflow-contracts' "$workflow_invocation_log"
+  assert_contains 'msbuild .config/CodeCoverage.proj' "$invocation_log"
+}
+
+# The other order, which keeps the shape it had. A broken build is not a tree worth reporting
+# contract findings about, so the suite is stopped rather than waited out and the gate answers at the
+# speed of the failure it already has.
+verify_full_stops_the_contract_suite_once_the_chain_failed() {
+  local gate_output="$test_directory/verify-full-chain-failure-output"
+  stage_documentation_change
+
+  if (
+    export FAKE_DOTNET_FAIL_MATCH='build MailFathom.slnx'
+    cd "$repository_root"
+    "$scripts_directory/verify-full.sh"
+  ) > "$gate_output" 2>&1; then
+    discard_documentation_change
+    printf 'verify-full.sh succeeded despite a failing build\n' >&2
+    return 1
+  fi
+
+  discard_documentation_change
+  assert_contains 'its verdict was not collected' "$gate_output"
+  assert_excludes 'the contract suite ran' "$gate_output"
+}
+
+# A failing suite is the reason a gate says no, so its output has to arrive at the gate's own stdout
+# rather than only in the file it was redirected to while it ran.
+verify_full_relays_what_the_contract_suite_printed() {
+  local gate_output="$test_directory/verify-full-output"
+  : > "$workflow_invocation_log"
+  stage_documentation_change
+
+  (
+    cd "$repository_root"
+    "$scripts_directory/verify-full.sh"
+  ) > "$gate_output" 2>&1
+
+  discard_documentation_change
+  assert_contains 'the contract suite ran' "$gate_output"
+}
+
+# The whole point of a record: a second run over content the first one already passed reports the
+# first rather than repeating it.
+verify_fast_skips_a_tree_it_already_proved() {
+  (
+    cd "$repository_root"
+    "$scripts_directory/verify-fast.sh"
+  )
+
+  : > "$invocation_log"
+
+  (
+    cd "$repository_root"
+    "$scripts_directory/verify-fast.sh"
+  )
+
   assert_file_content '' "$invocation_log"
+}
+
+verify_fast_runs_again_once_the_tree_changed() {
+  (
+    cd "$repository_root"
+    "$scripts_directory/verify-fast.sh"
+  )
+
+  printf 'namespace Fixture;\n\n// changed\n' > "$repository_root/src/Sample.cs"
+  : > "$invocation_log"
+
+  (
+    cd "$repository_root"
+    "$scripts_directory/verify-fast.sh"
+  )
+
+  git -C "$repository_root" checkout --quiet HEAD -- src/Sample.cs
+  assert_contains 'build MailFathom.slnx --configuration Release --no-restore' "$invocation_log"
+}
+
+# The full gate builds, tests, collects coverage over the same suite, and verifies the formatting the
+# loop repairs, so its record answers for the loop as well.
+verify_fast_accepts_the_record_the_full_gate_wrote() {
+  (
+    cd "$repository_root"
+    "$scripts_directory/verify-full.sh"
+  )
+
+  : > "$invocation_log"
+
+  (
+    cd "$repository_root"
+    "$scripts_directory/verify-fast.sh"
+  )
+
+  assert_file_content '' "$invocation_log"
+}
+
+# And never the other way round — with one exception, which is why both halves are asserted from one
+# run. Passing the loop says nothing about coverage or the contract suite, so those are asked again;
+# it does settle the formatting, because the repairing pass is the same tool over the same file set
+# and a record exists only where it rewrote nothing, which leaves the verifying pass one possible
+# answer.
+verify_full_refuses_the_fast_loop_record_except_for_the_formatting_pass() {
+  (
+    cd "$repository_root"
+    "$scripts_directory/verify-fast.sh"
+  )
+
+  : > "$invocation_log"
+
+  (
+    cd "$repository_root"
+    "$scripts_directory/verify-full.sh"
+  )
+
+  assert_contains 'msbuild .config/CodeCoverage.proj' "$invocation_log"
+  assert_excludes 'format MailFathom.slnx' "$invocation_log"
+}
+
+# A run whose formatting pass rewrote a file verified a build and a suite against content the working
+# tree no longer holds, so it records nothing and the next run does the work.
+verify_fast_records_nothing_when_formatting_rewrote_a_file() {
+  (
+    export FAKE_DOTNET_REWRITE="$repository_root/src/Sample.cs"
+    cd "$repository_root"
+    "$scripts_directory/verify-fast.sh"
+  )
+
+  git -C "$repository_root" checkout --quiet HEAD -- src/Sample.cs
+  : > "$invocation_log"
+
+  (
+    cd "$repository_root"
+    "$scripts_directory/verify-fast.sh"
+  )
+
+  assert_contains 'build MailFathom.slnx --configuration Release --no-restore' "$invocation_log"
+}
+
+verify_force_runs_everything_a_record_would_have_skipped() {
+  (
+    cd "$repository_root"
+    "$scripts_directory/verify-fast.sh"
+  )
+
+  : > "$invocation_log"
+
+  (
+    export VERIFY_FORCE=1
+    cd "$repository_root"
+    "$scripts_directory/verify-fast.sh"
+  )
+
+  assert_contains 'build MailFathom.slnx --configuration Release --no-restore' "$invocation_log"
+}
+
+# A record says a gate passed, so a gate that failed writes none — however far it got. The whitespace
+# check is the last step of the full gate and runs after everything the record would skip, which
+# makes a run that fails there the case that would be easiest to record by accident.
+verify_full_records_nothing_when_it_failed() {
+  printf 'trailing \n' > "$repository_root/tracked.txt"
+  git -C "$repository_root" add tracked.txt
+  git -C "$repository_root" commit --quiet -m 'committed trailing whitespace'
+
+  if (
+    cd "$repository_root"
+    "$scripts_directory/verify-full.sh"
+  ); then
+    git -C "$repository_root" reset --quiet --hard HEAD~1
+    printf 'verify-full.sh accepted committed trailing whitespace\n' >&2
+    return 1
+  fi
+
+  : > "$invocation_log"
+
+  if (
+    cd "$repository_root"
+    "$scripts_directory/verify-full.sh"
+  ); then
+    git -C "$repository_root" reset --quiet --hard HEAD~1
+    printf 'verify-full.sh accepted committed trailing whitespace on a second run\n' >&2
+    return 1
+  fi
+
+  git -C "$repository_root" reset --quiet --hard HEAD~1
+  assert_contains 'msbuild .config/CodeCoverage.proj' "$invocation_log"
 }
 
 # The one change that can move the formatting verdict on a file it never opened. `.editorconfig`
@@ -5333,7 +5538,16 @@ run_test verify_full_runs_tests_once_through_coverage
 run_test verify_full_runs_workflow_contracts_for_a_change_beyond_csharp
 run_test verify_full_skips_workflow_contracts_for_a_csharp_only_change
 run_test verify_full_runs_workflow_contracts_when_the_branch_removed_a_path
-run_test verify_full_stops_when_workflow_contracts_fail
+run_test verify_full_fails_when_workflow_contracts_fail_beside_a_running_chain
+run_test verify_full_stops_the_contract_suite_once_the_chain_failed
+run_test verify_full_relays_what_the_contract_suite_printed
+run_test verify_fast_skips_a_tree_it_already_proved
+run_test verify_fast_runs_again_once_the_tree_changed
+run_test verify_fast_accepts_the_record_the_full_gate_wrote
+run_test verify_full_refuses_the_fast_loop_record_except_for_the_formatting_pass
+run_test verify_fast_records_nothing_when_formatting_rewrote_a_file
+run_test verify_full_records_nothing_when_it_failed
+run_test verify_force_runs_everything_a_record_would_have_skipped
 run_test verify_full_formats_the_whole_solution_when_a_shared_style_input_changed
 run_test verify_full_formats_the_whole_solution_when_a_shared_style_input_was_removed
 run_test verify_full_formats_nothing_when_no_csharp_file_changed

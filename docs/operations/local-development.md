@@ -25,6 +25,15 @@ git add <task-files>
 bash scripts/verify-full.sh
 ```
 
+Both write a digest of what they verified under `artifacts/verify/` and answer in
+under a second when handed a tree they have already passed over, so running
+either one twice is cheap rather than something to avoid — and running it is
+always better than reasoning about whether the last run still holds.
+`VERIFY_FORCE=1` runs everything regardless.
+[A gate does not prove the same tree twice](agent-workflow.md#a-gate-does-not-prove-the-same-tree-twice)
+holds what a record claims, what retires one, and why a failing run records
+nothing.
+
 While reviewing the change, ask what it obliges elsewhere:
 
 ```bash
@@ -600,7 +609,7 @@ Two attributes take code out of that denominator, and `.config/testconfig.json` 
 
 A third exclusion is applied by path rather than by attribute: `.config/CodeCoverage.proj` filters `**/Persistence/Migrations/*.cs` out of the merged report. EF Core generates those files, so they carry no attribute the generator would preserve, and no unit test may execute them — a migration is proven by applying it to a real PostgreSQL server and reviewing the resulting schema. Leaving them in put roughly a thousand uncoverable lines in the denominator and moved the aggregate by more than twenty points, which would have masked a real regression anywhere else.
 
-Raw Cobertura reports and TRX files are written under `artifacts/coverage/raw/`. The merged Cobertura and HTML reports are written under `artifacts/coverage/report/`.
+Raw Cobertura reports and TRX files are written under `artifacts/coverage/raw/`. The merged Cobertura and HTML reports are written under `artifacts/coverage/report/`. The verification records the two gates write sit beside them under `artifacts/verify/`; the whole directory is ignored, so nothing there is ever staged, and deleting any of it costs one repeated run.
 
 ## Integration tests
 
