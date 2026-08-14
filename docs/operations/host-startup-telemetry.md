@@ -1,6 +1,6 @@
 # Host startup telemetry
 
-<!-- describes: src/Host/Program.cs, src/Host/Observability/** -->
+<!-- describes: src/Host/Program.cs, src/Host/HostComposition.cs, src/Host/Observability/** -->
 
 The host reports its own process lifetime through a bootstrap logging pipeline that `src/Host/Program.cs` owns directly. It is built before `WebApplication.CreateBuilder` runs and released when the process leaves.
 
@@ -8,7 +8,7 @@ The host reports its own process lifetime through a bootstrap logging pipeline t
 
 `AddServiceDefaults` registers OpenTelemetry logging into the dependency-injection container, so that pipeline exists only after `builder.Build()` has returned. Two gaps follow from that, and both are worst exactly when an operator needs the record most:
 
-- Everything before `builder.Build()` — configuration loading, options binding, secret-resolution registration — runs with no logger in scope at all. `CreateBuilder` is where a malformed `appsettings.json` or a failing configuration provider throws, and it is the very first statement of the program.
+- Everything before `builder.Build()` runs with no logger in scope at all: configuration loading, which `Program.cs` does itself before it composes anything, and then the whole of `HostComposition.Compose`, where options binding and secret-resolution registration happen. `CreateBuilder` is the first statement that can throw from configuration — a malformed `appsettings.json` or a failing configuration provider fails there — and the only statements ahead of it are the two that compose this pipeline.
 - A failure during startup, such as an options binding rejected by `ErrorOnUnknownConfiguration` or an unresolvable secret reference rejected by `SecretConfigurationStartupValidator`, escapes `app.RunAsync()` as an unhandled exception. Nothing disposes the application on that path, the OTLP exporter the container owns batches records for its default five seconds, and the runtime does not guarantee that `finally` blocks run for an unhandled exception. The process dies with the explanation still in a queue.
 
 The bootstrap pipeline closes both gaps: it is composed before `CreateBuilder`, so configuration loading is inside the window it reports on, and it exports each record synchronously, so delivery does not depend on process teardown.

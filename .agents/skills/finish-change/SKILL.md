@@ -26,8 +26,11 @@ where it came from.
 3. Invoke `$check-docs-licenses`. Fix every `fail` and repeat the gate until all three verdicts pass
    or are `n/a`. Its changelog verdict is `n/a` for ordinary work: `CHANGELOG.md` is written by the
    release pull request alone, so a diff that edits it here is a defect rather than diligence.
-4. Run `scripts/verify-full.sh`. Fix failures and rerun the complete script; earlier or partial
-   results do not replace a fresh successful run. Repair a formatting failure through
+4. Run `scripts/verify-full.sh`. Fix failures and rerun the complete script; partial results do not
+   replace a successful one, and a run that failed records nothing, so the rerun is a real run. An
+   *unchanged* tree is the one case that answers in under a second, because the script records what
+   it verified and a second run over identical content would reprove it rather than prove it. Repair
+   a formatting failure through
    `scripts/verify-fast.sh`, which rewrites the changed files, rather than through a hand-run
    `dotnet format` over the whole solution; a diagnostic no rewrite fixes is a build error there and
    names its own file and line.

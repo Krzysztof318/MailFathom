@@ -125,6 +125,7 @@ These rules implement [ADR 0003](../docs/decisions/0003-first-party-exception-hi
 ## Dependency injection and configuration
 
 - Register dependencies in focused extension methods owned by the project that implements them; keep `Program.cs` as a readable composition root.
+- **The host's own composition lives in `HostComposition`, not in `Program.cs`.** Top-level statements cannot be called, so a registration written in them is one no test can build — and the container resolves a factory-registered service on first use, which makes an unregistered dependency an exception out of a worker rather than a build that stopped. A new registration therefore goes into the stage of `HostComposition.Compose` that its ordering belongs to, and `Program.cs` keeps only what precedes composition and what the request pipeline does with the result. `CliRunner` records the same reasoning for the administration tool, and `HostCompositionTests` is what the arrangement buys.
 - Choose DI lifetimes deliberately. Never inject a scoped service into a singleton or capture scoped services in background workers.
 - Background services create an explicit scope per independent work unit and honor host cancellation.
 - Use typed options for related configuration. Apply `ValidateDataAnnotations`, custom validators where necessary, and `ValidateOnStart` for required settings.
