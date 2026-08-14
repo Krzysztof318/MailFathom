@@ -17,9 +17,9 @@ change has not touched. The change itself is under `{{REVIEW_DIRECTORY}}`:
 - `files.json` — every changed file with its unified diff in `patch`.
 - `head/<path>` — the whole file as the branch leaves it, for the changed files that are
   text and small enough to fetch. Missing never means unchanged. It means too large or
-  binary, unless `truncation.txt` says the head content stopped — for the reading window
-  or for the count ceiling — in which case the later files were not read at all and their
-  absence says nothing about them.
+  binary, or a path the run could not fetch, unless `truncation.txt` says the head content
+  stopped — for the reading window or for the count ceiling — in which case the later files
+  were not read at all and their absence says nothing about them.
 - `lines.json` — per file, the line numbers a review comment may anchor to.
 - `review-threads.json` — every inline thread on this pull request, its comments in the
   order they were written, and two states of its own: `resolved`, which the author sets

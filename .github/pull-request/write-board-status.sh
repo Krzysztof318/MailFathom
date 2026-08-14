@@ -42,6 +42,7 @@
 #   STATUS_FIELD            the single-select field to write
 #   CLOSING_ISSUES_SCRIPT   path to `collect-closing-issues.sh`
 #   CLOSING_ISSUE_LIMIT     how many closing issues to act on
+#   BOARD_WRITE_LIMIT_SECONDS  how long the walk over those issues may take
 
 set -euo pipefail
 
@@ -121,9 +122,30 @@ if [[ -z "$project_id" || -z "$field_id" || -z "$option_id" ]]; then
 fi
 
 moved=0
+unmoved=''
+
+# The third loop in this pipeline that calls once per record, and a retry budget is per call: this
+# one spends two of them per issue, the item read and the mutation, so a project endpoint that has
+# started stalling turns a walk over five issues into minutes rather than the second it takes when
+# the API answers. Neither workflow that calls this declares `timeout-minutes`, and
+# `Apply pull request rules` calls it once per open pull request, so the degradation multiplies
+# there rather than being capped by the job.
+#
+# The bound is therefore the window plus one issue's calls: the check is made before an issue is
+# read, so an issue already in flight finishes, and what a caller can predict is that the walk stops
+# asking for more work once the window is gone. What it buys is a board write that gives up rather
+# than one that holds a job open, which is the right trade for a step that gates nothing — the
+# issues it did not reach are named, and a hand moves them.
+board_write_limit_seconds="${BOARD_WRITE_LIMIT_SECONDS:-120}"
+board_write_started_at="$(date -u +%s)"
 
 while IFS= read -r issue_number; do
   [[ -n "$issue_number" ]] || continue
+
+  if (( $(date -u +%s) - board_write_started_at >= board_write_limit_seconds )); then
+    unmoved="${unmoved:+$unmoved, }$issue_number"
+    continue
+  fi
 
   item_file="$(mktemp)"
 
@@ -218,5 +240,10 @@ while IFS= read -r issue_number; do
   printf 'Issue %s moved from %s to %s.\n' \
     "$issue_number" "${current_status:-no status}" "$status"
 done < "$issues_file"
+
+if [[ -n "$unmoved" ]]; then
+  printf '::warning::Writing the board took longer than %ss, so issues %s were left where they stand.\n' \
+    "$board_write_limit_seconds" "$unmoved"
+fi
 
 printf 'Moved %s issues to %s.\n' "$moved" "$status"

@@ -830,17 +830,20 @@ a path the head does not carry is an ordinary outcome of that loop, so a file
 dropped after four failed attempts leaves the same gap as one that was never
 there — which the reviewer reads as content too large to collect.
 
-**Two collections call once per record, and a retry budget is per call**, so both
-carry a wall-clock window beside their count ceiling: the head content, and the
-issues the change closes. Without one, an endpoint that has started failing costs
-every remaining record a whole budget — minutes of a job whose thirty are mostly
-meant for the model, and a run killed before it starts is the failure the retries
-exist to remove. Each window is tested before a call rather than during one, so
-what it bounds is the record the loop *starts*: the real ceiling is the window plus
-one call's budget. Every one of those ceilings writes its line into
-`truncation.txt` and reaches the review body, because a file missing from `head/`
-and an issue present as its number alone both say something specific to a reviewer,
-and a gap left by a ceiling would otherwise be read as that statement.
+**Three loops call once per record, and a retry budget is per call**, so each
+carries a wall-clock window: the head content, the issues the change closes, and
+the board write, which spends two budgets per issue and runs in two workflows that
+declare no `timeout-minutes` of their own. Without one, an endpoint that has
+started failing costs every remaining record a whole budget — minutes of a job
+whose thirty are mostly meant for the model, and a run killed before it starts is
+the failure the retries exist to remove. Each window is tested before a call rather
+than during one, so what it bounds is the record the loop *starts*: the real
+ceiling is the window plus one record's calls. The two collection ceilings write
+their line into `truncation.txt` and reach the review body, because a file missing
+from `head/` and an issue present as its number alone both say something specific
+to a reviewer, and a gap left by a ceiling would otherwise be read as that
+statement; the board write names the issues it left where they stand in a warning
+on the run instead, which is where the rest of its per-issue failures are reported.
 
 What is retried is decided from what the API said rather than from the fact that
 something failed. A reply carrying a client status is an answer — the endpoint

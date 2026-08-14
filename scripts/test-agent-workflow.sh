@@ -3106,12 +3106,17 @@ run_board_status_write() {
   local required_statuses="$2"
   local current_status="$3"
   local output_file="$4"
+  local closing_issues="${5:-12}"
+  # The walk's wall-clock window, which every contract but the one about the window itself leaves at
+  # the default, because what those assert is which items moved rather than how long the walk took.
+  local limit_seconds="${6:-}"
 
-  prepare_fathom_review_board_state '12' "$current_status"
+  prepare_fathom_review_board_state "$closing_issues" "$current_status"
 
   set +e
   (
     export_fathom_review_board_environment 'classic-token-that-is-not-real'
+    [[ -z "$limit_seconds" ]] || export BOARD_WRITE_LIMIT_SECONDS="$limit_seconds"
     bash "$source_repository_root/.github/pull-request/write-board-status.sh" \
       "$status" '' "$required_statuses"
   ) > "$output_file" 2>&1
@@ -3145,6 +3150,20 @@ board_status_leaves_an_item_outside_the_required_statuses() {
     [[ ! -s "$board_mutations_file" ]]
     assert_contains 'so it is left where it stands' "$output_file"
   done
+}
+
+# The walk over the closing issues is the third loop that calls once per record, and it spends two
+# retry budgets on each — the item read and the mutation — in two workflows that declare no
+# `timeout-minutes`. What the window buys is a board write that gives up rather than one that holds a
+# job open, and the issues it did not reach are named so a hand can move them.
+board_status_stops_writing_when_its_window_is_gone() {
+  local output_file="$test_directory/board-status-window-output"
+
+  run_board_status_write 'Conflicts' 'Ready to merge' 'Ready to merge' "$output_file" '12,13' 0
+
+  ((board_status == 0))
+  [[ ! -s "$board_mutations_file" ]]
+  assert_contains 'issues 12, 13 were left where they stand' "$output_file"
 }
 
 # Every condition a pull request's state earns lives in one script, so a rule is an edit there rather
@@ -4287,9 +4306,10 @@ github_api_call_kills_an_attempt_that_stalls() {
 }
 
 # The wait between attempts, which every other contract zeroes so that it can assert a count. Nothing
-# would then observe that the helper waits at all: deleting the `sleep`, or the doubling, or the
-# jitter term leaves four requests going back-to-back at the proxy that motivated the retries, and
-# the property that several calls failing at once do not come back in step goes with it.
+# would then observe that the helper waits at all: deleting the `sleep`, or the doubling, leaves the
+# four requests arriving back-to-back at the proxy that motivated the retries. The jitter is not one
+# of the two — removing it leaves exactly 1 + 2 + 4, which still clears the floor below — so nothing
+# here holds the property that several calls failing at once do not come back in step.
 #
 # The budget is the full four rather than the three the other contracts use, because the jitter is
 # what decides how long a shorter run takes. With a base of one second the three waits are 1-2s,
@@ -5997,6 +6017,7 @@ run_test fathom_review_announces_over_every_other_status
 run_test fathom_review_writes_no_status_without_the_board_token
 run_test board_status_moves_an_item_a_rule_is_entitled_to_move
 run_test board_status_leaves_an_item_outside_the_required_statuses
+run_test board_status_stops_writing_when_its_window_is_gone
 run_test select_board_status_earns_conflicts_from_ready_to_merge_alone
 run_test select_board_status_earns_nothing_until_github_has_decided
 run_test pull_request_rules_move_a_pull_request_that_stopped_merging
