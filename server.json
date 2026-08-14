@@ -1,0 +1,27 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.krzysztof318/mailfathom",
+  "title": "MailFathom",
+  "description": "Security-first, self-hosted email archive with read-only search and cited answers for AI agents.",
+  "repository": {
+    "url": "https://github.com/Krzysztof318/MailFathom",
+    "source": "github",
+    "id": "1309260427"
+  },
+  "version": "0.6.0",
+  "websiteUrl": "https://krzysztof318.github.io/MailFathom/",
+  "remotes": [
+    {
+      "type": "streamable-http",
+      "url": "https://{host}/mcp",
+      "variables": {
+        "host": {
+          "description": "Public HTTPS host of the operator's MailFathom deployment, without a scheme or path.",
+          "isRequired": true,
+          "format": "string",
+          "placeholder": "mail.example.com"
+        }
+      }
+    }
+  ]
+}
