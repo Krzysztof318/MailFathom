@@ -478,8 +478,17 @@ jobs:
           model="$MODEL"
           reason="the pull request carries no ${SECURITY_LABEL} label"
 
-          if "$GITHUB_API_SCRIPT" "repos/${REPOSITORY}/pulls/${PULL_REQUEST_NUMBER}" --jq '.labels[].name' \
-               | grep -qxF "$SECURITY_LABEL"; then
+          # Read first, match second, rather than piping the read into `grep -q`. That reader exits
+          # the moment it matches, so the writer upstream is killed by `SIGPIPE` if it has not
+          # finished — and under `pipefail` the pipeline then reports 141 however well the read went,
+          # which reads here as *no label* and reviews a security change with the default model,
+          # saying nothing. The race is real either way and this step's own contract caught it: a
+          # script between `gh` and the match is one more process still running when the match lands.
+          pull_request_labels="$(
+            "$GITHUB_API_SCRIPT" "repos/${REPOSITORY}/pulls/${PULL_REQUEST_NUMBER}" --jq '.labels[].name'
+          )" || pull_request_labels=''
+
+          if grep -qxF "$SECURITY_LABEL" <<< "$pull_request_labels"; then
             security_review='true'
             model="$SECURITY_MODEL"
             reason="the pull request carries the ${SECURITY_LABEL} label"
