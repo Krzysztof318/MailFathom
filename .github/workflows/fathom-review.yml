@@ -724,11 +724,12 @@ jobs:
           # validation before a job exists.
           REVIEW_DIRECTORY: ${{ runner.temp }}/review
           GITHUB_API_SCRIPT: ${{ github.workspace }}/.github/pull-request/call-github-api.sh
-          # How long the head-content loop below may spend in total. It is declared here rather than
-          # written into the body for the reason the settle windows are: the contract suite runs the
-          # real loop against a window it can reach, and a bound no contract can take is a bound a
-          # later change can delete with every contract still green.
+          # How long each of the two loops below that call once per record may spend in total. They
+          # are declared here rather than written into the body for the reason the settle windows
+          # are: the contract suite runs the real loops against windows it can reach, and a bound no
+          # contract can take is a bound a later change can delete with every contract still green.
           HEAD_CONTENT_LIMIT_SECONDS: '120'
+          CLOSING_ISSUE_LIMIT_SECONDS: '120'
         run: |
           set -euo pipefail
 
@@ -820,15 +821,26 @@ jobs:
           # of backoff would burn the job's thirty minutes before the reviewer starts — killing the
           # run and leaving no verdict, which is the failure the retries exist to remove.
           #
-          # A wall-clock bound over the whole loop is what stops that, under every mix of causes,
-          # and it reports what it cut for a reason the count ceiling above does not share: a path
-          # missing from `head/` reads to the reviewer as content too large to collect, so a gap
-          # left by an unreachable API would arrive as a statement about the file.
+          # A wall-clock bound over the whole loop is what stops that, under every mix of causes.
+          # It is tested before a fetch rather than during one, so what it bounds is the path the
+          # loop *starts*: the real ceiling is the window plus one call's whole budget, which the
+          # per-attempt deadline makes about 140 seconds. A later change picking a value here is
+          # choosing the first of those two numbers, not the total.
+          #
+          # Both ceilings write a line, because a path missing from `head/` reads to the reviewer as
+          # content too large to collect — so a gap left by an unreachable API, or by a ceiling,
+          # would otherwise arrive as a statement about the file.
           head_content_started_at="$(date -u +%s)"
 
           fetched=0
           while IFS= read -r path; do
+            # The count ceiling reports too, for the same reason the window does and against the
+            # same sentence in the prompt: on a pull request of sixty-one to a hundred changed
+            # files the paths past this point are absent from `head/`, and without a line here the
+            # reviewer is told that means too large or binary when nobody fetched them at all.
             if (( fetched >= head_content_file_limit )); then
+              printf 'The content of the first %s changed files is here; the rest were not read.\n' \
+                "$fetched" >> "$REVIEW_DIRECTORY/truncation.txt"
               break
             fi
 
@@ -956,8 +968,27 @@ jobs:
             > "$REVIEW_DIRECTORY/closing-references.txt" \
             2>> "$REVIEW_DIRECTORY/truncation.txt"
 
+          # The second loop that makes one call per record, and so the second that needs a window
+          # rather than only a count: five closing references each spending a whole retry budget is
+          # minutes of a job whose thirty are mostly meant for the model, and the settle wait and the
+          # head-content window are already ahead of it. What the window cuts is recorded as the
+          # unreadable-contract record the failed fetch below already writes, because to the reviewer
+          # the two mean the same thing — the number was referenced and what it asks for is unknown.
+          issues_started_at="$(date -u +%s)"
+          unread_issues=0
+
           while IFS= read -r issue_number; do
             [[ -n "$issue_number" ]] || continue
+
+            if (( $(date -u +%s) - issues_started_at >= CLOSING_ISSUE_LIMIT_SECONDS )); then
+              unread_issues=$(( unread_issues + 1 ))
+
+              jq -nc --argjson number "$issue_number" \
+                '{number: $number, title: null, body: null, labels: null}' \
+                >> "$REVIEW_DIRECTORY/issues.ndjson"
+
+              continue
+            fi
 
             # The labels come with the body because they are where the pull request's own labels
             # came from: `security` is on the pull request because an issue here carries it, and the
@@ -976,6 +1007,11 @@ jobs:
                    '{number: $number, title: null, body: null, labels: null}' \
                    >> "$REVIEW_DIRECTORY/issues.ndjson"
           done < "$REVIEW_DIRECTORY/closing-references.txt"
+
+          if (( unread_issues > 0 )); then
+            printf 'Reading the issues this pull request closes took longer than %ss, so %s of them are here as their number alone.\n' \
+              "$CLOSING_ISSUE_LIMIT_SECONDS" "$unread_issues" >> "$REVIEW_DIRECTORY/truncation.txt"
+          fi
 
           jq -s . "$REVIEW_DIRECTORY/issues.ndjson" > "$REVIEW_DIRECTORY/issues.json"
           rm -f "$REVIEW_DIRECTORY/issues.ndjson" "$REVIEW_DIRECTORY/closing-references.txt"

@@ -828,9 +828,19 @@ retries narrow how often a read degrades without removing it. The head-content
 fetch is the one that degrades *silently*: its standard error is discarded because
 a path the head does not carry is an ordinary outcome of that loop, so a file
 dropped after four failed attempts leaves the same gap as one that was never
-there — which the reviewer reads as content too large to collect. The loop is
-bounded in time as well as in count for the same reason, and what that bound cuts
-is written into `truncation.txt` and reaches the review body.
+there — which the reviewer reads as content too large to collect.
+
+**Two collections call once per record, and a retry budget is per call**, so both
+carry a wall-clock window beside their count ceiling: the head content, and the
+issues the change closes. Without one, an endpoint that has started failing costs
+every remaining record a whole budget — minutes of a job whose thirty are mostly
+meant for the model, and a run killed before it starts is the failure the retries
+exist to remove. Each window is tested before a call rather than during one, so
+what it bounds is the record the loop *starts*: the real ceiling is the window plus
+one call's budget. Every one of those ceilings writes its line into
+`truncation.txt` and reaches the review body, because a file missing from `head/`
+and an issue present as its number alone both say something specific to a reviewer,
+and a gap left by a ceiling would otherwise be read as that statement.
 
 What is retried is decided from what the API said rather than from the fact that
 something failed. A reply carrying a client status is an answer — the endpoint

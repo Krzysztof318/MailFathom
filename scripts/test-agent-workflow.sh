@@ -2014,7 +2014,16 @@ case "$endpoint" in
     exit 0
     ;;
   */pulls/*/files*)
-    response='[{"filename":"src/Sample.cs","previous_filename":null,"status":"modified","additions":1,"deletions":0,"patch":"@@ -1,2 +1,3 @@\n unchanged\n+added\n unchanged"}]'
+    # One changed file unless a contract asks for more, which is what lets the count ceiling on the
+    # head-content loop be reached — that ceiling is a literal in the step and the only way to a
+    # contract about it is a pull request wide enough to cross it.
+    response="$(
+      jq -nc --argjson count "${FAKE_CHANGED_FILE_COUNT:-1}" \
+        '[range($count) | {filename: "src/Sample\(.).cs", previous_filename: null,
+                           status: "modified", additions: 1, deletions: 0,
+                           patch: "@@ -1,2 +1,3 @@\n unchanged\n+added\n unchanged"}]
+         | if length == 1 then [.[0] + {filename: "src/Sample.cs"}] else . end'
+    )"
     ;;
   */pulls/*/reviews*)
     response='[]'
@@ -2098,6 +2107,12 @@ run_fathom_review_collect() {
   # How long the head-content loop may spend, from the step's own `env` block. The contracts about
   # the collection give it a window nothing reaches; the one about the window itself gives it none.
   local head_content_limit_seconds="${2:-120}"
+  # The same for the loop that fetches the issues the change closes, which calls once per record for
+  # the same reason and carries a window of its own.
+  local closing_issue_limit_seconds="${3:-120}"
+  # How many changed files the pull request carries, which decides whether the head-content loop
+  # reaches its count ceiling.
+  local changed_file_count="${4:-1}"
   local step_script="$test_directory/fathom-review-collect.sh"
   local step_output_file="$test_directory/fathom-review-collect-step-output"
 
@@ -2120,6 +2135,8 @@ run_fathom_review_collect() {
     export GITHUB_OUTPUT="$step_output_file"
     export FAKE_UNFETCHABLE_ISSUES='12'
     export HEAD_CONTENT_LIMIT_SECONDS="$head_content_limit_seconds"
+    export CLOSING_ISSUE_LIMIT_SECONDS="$closing_issue_limit_seconds"
+    export FAKE_CHANGED_FILE_COUNT="$changed_file_count"
     export_api_retry_environment
     bash "$step_script"
   ) > "$output_file" 2>&1
@@ -2180,6 +2197,35 @@ fathom_review_reads_head_content_within_its_window() {
 
   assert_file_content '' "$collect_review_directory/truncation.txt"
   [[ -s "$collect_review_directory/head/src/Sample.cs" ]]
+}
+
+# The count ceiling reports what it cut for the same reason the window does. Without a line, a pull
+# request of sixty-one to a hundred changed files leaves the later paths absent from `head/` with an
+# empty `truncation.txt`, and the prompt tells the reviewer that absence means too large or binary —
+# so the review says in its summary that files nobody fetched were too big to collect.
+fathom_review_reports_the_head_content_files_its_count_ceiling_cut() {
+  local output_file="$test_directory/fathom-review-collect-file-ceiling-output"
+
+  run_fathom_review_collect "$output_file" 120 120 61
+
+  assert_contains 'The content of the first 60 changed files is here' \
+    "$collect_review_directory/truncation.txt"
+}
+
+# The issues the change closes are its stated contract, and the loop that fetches them calls once per
+# record exactly as the head-content loop does — five references each spending a whole retry budget
+# is minutes of a job whose thirty are mostly meant for the model. What the window cuts is the record
+# a failed fetch already writes, because to the reviewer both mean the same thing: the number was
+# referenced and what it asks for is unknown.
+fathom_review_stops_reading_closing_issues_when_its_window_is_gone() {
+  local output_file="$test_directory/fathom-review-collect-issue-window-output"
+
+  run_fathom_review_collect "$output_file" 120 0
+
+  assert_json '[11,12]' '[.[].number]' "$collect_review_directory/issues.json"
+  assert_json 'null' '.[0].labels' "$collect_review_directory/issues.json"
+  assert_json 'null' '.[1].labels' "$collect_review_directory/issues.json"
+  assert_contains 'are here as their number alone' "$collect_review_directory/truncation.txt"
 }
 
 # Which model performs the review is the other half of what the `security` label decides, and the
@@ -5888,6 +5934,8 @@ run_test fathom_review_collects_the_labels_of_an_issue_the_change_closes
 run_test fathom_review_reports_unknown_labels_for_an_issue_it_could_not_fetch
 run_test fathom_review_reads_head_content_within_its_window
 run_test fathom_review_stops_reading_head_content_when_its_window_is_gone
+run_test fathom_review_stops_reading_closing_issues_when_its_window_is_gone
+run_test fathom_review_reports_the_head_content_files_its_count_ceiling_cut
 run_test fathom_review_reads_a_security_labelled_change_with_the_costlier_model
 run_test fathom_review_keeps_the_default_model_for_an_ordinary_change
 run_test fathom_review_waits_for_the_labelling_run_before_reading_the_labels
