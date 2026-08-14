@@ -55,8 +55,9 @@ mail instead of erasing it.
 data, and the indexes for both, and that change nothing `0.5.0` reads — so the schema step applies while `0.5.0` is
 still serving, `0.5.0` serves the result unchanged if you roll the image back, and this release deploys over the
 previous release's data. Nothing else `0.5.0` promised is withdrawn: every setting not named below still means what it
-meant, and no tool was removed. One artifact stopped being published, and only on Windows: `winget` submissions are
-paused while the two already open wait for the community repository's review.
+meant, no tool was removed, and every artifact a release publishes still publishes — the image, the chart, the schema
+script, and an `mfctl` binary per platform, Windows included. What is paused is the `winget` *submission*, which has
+never produced a package: the two already open are waiting for the community repository's review.
 
 ### Added
 
@@ -68,10 +69,10 @@ to the server the way every other change is carried, so a restart neither loses 
 [#725](https://github.com/Krzysztof318/MailFathom/pull/725)).
 [Mail rules](https://krzysztof318.github.io/MailFathom/features/mail-rules.html) is the page, condition by condition.
 
-- **The condition is one expression over twenty-one facts about the message** — the account and folder aliases, the
-  subject, the sender's address and domain, the recipient addresses and domains, when it was received and sent, its age,
-  its size, the attachment count and bytes, six flags the server or the extraction reported, and the body text — with
-  seven functions and the ordinary operators. Anything outside that set is refused when the file is read rather than at
+- **The condition is one expression over twenty-two facts about the message** — the account alias, the folder alias and
+  the role that folder plays, the subject, the sender's address and domain, the recipient addresses and domains, when it
+  was received and sent, its age, its size, the attachment count and bytes, seven flags the server or the extraction
+  reported, and the body text — with seven functions and the ordinary operators. Anything outside that set is refused when the file is read rather than at
   the moment a message meets it, and a rule set with three mistakes reports all three at once
   ([#696](https://github.com/Krzysztof318/MailFathom/pull/696)).
 - **A rule runs on the occasions it declares.** `MailRules:Rules:<n>:Triggers` names them: `Arrival` for mail as it is
@@ -81,8 +82,12 @@ to the server the way every other change is carried, so a restart neither loses 
 - **Each account states which of the four actions a rule may ask of it** under `RuleActions`, with deletion opt-in and
   the three reversible actions opt-out. A rule asking for a refused action fails startup naming the rule, the action,
   and the account ([#725](https://github.com/Krzysztof318/MailFathom/pull/725)).
-- **A pass reaches no mail server and touches no `\Seen` flag.** It is the last local step of the account's own
-  synchronization run, over facts already stored, so no MCP read waits on it however long it takes.
+- **No IMAP command a rule asks for leaves the pass, and the pass touches no `\Seen` flag itself.** Every change a match
+  asks for is written down and carried by the account's convergence pass, the way every other change to a mailbox is.
+  The one thing the pass does reach a mail server for is finding a destination folder the account maps and does not
+  mirror, and only where a rule files into one; everything it reads about the mail was already stored, so no MCP read
+  waits on it however long it takes. It is a step of the account's own synchronization run, after the classification and
+  in front of the passages being cut.
 - **`mfctl` runs the rules and explains what they did.** `mfctl rules list` and `mfctl rules show` state which rules are
   loaded, in the order they run, and what fires each; `mfctl rules run` applies them to mail that arrived before them
   and returns at once rather than holding the terminal open; `mfctl rules run-status` says where that run has got to;
@@ -206,8 +211,8 @@ model opens a span measuring one attempt against the provider, with prompt and c
 [Telemetry](https://krzysztof318.github.io/MailFathom/operations/telemetry.html) lists every span and instrument.
 
 **An authorization server's document can advertise a scope this deployment does not require.**
-`OAuthValidationOptions:AdvertisedScopes` is published beside the required ones and never enforced, which is what lets a
-client be told to ask for `offline_access` without every token lacking it being refused
+`McpEndpoint:Authentication:<n>:OAuth:AdvertisedScopes` is published beside the required ones and never enforced, which
+is what lets a client be told to ask for `offline_access` without every token lacking it being refused
 ([#818](https://github.com/Krzysztof318/MailFathom/pull/818)).
 
 **`ask_mail` can narrow its lookups the way a search can.** The seven structured filters `search_emails` publishes are
