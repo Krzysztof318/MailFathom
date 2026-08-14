@@ -440,16 +440,17 @@ probes:
   # reporting dependency state is exposed by which network its port is on, and by nothing else.
   port: 8081
   # Startup reports whether MailFathom has finished coming up — every secret reference resolved, the database schema
-  # verified, only with personalDataScanning.enabled the analyzer answering for every configured category, and only with
-  # spamScanning.enabled the spam daemon answering. Its budget is what a slow first start is allowed, and it holds the
-  # liveness probe off until it succeeds.
+  # verified, and only with spamScanning.enabled the spam daemon answering. Its budget is what a slow first start is
+  # allowed, and it holds the liveness probe off until it succeeds. The personal-data analyzer is deliberately not among
+  # them: it is a sidecar that may become ready after this pod, so it is a readiness question and is asked below.
   startup:
     path: /started
     periodSeconds: 5
     timeoutSeconds: 5
     failureThreshold: 30
-  # Readiness consults the dependencies a request needs, the database included, so a pod that cannot serve leaves the
-  # Service's endpoints instead of answering requests it cannot fulfil.
+  # Readiness consults the dependencies a request needs — the database, and only with personalDataScanning.enabled the
+  # analyzer answering for every configured category — so a pod that cannot serve leaves the Service's endpoints instead
+  # of answering requests it cannot fulfil. The pod is not restarted for either: it rejoins when the dependency answers.
   readiness:
     path: /health
     initialDelaySeconds: 10
