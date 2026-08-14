@@ -36,7 +36,7 @@
        same assembly identity. InformationalVersion is left to the SDK, which is what composes VersionPrefix,
        VersionSuffix, and SourceRevisionId into the single string the runtime reports. -->
   <PropertyGroup>
-    <VersionPrefix>0.6.0</VersionPrefix>
+    <VersionPrefix>0.7.0</VersionPrefix>
     <AssemblyVersion>$(VersionPrefix)</AssemblyVersion>
     <FileVersion>$(VersionPrefix)</FileVersion>
   </PropertyGroup>

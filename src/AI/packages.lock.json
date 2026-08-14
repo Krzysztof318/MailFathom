@@ -428,7 +428,7 @@
       "MailFathom.Application": {
         "type": "Project",
         "dependencies": {
-          "MailFathom.Domain": "[0.6.0, )"
+          "MailFathom.Domain": "[0.7.0, )"
         }
       },
       "MailFathom.Domain": {

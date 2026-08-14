@@ -245,7 +245,7 @@
       "MailFathom.Common": {
         "type": "Project",
         "dependencies": {
-          "MailFathom.Domain": "[0.6.0, )"
+          "MailFathom.Domain": "[0.7.0, )"
         }
       },
       "MailFathom.Domain": {
@@ -254,7 +254,7 @@
       "mfctl": {
         "type": "Project",
         "dependencies": {
-          "MailFathom.Common": "[0.6.0, )",
+          "MailFathom.Common": "[0.7.0, )",
           "System.CommandLine": "[2.0.10, )",
           "System.Security.Cryptography.ProtectedData": "[10.0.10, )"
         }
