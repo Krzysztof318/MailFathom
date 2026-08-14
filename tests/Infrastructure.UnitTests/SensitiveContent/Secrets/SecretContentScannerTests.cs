@@ -63,6 +63,10 @@ public sealed class SecretContentScannerTests
         new("ProviderToken", SyntheticSecrets.EdgePlatformBase64Token, SyntheticSecrets.EdgePlatformBase64Token),
         new("ProviderToken", SyntheticSecrets.ModelProviderKey, SyntheticSecrets.ModelProviderKey),
         new("ProviderToken", SyntheticSecrets.ModelProviderProjectKey, SyntheticSecrets.ModelProviderProjectKey),
+        new(
+            "ProviderToken",
+            SyntheticSecrets.ModelProviderProjectKeyEndingInAHyphen,
+            SyntheticSecrets.ModelProviderProjectKeyEndingInAHyphen),
         new("ProviderToken", SyntheticSecrets.SecretStoreToken, SyntheticSecrets.SecretStoreToken),
         new("ProviderToken", SyntheticSecrets.SecretStoreLegacyToken, SyntheticSecrets.SecretStoreLegacyToken),
 

@@ -56,6 +56,14 @@ internal static class SyntheticSecrets
     public static string ModelProviderProjectKey { get; } =
         "sk" + "-proj-" + new string('e', 58) + "T3BlbkFJ" + new string('f', 58);
 
+    /// <summary>The project form ending in the hyphen its own alphabet permits, which no word boundary can close.</summary>
+    /// <remarks>
+    /// A word boundary looks for a transition, and there is none between this value's last character and any of the
+    /// non-word characters a message goes on with, so a rule ending in one reports nothing at all here.
+    /// </remarks>
+    public static string ModelProviderProjectKeyEndingInAHyphen { get; } =
+        "sk" + "-proj-" + new string('e', 58) + "T3BlbkFJ" + new string('f', 57) + "-";
+
     /// <summary>A secret store's service token in its current form.</summary>
     public static string SecretStoreToken { get; } = "hvs" + "." + new string('g', 90);
 

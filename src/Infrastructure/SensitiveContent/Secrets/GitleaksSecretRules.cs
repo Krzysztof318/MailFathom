@@ -447,9 +447,11 @@ internal static partial class GitleaksSecretRules
     [GeneratedRegex(@"\bAPI-[A-Z0-9]{26}(?![A-Z0-9])", SecretRegexEngine.MatchOptions, SecretRegexEngine.MatchTimeoutMilliseconds)]
     private static partial Regex OctopusDeployApiKey { get; }
 
-    // The project branch keeps the word boundary gitleaks gave it, which already ends the credential where its own
-    // alphabet does; the legacy branch is alphanumeric only and states that itself rather than borrowing the wider set.
-    [GeneratedRegex(@"\b(?:sk-(?:proj|svcacct|admin)-(?:[A-Za-z0-9_-]{74}|[A-Za-z0-9_-]{58})T3BlbkFJ(?:[A-Za-z0-9_-]{74}|[A-Za-z0-9_-]{58})\b|sk-[a-zA-Z0-9]{20}T3BlbkFJ[a-zA-Z0-9]{20}(?![a-zA-Z0-9]))", SecretRegexEngine.MatchOptions, SecretRegexEngine.MatchTimeoutMilliseconds)]
+    // The project branch's own alphabet carries the hyphen, which is why the word boundary gitleaks ends it with cannot
+    // stay: a suffix ending in one, followed by anything else non-word, puts no transition where the boundary looks for
+    // it, and the branch fails rather than reporting a shorter region. The legacy branch is alphanumeric throughout and
+    // says so itself instead of borrowing the wider set.
+    [GeneratedRegex(@"\b(?:sk-(?:proj|svcacct|admin)-(?:[A-Za-z0-9_-]{74}|[A-Za-z0-9_-]{58})T3BlbkFJ(?:[A-Za-z0-9_-]{74}|[A-Za-z0-9_-]{58})(?![A-Za-z0-9_])|sk-[a-zA-Z0-9]{20}T3BlbkFJ[a-zA-Z0-9]{20}(?![a-zA-Z0-9]))", SecretRegexEngine.MatchOptions, SecretRegexEngine.MatchTimeoutMilliseconds)]
     private static partial Regex OpenaiApiKey { get; }
 
     [GeneratedRegex(@"\b(?<refine>sha256~[\w-]{43})(?:[^\w-]|\z)", SecretRegexEngine.MatchOptions, SecretRegexEngine.MatchTimeoutMilliseconds)]
