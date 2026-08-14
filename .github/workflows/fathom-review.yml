@@ -847,8 +847,12 @@ jobs:
             # same sentence in the prompt: on a pull request of sixty-one to a hundred changed
             # files the paths past this point are absent from `head/`, and without a line here the
             # reviewer is told that means too large or binary when nobody fetched them at all.
+            #
+            # It states `fetched` rather than a position, exactly as the window's note does and for
+            # the same reason: a file dropped for size is read and left out, so the files with
+            # content need not be the first sixty paths.
             if (( fetched >= head_content_file_limit )); then
-              printf 'The content of the first %s changed files is here; the rest were not read.\n' \
+              printf 'Reading the changed files at the head reached its ceiling, so the content of the changed files after that point was not read; %s of them have content here.\n' \
                 "$fetched" >> "$REVIEW_DIRECTORY/truncation.txt"
               break
             fi

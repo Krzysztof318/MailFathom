@@ -2208,8 +2208,8 @@ fathom_review_reports_the_head_content_files_its_count_ceiling_cut() {
 
   run_fathom_review_collect "$output_file" 120 120 61
 
-  assert_contains 'The content of the first 60 changed files is here' \
-    "$collect_review_directory/truncation.txt"
+  assert_contains 'reached its ceiling' "$collect_review_directory/truncation.txt"
+  assert_contains '60 of them have content here' "$collect_review_directory/truncation.txt"
 }
 
 # The issues the change closes are its stated contract, and the loop that fetches them calls once per
@@ -4177,6 +4177,9 @@ run_github_api_call() {
   # empty for every contract but the one about the deadline, where the stall is the failure.
   local stall_seconds="${6:-}"
   local timeout_seconds="${7:-30}"
+  # The backoff base. Every contract but the one about the wait itself zeroes it, because what those
+  # assert is how many attempts were made rather than how long the script waited between them.
+  local retry_delay_seconds="${8:-0}"
 
   : > "$test_directory/api-retry-attempts.log"
 
@@ -4189,9 +4192,7 @@ run_github_api_call() {
     export FAKE_API_STALL_SECONDS="$stall_seconds"
     export API_ATTEMPT_LIMIT="$attempt_limit"
     export API_TIMEOUT_SECONDS="$timeout_seconds"
-    # No backoff, because what a contract asserts is how many attempts were made rather than how long
-    # the script waited between them.
-    export API_RETRY_DELAY_SECONDS='0'
+    export API_RETRY_DELAY_SECONDS="$retry_delay_seconds"
 
     bash "$source_repository_root/.github/pull-request/call-github-api.sh" \
       'repos/Krzysztof318/MailFathom/pulls/1' --jq '.head.sha'
@@ -4283,6 +4284,29 @@ github_api_call_kills_an_attempt_that_stalls() {
   (( api_call_status != 0 ))
   assert_api_attempts 2
   assert_contains 'Attempts made: 2 of 2' "$error_file"
+}
+
+# The wait between attempts, which every other contract zeroes so that it can assert a count. Nothing
+# would then observe that the helper waits at all: deleting the `sleep`, or the doubling, or the
+# jitter term leaves four requests going back-to-back at the proxy that motivated the retries, and
+# the property that several calls failing at once do not come back in step goes with it.
+#
+# The budget is the full four rather than the three the other contracts use, because the jitter is
+# what decides how long a shorter run takes. With a base of one second the three waits are 1-2s,
+# 2-3s and 4-5s, so the whole call takes 7 to 10 — while the same call with the doubling removed
+# takes 3 to 6, whatever the jitter rolls. Seven seconds is therefore the floor that separates them,
+# and no smaller budget separates them at all.
+github_api_call_waits_longer_between_each_attempt() {
+  local output_file="$test_directory/api-retry-backoff"
+  local error_file="$test_directory/api-retry-backoff-error"
+  local started_at
+  started_at="$(date -u +%s)"
+
+  run_github_api_call 9 4 "$output_file" "$error_file" '' '' 30 1
+
+  (( api_call_status != 0 ))
+  assert_api_attempts 4
+  assert_seconds_elapsed_at_least 7 "$started_at"
 }
 
 # A retry that exhausts its budget still fails the job. Nothing here turns an unreachable API into a
@@ -6000,6 +6024,7 @@ run_test github_api_call_returns_the_answer_after_a_dropped_connection
 run_test github_api_call_does_not_retry_an_answer_the_api_produced
 run_test github_api_call_retries_a_status_that_says_ask_again
 run_test github_api_call_kills_an_attempt_that_stalls
+run_test github_api_call_waits_longer_between_each_attempt
 run_test github_api_call_fails_after_the_budgeted_attempts
 run_test referenced_issues_collect_a_mention_as_well_as_a_closing_reference
 run_test referenced_issues_collect_a_link_to_an_issue_in_this_repository
