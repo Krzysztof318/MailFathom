@@ -67,9 +67,11 @@ That is the third kind of question a change raises and the only one no diff
 answers: not whether a changed line is correct, and not whether the build
 accepts it, but whether the change left the rest of the repository consistent
 with itself. [What the change obliges elsewhere](#what-the-change-obliges-elsewhere)
-describes what it indexes and why it asserts nothing. It gates nothing and takes
-about a second, so it belongs in the loop rather than in a checklist somebody
-reaches for when a change looks like it needs one.
+describes what it indexes and why it asserts nothing. It gates nothing and costs
+about thirteen seconds — a fixed cost rather than a small one, since it is what
+an empty diff measures too — which is still an order below every other step here,
+so it belongs in the loop rather than in a checklist somebody reaches for when a
+change looks like it needs one.
 
 Run the complete gate before committing:
 
@@ -79,13 +81,17 @@ bash scripts/verify-full.sh
 ```
 
 The full gate rejects remaining untracked files, fetches `origin main` and
-requires the branch to contain that freshly fetched base, runs the workflow
-contract suite where the change can have moved something it asserts, restores
-repository tools and the solution, builds Release, executes all unit tests
-through the aggregate 85% coverage target, verifies formatting, and checks
-committed branch changes, staged changes, and unstaged changes for whitespace
-errors. It stops at the first failure. Restore, build, test, coverage, and
-formatting can create ignored local artifacts, and the fetch updates
+requires the branch to contain that freshly fetched base, restores repository
+tools and the solution, builds Release, executes all unit tests through the
+aggregate 85% coverage target, verifies formatting, and checks committed branch
+changes, staged changes, and unstaged changes for whitespace errors. Beside all
+of that it runs the workflow contract suite, where the change can have moved
+something it asserts. That chain stops at its own first failure; the suite is the
+one step outside it, so a suite that fails does not stop a build already running
+beside it, and a chain that fails stops the suite rather than waiting for it. The
+paragraph below states what each of those buys. Restore, build, test, coverage,
+and formatting can create ignored local artifacts, the gate records what it
+verified under `artifacts/verify/`, and the fetch updates
 `refs/remotes/origin/main`, but the scripts do not commit, push, or change
 branches.
 
@@ -115,6 +121,64 @@ different questions. `CI` runs `dotnet format` over the whole solution on every
 pull request whose change can affect it, and runs the contract suite on every
 pull request there is, so what the narrower local scope withholds is an earlier
 verdict rather than the verdict.
+
+The contract suite runs beside the dotnet chain rather than in front of it. It
+builds the repositories it tests under its own temporary directory and fakes
+`dotnet` with a symlink to itself, so it reads nothing the chain writes and
+writes nothing the chain reads, and at 109 s against the chain's 105 s on the
+owner's machine, sequencing the two doubles the gate for no verdict. What that
+costs is stated rather than hidden: a failing suite does not mean an unspent
+build, because both are already running when the suite fails. The gate refuses
+either way, and it refuses having reported both answers rather than only the
+first. The opposite order keeps the cheaper shape — a chain that fails stops the
+suite instead of waiting it out, and says its verdict was not collected, because
+a broken build is not a tree worth reporting contract findings about and a
+compile error is worth answering in twenty seconds rather than a hundred.
+
+### A gate does not prove the same tree twice
+
+Both scripts record what they verified. A run that passes writes a digest under
+`artifacts/verify/`, and a run handed a digest it already recorded prints the
+earlier run's time and stops without repeating its expensive steps. The digest
+covers everything a verdict depends on inside the checkout — the commit, which
+paths are in which state, the content of every tracked change, the content of
+every file Git is not tracking yet, and the verification scripts themselves — so
+anything that could move a verdict retires the record that preceded it.
+
+Two runs over identical content reach identical verdicts, so the second one buys
+nothing. That was measurable rather than theoretical: across 150 session
+transcripts, 25% of full-gate runs and 13% of fast-loop runs re-ran a tree that
+no edit had touched since the previous green run of the same gate, 484 minutes of
+repetition on a conservative count. `$review-change` already stated the rule in
+prose; this is the same rule where a session cannot forget it.
+
+Four things bound what a record claims.
+
+- **It is written only when the tree stayed still.** Each run takes the digest
+  again at the end and records nothing when the two disagree. The fast loop is
+  why: its formatting pass rewrites files, so a run that repaired something
+  verified a build and a test suite against content the working tree no longer
+  holds. That guard is also what would let either gate be started in the
+  background beside an editing session.
+- **A gate that failed writes nothing**, however far it got.
+- **The full gate's record answers for the fast loop, and never the reverse.**
+  The full gate builds, tests, collects coverage over the same suite, and
+  verifies the formatting the loop repairs; passing the loop says nothing about
+  coverage or the contract suite. The one step the loop does settle for the full
+  gate is the scoped formatting pass — the same tool over the same file set, and
+  a record exists only where the repairing pass rewrote nothing, which leaves
+  `--verify-no-changes` one possible answer. The whole-solution pass a shared
+  style input triggers is never settled that way, because the loop never formatted
+  that scope.
+- **The base is deliberately not in the digest.** Whether the branch still
+  contains the current `origin/main` is asked afresh on every full-gate run,
+  before any record is consulted, so a record cannot stand in for it. Folding the
+  base in would retire every record each time somebody else merged, while proving
+  nothing about this branch's own content. The whitespace checks read the base
+  too, and run on every invocation for the same reason.
+
+`VERIFY_FORCE=1` runs everything regardless, and the message a skip prints says
+so. Nothing else reads the directory, and removing it costs one repeated run.
 
 Both scripts refuse to run on `main` or `master`, before the fetch and before
 any `dotnet` invocation. The integration branch is never the subject of a
