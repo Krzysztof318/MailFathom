@@ -2095,6 +2095,9 @@ chmod +x "$collect_bin_directory/gh"
 
 run_fathom_review_collect() {
   local output_file="$1"
+  # How long the head-content loop may spend, from the step's own `env` block. The contracts about
+  # the collection give it a window nothing reaches; the one about the window itself gives it none.
+  local head_content_limit_seconds="${2:-120}"
   local step_script="$test_directory/fathom-review-collect.sh"
   local step_output_file="$test_directory/fathom-review-collect-step-output"
 
@@ -2116,6 +2119,7 @@ run_fathom_review_collect() {
     export GITHUB_WORKSPACE="$source_repository_root"
     export GITHUB_OUTPUT="$step_output_file"
     export FAKE_UNFETCHABLE_ISSUES='12'
+    export HEAD_CONTENT_LIMIT_SECONDS="$head_content_limit_seconds"
     export_api_retry_environment
     bash "$step_script"
   ) > "$output_file" 2>&1
@@ -2148,6 +2152,34 @@ fathom_review_reports_unknown_labels_for_an_issue_it_could_not_fetch() {
   assert_json '12' '.[1].number' "$collect_review_directory/issues.json"
   assert_json 'null' '.[1].title' "$collect_review_directory/issues.json"
   assert_json 'null' '.[1].labels' "$collect_review_directory/issues.json"
+}
+
+# The head-content loop is the one call the collection makes per path, so a retry budget spent on
+# each of a hundred of them would burn the reviewing job's thirty minutes before the model starts —
+# the regression this window closes. What it reports is the count of files whose content is in the
+# bundle, never a prefix of the changed files: a file dropped for exceeding the byte limit is read
+# and left out, so a note claiming "the first N" would name a run of files that does not exist.
+fathom_review_stops_reading_head_content_when_its_window_is_gone() {
+  local output_file="$test_directory/fathom-review-collect-window-output"
+
+  run_fathom_review_collect "$output_file" 0
+
+  assert_contains 'the content of the changed files after that point was not read' \
+    "$collect_review_directory/truncation.txt"
+  assert_contains '0 of them have content here' "$collect_review_directory/truncation.txt"
+  [[ ! -e "$collect_review_directory/head/src/Sample.cs" ]]
+}
+
+# The window is a ceiling like every other one in the step, so an ordinary collection never reaches
+# it and writes nothing about it. A truncation file that always carried a line would put a sentence
+# about incomplete coverage into every review body.
+fathom_review_reads_head_content_within_its_window() {
+  local output_file="$test_directory/fathom-review-collect-within-window-output"
+
+  run_fathom_review_collect "$output_file"
+
+  assert_file_content '' "$collect_review_directory/truncation.txt"
+  [[ -s "$collect_review_directory/head/src/Sample.cs" ]]
 }
 
 # Which model performs the review is the other half of what the `security` label decides, and the
@@ -4069,6 +4101,12 @@ set -euo pipefail
 
 printf '%s\n' "$*" >> "$FAKE_API_ATTEMPT_LOG"
 
+# A connection that stalls rather than drops, which is the failure `gh` has no deadline of its own
+# for: it answers nothing and never returns, so only the wrapper's own kill ends the attempt.
+if [[ -n "${FAKE_API_STALL_SECONDS:-}" ]]; then
+  sleep "$FAKE_API_STALL_SECONDS"
+fi
+
 if (( "$(wc -l < "$FAKE_API_ATTEMPT_LOG")" <= "${FAKE_API_FAILURES:-0}" )); then
   printf 'partial\n'
   printf '%s\n' "${FAKE_API_ERROR:-invalid character 'u' looking for beginning of value}" >&2
@@ -4089,6 +4127,10 @@ run_github_api_call() {
   # The error text `gh` writes, which is what tells a reply the API produced from one that never
   # arrived. The default is the message the lost run actually failed on.
   local gh_error="${5:-}"
+  # How long each attempt stalls before answering, and how long the wrapper lets one run. Both are
+  # empty for every contract but the one about the deadline, where the stall is the failure.
+  local stall_seconds="${6:-}"
+  local timeout_seconds="${7:-30}"
 
   : > "$test_directory/api-retry-attempts.log"
 
@@ -4098,7 +4140,9 @@ run_github_api_call() {
     export FAKE_API_ATTEMPT_LOG="$test_directory/api-retry-attempts.log"
     export FAKE_API_FAILURES="$failures"
     export FAKE_API_ERROR="$gh_error"
+    export FAKE_API_STALL_SECONDS="$stall_seconds"
     export API_ATTEMPT_LIMIT="$attempt_limit"
+    export API_TIMEOUT_SECONDS="$timeout_seconds"
     # No backoff, because what a contract asserts is how many attempts were made rather than how long
     # the script waited between them.
     export API_RETRY_DELAY_SECONDS='0'
@@ -4178,6 +4222,21 @@ github_api_call_retries_a_status_that_says_ask_again() {
   (( api_call_status != 0 ))
   assert_api_attempts 3
   assert_contains 'Attempts made: 3 of 3' "$error_file"
+}
+
+# A connection that stalls rather than drops is the same proxy failure in its other shape, and `gh`
+# sets no deadline for it: without the wrapper's own kill the attempt never returns, the budget never
+# advances, and a bound that cannot advance is not a bound — the collection would sit there until the
+# reviewing job's thirty minutes ran out, which is the outcome the retries exist to remove.
+github_api_call_kills_an_attempt_that_stalls() {
+  local output_file="$test_directory/api-retry-stalled"
+  local error_file="$test_directory/api-retry-stalled-error"
+
+  run_github_api_call 0 2 "$output_file" "$error_file" '' 5 1
+
+  (( api_call_status != 0 ))
+  assert_api_attempts 2
+  assert_contains 'Attempts made: 2 of 2' "$error_file"
 }
 
 # A retry that exhausts its budget still fails the job. Nothing here turns an unreachable API into a
@@ -5827,6 +5886,8 @@ run_test fathom_review_stops_waiting_at_the_ceiling
 run_test fathom_review_reads_the_newest_comment_whatever_the_order
 run_test fathom_review_collects_the_labels_of_an_issue_the_change_closes
 run_test fathom_review_reports_unknown_labels_for_an_issue_it_could_not_fetch
+run_test fathom_review_reads_head_content_within_its_window
+run_test fathom_review_stops_reading_head_content_when_its_window_is_gone
 run_test fathom_review_reads_a_security_labelled_change_with_the_costlier_model
 run_test fathom_review_keeps_the_default_model_for_an_ordinary_change
 run_test fathom_review_waits_for_the_labelling_run_before_reading_the_labels
@@ -5890,6 +5951,7 @@ run_test github_api_call_asks_once_when_the_call_succeeds
 run_test github_api_call_returns_the_answer_after_a_dropped_connection
 run_test github_api_call_does_not_retry_an_answer_the_api_produced
 run_test github_api_call_retries_a_status_that_says_ask_again
+run_test github_api_call_kills_an_attempt_that_stalls
 run_test github_api_call_fails_after_the_budgeted_attempts
 run_test referenced_issues_collect_a_mention_as_well_as_a_closing_reference
 run_test referenced_issues_collect_a_link_to_an_issue_in_this_repository

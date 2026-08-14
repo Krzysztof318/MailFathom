@@ -454,9 +454,17 @@ jobs:
             [[ -n "$pending" && "$pending" != '0' ]]
           }
 
+          # Wall clock rather than a count of sleeps, as the settle loop below does. Summing the poll
+          # interval held while a poll was one request and does not now: a read that fails before it
+          # answers spends its retry budget inside `labelling_in_flight`, and a counter blind to that
+          # runs the ceiling this step declares out to several times its stated length before saying
+          # the labelling was "still running after 120s".
+          started_at="$(date -u +%s)"
           waited=0
 
           while labelling_in_flight; do
+            waited=$(( $(date -u +%s) - started_at ))
+
             if (( waited >= LABELLING_LIMIT_SECONDS )); then
               printf 'The labelling of %s was still running after %ss, so the labels are read as they stand.\n' \
                 "$head_sha" "$waited"
@@ -464,7 +472,6 @@ jobs:
             fi
 
             sleep "$LABELLING_POLL_SECONDS"
-            waited=$(( waited + LABELLING_POLL_SECONDS ))
           done
 
           security_review='false'
@@ -717,6 +724,11 @@ jobs:
           # validation before a job exists.
           REVIEW_DIRECTORY: ${{ runner.temp }}/review
           GITHUB_API_SCRIPT: ${{ github.workspace }}/.github/pull-request/call-github-api.sh
+          # How long the head-content loop below may spend in total. It is declared here rather than
+          # written into the body for the reason the settle windows are: the contract suite runs the
+          # real loop against a window it can reach, and a bound no contract can take is a bound a
+          # later change can delete with every contract still green.
+          HEAD_CONTENT_LIMIT_SECONDS: '120'
         run: |
           set -euo pipefail
 
@@ -812,7 +824,6 @@ jobs:
           # and it reports what it cut for a reason the count ceiling above does not share: a path
           # missing from `head/` reads to the reviewer as content too large to collect, so a gap
           # left by an unreachable API would arrive as a statement about the file.
-          head_content_limit_seconds=120
           head_content_started_at="$(date -u +%s)"
 
           fetched=0
@@ -821,9 +832,14 @@ jobs:
               break
             fi
 
-            if (( $(date -u +%s) - head_content_started_at >= head_content_limit_seconds )); then
-              printf 'Reading the changed files at the head took longer than %ss, so this review covers the content of the first %s of them.\n' \
-                "$head_content_limit_seconds" "$fetched" >> "$REVIEW_DIRECTORY/truncation.txt"
+            # What the note states is `fetched`, which counts the files whose content is in the
+            # bundle rather than the paths the loop reached: a file dropped for size leaves it
+            # behind, so calling it "the first N" would name a prefix that does not exist — this
+            # repository routinely carries files past the byte limit, `scripts/test-agent-workflow.sh`
+            # among them.
+            if (( $(date -u +%s) - head_content_started_at >= HEAD_CONTENT_LIMIT_SECONDS )); then
+              printf 'Reading the changed files at the head took longer than %ss, so the content of the changed files after that point was not read; %s of them have content here.\n' \
+                "$HEAD_CONTENT_LIMIT_SECONDS" "$fetched" >> "$REVIEW_DIRECTORY/truncation.txt"
               break
             fi
 

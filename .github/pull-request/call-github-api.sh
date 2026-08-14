@@ -42,11 +42,18 @@
 # Environment:
 #   API_ATTEMPT_LIMIT          how many attempts a transient failure is worth, including the first
 #   API_RETRY_DELAY_SECONDS    the backoff base; each attempt waits double the last, plus jitter
+#   API_TIMEOUT_SECONDS        how long one attempt may take before it is killed and retried
 
 set -euo pipefail
 
 attempt_limit="${API_ATTEMPT_LIMIT:-4}"
 retry_delay_seconds="${API_RETRY_DELAY_SECONDS:-2}"
+# `gh` sets no deadline of its own, so without this a connection that stalls rather than drops — the
+# same proxy failure that motivated the retries — hangs here with the attempt budget never
+# advancing, and a budget that cannot advance is not a bound. Thirty seconds is generous against a
+# request that normally answers in under one, and against the paginated calls here, which are a
+# handful of pages rather than a stream.
+timeout_seconds="${API_TIMEOUT_SECONDS:-30}"
 
 if (( $# == 0 )); then
   echo 'call-github-api.sh needs the arguments to pass to gh api.' >&2
@@ -94,7 +101,11 @@ status=0
 
 while true; do
   status=0
-  gh api "$@" > "$output_file" 2> "$error_file" || status=$?
+
+  # The kill needs no rule of its own in the classification below: `timeout` exits 124 having
+  # written no `(HTTP nnn)`, which is already read as a reply that never arrived — which is what a
+  # stalled connection is.
+  timeout "$timeout_seconds" gh api "$@" > "$output_file" 2> "$error_file" || status=$?
 
   if (( status == 0 )); then
     cat "$output_file"
