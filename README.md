@@ -6,11 +6,11 @@
 
 **A brain for your mail — self-hosted, AI-native, and yours alone.**
 
-MailFathom synchronizes your IMAP accounts into a PostgreSQL database you run, indexes that copy, and serves it to AI agents as read-only tools over the [Model Context Protocol](https://modelcontextprotocol.io/). Reading answers from your copy rather than from a mail server, and nothing is ever marked read on the server.
+MailFathom synchronizes your IMAP accounts into a PostgreSQL database you run, indexes that copy, and serves it to AI agents as read-only tools over the [Model Context Protocol](https://modelcontextprotocol.io/). Reading answers from your copy rather than from a mail server, and reading never marks anything read on the server — only a rule or a spam action you configured yourself can change your mailbox.
 
 ![A chat client asked to show the latest mail, answered with a table of the ten most recent messages, their receipt times, and the moment the local copy was last synchronized](https://raw.githubusercontent.com/Krzysztof318/MailFathom/main/assets/mcp-tools/list-recent-emails.png)
 
-*One question, answered from the local copy in an ordinary chat client. The `***` in these screenshots were blacked out by hand before the files entered a public repository — MailFathom redacts nothing on its way to a client.*
+*One question, answered from the local copy in an ordinary chat client. The `***` in these screenshots were blacked out by hand before the files entered a public repository — until you turn `SensitiveContent` on, MailFathom redacts nothing on its way to a client.*
 
 ## Install
 
@@ -51,12 +51,12 @@ MailFathom also resolves in [Context7](https://context7.com/krzysztof318/mailfat
 
 ## What exists today
 
-What is implemented is read-only synchronization and five tools, and this README is split on that line: this section and [What it does well](https://github.com/Krzysztof318/MailFathom#what-it-does-well) describe the code as it stands, while [Where it is going](https://github.com/Krzysztof318/MailFathom#where-it-is-going) is the roadmap.
+What is implemented is read-only retrieval, five tools, and the rules and spam actions your own configuration turns on, and this README is split on that line: this section and [What it does well](https://github.com/Krzysztof318/MailFathom#what-it-does-well) describe the code as it stands, while [Where it is going](https://github.com/Krzysztof318/MailFathom#where-it-is-going) is the roadmap.
 
 Two properties hold everywhere, and much of the rest of the design follows from them:
 
 - **Reading is local.** A tool call answers from your copy and never contacts a mail server, so it is fast, it works while the server is down, and it cannot change anything remotely. Every result states how fresh the local copy is.
-- **Synchronization never writes to your mailbox.** Fetching mail never sets the remote `\Seen` flag, so mail MailFathom has copied still shows as unread in your own mail client until you read it there.
+- **Retrieval never writes to your mailbox.** Fetching mail never sets the remote `\Seen` flag, so mail MailFathom has copied still shows as unread in your own mail client until you read it there. What can write is what you configured to: a `MailRules` rule whose action moves, copies, deletes, or marks a message read, and `SpamClassification:Actions`, which files junk and marks it read. Both are off until you turn them on, and each account states which of the four actions a rule may ask of it.
 
 What an agent gets is five tools, and they are the whole surface:
 
@@ -80,10 +80,10 @@ A connected agent can list, read, search, and ask about your mail. It cannot sen
 
 ## Project status
 
-`0.5.0` is the current release, and it builds on `0.4.0` — a key pair as a third way to authenticate, every surface stating where it is served, and the metrics and traces the libraries underneath it emit.
+`0.6.0` is the current release, and it builds on `0.5.0` — `ask_mail`, semantic ranking in `search_emails`, `list_accounts`, and the ceilings on what answering and embedding may spend.
 
-- **What it adds** is `ask_mail`, which answers a question about your mail in prose and cites the messages the answer came from; semantic ranking in `search_emails` beside the lexical one; `list_accounts`; and attachment content from `get_email_content`. The answering and semantic features stay dark until you declare the AI endpoints they need. Nothing here writes to a mailbox: the surface is still five read-only tools, exactly as the paragraph above says.
-- **Upgrading from `0.4.0`** is a configuration edit, a Helm values edit, and a database migration you plan for. The database is PostgreSQL 18, which does not read a data directory PostgreSQL 17 wrote, so an existing volume moves across a dump before the new image comes up; every account states a `DisplayName`; a values document naming `database.host` needs `database.deploy.enabled: false` beside it; and two MCP tool arguments were renamed, where the old spelling is ignored rather than refused — so a client still sending `accountIds` reads every account instead of the one it named, and every client that names accounts is updated before the upgrade. [The changelog](https://krzysztof318.github.io/MailFathom/CHANGELOG.html) states each break against the surface it breaks, and the upgrade command by command.
+- **What it adds** is everything that acts on your mail rather than reading it: rules you author in configuration that move, copy, delete, and mark messages as read; spam classification that can file junk on the server; and the durable queue underneath both. Beside that, mail can be redacted before anything is derived from it or leaves the deployment, secrets found in the process and personal data by an analyzer you run beside it. The rules, the classification, and both scanners are off until you turn them on; the queue beneath the first two runs on every instance. The MCP surface is still the same five read-only tools, exactly as the paragraph above says: nothing a client can call writes to a mailbox.
+- **Upgrading from `0.5.0`** is a configuration edit, a client edit, and a database migration you apply. Every folder you want read is named in configuration, and mail under an alias your file no longer names is unreachable until an entry names it again; switching a folder's `Synchronize` off now keeps its stored mail instead of erasing it; the folder argument of `list_emails`, `search_emails`, and `ask_mail` is `folders` where it was `folderAliases`, and the old spelling is ignored rather than refused, so a client still sending it reads every folder instead of the one it named; `get_email_content` hands back a signed link per attachment instead of base64, asked for with `includeAttachmentDownloadLinks` where `0.5.0` asked with `includeAttachmentContent`, and issues none unless `Deployment:PublicBaseAddress` is declared; `EmailContent:MaxAttachmentBytes` and `EmailContent:MaxAttachmentBytesPerRead` are deleted from the configuration file, or the host declines to start on a key it no longer knows; and mail in a folder mapped as junk is withheld from listing and search unless the call asks for it, and withheld from answering with no way to ask. The schema step applies while `0.5.0` is still serving. [The changelog](https://krzysztof318.github.io/MailFathom/CHANGELOG.html) states each break against the surface it breaks, and what to do about it.
 - **What it ships** is a container image, a Helm chart, the SQL script that creates the schema it expects, and an `mfctl` binary per platform — [where the artifacts are published](https://github.com/Krzysztof318/MailFathom#where-the-artifacts-are-published) has the references. There is no binary artifact for the service itself, so a native installation starts from a checkout of this repository.
 - **What it promises** across the MCP tool contract, the configuration schema, the database schema, and the deployment contract is stated in [the changelog](https://krzysztof318.github.io/MailFathom/CHANGELOG.html).
 
@@ -106,8 +106,8 @@ MailFathom is built as an enterprise-grade system from the first line, even whil
 
 ### Nothing on the surface writes, and no setting changes that
 
-- The MCP surface is five tools — `list_accounts`, `list_emails`, `get_email_content`, `search_emails`, `ask_mail` — and that is all of it. There is no write tool to enable.
-- Synchronization is incapable of marking remote mail as read.
+- The MCP surface is five tools — `list_accounts`, `list_emails`, `get_email_content`, `search_emails`, `ask_mail` — and that is all of it. There is no write tool to enable, and nothing a client sends can change your mailbox.
+- Retrieval is incapable of marking remote mail as read. A change to your mailbox happens only where your own configuration asks for one — a rule action, or a spam action — never because a caller asked.
 - No response carries an attachment's bytes. A call that asks for them by name receives a signed link per file instead, valid for minutes, scoped to that one attachment, and resolved through the live mailbox so it dies with the message it points at.
 - Configuration is read-only to the process, permanently. No request, command, or tool changes a setting, and the service never rewrites the file it was configured from. So the file you provisioned is the file in force: how an instance is configured is reviewable as a diff and restorable from a backup, and nothing reachable over the network can move it out from under you. What the service itself has to modify lives in the database instead.
 
@@ -202,18 +202,16 @@ None of it depends on somebody else's service. The copy is yours, the database i
 
 The five tools are the foundation, not the product. What follows turns a synchronized, searchable copy of your mail into something an agent can reason over and eventually act on. The direction is set and the order is not fixed:
 
-- **Acting on mail, not only reading it.** Sending is the first write capability: a durable SMTP outbox exists as an application capability before it is ever an MCP tool, and exposing it waits on a reviewed authorization and confirmation flow, because a tool that sends mail is a different security question from one that reads it. Every later write capability takes the same route. MailFathom can already perform a change against a mailbox and record what it did, which `0.5.0` shipped, but nothing asks it to yet — the caller is what this step adds.
+- **Acting on mail, not only reading it.** Sending is the first write capability: a durable SMTP outbox exists as an application capability before it is ever an MCP tool, and exposing it waits on a reviewed authorization and confirmation flow, because a tool that sends mail is a different security question from one that reads it. Every later write capability takes the same route. MailFathom can already perform a change against a mailbox and record what it did, and since `0.6.0` your own rules and the spam classification ask it to — what this step adds is a caller on the other side of the protocol, which is the different security question.
 
 ### Ideas, not yet scope
 
 These are recorded as open questions, each waiting on a decision rather than on effort. [Discussions](https://github.com/Krzysztof318/MailFathom/discussions) is where they are argued, and the `Ideas` category is open to yours.
 
 - **Encrypted and signed mail**, S/MIME and OpenPGP — the hard part is not the parsing but whether local decryption should be permitted at all, since it turns end-to-end protected mail into searchable plaintext. [#75](https://github.com/Krzysztof318/MailFathom/issues/75)
-- **Spam and junk classification** as an asynchronous job. [#76](https://github.com/Krzysztof318/MailFathom/issues/76)
 - **Antivirus scanning of stored attachments**, constrained by which engines can be used under a permissive licensing policy. [#77](https://github.com/Krzysztof318/MailFathom/issues/77)
 - **OAuth for outbound IMAP and SMTP**, so a provider that has retired password authentication stays reachable. [#78](https://github.com/Krzysztof318/MailFathom/issues/78)
-- **Local secret detection before anything leaves for a model**, which only becomes concrete once retrieval-augmented answering exists. [#79](https://github.com/Krzysztof318/MailFathom/issues/79)
-- **Jobs you define yourself**, in two shapes that stay separate rather than becoming one: *programmatic* jobs, where a deterministic rule matches stored mail and takes a bounded action, and *skill-based* jobs, whose body is an instruction an agent carries out against a slice of your mail. The second asks questions the first does not — what content leaves for a model, what a job may act on, and what an attacker who can write you an email can make one do. [#251](https://github.com/Krzysztof318/MailFathom/issues/251)
+- **Skill-based jobs**, whose body is an instruction an agent carries out against a slice of your mail, rather than the deterministic rule `0.6.0` shipped. It asks questions a rule does not — what content leaves for a model, what a job may act on, and what an attacker who can write you an email can make one do.
 
 ## Contributing
 

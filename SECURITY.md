@@ -34,8 +34,8 @@ A confirmed vulnerability is fixed on `main` and reaches you in a release that c
 
 | Version | Supported |
 |---|---|
-| `0.5.x` | Yes — the newest released minor line |
-| `0.4.x` | Only by a decision recorded on the issue asking for it |
+| `0.6.x` | Yes — the newest released minor line |
+| `0.5.x` | Only by a decision recorded on the issue asking for it |
 | Any older release line | Only by a decision recorded on the issue asking for it |
 | `main`, and the `-nightly.<n>` builds from it | No. A fix lands here first, but nothing built from `main` carries a release promise |
 
@@ -71,7 +71,7 @@ This authorization is what the maintainer can give. It does not waive the rights
 
 This section is about the software rather than about reporting. It states the rules the code is written and reviewed against, so a report can name the one that was broken.
 
-- Mail is retrieved **read-only**. Synchronization and content retrieval never set the remote IMAP `\Seen` flag, and every content-fetch path is tested for it.
+- Mail is retrieved **read-only**. Synchronization and content retrieval never set the remote IMAP `\Seen` flag, and every content-fetch path is tested for it. What can write to a mailbox is what the deployment's own configuration turned on — a mail rule action, or a spam classification action — and nothing reachable over the network asks for one.
 - Credentials, tokens, and certificate material are read through secret references rather than written into configuration as values. [`docs/operations/secret-provisioning.md`](docs/operations/secret-provisioning.md) describes the provisioning paths.
 - Message bodies, attachment content, raw MIME, credentials, and tokens are never written to logs, traces, or error responses.
 - Mail content, metadata, and anything derived from them are classified as personal data by default. A derived index inherits the classification of the mail it came from rather than being treated as anonymous.
