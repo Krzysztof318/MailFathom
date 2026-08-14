@@ -18,6 +18,8 @@ cd "$repository_root"
 source "$(dirname "${BASH_SOURCE[0]}")/resolve-base-remote.sh"
 # shellcheck source=scripts/list-branch-changes.sh
 source "$(dirname "${BASH_SOURCE[0]}")/list-branch-changes.sh"
+# shellcheck source=scripts/verification-record.sh
+source "$(dirname "${BASH_SOURCE[0]}")/verification-record.sh"
 
 # The integration branch is never the subject of a change, so a run there reports on code nobody is
 # about to modify. verify-full.sh cannot catch this through its base check: origin/main is trivially
@@ -27,6 +29,20 @@ if [[ "$current_branch" == 'main' || "$current_branch" == 'master' ]]; then
   printf 'verify-fast.sh must not run on %s. Switch to the branch that carries the change.\n' \
     "$current_branch" >&2
   exit 1
+fi
+
+verification_digest="$(resolve_verification_digest)"
+
+# The full gate builds, tests, collects coverage over the same suite, and verifies the formatting
+# this loop repairs, so a green run of it over this content leaves nothing here to find. The
+# implication runs one way only: passing the loop says nothing about coverage or the contract suite.
+if [[ -z "${VERIFY_FORCE:-}" ]]; then
+  for proving_gate in 'verify-fast' 'verify-full'; do
+    if verification_already_recorded "$proving_gate" "$verification_digest"; then
+      report_verification_already_recorded 'verify-fast' "$proving_gate"
+      exit 0
+    fi
+  done
 fi
 
 # Locked mode here and not only in the final gate, for the same reason formatting runs here: a pin
@@ -64,3 +80,7 @@ mapfile -t changed_csharp_files < <(printf '%s\n' "$changed_paths" | grep -E '\.
 if ((${#changed_csharp_files[@]} > 0)); then
   dotnet format MailFathom.slnx --no-restore --include "${changed_csharp_files[@]}"
 fi
+
+# Records nothing when that pass rewrote a file, because the build and the tests above ran against
+# content this working tree no longer holds.
+record_verification 'verify-fast' "$verification_digest"
