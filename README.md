@@ -51,7 +51,7 @@ MailFathom also resolves in [Context7](https://context7.com/krzysztof318/mailfat
 
 ## What exists today
 
-What is implemented is read-only synchronization and five tools, and this README is split on that line: this section and [What it does well](https://github.com/Krzysztof318/MailFathom#what-it-does-well) describe the code as it stands, while [Where it is going](https://github.com/Krzysztof318/MailFathom#where-it-is-going) is the roadmap.
+What is implemented is read-only retrieval, five tools, and the rules and spam actions your own configuration turns on, and this README is split on that line: this section and [What it does well](https://github.com/Krzysztof318/MailFathom#what-it-does-well) describe the code as it stands, while [Where it is going](https://github.com/Krzysztof318/MailFathom#where-it-is-going) is the roadmap.
 
 Two properties hold everywhere, and much of the rest of the design follows from them:
 

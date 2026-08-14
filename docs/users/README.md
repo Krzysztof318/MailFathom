@@ -16,8 +16,10 @@ Two properties hold everywhere and are worth knowing before anything is installe
 
 - **Reading is local.** A tool call answers from the local copy and never contacts a mail server, so it is fast, works
   while the server is down, and cannot change anything remotely. Every result states how fresh the local copy is.
-- **Synchronization is read-only.** Fetching mail never sets the remote `\Seen` flag, so mail MailFathom has copied
-  still shows as unread in your mail client until you read it there.
+- **Retrieval is read-only.** Fetching mail never sets the remote `\Seen` flag, so mail MailFathom has copied still
+  shows as unread in your mail client until you read it there. What can write to your mailbox is what you configured to:
+  a mail rule whose action moves, copies, deletes, or marks a message read, and the spam actions that file junk and mark
+  it read. Both are off until you turn them on.
 
 ## The state of the release
 

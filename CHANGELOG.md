@@ -45,14 +45,17 @@ attachment's content is not text a scan reaches** — the signed link serves the
 credential inside an attached file is not covered by turning a scanner on. That is off by default as well, and off it
 costs nothing at all — no container is started, no image is pulled, and no memory is held.
 
-**Five things need an edit before this release serves what `0.5.0` served.** The folder argument of `list_emails`,
+**Seven things need an edit before this release serves what `0.5.0` served.** The folder argument of `list_emails`,
 `search_emails`, and `ask_mail` is `folders` where it was `folderAliases`, and the old spelling is ignored rather than
 refused — so a client that keeps sending it reads every folder instead of the one it named. Every folder you want read
 is now named in configuration, and mail under an alias your file no longer names is unreachable until an entry names it
-again. `get_email_content` hands back a signed link per attachment instead of base64, and issues none at all unless
-`Deployment:PublicBaseAddress` is declared. Mail in a folder your configuration maps as junk is withheld from listing
-and search unless the call asks for it, and withheld from answering with no way to ask. And a folder whose `Synchronize`
-you switch off now keeps its stored mail instead of erasing it.
+again. `get_email_content` hands back a signed link per attachment instead of base64: a call asks for the links with
+`includeAttachmentDownloadLinks` where `0.5.0` asked with `includeAttachmentContent`, the old name is ignored rather
+than refused, and no link is issued at all unless `Deployment:PublicBaseAddress` is declared. **Delete
+`EmailContent:MaxAttachmentBytes` and `EmailContent:MaxAttachmentBytesPerRead` from your configuration file**, or the
+host refuses to start on a key it no longer knows. Mail in a folder your configuration maps as junk is withheld from
+listing and search unless the call asks for it, and withheld from answering with no way to ask. And a folder whose
+`Synchronize` you switch off now keeps its stored mail instead of erasing it.
 
 **The database schema moves by twelve migrations** that add eight tables, four columns on three tables that already held
 data, and the indexes for both, and that change nothing `0.5.0` reads — so the schema step applies while `0.5.0` is
@@ -101,9 +104,11 @@ to the server the way every other change is carried, so a restart neither loses 
   under way stays on the rule set it started with and reports itself superseded rather than half-applying two
   ([#682](https://github.com/Krzysztof318/MailFathom/pull/682)).
 
-**Spam classification, and filing junk on the server.** Every message is judged from the headers it already carries —
-the authentication results including the ARC chain, the provider's own `X-Spam-*` headers, and the folder it arrived in
-— and a verdict is recorded beside it with the signals it rests on
+**Spam classification, and filing junk on the server.** The verdict is read from what the message already carries: the
+provider's own `X-Spam-*` headers, and the folder it arrived in, which outranks them because it is a decision somebody
+already acted on. **The authentication results, the ARC chain included, are recorded beside the verdict as signals
+rather than judged from** — a DMARC failure is something your receiving server saw and chose to deliver anyway, so
+turning it into a spam verdict here would file mail your own provider decided to accept
 ([#731](https://github.com/Krzysztof318/MailFathom/pull/731)). `SpamClassification:Enabled` turns it on, and it is off.
 **It covers the folders `SpamClassification:ScannedFolders` names**, and where you name none, every account's inbox and
 nothing else — so a deployment whose own filter delivers somewhere other than the inbox names that folder there, or
@@ -270,13 +275,25 @@ the script prints the `export PATH` line to add to a shell profile rather than e
   *alias* nothing maps still selects nothing, because an alias is a name the caller chose while an empty page for a role
   would read as a folder holding no mail ([#729](https://github.com/Krzysztof318/MailFathom/pull/729)).
 - **Breaking (MCP tool contract)** — **`get_email_content` returns a signed download link per attachment instead of
-  base64 content.** Every attachment is still described in full — file name, media type, decoded size — and a call that
-  asks for the files receives one `https` URL per attachment, valid for `EmailContent:AttachmentDownloads:LinkLifetime`
+  base64 content, and asks for it with `includeAttachmentDownloadLinks` where `0.5.0` asked with
+  `includeAttachmentContent`.** An argument the tool does not declare is ignored rather than refused, so a client that
+  keeps sending the old name is not stopped: it receives every attachment described, no link, and no error. **Update
+  every client that fetches attachment content before the upgrade.** Every attachment is still described in full — file
+  name, media type, decoded size — and a call that asks for the files receives one `https` URL per attachment, valid for
+  `EmailContent:AttachmentDownloads:LinkLifetime`
   and scoped to that one attachment. **Declare `Deployment:PublicBaseAddress`**, an absolute address with no path and
   `https` unless the host is loopback: a deployment that declares none serves every other part of the read and reports
   each attachment as `Unavailable`, and so does one that configures no data-encryption key ring, because the signing
   key is derived from that ring. Nothing composes the address from a request header, so it cannot be guessed on your
   behalf ([#679](https://github.com/Krzysztof318/MailFathom/pull/679)).
+- **Breaking (configuration schema)** — **`EmailContent:MaxAttachmentBytes` and `EmailContent:MaxAttachmentBytesPerRead`
+  are removed, and a configuration file still carrying either fails startup.** They bounded how many attachment octets
+  one response and one call could carry, and no response carries an attachment's octets any more — what a caller
+  receives is a link, and what bounds it is its lifetime rather than its size. The `EmailContent` section is bound
+  strictly, so an unknown key is refused rather than ignored: a `0.5.0` file reaches this release and the host declines
+  to start naming the key. **Delete both lines**, including the `MaxAttachmentBytes: 0` that `0.5.0` documented as the
+  way to return no attachment content at all — a deployment that wants the metadata and nothing else now simply does not
+  ask for links ([#679](https://github.com/Krzysztof318/MailFathom/pull/679)).
 - **Breaking (MCP tool contract)** — **junk mail is withheld from listing, search, and answering by default.**
   `list_emails` and `search_emails` gain an optional `includeJunkMail`, defaulting to `false`, and every result of
   either carries a new required `includedJunkMail` field — so a client parsing a result strictly sees a new field, and
@@ -319,7 +336,7 @@ the script prints the `export PATH` line to add to a shell profile rather than e
   ([#797](https://github.com/Krzysztof318/MailFathom/pull/797),
   [#814](https://github.com/Krzysztof318/MailFathom/pull/814),
   [#820](https://github.com/Krzysztof318/MailFathom/pull/820)).
-- **Breaking (deployment contract)** — **the release no longer submits `winget` manifests.** Two submissions are open
+- **The release no longer submits `winget` manifests.** Two submissions are open
   against the community repository and neither has been reached, and it accepts exactly one pull request per package
   version — so submitting again could only queue a version behind them. No page offers `winget` as a way to get `mfctl`
   while that holds; take the binary from the release, or use the install script on Linux
