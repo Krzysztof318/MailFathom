@@ -121,13 +121,15 @@ git add <your files>
 bash scripts/verify-full.sh
 ```
 
-The full gate fetches `origin main` and refuses a branch that does not contain that freshly fetched base, so rebase when it complains; verifying against a stale base proves nothing about the branch that will actually merge. It then runs the workflow contract suite where your change can have moved something it asserts, builds, runs the complete unit-test and coverage gate, verifies formatting over the C# files you changed — over the whole solution when you touched an `.editorconfig` or one of the shared build files — and checks the diff. It rejects remaining untracked files, so a newly added file cannot slip past diff validation.
+The full gate fetches `origin main` and refuses a branch that does not contain that freshly fetched base, so rebase when it complains; verifying against a stale base proves nothing about the branch that will actually merge. It builds, runs the complete unit-test and coverage gate, verifies formatting over the C# files you changed — over the whole solution when you touched an `.editorconfig` or one of the shared build files — runs the workflow contract suite beside all of that where your change can have moved something it asserts, and checks the diff. It rejects remaining untracked files, so a newly added file cannot slip past diff validation.
+
+Neither script proves the same tree twice. Each records a digest of what it verified under `artifacts/verify/`, which is ignored and never staged, and a run handed a tree it has already passed over prints the earlier run and stops in under a second. So run the gate rather than working out whether the last run still counts: a failing run records nothing, a fast loop whose formatting pass rewrote a file records nothing, and `VERIFY_FORCE=1` runs everything regardless.
 
 Both scripts refuse to run on `main` or `master`. Check out your branch rather than working around the refusal.
 
 The integration suite is not part of either script. It starts containers and is run deliberately, through `scripts/run-integration-tests.sh`, when a maintainer asks for it.
 
-Neither script answers the third question a change raises, so there is one more command worth a second of your time:
+Neither script answers the third question a change raises, so there is one more command, and it is thirteen seconds whatever your diff holds:
 
 ```bash
 bash scripts/review-obligations.sh
