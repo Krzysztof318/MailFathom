@@ -30,6 +30,10 @@ change has not touched. The change itself is under `{{REVIEW_DIRECTORY}}`:
 - `issue-comments.json` — the conversation on the pull request.
 - `reviews.json` — the reviews already submitted, each with its `state`, its `body`, and
   the `commit_id` it was given for.
+- `changed-since-last-review.txt` — the paths that moved between the head of your last
+  review and this one, one per line. Absent on a first pass and on a review somebody
+  asked for, which both put the whole change in scope; present and empty means the head
+  has not moved since. **When this is not the first review** is what it decides.
 - `issues.json` — every issue the pull request body closes, in the order the body
   names them, and empty when it names none. Each entry carries the `labels` the issue
   holds. This is where the pull request's own labels usually come from, but not always:
@@ -134,9 +138,28 @@ re-report a paragraph the author has already answered.
 
 What that changes:
 
+- **`changed-since-last-review.txt` is what this pass may conclude something about.** It
+  lists every path that moved between the head your previous review was given for and the
+  head in front of you now, and it is the whole of what a later pass is *for*. A new
+  finding belongs on a path it names, or on something that stopped being true **because**
+  one of those paths moved — a page describing code that just changed, a test whose
+  subject moved, a claim in the body the new commits made wrong. Raising the second kind
+  is right and expected; say which changed path made it wrong, in the finding itself, so
+  the connection is on the record rather than assumed.
+- Everything else is context, and reading it is still required: the coverage ledger is
+  unchanged and a file you did not open is a file you cannot judge the changed ones
+  against. What the list bounds is the verdict, never the reading.
+- A defect you can see on a path nothing has moved is one the earlier passes read and let
+  through. Leaving it is deliberate. A change that has been reviewed three times and is
+  still collecting first findings on untouched files is a review that never converges,
+  which costs the author more than the finding is worth — and the file is in front of a
+  human reviewer too.
+- An absent `changed-since-last-review.txt` means the bound could not be established —
+  the first pass, a review somebody asked for, or a comparison the API refused. Then the
+  whole change is in scope, exactly as it is on a first pass.
 - You still review the whole change. The branch that merges is all of it, and a defect
   introduced by the fix for an earlier finding is exactly what a second pass exists to
-  catch.
+  catch — those paths are in the list, because a fix is a push.
 - A thread whose `resolved` is true is the author's statement that it is closed out.
   Take it. Re-open one only where the code still plainly has the defect, and then say
   which part of it the fix did not reach.
@@ -496,6 +519,15 @@ a missing page: which pages exist is not this change's business.
 
 Post nothing below P3, and at most twenty findings; when more clear the bar, keep the
 most severe and say in the summary how many you left out.
+
+The severity you write decides the verdict on a late pass. Past three passes over the
+same pull request, a review carrying nothing above `P3` is published as an approval with
+those findings attached rather than as one that holds the change: a `P3` is paid for
+later by definition, and a fourth round spent on one costs more than it is worth. So
+write the severity the finding actually has. Raising a `P3` to `P2` to make it hold the
+change is the failure this rule is most exposed to, and it is the reviewer arranging a
+verdict rather than reporting one — the level is a property of the defect, and the
+consequence is not yours to steer.
 
 Twenty is a ceiling, never a target. A change with two defects gets two findings, and a
 change with none gets none: an entry that exists to fill the list is a defect in the

@@ -742,7 +742,9 @@ shell, no editor, no writer, no network tool, no MCP tool, and no read access to
 `.git`, where the action leaves a token for its own use. It holds no credential it
 could use and posts nothing. Its findings are the run's own answer, and the step
 after it validates them and submits a single review: `event: COMMENT` when the
-answer holds findings, `event: APPROVE` when it holds none.
+answer holds findings that withhold approval, `event: APPROVE` when it holds none
+— and, from the fourth pass, when the ones it holds are all P3, described under
+**What a later pass is for** below.
 
 `Agent` is what spreads the first pass over subagents, described under **What the
 reviewer is measured against** below. It widens what the session can *read* in
@@ -752,20 +754,31 @@ model text the main session confirms against the file before it can become a
 finding.
 
 The model is named exactly rather than by alias: `claude-sonnet-5` at
-`--effort xhigh`. An alias re-points at whatever ships next, and findings are only
+`--effort high`. An alias re-points at whatever ships next, and findings are only
 comparable across runs when the model that produced them is the one the workflow
 names.
 
 Effort decides how much the reviewer works before answering, which is the
 difference between a sweep over the whole change and a close reading of the first
-few files followed by a shrug. It was `high` — a step down from the `xhigh` Claude
-Code applies by default — while the extra depth was unmeasured against a personal
-subscription with no per-run ceiling. #811 measured it: six rounds ran on one
-change, and two of them reported first-commit code that three earlier passes had
-read through, including a file of 68 added lines first named in the fourth review.
-A round that finds what an earlier round walked past costs a whole run of
-collection, model time, and an author answering it, so the depth is the cheaper
-half of that trade.
+few files followed by a shrug. It was raised to `xhigh` on #811's argument that a
+round finding what an earlier round walked past costs more than the depth that
+would have avoided it, and a day of running that way measured the other side of
+the trade. Over the 75 runs and 108 reviews either side of that change:
+
+| | at `high` | at `xhigh` |
+|---|---|---|
+| run duration, median | 5.1 min | 8.7 min |
+| run duration, longest | 16.8 min | 29.2 min |
+| runs past twenty minutes | 0 of 40 | 11 of 35 |
+| approvals | 41 of 87 reviews | 6 of 21 |
+| findings per review | 1.71 | 2.86 |
+
+The depth did not buy earlier convergence. What it bought was a reviewer with the
+budget to keep finding one more thing, which the coverage ledger then pointed at
+the whole change on every pass — #839 is the worked example, and it is under
+**What a later pass is for** below. So the level is back where it was, and the
+convergence problem is answered by narrowing what a later pass may conclude
+rather than by making any pass read less.
 
 That split is the point. Everything the reviewer reads about the change is
 untrusted — a diff, a comment, or an issue body can carry an instruction aimed
@@ -999,7 +1012,7 @@ does not inherit this reasoning; it argues its own case or uses `pull_request`.
 
 The run spends the repository owner's personal Claude subscription through
 `CLAUDE_CODE_OAUTH_TOKEN`, so what limits how often it runs is a design concern
-rather than an operational one. Seven things do, and they are listed together
+rather than an operational one. Nine things do, and they are listed together
 because each closes a different way the bill could grow:
 
 - a draft is never reviewed automatically, so a branch still being written is
@@ -1018,12 +1031,18 @@ because each closes a different way the bill could grow:
   things reach: a review request asking for it by name, and the `security` label
   on the pull request, described below;
 - every collected input carries an explicit ceiling, and what a ceiling dropped is
-  stated in the review body.
+  stated in the review body;
+- `--effort high` is a step down from the `xhigh` Claude Code applies by default,
+  measured rather than assumed: the table under **What the reviewer is measured
+  against** is what put it back there after a day at `xhigh` nearly doubled the
+  median run;
+- past three passes a change settles on what it has, so a P3 can cost a fourth
+  round at most rather than every round until somebody fixes it.
 
-`--effort` was the eighth of these and is no longer one of them. It bought less
-than the rounds it caused, which is the trade the paragraph on effort above
-records; what remains true is that reading depth is where this workflow spends
-deliberately rather than where it economizes.
+The last two are the only ones that bound how *hard* a run works rather than how
+often one starts, and they are the pair worth re-measuring rather than tuning by
+feel: reading depth is where this workflow spends deliberately, and a change that
+stops converging is where that spending stops paying.
 
 Moving the run onto a metered API key with a spend limit would replace that set
 with one number, and it is deliberately not done: the gate above already stops
@@ -1131,6 +1150,54 @@ this is a path from model text into a published review body: what the step names
 is the difference — paths the collection step wrote — and a name in the ledger
 that matches nothing in the collection is reported as a count and never quoted.
 The list of unread paths is bounded, and the remainder becomes a number.
+
+### What a later pass is for
+
+Reading the whole change on every pass is right. Judging it again on every pass is
+not, and the two came in together: with the ledger asking for the whole change to
+be read and `xhigh` paying for it, a fourth pass had both the reach and the budget
+to open a file no fix had touched and start there.
+
+#839 is what that looks like. Four files, 401 added lines — the smallest pull
+request of the sample — six automatic rounds, 34 inline findings, no approval, and
+a merge that happened only because the ceiling refused a seventh pass. Its first
+three rounds stayed in `CHANGELOG.md`. The fourth opened `README.md` and raised
+two P1 findings there, the fifth opened `docs/users/README.md` and raised one, the
+sixth opened `SECURITY.md` and raised another. Not one of those pages had been
+touched by a single fix. The reviewer was not converging on the change; it was
+widening across it.
+
+Two rules answer that, and neither one makes a pass read less.
+
+**What moved is what a later pass may conclude something about.** The collection
+step compares the head of the reviewer's previous review with the one in front of
+it and writes the paths between them into `changed-since-last-review.txt`. A new
+finding belongs on a path that file names, or on something that stopped being true
+*because* one of them moved — a page describing code that just changed, a test
+whose subject moved — and the second kind names the changed path that made it
+wrong, so the connection is on the record. Everything else stays context: the
+ledger is unchanged, and a file the reviewer did not open is one it cannot judge
+the changed files against. The file is absent on a first pass, on a review
+somebody asked for, and where the comparison failed, and each of those puts the
+whole change back in scope — a bound derived from an API error would silence
+findings on files that did move.
+
+**Past three passes a change settles on what it has.** A P1 breaks something and a
+P2 is owed by a rule, so either withholds approval however late it arrives. A P3
+is paid for later by definition, and a fourth round spent holding a change for one
+costs more than the finding is worth. So from the fourth pass a review carrying
+nothing above P3 is published as an approval with those findings attached as
+inline comments rather than as one that holds the change. Nothing is hidden and
+nothing is postponed silently: the findings are published exactly as they would
+have been, and the thread-resolution rule the `main` ruleset carries still makes
+each one answerable before the merge. What changes is only the verdict they arrive
+under. The count is of automatic passes alone, so asking for a review never
+advances a pull request toward its own threshold, and a requested pass is judged
+at full strictness.
+
+The prompt states the severities and the consequence together, because the
+reviewer writing a P3 as a P2 to make it hold the change would be arranging a
+verdict rather than reporting one.
 
 Both failure modes that split addresses are real and opposite. Judging a
 candidate while still looking suppresses findings that were not yet understood,
@@ -1359,8 +1426,10 @@ the column says whatever the last event left there for that whole time — usual
 in the review depends on that write, which is why it runs in parallel: a project
 API failure must not delay or skip a review.
 
-The last write is the verdict: `Changes requested` where the review carried
-findings, `Ready to merge` where it approved. A run that publishes no verdict
+The last write is the verdict: `Changes requested` where the review withheld
+approval, `Ready to merge` where it gave it. That is the verdict rather than the
+presence of findings, and the two stopped being the same question once a settled
+late pass began publishing its remaining P3 findings under an approval. A run that publishes no verdict
 writes nothing and leaves `In review` standing, where a reader sees that a review
 was asked for and produced nothing.
 

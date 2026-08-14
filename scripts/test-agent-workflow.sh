@@ -1689,6 +1689,10 @@ fathom_review_reviews_a_push_below_the_automatic_ceiling() {
   run_fathom_review_gate 'synchronize' "$output_file" "$step_output_file" 'Krzysztof318' '' "$reviews_file"
 
   assert_contains 'review=true' "$step_output_file"
+  # The same count the ceiling reasons about is published for the submission step, which spends it on
+  # a different decision. Publishing it here is what keeps the two from drifting apart into a review
+  # that settles on one pass number and a ceiling that refuses on another.
+  assert_contains 'automatic_reviews=5' "$step_output_file"
 }
 
 fathom_review_stops_reviewing_a_push_at_the_automatic_ceiling() {
@@ -2013,6 +2017,14 @@ case "$endpoint" in
     printf 'unchanged\nadded\nunchanged\n'
     exit 0
     ;;
+  */compare/*)
+    # What moved between the head of the previous review and this one. The narrowing list is written
+    # from this, so a contract steers it by name rather than by count.
+    response="$(
+      jq -nc --arg names "${FAKE_MOVED_FILES:-src/Sample.cs}" \
+        '{files: ($names | split(",") | map(select(. != "") | {filename: .}))}'
+    )"
+    ;;
   */pulls/*/files*)
     # One changed file unless a contract asks for more, which is what lets the count ceiling on the
     # head-content loop be reached — that ceiling is a literal in the step and the only way to a
@@ -2026,7 +2038,21 @@ case "$endpoint" in
     )"
     ;;
   */pulls/*/reviews*)
-    response='[]'
+    # No previous review is the ordinary case, which is the first pass. A contract about a later one
+    # names the head its previous review was given for, and that is what the comparison above runs
+    # against.
+    if [[ -n "${FAKE_PREVIOUS_REVIEW_HEAD:-}" ]]; then
+      response="$(
+        jq -nc --arg head "$FAKE_PREVIOUS_REVIEW_HEAD" \
+          '[{user: {login: "fathom-reviewer[bot]"},
+             state: "COMMENTED",
+             commit_id: $head,
+             submitted_at: "2026-08-14T09:00:00Z",
+             body: "# NEEDS CHANGES"}]'
+      )"
+    else
+      response='[]'
+    fi
     ;;
   */issues/*/comments*)
     response='[]'
@@ -2113,6 +2139,10 @@ run_fathom_review_collect() {
   # How many changed files the pull request carries, which decides whether the head-content loop
   # reaches its count ceiling.
   local changed_file_count="${4:-1}"
+  # Whether somebody asked for this review, which decides whether the step narrows a later pass to
+  # what moved since the previous one. A push is the ordinary case, and the narrowing contracts are
+  # the ones that name the other.
+  local explicit="${5:-false}"
   local step_script="$test_directory/fathom-review-collect.sh"
   local step_output_file="$test_directory/fathom-review-collect-step-output"
 
@@ -2138,6 +2168,8 @@ run_fathom_review_collect() {
     export CLOSING_ISSUE_LIMIT_SECONDS="$closing_issue_limit_seconds"
     export FAKE_CHANGED_FILE_COUNT="$changed_file_count"
     export_api_retry_environment
+    export REVIEWER_LOGIN='fathom-reviewer[bot]'
+    export EXPLICIT="$explicit"
     bash "$step_script"
   ) > "$output_file" 2>&1
 }
@@ -2226,6 +2258,42 @@ fathom_review_stops_reading_closing_issues_when_its_window_is_gone() {
   assert_json 'null' '.[0].labels' "$collect_review_directory/issues.json"
   assert_json 'null' '.[1].labels' "$collect_review_directory/issues.json"
   assert_contains 'are here as their number alone' "$collect_review_directory/truncation.txt"
+}
+
+# What a later pass may conclude something about. Without this list every pass judges the whole
+# change again, which is how #839 spent its fourth, fifth, and sixth rounds raising a first P1 on a
+# page no fix in the change had touched. These three fix which passes are narrowed and which are not.
+fathom_review_names_what_moved_since_its_previous_pass() {
+  local output_file="$test_directory/fathom-review-collect-moved-output"
+
+  FAKE_PREVIOUS_REVIEW_HEAD='89abcdef0123456789abcdef0123456789abcdef' \
+    FAKE_MOVED_FILES='src/Sample.cs,docs/operations/sample.md' \
+    run_fathom_review_collect "$output_file"
+
+  assert_contains 'src/Sample.cs' "$collect_review_directory/changed-since-last-review.txt"
+  assert_contains 'docs/operations/sample.md' "$collect_review_directory/changed-since-last-review.txt"
+}
+
+# The first pass has nothing to narrow against, and the file's absence is what the prompt reads as
+# the whole change being in scope. Writing an empty one instead would bound the first review to
+# nothing at all.
+fathom_review_narrows_nothing_on_a_first_pass() {
+  local output_file="$test_directory/fathom-review-collect-first-pass-output"
+
+  run_fathom_review_collect "$output_file"
+
+  [[ ! -e "$collect_review_directory/changed-since-last-review.txt" ]]
+}
+
+# A maintainer asking for a review wants the change looked at again rather than only the part of it
+# that moved, so the narrowing is for automatic passes alone.
+fathom_review_narrows_nothing_on_a_requested_pass() {
+  local output_file="$test_directory/fathom-review-collect-requested-output"
+
+  FAKE_PREVIOUS_REVIEW_HEAD='89abcdef0123456789abcdef0123456789abcdef' \
+    run_fathom_review_collect "$output_file" 120 120 1 'true'
+
+  [[ ! -e "$collect_review_directory/changed-since-last-review.txt" ]]
 }
 
 # Which model performs the review is the other half of what the `security` label decides, and the
@@ -2512,6 +2580,10 @@ run_fathom_review_submit() {
   # Which marker the published review carries. A push is the ordinary case, and the gate of the next
   # run counts exactly the reviews carrying this one.
   local trigger_marker="${6:-<!-- fathom-review: automatic -->}"
+  # How many passes this pull request has already had. Zero is the ordinary case, and the settling
+  # contracts are the ones that name a number: past three, a review carrying only P3 findings is
+  # published as an approval instead of one that holds the change.
+  local automatic_reviews="${7:-0}"
   local step_script="$test_directory/fathom-review-submit.sh"
   local review_directory="$test_directory/fathom-review-submit-review"
   local coverage_file="$test_directory/fathom-review-submit-coverage"
@@ -2544,6 +2616,7 @@ run_fathom_review_submit() {
     export REVIEW_DIRECTORY="$review_directory"
     export COVERAGE_FILE="$coverage_file"
     export TRIGGER_MARKER="$trigger_marker"
+    export AUTOMATIC_REVIEWS="$automatic_reviews"
     export FAKE_REVIEW_PAYLOAD="$payload_file"
     # The verdict the board job reads. It is written only where a review was posted, so a contract
     # that asserts on an empty file is asserting that nothing was published.
@@ -2569,6 +2642,69 @@ fathom_review_anchors_a_finding_to_its_line() {
   assert_json '["RIGHT"]' '[.comments[].side]' "$payload_file"
   assert_contains '# NEEDS CHANGES' "$payload_file"
   assert_contains '**Findings** — P1: 1' "$payload_file"
+  assert_contains 'verdict=changes_requested' "$submit_step_output_file"
+}
+
+# A change settles on what it has. These four fix both edges of that: which pass it starts on, and
+# what still holds a change however late it arrives.
+fathom_review_settles_a_late_pass_carrying_only_deferred_findings() {
+  local output_file="$test_directory/fathom-review-submit-settled-output"
+  local payload_file="$test_directory/fathom-review-submit-settled-payload"
+
+  run_fathom_review_submit \
+    '{"summary":"Fourth pass.","findings":[{"severity":"P3","path":"src/Sample.cs","start_line":null,"line":12,"title":"Name the guard for what it refuses","impact":"The name says what passes rather than what it stops.","correction":"Rename it.","rule":"`AGENTS.md`, \"Conventions & naming\""}]}' \
+    "$output_file" "$payload_file" 'success' '' '<!-- fathom-review: automatic -->' '3'
+
+  ((submit_status == 0))
+  assert_json '"APPROVE"' '.event' "$payload_file"
+  # The finding is still published, and still on its line: settling changes the verdict it arrives
+  # under, never whether it arrives. The thread-resolution rule then keeps it answerable.
+  assert_json '["src/Sample.cs"]' '[.comments[].path]' "$payload_file"
+  assert_contains '# APPROVED' "$payload_file"
+  assert_contains '**Findings** — P3: 1' "$payload_file"
+  assert_contains 'This is pass 4 and nothing above P3 is left' "$payload_file"
+  assert_contains 'verdict=approved' "$submit_step_output_file"
+}
+
+fathom_review_holds_a_late_pass_that_still_found_something_owed() {
+  local output_file="$test_directory/fathom-review-submit-held-output"
+  local payload_file="$test_directory/fathom-review-submit-held-payload"
+
+  run_fathom_review_submit \
+    '{"summary":"Fourth pass.","findings":[{"severity":"P3","path":"src/Sample.cs","start_line":null,"line":12,"title":"Name the guard for what it refuses","impact":"The name says what passes.","correction":"Rename it.","rule":"`AGENTS.md`, \"Conventions & naming\""},{"severity":"P2","path":"src/Sample.cs","start_line":null,"line":14,"title":"Bound the sequence","impact":"A remote list is expanded without a ceiling.","correction":"Take the first hundred.","rule":"`AGENTS.md`, \"Reliability, security, and performance\""}]}' \
+    "$output_file" "$payload_file" 'success' '' '<!-- fathom-review: automatic -->' '3'
+
+  ((submit_status == 0))
+  assert_json '"COMMENT"' '.event' "$payload_file"
+  assert_contains '# NEEDS CHANGES' "$payload_file"
+  assert_contains 'verdict=changes_requested' "$submit_step_output_file"
+}
+
+fathom_review_holds_an_early_pass_carrying_only_deferred_findings() {
+  local output_file="$test_directory/fathom-review-submit-early-output"
+  local payload_file="$test_directory/fathom-review-submit-early-payload"
+
+  run_fathom_review_submit \
+    '{"summary":"Third pass.","findings":[{"severity":"P3","path":"src/Sample.cs","start_line":null,"line":12,"title":"Name the guard for what it refuses","impact":"The name says what passes.","correction":"Rename it.","rule":"`AGENTS.md`, \"Conventions & naming\""}]}' \
+    "$output_file" "$payload_file" 'success' '' '<!-- fathom-review: automatic -->' '2'
+
+  ((submit_status == 0))
+  assert_json '"COMMENT"' '.event' "$payload_file"
+  assert_contains 'verdict=changes_requested' "$submit_step_output_file"
+}
+
+# The count arrives as a string from another job, so a run whose gate never wrote it must leave the
+# stricter verdict standing rather than approve on a value nobody set.
+fathom_review_holds_a_pass_whose_count_is_not_a_number() {
+  local output_file="$test_directory/fathom-review-submit-unset-count-output"
+  local payload_file="$test_directory/fathom-review-submit-unset-count-payload"
+
+  run_fathom_review_submit \
+    '{"summary":"Pass of unknown number.","findings":[{"severity":"P3","path":"src/Sample.cs","start_line":null,"line":12,"title":"Name the guard for what it refuses","impact":"The name says what passes.","correction":"Rename it.","rule":"`AGENTS.md`, \"Conventions & naming\""}]}' \
+    "$output_file" "$payload_file" 'success' '' '<!-- fathom-review: automatic -->' 'not-a-number'
+
+  ((submit_status == 0))
+  assert_json '"COMMENT"' '.event' "$payload_file"
   assert_contains 'verdict=changes_requested' "$submit_step_output_file"
 }
 
@@ -5980,6 +6116,9 @@ run_test fathom_review_reads_head_content_within_its_window
 run_test fathom_review_stops_reading_head_content_when_its_window_is_gone
 run_test fathom_review_stops_reading_closing_issues_when_its_window_is_gone
 run_test fathom_review_reports_the_head_content_files_its_count_ceiling_cut
+run_test fathom_review_names_what_moved_since_its_previous_pass
+run_test fathom_review_narrows_nothing_on_a_first_pass
+run_test fathom_review_narrows_nothing_on_a_requested_pass
 run_test fathom_review_reads_a_security_labelled_change_with_the_costlier_model
 run_test fathom_review_keeps_the_default_model_for_an_ordinary_change
 run_test fathom_review_waits_for_the_labelling_run_before_reading_the_labels
@@ -5992,6 +6131,10 @@ run_test apply_pull_request_labels_posts_the_labels_the_change_earns
 run_test apply_pull_request_labels_posts_nothing_for_an_ordinary_change
 run_test apply_pull_request_labels_reports_a_write_it_was_refused
 run_test fathom_review_anchors_a_finding_to_its_line
+run_test fathom_review_settles_a_late_pass_carrying_only_deferred_findings
+run_test fathom_review_holds_a_late_pass_that_still_found_something_owed
+run_test fathom_review_holds_an_early_pass_carrying_only_deferred_findings
+run_test fathom_review_holds_a_pass_whose_count_is_not_a_number
 run_test fathom_review_moves_a_finding_with_no_line_into_the_body
 run_test fathom_review_approves_when_it_finds_nothing
 run_test fathom_review_reports_the_files_a_review_never_named

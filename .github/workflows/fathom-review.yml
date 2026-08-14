@@ -132,6 +132,10 @@ jobs:
       # Whether somebody asked for this review rather than a push starting it. The submission step is
       # what records it on the review it publishes, and the gate of a later run is what reads it back.
       explicit: ${{ steps.gate.outputs.explicit }}
+      # How many automatic reviews this pull request already carries, which is how many passes it has
+      # had before this one. The submission step reads it to decide whether a pass this late may
+      # still withhold approval over findings that are paid for later.
+      automatic_reviews: ${{ steps.gate.outputs.automatic_reviews }}
       # The gate picks the default and the step that reads the labels may raise it, so the answer is
       # the second value where one exists. A skipped step has no output at all, which GitHub renders
       # as the empty string and this expression treats as *nothing was decided here* — the same shape
@@ -327,7 +331,15 @@ jobs:
           # says so with a label or a comment.
           automatic_review_limit=6
 
-          if [[ "$review" == 'true' && "$explicit" != 'true' ]]; then
+          # Counted whenever a review is going to happen rather than only when the ceiling could
+          # refuse it, because two decisions read this number now. The ceiling is one; the other is
+          # the settling threshold in the submission step, which needs to know how many passes this
+          # pull request has already had in order to stop a late pass withholding approval over
+          # findings that are paid for later. A requested review is still never refused by the
+          # ceiling below, and it still never joins the count.
+          automatic_reviews='0'
+
+          if [[ "$review" == 'true' ]]; then
             # `--paginate` runs `--jq` once per page, so the per-page counts are summed rather than
             # read as one number. The login reaches jq through the environment rather than through
             # string interpolation, so the `[bot]` brackets never arrive as filter syntax.
@@ -360,7 +372,7 @@ jobs:
                 | jq -s 'add // 0'
             ) || automatic_reviews='0'
 
-            if (( automatic_reviews >= automatic_review_limit )); then
+            if [[ "$explicit" != 'true' ]] && (( automatic_reviews >= automatic_review_limit )); then
               review='false'
               reason="the automatic review ceiling of ${automatic_review_limit} is reached; ${REVIEWER_LOGIN} has published ${automatic_reviews} automatic reviews on this pull request, so label it fathom-review or comment fathom-review to review it again"
             fi
@@ -371,6 +383,7 @@ jobs:
             echo "pull_request_number=${PULL_REQUEST_NUMBER}"
             echo "model=${model}"
             echo "explicit=${explicit}"
+            echo "automatic_reviews=${automatic_reviews}"
           } >> "$GITHUB_OUTPUT"
 
           echo "Review: ${review} (${reason})."
@@ -739,6 +752,13 @@ jobs:
           # contract can take is a bound a later change can delete with every contract still green.
           HEAD_CONTENT_LIMIT_SECONDS: '120'
           CLOSING_ISSUE_LIMIT_SECONDS: '120'
+          # The same login the gate counts by, restated here because this step asks the same question
+          # of a different endpoint: which of the reviews on this pull request are this App's own.
+          REVIEWER_LOGIN: 'fathom-reviewer[bot]'
+          # Whether somebody asked for this review. A requested pass is deliberately unbounded — a
+          # maintainer asking for one wants the change looked at again rather than only the part of
+          # it that moved — so the narrowing list below is written for an automatic pass alone.
+          EXPLICIT: ${{ needs.decide.outputs.explicit }}
         run: |
           set -euo pipefail
 
@@ -958,6 +978,36 @@ jobs:
             | jq -s --argjson limit "$comment_limit" --argjson bytes "$comment_body_limit" \
                  '[.[-$limit:][] | .body |= .[0:$bytes]]' \
             > "$REVIEW_DIRECTORY/reviews.json"
+
+          # What has moved since this App last published a review here, which is the whole of what a
+          # later pass is for. Without it every pass judges the entire change again and a fourth one
+          # reports a file no fix touched, which is what #839 did: rounds one to three stayed in the
+          # changelog, and rounds four, five, and six each opened a page nothing in the change had
+          # moved and raised a P1 there. The reviewer still *reads* everything — the coverage ledger
+          # is unchanged and a file it cannot see is a file it cannot judge in context — but what it
+          # may conclude is bounded by this list.
+          #
+          # The comparison is three-dot against the last reviewed head, so a branch rebased between
+          # passes reports what arrived from the base as moved too. That is not noise: the code the
+          # previous pass gave a verdict on is genuinely not the code in front of this one.
+          #
+          # The file is absent rather than empty when there is no previous review, and the prompt
+          # reads that as the first pass, where nothing is out of scope. A failed comparison takes the
+          # same path deliberately: a bound derived from an API error would silence findings on files
+          # that did move, so a run that cannot establish the bound reviews without it.
+          last_reviewed_head="$(
+            jq -r --arg reviewer "$REVIEWER_LOGIN" '
+              [.[] | select(.author == $reviewer) | .commit_id // ""]
+              | map(select(. != "")) | last // ""
+            ' "$REVIEW_DIRECTORY/reviews.json"
+          )" || last_reviewed_head=''
+
+          if [[ "$EXPLICIT" != 'true' && -n "$last_reviewed_head" ]]; then
+            "$GITHUB_API_SCRIPT" "repos/${REPOSITORY}/compare/${last_reviewed_head}...${head_sha}" \
+              --jq '.files[]?.filename' \
+              > "$REVIEW_DIRECTORY/changed-since-last-review.txt" \
+              || rm -f "$REVIEW_DIRECTORY/changed-since-last-review.txt"
+          fi
 
           "$GITHUB_API_SCRIPT" "repos/${REPOSITORY}/issues/${PULL_REQUEST_NUMBER}/comments?per_page=100" --paginate \
             --jq '.[] | {author: .user.login, created_at, body}' \
@@ -1195,19 +1245,19 @@ jobs:
           # in that directory today, and this is what keeps that true if a later change puts
           # something there.
           #
-          # `--effort xhigh` is what buys the two-pass sweep the prompt asks for. Effort decides how
-          # much the model thinks and how much work it does before answering, and a review is the
-          # shape of task where that matters most: the cheap failure is a reviewer that reads the
-          # first few files closely, finds something, and coasts.
+          # `--effort high` decides how much the model thinks and how much work it does before
+          # answering. A review is the shape of task where that matters: the cheap failure is a
+          # reviewer that reads the first few files closely, finds something, and coasts.
           #
-          # This was `high` — a deliberate step down from the `xhigh` Claude Code applies by
-          # default — on the argument that the extra depth had not been measured against a personal
-          # subscription with no per-run ceiling. #811 is that measurement, and it went the other
-          # way. Six rounds ran on one change, and two of them reported first-commit code that three
-          # earlier passes had read and let through: `EmailChunkWriter.cs`, 68 added lines, first
-          # reported in the fourth review, and a claim in `arrival-pipeline.md` in the fifth. A
-          # round that finds nothing new costs a whole run of collection, model time, and the
-          # author answering it, so the depth is cheaper than the round it replaces.
+          # This was `xhigh` for a day, on #811's argument that a round finding nothing new costs
+          # more than the depth that would have avoided it. The measurement over the day that
+          # followed went the other way, and it is in `docs/operations/agent-workflow.md` § *What a
+          # review costs*: median run 5.1 minutes to 8.7, longest 16.8 to 29.2, eleven of
+          # thirty-five runs past twenty minutes where none had been, and approvals falling from 47%
+          # of reviews to 29%. The depth did not buy earlier convergence; it bought a reviewer with
+          # the budget to keep finding one more thing, which the coverage ledger then pointed at the
+          # whole change every pass. Reading everything is still right, and it is the narrowing this
+          # change adds — not a shallower pass — that stops the widening.
           #
           # `Agent` is what lets the first pass be spread over subagents instead of read in one
           # sitting, which is the other half of the same measurement: a session reading thirty files
@@ -1238,7 +1288,7 @@ jobs:
           # to reach a CLI option from here.
           claude_args: |
             --model ${{ needs.decide.outputs.model }}
-            --effort xhigh
+            --effort high
             --allowedTools "Read,Grep,Glob,Agent"
             --setting-sources user
             --json-schema '${{ steps.prompt.outputs.schema }}'
@@ -1451,6 +1501,11 @@ jobs:
           # submitted a review and when, never what asked for it, and the gate of a later run needs
           # exactly that to count the automatic passes without counting the requested ones.
           TRIGGER_MARKER: ${{ needs.decide.outputs.explicit == 'true' && env.REQUESTED_REVIEW_MARKER || env.AUTOMATIC_REVIEW_MARKER }}
+          # How many passes this pull request has already had, which is what decides whether a
+          # review carrying nothing but P3 findings still withholds approval. The gate counts it and
+          # this step spends it; nothing recomputes it here, so the number the ceiling reasons about
+          # and the number the threshold reasons about cannot come to disagree.
+          AUTOMATIC_REVIEWS: ${{ needs.decide.outputs.automatic_reviews }}
         run: |
           set -euo pipefail
 
@@ -1571,6 +1626,42 @@ jobs:
             exit 0
           fi
 
+          # Past this many passes a change settles on what it has. A P1 breaks something and a P2 is
+          # owed by a rule, so either withholds approval however late it arrives; a P3 is paid for
+          # later by definition, and a review that holds a change for one on its fourth pass is
+          # spending a round on work its own severity says can wait. The findings are still published
+          # — as inline comments under the approval, where the thread-resolution rule the `main`
+          # ruleset carries still makes each one answerable — so nothing is hidden and nothing is
+          # postponed silently. What changes is only which verdict they arrive under.
+          #
+          # Three is the count because it is the pass a change should be settling on. #839 ran six and
+          # its last three each raised a P1 on a page no fix had touched, which is what the narrowing
+          # above removes; this is the other half of the same problem — the passes that stay in scope
+          # and still find one more sentence to sharpen.
+          #
+          # A requested review is not exempt. A maintainer asking for a pass this late wants the
+          # verdict rather than another round, and the number counts automatic passes alone, so
+          # asking never advances a pull request toward its own threshold.
+          settle_after_passes=3
+
+          # Read defensively: the output is a string from another job, and an unset or malformed one
+          # must leave the stricter verdict in place rather than approving on a value nobody wrote.
+          automatic_reviews="${AUTOMATIC_REVIEWS:-0}"
+          [[ "$automatic_reviews" =~ ^[0-9]+$ ]] || automatic_reviews='0'
+
+          verdict_event='COMMENT'
+          verdict_heading='# NEEDS CHANGES'
+          verdict_output='changes_requested'
+          settled_note=''
+
+          if (( automatic_reviews >= settle_after_passes )) \
+            && [[ "$(jq '[(.findings // [])[] | select(.severity != "P3")] | length' "$findings_file")" == '0' ]]; then
+            verdict_event='APPROVE'
+            verdict_heading='# APPROVED'
+            verdict_output='approved'
+            settled_note="This is pass $((automatic_reviews + 1)) and nothing above P3 is left, so the change is approved carrying the findings below rather than held for them."
+          fi
+
           # Anchors are checked against the same patches the reviewer was given, so a line that has
           # since moved cannot make the API reject the whole review. A finding whose anchor does not
           # survive is not discarded; it moves into the body, where it still reaches the author.
@@ -1593,7 +1684,10 @@ jobs:
              --arg commit "$HEAD_SHA" \
              --arg truncation "$(cat "$REVIEW_DIRECTORY/truncation.txt")" \
              --arg coverage "$(cat "$COVERAGE_FILE" 2>/dev/null || true)" \
-             --arg marker "$TRIGGER_MARKER" '
+             --arg marker "$TRIGGER_MARKER" \
+             --arg event "$verdict_event" \
+             --arg heading "$verdict_heading" \
+             --arg settled "$settled_note" '
             def allowed($path): $lines[0] | map(select(.filename == $path)) | .[0].lines // [];
             def anchored($finding):
               (allowed($finding.path) | index($finding.line)) != null
@@ -1627,11 +1721,12 @@ jobs:
             | ($findings - $kept) as $dropped
             | {
                 commit_id: $commit,
-                event: "COMMENT",
+                event: $event,
                 body: (
-                  ["# NEEDS CHANGES", ""]
+                  [$heading, ""]
                   + [(.summary // "")]
                   + ["", "**Findings** — \(tally($findings))"]
+                  + (if $settled == "" then [] else ["", $settled] end)
                   + (if $truncation == "" then [] else ["", $truncation] end)
                   + (if $coverage == "" then [] else ["", $coverage] end)
                   + (if ($dropped | length) == 0 then [] else
@@ -1662,10 +1757,10 @@ jobs:
           gh api "repos/${REPOSITORY}/pulls/${PULL_REQUEST_NUMBER}/reviews" \
             --method POST --input "$payload_file" --silent
 
-          echo 'verdict=changes_requested' >> "$GITHUB_OUTPUT"
+          echo "verdict=${verdict_output}" >> "$GITHUB_OUTPUT"
 
-          printf 'Posted a review with %s inline findings.\n' \
-            "$(jq -r '.comments | length' "$payload_file")"
+          printf 'Posted a %s review with %s inline findings.\n' \
+            "$verdict_event" "$(jq -r '.comments | length' "$payload_file")"
 
   # The verdict as the board reads it. `Status` is the lifecycle field the owner's views group by,
   # and until this job existed the two values a review decides had no writer at all: the built-in
