@@ -1177,7 +1177,18 @@ finding belongs on a path that file names, or on something that stopped being tr
 whose subject moved — and the second kind names the changed path that made it
 wrong, so the connection is on the record. Everything else stays context: the
 ledger is unchanged, and a file the reviewer did not open is one it cannot judge
-the changed files against. The file is absent on a first pass, on a review
+the changed files against.
+
+`obligations.json` is outside that bound, and the exception is what keeps the
+narrowing from contradicting the rubric beside it. That index is derived from the
+whole of `files.json` and the declared `describes:` markers, so it is the same
+list on the sixth pass as on the first — it cannot widen, which is the only thing
+the narrowing exists to stop. Without the exception a fourth pass would be shown a
+row saying a page describing a changed file is not in the change, and told in the
+same prompt not to raise it because that file had not moved since the last push.
+It is also the one rubric where the defect is what the change is *missing*, and
+nothing a later push contains can put a missing page or a missing test in front of
+the reviewer. The file is absent on a first pass, on a review
 somebody asked for, and where the comparison failed, and each of those puts the
 whole change back in scope — a bound derived from an API error would silence
 findings on files that did move.

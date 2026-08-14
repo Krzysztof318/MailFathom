@@ -149,6 +149,14 @@ What that changes:
 - Everything else is context, and reading it is still required: the coverage ledger is
   unchanged and a file you did not open is a file you cannot judge the changed ones
   against. What the list bounds is the verdict, never the reading.
+- **`obligations.json` is outside this bound.** Work through every row of it on this pass
+  exactly as on the first, and raise what it turns out to owe whether or not the path it
+  names moved since your last review. The reason the bound does not apply is that this
+  list cannot widen: a step derives it from the whole of `files.json` and the declared
+  markers, so it is the same list on the sixth pass as on the first, and a row of it is a
+  gap in what the change owes the rest of the repository rather than something you noticed
+  by looking further afield. It is also the one rubric where the defect is what the change
+  is *missing*, which no later push can put in front of you.
 - A defect you can see on a path nothing has moved is one the earlier passes read and let
   through. Leaving it is deliberate. A change that has been reviewed three times and is
   still collecting first findings on untouched files is a review that never converges,
