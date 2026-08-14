@@ -54,6 +54,24 @@ public sealed class SecretContentScannerTests
         new("ProviderToken", SyntheticSecrets.PackageRegistryToken, SyntheticSecrets.PackageRegistryToken),
         new("ProviderToken", SyntheticSecrets.MailPlatformKey, SyntheticSecrets.MailPlatformKey),
         new("CloudAccessKey", SyntheticSecrets.CloudServiceKey, SyntheticSecrets.CloudServiceKey),
+
+        // Both branches of each rule that alternates between credentials of different shapes. One lookahead shared
+        // across such a rule forbids the union of its branches' alphabets, which drops a token whose own alphabet had
+        // already ended — so a row here per branch is what tells the two apart. One passing says nothing about the
+        // other, which is the whole reason they are separate rows rather than one.
+        new("ProviderToken", SyntheticSecrets.EdgePlatformToken, SyntheticSecrets.EdgePlatformToken),
+        new("ProviderToken", SyntheticSecrets.EdgePlatformBase64Token, SyntheticSecrets.EdgePlatformBase64Token),
+        new("ProviderToken", SyntheticSecrets.ModelProviderKey, SyntheticSecrets.ModelProviderKey),
+        new("ProviderToken", SyntheticSecrets.ModelProviderProjectKey, SyntheticSecrets.ModelProviderProjectKey),
+        new("ProviderToken", SyntheticSecrets.SecretStoreToken, SyntheticSecrets.SecretStoreToken),
+        new("ProviderToken", SyntheticSecrets.SecretStoreLegacyToken, SyntheticSecrets.SecretStoreLegacyToken),
+
+        // The three whose own alphabet carries the full stop. A value ending a sentence is matched one character long,
+        // because the quantifier takes the stop before the lookahead is reached, and the surrounding sweep asserts a
+        // region covering the credential rather than equalling it for exactly this reason.
+        new("ProviderToken", SyntheticSecrets.DatabasePlatformApiToken, SyntheticSecrets.DatabasePlatformApiToken),
+        new("ProviderToken", SyntheticSecrets.DatabasePlatformOauthToken, SyntheticSecrets.DatabasePlatformOauthToken),
+        new("ProviderToken", SyntheticSecrets.DatabasePlatformPassword, SyntheticSecrets.DatabasePlatformPassword),
     ];
 
     private readonly FakeTimeProvider timeProvider = new(ScannedAt);
@@ -138,6 +156,50 @@ public sealed class SecretContentScannerTests
         // character into the match and one more character is redacted than had to be. That is the direction this
         // feature errs in deliberately: a reader loses a full stop, and nobody loses the credential.
         var covering = Regions(findings, text, category)
+            .Where(region => region.Contains(credential, StringComparison.Ordinal))
+            .ToArray();
+
+        Assert.NotEmpty(covering);
+    }
+
+    /// <summary>Each branch of an alternating rule ends where its own alphabet does, not where its siblings' do.</summary>
+    /// <remarks>
+    /// The character after each value below belongs to another branch of the same rule and not to the branch that
+    /// matched it. A rule closing all of its branches with one shared lookahead forbids their union, so every one of
+    /// these reads as text carrying no credential at all — which is why the six surroundings above cannot stand in for
+    /// this test: a full stop and a bracket are outside every branch's alphabet and pass either way.
+    /// </remarks>
+    [Theory]
+    [InlineData(nameof(SyntheticSecrets.EdgePlatformToken), '+')]
+    [InlineData(nameof(SyntheticSecrets.EdgePlatformToken), '=')]
+    [InlineData(nameof(SyntheticSecrets.EdgePlatformBase64Token), '-')]
+    [InlineData(nameof(SyntheticSecrets.EdgePlatformBase64Token), '_')]
+    [InlineData(nameof(SyntheticSecrets.ModelProviderKey), '-')]
+    [InlineData(nameof(SyntheticSecrets.ModelProviderKey), '_')]
+    [InlineData(nameof(SyntheticSecrets.SecretStoreLegacyToken), '-')]
+    [InlineData(nameof(SyntheticSecrets.SecretStoreLegacyToken), '_')]
+    public async Task ScanAsync_ACredentialFollowedByAnotherBranchsAlphabet_IsStillFound(
+        string credentialName,
+        char following)
+    {
+        // Arrange
+        var scanner = this.Scanner();
+        var credential = credentialName switch
+        {
+            nameof(SyntheticSecrets.EdgePlatformToken) => SyntheticSecrets.EdgePlatformToken,
+            nameof(SyntheticSecrets.EdgePlatformBase64Token) => SyntheticSecrets.EdgePlatformBase64Token,
+            nameof(SyntheticSecrets.ModelProviderKey) => SyntheticSecrets.ModelProviderKey,
+            nameof(SyntheticSecrets.SecretStoreLegacyToken) => SyntheticSecrets.SecretStoreLegacyToken,
+            _ => throw new ArgumentOutOfRangeException(nameof(credentialName), credentialName, "No such credential."),
+        };
+
+        var text = "The token is " + credential + following + " — rotate it.";
+
+        // Act
+        var findings = await scanner.ScanAsync(text, TestContext.Current.CancellationToken);
+
+        // Assert
+        var covering = Regions(findings, text, "ProviderToken")
             .Where(region => region.Contains(credential, StringComparison.Ordinal))
             .ToArray();
 

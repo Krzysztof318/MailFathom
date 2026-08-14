@@ -165,7 +165,7 @@ public sealed class SensitiveDecoyCatalogTests
         Assert.Equal(rules.Distinct().Count(), rules.Length);
     }
 
-    /// <summary>Three of the four placements are cut from the sentence at the placeholder, so every sentence needs one.</summary>
+    /// <summary>Every placement finds the value's position by the placeholder, so a sentence without one carries none.</summary>
     [Fact]
     public void Kinds_EverySentence_CarriesThePlaceholderThePlacementsAreCutAt()
     {

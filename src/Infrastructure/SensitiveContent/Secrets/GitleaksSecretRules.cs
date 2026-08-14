@@ -41,6 +41,13 @@ namespace MailFathom.Infrastructure.SensitiveContent.Secrets;
 /// exclude a delimiter.
 /// </para>
 /// <para>
+/// Where a rule alternates between credentials of different shapes, the lookahead belongs <i>inside</i> each branch. One
+/// shared across them would forbid the union of their alphabets, so a token followed by a character its own branch never
+/// contained would fail the lookahead, find nothing to backtrack into, and go unreported — the very miss this
+/// transformation exists to remove, reintroduced by the transformation itself. <c>flyio-access-token</c>,
+/// <c>openai-api-key</c>, and <c>vault-service-token</c> are the three rules that alternate this way.
+/// </para>
+/// <para>
 /// Two rules keep a trailing form the transformation does not touch, because neither was ever blind to punctuation:
 /// <c>openshift-user-token</c> ends in <c>(?:[^\w-]|\z)</c>, which succeeds before any character outside the
 /// credential's alphabet, and <c>perplexity-api-key</c> carries <c>\b</c> as a further alternative of the delimiter
@@ -327,7 +334,9 @@ internal static partial class GitleaksSecretRules
     [GeneratedRegex(@"FLWSECK_TEST-(?i)[a-h0-9]{32}-X", SecretRegexEngine.MatchOptions, SecretRegexEngine.MatchTimeoutMilliseconds)]
     private static partial Regex FlutterwaveSecretKey { get; }
 
-    [GeneratedRegex(@"\b(?:fo1_[\w-]{43}|fm1[ar]_[a-zA-Z0-9+\/]{100,}={0,3}|fm2_[a-zA-Z0-9+\/]{100,}={0,3})(?![\w+/=\-])", SecretRegexEngine.MatchOptions, SecretRegexEngine.MatchTimeoutMilliseconds)]
+    // One lookahead per branch, because the three spell a credential in different alphabets: a shared one would forbid
+    // their union and drop a token whose own alphabet had ended, which is the miss this rule was rewritten to stop.
+    [GeneratedRegex(@"\b(?:fo1_[\w-]{43}(?![\w-])|fm1[ar]_[a-zA-Z0-9+\/]{100,}={0,3}(?![a-zA-Z0-9+/])|fm2_[a-zA-Z0-9+\/]{100,}={0,3}(?![a-zA-Z0-9+/]))", SecretRegexEngine.MatchOptions, SecretRegexEngine.MatchTimeoutMilliseconds)]
     private static partial Regex FlyioAccessToken { get; }
 
     [GeneratedRegex(@"fio-u-(?i)[a-z0-9\-_=]{64}", SecretRegexEngine.MatchOptions, SecretRegexEngine.MatchTimeoutMilliseconds)]
@@ -438,7 +447,9 @@ internal static partial class GitleaksSecretRules
     [GeneratedRegex(@"\bAPI-[A-Z0-9]{26}(?![A-Z0-9])", SecretRegexEngine.MatchOptions, SecretRegexEngine.MatchTimeoutMilliseconds)]
     private static partial Regex OctopusDeployApiKey { get; }
 
-    [GeneratedRegex(@"\b(?:sk-(?:proj|svcacct|admin)-(?:[A-Za-z0-9_-]{74}|[A-Za-z0-9_-]{58})T3BlbkFJ(?:[A-Za-z0-9_-]{74}|[A-Za-z0-9_-]{58})\b|sk-[a-zA-Z0-9]{20}T3BlbkFJ[a-zA-Z0-9]{20})(?![A-Za-z0-9_\-])", SecretRegexEngine.MatchOptions, SecretRegexEngine.MatchTimeoutMilliseconds)]
+    // The project branch keeps the word boundary gitleaks gave it, which already ends the credential where its own
+    // alphabet does; the legacy branch is alphanumeric only and states that itself rather than borrowing the wider set.
+    [GeneratedRegex(@"\b(?:sk-(?:proj|svcacct|admin)-(?:[A-Za-z0-9_-]{74}|[A-Za-z0-9_-]{58})T3BlbkFJ(?:[A-Za-z0-9_-]{74}|[A-Za-z0-9_-]{58})\b|sk-[a-zA-Z0-9]{20}T3BlbkFJ[a-zA-Z0-9]{20}(?![a-zA-Z0-9]))", SecretRegexEngine.MatchOptions, SecretRegexEngine.MatchTimeoutMilliseconds)]
     private static partial Regex OpenaiApiKey { get; }
 
     [GeneratedRegex(@"\b(?<refine>sha256~[\w-]{43})(?:[^\w-]|\z)", SecretRegexEngine.MatchOptions, SecretRegexEngine.MatchTimeoutMilliseconds)]
@@ -552,6 +563,8 @@ internal static partial class GitleaksSecretRules
     [GeneratedRegex(@"\bhvb\.[\w-]{138,300}(?![\w\-])", SecretRegexEngine.MatchOptions, SecretRegexEngine.MatchTimeoutMilliseconds)]
     private static partial Regex VaultBatchToken { get; }
 
-    [GeneratedRegex(@"\b(?:hvs\.[\w-]{90,120}|s\.(?i:[a-z0-9]{24}))(?![\w\-])", SecretRegexEngine.MatchOptions, SecretRegexEngine.MatchTimeoutMilliseconds)]
+    // The legacy branch is alphanumeric where the current one also takes an underscore and a hyphen, and its lookahead
+    // spells both cases because the case-insensitive group above it ends before the lookahead begins.
+    [GeneratedRegex(@"\b(?:hvs\.[\w-]{90,120}(?![\w-])|s\.(?i:[a-z0-9]{24})(?![a-zA-Z0-9]))", SecretRegexEngine.MatchOptions, SecretRegexEngine.MatchTimeoutMilliseconds)]
     private static partial Regex VaultServiceToken { get; }
 }

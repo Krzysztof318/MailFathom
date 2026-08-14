@@ -54,11 +54,15 @@ internal sealed record SensitiveDecoyKind(
 
     /// <summary>Writes the sentence with the value placed the way this planting asks for.</summary>
     /// <remarks>
-    /// The three placements that are not the sentence's own are derived from it rather than written a second time per
-    /// kind. Every sentence here states its recogniser's context words before the placeholder, so cutting the sentence
-    /// at the placeholder keeps everything a recogniser scores on and drops only the words that followed the value.
-    /// Writing a second sentence per kind and per placement would be forty-eight sentences to keep true instead of
-    /// twelve, and the words after the value are the ones that carry nothing.
+    /// Every placement is derived from the one sentence rather than written a second time per kind, in one of two ways.
+    /// <see cref="SensitiveDecoyPlacement.MidSentence" /> and <see cref="SensitiveDecoyPlacement.InBrackets" /> keep the
+    /// whole sentence and only replace the placeholder where it stands, so what follows the value is the sentence's own
+    /// next word or the closing bracket. <see cref="SensitiveDecoyPlacement.ClosingTheSentence" /> and
+    /// <see cref="SensitiveDecoyPlacement.InATableCell" /> cut at the placeholder and keep only what preceded it, which
+    /// is what lets the value be the last thing on its line. That cut is safe because every sentence here states its
+    /// recogniser's context words before the placeholder, so it drops only the words that followed the value and those
+    /// are the ones carrying nothing. Writing a second sentence per kind and per placement would be forty-eight
+    /// sentences to keep true instead of twelve.
     /// </remarks>
     private string Write(string value, SensitiveDecoyPlacement placement) => placement switch
     {
