@@ -825,9 +825,10 @@ the model decision keeps the default model, the settle loop collects at once, an
 an issue the run could not fetch is recorded as its number with a null body and
 null labels. Each is argued at its own call site, and each is a place where the
 retries narrow how often a read degrades without removing it. The head-content
-fetch is the one that degrades *silently*: its standard error is discarded because
 a path the head does not carry is an ordinary outcome of that loop, so a file
 dropped after four failed attempts leaves the same gap as one that was never
+there. The prompt names an unfetchable path among the causes of a missing
+`head/<path>`, so what stays silent is how many paths it happened to.
 there — which the reviewer reads as content too large to collect.
 
 **Three loops call once per record, and a retry budget is per call**, so each
