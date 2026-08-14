@@ -21,9 +21,9 @@ Two properties hold everywhere and are worth knowing before anything is installe
 
 ## The state of the release
 
-`0.5.0` is the current release. The container image is published to both registries, the Helm chart is published, and
+`0.6.0` is the current release. The container image is published to both registries, the Helm chart is published, and
 the schema file you apply and the `mfctl` binaries are attached to the GitHub release — so an installation starts from
-a versioned artifact rather than from a checkout. Where a page describes something that arrives later than `0.5.0`, it
+a versioned artifact rather than from a checkout. Where a page describes something that arrives later than `0.6.0`, it
 says so and names the release, rather than describing it as though you could already download it.
 
 ## The path
