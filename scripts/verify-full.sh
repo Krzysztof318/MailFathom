@@ -103,8 +103,11 @@ verification_digest="$(resolve_verification_digest)"
 # reached, so a record can never stand in for it. Folding the base in would instead retire a record
 # every time somebody else merged, which is the one thing that happens constantly here and proves
 # nothing about this branch's own content.
+expensive_steps_ran='yes'
+
 if [[ -z "${VERIFY_FORCE:-}" ]] && verification_already_recorded 'verify-full' "$verification_digest"; then
   report_verification_already_recorded 'verify-full' 'verify-full'
+  expensive_steps_ran=''
   # The whitespace checks below still run: they are the one part of this gate that reads the base
   # rather than the tree, and they cost nothing.
 else
@@ -212,4 +215,10 @@ git diff --check "$base_remote/main..HEAD"
 git diff --cached --check
 git diff --check
 
-record_verification 'verify-full' "$verification_digest"
+# Only a run that did the work re-stamps the record. A skipped run rewriting it would push the
+# recorded time forward on every rerun, and that time is the whole evidence the skip message offers:
+# it has to name the run that actually built, tested, and measured this content, not the last one
+# that agreed it had already been done.
+if [[ -n "$expensive_steps_ran" ]]; then
+  record_verification 'verify-full' "$verification_digest"
+fi

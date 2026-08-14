@@ -431,6 +431,30 @@ verify_fast_skips_a_tree_it_already_proved() {
   assert_file_content '' "$invocation_log"
 }
 
+# The recorded time is the whole evidence a skip offers, so it has to name the run that did the work.
+# A skipped run that re-stamped it would push that time forward on every rerun until it described
+# nothing. The sentinel is what makes this deterministic: two runs a second apart would otherwise
+# write the same timestamp and the contract would pass without asserting anything.
+verify_full_leaves_the_record_alone_when_it_skips() {
+  local record="$repository_root/artifacts/verify/verify-full.digest"
+  local digest
+
+  (
+    cd "$repository_root"
+    "$scripts_directory/verify-full.sh"
+  )
+
+  digest="$(head --lines=1 "$record")"
+  printf '%s\nthe-run-that-did-the-work\n' "$digest" > "$record"
+
+  (
+    cd "$repository_root"
+    "$scripts_directory/verify-full.sh"
+  )
+
+  assert_file_content "$digest"$'\nthe-run-that-did-the-work' "$record"
+}
+
 verify_fast_runs_again_once_the_tree_changed() {
   (
     cd "$repository_root"
@@ -5542,6 +5566,7 @@ run_test verify_full_fails_when_workflow_contracts_fail_beside_a_running_chain
 run_test verify_full_stops_the_contract_suite_once_the_chain_failed
 run_test verify_full_relays_what_the_contract_suite_printed
 run_test verify_fast_skips_a_tree_it_already_proved
+run_test verify_full_leaves_the_record_alone_when_it_skips
 run_test verify_fast_runs_again_once_the_tree_changed
 run_test verify_fast_accepts_the_record_the_full_gate_wrote
 run_test verify_full_refuses_the_fast_loop_record_except_for_the_formatting_pass

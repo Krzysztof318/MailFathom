@@ -81,13 +81,17 @@ bash scripts/verify-full.sh
 ```
 
 The full gate rejects remaining untracked files, fetches `origin main` and
-requires the branch to contain that freshly fetched base, runs the workflow
-contract suite where the change can have moved something it asserts, restores
-repository tools and the solution, builds Release, executes all unit tests
-through the aggregate 85% coverage target, verifies formatting, and checks
-committed branch changes, staged changes, and unstaged changes for whitespace
-errors. It stops at the first failure. Restore, build, test, coverage, and
-formatting can create ignored local artifacts, and the fetch updates
+requires the branch to contain that freshly fetched base, restores repository
+tools and the solution, builds Release, executes all unit tests through the
+aggregate 85% coverage target, verifies formatting, and checks committed branch
+changes, staged changes, and unstaged changes for whitespace errors. Beside all
+of that it runs the workflow contract suite, where the change can have moved
+something it asserts. That chain stops at its own first failure; the suite is the
+one step outside it, so a suite that fails does not stop a build already running
+beside it, and a chain that fails stops the suite rather than waiting for it. The
+paragraph below states what each of those buys. Restore, build, test, coverage,
+and formatting can create ignored local artifacts, the gate records what it
+verified under `artifacts/verify/`, and the fetch updates
 `refs/remotes/origin/main`, but the scripts do not commit, push, or change
 branches.
 
