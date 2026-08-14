@@ -33,7 +33,7 @@ release claims it shipped.
 
 The sixth release, and the first one that **does something with your mail rather than only reading it**. Rules you write
 in a configuration file move, copy, delete, and mark messages as read; a spam classification files junk on the server;
-and a durable queue underneath both survives a restart without repeating work or losing it. The rules and the
+and a durable queue underneath both means a crash loses none of it. The rules and the
 classification are off until you turn them on — the queue beneath them runs on every instance and is switched off only
 for a replica serving reads — and a rule is only ever authored in the file you provisioned, so what an instance will do
 to a mailbox is reviewable in a diff before it does anything.
@@ -133,8 +133,9 @@ gets no verdict for the mail in it.
   provider, and never offered to the rule set. **A message still waiting for a verdict is held back only until
   `SpamClassification:ClassificationWait` expires**, fifteen minutes unless you say otherwise, so a wedged scanner or a
   deep queue does not stall the index: past the wait the message is derived from like any other, and a spam verdict
-  arriving afterwards discards the passages and vectors it produced, in the transaction that records the verdict. Budget
-  the provider spend accordingly if you raise the wait or run the scanner near its limit. Nothing else is written down,
+  arriving afterwards discards the passages and vectors it produced, in the transaction that records the verdict. **A
+  shorter wait therefore costs more**, since more unscored mail is embedded and then stripped — budget the provider spend
+  accordingly if you lower it or run the scanner near its limit. Nothing else is written down,
   so dragging a message out of junk in any mail client is the whole of the correction
   ([#805](https://github.com/Krzysztof318/MailFathom/pull/805)).
 
@@ -181,8 +182,10 @@ reads, or answers from it. A folder mapped with `Synchronize: false` is still a 
   ([#789](https://github.com/Krzysztof318/MailFathom/pull/789)).
 
 **Durable background work, with the queue an operator can see and act on.** Jobs are persisted, leased, and claimed one
-statement at a time, so a crash neither strands work nor repeats it; an attempt runs under a bounded timeout with its
-lease renewed while it works ([#797](https://github.com/Krzysztof318/MailFathom/pull/797),
+statement at a time, so work in flight when a process dies is picked up again rather than stranded — **execution is
+at-least-once**, and every handler is registered on the promise that running it twice with one payload is the same as
+running it once, so the second attempt a crash produces is safe rather than absent. An attempt runs under a bounded
+timeout with its lease renewed while it works ([#797](https://github.com/Krzysztof318/MailFathom/pull/797),
 [#800](https://github.com/Krzysztof318/MailFathom/pull/800)).
 
 - **Failure is classified rather than counted.** What is transient is retried with jittered backoff up to
@@ -256,8 +259,8 @@ end to end from the identity provider's side ([#700](https://github.com/Krzyszto
 `org.opencontainers.image.documentation` label, the chart's install notes, `mfctl status` for the version the
 *deployment* reports, and the MCP server's own instructions to an initializing client
 ([#798](https://github.com/Krzysztof318/MailFathom/pull/798)). The site publishes each version's pages as artifacts an
-AI agent can read as well: a map at the version's root, the Markdown source beside every rendered page, and one file per
-reading path ([#793](https://github.com/Krzysztof318/MailFathom/pull/793)).
+AI agent can read as well: a map at the version's root, the Markdown source beside every documentation page the map
+links — the generated API reference is published as pages only — and one file per reading path ([#793](https://github.com/Krzysztof318/MailFathom/pull/793)).
 
 **`mfctl` installs on Linux with one command**, which fetches the binary for the platform, verifies it against the
 checksum published beside it, and installs it into `~/.local/bin`. Where that directory is not already on your `PATH`
@@ -327,7 +330,7 @@ the script prints the `export PATH` line to add to a shell profile rather than e
   configuration `0.5.0` accepted still binds. What is new is that two folders of one account naming the same role, or an
   alias beginning `role:`, fail startup — neither of which a previous file could have relied on
   ([#729](https://github.com/Krzysztof318/MailFathom/pull/729)).
-- **Breaking (database schema)** — **twelve migrations**, adding eight tables for rules, their execution history, spam
+- **Twelve migrations**, adding eight tables for rules, their execution history, spam
   classifications and their signals, classification runs, jobs, and rule schedules; four columns on `stored_emails`,
   `email_search_documents`, and `backfill_positions`; and the indexes both need. One statement renames a column on a
   table this release itself introduced. **Nothing `0.5.0` reads changes shape**, so the schema step applies while
