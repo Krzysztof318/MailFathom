@@ -180,7 +180,7 @@ try
             // that follows carries a credential.
             //
             // Scoped away from the administrative routes rather than added globally. This middleware authenticates with
-            // the application's default scheme, pinned above to the MCP surface's, so an administrative request
+            // the application's default scheme, which HostComposition pins to the MCP surface's, so an administrative request
             // reaching it would have its credential compared against the MCP endpoint's keys before the administrative
             // policy ever ran. Nothing would be disclosed by that — the comparison is constant-time and the result is
             // discarded — but a credential provisioned for one surface must not be offered to the other's handlers.

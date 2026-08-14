@@ -1255,11 +1255,11 @@ internal static class HostComposition
         }
 
         // Both endpoints call AddAuthentication, and each call sets the application's one default scheme, so the default
-        // is otherwise whichever surface was registered last. It is stated here instead, because the thing that depends on
-        // it is not obvious from either registration: UseAuthentication below populates HttpContext.User with the default
-        // scheme, and the MCP rate limiter partitions on that user. Left to ordering, enabling the administrative endpoint
-        // would silently collapse every authenticated MCP client into the shared anonymous bucket — no failure, just a
-        // limit that stopped being per-client.
+        // is otherwise whichever surface was registered last. It is stated here instead, because the thing that depends
+        // on it is not obvious from either registration: UseAuthentication, which the request pipeline in Program.cs
+        // runs, populates HttpContext.User with the default scheme, and the MCP rate limiter partitions on that user.
+        // Left to ordering, enabling the administrative endpoint would silently collapse every authenticated MCP client
+        // into the shared anonymous bucket — no failure, just a limit that stopped being per-client.
         if (mcpEndpointSettings is { Enabled: true, RequiresAuthentication: true })
         {
             builder.Services.Configure<AuthenticationOptions>(

@@ -190,6 +190,12 @@ public sealed class HostCompositionTests
             .. services
                 .Where(IsWorthResolving)
                 .Where(static descriptor => !descriptor.ServiceType.IsGenericTypeDefinition)
+
+                // One resolution per registration group rather than per descriptor, because resolving a service type
+                // builds every implementation registered against it: a shape declaring a dozen hosted services would
+                // otherwise build all of them a dozen times, and one broken constructor among them would be reported
+                // once per sibling instead of once.
+                .DistinctBy(static descriptor => (descriptor.ServiceType, descriptor.ServiceKey))
                 .Select(descriptor => ReportResolving(scope.ServiceProvider, descriptor))
                 .OfType<string>(),
 
