@@ -55,7 +55,7 @@ internal static class SensitiveContentPlanMapper
 
     /// <summary>Composes the profile the personal-data analyzer is reached under.</summary>
     /// <param name="settings">The bound section, already judged by <see cref="SensitiveContentOptions.Validate" />.</param>
-    /// <returns>The profile the scanner and the startup probe both read.</returns>
+    /// <returns>The profile the scanner and the readiness probe both read.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="settings" /> is <see langword="null" />.</exception>
     /// <exception cref="InvalidOperationException">Thrown when the personal-data scanner is not switched on, or names no analyzer address.</exception>
     /// <remarks>

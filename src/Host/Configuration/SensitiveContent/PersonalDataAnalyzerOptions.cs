@@ -43,7 +43,7 @@ internal sealed class PersonalDataAnalyzerOptions
 
     /// <summary>Gets or sets the two-letter code of the language every request states.</summary>
     /// <remarks>
-    /// The analyzer selects a model by it and refuses a language it loaded none for, which is what the startup probe finds
+    /// The analyzer selects a model by it and refuses a language it loaded none for, which is what the readiness probe finds
     /// out. The default is the language the shipped analyzer image carries a model for; changing it means changing the
     /// analyzer's own configuration in the same edit.
     /// </remarks>

@@ -376,9 +376,10 @@ cp deploy/quadlet/mailfathom-presidio.container ~/.config/containers/systemd/
 Then in `~/.config/containers/systemd/mailfathom.container`, uncomment the two ordering lines in `[Unit]` and the four
 `Environment=` lines for `SensitiveContent`, and `systemctl --user daemon-reload`. The analyzer unit declares
 `Notify=healthy` exactly as the database unit does, so that ordering waits for an analyzer that *answers* rather than a
-container that exists — which matters here more than for the database, because the analyzer loads a language model before
-it serves anything and MailFathom refuses to start while it cannot reach one. `TimeoutStartSec=300` is what allows for
-that load. Nothing else in the start sequence changes: the uncommented `Requires=` is what pulls the analyzer in when
+container that exists. Nothing breaks without it — MailFathom starts either way and reports itself unready until the
+analyzer answers — but the analyzer loads a language model before it serves anything, and ordering the two is what keeps
+that interval out of the application's log and off its readiness probe. `TimeoutStartSec=300` is what allows for that
+load. Nothing else in the start sequence changes: the uncommented `Requires=` is what pulls the analyzer in when
 `mailfathom.service` starts, and `systemctl --user status mailfathom-presidio.service` is where its own health check is
 read while the model loads.
 

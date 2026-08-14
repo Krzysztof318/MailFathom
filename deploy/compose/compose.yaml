@@ -210,9 +210,9 @@ services:
       start_period: 90s
     # No `depends_on` in either direction. MailFathom deliberately does not declare one on this service: a dependency on
     # a service behind a profile is a dependency Compose resolves differently depending on which profiles are active, and
-    # the behaviour is not something this file should rest on. MailFathom's own startup gate refuses to serve while the
-    # analyzer is not answering, and `restart: unless-stopped` is what turns that refusal into a retry until the model
-    # has loaded.
+    # the behaviour is not something this file should rest on. Nothing here has to order the two: MailFathom starts
+    # whether or not the analyzer answers, reports itself unready on `/health` while it does not, and becomes ready by
+    # itself once the model has loaded.
     cap_drop:
       - ALL
     security_opt:

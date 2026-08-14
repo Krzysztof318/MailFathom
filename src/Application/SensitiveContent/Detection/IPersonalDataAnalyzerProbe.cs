@@ -4,13 +4,19 @@
 
 namespace MailFathom.Application.SensitiveContent.Detection;
 
-/// <summary>Establishes, before anything is scanned, that the personal-data analyzer this deployment configured answers.</summary>
+/// <summary>Establishes that the personal-data analyzer this deployment configured answers, and can be asked again whenever that has to be established.</summary>
 /// <remarks>
 /// <para>
 /// The personal-data scanner reaches an analyzer deployed beside the service, and the port above it fails closed: with
 /// the <c>Pii</c> switch on and that analyzer absent, every guarded read, write, and egress is refused. A deployment in
-/// that state is not degraded, it is stopped, so the question is asked once while the host is coming up rather than
-/// discovered one refused operation at a time.
+/// that state is not degraded, it is stopped — which is why the question is asked directly rather than discovered one
+/// refused operation at a time, and why the answer removes an instance from traffic rather than softening what it
+/// serves.
+/// </para>
+/// <para>
+/// The analyzer is a sidecar with a lifetime of its own, so the answer is not a fact about start-up. It may become
+/// reachable after this process does and may stop answering long afterwards, which is why the readiness probe asks on
+/// every scrape rather than a gate asking once.
 /// </para>
 /// <para>
 /// It is a port of its own rather than a member of <see cref="ISensitiveContentScanner" /> because the two ask different
