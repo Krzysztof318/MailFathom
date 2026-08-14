@@ -23,7 +23,7 @@ ARG DOTNET_SDK_IMAGE=mcr.microsoft.com/dotnet/sdk:10.0.302-noble
 # `-extra` carries ICU and tzdata. MailFathom decodes internationalized headers, folds case for search, and formats
 # instants for several time zones, so invariant globalization — what the plain chiseled image forces — would quietly
 # change how mail from outside one alphabet is read. The size saved is not worth that.
-ARG DOTNET_ASPNET_IMAGE=mcr.microsoft.com/dotnet/aspnet:10.0.10-noble-chiseled-extra
+ARG DOTNET_ASPNET_IMAGE=mcr.microsoft.com/dotnet/aspnet:10.0.11-noble-chiseled-extra
 
 
 ########################################################################################################################

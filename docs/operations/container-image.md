@@ -21,7 +21,7 @@ than anything in here. [Applying the database schema](database-schema.md) docume
 
 ## What is inside, and what is not
 
-The runtime image is built on `mcr.microsoft.com/dotnet/aspnet:10.0.10-noble-chiseled-extra` and is about 77 MB.
+The runtime image is built on `mcr.microsoft.com/dotnet/aspnet:10.0.11-noble-chiseled-extra` and is about 77 MB.
 Chiseled means there is no shell, no package manager, and no HTTP client: a process that reaches the container finds
 almost nothing to use. `-extra` carries ICU and tzdata, which the plain chiseled image does not — MailFathom decodes
 internationalized headers, folds case for search, and formats instants for several time zones, and the invariant
