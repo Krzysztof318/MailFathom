@@ -67,7 +67,7 @@ public sealed partial class McpClientCertificateTrustProfile
     /// and an audit record, where escaping or truncation must not be what decides its meaning.
     /// </remarks>
     public static bool IsAcceptedName(string? configuredValue) =>
-        configuredValue is { Length: <= MaximumNameLength } && AcceptedName().IsMatch(configuredValue);
+        configuredValue is { Length: <= MaximumNameLength } && AcceptedName.IsMatch(configuredValue);
 
     /// <summary>Reports whether a configured value may be an expected subject alternative name.</summary>
     /// <param name="configuredValue">The bound value.</param>
@@ -135,5 +135,5 @@ public sealed partial class McpClientCertificateTrustProfile
     }
 
     [GeneratedRegex("^[A-Za-z0-9][A-Za-z0-9._-]*$", RegexOptions.CultureInvariant)]
-    private static partial Regex AcceptedName();
+    private static partial Regex AcceptedName { get; }
 }

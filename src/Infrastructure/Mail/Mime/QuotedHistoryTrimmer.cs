@@ -55,7 +55,7 @@ internal static partial class QuotedHistoryTrimmer
 
     /// <summary>Matches the separator Outlook and several other clients write above a forwarded or replied-to message.</summary>
     [GeneratedRegex(@"^\s*-{2,}\s*(Original Message|Forwarded message|Weitergeleitete Nachricht|Oorspronkelijk bericht)\s*-{2,}\s*$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant, matchTimeoutMilliseconds: 200)]
-    private static partial Regex OriginalMessageMarker();
+    private static partial Regex OriginalMessageMarker { get; }
 
     /// <summary>Matches the attribution line a client writes directly above the block it quotes.</summary>
     /// <remarks>
@@ -63,7 +63,7 @@ internal static partial class QuotedHistoryTrimmer
     /// sentence in the message body and take the paragraph after it out of the index.
     /// </remarks>
     [GeneratedRegex(@"^\s{0,8}(On|Am|Le|El|Il)\b.{0,300}\b(wrote|schrieb|a écrit|escribió|ha scritto)\s*:\s*$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant, matchTimeoutMilliseconds: 200)]
-    private static partial Regex QuoteAttributionLine();
+    private static partial Regex QuoteAttributionLine { get; }
 
     /// <summary>Finds the first line of the forwarded-message block, or nothing when the text carries none.</summary>
     /// <remarks>
@@ -73,7 +73,7 @@ internal static partial class QuotedHistoryTrimmer
     /// </remarks>
     private static int? FindFirstOriginalMessageMarkerLine(string[] lines)
     {
-        var markerLine = FirstIndexWhere(lines, line => OriginalMessageMarker().IsMatch(line));
+        var markerLine = FirstIndexWhere(lines, line => OriginalMessageMarker.IsMatch(line));
 
         return markerLine >= 0 ? markerLine : null;
     }
@@ -117,7 +117,7 @@ internal static partial class QuotedHistoryTrimmer
             attributionLine--;
         }
 
-        if (attributionLine > 0 && QuoteAttributionLine().IsMatch(lines[attributionLine - 1]))
+        if (attributionLine > 0 && QuoteAttributionLine.IsMatch(lines[attributionLine - 1]))
         {
             attributionLine--;
         }

@@ -86,7 +86,7 @@ internal sealed partial class MimeAttachmentClassifier
     }
 
     [GeneratedRegex("""cid:(?<contentId>[^"'\s>)\\]+)""", RegexOptions.IgnoreCase, matchTimeoutMilliseconds: 1000)]
-    private static partial Regex ContentIdReference();
+    private static partial Regex ContentIdReference { get; }
 
     private void WalkEntity(MimeEntity? entity, bool isInBodyBranch)
     {
@@ -382,7 +382,7 @@ internal sealed partial class MimeAttachmentClassifier
     private static IEnumerable<string> ReadContentIdReferences(string? referenceContext) =>
         referenceContext is null
             ? []
-            : ContentIdReference()
+            : ContentIdReference
                 .Matches(referenceContext)
 
                 // RFC 2392 builds a cid URL by removing the angle brackets and percent-encoding whatever cannot appear

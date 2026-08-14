@@ -64,8 +64,43 @@ public sealed class SecretRuleCorpusTests
 
         // Assert
         Assert.Equal("mailfathom-secrets", SecretRuleCorpus.Detector.Name);
-        Assert.Contains("gitleaks." + GitleaksSecretRules.CorpusRevision, revision, StringComparison.Ordinal);
+        Assert.Contains(
+            "gitleaks." + GitleaksSecretRules.CorpusRevision + "." + GitleaksSecretRules.TransformationRevision,
+            revision,
+            StringComparison.Ordinal);
         Assert.Contains("own." + MailFathomSecretRules.CorpusRevision, revision, StringComparison.Ordinal);
+    }
+
+    /// <summary>The delimiter alternation gitleaks ends its expressions with never comes back through a refresh.</summary>
+    /// <remarks>
+    /// <para>
+    /// gitleaks closes most of its rules with a group requiring a backtick, a quotation mark, whitespace, a semicolon,
+    /// an escaped newline, or the end of the text after the credential, because that is where one ends in source
+    /// control. In mail it is where one almost never ends, so a rule carrying that group reports nothing at all for a
+    /// credential closing a sentence — and reports nothing in a way no true-positive test written beside it can see,
+    /// because such a test writes the value with a space after it.
+    /// </para>
+    /// <para>
+    /// <see cref="GitleaksSecretRules" /> replaces it with a negative lookahead as one of the four transformations its
+    /// remarks name, and this is what keeps that transformation applied. The corpus is refreshed by copying expressions
+    /// from an upstream release that still ends them the old way, so the alternation arriving back is the ordinary
+    /// outcome of a refresh rather than a mistake somebody would notice.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public void Rules_CompiledHere_NeverEndInTheDelimiterGitleaksWroteForSourceControl()
+    {
+        // Arrange
+        const string SourceControlDelimiter = """(?:[\x60'"\s;]|\\[nr]|$)""";
+
+        // Act
+        var carried = SecretRuleCorpus.Rules
+            .Where(definition => definition.Expression is not null)
+            .Where(definition => definition.Expression!.ToString().EndsWith(SourceControlDelimiter, StringComparison.Ordinal))
+            .Select(definition => definition.Rule.ToString());
+
+        // Assert
+        Assert.Empty(carried);
     }
 
     /// <summary>Every expression MailFathom compiled is bounded, whichever of the two files it was written in.</summary>

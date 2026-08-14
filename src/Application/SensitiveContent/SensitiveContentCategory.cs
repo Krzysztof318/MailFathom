@@ -37,7 +37,7 @@ public sealed partial record SensitiveContentCategory
     /// <exception cref="ArgumentException">Thrown when <paramref name="name" /> is not an acceptable category name.</exception>
     public static SensitiveContentCategory Create(string name)
     {
-        if (name is null || !AcceptedName().IsMatch(name))
+        if (name is null || !AcceptedName.IsMatch(name))
         {
             throw new ArgumentException(
                 $"'{name}' is not an acceptable sensitive-content category name. It may carry up to 64 letters, digits, dots, dashes, and underscores, and must begin with a letter.",
@@ -56,5 +56,5 @@ public sealed partial record SensitiveContentCategory
     public override string ToString() => this.Name;
 
     [GeneratedRegex(@"\A[A-Za-z][A-Za-z0-9._-]{0,63}\z", RegexOptions.CultureInvariant)]
-    private static partial Regex AcceptedName();
+    private static partial Regex AcceptedName { get; }
 }

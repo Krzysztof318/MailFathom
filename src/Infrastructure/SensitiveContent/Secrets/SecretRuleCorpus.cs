@@ -21,7 +21,10 @@ namespace MailFathom.Infrastructure.SensitiveContent.Secrets;
 /// </para>
 /// <para>
 /// The revision moves whenever any of the three does, which is what makes a redaction reproducible against a stated
-/// corpus rather than against whatever this build happened to carry.
+/// corpus rather than against whatever this build happened to carry. It carries a fourth part beside them: the gitleaks
+/// half is named by the release it was taken from <em>and</em> by
+/// <see cref="GitleaksSecretRules.TransformationRevision" />, because what a rule matches here is that release read
+/// through the transformations named there, and either one moving is a different corpus.
 /// </para>
 /// </remarks>
 internal static class SecretRuleCorpus
@@ -51,9 +54,10 @@ internal static class SecretRuleCorpus
         "mailfathom-secrets",
         string.Format(
             CultureInfo.InvariantCulture,
-            "{0}+gitleaks.{1}+own.{2}",
+            "{0}+gitleaks.{1}.{2}+own.{3}",
             SecretMasker.Version,
             GitleaksSecretRules.CorpusRevision,
+            GitleaksSecretRules.TransformationRevision,
             MailFathomSecretRules.CorpusRevision));
 
     /// <summary>Every rule the scanner can look for, indexed by the name a detection reports.</summary>

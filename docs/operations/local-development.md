@@ -445,8 +445,16 @@ digits before the check digit are drawn from the seed, every host is under `.tes
 anybody or opens anything. Nothing shaped like a credential is committed to this repository either — a value exists
 only in a running process and in the mailbox it was delivered to.
 
-A dry run names the category a message carries and never the value, exactly as a scanner's finding does. The seed is
-what reproduces a value; the message is where it is.
+**Where in its sentence a value is written varies too, and it is the second half of what a decoy tests.** A rule
+recognises a credential by its shape and then has to establish where that shape ends, so the character standing after
+the value is part of the question it is asked. A value is therefore planted four ways — inside the sentence, closing
+it, in brackets, and as a cell of a pipe-delimited table — and the placement advances once per complete cycle of kinds,
+so every kind meets every placement rather than each kind meeting one. A corpus that wrote every value the same way
+exercised one answer and reported the other three as though they could not fail, which is exactly what it did until a
+rule that could not see past a full stop was found in a mailbox rather than here.
+
+A dry run names the category a message carries and the placement it was written in, and never the value, exactly as a
+scanner's finding does. The seed is what reproduces a value; the message is where it is.
 
 The corpus listing goes to standard output and everything the run says about itself to standard error, so two dry runs
 of one seed are compared with an ordinary `diff`:

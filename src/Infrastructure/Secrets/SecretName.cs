@@ -41,7 +41,7 @@ public readonly partial record struct SecretName
     /// <remarks>Surrounding whitespace is not trimmed away: a name that needs trimming is two spellings of one identity, and only one of them would match a comparison made elsewhere.</remarks>
     public static bool TryCreate(string? configuredValue, out SecretName name)
     {
-        if (configuredValue is null || configuredValue.Length > MaximumLength || !AcceptedName().IsMatch(configuredValue))
+        if (configuredValue is null || configuredValue.Length > MaximumLength || !AcceptedName.IsMatch(configuredValue))
         {
             name = default;
 
@@ -58,5 +58,5 @@ public readonly partial record struct SecretName
     public override string ToString() => this.Value ?? "(unnamed)";
 
     [GeneratedRegex("^[A-Za-z0-9][A-Za-z0-9._-]*$", RegexOptions.CultureInvariant)]
-    private static partial Regex AcceptedName();
+    private static partial Regex AcceptedName { get; }
 }

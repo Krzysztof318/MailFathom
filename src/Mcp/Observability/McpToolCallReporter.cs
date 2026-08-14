@@ -145,10 +145,10 @@ internal sealed partial class McpToolCallReporter(
     /// </para>
     /// </remarks>
     private static string RecordableToolName(string? requestedName) =>
-        requestedName is not null && ToolNameShape().IsMatch(requestedName) ? requestedName : "(unrecognized)";
+        requestedName is not null && ToolNameShape.IsMatch(requestedName) ? requestedName : "(unrecognized)";
 
     [GeneratedRegex("^[a-z0-9_]{1,64}$")]
-    private static partial Regex ToolNameShape();
+    private static partial Regex ToolNameShape { get; }
 
     private static CallToolResult ErrorResult(string failureText) => new()
     {

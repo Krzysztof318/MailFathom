@@ -27,6 +27,58 @@ internal static class SyntheticSecrets
     /// <summary>An access key identifier of the shape one cloud platform issues.</summary>
     public static string CloudAccessKey { get; } = "AK" + "IA" + new string('B', 16);
 
+    /// <summary>A hosting provider's personal access token, whose rule ends in a lookahead over hexadecimal.</summary>
+    public static string HostingProviderToken { get; } = "dop" + "_v1_" + new string('a', 64);
+
+    /// <summary>A payment platform's test key, whose rule ends in a lookahead over an alphanumeric run.</summary>
+    public static string PaymentPlatformKey { get; } = "sk" + "_test_" + new string('b', 32);
+
+    /// <summary>A package registry's access token, whose rule reads case-insensitively.</summary>
+    public static string PackageRegistryToken { get; } = "npm" + "_" + new string('c', 36);
+
+    /// <summary>A mail platform's key, whose own alphabet holds the full stop that would otherwise end it.</summary>
+    public static string MailPlatformKey { get; } = "SG" + "." + new string('d', 22) + "." + new string('e', 43);
+
+    /// <summary>A second cloud platform's key, whose rule ends in a lookahead over a word character.</summary>
+    public static string CloudServiceKey { get; } = "AI" + "za" + new string('f', 35);
+
+    /// <summary>An edge platform's token, in the first of the three forms its one rule alternates between.</summary>
+    public static string EdgePlatformToken { get; } = "f" + "o1_" + new string('a', 43);
+
+    /// <summary>The same platform's second form, spelled in base64 where the first is spelled in word characters.</summary>
+    public static string EdgePlatformBase64Token { get; } = "fm" + "1a_" + new string('b', 100) + "==";
+
+    /// <summary>A model provider's key in its legacy form, which is alphanumeric throughout.</summary>
+    public static string ModelProviderKey { get; } =
+        "sk" + "-" + new string('c', 20) + "T3BlbkFJ" + new string('d', 20);
+
+    /// <summary>The same provider's project form, whose alphabet also carries an underscore and a hyphen.</summary>
+    public static string ModelProviderProjectKey { get; } =
+        "sk" + "-proj-" + new string('e', 58) + "T3BlbkFJ" + new string('f', 58);
+
+    /// <summary>The project form ending in the hyphen its own alphabet permits, which no word boundary can close.</summary>
+    /// <remarks>
+    /// A word boundary looks for a transition, and there is none between this value's last character and any of the
+    /// non-word characters a message goes on with, so a rule ending in one reports nothing at all here.
+    /// </remarks>
+    public static string ModelProviderProjectKeyEndingInAHyphen { get; } =
+        "sk" + "-proj-" + new string('e', 58) + "T3BlbkFJ" + new string('f', 57) + "-";
+
+    /// <summary>A secret store's service token in its current form.</summary>
+    public static string SecretStoreToken { get; } = "hvs" + "." + new string('g', 90);
+
+    /// <summary>The same store's legacy form, alphanumeric where the current one takes a hyphen too.</summary>
+    public static string SecretStoreLegacyToken { get; } = "s" + "." + new string('h', 24);
+
+    /// <summary>A database platform's API token, whose own alphabet carries the full stop that can follow it.</summary>
+    public static string DatabasePlatformApiToken { get; } = "pscale" + "_tkn_" + new string('i', 32);
+
+    /// <summary>The same platform's OAuth token, which its rule reads case-sensitively.</summary>
+    public static string DatabasePlatformOauthToken { get; } = "pscale" + "_oauth_" + new string('j', 32);
+
+    /// <summary>The same platform's password, whose rule reads case-insensitively throughout.</summary>
+    public static string DatabasePlatformPassword { get; } = "pscale" + "_pw_" + new string('k', 32);
+
     /// <summary>A private key block, armoured the way an agent or a certificate tool emits one.</summary>
     public static string PrivateKey { get; } =
         "-----BEGIN RSA PRIVATE KEY-----\n"

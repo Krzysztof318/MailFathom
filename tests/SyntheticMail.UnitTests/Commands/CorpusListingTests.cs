@@ -98,7 +98,9 @@ public sealed class CorpusListingTests
     public void Describe_AMessageCarryingFabricatedSensitiveMaterial_NamesTheCategoryAndNeverTheValue()
     {
         // Arrange
-        var decoy = SensitiveDecoyCatalog.Kinds.Single(kind => kind.Rule == "aws-access-token").Plant(new Random(4));
+        var decoy = SensitiveDecoyCatalog.Kinds
+            .Single(kind => kind.Rule == "aws-access-token")
+            .Plant(new Random(4), SensitiveDecoyPlacement.InATableCell);
         var email = Build(inReplyTo: null, carbonCopies: 0, attachment: null) with
         {
             Body = new SyntheticEmailBody(
@@ -113,7 +115,7 @@ public sealed class CorpusListingTests
         var line = CorpusListing.Describe(email);
 
         // Assert
-        Assert.Contains("| sensitive=Secrets:CloudAccessKey |", line, StringComparison.Ordinal);
+        Assert.Contains("| sensitive=Secrets:CloudAccessKey@InATableCell |", line, StringComparison.Ordinal);
         Assert.DoesNotContain("AKIA", line, StringComparison.Ordinal);
     }
 

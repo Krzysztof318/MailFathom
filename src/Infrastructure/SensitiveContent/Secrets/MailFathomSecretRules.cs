@@ -24,15 +24,15 @@ internal static partial class MailFathomSecretRules
         SecretRuleDefinition.Compile(
             SecretCategories.ConnectionString,
             "database-connection-uri-credential",
-            DatabaseConnectionUriCredential()),
+            DatabaseConnectionUriCredential),
         SecretRuleDefinition.Compile(
             SecretCategories.ConnectionString,
             "connection-string-password-keyword",
-            ConnectionStringPasswordKeyword()),
+            ConnectionStringPasswordKeyword),
         SecretRuleDefinition.Compile(
             SecretCategories.CredentialUrl,
             "url-credential-query-parameter",
-            UrlCredentialQueryParameter()),
+            UrlCredentialQueryParameter),
     ];
 
     /// <remarks>
@@ -45,7 +45,7 @@ internal static partial class MailFathomSecretRules
         @"\b(?:postgres(?:ql)?|mysql|mariadb|mongodb(?:\+srv)?|redis(?:s)?|amqps?|mssql|sqlserver|jdbc:[a-z0-9]{1,20})://(?<refine>[^\s:@/]{1,128}:[^\s:@/]{1,256})@",
         SecretRegexEngine.MatchOptions | RegexOptions.IgnoreCase,
         SecretRegexEngine.MatchTimeoutMilliseconds)]
-    private static partial Regex DatabaseConnectionUriCredential();
+    private static partial Regex DatabaseConnectionUriCredential { get; }
 
     /// <remarks>
     /// The trailing semicolon is what makes this a connection string rather than prose: a keyword-and-value list
@@ -56,7 +56,7 @@ internal static partial class MailFathomSecretRules
         @"(?:^|[;\s])(?:password|pwd|accountkey|sharedaccesskey)\s*=\s*(?<refine>[^;\s""'<>]{8,256});",
         SecretRegexEngine.MatchOptions | RegexOptions.IgnoreCase,
         SecretRegexEngine.MatchTimeoutMilliseconds)]
-    private static partial Regex ConnectionStringPasswordKeyword();
+    private static partial Regex ConnectionStringPasswordKeyword { get; }
 
     /// <remarks>
     /// A link whose query names a credential is the one place a URL is worth redacting in part rather than whole: the
@@ -68,5 +68,5 @@ internal static partial class MailFathomSecretRules
         @"[?&](?:access_token|refresh_token|id_token|auth_token|authtoken|api[_-]?key|apikey|client_secret|private_token|session_token|signature|sig|sas|token|secret)=(?<refine>[A-Za-z0-9._~+/%-]{16,512})",
         SecretRegexEngine.MatchOptions | RegexOptions.IgnoreCase,
         SecretRegexEngine.MatchTimeoutMilliseconds)]
-    private static partial Regex UrlCredentialQueryParameter();
+    private static partial Regex UrlCredentialQueryParameter { get; }
 }

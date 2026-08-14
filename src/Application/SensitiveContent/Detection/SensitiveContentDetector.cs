@@ -40,14 +40,14 @@ public sealed partial record SensitiveContentDetector
     /// <exception cref="ArgumentException">Thrown when either value is outside the grammar this type accepts.</exception>
     public static SensitiveContentDetector Create(string name, string revision)
     {
-        if (name is null || !AcceptedValue().IsMatch(name))
+        if (name is null || !AcceptedValue.IsMatch(name))
         {
             throw new ArgumentException(
                 $"'{name}' is not an acceptable detector name. It may carry up to 64 letters, digits, dots, dashes, plus signs, and underscores, and must begin with a letter or a digit.",
                 nameof(name));
         }
 
-        if (revision is null || !AcceptedValue().IsMatch(revision))
+        if (revision is null || !AcceptedValue.IsMatch(revision))
         {
             throw new ArgumentException(
                 $"'{revision}' is not an acceptable detector revision. It may carry up to 64 letters, digits, dots, dashes, plus signs, and underscores, and must begin with a letter or a digit.",
@@ -61,5 +61,5 @@ public sealed partial record SensitiveContentDetector
     public override string ToString() => $"{this.Name}@{this.Revision}";
 
     [GeneratedRegex(@"\A[A-Za-z0-9][A-Za-z0-9._+-]{0,63}\z", RegexOptions.CultureInvariant)]
-    private static partial Regex AcceptedValue();
+    private static partial Regex AcceptedValue { get; }
 }

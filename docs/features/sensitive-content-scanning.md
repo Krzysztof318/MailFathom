@@ -321,13 +321,21 @@ Three places, and the reason is a measured gap.
 - **The gitleaks rule data**, at the release recorded in `THIRD_PARTY_LICENSES.md`. A mailbox receives forge tokens,
   cloud access keys, payment keys, and model-provider keys, and the engine alone catches almost none of them. Only
   entries that recognise a credential **by its own shape** are taken: gitleaks also ships rules that recognise a secret
-  by its proximity to a keyword, and a mailbox is prose, so those would turn ordinary sentences into findings.
+  by its proximity to a keyword, and a mailbox is prose, so those would turn ordinary sentences into findings. The
+  expressions that are taken are adapted rather than copied, and one of those adaptations is about prose too. gitleaks
+  establishes where a credential ends by requiring a quotation mark, whitespace, a semicolon, or the end of the text
+  after it, which is where one ends in a file and not where one ends in a message; MailFathom requires instead that the
+  credential's own alphabet has stopped, so a token closing a sentence, standing in a bracket, or sitting in a table
+  cell is found exactly as one followed by a space is.
 - **MailFathom's own**, for the two shapes both corpora miss because both are written for source control: a connection
   string pasted into a thread so somebody can reproduce a failure, and a link whose query string is the credential.
 
 Whichever of the three matched, a finding reports **one detector identity and one corpus revision**, and that revision
-moves when any of the three does. An operator diagnosing a false positive should not have to learn which corpus a rule
-came from before they can suppress it.
+moves when any of the three does. It also moves when the adaptation above changes what a rule matches, which is a
+fourth thing it names: the gitleaks half is identified by the release it came from and by the revision of what was done
+to it, because either one moving is a different corpus and a text redacted under the earlier one is a different result.
+An operator diagnosing a false positive should not have to learn which corpus a rule came from before they can suppress
+it.
 
 ### What is redacted, and what is left readable
 

@@ -101,11 +101,11 @@ internal sealed partial class EfCoreDatabaseSchemaInspector(MailFathomDbContext 
     /// </remarks>
     private static string? ReadRegisteredConfigurationName(string generationExpression)
     {
-        var match = RegisteredConfigurationPattern().Match(generationExpression);
+        var match = RegisteredConfigurationPattern.Match(generationExpression);
 
         return match.Success ? match.Groups[1].Value : null;
     }
 
     [GeneratedRegex("'([^']+)'::regconfig", RegexOptions.CultureInvariant)]
-    private static partial Regex RegisteredConfigurationPattern();
+    private static partial Regex RegisteredConfigurationPattern { get; }
 }

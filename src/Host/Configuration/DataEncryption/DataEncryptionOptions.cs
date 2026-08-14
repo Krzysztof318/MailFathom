@@ -83,7 +83,7 @@ internal sealed partial class DataEncryptionOptions : IValidatableObject
 
     private static IEnumerable<ValidationResult> FindKeyErrors(DataEncryptionKeyOptions key, int position)
     {
-        if (!AcceptedKeyId().IsMatch(key.KeyId))
+        if (!AcceptedKeyId.IsMatch(key.KeyId))
         {
             yield return new ValidationResult(
                 $"DataEncryption:Keys:{position}:KeyId is '{key.KeyId}', which is not an acceptable key identifier. It may carry up to 64 letters, digits, dots, dashes, and underscores, and must begin with a letter or a digit.",
@@ -132,5 +132,5 @@ internal sealed partial class DataEncryptionOptions : IValidatableObject
     /// is why the set is narrow rather than merely careful.
     /// </remarks>
     [GeneratedRegex(@"\A[A-Za-z0-9][A-Za-z0-9._-]{0,63}\z", RegexOptions.CultureInvariant)]
-    private static partial Regex AcceptedKeyId();
+    private static partial Regex AcceptedKeyId { get; }
 }
