@@ -38,10 +38,12 @@ classification are off until you turn them on — the queue beneath them runs on
 for a replica serving reads — and a rule is only ever authored in the file you provisioned, so what an instance will do
 to a mailbox is reviewable in a diff before it does anything.
 
-The other half of the release goes the opposite way. **A message can be redacted before anything is derived from it and
-before anything of it leaves this deployment**: secrets are found in this process, personal data by an analyzer you run
-beside it, and what MailFathom then chunks, embeds, retrieves, and returns is the redacted text. That is off by default
-as well, and off it costs nothing at all — no container is started, no image is pulled, and no memory is held.
+The other half of the release goes the opposite way. **A message's text can be redacted before anything is derived from
+it and before any of that text leaves this deployment**: secrets are found in this process, personal data by an analyzer
+you run beside it, and what MailFathom then chunks, embeds, retrieves, and returns is the redacted text. **An
+attachment's content is not text a scan reaches** — the signed link serves the file exactly as it was stored, so a
+credential inside an attached file is not covered by turning a scanner on. That is off by default as well, and off it
+costs nothing at all — no container is started, no image is pulled, and no memory is held.
 
 **Five things need an edit before this release serves what `0.5.0` served.** The folder argument of `list_emails`,
 `search_emails`, and `ask_mail` is `folders` where it was `folderAliases`, and the old spelling is ignored rather than
@@ -168,8 +170,10 @@ reads, or answers from it. A folder mapped with `Synchronize: false` is still a 
   `SpecialUse`, a role is unique per account, and `role:Junk` is how a rule or the classification names a destination
   without knowing what the server calls it ([#729](https://github.com/Krzysztof318/MailFathom/pull/729)).
 - **`mfctl folder erase` is the one thing in MailFathom that removes a folder's local copy**, one bounded pass per
-  request, printing a running total and taking the raw MIME, the search document, the passages, their vectors, and the
-  checkpoint with the rows ([#789](https://github.com/Krzysztof318/MailFathom/pull/789)).
+  request, printing a running total and taking the raw MIME, the search document, the passages, their vectors, the spam
+  verdicts and the signals behind them, the rule-execution history for that mail, and the checkpoint with the rows — so
+  `mfctl spam classifications` and `mfctl rules history` stop answering for a folder you erase
+  ([#789](https://github.com/Krzysztof318/MailFathom/pull/789)).
 
 **Durable background work, with the queue an operator can see and act on.** Jobs are persisted, leased, and claimed one
 statement at a time, so a crash neither strands work nor repeats it; an attempt runs under a bounded timeout with its
@@ -326,7 +330,8 @@ the script prints the `export PATH` line to add to a shell profile rather than e
   moving afterwards ([#811](https://github.com/Krzysztof318/MailFathom/pull/811)).
   [The arrival pipeline](https://krzysztof318.github.io/MailFathom/architecture/arrival-pipeline.html) states the whole
   order.
-- **The folder-count refusal on `list_emails` and `search_emails` reads for the argument rather than for aliases.** The
+- **The folder-count refusal on `list_emails`, `search_emails`, and `ask_mail` reads for the argument rather than for
+  aliases.** All three bind `folders` through the same resolver, so all three raise it. The
   five-digit code `51002` is unchanged and its message and filter name are worded differently; a client that matched on
   the text rather than the code sees new text, which is what the code exists so it need not do
   ([#776](https://github.com/Krzysztof318/MailFathom/pull/776)).
