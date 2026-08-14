@@ -24,9 +24,9 @@ After=mailfathom-postgres.service
 
 # Only when personal-data scanning is on, and uncommented together with the four Environment= lines further down and
 # mailfathom-presidio.container being installed at all. The analyzer unit declares `Notify=healthy` as well, so this
-# ordering waits for an analyzer that answers rather than for a container that exists — which matters more here than for
-# the database, because the analyzer loads a language model before it serves anything and MailFathom refuses to start
-# while it cannot reach one.
+# ordering waits for an analyzer that answers rather than for a container that exists. Nothing breaks without it —
+# MailFathom starts either way and reports unready until the analyzer answers — but the analyzer loads a language model
+# before it serves anything, and ordering the two keeps that interval off the application's readiness probe.
 #Requires=mailfathom-presidio.service
 #After=mailfathom-presidio.service
 
@@ -107,8 +107,9 @@ Environment=Persistence__Password__SecretReference=systemd-credential:mailfathom
 
 # Personal-data scanning, off because these four lines are commented out — which is the product's default and what makes
 # it cost nothing. Uncomment them together with the two ordering lines at the top of this file, and install
-# mailfathom-presidio.container beside it; enabling the switch with no analyzer to reach fails startup and names the
-# Endpoint setting below as the one to correct, which is the intended behaviour rather than a misconfiguration to avoid.
+# mailfathom-presidio.container beside it; enabling the switch with no address at all fails startup and names the
+# Endpoint setting below as the one to correct, while an address nothing answers at leaves the unit running and unready,
+# both of which are the intended behaviour rather than a misconfiguration to avoid.
 # The address is the analyzer unit's container name on the internal network — replace it with your own analyzer's if you
 # operate one, keeping it inside your own network, and then install no analyzer unit at all.
 # docs/features/sensitive-content-scanning.md states what each category hides and what pointing the endpoint outside the

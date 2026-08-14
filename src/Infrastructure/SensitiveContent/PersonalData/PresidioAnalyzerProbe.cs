@@ -108,7 +108,7 @@ internal sealed class PresidioAnalyzerProbe : IPersonalDataAnalyzerProbe
             {
                 // The status alone, as its number and .NET's own name for it. A refusal's body is written by a service this
                 // process does not own, and so is the reason phrase beside the status line — a proxy or a wrong service at
-                // the configured address composes both, and this message reaches a startup log.
+                // the configured address composes both, and this message reaches the readiness probe's log.
                 throw PersonalDataAnalyzerUnavailableException.Refused(
                     this.profile.Endpoint.ToString(),
                     string.Format(

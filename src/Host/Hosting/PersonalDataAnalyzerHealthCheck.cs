@@ -32,12 +32,14 @@ namespace MailFathom.Host.Hosting;
 /// <b>The log is where the reason lives.</b> A probe response is one word by design — it is served without a credential,
 /// so a description would disclose which dependencies exist and what is wrong with one — which leaves an operator with
 /// a `503` and nothing to read. So a transition into unavailability is logged at <c>Error</c> with the failure behind
-/// it, and the recovery is logged in turn.
+/// it, and the recovery is logged in turn. Neither record claims the analyzer <i>stopped</i>: the first scrape of a
+/// process whose sidecar is still loading its model is the same transition as an outage, and a message written for the
+/// second would misreport an ordinary cold start as one.
 /// </para>
 /// <para>
 /// It logs the transition rather than the observation. A readiness period of ten seconds would otherwise write six
 /// records a minute for as long as the outage lasted, which buries the record that says when it began under copies of
-/// itself; what an operator needs from a log is when the analyzer stopped answering and when it started again. The last
+/// itself; what an operator needs from a log is when the analyzer stopped serving this instance and when it began. The last
 /// observation is therefore held here, which is why this check is a singleton — the registration resolves the one
 /// instance rather than constructing one per scrape, and every read and write of that state is taken under the same
 /// lock, because scrapes arrive on whichever thread served them.
@@ -155,11 +157,12 @@ internal sealed partial class PersonalDataAnalyzerHealthCheck : IHealthCheck
     /// <summary>
     /// Reports the analyzer as the reason this instance is unready. The failure is passed whole because it is the only
     /// account of what went wrong; MailFathom's own message names the configuration key rather than the address, for
-    /// the reason <see cref="PersonalDataAnalyzerUnavailableException" /> records.
+    /// the reason <see cref="PersonalDataAnalyzerUnavailableException" /> records. The wording is state-neutral because
+    /// this record covers an analyzer that has never answered as well as one that has stopped.
     /// </summary>
     [LoggerMessage(
         Level = LogLevel.Error,
-        Message = "The personal-data analyzer stopped answering, so this instance reports unready and refuses every read, derived write, and egress the scanner guards. It is not restarted: correct SensitiveContent:PersonalDataAnalyzer:Endpoint, start the analyzer beside this service, or switch the scanner off.")]
+        Message = "The personal-data analyzer is not answering, so this instance reports unready and refuses every read, derived write, and egress the scanner guards. It is not restarted, and it becomes ready by itself once the analyzer answers: correct SensitiveContent:PersonalDataAnalyzer:Endpoint, start the analyzer beside this service, or switch the scanner off.")]
     private partial void LogAnalyzerUnavailable(Exception failure);
 
     /// <summary>Reports the recovery, which is what tells an operator watching the first record that the outage ended.</summary>

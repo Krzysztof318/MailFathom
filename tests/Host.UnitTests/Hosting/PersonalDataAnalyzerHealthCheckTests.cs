@@ -129,6 +129,51 @@ public sealed class PersonalDataAnalyzerHealthCheckTests
         Assert.DoesNotContain("analyzer.example.test", record.Message, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// The first observation of either kind is a transition, so an instance whose analyzer answers from the very first
+    /// scrape says so once. Without it a regression that logged only the failure half would leave an operator reading an
+    /// outage that had already ended.
+    /// </summary>
+    [Fact]
+    public async Task CheckHealthAsync_AnAnalyzerAnsweringFromTheFirstScrape_LogsItOnceAtInformation()
+    {
+        // Arrange
+        using var loggerFactory = new RecordingLoggerFactory();
+        var check = new PersonalDataAnalyzerHealthCheck(
+            Substitute.For<IPersonalDataAnalyzerProbe>(),
+            loggerFactory.CreateLogger<PersonalDataAnalyzerHealthCheck>());
+
+        // Act
+        await check.CheckHealthAsync(new HealthCheckContext(), TestContext.Current.CancellationToken);
+        await check.CheckHealthAsync(new HealthCheckContext(), TestContext.Current.CancellationToken);
+
+        // Assert
+        var record = Assert.Single(loggerFactory.Records);
+
+        Assert.Equal(LogLevel.Information, record.Level);
+        Assert.Null(record.Failure);
+    }
+
+    /// <summary>
+    /// A cancellation the caller did not ask for is the analyzer failing to answer inside its budget, not a scrape
+    /// somebody abandoned. It must report unready rather than propagate, which is what the <c>when</c> clause on the
+    /// cancellation catch decides.
+    /// </summary>
+    [Fact]
+    public async Task CheckHealthAsync_AProbeCancelledByItsOwnBudget_IsUnhealthyRatherThanPropagating()
+    {
+        // Arrange
+        var check = CheckOverAnAnalyzerFailing(
+            new OperationCanceledException(),
+            NullLogger<PersonalDataAnalyzerHealthCheck>.Instance);
+
+        // Act
+        var result = await check.CheckHealthAsync(new HealthCheckContext(), TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(HealthStatus.Unhealthy, result.Status);
+    }
+
     /// <summary>A record saying the outage began is worth little without the one saying it ended.</summary>
     [Fact]
     public async Task CheckHealthAsync_AnAnalyzerThatCameBack_LogsBothTransitionsAndNothingBetween()
