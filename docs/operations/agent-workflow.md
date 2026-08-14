@@ -419,10 +419,14 @@ The canonical skills are:
   changelog section from what merged since the previous tag, reading each closed
   issue against its parent, so a feature the release delivers only part of is
   written as what the reader can do now rather than as the capability its parent
-  names. Its changelog pull request also carries the files that name a version
-  in prose and a sweep for prose describing the release state without naming
-  one, because both go stale at the tag and neither is reached by
-  `<VersionPrefix>`. Before either pull request it settles the milestones —
+  names. Its changelog pull request also brings `server.json` onto the release
+  version, carries the files that name a version in prose, and sweeps for prose
+  describing the release state without naming one, because all go stale at the
+  tag and none is reached by `<VersionPrefix>`. After the release workflow
+  succeeds, its printed sequence publishes and verifies that metadata in the
+  official MCP Registry; the version-bump pull request leaves `server.json` on
+  the latest stable release while `<VersionPrefix>` names the next one. Before
+  either pull request it settles the milestones —
   creating the next one if it does not exist, opening the issue that tracks that
   release in it, moving what is still open into it, and closing the one being
   released — which is the reason the release being worked never stands without

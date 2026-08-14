@@ -28,7 +28,9 @@ not happen.
 
 Read, never asked for. The version being released is the `VersionPrefix` declared in `Directory.Build.props`, because
 that is the number the build already stamps into every assembly and every artifact; asking would let this skill name a
-release the build would not produce.
+release the build would not produce. The `version` in `server.json` always records the latest stable MailFathom
+release instead; it is brought onto the release version in step 4, is the version published to the official MCP
+Registry, and never follows the next version declared on `main`.
 
 ```bash
 scripts/read-declared-version.sh
@@ -241,6 +243,8 @@ cut, and stated in the `CHANGELOG.md` section the release pull request writes; t
   moved onto that digest in both; the packaged chart states `appVersion: x.y.z`; the GitHub release carries
   `mailfathom-schema-x.y.z.sql` with its checksum and the `mfctl` binaries with theirs; the release notes are the
   changelog section rather than a list of pull-request titles.
+- The official MCP Registry carries `io.github.Krzysztof318/mailfathom` at version `x.y.z`, published from the
+  `server.json` in the tagged tree after the release workflow succeeds.
 - `SECURITY.md` names `x.y` as the supported line, and the line it replaces moves down a row.
 - The version-bump pull request `[#<issue>] Bump main version to <next>` merges after the tag and closes this issue.
 - The published image and chart are installed and verified against a real deployment before the release is announced.
@@ -280,7 +284,7 @@ On a branch off the release branch, and touching nothing else:
   version still runs, and whether the release deploys over the previous release's data at all;
 - update the link references at the foot of the file so the new section resolves;
 - leave `VersionPrefix` alone. It already reads `x.y.z`, which is what makes the tagged tree self-consistent;
-- **bring the files that name a version in prose onto `x.y.z`**, per the list below;
+- **bring the Registry metadata and the files that name a version in prose onto `x.y.z`**, per the list below;
 - **sweep the tree for prose that describes the release state**, per the pass after it.
 
 Nothing else belongs in this diff. **This is the pull request whose merge commit is tagged and published**, so it is
@@ -288,23 +292,26 @@ both the last point at which the release's contents are read as a whole and the 
 from; an unrelated change in it is a change nobody reviewed as part of the release. `CHANGELOG.md` is a protected path,
 which is what makes an edit to it outside this flow visible.
 
-#### The files that name a version in prose
+#### The Registry metadata and files that name a version in prose
 
-`<VersionPrefix>` is the only place a version is written for the *build*. Three files additionally name one in prose,
-where nothing derives it and nothing checks it, so they are read here by name rather than left to be noticed:
+`<VersionPrefix>` is the only place a version is written for the *build*. `server.json` separately and always names the
+latest stable MailFathom release, and three files name the current release in prose. Nothing derives these four values,
+so they are read here by name rather than left to be noticed:
 
 | File | What to bring onto `x.y.z` |
 | --- | --- |
+| `server.json` | The top-level `version`. Leave the server name, remote template, and every other field unchanged unless the release contains a separately reviewed metadata change; then run `mcp-publisher validate` |
 | `README.md` | The **Project status** paragraph — which release is current and what it ships — and the **Where the artifacts are published** table whenever a release starts or stops attaching one |
 | `docs/users/README.md` | The **The state of the release** section — which release is current, and what a page is allowed to describe as already downloadable |
 | `SECURITY.md` | The **Supported versions** table. `x.y` becomes the supported line and the one it replaces moves down a row, per ADR 0004's rule that only the newest released minor is patched by default |
 
 **They belong in this pull request rather than the bump one, and the reason is what the whole ordering rests on:** this
-diff's merge commit is what gets tagged, so it is the tree an operator reads at `v<x.y.z>`. A `SECURITY.md` corrected
-after the tag names the previous line in the artifact people actually download, and `docs/` at a tag is read far more
-often than `docs/` on `main`. The bump pull request cannot carry them for the same reason it cannot carry the changelog.
+diff's merge commit is what gets tagged, so it is the tree an operator reads at `v<x.y.z>` and the metadata published
+to the Registry. A `SECURITY.md` corrected after the tag names the previous line in the artifact people actually
+download, and a `server.json` corrected after the tag publishes metadata for a tree other than the tagged one. The
+bump pull request cannot carry them for the same reason it cannot carry the changelog.
 
-Three files each is a decision rather than an accident, and it is the ceiling rather than a starting point. **A page
+Four files are a decision rather than an accident, and they are the ceiling rather than a starting point. **A page
 that quotes a version because a reader substitutes one writes `<version>` and stays off this list**: the image
 references and the `mailfathom-schema-<version>.sql` filename in `docs/users/installation.md`,
 `docs/operations/database-schema.md`, `docs/operations/deployment-compose.md`, and
@@ -400,6 +407,10 @@ On a second branch off the release branch, raise `<VersionPrefix>` in `Directory
 the table above. That property is the only place a version is *written*: the image's tags and labels arrive as build
 arguments, and the chart's `version` and `appVersion` are both supplied at package time from the same declaration.
 
+**Leave `server.json` on `x.y.z`.** It always records the latest stable MailFathom release, whereas `VersionPrefix` now
+names the next release. The next run brings it forward in the release-preparation pull request, immediately before that
+version is tagged and published to the official MCP Registry.
+
 **It is not the only place one is recorded.** Every `packages.lock.json` writes the version of each `MailFathom.*`
 project it references — `"MailFathom.Domain": "[x.y.z, )"` — so raising the declaration leaves those files naming a
 version the tree no longer has. They are part of this diff, and of no other: this is the pull request where the number
@@ -490,6 +501,15 @@ Release x.y.z is prepared. Merge in this order — the tag has to land between t
    It then publishes the image under vx.y.z to both registries as one manifest list under one digest, moves `latest`
    onto that digest — `latest` follows the newest release and never a nightly — and publishes the Helm chart against
    the digest the image publication produced, at the same version.
+
+   After the release workflow succeeds, publish the Registry metadata from that tagged tree and verify the exact
+   server identifier and version through the Registry API:
+       git switch --detach vx.y.z
+       mcp-publisher login github
+       mcp-publisher validate
+       mcp-publisher publish
+       curl --fail --silent --show-error \
+         'https://registry.modelcontextprotocol.io/v0.1/servers/io.github.Krzysztof318%2Fmailfathom/versions/x.y.z'
 
 3. Merge the version-bump pull request (#B).
    After the tag, so main returns to naming the next release rather than the one just published. This is what
