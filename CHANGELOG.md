@@ -33,9 +33,10 @@ release claims it shipped.
 
 The sixth release, and the first one that **does something with your mail rather than only reading it**. Rules you write
 in a configuration file move, copy, delete, and mark messages as read; a spam classification files junk on the server;
-and a durable queue underneath both survives a restart without repeating work or losing it. Every one of those is off
-until you turn it on, and a rule is only ever authored in the file you provisioned — so what an instance will do to a
-mailbox is reviewable in a diff before it does anything.
+and a durable queue underneath both survives a restart without repeating work or losing it. The rules and the
+classification are off until you turn them on — the queue beneath them runs on every instance and is switched off only
+for a replica serving reads — and a rule is only ever authored in the file you provisioned, so what an instance will do
+to a mailbox is reviewable in a diff before it does anything.
 
 The other half of the release goes the opposite way. **A message can be redacted before anything is derived from it and
 before anything of it leaves this deployment**: secrets are found in this process, personal data by an analyzer you run
@@ -47,9 +48,9 @@ as well, and off it costs nothing at all — no container is started, no image i
 refused — so a client that keeps sending it reads every folder instead of the one it named. Every folder you want read
 is now named in configuration, and mail under an alias your file no longer names is unreachable until an entry names it
 again. `get_email_content` hands back a signed link per attachment instead of base64, and issues none at all unless
-`Deployment:PublicBaseAddress` is declared. Mail in a folder your configuration maps as junk is withheld from listing,
-search, and answering unless the call asks for it. And a folder whose `Synchronize` you switch off now keeps its stored
-mail instead of erasing it.
+`Deployment:PublicBaseAddress` is declared. Mail in a folder your configuration maps as junk is withheld from listing
+and search unless the call asks for it, and withheld from answering with no way to ask. And a folder whose `Synchronize`
+you switch off now keeps its stored mail instead of erasing it.
 
 **The database schema moves by twelve migrations** that add eight tables, four columns on three tables that already held
 data, and the indexes for both, and that change nothing `0.5.0` reads — so the schema step applies while `0.5.0` is
@@ -102,6 +103,9 @@ to the server the way every other change is carried, so a restart neither loses 
 the authentication results including the ARC chain, the provider's own `X-Spam-*` headers, and the folder it arrived in
 — and a verdict is recorded beside it with the signals it rests on
 ([#731](https://github.com/Krzysztof318/MailFathom/pull/731)). `SpamClassification:Enabled` turns it on, and it is off.
+**It covers the folders `SpamClassification:ScannedFolders` names**, and where you name none, every account's inbox and
+nothing else — so a deployment whose own filter delivers somewhere other than the inbox names that folder there, or
+gets no verdict for the mail in it.
 [Spam classification](https://krzysztof318.github.io/MailFathom/features/spam-classification.html) is the page.
 
 - **An Apache SpamAssassin daemon beside the service scores what the headers cannot**, deployed only where
@@ -175,8 +179,11 @@ lease renewed while it works ([#797](https://github.com/Krzysztof318/MailFathom/
   `Jobs:MaxQueueDepthPerType` govern how much runs at once and refuse an enqueue past the depth rather than accepting
   work the deployment cannot reach ([#807](https://github.com/Krzysztof318/MailFathom/pull/807)).
 - **`mfctl jobs dead-letters`, `mfctl jobs retry`, and `mfctl jobs drop`** list what has stopped, put one back, and give
-  one up, and five instruments publish what ran, how long it took, how much was repeated, what stopped, and what is
-  waiting ([#814](https://github.com/Krzysztof318/MailFathom/pull/814)).
+  one up, and seven instruments publish what ran, how long it took, how much was repeated, what stopped, what is
+  waiting, what a recurring dispatch decided, and how many of its occasions were skipped — the last of those being the
+  one thing the others cannot show, since a skipped occasion enqueues nothing
+  ([#814](https://github.com/Krzysztof318/MailFathom/pull/814),
+  [#820](https://github.com/Krzysztof318/MailFathom/pull/820)).
 
 **A model server on a private address, reached with no credential at all.** `Unauthenticated` is a third way to declare
 what an endpoint presents, beside `ApiKey` and `EntraCredential`, and a plain `http` address is accepted for an endpoint
@@ -188,10 +195,12 @@ startup warning names each endpoint reached in the clear and what crosses it rea
 services were checked and what each check rests on ([#698](https://github.com/Krzysztof318/MailFathom/pull/698),
 [#702](https://github.com/Krzysztof318/MailFathom/pull/702)).
 
-**An inbound request now has an upper duration, and the process an upper connection count.** Each endpoint carries
-`RequestTimeout` beside its rate limiting, defaulted so enabling an endpoint bounds it, and `ConnectionLimits` bounds
-what the machine accepts at all — the accept, the TLS handshake, and the client certificate's chain building all happen
-before any rate limiter can see them ([#684](https://github.com/Krzysztof318/MailFathom/pull/684)).
+**An inbound request now has an upper duration, and the process an upper connection count.** The MCP and administrative
+endpoints each carry `RequestTimeout` beside their rate limiting, defaulted so enabling an endpoint bounds it — the
+health probes stay outside it deliberately, since they have to keep answering while an endpoint is refusing — and
+`ConnectionLimits` bounds what the machine accepts at all, the probe listener included, because the accept, the TLS
+handshake, and the client certificate's chain building all happen before any rate limiter can see them
+([#684](https://github.com/Krzysztof318/MailFathom/pull/684)).
 
 **A Podman Quadlet deployment**, so a container can take the encrypted, machine-bound credentials systemd provisions.
 `deploy/quadlet/` holds the unit sources for the application, PostgreSQL, the two networks, the volume, and the two
@@ -238,7 +247,8 @@ AI agent can read as well: a map at the version's root, the Markdown source besi
 reading path ([#793](https://github.com/Krzysztof318/MailFathom/pull/793)).
 
 **`mfctl` installs on Linux with one command**, which fetches the binary for the platform, verifies it against the
-checksum published beside it, and puts it on the path
+checksum published beside it, and installs it into `~/.local/bin`. Where that directory is not already on your `PATH`
+the script prints the `export PATH` line to add to a shell profile rather than editing one for you
 ([#794](https://github.com/Krzysztof318/MailFathom/pull/794)).
 
 ### Changed
@@ -292,11 +302,6 @@ checksum published beside it, and puts it on the path
   configuration `0.5.0` accepted still binds. What is new is that two folders of one account naming the same role, or an
   alias beginning `role:`, fail startup — neither of which a previous file could have relied on
   ([#729](https://github.com/Krzysztof318/MailFathom/pull/729)).
-- **Breaking (deployment contract)** — **`mfctl rules` publishes a rule action's folder as `destination` rather than
-  `destinationAlias`**, in the declared-rule views and the run history, because what it carries is not always an alias:
-  a declaration may read `role:Junk`, and a run records what it actually resolved to. **An older `mfctl` against a newer
-  deployment shows a relocation's folder as absent**; the two share a `major.minor`, so upgrading them together is what
-  the deployment contract already asks for ([#729](https://github.com/Krzysztof318/MailFathom/pull/729)).
 - **Breaking (database schema)** — **twelve migrations**, adding eight tables for rules, their execution history, spam
   classifications and their signals, classification runs, jobs, and rule schedules; four columns on `stored_emails`,
   `email_search_documents`, and `backfill_positions`; and the indexes both need. One statement renames a column on a
@@ -341,10 +346,11 @@ checksum published beside it, and puts it on the path
 
 ### Security
 
-- **Mail can be redacted before it crosses out of the deployment, and the guard fails closed.** Three egress points are
+- **Mail can be redacted before it crosses out of the deployment, and the guard fails closed.** Four egress points are
   named and each is guarded: the question and the retrieved extracts sent to a chat endpoint, every passage sent to an
-  embedding endpoint, and the subjects, snippets, and answers the MCP tools return. A detector that is unavailable,
-  times out, or errors **fails the call** rather than serving unredacted text
+  embedding endpoint, the subjects, snippets, and answers the MCP tools return, and the whole message `get_email_content`
+  hands back when a client asks for one by identifier. A detector that is unavailable, times out, or errors **fails the
+  call** rather than serving unredacted text
   ([#772](https://github.com/Krzysztof318/MailFathom/pull/772),
   [#803](https://github.com/Krzysztof318/MailFathom/pull/803)).
 - **No response carries an attachment's bytes any more.** A call asking for files receives a link per attachment,
@@ -365,9 +371,10 @@ checksum published beside it, and puts it on the path
 - **Junk mail never reaches the model that answers a question.** `ask_mail` excludes it with no override, so a message
   written to deceive a reader cannot arrive as ordinary correspondence in the material an answer is composed from
   ([#731](https://github.com/Krzysztof318/MailFathom/pull/731)).
-- **A telemetry record still carries no mail.** Every publisher of a span or a measurement in the deployment is driven
-  through a listener and what it emitted is held against the redaction contract, so the rule is asserted over the whole
-  surface rather than sampled where somebody remembered to check
+- **A telemetry record still carries no mail.** Every publisher of a span or a measurement in the deployment is held
+  against the redaction contract — driven through a listener and judged on what it emitted where a test can drive it,
+  and read from its declarations where it cannot, which is how a span a background worker opens is covered — so the rule
+  is asserted over the whole surface rather than sampled where somebody remembered to check
   ([#832](https://github.com/Krzysztof318/MailFathom/pull/832)).
 
 ## [0.5.0] - 2026-08-10
