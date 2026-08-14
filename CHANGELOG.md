@@ -123,8 +123,12 @@ gets no verdict for the mail in it.
   the verdicts back ([#795](https://github.com/Krzysztof318/MailFathom/pull/795)).
 - **Junk is withheld from everything derived from it.** Where classification is on, a message it calls spam — and one the
   receiving server already filed in junk — is never cut into passages, never embedded, never sent to an embedding
-  provider, and never offered to the rule set. Nothing is written down to record that, so dragging a message out of junk
-  in any mail client is the whole of the correction
+  provider, and never offered to the rule set. **A message still waiting for a verdict is held back only until
+  `SpamClassification:ClassificationWait` expires**, fifteen minutes unless you say otherwise, so a wedged scanner or a
+  deep queue does not stall the index: past the wait the message is derived from like any other, and a spam verdict
+  arriving afterwards discards the passages and vectors it produced, in the transaction that records the verdict. Budget
+  the provider spend accordingly if you raise the wait or run the scanner near its limit. Nothing else is written down,
+  so dragging a message out of junk in any mail client is the whole of the correction
   ([#805](https://github.com/Krzysztof318/MailFathom/pull/805)).
 
 **Sensitive-content scanning: mail redacted before it is derived from or handed out.** Two switches under
@@ -348,9 +352,11 @@ the script prints the `export PATH` line to add to a shell profile rather than e
 
 - **Mail can be redacted before it crosses out of the deployment, and the guard fails closed.** Four egress points are
   named and each is guarded: the question and the retrieved extracts sent to a chat endpoint, every passage sent to an
-  embedding endpoint, the subjects, snippets, and answers the MCP tools return, and the whole message `get_email_content`
-  hands back when a client asks for one by identifier. A detector that is unavailable, times out, or errors **fails the
-  call** rather than serving unredacted text
+  embedding endpoint, the subjects, snippets, and answers the MCP tools return, and — for a message a client asked for by
+  identifier — its body representations, its subject, and the display names its headers wrote. What is deliberately left
+  as read at that fourth point is what a caller acts on rather than reads: the addresses, the sizes, the flags, and every
+  attachment's file name. A detector that is unavailable, times out, or errors **fails the call** rather than serving
+  unredacted text
   ([#772](https://github.com/Krzysztof318/MailFathom/pull/772),
   [#803](https://github.com/Krzysztof318/MailFathom/pull/803)).
 - **No response carries an attachment's bytes any more.** A call asking for files receives a link per attachment,
@@ -365,8 +371,9 @@ the script prints the `export PATH` line to add to a shell profile rather than e
   accept what it sends ([#724](https://github.com/Krzysztof318/MailFathom/pull/724),
   [#777](https://github.com/Krzysztof318/MailFathom/pull/777)).
 - **A slow or numerous caller can no longer hold a surface out of service.** Twenty concurrent requests with no upper
-  duration was enough to do it, since a permit was held for as long as the request took; every endpoint now carries a
-  request timeout, and a process-wide connection ceiling bounds what is accepted before any routing has happened
+  duration was enough to do it, since a permit was held for as long as the request took; the MCP and administrative
+  endpoints now carry a request timeout, the probes staying outside it, and a process-wide connection ceiling bounds
+  what is accepted before any routing has happened
   ([#684](https://github.com/Krzysztof318/MailFathom/pull/684)).
 - **Junk mail never reaches the model that answers a question.** `ask_mail` excludes it with no override, so a message
   written to deceive a reader cannot arrive as ordinary correspondence in the material an answer is composed from
