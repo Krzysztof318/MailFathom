@@ -1,17 +1,20 @@
 # The release procedure
 
-<!-- describes: Directory.Build.props, .github/workflows/release.yml, .github/workflows/publish-helm-chart.yml, .github/workflows/submit-winget-manifest.yml, scripts/assert-release-tag.sh, scripts/read-declared-version.sh, scripts/build-winget-manifests.sh, .agents/skills/prepare-release/SKILL.md -->
+<!-- describes: Directory.Build.props, server.json, .github/workflows/release.yml, .github/workflows/publish-helm-chart.yml, .github/workflows/submit-winget-manifest.yml, scripts/assert-release-tag.sh, scripts/read-declared-version.sh, scripts/build-winget-manifests.sh, .agents/skills/prepare-release/SKILL.md -->
 
-MailFathom's version number is a compatibility promise over four public surfaces, and it is written in one place. This
-page records how a build acquires that number, where it is observable, and the sequence that turns a commit on a
-release branch into a release. [ADR 0004](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0004-versioning-and-release-policy.md) records why each of those
-is the way it is.
+MailFathom's version number is a compatibility promise over four public surfaces. This page records how a build
+acquires that number, how the official MCP Registry metadata records the released one, where both are observable, and
+the sequence that turns a commit on a release branch into a release.
+[ADR 0004](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0004-versioning-and-release-policy.md)
+records why the build and release use their declared version and tag.
 
 ## Where the number comes from
 
-`<VersionPrefix>` in `Directory.Build.props` is the only place in the repository where a version number is written.
-Every project derives `Version`, `AssemblyVersion`, `FileVersion`, and `InformationalVersion` from it centrally, and no
-project sets a version of its own.
+`<VersionPrefix>` in `Directory.Build.props` is the only place where a version is declared for the build. Every project
+derives `Version`, `AssemblyVersion`, `FileVersion`, and `InformationalVersion` from it centrally, and no project sets a
+version of its own. The top-level `version` in `server.json` serves a different purpose: it always records the latest
+stable MailFathom release and the version published to the official MCP Registry, so it remains on the current release
+while `VersionPrefix` on `main` names the next one.
 
 It names the **next** release rather than the last one, so every build from `main` is a preview of what the next tag
 will carry. Raising it is a reviewed diff.
@@ -56,10 +59,13 @@ because an OCI tag would reject it later and further from the cause.
 | A packaged chart's `version` and `appVersion` | the chart release, and the application version it deploys | yes |
 | The release's `mailfathom-schema-<version>.sql` | which schema that version expects | yes |
 | The published assemblies | `AssemblyInformationalVersion` | yes |
+| `server.json` and the official MCP Registry | the latest stable MailFathom release published for agent discovery | yes |
 
-All of them come from the same declaration. The runtime paths read the assembly's own metadata rather than a
-literal restated in code, and unit tests assert that by deriving their expectation from that metadata; a reporting path
-that regressed to a hardcoded string fails them rather than staying plausible while being wrong.
+Every build and artifact surface comes from the same declaration. The runtime paths read the assembly's own metadata
+rather than a literal restated in code, and unit tests assert that by deriving their expectation from that metadata; a
+reporting path that regressed to a hardcoded string fails them rather than staying plausible while being wrong.
+`server.json` is copied onto that version by the release-preparation pull request because it describes a published
+Registry entry rather than a preview build.
 
 Four of those surfaces go one step further and say what the version *means for the reader*: where to read about it. The
 image's `org.opencontainers.image.documentation` label, the chart's install notes, `mfctl status`, and the instructions
@@ -71,8 +77,9 @@ a prerelease are stated.
 The native process deployment needs nothing further: `dotnet publish` writes the stamped assemblies, so the artifact on
 disk carries its own version and revision without being started.
 
-**Nothing else in the repository writes a version number**, which is what makes drift impossible rather than merely
-checked. The image's labels and tags arrive as build arguments, and the chart's `appVersion` arrives at package time:
+**No other build input writes a version number**, which is what makes drift among artifacts impossible rather than
+merely checked. The image's labels and tags arrive as build arguments, and the chart's `appVersion` arrives at package
+time:
 
 ```bash
 version="$(bash scripts/read-declared-version.sh)"
@@ -159,14 +166,16 @@ unavailable:
 
 1. **Merge the changelog pull request, titled `[#<issue>] Prepare release x.y.z`.** It adds
    `## [x.y.z] - YYYY-MM-DD` with the release's entries, composed from what merged since the previous tag, and it
-   brings the three files that name a version in prose onto that version: the **Project status** paragraph and the
-   **Where the artifacts are published** table in `README.md`, the **state of the release** section in
-   `docs/users/README.md`, and the **Supported versions** table in `SECURITY.md`. It touches nothing else. It merges
-   first because **its merge commit is what gets tagged and published**, so the tagged tree contains the released
-   changelog — and the files describing the release they ship inside — rather than describing them afterwards.
+   brings `server.json` and the three files that name a version in prose onto that version: the Registry metadata's
+   top-level `version`, the **Project status** paragraph and the **Where the artifacts are published** table in
+   `README.md`, the **state of the release** section in `docs/users/README.md`, and the **Supported versions** table in
+   `SECURITY.md`. It changes no other Registry metadata. It merges first because **its merge commit is what gets tagged
+   and published**, so the tagged tree contains the released changelog, the metadata published to the Registry, and
+   the files describing the release they ship inside rather than describing them afterwards.
 
-   Those three are the whole of what `<VersionPrefix>` does not reach *by name*, and they are the three that assert
-   *which release is current*. Everywhere a page quotes a version because a reader substitutes one — an image
+   Those four files are the whole of what `<VersionPrefix>` does not reach *by name*: `server.json` asserts which
+   stable release is current in the Registry, and the other three assert *which release is current*. Everywhere a page
+   quotes a version because a reader substitutes one — an image
    reference, the `mailfathom-schema-<version>.sql` filename in the apply commands — it writes the placeholder and a
    release touches it not at all. Everything a build stamps derives from that one declaration; prose does not, and
    nothing checks it, which is why the short list is stated rather than searched
@@ -197,12 +206,20 @@ unavailable:
    stays down. [Applying the database schema](database-schema.md) is what the artifact is; the release notes record its
    name, its checksum, and the migrations it carries.
 
+   After that workflow succeeds, validate and publish the `server.json` from the tagged tree with the official
+   `mcp-publisher`, then query the Registry API for `io.github.Krzysztof318/mailfathom` and confirm it returns version
+   `x.y.z`. Publishing before the workflow succeeds would advertise a release whose installable artifacts do not yet
+   exist; publishing from the later bump would advertise the next, unreleased version instead.
+
 3. **Merge the version-bump pull request, titled `[#<issue>] Bump main version to <next>`.** It raises `VersionPrefix`
    to the next version, and it names the same issue the changelog pull request does and carries the `Closes` line for
    it, because a release is one unit of work and is finished when `main` names the next version rather than when the
    changelog merged. It merges after the tag, so `main` returns to naming the next release. Skipping it fails loudly
    rather than silently: the next tag push repeats a version that already exists, and step 2 rejects it — and the
    release's tracking issue is still open, which is the same failure visible a step earlier.
+
+   It leaves `server.json` on `x.y.z`, because that file always records the latest stable MailFathom release while
+   `VersionPrefix` returns `main` to naming the next release.
 
    It also brings the lock files with it. Each `packages.lock.json` records the version of every `MailFathom.*`
    project it references, so raising the declaration leaves them naming the release just published;
