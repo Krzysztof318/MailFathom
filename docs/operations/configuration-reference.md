@@ -339,7 +339,7 @@ nowhere to ask **fails startup** rather than running unprotected.
 | `SensitiveContent:Pii:Suppressions:<n>:Category` | string | — | As above | restart |
 | `SensitiveContent:Pii:Suppressions:<n>:Rule` | string | — | As above | restart |
 | `SensitiveContent:PersonalDataAnalyzer:Endpoint` | string | unset | Required once `Pii` is on, and an absolute `http` or `https` address; read by nothing while that switch is off | restart |
-| `SensitiveContent:PersonalDataAnalyzer:Language` | string | `en` | Two lowercase letters, naming a language the analyzer loads a model for | restart |
+| `SensitiveContent:PersonalDataAnalyzer:Language` | string | `en` | Two lowercase letters, naming a language the analyzer loads a model for and registers recognizers in. One per deployment, stated on every request, and part of the derivation stamp | restart |
 | `SensitiveContent:PersonalDataAnalyzer:MinimumConfidence` | double | `0.4` | 0 – 1 inclusive, compared inclusively by the analyzer. It decides which regions are replaced, so it is part of the derivation stamp and changing it marks earlier-derived rows stale | restart |
 | `SensitiveContent:MaximumAnalyzedCharacters` | int | `200000` | 1 – 10000000; text beyond it is dropped from the result rather than handed on unscanned. On the derived path that is what is *stored*, so lowering it truncates every message indexed afterwards and the value is part of the derivation stamp | restart |
 | `SensitiveContent:ScanTimeout` | TimeSpan | `00:00:05` | One second to two minutes, per call to one scanner | restart |
@@ -411,6 +411,13 @@ The analyzer block is read only while `Pii` is on. An address left behind under 
 inert, for the reason a category list under one is: it describes no protection, so refusing to start over it would be
 refusing over a comment. The reverse — the scanner on with no address, a relative or non-HTTP address, a language that is
 not two lowercase letters, or a floor outside 0 to 1 — fails startup naming the key.
+
+**`Language` is a code the analyzer has to have been built for**, and setting it is only the last of the steps that make
+a second language work: the model, the image, the analyzer's recognizer registry, its engine, and then this key. A code the analyzer registers
+nothing for leaves the deployment unready rather than falling back to English, and even a code it does register decides
+which of the eleven categories above can find anything — under `pl` the shipped registry knows one national identifier
+and no identity document at all. [The analyzer's language](personal-data-analyzer-languages.md) records what each
+language reaches and what changing it takes.
 
 The analyzed ceiling defaults to the same number as `EmailContent:MaxCharactersPerRead`, so an ordinary content read is
 analyzed whole and only something pathological reaches it.

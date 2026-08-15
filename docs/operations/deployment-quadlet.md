@@ -392,6 +392,13 @@ volumes, no configuration, and no `PublishPort=`. It receives request bodies and
 `mailfathom-backend.network` alone and reachable from MailFathom and nothing else. It needs no `UserNS=keep-id` either,
 because nothing in it reads a file you own.
 
+**The language line is the one that needs the image behind it.** The commented `SensitiveContent__PersonalDataAnalyzer__Language`
+line names `en`, and the pinned image is built with an English model and an English recognizer registry. Naming another
+code there leaves MailFathom permanently unready rather than scanning in that language: the analyzer answers that it
+recognises nothing for it. Running the analyzer in a second language means an image of your own, named on the `Image=`
+line of the copied unit — [the analyzer's language](personal-data-analyzer-languages.md) records what that takes and
+which identifiers each language reaches.
+
 ## Spam scanning
 
 The same shape, and the same default: `mailfathom-spamassassin.container` is a file you either copy or do not, and not

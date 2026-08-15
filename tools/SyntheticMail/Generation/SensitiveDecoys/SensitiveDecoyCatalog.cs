@@ -16,9 +16,9 @@ namespace MailFathom.SyntheticMail.Generation.SensitiveDecoys;
 /// <para>
 /// <b>Two entries share a category on purpose.</b> A national identification number is found by a recogniser
 /// registered for one language, so the same category is reached through a Polish number and an American one and a
-/// deployment finds whichever its analyzer was asked in. Everything else is either language-agnostic — a payment card,
-/// an account number, a medical licence — or reached through the English-language recogniser that a default
-/// deployment loads.
+/// deployment finds whichever its analyzer was asked in. Everything else is either registered for no particular
+/// language — an account number, a medical licence — or reached through a recogniser the default English deployment
+/// loads; the payment card's own recogniser names four languages, English among them.
 /// </para>
 /// <para>
 /// Nothing in a message says a decoy is one. A corpus whose planted lines were marked would test a scanner against

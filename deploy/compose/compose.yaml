@@ -195,7 +195,9 @@ services:
     # An immutable tag, like the database image and unlike MailFathom's own: this is a dependency the deployment operates
     # rather than a version it chooses. It is the same pin the Helm chart and the integration suite use, so an analyzer
     # reviewed against one is the analyzer running in the others. MIT-licensed, and it loads an MIT-licensed spaCy model —
-    # both are recorded in THIRD_PARTY_LICENSES.md.
+    # both are recorded in THIRD_PARTY_LICENSES.md. It is built for English alone, and a model is installed while the
+    # image is built rather than while it starts, so an override here is how a deployment runs the analyzer in another
+    # language — docs/operations/personal-data-analyzer-languages.md states what that takes.
     image: ${MAILFATHOM_PRESIDIO_IMAGE:-ghcr.io/data-privacy-stack/presidio-analyzer:2.2.364}
     restart: unless-stopped
     healthcheck:

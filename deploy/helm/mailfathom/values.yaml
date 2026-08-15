@@ -204,9 +204,12 @@ personalDataScanning:
     # docs/features/sensitive-content-scanning.md states what is given up.
     endpoint: ""
 
-    # The two-letter code of the language every request states. The image below carries an English model and nothing
-    # else, so changing this means supplying an analyzer configured for the language in the same edit; the pod reports
-    # unready for as long as the analyzer has no model for what is named here.
+    # The two-letter code of the language every request states — one per release, with no per-account or per-message
+    # language and no detection. The image below carries an English model and an English recognizer registry, so
+    # changing this means supplying an analyzer built for that language in the same edit: the pod reports unready for as
+    # long as the analyzer recognises nothing for what is named here, rather than falling back to English. Which
+    # identifiers each language reaches, and what building such an image takes, is in
+    # docs/operations/personal-data-analyzer-languages.md.
     language: en
 
     # How sure the analyzer must be before a finding is redacted, from 0 to 1. Redaction acts on every finding whatever
@@ -220,6 +223,8 @@ personalDataScanning:
     # An immutable tag naming the analyzer release, like the database image above and unlike the application image: this
     # is a dependency the chart operates rather than a version a deployment chooses. It is the same pin the Compose
     # deployment and the integration suite use, so an analyzer reviewed against one is the analyzer running in the others.
+    # It is also where an image built for another language is named, since a model is installed while an analyzer image
+    # is built rather than while it starts, and this Deployment mounts no analyzer configuration.
     image:
       registry: ghcr.io
       repository: data-privacy-stack/presidio-analyzer

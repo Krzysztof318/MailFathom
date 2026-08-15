@@ -425,7 +425,7 @@ equally often. They cover each category the two scanners look for unless a deplo
 | A JSON Web Token | `Secrets` / `JsonWebToken` | the secret rule corpus |
 | A database connection string carrying its password | `Secrets` / `ConnectionString` | the secret rule corpus |
 | A download link whose query string is the credential | `Secrets` / `CredentialUrl` | the secret rule corpus |
-| A payment card number | `Pii` / `PaymentCard` | the analyzer, in any language |
+| A payment card number | `Pii` / `PaymentCard` | the analyzer, asked in English, Spanish, Italian, or Polish |
 | An IBAN | `Pii` / `BankAccount` | the analyzer, in any language |
 | A medical licence number | `Pii` / `HealthIdentifier` | the analyzer, in any language |
 | A PESEL | `Pii` / `NationalIdentifier` | the analyzer, asked in Polish |
@@ -435,8 +435,11 @@ equally often. They cover each category the two scanners look for unless a deplo
 **Which of the personal identifiers a deployment finds follows the language it asks the analyzer in**, because a
 recogniser for a country's identification number is registered for one language and is not loaded for the others. A
 deployment on the default `en` finds the social security and passport numbers and never the PESEL; one configured for
-`pl` finds the PESEL and neither of the other two. The three global ones are found either way. A decoy nothing reports
-is therefore worth checking against `SensitiveContent:PersonalDataAnalyzer:Language` before it is read as a defect.
+`pl` finds the PESEL and neither of the other two. The IBAN and the medical licence number are found either way,
+because the recognisers behind them are registered for no particular language, and the payment card in the four its
+recogniser names. A decoy nothing reports is therefore worth checking against
+`SensitiveContent:PersonalDataAnalyzer:Language` before it is read as a defect —
+[the analyzer's language](personal-data-analyzer-languages.md) has the whole table.
 
 **Every value is fabricated at run time and is structurally valid.** A payment card passes Luhn, an IBAN its
 remainder, a PESEL its weighted sum, a medical licence its own check digit — an identifier that failed its validator
