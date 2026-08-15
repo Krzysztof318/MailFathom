@@ -111,9 +111,27 @@ permissions:
 #
 # It renders as nothing. A Markdown comment is invisible in the review GitHub displays and survives
 # the round trip through the API, which an invisible character or a trailing convention would not.
+#
+# Which Claude subscription pays for a review is the second thing declared here, and for a related
+# reason: three steps name the credential and they have to name the same one. `CLAUDE_CODE_PROFILE`
+# is a repository variable rather than a secret, because the name of a profile is not one — keeping
+# it out of the secret store is what lets a run say which subscription it selected instead of `***`.
+# Set it to `secondary` to spend the second profile's subscription; unset, or set to anything else,
+# means the first and `CLAUDE_CODE_OAUTH_TOKEN`. Both tokens live in the secret store at once, so
+# switching back is a variable change rather than a token regenerated over one that was overwritten.
+#
+# What is declared here is the secret's *name*, which the annotations that report a missing
+# credential print. The value is read per step, by the same condition, because a secret in a
+# workflow-level `env` is in the environment of every step of every job — including the two that
+# never touch a Claude credential and the one that runs the model — and this file's whole posture is
+# that the credential is held by the fewest steps that can do the work. `scripts/test-agent-workflow.sh`
+# fails when the four spellings of the condition stop agreeing, which is the one failure this split
+# can produce and the one nothing else would report: a leak check comparing findings against a token
+# no run spends passes every review it is given.
 env:
   AUTOMATIC_REVIEW_MARKER: '<!-- fathom-review: automatic -->'
   REQUESTED_REVIEW_MARKER: '<!-- fathom-review: requested -->'
+  CLAUDE_CREDENTIAL_SECRET: ${{ vars.CLAUDE_CODE_PROFILE == 'secondary' && 'CLAUDE_CODE_OAUTH_TOKEN_SECONDARY' || 'CLAUDE_CODE_OAUTH_TOKEN' }}
 
 jobs:
   decide:
@@ -1194,9 +1212,17 @@ jobs:
         uses: anthropics/claude-code-action@v1
         with:
           # A Claude Code OAuth token rather than an API key: the review runs on the owner's Claude
-          # subscription. Generate it with `claude setup-token` and store it as the
-          # `CLAUDE_CODE_OAUTH_TOKEN` repository secret.
-          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          # subscription. Generate it with `claude setup-token` and store it as the repository
+          # secret the profile declared at the top of this file selects — `CLAUDE_CODE_OAUTH_TOKEN`,
+          # or `CLAUDE_CODE_OAUTH_TOKEN_SECONDARY` where `CLAUDE_CODE_PROFILE` is `secondary`.
+          #
+          # A `&&`/`||` expression yields its right operand whenever the middle one is empty, so a
+          # `secondary` profile whose secret was never stored falls back to the first profile's
+          # token rather than authenticating with nothing. That is the better of the two outcomes —
+          # a review that runs on the other subscription beats one that cannot run at all — and it
+          # is the reason the two steps below still refuse an unset credential outright: both
+          # secrets missing is the case no fallback covers.
+          claude_code_oauth_token: ${{ vars.CLAUDE_CODE_PROFILE == 'secondary' && secrets.CLAUDE_CODE_OAUTH_TOKEN_SECONDARY || secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           # Explicit, so the action uses the workflow token with the permissions declared above
           # rather than exchanging an OIDC token for a GitHub App installation token whose scopes
           # this workflow does not state.
@@ -1308,7 +1334,12 @@ jobs:
         env:
           EXECUTION_FILE: ${{ runner.temp }}/claude-execution-output.json
           WORKFLOW_TOKEN: ${{ github.token }}
-          CLAUDE_CREDENTIAL: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          # The credential the step above actually authenticated with, selected by the same
+          # condition rather than by a second reading of the profile: this compares printed text
+          # against it, so a comparison against the token the run did not spend would be no
+          # comparison at all. `CLAUDE_CREDENTIAL_SECRET` names it and arrives from the
+          # workflow-level `env`, which every step already carries.
+          CLAUDE_CREDENTIAL: ${{ vars.CLAUDE_CODE_PROFILE == 'secondary' && secrets.CLAUDE_CODE_OAUTH_TOKEN_SECONDARY || secrets.CLAUDE_CODE_OAUTH_TOKEN }}
         run: |
           set -euo pipefail
 
@@ -1338,7 +1369,7 @@ jobs:
           # secret is reported rather than compared: `grep -F ''` matches everything, which would
           # turn a missing secret into a permanent false positive.
           if [[ -z "$CLAUDE_CREDENTIAL" ]]; then
-            echo '::error::CLAUDE_CODE_OAUTH_TOKEN is not set, which is why the reviewer could not run.'
+            printf '::error::%s is not set, which is why the reviewer could not run.\n' "$CLAUDE_CREDENTIAL_SECRET"
             exit 0
           fi
 
@@ -1477,8 +1508,10 @@ jobs:
           REVIEWER_TOKEN: ${{ steps.reviewer.outputs.token }}
           # Held only by this step, which runs no model output and makes one API call, so that a
           # credential the reviewer was never able to read still cannot be published if it somehow
-          # reaches the findings.
-          CLAUDE_CREDENTIAL: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          # reaches the findings. It is the credential the reviewer authenticated with, selected by
+          # the same condition the action input above uses: what this refuses to publish has to be
+          # the token the run spent rather than the one the other profile would have.
+          CLAUDE_CREDENTIAL: ${{ vars.CLAUDE_CODE_PROFILE == 'secondary' && secrets.CLAUDE_CODE_OAUTH_TOKEN_SECONDARY || secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           # Whether the reviewer got as far as an answer. Two branches consult it: an empty answer
           # is a failure already reported when the step failed and this workflow's own defect when
           # it did not, and an empty findings array means one thing from a run that finished and
@@ -1539,7 +1572,7 @@ jobs:
           # An unset secret is refused rather than compared: `grep -F ''` matches every file, so
           # comparing against it would reject every review this workflow ever produced.
           if [[ -z "$CLAUDE_CREDENTIAL" ]]; then
-            echo '::error::CLAUDE_CODE_OAUTH_TOKEN is not set, so the findings cannot be checked against it.'
+            printf '::error::%s is not set, so the findings cannot be checked against it.\n' "$CLAUDE_CREDENTIAL_SECRET"
             exit 1
           fi
 
