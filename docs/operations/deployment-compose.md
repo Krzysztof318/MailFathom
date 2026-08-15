@@ -324,6 +324,41 @@ docker compose down --remove-orphans                # keeps the mail
 docker compose down --volumes --remove-orphans      # destroys it
 ```
 
+## The error a rootless-Podman teardown reports
+
+Taking the deployment down under Podman can end on this, and everything it reports on has already happened:
+
+```text
+Error: removing container <id> network: 1 error occurred:
+        * rootless netns: kill network process: permission denied
+```
+
+The containers are gone, the networks are gone, and the volume survives exactly as it does on any other `down`. What
+failed is the last step of the teardown rather than the teardown. Rootless Podman holds the network namespace its
+containers share open with a `pasta` process, and finishes by sending that process `SIGTERM` — and here the kernel
+refused the signal. No file mode is involved in that refusal. `pasta` runs confined by an AppArmor profile, that profile
+accepts a signal from an *unconfined* sender and from nobody else, and on a distribution that also ships an AppArmor
+profile for `podman` the sender is no longer unconfined, so no rule matches and the signal is denied. Podman reads that
+as the distribution's policy rather than as a defect of its own, and
+[closed the report on those terms](https://github.com/containers/podman/issues/27372).
+
+What it costs is one `pasta` process per teardown, left running with nothing to serve. `pgrep --list-full pasta` finds
+them: the ones Podman started carry `rootless-netns` in their arguments. Killing them by hand works, because your own
+shell is not what the policy refuses.
+
+Making the error stop is a change to the host's AppArmor policy, and the one thing there not to guess at is which
+profile refused whom. The denial says both:
+
+```bash
+journalctl --dmesg --grep 'apparmor="DENIED".*operation="signal"'   # /var/log/audit/audit.log where auditd runs
+```
+
+`profile=` names the process that was signalled and `peer=` the one that signalled it. What allows that pair is a rule
+in the profile `profile=` names — `signal (receive) set=("term") peer=<peer>,` added inside the `pasta` profile, which
+the `passt` package installs as `/etc/apparmor.d/usr.bin.pasta`, and applied with
+`apparmor_parser --replace /etc/apparmor.d/usr.bin.pasta`. That file belongs to the package, so a later upgrade of it
+asks what to do with the edit.
+
 ## The image
 
 `MAILFATHOM_IMAGE` defaults to `mailfathom:local`, a name no registry can serve, so `docker compose up --build` builds this
