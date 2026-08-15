@@ -670,7 +670,7 @@ same refusals; the section above records that rule once.
 
 | Field | Meaning |
 |---|---|
-| `answer` | The answer, in prose, written in the language the question was asked in whatever language the mail behind it was written in |
+| `answer` | The answer, in prose, written in the language the question was asked in, whatever language the mail behind it was written in |
 | `citations` | The emails the run retrieved, one entry per email, in the order it first reached each |
 | `answerTruncated` | Whether the answer was cut to the length one response carries |
 | `citationsTruncated` | Whether the run reached more emails than `citations` names |
