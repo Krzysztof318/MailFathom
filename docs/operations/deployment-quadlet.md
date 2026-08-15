@@ -345,6 +345,12 @@ Stopping the units leaves the volume. Removing it is `podman volume rm mailfatho
 because rebuilding it costs a full IMAP resynchronization — and everything that is not in the mailbox, the answering
 audit trail and the embeddings, is regenerated rather than refetched.
 
+Stopping them can also report `rootless netns: kill network process: permission denied`, which is the host's AppArmor
+policy refusing a signal rather than a unit that failed to stop. These containers are torn down through the same
+rootless network namespace as the Compose deployment's and end on the same step, so
+[the error a rootless-Podman teardown reports](deployment-compose.md#the-error-a-rootless-podman-teardown-reports)
+holds here unchanged.
+
 ## Uninstalling
 
 ```bash
