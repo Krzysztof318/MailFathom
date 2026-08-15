@@ -342,7 +342,7 @@ nowhere to ask **fails startup** rather than running unprotected.
 | `SensitiveContent:PersonalDataAnalyzer:Language` | string | `en` | Two lowercase letters, naming a language the analyzer loads a model for and registers recognizers in. One per deployment, stated on every request, and part of the derivation stamp | restart |
 | `SensitiveContent:PersonalDataAnalyzer:MinimumConfidence` | double | `0.4` | 0 – 1 inclusive, compared inclusively by the analyzer. It decides which regions are replaced, so it is part of the derivation stamp and changing it marks earlier-derived rows stale | restart |
 | `SensitiveContent:MaximumAnalyzedCharacters` | int | `200000` | 1 – 10000000; text beyond it is dropped from the result rather than handed on unscanned. On the derived path that is what is *stored*, so lowering it truncates every message indexed afterwards and the value is part of the derivation stamp | restart |
-| `SensitiveContent:ScanTimeout` | TimeSpan | `00:00:05` | One second to two minutes, per call to one scanner | restart |
+| `SensitiveContent:ScanTimeout` | TimeSpan | `00:00:15` | One second to two minutes, per call to one scanner. A scan that misses it is refused rather than served unscanned, and on the derivation path that refusal ends the synchronization run carrying it, so a budget below what the analyzer spends on a large body leaves a folder repeating the same batch | restart |
 | `SensitiveContent:MaximumConcurrentScans` | int | `4` | 1 – 256, across the process | restart |
 | `SensitiveContent:RebuildStaleDerivedData` | bool | `false` | Read only while a scanner is on; re-derives every message whose derived text predates the current configuration | restart |
 
