@@ -4,8 +4,10 @@
 
 using MailFathom.Application.EmailContent.Storage;
 using MailFathom.Application.Emails.Extraction;
+using MailFathom.Application.Mail;
 using MailFathom.Infrastructure.Mail.Mime;
 using MailFathom.Infrastructure.UnitTests.TestDoubles;
+using NSubstitute;
 using Xunit;
 
 namespace MailFathom.Infrastructure.UnitTests.Mail.Mime;
@@ -438,7 +440,9 @@ public sealed class EmailBodyTextExtractionTests
         Assert.Equal("One reading.", result.Metadata?.Text.TrimmedText);
     }
 
-    private static MimeKitEmailMimeReader CreateReader(EmailMimeExtractionOptions options) => new(options);
+    /// <summary>Builds a reader that believes no server, because nothing here is about sender authentication.</summary>
+    private static MimeKitEmailMimeReader CreateReader(EmailMimeExtractionOptions options) =>
+        new(options, Substitute.For<ITrustedAuthenticationAuthorityReader>());
 
     private static async Task<ExtractedEmailText> ExtractTextAsync(
         RemoteEmailContent content,

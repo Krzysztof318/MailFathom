@@ -7,6 +7,7 @@ using MailFathom.Application.Emails.Summaries;
 using MailFathom.Application.Synchronization;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
+using MailFathom.Domain.Emails.Authentication;
 using MailFathom.Domain.Folders;
 using MailFathom.Infrastructure.Persistence.Emails;
 using MailFathom.Infrastructure.Persistence.Entities;
@@ -338,6 +339,67 @@ public sealed class StoredEmailMetadataMappingTests
         Assert.False(entity.IsRemotelyDeleted);
     }
 
+    /// <summary>The verdict reaches its own columns in the comparison form, which is what a later reader matches on.</summary>
+    [Fact]
+    public void ApplyExtractedMetadata_AuthenticatedMessage_RecordsTheWholeVerdict()
+    {
+        // Arrange
+        var entity = CreateEntity();
+        Assert.True(SenderDomain.TryCreate("Signer.Test", out var dkimDomain));
+        Assert.True(SenderDomain.TryCreate("relay.test", out var spfDomain));
+        Assert.True(SenderDomain.TryCreate("bank.test", out var fromDomain));
+
+        // Act
+        StoredEmailMetadataMapping.ApplyExtractedMetadata(
+            entity,
+            CreateExtractedMetadata(
+                senderAuthentication: SenderAuthentication.Authenticated(
+                    dkimDomain,
+                    spfDomain,
+                    fromDomain,
+                    DmarcOutcome.Fail)));
+
+        // Assert
+        Assert.Equal(SenderAuthenticationOutcome.Authenticated, entity.SenderAuthenticationOutcome);
+        Assert.Equal(SenderAuthenticationMethod.DomainKeysIdentifiedMail, entity.SenderAuthenticationMethod);
+        Assert.Equal("SIGNER.TEST", entity.AuthenticatedSenderDomain);
+        Assert.Equal("SIGNER.TEST", entity.DkimSignerDomain);
+        Assert.Equal("RELAY.TEST", entity.SpfMailFromDomain);
+        Assert.Equal(DmarcOutcome.Fail, entity.DmarcOutcome);
+        Assert.Equal(SenderDomainAlignment.Misaligned, entity.SenderDomainAlignment);
+    }
+
+    /// <summary>A re-derivation that establishes nothing must clear what a previous reading recorded, not leave half of it.</summary>
+    [Fact]
+    public void ApplyExtractedMetadata_NotEstablishedAfterAnAuthenticatedReading_ClearsTheWholeVerdict()
+    {
+        // Arrange
+        var entity = CreateEntity();
+        Assert.True(SenderDomain.TryCreate("signer.test", out var dkimDomain));
+        StoredEmailMetadataMapping.ApplyExtractedMetadata(
+            entity,
+            CreateExtractedMetadata(
+                senderAuthentication: SenderAuthentication.Authenticated(
+                    dkimDomain,
+                    spfDomain: null,
+                    fromDomain: null,
+                    DmarcOutcome.Pass)));
+
+        // Act
+        StoredEmailMetadataMapping.ApplyExtractedMetadata(
+            entity,
+            CreateExtractedMetadata(senderAuthentication: SenderAuthentication.NotEstablished()));
+
+        // Assert
+        Assert.Equal(SenderAuthenticationOutcome.NotEstablished, entity.SenderAuthenticationOutcome);
+        Assert.Equal(SenderAuthenticationMethod.None, entity.SenderAuthenticationMethod);
+        Assert.Null(entity.AuthenticatedSenderDomain);
+        Assert.Null(entity.DkimSignerDomain);
+        Assert.Null(entity.SpfMailFromDomain);
+        Assert.Equal(DmarcOutcome.NotReported, entity.DmarcOutcome);
+        Assert.Equal(SenderDomainAlignment.NotAssessed, entity.SenderDomainAlignment);
+    }
+
     private static AttachmentFileName FileName(string decodedFileName)
     {
         Assert.True(AttachmentFileName.TryNormalize(decodedFileName, out var fileName));
@@ -356,7 +418,8 @@ public sealed class StoredEmailMetadataMappingTests
         IReadOnlyList<EmailParticipant>? participants = null,
         EmailThreadReferences? threadReferences = null,
         EmailAttachmentSummary? attachments = null,
-        ExtractedEmailText? text = null) =>
+        ExtractedEmailText? text = null,
+        SenderAuthentication? senderAuthentication = null) =>
         new(
             OccurrenceId,
             "Quarterly report",
@@ -365,7 +428,8 @@ public sealed class StoredEmailMetadataMappingTests
             participants ?? [],
             threadReferences ?? EmailThreadReferences.None,
             attachments ?? EmailAttachmentSummary.None,
-            text ?? ExtractedEmailText.NoTextualBody);
+            text ?? ExtractedEmailText.NoTextualBody,
+            senderAuthentication ?? SenderAuthentication.NotEstablished());
 
     private static RemoteEmailMetadata CreateRemoteMetadata(string internetMessageId) =>
         new(OccurrenceId, internetMessageId, "Quarterly report", SentAt, SizeOctets: 4096);

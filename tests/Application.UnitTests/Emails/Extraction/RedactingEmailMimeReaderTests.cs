@@ -10,6 +10,7 @@ using MailFathom.Application.SensitiveContent.Detection;
 using MailFathom.Application.UnitTests.TestDoubles;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
+using MailFathom.Domain.Emails.Authentication;
 using MailFathom.Domain.Folders;
 using Microsoft.Extensions.Time.Testing;
 using NSubstitute;
@@ -207,7 +208,8 @@ public sealed class RedactingEmailMimeReaderTests
                 Participants: [],
                 EmailThreadReferences.None,
                 EmailAttachmentSummary.None,
-                text))));
+                text,
+                SenderAuthentication.NotEstablished()))));
 
         return reader;
     }

@@ -5,7 +5,9 @@
 using System.Text.RegularExpressions;
 using MailFathom.Application.EmailContent.Storage;
 using MailFathom.Application.Emails.Extraction;
+using MailFathom.Application.Mail;
 using MailFathom.Domain.Emails;
+using MailFathom.Domain.Emails.Authentication;
 using MimeKit;
 
 namespace MailFathom.Infrastructure.Mail.Mime;
@@ -31,26 +33,36 @@ internal delegate Task<MimeMessage> ParsedMimeMessageLoader(Stream rawMime, Canc
 internal sealed class MimeKitEmailMimeReader : IEmailMimeReader
 {
     private readonly EmailMimeExtractionOptions options;
+    private readonly ITrustedAuthenticationAuthorityReader trustedAuthorities;
     private readonly ParsedMimeMessageLoader loadMessage;
 
     /// <summary>Initializes a reader that parses with MimeKit.</summary>
     /// <param name="options">The configured structural limits.</param>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="options" /> is <see langword="null" />.</exception>
-    public MimeKitEmailMimeReader(EmailMimeExtractionOptions options)
-        : this(options, LoadWithoutCopyingContentAsync)
+    /// <param name="trustedAuthorities">Resolves the server whose sender-authentication statements an account believes.</param>
+    /// <exception cref="ArgumentNullException">Thrown when either argument is <see langword="null" />.</exception>
+    public MimeKitEmailMimeReader(
+        EmailMimeExtractionOptions options,
+        ITrustedAuthenticationAuthorityReader trustedAuthorities)
+        : this(options, trustedAuthorities, LoadWithoutCopyingContentAsync)
     {
     }
 
     /// <summary>Initializes a reader whose message load is supplied, so a test can observe whether it happens.</summary>
     /// <param name="options">The configured structural limits.</param>
+    /// <param name="trustedAuthorities">Resolves the server whose sender-authentication statements an account believes.</param>
     /// <param name="loadMessage">Turns raw MIME into a parsed message.</param>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="options" /> or <paramref name="loadMessage" /> is <see langword="null" />.</exception>
-    internal MimeKitEmailMimeReader(EmailMimeExtractionOptions options, ParsedMimeMessageLoader loadMessage)
+    /// <exception cref="ArgumentNullException">Thrown when any argument is <see langword="null" />.</exception>
+    internal MimeKitEmailMimeReader(
+        EmailMimeExtractionOptions options,
+        ITrustedAuthenticationAuthorityReader trustedAuthorities,
+        ParsedMimeMessageLoader loadMessage)
     {
         ArgumentNullException.ThrowIfNull(options);
+        ArgumentNullException.ThrowIfNull(trustedAuthorities);
         ArgumentNullException.ThrowIfNull(loadMessage);
 
         this.options = options;
+        this.trustedAuthorities = trustedAuthorities;
         this.loadMessage = loadMessage;
     }
 
@@ -129,6 +141,20 @@ internal sealed class MimeKitEmailMimeReader : IEmailMimeReader
             headers.Participants,
             headers.ThreadReferences,
             classification.Summary,
-            EmailBodyTextExtractor.Extract(classification, this.options.MaxExtractedTextCharacters));
+            EmailBodyTextExtractor.Extract(classification, this.options.MaxExtractedTextCharacters),
+            this.ReadSenderAuthentication(occurrenceId, message));
     }
+
+    /// <summary>Reads what the receiving server established about who sent the message.</summary>
+    /// <remarks>
+    /// The displayed sender is taken from <c>From</c> alone and never from <c>Sender</c>, unlike the participant a
+    /// timeline names. The two headers answer different questions: the timeline wants whoever the message is from for a
+    /// reader, while alignment is defined against the domain a mail client shows, which is <c>From</c>'s. The first
+    /// mailbox wins where the header carried several, because a message can display only one sender.
+    /// </remarks>
+    private SenderAuthentication ReadSenderAuthentication(EmailOccurrenceId occurrenceId, MimeMessage message) =>
+        SenderAuthenticationReading.Read(
+            AuthenticationResultsHeaderReader.Read(message),
+            this.trustedAuthorities.GetTrustedAuthority(occurrenceId.AccountId),
+            message.From.Mailboxes.FirstOrDefault()?.Address);
 }

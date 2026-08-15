@@ -40,6 +40,9 @@
 - name: Sensitive-content scanning
   href: sensitive-content-scanning.md
   description: How a credential that arrived in a mailbox is kept out of a provider's context window, a retrieval snippet, and a log line.
+- name: Sender authentication
+  href: sender-authentication.md
+  description: How the domain that actually sent a message is established from what the receiving server authenticated, rather than from the From header anybody can write.
 - name: Spam classification
   href: spam-classification.md
   description: How mail written to deceive a reader is recognized from what the receiving server already decided, and what that changes downstream.

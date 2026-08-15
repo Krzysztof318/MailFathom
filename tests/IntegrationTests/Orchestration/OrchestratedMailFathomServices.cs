@@ -214,6 +214,11 @@ internal sealed class OrchestratedMailFathomServices : IAsyncDisposable
         builder.Services.AddSingleton<IAuthoredDeleteEmailDispositionReader>(account);
         builder.Services.AddSingleton<IMailboxMutationAuditSettingsReader>(account);
         builder.Services.AddSingleton<IMailAnsweringAuditSettingsReader>(account);
+        // Which server's sender-authentication statements an account believes, registered by the composition root from
+        // the same options section. The MIME reader resolves it for every extraction, so a harness without it would fail
+        // to compose rather than behave like the deployment that names no such server — which is the deployment this
+        // account is.
+        builder.Services.AddSingleton<ITrustedAuthenticationAuthorityReader>(account);
         builder.Services.AddSingleton(new MailboxSynchronizationOptions
         {
             MaxMetadataBatchSize = 50,

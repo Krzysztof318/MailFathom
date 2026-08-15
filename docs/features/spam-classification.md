@@ -67,6 +67,10 @@ outcome is a relay's signed claim about what *it* saw, which is a weaker stateme
 saw. A failure is recorded and decides nothing on its own — a message the receiving server chose to deliver despite a
 DMARC failure is a message about which something is known, not a message this system overrules the server about.
 
+This reading is deliberately not the one [sender authentication](sender-authentication.md) performs. Here every hop's
+claim is collected as a signal to be weighed against the others; there exactly one server is believed and the rest are
+ignored, which is what makes that verdict a statement about who sent the message rather than evidence about it.
+
 **Provider spam headers.** `X-Spam-Flag`, `X-Spam-Status`, `X-Spam-Score`, and `X-Spam-Level`. The flag is read before
 the status, so a message that disagrees with itself is answered by the one field with two accepted values. A score
 becomes an assessment only where the same header carries the threshold it was judged against; a bare

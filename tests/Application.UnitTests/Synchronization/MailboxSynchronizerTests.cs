@@ -18,6 +18,7 @@ using MailFathom.Application.Synchronization.Sessions;
 using MailFathom.Application.UnitTests.TestDoubles;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
+using MailFathom.Domain.Emails.Authentication;
 using MailFathom.Domain.Folders;
 using MailFathom.Domain.Mutations;
 using MailFathom.Domain.Synchronization;
@@ -2348,7 +2349,8 @@ public sealed class MailboxSynchronizerTests
         Participants: [],
         EmailThreadReferences.None,
         EmailAttachmentSummary.None,
-        ExtractedEmailText.NoTextualBody);
+        ExtractedEmailText.NoTextualBody,
+        SenderAuthentication.NotEstablished());
 
     /// <summary>A run that runs out of bytes ends between two messages, at a checkpoint that covers only what it stored.</summary>
     /// <remarks>

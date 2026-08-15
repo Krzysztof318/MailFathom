@@ -10,6 +10,7 @@ using MailFathom.Application.Rules.History;
 using MailFathom.Application.SensitiveContent.Derivation;
 using MailFathom.CodeCoverage;
 using MailFathom.Domain.Emails;
+using MailFathom.Domain.Emails.Authentication;
 using MailFathom.Domain.Mutations;
 using MailFathom.Infrastructure.Persistence.Connections;
 using MailFathom.Infrastructure.Persistence.Entities;
@@ -329,6 +330,35 @@ internal sealed class MailFathomDbContext : DbContext
 
             // Stored as text so the availability reason stays readable in ad-hoc audit queries and survives enum reordering.
             entity.Property(email => email.ContentAvailability).HasConversion<string>().HasMaxLength(64).IsRequired();
+
+            // The sender-authentication verdict, whose four enums are stored as text for the same reason and whose
+            // domains are bounded by the length a resolver accepts, which the domain value already refuses to exceed.
+            // Each enum carries a database default naming the value that establishes nothing, because that is what is
+            // true of a row written before this deployment read the header: the migration that adds the columns fills
+            // every stored message in with it, and a mailbox re-reads its own raw MIME through the extraction backfill.
+            entity.Property(email => email.SenderAuthenticationOutcome)
+                .HasConversion<string>()
+                .HasMaxLength(64)
+                .HasDefaultValue(SenderAuthenticationOutcome.NotEstablished)
+                .IsRequired();
+            entity.Property(email => email.SenderAuthenticationMethod)
+                .HasConversion<string>()
+                .HasMaxLength(64)
+                .HasDefaultValue(SenderAuthenticationMethod.None)
+                .IsRequired();
+            entity.Property(email => email.DmarcOutcome)
+                .HasConversion<string>()
+                .HasMaxLength(64)
+                .HasDefaultValue(DmarcOutcome.NotReported)
+                .IsRequired();
+            entity.Property(email => email.SenderDomainAlignment)
+                .HasConversion<string>()
+                .HasMaxLength(64)
+                .HasDefaultValue(SenderDomainAlignment.NotAssessed)
+                .IsRequired();
+            entity.Property(email => email.AuthenticatedSenderDomain).HasMaxLength(StoredEmailEntity.MaximumDomainLength);
+            entity.Property(email => email.DkimSignerDomain).HasMaxLength(StoredEmailEntity.MaximumDomainLength);
+            entity.Property(email => email.SpfMailFromDomain).HasMaxLength(StoredEmailEntity.MaximumDomainLength);
 
             ConfigureStoredEmailIndexes(entity);
 

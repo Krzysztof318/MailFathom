@@ -14,6 +14,7 @@ using MailFathom.Application.Synchronization.Checkpoints;
 using MailFathom.Application.Synchronization.Reconciliation;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
+using MailFathom.Domain.Emails.Authentication;
 using MailFathom.Domain.Folders;
 using MailFathom.Domain.Synchronization;
 using MailFathom.Domain.Transport;
@@ -56,7 +57,8 @@ internal sealed class SyntheticMailAccount(
     IMailAccountCatalog,
     IMailFolderParticipationReader,
     IMailFolderMappingReader,
-    IJunkMailFolderCatalog
+    IJunkMailFolderCatalog,
+    ITrustedAuthenticationAuthorityReader
 {
     /// <summary>Every folder alias this suite's configuration maps, which is every alias its tests bind one to.</summary>
     /// <remarks>
@@ -222,6 +224,16 @@ internal sealed class SyntheticMailAccount(
     /// </remarks>
     public MailAnsweringAuditSettings GetAnsweringAuditSettings(MailAccountId accountId) =>
         new(answeringAuditTrailEnabled, AnsweringAuditRetention);
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// This suite's mail server writes no <c>Authentication-Results</c> header, so an account that named a server to
+    /// believe would still record the not-established verdict on everything and only make the arrangement look like it
+    /// proved something. What the trusted reading does with a header is settled in the unit suite, where a header can
+    /// be written by hand.
+    /// </remarks>
+    public TrustedAuthenticationAuthority GetTrustedAuthority(MailAccountId accountId) =>
+        TrustedAuthenticationAuthority.None;
 
     /// <inheritdoc />
     /// <remarks>

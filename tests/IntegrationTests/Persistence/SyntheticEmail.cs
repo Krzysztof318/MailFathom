@@ -9,6 +9,7 @@ using MailFathom.Application.Emails.Extraction;
 using MailFathom.Application.Emails.Summaries;
 using MailFathom.Application.Synchronization;
 using MailFathom.Domain.Emails;
+using MailFathom.Domain.Emails.Authentication;
 using MailFathom.Domain.Folders;
 using MailFathom.IntegrationTests.Orchestration;
 
@@ -105,7 +106,8 @@ internal static class SyntheticEmail
             ],
             EmailThreadReferences.Create($"{subject}@mailfathom.test", inReplyTo: null, references: null),
             EmailAttachmentSummary.None,
-            ExtractedEmailText.FromPlainTextBody(bodyText, bodyText));
+            ExtractedEmailText.FromPlainTextBody(bodyText, bodyText),
+            SenderAuthentication.NotEstablished());
 
     /// <summary>Builds raw RFC 822 bytes of a requested length, padded with text that does not compress.</summary>
     /// <param name="subject">The subject the headers carry.</param>

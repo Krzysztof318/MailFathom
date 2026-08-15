@@ -31,6 +31,7 @@ using MailFathom.Application.Synchronization.Reconciliation;
 using MailFathom.Application.Synchronization.Sessions;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
+using MailFathom.Domain.Emails.Authentication;
 using MailFathom.Domain.Folders;
 using MailFathom.Domain.Mutations;
 using MailFathom.Domain.Transport;
@@ -545,7 +546,8 @@ internal static class SynchronizationTestHost
                 Participants: [],
                 EmailThreadReferences.None,
                 EmailAttachmentSummary.None,
-                ExtractedEmailText.NoTextualBody))));
+                ExtractedEmailText.NoTextualBody,
+                SenderAuthentication.NotEstablished()))));
 
         return mimeReader;
     }

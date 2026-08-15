@@ -29,6 +29,7 @@ using MailFathom.Application.Jobs;
 using MailFathom.Application.Jobs.DeadLetters;
 using MailFathom.Application.Jobs.Execution;
 using MailFathom.Application.Jobs.Scheduling;
+using MailFathom.Application.Mail;
 using MailFathom.Application.Mail.Mutations;
 using MailFathom.Application.Mail.Mutations.Audit;
 using MailFathom.Application.Mail.Mutations.Convergence;
@@ -408,7 +409,9 @@ public static class ServiceCollectionExtensions
         // project does not bind, and left unwrapped where nothing is scanned so a message is read exactly as it was.
         services.AddScoped<IEmailMimeReader>(provider =>
         {
-            var reader = new MimeKitEmailMimeReader(provider.GetRequiredService<EmailMimeExtractionOptions>());
+            var reader = new MimeKitEmailMimeReader(
+                provider.GetRequiredService<EmailMimeExtractionOptions>(),
+                provider.GetRequiredService<ITrustedAuthenticationAuthorityReader>());
 
             return provider.GetRequiredService<SensitiveContentDerivationGuard>() is { IsActive: true } guard
                 ? new RedactingEmailMimeReader(reader, guard)

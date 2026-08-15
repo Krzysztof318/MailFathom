@@ -17,6 +17,7 @@ using MailFathom.Application.Synchronization.Checkpoints;
 using MailFathom.Application.Synchronization.Reconciliation;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
+using MailFathom.Domain.Emails.Authentication;
 using MailFathom.Domain.Folders;
 using MailFathom.Domain.Synchronization;
 using MailFathom.Domain.Transport;
@@ -39,6 +40,7 @@ internal sealed class MailSynchronizationOptions
         IMailboxMutationAuditSettingsReader,
         IMailAnsweringAuditSettingsReader,
         IMailAccountCatalog,
+        ITrustedAuthenticationAuthorityReader,
         IMailFolderParticipationReader,
         IJunkMailFolderCatalog,
         IMailFolderMappingReader
@@ -454,6 +456,15 @@ internal sealed class MailSynchronizationOptions
         this.FindConfiguredAccount(accountId)?.CreateAnsweringAuditSettings() ?? MailAnsweringAuditSettings.Disabled;
 
     /// <inheritdoc />
+    /// <remarks>
+    /// An account this snapshot no longer names answers with none rather than failing, for the reason the audit
+    /// settings above do: the extraction backfill runs over accounts a reload may have removed between one run and the
+    /// next, and believing no header there is the honest answer as well as the safe one.
+    /// </remarks>
+    public TrustedAuthenticationAuthority GetTrustedAuthority(MailAccountId accountId) =>
+        this.FindConfiguredAccount(accountId)?.CreateTrustedAuthority() ?? TrustedAuthenticationAuthority.None;
+
+    /// <inheritdoc />
     public bool SynchronizationEnabled => this.Enabled;
 
     /// <inheritdoc />
@@ -820,6 +831,30 @@ internal sealed class MailSynchronizationAccountOptions : IValidatableObject
     /// <remarks>An account authenticating with a password leaves the block empty, and validation then never reads it.</remarks>
     public MailAccountOAuthOptions OAuth { get; set; } = new();
 
+    /// <summary>Gets or sets the authserv-id of the one server whose sender-authentication results this account believes.</summary>
+    /// <remarks>
+    /// <para>
+    /// RFC 8601 has every server that checks SPF, DKIM, or DMARC write its findings into an <c>Authentication-Results</c>
+    /// header stamped with its own identifier, and it has a consumer read only the headers carrying the identifier it
+    /// trusts. That is the whole defence: the header is ordinary, so anything upstream of the receiving server can write
+    /// one claiming that everything passed, and a reading that took the topmost header whatever it said could be
+    /// defeated by the thing it is checking.
+    /// </para>
+    /// <para>
+    /// Which identifier is right is a property of who receives this account's mail rather than of MailFathom, so there
+    /// is nothing to default it to. Omitting it is an ordinary choice and not a misconfiguration: the account then
+    /// believes no header at all and every message it holds carries the not-established verdict, which is also what a
+    /// deployment whose provider publishes no results sees. Configuring one afterwards changes what a later extraction
+    /// derives; the backfill is what re-derives the mail already stored.
+    /// </para>
+    /// <para>
+    /// It is compared without regard to case. A value that is present but unusable — blank, longer than a domain name,
+    /// or carrying whitespace — fails startup, because the alternative is discovering it as mail that never
+    /// authenticates.
+    /// </para>
+    /// </remarks>
+    public string? TrustedAuthenticationServiceIdentifier { get; set; }
+
     /// <summary>Gets or sets the earliest date the mail server may have received an email on for it to be synchronized.</summary>
     /// <remarks>
     /// Omitting it synchronizes every email the server still holds, which is the default. It binds as a plain date such
@@ -963,6 +998,17 @@ internal sealed class MailSynchronizationAccountOptions : IValidatableObject
             yield return new ValidationResult(
                 $"Account '{this.AccountId}': the synchronization mode must be one of {string.Join(", ", Enum.GetNames<MailSynchronizationMode>())}.",
                 [nameof(this.Mode)]);
+        }
+
+        // A present but unusable authserv-id fails startup rather than degrading to trusting nothing, because the two
+        // are indistinguishable afterwards: an account that believes no header and an account whose configured
+        // identifier matches none both see every message as unauthenticated. The message names the account and never
+        // the value, which the failure rules refuse as a host name.
+        if (!TrustedAuthenticationAuthority.TryCreate(this.TrustedAuthenticationServiceIdentifier, out _))
+        {
+            yield return new ValidationResult(
+                $"Account '{this.AccountId}': the trusted authentication service identifier must be a domain-shaped token of at most {TrustedAuthenticationAuthority.MaximumLength} characters, or be omitted so that the account believes no header.",
+                [nameof(this.TrustedAuthenticationServiceIdentifier)]);
         }
 
         // Checked here rather than through a data annotation because nothing binds the block as an options graph of its
@@ -1269,6 +1315,18 @@ internal sealed class MailSynchronizationAccountOptions : IValidatableObject
     /// <returns>The settings the account's block names.</returns>
     internal MailAnsweringAuditSettings CreateAnsweringAuditSettings() =>
         new(this.AnsweringAuditTrail.Enabled, this.AnsweringAuditTrail.Retention);
+
+    /// <summary>Builds the account's configured sender-authentication authority.</summary>
+    /// <returns>The authority the account named, or none when it named none.</returns>
+    /// <remarks>
+    /// An unusable value answers with none rather than raising, because startup validation already refuses that
+    /// configuration and a reload being rejected must not make an extraction throw. Believing no header is the safe
+    /// direction to fall in: it withholds a verdict rather than inventing one.
+    /// </remarks>
+    internal TrustedAuthenticationAuthority CreateTrustedAuthority() =>
+        TrustedAuthenticationAuthority.TryCreate(this.TrustedAuthenticationServiceIdentifier, out var authority)
+            ? authority
+            : TrustedAuthenticationAuthority.None;
 
     /// <summary>Builds the account's configured synchronization window.</summary>
     /// <returns>The window the account's bound names, or an unbounded one when it configured none.</returns>

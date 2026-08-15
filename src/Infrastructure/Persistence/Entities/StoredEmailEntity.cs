@@ -4,6 +4,7 @@
 
 using MailFathom.CodeCoverage;
 using MailFathom.Domain.Emails;
+using MailFathom.Domain.Emails.Authentication;
 
 namespace MailFathom.Infrastructure.Persistence.Entities;
 
@@ -15,6 +16,9 @@ internal sealed class StoredEmailEntity
 
     /// <summary>The longest header line RFC 5322 accepts, which bounds every stored message identifier.</summary>
     internal const int MaximumIdentifierLength = 998;
+
+    /// <summary>The longest domain name a resolver accepts, which bounds every sender-authentication domain column.</summary>
+    internal const int MaximumDomainLength = SenderDomain.MaximumLength;
 
     /// <summary>
     /// The greatest number of addresses one header contributes to its array column. A message addressed to more
@@ -62,6 +66,48 @@ internal sealed class StoredEmailEntity
 
     /// <summary>Gets or sets the comparison form of <see cref="SenderAddress" />, which is the form every filter matches on.</summary>
     public string? SenderNormalizedAddress { get; set; }
+
+    /// <summary>
+    /// Gets or sets what the receiving mail server established about who actually sent this message, which is never
+    /// derived from the sender columns above.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Columns on the email rather than a table hanging off it, unlike <see cref="SpamClassification" />. The rows would
+    /// not be sparse: every message whose MIME was read carries a verdict, including the not-established one that a
+    /// deployment whose provider publishes no results sees on all of its mail. What reads the verdict is the arriving
+    /// message's own presentation, one row at a time down a timeline, so a join per row would buy a nullable association
+    /// nothing is ever without.
+    /// </para>
+    /// <para>
+    /// The whole group is written by extraction from the stored raw MIME and is re-derivable from it, which is what the
+    /// extraction backfill does after a trusted authority is configured for an account that had none.
+    /// </para>
+    /// </remarks>
+    public SenderAuthenticationOutcome SenderAuthenticationOutcome { get; set; }
+
+    /// <summary>Gets or sets which check established <see cref="AuthenticatedSenderDomain" />, or that none did.</summary>
+    public SenderAuthenticationMethod SenderAuthenticationMethod { get; set; }
+
+    /// <summary>Gets or sets the domain that authenticated, which is the DKIM one wherever both checks produced one.</summary>
+    public string? AuthenticatedSenderDomain { get; set; }
+
+    /// <summary>Gets or sets the domain of a DKIM signature the server verified, absent where none verified.</summary>
+    public string? DkimSignerDomain { get; set; }
+
+    /// <summary>Gets or sets the envelope-sender domain of an SPF check that passed, absent where none passed.</summary>
+    /// <remarks>
+    /// Kept beside <see cref="DkimSignerDomain" /> rather than collapsed into the authenticated domain, because the two
+    /// disagreeing is itself a fact about the message: a relay may be permitted to send for one domain while the
+    /// signature belongs to another, and a reader asking which is which would otherwise have to re-parse the raw MIME.
+    /// </remarks>
+    public string? SpfMailFromDomain { get; set; }
+
+    /// <summary>Gets or sets the DMARC result the trusted header reported, or that it reported none.</summary>
+    public DmarcOutcome DmarcOutcome { get; set; }
+
+    /// <summary>Gets or sets whether the authenticated domain is the one the message displays as its sender.</summary>
+    public SenderDomainAlignment SenderDomainAlignment { get; set; }
 
     /// <summary>Gets or sets the normalized <c>To</c> addresses, which recipient filters test for containment.</summary>
     /// <remarks>
