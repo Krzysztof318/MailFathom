@@ -4,6 +4,7 @@
 
 using MailFathom.Application.Emails.Summaries;
 using MailFathom.Domain.Emails;
+using MailFathom.Domain.Emails.Authentication;
 
 namespace MailFathom.Application.Emails.Extraction;
 
@@ -16,9 +17,11 @@ namespace MailFathom.Application.Emails.Extraction;
 /// <param name="ThreadReferences">The identifiers that place the message in a conversation.</param>
 /// <param name="Attachments">What the message carries besides its body.</param>
 /// <param name="Text">The searchable text the body yielded, or the reason it yielded none.</param>
+/// <param name="SenderAuthentication">What the receiving server established about who sent the message.</param>
 /// <remarks>
-/// Participants, subject, thread identifiers, and body text are personal data by default. Nothing in this record may be
-/// written to a log; only counts and the occurrence identity are safe to report.
+/// Participants, subject, thread identifiers, body text, and every domain the sender-authentication verdict names are
+/// personal data by default. Nothing in this record may be written to a log; only counts, the occurrence identity, and
+/// the verdict's own outcome are safe to report.
 /// </remarks>
 public sealed record ExtractedEmailMetadata(
     EmailOccurrenceId OccurrenceId,
@@ -28,4 +31,5 @@ public sealed record ExtractedEmailMetadata(
     IReadOnlyList<EmailParticipant> Participants,
     EmailThreadReferences ThreadReferences,
     EmailAttachmentSummary Attachments,
-    ExtractedEmailText Text);
+    ExtractedEmailText Text,
+    SenderAuthentication SenderAuthentication);

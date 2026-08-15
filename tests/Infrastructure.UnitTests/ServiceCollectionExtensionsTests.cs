@@ -7,6 +7,7 @@ using MailFathom.Application.Emails.Embeddings.Generation;
 using MailFathom.Application.Emails.Extraction;
 using MailFathom.Application.Emails.Search;
 using MailFathom.Application.Emails.SearchEmails;
+using MailFathom.Application.Mail;
 using MailFathom.Application.Retrieval;
 using MailFathom.Application.Retrieval.AskMail;
 using MailFathom.Application.SensitiveContent;
@@ -26,6 +27,7 @@ using Microsoft.Extensions.Http.Resilience;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Npgsql;
+using NSubstitute;
 using Xunit;
 
 namespace MailFathom.Infrastructure.UnitTests;
@@ -329,6 +331,7 @@ public sealed class ServiceCollectionExtensionsTests
         var services = new ServiceCollection();
         services.AddSingleton(TimeProvider.System);
         services.AddSingleton(new EmailMimeExtractionOptions());
+        services.AddSingleton(Substitute.For<ITrustedAuthenticationAuthorityReader>());
         services.AddSingleton(SensitiveContentPlan.Create(
             SensitiveContentScanBounds.Default,
             [
@@ -361,6 +364,7 @@ public sealed class ServiceCollectionExtensionsTests
         var services = new ServiceCollection();
         services.AddSingleton(TimeProvider.System);
         services.AddSingleton(new EmailMimeExtractionOptions());
+        services.AddSingleton(Substitute.For<ITrustedAuthenticationAuthorityReader>());
 
         // Act
         services.AddInfrastructure(

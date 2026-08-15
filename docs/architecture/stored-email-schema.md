@@ -38,6 +38,28 @@ The sender is stored as three columns: the display name and address as the messa
 
 Recipients are PostgreSQL `text[]` columns — `to_addresses`, `cc_addresses`, `reply_to_addresses` — rather than a join table, because every planned query tests containment rather than joining to recipient rows. They hold the comparison form only. A recipient's display name is mail content that no planned query filters or sorts on, and a second copy of it would widen the access, export, and erasure surface for nothing; a reader that needs the names re-derives them from the stored raw MIME, which the [email content](../features/email-content.md) read model parses anyway.
 
+### The sender-authentication verdict
+
+Seven columns record what the receiving mail server established about who actually sent the message:
+`SenderAuthenticationOutcome`, `SenderAuthenticationMethod`, `AuthenticatedSenderDomain`, `DkimSignerDomain`,
+`SpfMailFromDomain`, `DmarcOutcome`, and `SenderDomainAlignment`. The four enums are text for the reason
+`content_availability` is, and the three domains are `character varying(253)` — the length a resolver accepts, which the
+domain value already refuses to exceed, so no value ever reaches a column that would reject it.
+
+They are columns on the row rather than a table hanging off it, unlike [what classification
+concluded](#what-classification-concluded-about-a-message). The rows would not be sparse: every message whose MIME was
+read carries a verdict, including the not-established one that a deployment whose provider publishes no results sees on
+all of its mail. What reads the verdict is the arriving message's own presentation, one row at a time down a timeline,
+so a join per row would buy a nullable association nothing is ever without.
+
+Every enum column carries a database default naming the value that establishes nothing — `NotEstablished`, `None`,
+`NotReported`, `NotAssessed` — so the migration that adds them fills every stored message in with what was true of it
+rather than with a value nothing wrote. The whole group is written together on every extraction, so re-reading a
+message after its account gained a trusted identifier replaces the verdict rather than leaving one column of the
+previous reading behind. The domains are stored in the upper-cased comparison form, which is what a later reader matches
+on; [sender authentication](../features/sender-authentication.md) states how the verdict is reached and which header it
+is allowed to come from.
+
 ### Bounds on what a header may contribute
 
 Nothing between the mail server and a row bounds a header's length or how many addresses it names. The MIME reader bounds a message's *structure* — part count and nesting depth — but not the width of a single header, so the persistence mapping applies its own ceilings: 320 octets per address, 998 per message identifier, 256 addresses per recipient array, and 64 thread ancestors.

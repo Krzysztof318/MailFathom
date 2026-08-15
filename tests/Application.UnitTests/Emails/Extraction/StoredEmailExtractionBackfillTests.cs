@@ -10,6 +10,7 @@ using MailFathom.Application.Persistence;
 using MailFathom.Application.SensitiveContent.Derivation;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
+using MailFathom.Domain.Emails.Authentication;
 using MailFathom.Domain.Folders;
 using Microsoft.Extensions.Time.Testing;
 using NSubstitute;
@@ -347,7 +348,8 @@ public sealed class StoredEmailExtractionBackfillTests
                 Participants: [],
                 EmailThreadReferences.None,
                 EmailAttachmentSummary.None,
-                ExtractedEmailText.FromPlainTextBody(bodyText, bodyText)))));
+                ExtractedEmailText.FromPlainTextBody(bodyText, bodyText),
+                SenderAuthentication.NotEstablished()))));
 
         return mimeReader;
     }

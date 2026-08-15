@@ -27,6 +27,7 @@ using MailFathom.Application.Synchronization.Sessions;
 using MailFathom.Application.UnitTests.TestDoubles;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
+using MailFathom.Domain.Emails.Authentication;
 using MailFathom.Domain.Failures;
 using MailFathom.Domain.Folders;
 using MailFathom.TestSupport;
@@ -1582,7 +1583,8 @@ public sealed class EmailContentReaderTests
                 Participants: [],
                 EmailThreadReferences.None,
                 EmailAttachmentSummary.None,
-                ExtractedEmailText.FromPlainTextBody(body, body)))));
+                ExtractedEmailText.FromPlainTextBody(body, body),
+                SenderAuthentication.NotEstablished()))));
 
         return reader;
     }

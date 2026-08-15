@@ -6,6 +6,7 @@ using MailFathom.Application.Emails.Extraction;
 using MailFathom.Application.Emails.Summaries;
 using MailFathom.Application.Synchronization;
 using MailFathom.Domain.Emails;
+using MailFathom.Domain.Emails.Authentication;
 using MailFathom.Infrastructure.Persistence.Entities;
 
 namespace MailFathom.Infrastructure.Persistence.Emails;
@@ -69,6 +70,24 @@ internal static class StoredEmailMetadataMapping
         entity.ThreadReferences = BoundedIdentifiers(metadata.ThreadReferences.References);
 
         ApplyAttachmentSummary(entity, metadata.Attachments);
+        ApplySenderAuthentication(entity, metadata.SenderAuthentication);
+    }
+
+    /// <summary>Records what the receiving mail server established about who sent the message.</summary>
+    /// <remarks>
+    /// Written whole on every extraction, including the not-established verdict, so a re-derivation after an account's
+    /// trusted authority changed replaces the whole group rather than leaving one column from the previous reading. The
+    /// domains need no length guard of their own: the domain value refuses anything longer than the column accepts.
+    /// </remarks>
+    private static void ApplySenderAuthentication(StoredEmailEntity entity, SenderAuthentication authentication)
+    {
+        entity.SenderAuthenticationOutcome = authentication.Outcome;
+        entity.SenderAuthenticationMethod = authentication.AuthenticatedBy;
+        entity.AuthenticatedSenderDomain = authentication.AuthenticatedDomain?.NormalizedValue;
+        entity.DkimSignerDomain = authentication.DkimDomain?.NormalizedValue;
+        entity.SpfMailFromDomain = authentication.SpfDomain?.NormalizedValue;
+        entity.DmarcOutcome = authentication.Dmarc;
+        entity.SenderDomainAlignment = authentication.Alignment;
     }
 
     /// <summary>Records the one participant a timeline names as the message's sender.</summary>

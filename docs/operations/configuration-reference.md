@@ -111,6 +111,7 @@ shape the coordinator loop itself, which are read once at start and marked *rest
 | `…:Secrets:Password` | secret block | unset | Required when the permitted mechanisms include any password mechanism; must resolve at startup | reload; material per connection |
 | `…:Mode` | enum | `Polling` | `Polling`, `Push`; push holds one connection open per account on a server supporting `NOTIFY`, and one per folder on a server offering only `IDLE` | reload; the next run adopts it |
 | `…:EarliestEmailReceivedDate` | date | unset (everything) | Not in the future (compared in UTC) | reload |
+| `…:TrustedAuthenticationServiceIdentifier` | string | unset (believe no header) | The authserv-id of the server that receives this account's mail; at most 253 characters and no whitespace, compared without regard to case. Present and unusable fails startup; omitted is an ordinary choice | reload; the next extraction reads against it |
 | `…:RemotelyDeletedEmailDisposition` | enum | `RetainTombstone` | `RetainTombstone`, `EraseLocalCopy` | reload; governs disappearances observed from then on |
 | `…:AuthoredDeleteEmailDisposition` | enum | `RetainLocalCopy` | `RetainLocalCopy`, `RetainTombstone`, `EraseLocalCopy`; what becomes of the local copy of mail MailFathom itself deleted, and it takes precedence over the key above for those | reload; governs deletes authored from then on |
 | `…:RuleActions:Move` | bool | `true` | Whether a rule may file this account's mail into another of its folders | reload; the next rule pass writes down no change this refuses |
@@ -122,6 +123,13 @@ shape the coordinator loop itself, which are read once at start and marked *rest
 | `…:AnsweringAuditTrail:Enabled` | bool | `false` | Whether a finished `ask_mail` run leaves a durable entry naming the mail it read from this account | reload; governs runs from then on |
 | `…:AnsweringAuditTrail:Retention` | TimeSpan | `30.00:00:00` | 1 day – 3650 days; how long this account's answering entries are kept | reload; the next account run erases against the new window |
 | `…:Folders` | list | inbox by role | Aliases unique; each entry below | reload |
+
+`TrustedAuthenticationServiceIdentifier` names the one server whose `Authentication-Results` headers this account
+believes, which is what stops the check from being defeated by a header an attacker wrote upstream. There is nothing to
+default it to, because the right value is a property of who receives this account's mail; an account that omits it
+believes no header and every message it holds records that nothing was established.
+[Sender authentication](../features/sender-authentication.md) states how the header is chosen and what the verdict
+holds.
 
 `RuleActions` is what a rule is judged against rather than what it is filtered by: a rule declaring an action this
 account does not permit **fails startup** naming the rule, the action, and the account, rather than running with that

@@ -4,9 +4,13 @@
 
 using System.Text;
 using MailFathom.Application.Emails.Extraction;
+using MailFathom.Application.Mail;
+using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
+using MailFathom.Domain.Emails.Authentication;
 using MailFathom.Infrastructure.Mail.Mime;
 using MailFathom.Infrastructure.UnitTests.TestDoubles;
+using NSubstitute;
 using Xunit;
 
 namespace MailFathom.Infrastructure.UnitTests.Mail.Mime;
@@ -639,6 +643,7 @@ public sealed class MimeKitEmailMimeReaderTests
         var treeWasConstructed = false;
         var reader = new MimeKitEmailMimeReader(
             new EmailMimeExtractionOptions { MaxPartCount = 3, MaxNestingDepth = 30 },
+            TrustedAuthorities(identifier: null),
             (rawMime, cancellationToken) =>
             {
                 treeWasConstructed = true;
@@ -677,6 +682,7 @@ public sealed class MimeKitEmailMimeReaderTests
         var treeWasConstructed = false;
         var reader = new MimeKitEmailMimeReader(
             new EmailMimeExtractionOptions { MaxPartCount = 1000, MaxNestingDepth = 2 },
+            TrustedAuthorities(identifier: null),
             (rawMime, cancellationToken) =>
             {
                 treeWasConstructed = true;
@@ -698,7 +704,9 @@ public sealed class MimeKitEmailMimeReaderTests
     public async Task ReadMetadataAsync_MessageWithinTheStructuralLimits_IsRead()
     {
         // Arrange
-        var reader = new MimeKitEmailMimeReader(new EmailMimeExtractionOptions { MaxPartCount = 10, MaxNestingDepth = 4 });
+        var reader = new MimeKitEmailMimeReader(
+            new EmailMimeExtractionOptions { MaxPartCount = 10, MaxNestingDepth = 4 },
+            TrustedAuthorities(identifier: null));
 
         // Act
         var result = await reader.ReadMetadataAsync(CreateDeeplyNestedMessage(nestingDepth: 3), CancellationToken.None);
@@ -762,7 +770,177 @@ public sealed class MimeKitEmailMimeReaderTests
         Assert.Equal(MimeFixtures.OccurrenceId, AssertExtracted(result).OccurrenceId);
     }
 
-    private static MimeKitEmailMimeReader CreateReader() => new(new EmailMimeExtractionOptions());
+    /// <summary>The header the trusted server wrote is the one that decides, and the forged one below it is ignored.</summary>
+    [Fact]
+    public async Task ReadMetadataAsync_ForgedAuthenticationResultsBelowTheTrustedOne_ReadsTheTrustedOne()
+    {
+        // Arrange
+        var content = MimeFixtures.Message(
+            "Authentication-Results: mx.example.test; dkim=fail header.d=bank.test",
+            "Authentication-Results: attacker.test; dkim=pass header.d=bank.test",
+            "From: alerts@bank.test",
+            "Content-Type: text/plain",
+            string.Empty,
+            "Body");
+
+        // Act
+        var result = await CreateReader("mx.example.test").ReadMetadataAsync(content, CancellationToken.None);
+
+        // Assert
+        var authentication = AssertExtracted(result).SenderAuthentication;
+        Assert.Equal(SenderAuthenticationOutcome.Failed, authentication.Outcome);
+        Assert.Null(authentication.AuthenticatedDomain);
+    }
+
+    /// <summary>What a real provider writes is read whole: an identity, the envelope domain, and the DMARC result.</summary>
+    [Fact]
+    public async Task ReadMetadataAsync_TrustedHeaderStatingEveryMethod_RecordsTheWholeVerdict()
+    {
+        // Arrange
+        var content = MimeFixtures.Message(
+            "Authentication-Results: mx.example.test; spf=pass smtp.mailfrom=bounce@bank.test; "
+            + "dkim=pass header.d=bank.test; dmarc=pass header.from=bank.test",
+            "From: Bank <alerts@bank.test>",
+            "Content-Type: text/plain",
+            string.Empty,
+            "Body");
+
+        // Act
+        var result = await CreateReader("mx.example.test").ReadMetadataAsync(content, CancellationToken.None);
+
+        // Assert
+        var authentication = AssertExtracted(result).SenderAuthentication;
+        Assert.Equal(SenderAuthenticationOutcome.Authenticated, authentication.Outcome);
+        Assert.Equal(SenderAuthenticationMethod.DomainKeysIdentifiedMail, authentication.AuthenticatedBy);
+        Assert.Equal("BANK.TEST", authentication.AuthenticatedDomain?.NormalizedValue);
+        Assert.Equal("BANK.TEST", authentication.SpfDomain?.NormalizedValue);
+        Assert.Equal(DmarcOutcome.Pass, authentication.Dmarc);
+        Assert.Equal(SenderDomainAlignment.Aligned, authentication.Alignment);
+    }
+
+    /// <summary>An account naming no trusted server reads no header, which is what an unconfigured deployment gets.</summary>
+    [Fact]
+    public async Task ReadMetadataAsync_AccountTrustsNoServer_LeavesTheVerdictNotEstablished()
+    {
+        // Arrange
+        var content = MimeFixtures.Message(
+            "Authentication-Results: mx.example.test; dkim=pass header.d=bank.test",
+            "From: alerts@bank.test",
+            "Content-Type: text/plain",
+            string.Empty,
+            "Body");
+
+        // Act
+        var result = await CreateReader().ReadMetadataAsync(content, CancellationToken.None);
+
+        // Assert
+        var authentication = AssertExtracted(result).SenderAuthentication;
+        Assert.Equal(SenderAuthenticationOutcome.NotEstablished, authentication.Outcome);
+        Assert.Equal("BANK.TEST", authentication.FromDomain?.NormalizedValue);
+    }
+
+    /// <summary>The ARC form preserves an upstream hop's claim rather than what this mailbox's server saw, so it decides nothing.</summary>
+    [Fact]
+    public async Task ReadMetadataAsync_ArcAuthenticationResultsOnly_LeavesTheVerdictNotEstablished()
+    {
+        // Arrange
+        var content = MimeFixtures.Message(
+            "ARC-Authentication-Results: i=1; mx.example.test; dkim=pass header.d=bank.test",
+            "From: alerts@bank.test",
+            "Content-Type: text/plain",
+            string.Empty,
+            "Body");
+
+        // Act
+        var result = await CreateReader("mx.example.test").ReadMetadataAsync(content, CancellationToken.None);
+
+        // Assert
+        Assert.Equal(
+            SenderAuthenticationOutcome.NotEstablished,
+            AssertExtracted(result).SenderAuthentication.Outcome);
+    }
+
+    /// <summary>A header of pathological length is passed over unread rather than parsed, and the message is still extracted.</summary>
+    [Fact]
+    public async Task ReadMetadataAsync_AuthenticationResultsPastTheLengthBound_IsNotRead()
+    {
+        // Arrange
+        var padding = string.Join(' ', Enumerable.Repeat("dkim=none", 600));
+        var content = MimeFixtures.Message(
+            $"Authentication-Results: mx.example.test; dkim=pass header.d=bank.test; {padding}",
+            "From: alerts@bank.test",
+            "Content-Type: text/plain",
+            string.Empty,
+            "Body");
+
+        // Act
+        var result = await CreateReader("mx.example.test").ReadMetadataAsync(content, CancellationToken.None);
+
+        // Assert
+        var metadata = AssertExtracted(result);
+        Assert.True(padding.Length > AuthenticationResultsHeader.MaximumHeaderValueLength);
+        Assert.Equal(SenderAuthenticationOutcome.NotEstablished, metadata.SenderAuthentication.Outcome);
+    }
+
+    /// <summary>A header nothing can parse contributes nothing, even when it claims the trusted server's own identifier.</summary>
+    /// <remarks>
+    /// The forgery is written above a well-formed header of the same identifier, so the two outcomes are distinguishable:
+    /// a malformed header that had been parsed would be the topmost trusted one and would establish nothing.
+    /// </remarks>
+    [Fact]
+    public async Task ReadMetadataAsync_MalformedAuthenticationResults_FallsThroughToTheHeaderThatParses()
+    {
+        // Arrange
+        var content = MimeFixtures.Message(
+            "Authentication-Results: mx.example.test; dkim=pass header.d=",
+            "Authentication-Results: mx.example.test; dkim=pass header.d=bank.test",
+            "From: alerts@bank.test",
+            "Content-Type: text/plain",
+            string.Empty,
+            "Body");
+
+        // Act
+        var result = await CreateReader("mx.example.test").ReadMetadataAsync(content, CancellationToken.None);
+
+        // Assert
+        Assert.Equal(
+            SenderAuthenticationOutcome.Authenticated,
+            AssertExtracted(result).SenderAuthentication.Outcome);
+    }
+
+    /// <summary>A message carrying no such header at all is the ordinary case, and it establishes nothing.</summary>
+    [Fact]
+    public async Task ReadMetadataAsync_MessageWithoutAuthenticationResults_LeavesTheVerdictNotEstablished()
+    {
+        // Arrange
+        var content = MimeFixtures.Message(
+            "From: alerts@bank.test",
+            "Content-Type: text/plain",
+            string.Empty,
+            "Body");
+
+        // Act
+        var result = await CreateReader("mx.example.test").ReadMetadataAsync(content, CancellationToken.None);
+
+        // Assert
+        var authentication = AssertExtracted(result).SenderAuthentication;
+        Assert.Equal(SenderAuthenticationOutcome.NotEstablished, authentication.Outcome);
+        Assert.Equal(SenderDomainAlignment.NotAssessed, authentication.Alignment);
+    }
+
+    private static MimeKitEmailMimeReader CreateReader(string? trustedAuthorityIdentifier = null) =>
+        new(new EmailMimeExtractionOptions(), TrustedAuthorities(trustedAuthorityIdentifier));
+
+    /// <summary>Answers every account with the one authority a test configured, or with none.</summary>
+    private static ITrustedAuthenticationAuthorityReader TrustedAuthorities(string? identifier)
+    {
+        TrustedAuthenticationAuthority.TryCreate(identifier, out var authority);
+
+        var authorities = Substitute.For<ITrustedAuthenticationAuthorityReader>();
+        authorities.GetTrustedAuthority(Arg.Any<MailAccountId>()).Returns(authority);
+
+        return authorities;
+    }
 
     private static ExtractedEmailMetadata AssertExtracted(EmailMimeExtractionResult result)
     {
