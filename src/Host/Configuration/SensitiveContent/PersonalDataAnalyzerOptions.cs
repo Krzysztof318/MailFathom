@@ -41,15 +41,29 @@ internal sealed class PersonalDataAnalyzerOptions
     [SuppressMessage("Design", "CA1056:URI-like properties should not be strings", Justification = "Bound from configuration, where a malformed value must surface as this section's startup failure naming the key rather than as a binder format exception.")]
     public string? Endpoint { get; set; }
 
-    /// <summary>Gets or sets the two-letter code of the language every request states.</summary>
+    /// <summary>Gets or sets the two-letter codes of the languages the analyzer is asked in.</summary>
     /// <remarks>
-    /// One per deployment, with no per-account, per-folder, or per-message language and no detection. The analyzer selects
-    /// a model by it and registers a recognizer against it, so a language it was not built for is one it recognises nothing
-    /// in — which the readiness probe reports rather than falling back. The default is what the shipped analyzer image
-    /// carries; naming another code means an analyzer image built for that language in the same edit, because a model is
-    /// installed while such an image is built rather than while it starts.
+    /// <para>
+    /// A set for the whole deployment, with no per-account, per-folder, or per-message language and no detection. A mailbox
+    /// is mixed by nature, and the analyzer selects a model by language and registers a recognizer against a language, so
+    /// what a category can find is decided here before it is decided by anything else in this section. One scan asks once
+    /// per entry and merges what came back, which makes every entry another request inside the one budget
+    /// <c>SensitiveContent:ScanTimeout</c> allows.
+    /// </para>
+    /// <para>
+    /// The order is not read: the set is deduplicated and ordered before it reaches anything, so two deployments that
+    /// named the same languages carry the same derivation stamp whichever way round they wrote them. The default is what
+    /// the shipped analyzer image carries; naming another code means an analyzer image built for that language in the same
+    /// edit, because a model is installed while such an image is built rather than while it starts.
+    /// </para>
+    /// <para>
+    /// Empty rather than defaulted here, as every list in this section is: the binder adds to a bound collection instead
+    /// of replacing it, so a default written into this property would be a language an operator could name others beside
+    /// but never remove. <see cref="SensitiveContentPlanMapper" /> is where a list nobody wrote becomes
+    /// <see cref="DefaultLanguage" />.
+    /// </para>
     /// </remarks>
-    public string Language { get; set; } = "en";
+    public IList<string> Languages { get; } = [];
 
     /// <summary>Gets or sets how sure the analyzer must be before a finding is redacted, from 0 to 1.</summary>
     /// <remarks>
@@ -72,4 +86,7 @@ internal sealed class PersonalDataAnalyzerOptions
 
     /// <summary>The floor a deployment that states none receives.</summary>
     internal const double DefaultMinimumConfidence = 0.4;
+
+    /// <summary>The language a deployment that names none is asked in, which is the one the shipped analyzer image serves.</summary>
+    internal const string DefaultLanguage = "en";
 }

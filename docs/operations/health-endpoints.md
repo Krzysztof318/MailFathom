@@ -1,6 +1,6 @@
 # The health endpoints and the listener they are served on
 
-<!-- describes: src/Host/Hosting/**, src/Host/Configuration/Endpoints/HealthEndpointOptions.cs, src/Host/Configuration/Endpoints/EndpointTransport.cs, src/Host/Configuration/Endpoints/ListenerComposition.cs, src/Host/Configuration/Endpoints/ServedSurfaces.cs, src/Host/Security/Endpoints/Health* -->
+<!-- describes: src/Host/Hosting/**, src/Host/Configuration/Endpoints/HealthEndpointOptions.cs, src/Host/Configuration/Endpoints/EndpointTransport.cs, src/Host/Configuration/Endpoints/ListenerComposition.cs, src/Host/Configuration/Endpoints/ServedSurfaces.cs, src/Host/Security/Endpoints/Health*, src/Infrastructure/SensitiveContent/PersonalData/PresidioAnalyzerProbe.cs -->
 
 An orchestrator decides three things about a process by asking it: whether it has finished coming up, whether it can
 serve a request right now, and whether it is still running rather than stuck. MailFathom answers those three questions on
@@ -112,9 +112,11 @@ Like the database check and unlike the two above it, this one reaches its depend
 container with a lifetime of its own — it may become ready after MailFathom and may stop answering long afterwards — so a
 verdict taken once would be wrong in both directions. That is also why an unreachable analyzer is not a startup failure: the host comes
 up, reports unready, and becomes ready by itself when the analyzer does. The question asked is which entities the
-analyzer recognises in the configured language, which it answers from its own registry, and each transition — into
-unavailability and back out of it — is written to the log, at `Error` and `Information` respectively, because a probe
-response carries no reason and the log is where an operator reads one.
+analyzer recognises, asked once per configured language and answered from its own registry: a language that answers
+nothing at all fails the check by name, and a switched-on category is judged across the languages together, so adding one
+never turns a ready instance unready. Each transition — into unavailability and back out of it — is written to the log,
+at `Error` and `Information` respectively, because a probe response carries no reason and the log is where an operator
+reads one.
 [Sensitive-content scanning](../features/sensitive-content-scanning.md#the-analyzer-is-deployed-only-when-the-switch-is-on)
 records what the scanner does with an analyzer that is not there.
 

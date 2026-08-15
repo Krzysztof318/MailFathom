@@ -398,12 +398,16 @@ volumes, no configuration, and no `PublishPort=`. It receives request bodies and
 `mailfathom-backend.network` alone and reachable from MailFathom and nothing else. It needs no `UserNS=keep-id` either,
 because nothing in it reads a file you own.
 
-**The language line is the one that needs the image behind it.** The commented `SensitiveContent__PersonalDataAnalyzer__Language`
-line names `en`, and the pinned image is built with an English model and an English recognizer registry. Naming another
-code there leaves MailFathom permanently unready rather than scanning in that language: the analyzer answers that it
-recognises nothing for it. Running the analyzer in a second language means an image of your own, named on the `Image=`
-line of the copied unit — [the analyzer's language](personal-data-analyzer-languages.md) records what that takes and
-which identifiers each language reaches.
+**The language lines are the ones that need the image behind them.** The commented
+`SensitiveContent__PersonalDataAnalyzer__Languages__0` line names `en` and a `__1` line beside it names `pl`, because
+MailFathom takes a list and a list reaches .NET configuration as indexed keys numbered from zero without a gap — a gap
+ends the bound list at it and drops everything after. The pinned image is built with an English model and an English
+recognizer registry, so uncommenting the second line without an image behind it leaves MailFathom permanently unready
+rather than scanning in that language: the analyzer answers that it recognises nothing for it, and the readiness log
+names the language. Running the analyzer in a second language means an image of your own, named on the `Image=` line of
+the copied analyzer unit — [the analyzer's languages](personal-data-analyzer-languages.md) records what that takes and
+which identifiers each language reaches. Each configured language is also one more analyzer request inside a scan's
+single budget, which is why at most eight are accepted.
 
 ## Spam scanning
 

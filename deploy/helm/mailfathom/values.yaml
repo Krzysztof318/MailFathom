@@ -204,13 +204,16 @@ personalDataScanning:
     # docs/features/sensitive-content-scanning.md states what is given up.
     endpoint: ""
 
-    # The two-letter code of the language every request states — one per release, with no per-account or per-message
-    # language and no detection. The image below carries an English model and an English recognizer registry, so
-    # changing this means supplying an analyzer built for that language in the same edit: the pod reports unready for as
-    # long as the analyzer recognises nothing for what is named here, rather than falling back to English. Which
-    # identifiers each language reaches, and what building such an image takes, is in
+    # The two-letter codes of the languages the analyzer is asked in — one set per release, with no per-account or
+    # per-message language and no detection. A mailbox is mixed by nature, so naming several is what makes the
+    # identifiers of every language it carries findable; a scan then asks once per language and merges what came back,
+    # inside the one budget it is allowed, and at most eight are accepted. The image below carries an English model and
+    # an English recognizer registry, so naming another means supplying an analyzer built for it in the same edit: the
+    # pod reports unready for as long as the analyzer recognises nothing in one of these, rather than falling back to
+    # English. Which identifiers each language reaches, and what building such an image takes, is in
     # docs/operations/personal-data-analyzer-languages.md.
-    language: en
+    languages:
+      - en
 
     # How sure the analyzer must be before a finding is redacted, from 0 to 1. Redaction acts on every finding whatever
     # its confidence, so this floor is the only thing between a deployment and the analyzer's weakest guesses: with no

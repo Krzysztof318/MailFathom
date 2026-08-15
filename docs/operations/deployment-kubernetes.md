@@ -373,8 +373,8 @@ personalDataScanning:
 ```
 
 That renders a single-replica Deployment and a ClusterIP Service, and writes `SensitiveContent__Pii__Enabled`, the
-derived endpoint, the language, and the confidence floor into the application's environment — one decision in one place
-rather than a value here and a configuration file that could disagree. The schema refuses those four keys in
+derived endpoint, the languages, and the confidence floor into the application's environment — one decision in one place
+rather than a value here and a configuration file that could disagree. The schema refuses every one of those settings in
 `config.extraEnvironment` for that reason: an address stated there would send mail content somewhere else while the pod
 the release installed sat idle.
 
@@ -396,14 +396,19 @@ boundary, and the feature page states what pointing it outside gives up.
 The analyzer's Service is ClusterIP with no value to change it, no ingress rule is rendered for it, and its pod mounts no
 service-account token. It is the pod in the release that reads mail content in the clear.
 
-**The language is a property of the image, not of the chart.** `personalDataScanning.analyzer.language` states the one
-language every request is made in, and the pinned image is built for English alone — one model, and a recognizer
-registry declaring English. Naming another code leaves the pod unready rather than scanning in that language. The
-analyzer Deployment mounts no configuration and takes no analyzer environment of its own, deliberately: a value per
-Presidio setting would be this chart publishing a partial copy of a third party's configuration schema. A second
-language is therefore an image of your own in `analyzer.image`, or `analyzer.deploy: false` and an analyzer you operate
-— [the analyzer's language](personal-data-analyzer-languages.md) records what building one takes and which identifiers
-each language reaches.
+**The languages are a property of the image, not of the chart.** `personalDataScanning.analyzer.languages` lists the
+codes every scan is made in — the chart writes one indexed environment entry per code, numbered from zero — and the
+pinned image is built for English alone, one model and a recognizer registry declaring English. Naming another code
+leaves the pod unready rather than scanning in that language, and the readiness log names the code that answered
+nothing. The analyzer Deployment mounts no configuration and takes no analyzer environment of its own, deliberately: a
+value per Presidio setting would be this chart publishing a partial copy of a third party's configuration schema. A
+second language is therefore an image of your own in `analyzer.image`, or `analyzer.deploy: false` and an analyzer you
+operate — [the analyzer's languages](personal-data-analyzer-languages.md) records what building one takes and which
+identifiers each language reaches.
+
+The schema accepts one to eight codes of two lowercase letters each and no repeats. Each is one more analyzer request
+inside a scan's single `SensitiveContent:ScanTimeout` budget, which is what the ceiling is about; the readiness probe
+judges a switched-on category across the whole set, so adding a language never turns a ready pod unready.
 
 **Resources and readiness.** The analyzer requests a gigabyte of memory and is limited to two, because it loads a language
 model before it serves anything and holds it for the life of the pod; below roughly a gigabyte it is killed while loading.

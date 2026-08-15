@@ -288,6 +288,80 @@ public sealed class PresidioContentScannerTests
             () => context.Scanner.ScanAsync("some text", cancelled.Token));
     }
 
+    /// <summary>One analyze call states one language, so a mixed mailbox is asked once for each of them over the same text.</summary>
+    [Fact]
+    public async Task ScanAsync_SeveralConfiguredLanguages_AsksTheAnalyzerOncePerLanguage()
+    {
+        // Arrange
+        using var context = MultilingualAnalyzerAnswering("[]", "[]");
+
+        // Act
+        await context.Scanner.ScanAsync($"Card {SyntheticCardNumber}", CancellationToken.None);
+
+        // Assert
+        Assert.Equal(
+            ["en", "pl"],
+            context.Handler.RecordedRequests.Select(recorded =>
+                JsonDocument.Parse(recorded.ContentAsUtf8String()).RootElement.GetProperty("language").GetString()));
+    }
+
+    /// <summary>
+    /// A recogniser registered for one language finds what the other cannot, which is the whole reason a mixed mailbox
+    /// names both. Neither answer may be lost in the merge.
+    /// </summary>
+    [Fact]
+    public async Task ScanAsync_FindingsFromDifferentLanguages_AreAllReported()
+    {
+        // Arrange
+        using var context = MultilingualAnalyzerAnswering(
+            Reported("US_SSN", 0, 11, 0.85),
+            Reported("PL_PESEL", 12, 23, 0.85));
+
+        // Act
+        var findings = await context.Scanner.ScanAsync("123-45-6789 12345678901", CancellationToken.None);
+
+        // Assert
+        Assert.Equal(
+            ["PL_PESEL", "US_SSN"],
+            findings.Select(finding => finding.Rule.Name).Order(StringComparer.Ordinal));
+    }
+
+    /// <summary>
+    /// A language-agnostic recogniser answers identically however many languages it is asked in, so a finding count that
+    /// grew with the configured set would describe the configuration rather than the mail.
+    /// </summary>
+    [Fact]
+    public async Task ScanAsync_TheSameValueFoundInEveryLanguage_IsOneFindingCarryingTheStrongestScore()
+    {
+        // Arrange
+        using var context = MultilingualAnalyzerAnswering(
+            Reported("IBAN_CODE", 0, 8, 0.6),
+            Reported("IBAN_CODE", 0, 8, 0.95));
+
+        // Act
+        var findings = await context.Scanner.ScanAsync("PL601020 and more text", CancellationToken.None);
+
+        // Assert
+        var finding = Assert.Single(findings);
+        Assert.Equal("IBAN_CODE", finding.Rule.Name);
+        Assert.Equal(0.95, finding.Confidence);
+    }
+
+    /// <summary>An analyzer that stops answering partway through a scan refuses the operation, as it does on the first call.</summary>
+    [Fact]
+    public async Task ScanAsync_AnalyzerThatFailsOnALaterLanguage_RefusesTheOperation()
+    {
+        // Arrange
+        using var context = MultilingualAnalyzerAnswering("[]", "not json at all");
+
+        // Act
+        var failure = await Assert.ThrowsAsync<SensitiveContentScannerUnavailableException>(
+            () => context.Scanner.ScanAsync("some text", CancellationToken.None));
+
+        // Assert
+        Assert.Equal(SensitiveContentScannerKind.Pii, failure.Scanner);
+    }
+
     /// <summary>The request body is mail content, so a record that printed its members would put a message body in a log line.</summary>
     [Fact]
     public void PresidioAnalyzeRequest_ToString_CarriesNoText()
@@ -331,7 +405,20 @@ public sealed class PresidioContentScannerTests
             Content = new StringContent(body, Encoding.UTF8, "application/json"),
         });
 
-        return Context(handler, plan);
+        return Context(handler, plan, profile: null);
+    }
+
+    /// <summary>An analyzer that answers each language's request with a body of its own, in the order they are asked.</summary>
+    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "Each object is handed to the returned context, whose Dispose releases all of them; disposing them here would return a context of closed resources.")]
+    private static ScannerContext MultilingualAnalyzerAnswering(params string[] bodies)
+    {
+        var answered = 0;
+        var handler = FakeHttpMessageHandler.AlwaysResponding(() => new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent(bodies[answered++], Encoding.UTF8, "application/json"),
+        });
+
+        return Context(handler, plan: null, PersonalDataScanningPlans.MultilingualProfile);
     }
 
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "Each object is handed to the returned context, whose Dispose releases all of them; disposing them here would return a context of closed resources.")]
@@ -339,10 +426,13 @@ public sealed class PresidioContentScannerTests
     {
         var handler = new FakeHttpMessageHandler((_, _) => throw failure);
 
-        return Context(handler, plan: null);
+        return Context(handler, plan: null, profile: null);
     }
 
-    private static ScannerContext Context(FakeHttpMessageHandler handler, SensitiveContentPlan? plan)
+    private static ScannerContext Context(
+        FakeHttpMessageHandler handler,
+        SensitiveContentPlan? plan,
+        PersonalDataAnalyzerProfile? profile)
     {
         // A fresh client per call, as the factory hands out: the scanner opens one per scan and disposes it, so a double
         // returning one instance twice would answer the second scan from a disposed client and report a failure the
@@ -356,7 +446,7 @@ public sealed class PresidioContentScannerTests
 
         var scanner = new PresidioContentScanner(
             plan ?? PersonalDataScanningPlans.Default,
-            PersonalDataScanningPlans.Profile,
+            profile ?? PersonalDataScanningPlans.Profile,
             transportFactory,
             new FakeTimeProvider(ScannedAt));
 

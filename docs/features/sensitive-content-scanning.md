@@ -171,7 +171,8 @@ at the ceiling, and here what is returned is what is stored — so a deployment 
 and raising it back has to leave those rows stale or the missing text is never restored by anything.
 
 **The personal-data confidence floor is part of it too**, through the analyzer profile's revision, which names the
-mapping, the language, and the floor together. The floor is sent to the analyzer rather than applied to its answer, so a
+mapping, the set of languages, and the floor together. The languages are in it because they decide what could be found
+at all, so adding one marks earlier-derived rows stale exactly as changing the only one did. The floor is sent to the analyzer rather than applied to its answer, so a
 finding below it never crosses the process boundary: two deployments differing only there did not ask the same question,
 and a mailbox indexed under a higher floor holds personal data the lower one replaces.
 
@@ -398,8 +399,9 @@ validated before anything is dialled.
 
 An address that names an analyzer which does not answer is a different thing, and it does **not** fail startup. The host
 comes up and reports itself **unready** — `/health` answers `Unhealthy`, so an orchestrator takes the instance out of
-traffic without restarting it. So does an analyzer that answers but recognises nothing for one of the switched-on
-categories — a narrower registry than the shipped image, or a language it has no model for. Both are refusals to serve
+traffic without restarting it. So does an analyzer that recognises nothing at all in one of the configured languages, and
+one that answers but recognises nothing for a switched-on category in any of them — a narrower registry than the shipped
+image, or a language it has no model for. All of them are refusals to serve
 rather than warnings, because the alternative is a deployment whose configuration reads as protection in force while
 every scan finds nothing, and nothing finding anything is indistinguishable from a clean message.
 
@@ -476,40 +478,52 @@ on its own.
 **A category is only as good as the analyzer behind it.** The shipped image registers nineteen entities for English, so
 most of the entries in each category above — the national identifiers of two dozen countries, the passport formats of
 several — are recognised only by an analyzer configured with the recognizers for them. The readiness probe checks that
-every switched-on category has **at least one** entity the analyzer knows, which is what catches a category that would be
-scanned for and never found; it deliberately does not require all of them, because a narrower registry costs recall
-inside a category that still works.
+every switched-on category has **at least one** entity the analyzer knows in at least one configured language, which is
+what catches a category that would be scanned for and never found; it deliberately does not require all of them, because
+a narrower registry costs recall inside a category that still works.
 
 That rule is right and it has a consequence worth stating plainly: a category can be half unreachable while the
 deployment reads healthy. `NationalIdentifier` covers 27 analyzer entities, of which the shipped image knows `US_SSN`
 and `US_ITIN`; the category passes the probe on those two while `PL_PESEL` — also one of its entities — is not looked
-for at all. Nothing is logged, because nothing went wrong: the analyzer was asked what it knows and answered.
+for at all under English. Nothing is logged, because nothing went wrong: the analyzer was asked what it knows and
+answered. What closes that particular gap is naming `pl` beside `en`, which the next section is about.
 
-### One language, chosen once for the deployment
+### The languages, chosen once for the deployment
 
-`SensitiveContent:PersonalDataAnalyzer:Language` is a single two-letter code. It is stated on every request, there is no
-per-account, per-folder, or per-message language and no detection, and it is part of the detector revision a finding
-carries — so the same text asked in two languages is two results, and changing it marks derived text stale.
+`SensitiveContent:PersonalDataAnalyzer:Languages` is a set of two-letter codes, defaulting to `en` alone. There is no
+per-account, per-folder, or per-message language and no detection — the set belongs to the deployment — and it is part of
+the detector revision a finding carries, so the same text asked under two different sets is two results and widening the
+set marks derived text stale.
 
 **A recognizer exists only for the languages it is registered for.** This is the mechanism behind the paragraph above:
-the analyzer's registry declares each recognizer against a language, and one not declared for the configured language is
+the analyzer's registry declares each recognizer against a language, and one not declared for a configured language is
 absent rather than weaker. The shipped image's registry names a recognizer for eleven languages and ships most of the
-locale-specific ones switched off, so what a category can find is decided by the language before it is decided by
-anything MailFathom configures. `en` and `it` are the two languages under which all five default categories have
-something behind them; `es` and `pl` leave `IdentityDocument` with nothing, and the remaining seven leave
-`PaymentCard`, `NationalIdentifier`, and `IdentityDocument` empty — which the readiness probe refuses on, naming the
-category.
+locale-specific ones switched off, so what a category can find is decided by the languages before it is decided by
+anything else MailFathom configures. `en` and `it` are the two languages under which all five default categories have
+something behind them on their own; `es` and `pl` leave `IdentityDocument` with nothing, and the remaining seven leave
+`PaymentCard`, `NationalIdentifier`, and `IdentityDocument` empty — which is why naming several is how a mixed mailbox
+covers what any one of them misses.
 
-**Polish is the case worth naming**, because it is where the two rules meet. Its only entry in the registry is
-`PL_PESEL`; there is no Polish passport recognizer and no Polish identity-card one, while several other locales carry
-both. So the two identifiers Polish correspondence carries most are the two with nothing to switch on, and a Polish
-deployment either adds a recognizer for them or drops `IdentityDocument` and accepts that those numbers stay in the
-text.
+**A category has to be reachable in one configured language, not in every one.** The probe unions what each language
+answers and then asks its per-category question over that union, so `en` beside `pl` reaches `IdentityDocument` through
+English while `PL_PESEL` closes the Polish half of `NationalIdentifier` — and adding a language never turns a ready
+deployment unready. What each configured language must do is answer at all: one the analyzer was never built for is
+refused by name, because a language contributing nothing is protection an operator asked for and did not get.
 
-Asking in a language the analyzer's own image was not built for is a refusal rather than a downgrade: the entity probe
-answers nothing, the deployment reports itself unready, and no scan runs against a fallback. What it takes to make a
-second language work — the model, the image, the registry, and the MailFathom-side entry a new entity needs — is
-[the analyzer's language](../operations/personal-data-analyzer-languages.md).
+**One scan is one request per language.** A call states one language, so the scan asks once for each of them over the
+same text, one after another, and merges the answers. `SensitiveContent:ScanTimeout` bounds the whole scan rather than
+each call and `SensitiveContent:MaximumConcurrentScans` still counts scans rather than requests, which is why the set is
+capped at eight. The merge rests on rules the redactor already had: two languages reporting the same value over the same
+span are one finding carrying the stronger score, overlapping regions become one placeholder, and the findings are
+ordered before they are applied, so the redacted text does not depend on which language answered first.
+
+**Polish is the case worth naming**, because it is where these rules meet. Its only entry in the registry is `PL_PESEL`;
+there is no Polish passport recognizer and no Polish identity-card one, while several other locales carry both. So a
+deployment naming `pl` beside `en` finds PESEL numbers and keeps `IdentityDocument` reachable through the English
+entities, and the two identifiers Polish correspondence carries most are still the two with nothing to switch on — which
+needs a recognizer added to the analyzer rather than another language. What it takes to make a language work at all —
+the model, the image, the registry, and the MailFathom-side entry a new entity needs — is [the analyzer's
+languages](../operations/personal-data-analyzer-languages.md).
 
 ### The confidence floor
 

@@ -6,6 +6,7 @@ using System.ComponentModel.DataAnnotations;
 using MailFathom.Application.SensitiveContent;
 using MailFathom.Host.Configuration.SensitiveContent;
 using MailFathom.Host.UnitTests.TestDoubles;
+using MailFathom.Infrastructure.SensitiveContent.PersonalData;
 using Xunit;
 
 namespace MailFathom.Host.UnitTests.Configuration.SensitiveContent;
@@ -149,7 +150,7 @@ public sealed class SensitiveContentOptionsTests
         Assert.DoesNotContain(addressThatMustNotAppear, result.ErrorMessage!, StringComparison.Ordinal);
     }
 
-    /// <summary>The code reaches a query argument and the detector revision every finding carries.</summary>
+    /// <summary>Each code reaches a query argument and the detector revision every finding carries.</summary>
     [Theory]
     [InlineData("")]
     [InlineData("EN")]
@@ -160,7 +161,7 @@ public sealed class SensitiveContentOptionsTests
         var settings = new SensitiveContentOptions();
         settings.Pii.Enabled = true;
         settings.PersonalDataAnalyzer.Endpoint = "http://presidio-analyzer:3000";
-        settings.PersonalDataAnalyzer.Language = language;
+        settings.PersonalDataAnalyzer.Languages.Add(language);
 
         // Act
         var results = settings.Validate(new ValidationContext(settings)).ToArray();
@@ -168,6 +169,70 @@ public sealed class SensitiveContentOptionsTests
         // Assert
         var result = Assert.Single(results);
         Assert.Contains("two-letter lowercase language code", result.ErrorMessage!, StringComparison.Ordinal);
+    }
+
+    /// <summary>One malformed entry beside well-formed ones is still a request the analyzer cannot be asked.</summary>
+    [Fact]
+    public void Validate_AnalyzerLanguagesWithOneMalformedEntry_IsReported()
+    {
+        // Arrange
+        var settings = new SensitiveContentOptions();
+        settings.Pii.Enabled = true;
+        settings.PersonalDataAnalyzer.Endpoint = "http://presidio-analyzer:3000";
+        settings.PersonalDataAnalyzer.Languages.Add("en");
+        settings.PersonalDataAnalyzer.Languages.Add("polish");
+
+        // Act
+        var results = settings.Validate(new ValidationContext(settings)).ToArray();
+
+        // Assert
+        var result = Assert.Single(results);
+        Assert.Contains("polish", result.ErrorMessage!, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Each language is another request inside the one budget a scan is allowed, and the revision every finding carries
+    /// names them all — so the ceiling is refused here, where the message can name the key an operator wrote.
+    /// </summary>
+    [Fact]
+    public void Validate_MoreAnalyzerLanguagesThanAScanAsksIn_IsReported()
+    {
+        // Arrange
+        var settings = new SensitiveContentOptions();
+        settings.Pii.Enabled = true;
+        settings.PersonalDataAnalyzer.Endpoint = "http://presidio-analyzer:3000";
+
+        foreach (var language in Enumerable
+            .Range(0, PersonalDataAnalyzerProfile.MaximumLanguages + 1)
+            .Select(index => $"{(char)('a' + (index / 26))}{(char)('a' + (index % 26))}"))
+        {
+            settings.PersonalDataAnalyzer.Languages.Add(language);
+        }
+
+        // Act
+        var results = settings.Validate(new ValidationContext(settings)).ToArray();
+
+        // Assert
+        var result = Assert.Single(results);
+        Assert.Contains("at most 8 are asked for", result.ErrorMessage!, StringComparison.Ordinal);
+    }
+
+    /// <summary>A mixed mailbox names every language its correspondence carries, and nothing about that is a configuration error.</summary>
+    [Fact]
+    public void Validate_SeveralWellFormedAnalyzerLanguages_ReportsNothing()
+    {
+        // Arrange
+        var settings = new SensitiveContentOptions();
+        settings.Pii.Enabled = true;
+        settings.PersonalDataAnalyzer.Endpoint = "http://presidio-analyzer:3000";
+        settings.PersonalDataAnalyzer.Languages.Add("en");
+        settings.PersonalDataAnalyzer.Languages.Add("pl");
+
+        // Act
+        var results = settings.Validate(new ValidationContext(settings));
+
+        // Assert
+        Assert.Empty(results);
     }
 
     /// <summary>
@@ -200,7 +265,7 @@ public sealed class SensitiveContentOptionsTests
     {
         // Arrange
         var settings = new SensitiveContentOptions();
-        settings.PersonalDataAnalyzer.Language = "not a language";
+        settings.PersonalDataAnalyzer.Languages.Add("not a language");
         settings.PersonalDataAnalyzer.MinimumConfidence = 12;
 
         // Act
@@ -225,16 +290,20 @@ public sealed class SensitiveContentOptionsTests
         Assert.Empty(results);
     }
 
-    /// <summary>The floor is a default rather than an opt-in, because a deployment that states none must not receive zero.</summary>
+    /// <summary>
+    /// The floor is a default rather than an opt-in, because a deployment that states none must not receive zero. The
+    /// languages are empty here rather than defaulted, because the binder adds to a bound collection instead of replacing
+    /// it — a default written into the property would be a language an operator could never remove.
+    /// </summary>
     [Fact]
-    public void Defaults_AnalyzerBlock_NamesNoAddressAsksInEnglishAndKeepsAFloor()
+    public void Defaults_AnalyzerBlock_NamesNoAddressNoLanguageAndKeepsAFloor()
     {
         // Act
         var settings = new SensitiveContentOptions();
 
         // Assert
         Assert.Null(settings.PersonalDataAnalyzer.Endpoint);
-        Assert.Equal("en", settings.PersonalDataAnalyzer.Language);
+        Assert.Empty(settings.PersonalDataAnalyzer.Languages);
         Assert.Equal(0.4, settings.PersonalDataAnalyzer.MinimumConfidence);
     }
 

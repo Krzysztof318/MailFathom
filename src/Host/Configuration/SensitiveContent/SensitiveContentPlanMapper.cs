@@ -81,9 +81,20 @@ internal static class SensitiveContentPlanMapper
 
         return PersonalDataAnalyzerProfile.Create(
             endpoint,
-            settings.PersonalDataAnalyzer.Language,
+            LanguagesOf(settings.PersonalDataAnalyzer),
             settings.PersonalDataAnalyzer.MinimumConfidence);
     }
+
+    /// <summary>Resolves the languages the analyzer is asked in, which a deployment that named none leaves to the default.</summary>
+    /// <remarks>
+    /// An unnamed list means the language the shipped analyzer image serves, exactly as an unnamed category list means the
+    /// scanner's default categories. The profile refuses an empty set outright, which is what makes this the one place the
+    /// default is applied rather than a fallback something further down repeats.
+    /// </remarks>
+    private static IReadOnlyList<string> LanguagesOf(PersonalDataAnalyzerOptions settings) =>
+        settings.Languages.Count == 0
+            ? [PersonalDataAnalyzerOptions.DefaultLanguage]
+            : [.. settings.Languages];
 
     private static SensitiveContentScannerPlan MapScanner(
         SensitiveContentScannerKind scanner,
