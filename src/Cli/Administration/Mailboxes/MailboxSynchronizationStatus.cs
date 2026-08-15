@@ -150,8 +150,9 @@ internal sealed record MailboxFolderRun(
     {
         var outcome = this.DescribeOutcome();
 
-        // The instant leads for an outcome that names a remedy, because those sentences end in the remedy and appending
-        // a timestamp after it would read as part of the instruction.
+        // Only a synchronized turn leads with its outcome, because only that one ends in counts. Every other sentence
+        // ends in what the operator does next or where they read on, and a timestamp appended after that would attach
+        // itself to the instruction rather than to the turn.
         return this.Outcome is "Synchronized"
             ? string.Create(
                 CultureInfo.InvariantCulture,

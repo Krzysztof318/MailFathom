@@ -456,6 +456,50 @@ public sealed class AccountSynchronizationSupervisorTests
     }
 
     /// <summary>
+    /// A restart that cuts a folder short must reach the ledger as the restart it was. Classifying it as a failure
+    /// would tell an operator to go looking for a defect, and leaving it unrecorded would leave the folder reading as
+    /// whatever the run before the restart made it.
+    /// </summary>
+    [Fact]
+    public async Task RunAsync_DeploymentStopsWhileAFolderIsInFlight_RecordsTheFolderAsInterruptedByShutdown()
+    {
+        // Arrange
+        var folderEntered = new TaskCompletionSource();
+        var releaseFolder = new TaskCompletionSource();
+        var sessionFactory = Substitute.For<IMailboxSessionFactory>();
+        sessionFactory
+            .OpenReadOnlyAsync(
+                Arg.Any<MailAccountId>(),
+                Arg.Any<MailFolderResolution>(),
+                Arg.Any<MailTransportSecurityPolicy>(),
+                Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                folderEntered.TrySetResult();
+
+                return HoldUntilWorkUnitCancelledAsync(releaseFolder, call.Arg<CancellationToken>());
+            });
+        using var harness = CreateHarness(
+            SynchronizationTestHost.CreateSingleAccountOptions(enabled: true, "INBOX"),
+            sessionFactory);
+        var supervision = harness.StartSupervision();
+
+        // Act
+        await folderEntered.Task.WaitAsync(DeadlockGuard, TestContext.Current.CancellationToken);
+        await harness.StopWorkUnitsAsync();
+        releaseFolder.SetResult();
+        await supervision.WaitAsync(DeadlockGuard, TestContext.Current.CancellationToken);
+
+        // Assert
+        var account = MailAccountId.Create("primary");
+        var folder = harness.RunLedger.ReadFolder(new MailFolderIdentity(account, MailFolderAlias.Create("INBOX")));
+        Assert.Equal(MailFolderRunOutcome.InterruptedByShutdown, folder?.Outcome);
+
+        // The restart is not the account's fault, so nothing about it grows the wait before the next run.
+        Assert.Equal(0, harness.RunLedger.ReadAccount(account).ConsecutiveFailureCount);
+    }
+
+    /// <summary>
     /// A change the previous process left half-made is finished by the first run after a restart, with nobody asking
     /// for it. The account's own loop is what schedules that, which is why no separate worker exists for it.
     /// </summary>
@@ -1132,6 +1176,17 @@ public sealed class AccountSynchronizationSupervisorTests
         throw new InvalidOperationException("connect failed");
     }
 
+    /// <summary>Models a folder work unit that the drain deadline cuts short, which is what a deployment stopping does to one.</summary>
+    private static async Task<IMailboxSession> HoldUntilWorkUnitCancelledAsync(
+        TaskCompletionSource release,
+        CancellationToken cancellationToken)
+    {
+        await release.Task;
+        cancellationToken.ThrowIfCancellationRequested();
+
+        throw new InvalidOperationException("The work unit was released without its token having been cancelled.");
+    }
+
     /// <summary>Models the same work unit ending in a folder the server serves, for a test about what a held run finishes as.</summary>
     private static async Task<IMailboxSession> HoldUntilReleasedAsync(
         TaskCompletionSource release,
@@ -1244,6 +1299,9 @@ public sealed class AccountSynchronizationSupervisorTests
 
         /// <summary>Cancels scheduling the way host shutdown does, leaving the work-unit token live for the drain.</summary>
         internal Task StopSchedulingAsync() => this.scheduling.CancelAsync();
+
+        /// <summary>Ends the drain the way a host that waited long enough does, interrupting the work still in flight.</summary>
+        internal Task StopWorkUnitsAsync() => this.workUnits.CancelAsync();
 
         /// <summary>Supervises the account until the awaited signal arrives, then stops scheduling and lets it finish.</summary>
         internal async Task SuperviseUntilAsync(Task signal)

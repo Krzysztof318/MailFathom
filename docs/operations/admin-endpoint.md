@@ -137,7 +137,9 @@ backoff grows behind it, and each individual run still reports itself as finishe
 **A folder's outcome names its remedy where it has one.** An alias matching no advertised folder and an alias matching
 several are both corrected by editing the mapping rather than by waiting, so both lines say so. A deferral after the
 mail server stopped answering, and one after a concurrency conflict, are waited out. An unexpected failure is the one
-that sends you to the log.
+that sends you to the log. A folder interrupted because the deployment was shutting down is none of those: the restart
+ended its turn, its checkpoint holds whatever that turn had already committed, and the first run after the deployment
+comes back resumes from there.
 
 **`Phase` says which of three things the account is doing** — running now, ready to run and waiting for one of the
 `MailSynchronization:MaxConcurrentAccounts` slots, or waiting out the delay its last run chose. The instant is the
