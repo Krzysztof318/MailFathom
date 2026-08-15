@@ -25,7 +25,7 @@ public sealed class PersonalDataAnalyzerProfileTests
         var endpoint = new Uri(configured, UriKind.Absolute);
 
         // Act
-        var profile = PersonalDataAnalyzerProfile.Create(endpoint, "en", 0.3);
+        var profile = PersonalDataAnalyzerProfile.Create(endpoint, ["en"], 0.3);
 
         // Assert
         Assert.Equal(expected, profile.Endpoint.ToString());
@@ -41,7 +41,7 @@ public sealed class PersonalDataAnalyzerProfileTests
         var endpoint = new Uri(configured, UriKind.Absolute);
 
         // Act
-        var failure = Assert.Throws<ArgumentException>(() => PersonalDataAnalyzerProfile.Create(endpoint, "en", 0.3));
+        var failure = Assert.Throws<ArgumentException>(() => PersonalDataAnalyzerProfile.Create(endpoint, ["en"], 0.3));
 
         // Assert
         Assert.Equal("endpoint", failure.ParamName);
@@ -60,10 +60,94 @@ public sealed class PersonalDataAnalyzerProfileTests
         var endpoint = new Uri("http://presidio-analyzer:3000", UriKind.Absolute);
 
         // Act
-        var failure = Assert.Throws<ArgumentException>(() => PersonalDataAnalyzerProfile.Create(endpoint, language, 0.3));
+        var failure = Assert.Throws<ArgumentException>(() => PersonalDataAnalyzerProfile.Create(endpoint, [language], 0.3));
 
         // Assert
-        Assert.Equal("language", failure.ParamName);
+        Assert.Equal("languages", failure.ParamName);
+    }
+
+    /// <summary>A well-formed language beside a malformed one is still a deployment asking a question nothing answers.</summary>
+    [Fact]
+    public void Create_OneMalformedLanguageAmongSeveral_IsRefused()
+    {
+        // Arrange
+        var endpoint = new Uri("http://presidio-analyzer:3000", UriKind.Absolute);
+
+        // Act
+        var failure = Assert.Throws<ArgumentException>(
+            () => PersonalDataAnalyzerProfile.Create(endpoint, ["en", "polish", "pl"], 0.3));
+
+        // Assert
+        Assert.Equal("languages", failure.ParamName);
+        Assert.Contains("'polish'", failure.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A configuration source can bind a null into a list, and a hole in the set has to be refused where the message names
+    /// the language rather than where deduplication refuses to hash it.
+    /// </summary>
+    [Fact]
+    public void Create_ANullAmongTheLanguages_IsRefused()
+    {
+        // Arrange
+        var endpoint = new Uri("http://presidio-analyzer:3000", UriKind.Absolute);
+        var languages = new[] { "en", null! };
+
+        // Act
+        var failure = Assert.Throws<ArgumentException>(
+            () => PersonalDataAnalyzerProfile.Create(endpoint, languages, 0.3));
+
+        // Assert
+        Assert.Equal("languages", failure.ParamName);
+    }
+
+    /// <summary>Every request states a language, so a deployment asking in none would scan every category and find nothing.</summary>
+    [Fact]
+    public void Create_NoLanguageAtAll_IsRefused()
+    {
+        // Arrange
+        var endpoint = new Uri("http://presidio-analyzer:3000", UriKind.Absolute);
+
+        // Act
+        var failure = Assert.Throws<ArgumentException>(() => PersonalDataAnalyzerProfile.Create(endpoint, [], 0.3));
+
+        // Assert
+        Assert.Equal("languages", failure.ParamName);
+    }
+
+    /// <summary>Each language is another request inside one scan's budget, and the revision has to name them all.</summary>
+    [Fact]
+    public void Create_MoreLanguagesThanAScanAsksIn_IsRefused()
+    {
+        // Arrange
+        var endpoint = new Uri("http://presidio-analyzer:3000", UriKind.Absolute);
+        var languages = Enumerable
+            .Range(0, PersonalDataAnalyzerProfile.MaximumLanguages + 1)
+            .Select(index => $"{(char)('a' + (index / 26))}{(char)('a' + (index % 26))}")
+            .ToArray();
+
+        // Act
+        var failure = Assert.Throws<ArgumentException>(
+            () => PersonalDataAnalyzerProfile.Create(endpoint, languages, 0.3));
+
+        // Assert
+        Assert.Equal("languages", failure.ParamName);
+    }
+
+    /// <summary>The order is the operator's typing rather than a decision, so two deployments that named the same set match.</summary>
+    [Fact]
+    public void Create_LanguagesInAnyOrderWithRepeats_AreCarriedAsOneOrderedSet()
+    {
+        // Arrange
+        var endpoint = new Uri("http://presidio-analyzer:3000", UriKind.Absolute);
+
+        // Act
+        var written = PersonalDataAnalyzerProfile.Create(endpoint, ["pl", "en", "pl"], 0.3);
+        var writtenOtherwise = PersonalDataAnalyzerProfile.Create(endpoint, ["en", "pl"], 0.3);
+
+        // Assert
+        Assert.Equal(["en", "pl"], written.Languages);
+        Assert.Equal(written.Detector.Revision, writtenOtherwise.Detector.Revision);
     }
 
     /// <summary>A floor outside the analyzer's own scale would be sent as one, and neither end of it means anything there.</summary>
@@ -79,7 +163,7 @@ public sealed class PersonalDataAnalyzerProfileTests
 
         // Act
         var failure = Assert.Throws<ArgumentOutOfRangeException>(
-            () => PersonalDataAnalyzerProfile.Create(endpoint, "en", minimumConfidence));
+            () => PersonalDataAnalyzerProfile.Create(endpoint, ["en"], minimumConfidence));
 
         // Assert
         Assert.Equal("minimumConfidence", failure.ParamName);
@@ -96,7 +180,7 @@ public sealed class PersonalDataAnalyzerProfileTests
         var endpoint = new Uri("http://presidio-analyzer:3000", UriKind.Absolute);
 
         // Act
-        var profile = PersonalDataAnalyzerProfile.Create(endpoint, "en", minimumConfidence);
+        var profile = PersonalDataAnalyzerProfile.Create(endpoint, ["en"], minimumConfidence);
 
         // Assert
         Assert.Equal(minimumConfidence, profile.MinimumConfidence);
@@ -110,11 +194,27 @@ public sealed class PersonalDataAnalyzerProfileTests
         var endpoint = new Uri("http://presidio-analyzer:3000", UriKind.Absolute);
 
         // Act
-        var profile = PersonalDataAnalyzerProfile.Create(endpoint, "de", 0.3);
+        var profile = PersonalDataAnalyzerProfile.Create(endpoint, ["de"], 0.3);
 
         // Assert
         Assert.Equal(
             $"presidio+entities.{PresidioEntityCorpus.MappingRevision}+lang.de+floor.0.3",
+            profile.Detector.Revision);
+    }
+
+    /// <summary>Adding a language changes what a scan can find, so what was derived before it is not comparable.</summary>
+    [Fact]
+    public void Create_Detector_NamesEveryLanguageTheTextWasAskedAbout()
+    {
+        // Arrange
+        var endpoint = new Uri("http://presidio-analyzer:3000", UriKind.Absolute);
+
+        // Act
+        var profile = PersonalDataAnalyzerProfile.Create(endpoint, ["pl", "en"], 0.3);
+
+        // Assert
+        Assert.Equal(
+            $"presidio+entities.{PresidioEntityCorpus.MappingRevision}+lang.en.pl+floor.0.3",
             profile.Detector.Revision);
     }
 
@@ -132,8 +232,8 @@ public sealed class PersonalDataAnalyzerProfileTests
         var endpoint = new Uri("http://presidio-analyzer:3000", UriKind.Absolute);
 
         // Act
-        var strict = PersonalDataAnalyzerProfile.Create(endpoint, "en", 0.85);
-        var permissive = PersonalDataAnalyzerProfile.Create(endpoint, "en", 0.4);
+        var strict = PersonalDataAnalyzerProfile.Create(endpoint, ["en"], 0.85);
+        var permissive = PersonalDataAnalyzerProfile.Create(endpoint, ["en"], 0.4);
 
         // Assert
         Assert.NotEqual(strict.Detector.Revision, permissive.Detector.Revision);

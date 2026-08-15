@@ -432,14 +432,15 @@ equally often. They cover each category the two scanners look for unless a deplo
 | A social security number | `Pii` / `NationalIdentifier` | the analyzer, asked in English |
 | A passport number | `Pii` / `IdentityDocument` | the analyzer, asked in English |
 
-**Which of the personal identifiers a deployment finds follows the language it asks the analyzer in**, because a
+**Which of the personal identifiers a deployment finds follows the languages it asks the analyzer in**, because a
 recogniser for a country's identification number is registered for one language and is not loaded for the others. A
 deployment on the default `en` finds the social security and passport numbers and never the PESEL; one configured for
-`pl` finds the PESEL and neither of the other two. The IBAN and the medical licence number are found either way,
-because the recognisers behind them are registered for no particular language, and the payment card in the four its
-recogniser names. A decoy nothing reports is therefore worth checking against
-`SensitiveContent:PersonalDataAnalyzer:Language` before it is read as a defect —
-[the analyzer's language](personal-data-analyzer-languages.md) has the whole table.
+`pl` alone finds the PESEL and neither of the other two; one naming both finds all three, since a scan asks once per
+language and merges what came back. The IBAN and the medical licence number are found either way, because the
+recognisers behind them are registered for no particular language, and the payment card in the four its recogniser
+names. A decoy nothing reports is therefore worth checking against
+`SensitiveContent:PersonalDataAnalyzer:Languages` before it is read as a defect —
+[the analyzer's languages](personal-data-analyzer-languages.md) has the whole table.
 
 **Every value is fabricated at run time and is structurally valid.** A payment card passes Luhn, an IBAN its
 remainder, a PESEL its weighted sum, a medical licence its own check digit — an identifier that failed its validator

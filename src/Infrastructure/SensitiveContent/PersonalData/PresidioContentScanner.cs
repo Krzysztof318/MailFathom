@@ -34,6 +34,14 @@ namespace MailFathom.Infrastructure.SensitiveContent.PersonalData;
 /// what the text carries rather than as a text that carried nothing.
 /// </para>
 /// <para>
+/// <b>A configured language is a request, and they are made one after another.</b> One analyze call states one language, so
+/// a deployment configured for two asks twice over the same text and merges what came back. Sequentially rather than at
+/// once, for the reason the redactor runs its scanners in sequence: the concurrency bound counts scans rather than
+/// requests, and fanning a caller's languages out would let one permit hold several analyzer calls open. What that costs
+/// is real and belongs to the operator — every configured language shares the one per-scan budget rather than receiving a
+/// budget of its own.
+/// </para>
+/// <para>
 /// One instance serves the whole process and several scans at once. The requested entity list is fixed at construction and
 /// nothing here holds state between calls.
 /// </para>
@@ -59,7 +67,7 @@ internal sealed class PresidioContentScanner : ISensitiveContentScanner
 
     /// <summary>Initializes the scanner for the categories a deployment switched on.</summary>
     /// <param name="plan">What this deployment scans for, of which the personal-data half is read.</param>
-    /// <param name="profile">Where the analyzer is, what language it is asked in, and what its findings are attributed to.</param>
+    /// <param name="profile">Where the analyzer is, which languages it is asked in, and what its findings are attributed to.</param>
     /// <param name="transportFactory">Opens the client each call is made through.</param>
     /// <param name="timeProvider">Stamps each finding with when the scan evaluated the text.</param>
     /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
@@ -104,12 +112,40 @@ internal sealed class PresidioContentScanner : ISensitiveContentScanner
             return [];
         }
 
-        var reported = await this.AnalyzeAsync(text, cancellationToken);
+        // One stamp for the whole scan rather than one per language, because what it records is when this scanner
+        // evaluated the text, and the text was evaluated once however many questions that took.
+        var detectedAt = this.timeProvider.GetUtcNow();
+        var offsets = CodePointOffsets.For(text);
+        var found = new List<SensitiveContentFinding>();
 
-        return this.Findings(text, reported);
+        foreach (var language in this.profile.Languages)
+        {
+            found.AddRange(this.Findings(offsets, await this.AnalyzeAsync(text, language, cancellationToken), detectedAt));
+        }
+
+        return Merged(found);
     }
 
-    private async Task<PresidioRecognizedEntity[]> AnalyzeAsync(string text, CancellationToken cancellationToken)
+    /// <summary>Collapses what two languages reported over the same value into the one detection it is.</summary>
+    /// <remarks>
+    /// A language-agnostic recognizer — an IBAN, an email address, a phone number — answers identically in every language
+    /// the analyzer is asked in, so a deployment configured for two would otherwise report every such value twice. The
+    /// redacted text would be unaffected, since overlapping regions merge into one placeholder, but the findings travel
+    /// beyond that text: they are counted, recorded, and attributed, and a count that doubles when a language is added
+    /// describes the configuration rather than the mail. The strongest score survives, which is the analyzer's own answer
+    /// for the language that read the surrounding text best.
+    /// </remarks>
+    private static IReadOnlyList<SensitiveContentFinding> Merged(List<SensitiveContentFinding> found) =>
+    [
+        .. found
+            .GroupBy(finding => (finding.Rule.Name, finding.Span.Start, finding.Span.End))
+            .Select(duplicates => duplicates.MaxBy(finding => finding.Confidence)!),
+    ];
+
+    private async Task<PresidioRecognizedEntity[]> AnalyzeAsync(
+        string text,
+        string language,
+        CancellationToken cancellationToken)
     {
         try
         {
@@ -120,7 +156,7 @@ internal sealed class PresidioContentScanner : ISensitiveContentScanner
             using var request = JsonContent.Create(
                 new PresidioAnalyzeRequest(
                     text,
-                    this.profile.Language,
+                    language,
                     this.requestedEntities,
                     this.profile.MinimumConfidence),
                 PresidioJsonContext.Default.PresidioAnalyzeRequest);
@@ -153,19 +189,16 @@ internal sealed class PresidioContentScanner : ISensitiveContentScanner
     /// one reporting something no category covers is answering a question nobody asked rather than failing — while a
     /// deployment that refused the whole scan over it would fail closed on every message.
     /// </remarks>
-    private IReadOnlyList<SensitiveContentFinding> Findings(string text, PresidioRecognizedEntity[] reported)
-    {
-        var detectedAt = this.timeProvider.GetUtcNow();
-        var offsets = CodePointOffsets.For(text);
-
-        return
-        [
-            .. reported
-                .Where(entity => entity.EntityType is not null
-                    && this.requestedRules.ContainsKey(entity.EntityType))
-                .Select(entity => this.Finding(offsets, entity, detectedAt)),
-        ];
-    }
+    private IReadOnlyList<SensitiveContentFinding> Findings(
+        CodePointOffsets offsets,
+        PresidioRecognizedEntity[] reported,
+        DateTimeOffset detectedAt) =>
+    [
+        .. reported
+            .Where(entity => entity.EntityType is not null
+                && this.requestedRules.ContainsKey(entity.EntityType))
+            .Select(entity => this.Finding(offsets, entity, detectedAt)),
+    ];
 
     private SensitiveContentFinding Finding(
         CodePointOffsets offsets,

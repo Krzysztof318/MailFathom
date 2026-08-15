@@ -75,8 +75,57 @@ public sealed class PersonalDataAnalyzerUnavailableException : MailFathomExcepti
         return new PersonalDataAnalyzerUnavailableException(
             string.Format(
                 CultureInfo.InvariantCulture,
-                "The analyzer named by SensitiveContent:PersonalDataAnalyzer:Endpoint answered the personal-data scanner's availability probe with {0}. Check that the address serves a Presidio analyzer rather than another service, and that the language this deployment is configured for is one its own configuration loads a model for.",
+                "The analyzer named by SensitiveContent:PersonalDataAnalyzer:Endpoint answered the personal-data scanner's availability probe with {0}. Check that the address serves a Presidio analyzer rather than another service, and that every language SensitiveContent:PersonalDataAnalyzer:Languages names is one its own configuration loads a model for.",
                 status),
+            endpoint);
+    }
+
+    /// <summary>Reports that the analyzer did not answer the whole availability probe within the budget one scrape is allowed.</summary>
+    /// <param name="endpoint">The address the probe asked.</param>
+    /// <param name="budget">How long the scrape was allowed to take.</param>
+    /// <returns>The failure to raise.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="endpoint" /> is <see langword="null" />.</exception>
+    /// <remarks>
+    /// The budget covers the scrape rather than each request it makes, because a scrape asks once per configured
+    /// language while the readiness period an orchestrator scrapes on stays what it was. An analyzer slow enough to
+    /// reach this is one that would answer a scan no faster, so the instance reports unready rather than serving reads
+    /// its scanner is about to refuse anyway.
+    /// </remarks>
+    public static PersonalDataAnalyzerUnavailableException DidNotAnswerInTime(string endpoint, TimeSpan budget)
+    {
+        ArgumentNullException.ThrowIfNull(endpoint);
+
+        return new PersonalDataAnalyzerUnavailableException(
+            string.Format(
+                CultureInfo.InvariantCulture,
+                "The analyzer named by SensitiveContent:PersonalDataAnalyzer:Endpoint did not answer the personal-data scanner's availability probe within {0}. The probe asks it once for every language SensitiveContent:PersonalDataAnalyzer:Languages names, under the single budget SensitiveContent:ScanTimeout allows, so raise that budget, name fewer languages, or give the analyzer the resources it needs.",
+                budget),
+            endpoint);
+    }
+
+    /// <summary>Reports that the analyzer recognises nothing at all in one of the configured languages.</summary>
+    /// <param name="endpoint">The address the probe asked.</param>
+    /// <param name="language">The language it answered nothing for.</param>
+    /// <returns>The failure to raise.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
+    /// <remarks>
+    /// This is what naming a language the analyzer's own image was never built for looks like: an empty registry rather
+    /// than a refusal, since the analyzer answers the question and has nothing to say. It is judged per language rather
+    /// than over the configured set, because a language contributing nothing is the operator having asked for protection
+    /// that does not exist — and one that silently added nothing would be indistinguishable from one that worked. The
+    /// language is named because it is MailFathom's own configured value, and it is the one thing an operator needs in
+    /// order to know which entry to repair.
+    /// </remarks>
+    public static PersonalDataAnalyzerUnavailableException RecognizesNothingIn(string endpoint, string language)
+    {
+        ArgumentNullException.ThrowIfNull(endpoint);
+        ArgumentNullException.ThrowIfNull(language);
+
+        return new PersonalDataAnalyzerUnavailableException(
+            string.Format(
+                CultureInfo.InvariantCulture,
+                "The analyzer named by SensitiveContent:PersonalDataAnalyzer:Endpoint recognises no entity at all in '{0}', which SensitiveContent:PersonalDataAnalyzer:Languages names. An analyzer answers for a language only once an image was built with a model and a recognizer registry for it. Supply such an image, or drop that language from the list.",
+                language),
             endpoint);
     }
 
@@ -89,6 +138,8 @@ public sealed class PersonalDataAnalyzerUnavailableException : MailFathomExcepti
     /// A category the analyzer recognises no entity of would be scanned for and never found, which is the quiet failure
     /// the whole feature exists to prevent: an operator reading their own configuration would take it as protection that
     /// is in force. It happens when an analyzer runs a recognizer registry of its own rather than the shipped default.
+    /// The judgement is over every configured language together, so a category one of them reaches is a category this
+    /// deployment can find — adding a language never turns a ready deployment unready.
     /// </remarks>
     public static PersonalDataAnalyzerUnavailableException DetectsNothingFor(
         string endpoint,
@@ -100,7 +151,7 @@ public sealed class PersonalDataAnalyzerUnavailableException : MailFathomExcepti
         return new PersonalDataAnalyzerUnavailableException(
             string.Format(
                 CultureInfo.InvariantCulture,
-                "The analyzer named by SensitiveContent:PersonalDataAnalyzer:Endpoint recognises no entity the '{0}' category maps onto, so that category would be scanned for and never found. Configure the analyzer's recognizer registry to load it, or leave the category out of the configured list.",
+                "The analyzer named by SensitiveContent:PersonalDataAnalyzer:Endpoint recognises no entity the '{0}' category maps onto in any of the configured languages, so that category would be scanned for and never found. Configure the analyzer's recognizer registry to load one, name a language that reaches it, or leave the category out of the configured list.",
                 category),
             endpoint);
     }

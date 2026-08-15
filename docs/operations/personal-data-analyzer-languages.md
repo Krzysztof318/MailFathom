@@ -1,4 +1,4 @@
-# The analyzer's language, and what a second one requires
+# The analyzer's languages, and what each one requires
 
 <!-- describes: src/Infrastructure/SensitiveContent/PersonalData/**, src/Host/Configuration/SensitiveContent/PersonalDataAnalyzerOptions.cs, deploy/compose/compose.yaml, deploy/quadlet/mailfathom-presidio.container, deploy/helm/mailfathom/values.yaml -->
 
@@ -7,10 +7,10 @@
 > named here can be renamed or moved there at any time. Where this page and that product's own documentation disagree,
 > the product's documentation is right.
 
-The personal-data scanner asks its analyzer in exactly one language, named once for the whole deployment by
-[`SensitiveContent:PersonalDataAnalyzer:Language`](configuration-reference.md#sensitivecontent). A mailbox is not
+The personal-data scanner asks its analyzer in every language named once for the whole deployment by
+[`SensitiveContent:PersonalDataAnalyzer:Languages`](configuration-reference.md#sensitivecontent). A mailbox is not
 single-language — a Polish deployment receives English mail and an English one receives Polish mail — so this page
-states what that one language buys, what it leaves unreachable, and what it actually takes to change it.
+states what each language buys, what it leaves unreachable, and what it actually takes to add one.
 [The personal-data scanner](../features/sensitive-content-scanning.md#the-personal-data-scanner) records what the
 feature does with what it finds; this page is about what it is able to find at all.
 
@@ -35,30 +35,51 @@ model that is not on disk and the analyzer fails to load rather than fetching it
 route below either a derived image or a mount *plus* an install step, and it is why no environment variable on the
 analyzer container enables a language.
 
-## One language per deployment, and what the probe does about it
+## A set per deployment, and what the probe does about it
 
-`Language` is a scalar validated to two lowercase letters. It is written into the `language` argument of every
-`/analyze` call and of the entity probe MailFathom's readiness check makes, and there is no per-account, per-folder, or
-per-message language and no detection. It is also part of the detector revision every finding carries, so changing it
-marks derived text written under the old one stale — [derived
-data](../features/sensitive-content-scanning.md#derived-data-is-written-redacted-and-stamped) records what that costs.
+`Languages` is a list, each entry validated to two lowercase letters, at most eight of them, and defaulting to `en`
+alone when nothing is named. Each entry is written into the `language` argument of one `/analyze` call and of one entity
+probe MailFathom's readiness check makes; there is no per-account, per-folder, or per-message language and no detection,
+so the set belongs to the deployment. The order is not read — the set is deduplicated and ordered before anything uses
+it, so two deployments that named the same languages behave identically however they wrote them. The set is also part of
+the detector revision every finding carries, so widening it marks derived text written under the narrower one stale —
+[derived data](../features/sensitive-content-scanning.md#derived-data-is-written-redacted-and-stamped) records what that
+costs.
 
-The readiness probe asks the analyzer which entities it recognises **in that language** and requires each switched-on
-category to have **at least one** of them. That rule is right — a narrower registry costing recall inside a category
-that still works should not refuse a start — but it means a category can be half unreachable while the deployment reads
-healthy. `NationalIdentifier` is the worked example: it covers 27 analyzer entities, of which the shipped image
-registers `US_SSN` and `US_ITIN` under `en`. `PL_PESEL` is not among them, so a PESEL in Polish correspondence is not
-found, no log line says so, and the probe passes on the strength of the two it does know.
+**One scan is one request per language.** A single `/analyze` call states one language, so a scan over a set of two asks
+twice over the same text, one call after the other, and merges what came back. Two consequences belong to the operator:
+`SensitiveContent:ScanTimeout` bounds the whole scan rather than each call, so the languages share one budget rather than
+receiving one each; and `SensitiveContent:MaximumConcurrentScans` still counts scans rather than requests, so a
+deployment naming three languages makes three times the analyzer requests at the same permitted concurrency. That is what
+the ceiling of eight is for. The merge itself adds no new rule: the same value reported over the same span by two
+languages is one finding carrying the stronger score, and overlapping regions become one placeholder as they already did.
 
-What the probe does catch is a category with *nothing* behind it, and that is the ordinary result of naming a language
-the image was not built for. Two failures, in the order an operator meets them:
+The readiness probe asks the analyzer which entities it recognises **in each configured language**, unions the answers,
+and requires each switched-on category to have **at least one** of them somewhere in that union. Per category across the
+set rather than per category per language, because otherwise adding a language would turn a healthy deployment unready
+for the categories that language has nothing for — widening protection must never read as breaking it. The scrape runs
+under one `SensitiveContent:ScanTimeout` as a whole rather than one per request, so a longer list costs more requests and
+never a longer scrape, and an analyzer too slow to answer them all inside that budget reports the deployment unready.
 
-- **The language is not in the analyzer's registry at all.** The entity probe answers an empty list, and MailFathom
-  reports `81002` naming `SensitiveContent:PersonalDataAnalyzer:Endpoint` on its readiness log. This is what setting
-  `Language: pl` against the unmodified image does — not a degraded scan, and not a fall back to English.
-- **The language is registered, but a switched-on category has no entity in it.** The probe names that category in the
-  `81002`. Under `pl` with the default category set, `IdentityDocument` is that category, for the reason the next
-  section gives.
+The rule keeps its old consequence, softened by the set: a category can be half unreachable while the deployment reads
+healthy. `NationalIdentifier` is the worked example — it covers 27 analyzer entities, of which the shipped image
+registers `US_SSN` and `US_ITIN` under `en`. `PL_PESEL` is not among them, so under `en` alone a PESEL in Polish
+correspondence is not found, no log line says so, and the probe passes on the strength of the two it does know. Naming
+`pl` beside `en` is what closes it: the union then holds all three, and `IdentityDocument` stays reachable through the
+English entities that `pl` has nothing for.
+
+What the probe does catch is a language answering nothing at all, and a category with *nothing* behind it anywhere. Two
+failures, in the order an operator meets them:
+
+- **A configured language is not in the analyzer's registry at all.** Its entity probe answers an empty list, and
+  MailFathom reports `81002` naming that language and
+  `SensitiveContent:PersonalDataAnalyzer:Languages` on its readiness log. This is what adding `pl` to the list against
+  the unmodified image does — not a degraded scan, not a language that quietly contributes nothing, and not a fall back
+  to English. It is judged per language rather than over the union, because a language that answered nothing is
+  protection an operator asked for and did not receive.
+- **Every configured language is registered, but a switched-on category has no entity in any of them.** The probe names
+  that category in the `81002`. Under `pl` alone with the default category set, `IdentityDocument` is that category, for
+  the reason the next section gives.
 
 Either way the host comes up, reports itself unready, and stays out of traffic until the analyzer answers — it is not a
 startup failure. [Health endpoints](health-endpoints.md#the-three-probes) records what each probe consults.
@@ -73,8 +94,9 @@ language at all, so they are instantiated for whatever language list the registr
 MailFathom maps to nothing.
 
 The table is what remains once both filters have been applied, assuming a model for the language has been installed and
-nothing in the registry has been switched on by hand. **Empty** names a default category with no entity behind it,
-which is the category the readiness probe refuses on.
+nothing in the registry has been switched on by hand. **Empty** names a default category with no entity behind it in
+that language alone; the readiness probe refuses only on a category empty in *every* configured language, so a row's
+empty column is filled by any other configured row that covers it.
 
 | Language | Beyond the language-agnostic entities | Default categories left empty |
 | --- | --- | --- |
@@ -89,9 +111,11 @@ registry declares; there is no Polish passport recognizer and no Polish identity
 Italy, Korea, the United Kingdom, and the United States each have a passport recognizer somewhere in the registry, and
 Germany and Italy an identity-card one. So the two identifiers
 Polish correspondence carries most are exactly the two with nothing to switch on, and `IdentityDocument` — a category on
-by default — has nothing behind it in that language. A Polish deployment either adds a recognizer for one of them, by
-the route below, or drops `IdentityDocument` from `SensitiveContent:Pii:Categories` and accepts that those numbers are
-not redacted.
+by default — has nothing behind it in that language. Naming `pl` beside `en` is the answer to the *probe*, since English
+keeps `IdentityDocument` populated, but it is not the answer to the *mailbox*: an English passport recognizer does not
+read a Polish identity-card number. A Polish deployment that needs those numbers redacted adds a recognizer for one of
+them, by the route below, or drops `IdentityDocument` from `SensitiveContent:Pii:Categories` and accepts that they are
+not.
 
 The other direction holds too, and it is not a defect: MailFathom's corpus names entities no shipped registry produces
 in any language, `FI_PERSONAL_IDENTITY_CODE` among them. The corpus is written against what the analyzer's recognizer
@@ -104,8 +128,7 @@ configures categories against, and an entity nothing reports simply never arrive
 Five steps, and only the last of them is on MailFathom's side.
 
 1. **Name the model.** Add a `lang_code` / `model_name` pair to the `models:` list in the NLP configuration. It is a
-   list rather than a scalar, so a second language is declared *beside* English rather than in place of it — which is
-   what a mixed mailbox wants, even though MailFathom asks in one of them at a time.
+   list rather than a scalar, so a second language is declared *beside* English rather than in place of it.
 
    ```yaml
    nlp_engine_name: spacy
@@ -115,6 +138,8 @@ Five steps, and only the last of them is on MailFathom's side.
      - lang_code: pl
        model_name: pl_core_news_md
    ```
+
+   Declaring it beside English rather than in place of it is what a mixed mailbox wants, and MailFathom now asks in both.
 
 2. **Get the model into the image.** Build a derived image from the pinned one with the file above supplied as the
    build's NLP configuration, which is what installs the model. Mounting the file over a running container instead is a
@@ -130,9 +155,18 @@ Five steps, and only the last of them is on MailFathom's side.
    registry's; upstream states that requirement outright, and an engine narrower than its registry answers for a
    language whose recognizers it will never reach.
 
-5. **Then tell MailFathom.** `SensitiveContent:PersonalDataAnalyzer:Language` names the new code last, once an analyzer
-   that answers for it is running. Setting the key first produces the unready deployment the previous section
-   describes.
+5. **Then tell MailFathom.** `SensitiveContent:PersonalDataAnalyzer:Languages` gains the new code last, once an analyzer
+   that answers for it is running. Adding it to the list first produces the unready deployment the previous section
+   describes, naming the code that answered nothing. The key is a list, so through the environment it is written as
+   indexed entries numbered from zero and contiguous —
+   `SensitiveContent__PersonalDataAnalyzer__Languages__0=en` beside
+   `SensitiveContent__PersonalDataAnalyzer__Languages__1=pl` — because a gap ends the bound list at it and silently drops
+   everything after. The Helm chart writes those entries itself from `personalDataScanning.analyzer.languages`.
+
+   Widening the list changes the detector revision every finding carries and therefore the derivation stamp, so every
+   message already indexed reads as derived under a different configuration. That is the same price the last section of
+   this page describes for a new recognizer, and it is paid the same way — which is a reason to add every language a
+   deployment needs in one change rather than one at a time.
 
 Where the image is named differs per deployment shape, and nothing else about them changes:
 
@@ -203,27 +237,31 @@ change rather than one at a time.
 
 ## Verifying it took
 
-Ask the analyzer directly, from somewhere inside the deployment's own network, before restarting MailFathom against it:
+Ask the analyzer directly, from somewhere inside the deployment's own network, before restarting MailFathom against it,
+and ask it **once per language the deployment will name** — that is what the readiness probe does, and one language's
+answer says nothing about another's:
 
 ```bash
+curl --silent 'http://presidio-analyzer:3000/supportedentities?language=en'
 curl --silent 'http://presidio-analyzer:3000/supportedentities?language=pl'
 curl --silent 'http://presidio-analyzer:3000/recognizers?language=pl'
 ```
 
-An empty array from the first is the analyzer saying it has nothing for that language, which is exactly what MailFathom
-reports as unready. A list that omits an entity you configured is a recognizer that loaded for a different language or
-did not load at all, and the second call names the recognizers rather than their entities, which is what separates the
-two. Once the entities are there, the readiness probe is the last check: `/health` answers `Healthy` when every
-switched-on category has at least one of them, and the log names the category when one does not.
+An empty array from any of the first calls is the analyzer saying it has nothing for that language, which is exactly what
+MailFathom reports as unready — naming that language, whatever the others answered. A list that omits an entity you
+configured is a recognizer that loaded for a different language or did not load at all, and the last call names the
+recognizers rather than their entities, which is what separates the two. Once every language answers something, the
+readiness probe is the last check: `/health` answers `Healthy` when every switched-on category has at least one entity
+across the configured languages together, and the log names the category when one has none in any of them.
 
 ## What this page does not cover
 
-**Asking in more than one language at a time.** `Language` is a scalar, one request states one language, and nothing
-detects a message's own. A deployment whose mail is genuinely mixed chooses the language its regulated identifiers are
-written in and accepts that the other language's locale-specific entities are not found. What survives the choice is
-the row of entities registered against no language — IBANs, email addresses, phone numbers, dates, network addresses,
-and medical licence numbers — and the named-entity ones, which are found as well as a model for the configured
-language reads the other language's text.
+**Detecting a message's own language.** Nothing here reads what a message is written in: the set is a property of the
+deployment, and every message is asked about under all of it. A deployment therefore names the languages its
+correspondence carries rather than tagging its mail, and a message in a language nobody configured is covered only by the
+entities registered against no language at all — IBANs, email addresses, phone numbers, dates, network addresses, and
+medical licence numbers — plus the named-entity ones, which are found as well as a model for a configured language reads
+that text.
 
 **Recognizers MailFathom ships for a language.** The corpus above is the analyzer's vocabulary as this build maps it,
 and MailFathom neither carries recognizer definitions nor installs them. What a deployment adds, it adds to its own

@@ -10,6 +10,7 @@ using MailFathom.Application.SensitiveContent;
 using MailFathom.Application.SensitiveContent.Detection;
 using MailFathom.Infrastructure.SensitiveContent.PersonalData;
 using MailFathom.TestSupport;
+using Microsoft.Extensions.Time.Testing;
 using NSubstitute;
 using Xunit;
 
@@ -183,7 +184,110 @@ public sealed class PresidioAnalyzerProbeTests
             () => context.Probe.VerifyAvailableAsync(CancellationToken.None));
 
         // Assert
-        Assert.Contains("empty list of supported entities", failure.Message, StringComparison.Ordinal);
+        Assert.Contains("recognises no entity at all in 'en'", failure.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>Each configured language is asked separately, because one answer says nothing about the others.</summary>
+    [Fact]
+    public async Task VerifyAvailableAsync_SeveralConfiguredLanguages_AsksTheAnalyzerOncePerLanguage()
+    {
+        // Arrange
+        var supported = SupportedEntitiesOf(PersonalDataScanningPlans.Default);
+        using var context = MultilingualAnalyzerAnswering(plan: null, supported, supported);
+
+        // Act
+        await context.Probe.VerifyAvailableAsync(CancellationToken.None);
+
+        // Assert
+        Assert.Equal(
+            [
+                "http://analyzer.invalid:3000/supportedentities?language=en",
+                "http://analyzer.invalid:3000/supportedentities?language=pl",
+            ],
+            context.Handler.RecordedRequests.Select(recorded => recorded.RequestUri?.ToString()));
+    }
+
+    /// <summary>
+    /// Widening protection must never read as breaking it. A category one configured language reaches is a category this
+    /// deployment can find, whatever the others know — otherwise adding a language turns a ready deployment unready.
+    /// </summary>
+    [Fact]
+    public async Task VerifyAvailableAsync_EachCategoryReachableInADifferentLanguage_Passes()
+    {
+        // Arrange
+        // Neither answer satisfies both categories on its own, so a probe that read one language and stopped would fail
+        // this rather than pass it — which is what makes the union the thing under test.
+        var plan = PersonalDataScanningPlans.For(
+            [PersonalDataScanningPlans.Category("NationalIdentifier"), PersonalDataScanningPlans.Category("HealthIdentifier")]);
+        using var context = MultilingualAnalyzerAnswering(plan, """["UK_NHS"]""", """["PL_PESEL"]""");
+
+        // Act
+        await context.Probe.VerifyAvailableAsync(CancellationToken.None);
+
+        // Assert
+        Assert.Equal(2, context.Handler.RecordedRequests.Count);
+    }
+
+    /// <summary>A category no configured language reaches is still the quiet failure the probe exists to refuse.</summary>
+    [Fact]
+    public async Task VerifyAvailableAsync_CategoryNoConfiguredLanguageReaches_RefusesToStart()
+    {
+        // Arrange
+        var plan = PersonalDataScanningPlans.For(
+            [PersonalDataScanningPlans.Category("NationalIdentifier"), PersonalDataScanningPlans.Category("HealthIdentifier")]);
+        using var context = MultilingualAnalyzerAnswering(plan, """["US_SSN"]""", """["PL_PESEL"]""");
+
+        // Act
+        var failure = await Assert.ThrowsAsync<PersonalDataAnalyzerUnavailableException>(
+            () => context.Probe.VerifyAvailableAsync(CancellationToken.None));
+
+        // Assert
+        Assert.Contains("HealthIdentifier", failure.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A language the analyzer was never built for is an operator asking for protection that does not exist, so it is
+    /// refused by name rather than absorbed into what another language answered.
+    /// </summary>
+    [Fact]
+    public async Task VerifyAvailableAsync_OneConfiguredLanguageTheAnalyzerKnowsNothingIn_RefusesToStartNamingIt()
+    {
+        // Arrange
+        var supported = SupportedEntitiesOf(PersonalDataScanningPlans.Default);
+        using var context = MultilingualAnalyzerAnswering(plan: null, supported, "[]");
+
+        // Act
+        var failure = await Assert.ThrowsAsync<PersonalDataAnalyzerUnavailableException>(
+            () => context.Probe.VerifyAvailableAsync(CancellationToken.None));
+
+        // Assert
+        Assert.Contains("recognises no entity at all in 'pl'", failure.Message, StringComparison.Ordinal);
+        Assert.Contains("SensitiveContent:PersonalDataAnalyzer:Languages", failure.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A scrape asks once per configured language, so the budget covers the scrape rather than each request. Without one
+    /// a slow analyzer would hold a readiness scrape for a multiple of what an operator configured, which flaps an
+    /// instance in and out of traffic instead of reporting what it found.
+    /// </summary>
+    [Fact]
+    public async Task VerifyAvailableAsync_AnalyzerSlowerThanTheScanBudget_RefusesToStartNamingTheBudget()
+    {
+        // Arrange
+        var reachedTheAnalyzer = new TaskCompletionSource();
+        using var context = AnalyzerHanging(reachedTheAnalyzer);
+
+        // Act
+        var verifying = context.Probe.VerifyAvailableAsync(CancellationToken.None);
+        await reachedTheAnalyzer.Task;
+        context.TimeProvider.Advance(SensitiveContentScanBounds.Default.ScanTimeout);
+
+        var failure = await Assert.ThrowsAsync<PersonalDataAnalyzerUnavailableException>(() => verifying);
+
+        // Assert
+        Assert.Contains("did not answer", failure.Message, StringComparison.Ordinal);
+        Assert.Contains("SensitiveContent:ScanTimeout", failure.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("analyzer.invalid", failure.Message, StringComparison.Ordinal);
     }
 
     /// <summary>A host shutting down is its own fact and must not be reported as an analyzer that is missing.</summary>
@@ -216,7 +320,38 @@ public sealed class PresidioAnalyzerProbeTests
             ReasonPhrase = reasonPhrase,
         });
 
-        return Context(handler, plan);
+        return Context(handler, plan, profile: null);
+    }
+
+    /// <summary>An analyzer that answers each language's probe with a registry of its own, in the order they are asked.</summary>
+    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "Each object is handed to the returned context, whose Dispose releases all of them; disposing them here would return a context of closed resources.")]
+    private static ProbeContext MultilingualAnalyzerAnswering(SensitiveContentPlan? plan, params string[] bodies)
+    {
+        var answered = 0;
+        var handler = FakeHttpMessageHandler.AlwaysResponding(() => new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent(bodies[answered++], Encoding.UTF8, "application/json"),
+        });
+
+        return Context(handler, plan, PersonalDataScanningPlans.MultilingualProfile);
+    }
+
+    /// <summary>An analyzer that accepts the request and never answers, so only the scrape's own budget ends the wait.</summary>
+    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "Each object is handed to the returned context, whose Dispose releases all of them; disposing them here would return a context of closed resources.")]
+    private static ProbeContext AnalyzerHanging(TaskCompletionSource reachedTheAnalyzer)
+    {
+        var handler = new FakeHttpMessageHandler(async (_, cancellationToken) =>
+        {
+            // Signalled before the wait, so the test advances a clock the probe is already timing against rather than
+            // one whose budget has not been armed yet.
+            reachedTheAnalyzer.TrySetResult();
+
+            await Task.Delay(Timeout.Infinite, cancellationToken);
+
+            return new HttpResponseMessage(HttpStatusCode.OK);
+        });
+
+        return Context(handler, plan: null, profile: null);
     }
 
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "Each object is handed to the returned context, whose Dispose releases all of them; disposing them here would return a context of closed resources.")]
@@ -224,10 +359,13 @@ public sealed class PresidioAnalyzerProbeTests
     {
         var handler = new FakeHttpMessageHandler((_, _) => throw failure);
 
-        return Context(handler, plan: null);
+        return Context(handler, plan: null, profile: null);
     }
 
-    private static ProbeContext Context(FakeHttpMessageHandler handler, SensitiveContentPlan? plan)
+    private static ProbeContext Context(
+        FakeHttpMessageHandler handler,
+        SensitiveContentPlan? plan,
+        PersonalDataAnalyzerProfile? profile)
     {
         var transportFactory = Substitute.For<IHttpClientFactory>();
         transportFactory.CreateClient(PersonalDataAnalyzerProfile.TransportName)
@@ -236,15 +374,21 @@ public sealed class PresidioAnalyzerProbeTests
                 BaseAddress = PersonalDataScanningPlans.Profile.Endpoint,
             });
 
+        var timeProvider = new FakeTimeProvider();
+
         var probe = new PresidioAnalyzerProbe(
             plan ?? PersonalDataScanningPlans.Default,
-            PersonalDataScanningPlans.Profile,
-            transportFactory);
+            profile ?? PersonalDataScanningPlans.Profile,
+            transportFactory,
+            timeProvider);
 
-        return new ProbeContext(handler, probe);
+        return new ProbeContext(handler, probe, timeProvider);
     }
 
-    private sealed record ProbeContext(FakeHttpMessageHandler Handler, PresidioAnalyzerProbe Probe) : IDisposable
+    private sealed record ProbeContext(
+        FakeHttpMessageHandler Handler,
+        PresidioAnalyzerProbe Probe,
+        FakeTimeProvider TimeProvider) : IDisposable
     {
         public void Dispose() => this.Handler.Dispose();
     }

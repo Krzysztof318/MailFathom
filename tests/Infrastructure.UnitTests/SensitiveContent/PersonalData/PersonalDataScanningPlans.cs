@@ -24,7 +24,11 @@ internal static class PersonalDataScanningPlans
     /// <summary>The profile the tests reach an analyzer under, at an address nothing resolves.</summary>
     /// <remarks>The tests answer through a scripted handler, so the address is only ever composed against and never dialled.</remarks>
     public static PersonalDataAnalyzerProfile Profile { get; } =
-        PersonalDataAnalyzerProfile.Create(new Uri("http://analyzer.invalid:3000"), "en", MinimumConfidence);
+        PersonalDataAnalyzerProfile.Create(new Uri("http://analyzer.invalid:3000"), ["en"], MinimumConfidence);
+
+    /// <summary>The profile of a mixed mailbox, which asks the analyzer once per language over the same text.</summary>
+    public static PersonalDataAnalyzerProfile MultilingualProfile { get; } =
+        PersonalDataAnalyzerProfile.Create(new Uri("http://analyzer.invalid:3000"), ["pl", "en"], MinimumConfidence);
 
     /// <summary>Composes a plan over named categories, with no rule suppressed.</summary>
     /// <param name="categories">The categories the scanner looks for.</param>

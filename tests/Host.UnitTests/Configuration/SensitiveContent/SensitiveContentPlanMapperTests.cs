@@ -193,13 +193,14 @@ public sealed class SensitiveContentPlanMapperTests
 
     /// <summary>The scanner and its startup probe read one profile, so every configured value reaches both or neither.</summary>
     [Fact]
-    public void MapAnalyzerProfile_AConfiguredAnalyzer_CarriesItsAddressLanguageAndConfidenceFloor()
+    public void MapAnalyzerProfile_AConfiguredAnalyzer_CarriesItsAddressLanguagesAndConfidenceFloor()
     {
         // Arrange
         var settings = new SensitiveContentOptions();
         settings.Pii.Enabled = true;
         settings.PersonalDataAnalyzer.Endpoint = "http://presidio-analyzer:3000";
-        settings.PersonalDataAnalyzer.Language = "de";
+        settings.PersonalDataAnalyzer.Languages.Add("pl");
+        settings.PersonalDataAnalyzer.Languages.Add("de");
         settings.PersonalDataAnalyzer.MinimumConfidence = 0.7;
 
         // Act
@@ -207,8 +208,28 @@ public sealed class SensitiveContentPlanMapperTests
 
         // Assert
         Assert.Equal("http://presidio-analyzer:3000/", profile.Endpoint.ToString());
-        Assert.Equal("de", profile.Language);
+        Assert.Equal(["de", "pl"], profile.Languages);
         Assert.Equal(0.7, profile.MinimumConfidence);
+    }
+
+    /// <summary>
+    /// An unnamed list means the language the shipped analyzer image serves, exactly as an unnamed category list means the
+    /// scanner's default categories — the binder adds to a bound collection rather than replacing it, so the default
+    /// cannot live on the property without becoming a language nobody can remove.
+    /// </summary>
+    [Fact]
+    public void MapAnalyzerProfile_AnAnalyzerNoLanguageWasStatedFor_IsAskedInTheShippedImagesOwn()
+    {
+        // Arrange
+        var settings = new SensitiveContentOptions();
+        settings.Pii.Enabled = true;
+        settings.PersonalDataAnalyzer.Endpoint = "http://presidio-analyzer:3000";
+
+        // Act
+        var profile = SensitiveContentPlanMapper.MapAnalyzerProfile(settings);
+
+        // Assert
+        Assert.Equal(["en"], profile.Languages);
     }
 
     /// <summary>An analyzer nobody tuned has to arrive with the floor that keeps its sub-0.1 guesses out of the text.</summary>

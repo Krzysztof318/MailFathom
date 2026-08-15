@@ -113,14 +113,15 @@ public sealed class SensitiveContentOptionsBindingTests
     /// against an address the operator did state.
     /// </summary>
     [Fact]
-    public void Bind_AConfiguredAnalyzer_ReadsItsAddressLanguageAndConfidenceFloor()
+    public void Bind_AConfiguredAnalyzer_ReadsItsAddressLanguagesAndConfidenceFloor()
     {
         // Arrange
         var configuration = ConfigurationFrom(new Dictionary<string, string?>
         {
             ["SensitiveContent:Pii:Enabled"] = "true",
             ["SensitiveContent:PersonalDataAnalyzer:Endpoint"] = "http://presidio-analyzer:3000",
-            ["SensitiveContent:PersonalDataAnalyzer:Language"] = "de",
+            ["SensitiveContent:PersonalDataAnalyzer:Languages:0"] = "de",
+            ["SensitiveContent:PersonalDataAnalyzer:Languages:1"] = "pl",
             ["SensitiveContent:PersonalDataAnalyzer:MinimumConfidence"] = "0.6",
         });
 
@@ -130,7 +131,7 @@ public sealed class SensitiveContentOptionsBindingTests
         // Assert
         Assert.True(settings.Pii.Enabled);
         Assert.Equal("http://presidio-analyzer:3000", settings.PersonalDataAnalyzer.Endpoint);
-        Assert.Equal("de", settings.PersonalDataAnalyzer.Language);
+        Assert.Equal(["de", "pl"], settings.PersonalDataAnalyzer.Languages);
         Assert.Equal(0.6, settings.PersonalDataAnalyzer.MinimumConfidence);
     }
 

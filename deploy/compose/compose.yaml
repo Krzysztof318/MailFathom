@@ -114,7 +114,11 @@ services:
       # starts, so an operator running their own analyzer overrides it and enables no profile.
       SensitiveContent__Pii__Enabled: ${MAILFATHOM_PERSONAL_DATA_SCANNING:-false}
       SensitiveContent__PersonalDataAnalyzer__Endpoint: ${MAILFATHOM_PERSONAL_DATA_ANALYZER:-http://presidio-analyzer:3000}
-      SensitiveContent__PersonalDataAnalyzer__Language: ${MAILFATHOM_PERSONAL_DATA_LANGUAGE:-en}
+      # One entry per language the analyzer is asked in. An indexed key is how a list reaches .NET configuration through
+      # the environment, and Compose expands no variable into several of them — so a second language is a second line
+      # added here rather than a value in `.env`, and the numbering starts at zero and leaves no gap.
+      SensitiveContent__PersonalDataAnalyzer__Languages__0: ${MAILFATHOM_PERSONAL_DATA_LANGUAGE:-en}
+      #SensitiveContent__PersonalDataAnalyzer__Languages__1: pl
       SensitiveContent__PersonalDataAnalyzer__MinimumConfidence: ${MAILFATHOM_PERSONAL_DATA_MINIMUM_CONFIDENCE:-0.4}
       # Spam classification with a scanner, paired with the `spam-scanning` profile the same way: the profile decides
       # whether the daemon container exists and these decide whether MailFathom classifies and asks it. Both switches

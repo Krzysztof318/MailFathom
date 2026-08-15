@@ -125,8 +125,16 @@ spec:
               value: "true"
             - name: SensitiveContent__PersonalDataAnalyzer__Endpoint
               value: {{ include "mailfathom.analyzerEndpoint" . | quote }}
-            - name: SensitiveContent__PersonalDataAnalyzer__Language
-              value: {{ .Values.personalDataScanning.analyzer.language | quote }}
+            {{- /*
+              A list reaches .NET configuration as indexed keys, so each language becomes an environment entry of its
+              own numbered from zero. Ranging over the value is what keeps the numbering contiguous: a gap ends the
+              bound list at it, so a chart writing a fixed set of slots would silently drop every language after an
+              empty one.
+            */}}
+            {{- range $index, $language := .Values.personalDataScanning.analyzer.languages }}
+            - name: SensitiveContent__PersonalDataAnalyzer__Languages__{{ $index }}
+              value: {{ $language | quote }}
+            {{- end }}
             - name: SensitiveContent__PersonalDataAnalyzer__MinimumConfidence
               value: {{ .Values.personalDataScanning.analyzer.minimumConfidence | quote }}
             {{- end }}

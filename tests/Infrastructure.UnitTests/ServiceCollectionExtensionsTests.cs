@@ -489,7 +489,7 @@ public sealed class ServiceCollectionExtensionsTests
         services.AddSingleton(TimeProvider.System);
         services.AddSingleton(PersonalDataAnalyzerProfile.Create(
             new Uri("http://presidio-analyzer:3000"),
-            "en",
+            ["en"],
             0.3));
         services.AddSingleton(SensitiveContentPlan.Create(
             SensitiveContentScanBounds.Default,
@@ -548,7 +548,7 @@ public sealed class ServiceCollectionExtensionsTests
         services.AddSingleton(TimeProvider.System);
         services.AddSingleton(PersonalDataAnalyzerProfile.Create(
             new Uri("http://presidio-analyzer:3000"),
-            "en",
+            ["en"],
             0.4));
         services.AddSingleton(SensitiveContentPlan.Create(
             SensitiveContentScanBounds.Create(

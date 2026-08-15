@@ -45,9 +45,9 @@
     - name: Changing the embedding model
       href: embedding-profiles.md
       description: Activating a new embedding profile without invalidating the vectors already stored, and what the change costs while it runs.
-    - name: The analyzer's language
+    - name: The analyzer's languages
       href: personal-data-analyzer-languages.md
-      description: Which personal identifiers the personal-data analyzer can find in each language, and what running it in a second one takes.
+      description: Which personal identifiers the personal-data analyzer can find in each language, and what adding a second one to a deployment takes.
 - name: Endpoints
   items:
     - name: The MCP endpoint

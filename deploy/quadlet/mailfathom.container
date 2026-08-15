@@ -105,22 +105,26 @@ Environment=ConnectionStrings__mailfathom=Host=mailfathom-postgres;Port=5432;Dat
 Environment=Persistence__Password__Name=mailfathom-database-password
 Environment=Persistence__Password__SecretReference=systemd-credential:mailfathom-database-password
 
-# Personal-data scanning, off because these four lines are commented out — which is the product's default and what makes
-# it cost nothing. Uncomment them together with the two ordering lines at the top of this file, and install
-# mailfathom-presidio.container beside it; enabling the switch with no address at all fails startup and names the
-# Endpoint setting below as the one to correct, while an address nothing answers at leaves the unit running and unready,
-# both of which are the intended behaviour rather than a misconfiguration to avoid.
+# Personal-data scanning, off because these lines are commented out — which is the product's default and what makes it
+# cost nothing. Uncomment the four below that are not marked optional, together with the two ordering lines at the top of
+# this file, and install mailfathom-presidio.container beside it; enabling the switch with no address at all fails
+# startup and names the Endpoint setting below as the one to correct, while an address nothing answers at leaves the unit
+# running and unready, both of which are the intended behaviour rather than a misconfiguration to avoid.
 # The address is the analyzer unit's container name on the internal network — replace it with your own analyzer's if you
 # operate one, keeping it inside your own network, and then install no analyzer unit at all.
 # docs/features/sensitive-content-scanning.md states what each category hides and what pointing the endpoint outside the
 # deployment gives up.
-# The language is one per deployment and the analyzer image below has to have been built for it: the pinned image carries
-# an English model and an English recognizer registry, so naming another code here leaves the unit unready rather than
-# scanning in that language. docs/operations/personal-data-analyzer-languages.md states what a second language takes and
-# which identifiers each language reaches.
+# The languages are a list written as indexed keys numbered from zero without a gap, and the analyzer image has to have
+# been built for every one of them: the pinned image carries an English model and an English recognizer registry, so a
+# second code leaves the unit permanently unready rather than scanning in that language. A scan asks once per language
+# and merges what came back, inside the one budget it is allowed, and at most eight are accepted.
+# docs/operations/personal-data-analyzer-languages.md states what a second language takes and which identifiers each
+# language reaches.
 #Environment=SensitiveContent__Pii__Enabled=true
 #Environment=SensitiveContent__PersonalDataAnalyzer__Endpoint=http://mailfathom-presidio:3000
-#Environment=SensitiveContent__PersonalDataAnalyzer__Language=en
+#Environment=SensitiveContent__PersonalDataAnalyzer__Languages__0=en
+# Optional, and only alongside an analyzer image built for the language it names — see the paragraph above:
+#Environment=SensitiveContent__PersonalDataAnalyzer__Languages__1=pl
 #Environment=SensitiveContent__PersonalDataAnalyzer__MinimumConfidence=0.4
 
 # Spam classification with a scanner, off because these lines are commented out. Uncomment them together with the two

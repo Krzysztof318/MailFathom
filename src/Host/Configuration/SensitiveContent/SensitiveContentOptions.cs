@@ -6,6 +6,7 @@ using System.ComponentModel.DataAnnotations;
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using MailFathom.Application.SensitiveContent;
+using MailFathom.Infrastructure.SensitiveContent.PersonalData;
 
 namespace MailFathom.Host.Configuration.SensitiveContent;
 
@@ -114,6 +115,14 @@ internal sealed class SensitiveContentOptions : IValidatableObject
         }
     }
 
+    /// <summary>Reports whether one configured entry is a code the analyzer can be asked in.</summary>
+    /// <remarks>
+    /// A null is one of the shapes a configuration source can bind into a list, and it has to be answered here rather
+    /// than reached by the deduplication below, which refuses to hash one.
+    /// </remarks>
+    private static bool IsLanguageCode(string language) =>
+        language is { Length: 2 } && language.All(char.IsAsciiLetterLower);
+
     /// <summary>Finds what is wrong with the analyzer block, which only a switched-on personal-data scanner reads.</summary>
     /// <remarks>
     /// Nothing here judges an analyzer address left behind under a scanner nobody runs, for the reason nothing judges a
@@ -149,13 +158,41 @@ internal sealed class SensitiveContentOptions : IValidatableObject
                 [nameof(this.PersonalDataAnalyzer)]);
         }
 
-        // Two letters, because the analyzer selects a model by this and the code reaches a query string and the detector
-        // revision every finding carries. A wider grammar would let a configured value decide how either one parses.
-        if (this.PersonalDataAnalyzer.Language is not { Length: 2 }
-            || !this.PersonalDataAnalyzer.Language.All(char.IsAsciiLetterLower))
+        // Two letters each, because the analyzer selects a model by one and each code reaches a query string and the
+        // detector revision every finding carries. A wider grammar would let a configured value decide how either one
+        // parses. An empty list is not judged here: it is the absent list every collection in this section defaults from,
+        // and SensitiveContentPlanMapper is what turns it into the shipped analyzer's own language.
+        var malformed = this.PersonalDataAnalyzer.Languages.Where(language => !IsLanguageCode(language)).ToArray();
+
+        if (malformed.Length > 0)
+        {
+            // Only the entries that failed, because quoting the whole list beside them leaves an operator comparing a
+            // valid code with an invalid one and nothing saying which is which.
+            yield return new ValidationResult(
+                $"{analyzerKey}:Languages names '{string.Join("', '", malformed)}', and every entry is a two-letter lowercase language code such as en. State ones the analyzer's own configuration loads a model for.",
+                [nameof(this.PersonalDataAnalyzer)]);
+        }
+
+        // Bounded because each language is another analyzer request inside the one budget ScanTimeout allows, and because
+        // the revision every finding carries names them all inside a grammar of its own. Refused here so the message names
+        // the key an operator wrote rather than the grammar a detector identity accepts. Counted after deduplication, as
+        // PersonalDataAnalyzerProfile counts it: a repeat is one language asked once, so refusing over one would refuse a
+        // configuration the profile accepts.
+        var asked = this.PersonalDataAnalyzer.Languages
+            .Where(IsLanguageCode)
+            .Distinct(StringComparer.Ordinal)
+            .Count();
+
+        if (asked > PersonalDataAnalyzerProfile.MaximumLanguages)
         {
             yield return new ValidationResult(
-                $"{analyzerKey}:Language is '{this.PersonalDataAnalyzer.Language}', which is not a two-letter lowercase language code such as en. State one the analyzer's own configuration loads a model for.",
+                string.Format(
+                    CultureInfo.InvariantCulture,
+                    "{0}:Languages names {1} distinct languages and at most {2} are asked for. One scan asks once per language inside the single budget {3}:ScanTimeout allows, and the derivation stamp names every one of them.",
+                    analyzerKey,
+                    asked,
+                    PersonalDataAnalyzerProfile.MaximumLanguages,
+                    SectionName),
                 [nameof(this.PersonalDataAnalyzer)]);
         }
 

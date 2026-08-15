@@ -429,12 +429,19 @@ outside gives up.
 The analyzer is attached to the `backend` network alone and publishes no port. It receives mail content in the clear and
 answers where the identifiers in it are, so nothing outside the host can reach it and MailFathom asks it over plain HTTP.
 
-**`MAILFATHOM_PERSONAL_DATA_LANGUAGE` is not a language switch on its own.** It states the one language every request
-is made in, and the pinned image is built for English alone — one model, and a recognizer registry declaring English.
+**`MAILFATHOM_PERSONAL_DATA_LANGUAGE` is not a language switch on its own.** It states the first language the analyzer is
+asked in, and the pinned image is built for English alone — one model, and a recognizer registry declaring English.
 Naming another code leaves MailFathom unready rather than scanning in that language, because the analyzer answers that
 it recognises nothing for it. A second language means an image built for it, named in `MAILFATHOM_PRESIDIO_IMAGE`;
-[the analyzer's language](personal-data-analyzer-languages.md) records what that takes and which identifiers each
+[the analyzer's languages](personal-data-analyzer-languages.md) records what that takes and which identifiers each
 language reaches.
+
+**A second language is a second line in `compose.yaml` rather than a second variable.** MailFathom takes a list of
+languages, which reaches .NET configuration as indexed environment keys, and Compose expands no variable into several of
+them — so the shipped file writes `SensitiveContent__PersonalDataAnalyzer__Languages__0` from the variable above and
+carries a commented `__1` line beside it to uncomment. The numbering starts at zero and leaves no gap, because a gap ends
+the bound list at it and everything after is dropped. One scan then asks the analyzer once per language, one call after
+the other, inside the single `SensitiveContent:ScanTimeout` budget rather than one budget each.
 
 ## Spam scanning
 

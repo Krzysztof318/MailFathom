@@ -285,7 +285,7 @@ public sealed class OrchestratedPersonalDataAnalyzerTests(MailFathomOrchestratio
         var services = new ServiceCollection();
         services.AddSingleton(TimeProvider.System);
         services.AddSingleton(plan);
-        services.AddSingleton(PersonalDataAnalyzerProfile.Create(analyzer, "en", MinimumConfidence));
+        services.AddSingleton(PersonalDataAnalyzerProfile.Create(analyzer, ["en"], MinimumConfidence));
 
         // The real registration rather than a client composed here, so what these tests exercise includes the bounds, the
         // base-address handling, and the resilience handler a deployment gets: the registration adds that handler itself,
