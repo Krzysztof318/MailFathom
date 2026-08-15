@@ -41,7 +41,7 @@ internal sealed class PersonalDataAnalyzerOptions
     [SuppressMessage("Design", "CA1056:URI-like properties should not be strings", Justification = "Bound from configuration, where a malformed value must surface as this section's startup failure naming the key rather than as a binder format exception.")]
     public string? Endpoint { get; set; }
 
-    /// <summary>Gets or sets the two-letter codes of the languages the analyzer is asked in.</summary>
+    /// <summary>Gets the two-letter codes of the languages the analyzer is asked in.</summary>
     /// <remarks>
     /// <para>
     /// A set for the whole deployment, with no per-account, per-folder, or per-message language and no detection. A mailbox

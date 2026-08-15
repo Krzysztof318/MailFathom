@@ -171,9 +171,13 @@ public sealed class SensitiveContentOptionsTests
         Assert.Contains("two-letter lowercase language code", result.ErrorMessage!, StringComparison.Ordinal);
     }
 
-    /// <summary>One malformed entry beside well-formed ones is still a request the analyzer cannot be asked.</summary>
+    /// <summary>
+    /// One malformed entry beside well-formed ones is still a request the analyzer cannot be asked, and the message names
+    /// that entry alone — a list quoting the valid code beside the invalid one leaves an operator comparing the two with
+    /// nothing saying which is which.
+    /// </summary>
     [Fact]
-    public void Validate_AnalyzerLanguagesWithOneMalformedEntry_IsReported()
+    public void Validate_AnalyzerLanguagesWithOneMalformedEntry_IsReportedQuotingOnlyThatEntry()
     {
         // Arrange
         var settings = new SensitiveContentOptions();
@@ -187,7 +191,56 @@ public sealed class SensitiveContentOptionsTests
 
         // Assert
         var result = Assert.Single(results);
-        Assert.Contains("polish", result.ErrorMessage!, StringComparison.Ordinal);
+        Assert.Contains("'polish'", result.ErrorMessage!, StringComparison.Ordinal);
+        Assert.DoesNotContain("'en'", result.ErrorMessage!, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The ceiling is counted after deduplication, as the profile counts it. A repeat is one language asked once, so a
+    /// list an operator produced by merging two configuration sources must not be refused for a length the analyzer
+    /// never sees.
+    /// </summary>
+    [Fact]
+    public void Validate_MoreRawEntriesThanTheCeilingButNoMoreDistinctLanguages_ReportsNothing()
+    {
+        // Arrange
+        var settings = new SensitiveContentOptions();
+        settings.Pii.Enabled = true;
+        settings.PersonalDataAnalyzer.Endpoint = "http://presidio-analyzer:3000";
+
+        foreach (var language in LanguageCodes(PersonalDataAnalyzerProfile.MaximumLanguages))
+        {
+            settings.PersonalDataAnalyzer.Languages.Add(language);
+        }
+
+        settings.PersonalDataAnalyzer.Languages.Add(settings.PersonalDataAnalyzer.Languages[0]);
+
+        // Act
+        var results = settings.Validate(new ValidationContext(settings));
+
+        // Assert
+        Assert.Empty(results);
+    }
+
+    /// <summary>The ceiling is inclusive, so a deployment naming exactly as many languages as are asked for starts.</summary>
+    [Fact]
+    public void Validate_ExactlyAsManyAnalyzerLanguagesAsAreAskedFor_ReportsNothing()
+    {
+        // Arrange
+        var settings = new SensitiveContentOptions();
+        settings.Pii.Enabled = true;
+        settings.PersonalDataAnalyzer.Endpoint = "http://presidio-analyzer:3000";
+
+        foreach (var language in LanguageCodes(PersonalDataAnalyzerProfile.MaximumLanguages))
+        {
+            settings.PersonalDataAnalyzer.Languages.Add(language);
+        }
+
+        // Act
+        var results = settings.Validate(new ValidationContext(settings));
+
+        // Assert
+        Assert.Empty(results);
     }
 
     /// <summary>
@@ -202,9 +255,7 @@ public sealed class SensitiveContentOptionsTests
         settings.Pii.Enabled = true;
         settings.PersonalDataAnalyzer.Endpoint = "http://presidio-analyzer:3000";
 
-        foreach (var language in Enumerable
-            .Range(0, PersonalDataAnalyzerProfile.MaximumLanguages + 1)
-            .Select(index => $"{(char)('a' + (index / 26))}{(char)('a' + (index % 26))}"))
+        foreach (var language in LanguageCodes(PersonalDataAnalyzerProfile.MaximumLanguages + 1))
         {
             settings.PersonalDataAnalyzer.Languages.Add(language);
         }
@@ -216,6 +267,11 @@ public sealed class SensitiveContentOptionsTests
         var result = Assert.Single(results);
         Assert.Contains("at most 8 are asked for", result.ErrorMessage!, StringComparison.Ordinal);
     }
+
+    /// <summary>Distinct well-formed codes, so a test about a count is not also a test about the grammar.</summary>
+    private static IEnumerable<string> LanguageCodes(int count) => Enumerable
+        .Range(0, count)
+        .Select(index => $"{(char)('a' + (index / 26))}{(char)('a' + (index % 26))}");
 
     /// <summary>A mixed mailbox names every language its correspondence carries, and nothing about that is a configuration error.</summary>
     [Fact]

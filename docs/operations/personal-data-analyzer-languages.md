@@ -57,7 +57,9 @@ languages is one finding carrying the stronger score, and overlapping regions be
 The readiness probe asks the analyzer which entities it recognises **in each configured language**, unions the answers,
 and requires each switched-on category to have **at least one** of them somewhere in that union. Per category across the
 set rather than per category per language, because otherwise adding a language would turn a healthy deployment unready
-for the categories that language has nothing for — widening protection must never read as breaking it.
+for the categories that language has nothing for — widening protection must never read as breaking it. The scrape runs
+under one `SensitiveContent:ScanTimeout` as a whole rather than one per request, so a longer list costs more requests and
+never a longer scrape, and an analyzer too slow to answer them all inside that budget reports the deployment unready.
 
 The rule keeps its old consequence, softened by the set: a category can be half unreachable while the deployment reads
 healthy. `NationalIdentifier` is the worked example — it covers 27 analyzer entities, of which the shipped image

@@ -114,7 +114,10 @@ verdict taken once would be wrong in both directions. That is also why an unreac
 up, reports unready, and becomes ready by itself when the analyzer does. The question asked is which entities the
 analyzer recognises, asked once per configured language and answered from its own registry: a language that answers
 nothing at all fails the check by name, and a switched-on category is judged across the languages together, so adding one
-never turns a ready instance unready. Each transition — into unavailability and back out of it — is written to the log,
+never turns a ready instance unready. The whole scrape runs under one `SensitiveContent:ScanTimeout` rather than each of
+its requests under a timeout of its own, so naming more languages costs more requests and never a longer scrape — an
+analyzer too slow to finish inside that budget reports the instance unready, which is what it would be anyway once a scan
+missed the same budget. Each transition — into unavailability and back out of it — is written to the log,
 at `Error` and `Information` respectively, because a probe response carries no reason and the log is where an operator
 reads one.
 [Sensitive-content scanning](../features/sensitive-content-scanning.md#the-analyzer-is-deployed-only-when-the-switch-is-on)

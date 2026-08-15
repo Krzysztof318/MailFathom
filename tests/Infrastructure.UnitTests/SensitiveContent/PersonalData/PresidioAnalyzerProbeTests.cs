@@ -10,6 +10,7 @@ using MailFathom.Application.SensitiveContent;
 using MailFathom.Application.SensitiveContent.Detection;
 using MailFathom.Infrastructure.SensitiveContent.PersonalData;
 using MailFathom.TestSupport;
+using Microsoft.Extensions.Time.Testing;
 using NSubstitute;
 using Xunit;
 
@@ -211,12 +212,14 @@ public sealed class PresidioAnalyzerProbeTests
     /// deployment can find, whatever the others know — otherwise adding a language turns a ready deployment unready.
     /// </summary>
     [Fact]
-    public async Task VerifyAvailableAsync_CategoryReachableInOneConfiguredLanguageOnly_Passes()
+    public async Task VerifyAvailableAsync_EachCategoryReachableInADifferentLanguage_Passes()
     {
         // Arrange
+        // Neither answer satisfies both categories on its own, so a probe that read one language and stopped would fail
+        // this rather than pass it — which is what makes the union the thing under test.
         var plan = PersonalDataScanningPlans.For(
             [PersonalDataScanningPlans.Category("NationalIdentifier"), PersonalDataScanningPlans.Category("HealthIdentifier")]);
-        using var context = MultilingualAnalyzerAnswering(plan, """["US_SSN","UK_NHS"]""", """["PL_PESEL"]""");
+        using var context = MultilingualAnalyzerAnswering(plan, """["UK_NHS"]""", """["PL_PESEL"]""");
 
         // Act
         await context.Probe.VerifyAvailableAsync(CancellationToken.None);
@@ -260,6 +263,31 @@ public sealed class PresidioAnalyzerProbeTests
         // Assert
         Assert.Contains("recognises no entity at all in 'pl'", failure.Message, StringComparison.Ordinal);
         Assert.Contains("SensitiveContent:PersonalDataAnalyzer:Languages", failure.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A scrape asks once per configured language, so the budget covers the scrape rather than each request. Without one
+    /// a slow analyzer would hold a readiness scrape for a multiple of what an operator configured, which flaps an
+    /// instance in and out of traffic instead of reporting what it found.
+    /// </summary>
+    [Fact]
+    public async Task VerifyAvailableAsync_AnalyzerSlowerThanTheScanBudget_RefusesToStartNamingTheBudget()
+    {
+        // Arrange
+        var reachedTheAnalyzer = new TaskCompletionSource();
+        using var context = AnalyzerHanging(reachedTheAnalyzer);
+
+        // Act
+        var verifying = context.Probe.VerifyAvailableAsync(CancellationToken.None);
+        await reachedTheAnalyzer.Task;
+        context.TimeProvider.Advance(SensitiveContentScanBounds.Default.ScanTimeout);
+
+        var failure = await Assert.ThrowsAsync<PersonalDataAnalyzerUnavailableException>(() => verifying);
+
+        // Assert
+        Assert.Contains("did not answer", failure.Message, StringComparison.Ordinal);
+        Assert.Contains("SensitiveContent:ScanTimeout", failure.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("analyzer.invalid", failure.Message, StringComparison.Ordinal);
     }
 
     /// <summary>A host shutting down is its own fact and must not be reported as an analyzer that is missing.</summary>
@@ -308,6 +336,24 @@ public sealed class PresidioAnalyzerProbeTests
         return Context(handler, plan, PersonalDataScanningPlans.MultilingualProfile);
     }
 
+    /// <summary>An analyzer that accepts the request and never answers, so only the scrape's own budget ends the wait.</summary>
+    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "Each object is handed to the returned context, whose Dispose releases all of them; disposing them here would return a context of closed resources.")]
+    private static ProbeContext AnalyzerHanging(TaskCompletionSource reachedTheAnalyzer)
+    {
+        var handler = new FakeHttpMessageHandler(async (_, cancellationToken) =>
+        {
+            // Signalled before the wait, so the test advances a clock the probe is already timing against rather than
+            // one whose budget has not been armed yet.
+            reachedTheAnalyzer.TrySetResult();
+
+            await Task.Delay(Timeout.Infinite, cancellationToken);
+
+            return new HttpResponseMessage(HttpStatusCode.OK);
+        });
+
+        return Context(handler, plan: null, profile: null);
+    }
+
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "Each object is handed to the returned context, whose Dispose releases all of them; disposing them here would return a context of closed resources.")]
     private static ProbeContext AnalyzerFailingWith(Exception failure)
     {
@@ -328,15 +374,21 @@ public sealed class PresidioAnalyzerProbeTests
                 BaseAddress = PersonalDataScanningPlans.Profile.Endpoint,
             });
 
+        var timeProvider = new FakeTimeProvider();
+
         var probe = new PresidioAnalyzerProbe(
             plan ?? PersonalDataScanningPlans.Default,
             profile ?? PersonalDataScanningPlans.Profile,
-            transportFactory);
+            transportFactory,
+            timeProvider);
 
-        return new ProbeContext(handler, probe);
+        return new ProbeContext(handler, probe, timeProvider);
     }
 
-    private sealed record ProbeContext(FakeHttpMessageHandler Handler, PresidioAnalyzerProbe Probe) : IDisposable
+    private sealed record ProbeContext(
+        FakeHttpMessageHandler Handler,
+        PresidioAnalyzerProbe Probe,
+        FakeTimeProvider TimeProvider) : IDisposable
     {
         public void Dispose() => this.Handler.Dispose();
     }

@@ -80,6 +80,29 @@ public sealed class PersonalDataAnalyzerUnavailableException : MailFathomExcepti
             endpoint);
     }
 
+    /// <summary>Reports that the analyzer did not answer the whole availability probe within the budget one scrape is allowed.</summary>
+    /// <param name="endpoint">The address the probe asked.</param>
+    /// <param name="budget">How long the scrape was allowed to take.</param>
+    /// <returns>The failure to raise.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="endpoint" /> is <see langword="null" />.</exception>
+    /// <remarks>
+    /// The budget covers the scrape rather than each request it makes, because a scrape asks once per configured
+    /// language while the readiness period an orchestrator scrapes on stays what it was. An analyzer slow enough to
+    /// reach this is one that would answer a scan no faster, so the instance reports unready rather than serving reads
+    /// its scanner is about to refuse anyway.
+    /// </remarks>
+    public static PersonalDataAnalyzerUnavailableException DidNotAnswerInTime(string endpoint, TimeSpan budget)
+    {
+        ArgumentNullException.ThrowIfNull(endpoint);
+
+        return new PersonalDataAnalyzerUnavailableException(
+            string.Format(
+                CultureInfo.InvariantCulture,
+                "The analyzer named by SensitiveContent:PersonalDataAnalyzer:Endpoint did not answer the personal-data scanner's availability probe within {0}. The probe asks it once for every language SensitiveContent:PersonalDataAnalyzer:Languages names, under the single budget SensitiveContent:ScanTimeout allows, so raise that budget, name fewer languages, or give the analyzer the resources it needs.",
+                budget),
+            endpoint);
+    }
+
     /// <summary>Reports that the analyzer recognises nothing at all in one of the configured languages.</summary>
     /// <param name="endpoint">The address the probe asked.</param>
     /// <param name="language">The language it answered nothing for.</param>
