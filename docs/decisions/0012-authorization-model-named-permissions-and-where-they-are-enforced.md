@@ -33,7 +33,8 @@ One neighbouring question is already settled and is not reopened here. Issue 816
 - **The deployment serves one owner's mail.** This is not a multi-tenant service, so the model does not have to express delegation, group mapping, or a policy language, and inventing them would be scaffolding for a shape nobody has.
 - **Root `AGENTS.md` asks for authorization close to the use case as well as at the transport boundary**, so that a second entrypoint — a rule action, a worker, a command, a gateway added later — cannot widen access by omission.
 - **What leaves the process is a different question from what the caller can read.** `ask_mail` sends mail content to a model provider, so whether a credential may reach it is a decision about egress and not only about retrieval.
-- **The break is affordable and the record of it is not optional.** ADR 0004 permits a `0.y.z` minor to break the configuration schema, the MCP tool contract and the deployment contract; what it requires is that each break is named against its surface with the operator's action.
+- **A first deployment has to work before it has an authorization model.** This is somebody's own mail server as often as it is an organization's, and the person standing one up is configuring a mailbox and a credential, not a permission set. A design whose first step is an authorization decision is a design most of its users meet as an obstacle.
+- **A break here would be affordable and would still have to be written down.** ADR 0004 permits a `0.y.z` minor to break the configuration schema, the MCP tool contract and the deployment contract, and requires each break to be named against its surface with the operator's action. So the question the default answers is what serves an operator, never whether the project is allowed to make them act.
 
 ## Considered Options
 
@@ -66,7 +67,7 @@ A name is `mailfathom.<surface>[.<subject>].<verb>`, lowercase, dot-separated, a
 | --- | --- |
 | `mailfathom.mail.read` | The MCP tools that read the local mailbox copy: `list_accounts`, `list_emails`, `get_email_content`, `search_emails`. |
 | `mailfathom.mail.ask` | `ask_mail`, which answers from mail content by sending it to a model provider. |
-| `mailfathom.admin.read` | The administrative reads that report the deployment's own state and no mail: the session, embedding status and the activation preview, the loaded rules, a run's progress, and the stopped-job list. |
+| `mailfathom.admin.read` | The administrative reads that report the deployment's own state and no mail: embedding status and the activation preview, the loaded rules, a run's progress, and the stopped-job list. |
 | `mailfathom.admin.audit.read` | The per-account records derived from mail: the mailbox-mutation audit, the answering audit, the rules history, and the spam classifications. |
 | `mailfathom.admin.operate` | Asking the deployment to do work it can already do: running rules over an account, classifying an account, retrying or dropping a stopped job, cancelling a reindex. |
 | `mailfathom.admin.credentials.write` | Storing a mailbox refresh token. |
@@ -74,6 +75,8 @@ A name is `mailfathom.<surface>[.<subject>].<verb>`, lowercase, dot-separated, a
 | `mailfathom.admin.erase` | Erasing the mail stored for a folder an account no longer mirrors. |
 
 The separations above are the ones an operator would plausibly want to grant apart: reading state, reading what was derived from mail, causing work, placing a credential, starting a bill, and destroying mail. That sentence is the rule the set is allocated under, and issue 587 maps every administrative route onto exactly one of these names rather than adding to them.
+
+**`GET /api/admin/session` requires no permission**, and is the one administrative route that does not. It reports the credential the caller already presented and the version the deployment already publishes, so it discloses nothing a caller did not bring; and it is what every command reads first, `mfctl login` included, which refuses to store a credential the deployment has not accepted through it. Putting it behind `mailfathom.admin.read` would make that permission a component of every administrative grant — an operator granting only `mailfathom.admin.spend` could not sign in to use it — which is a trap rather than a separation, and none of the six separations above asks for it. Issue 587's requirement that the route report the caller's grant is unaffected: it reports what the caller holds, which is exactly the question a caller may always ask about itself.
 
 **No permission implies another.** An implication table is a second set of rules to keep true, and writing two names in a grant is cheaper than remembering which one carries which. In particular `mailfathom.mail.ask` does not imply `mailfathom.mail.read` and is not the weaker of the two: a cited answer returns mail content, so the documentation states that granting it is granting access to mail.
 
@@ -85,28 +88,46 @@ Both surfaces draw from one published set, and the name says which surface it be
 
 ### A grant belongs to the credential's configuration entry
 
-An `Authentication[]` entry states what it grants, on both endpoints, and it always states it as `Permissions` — a list of published names, which is the ceiling on what any credential the entry admits may do. A second setting decides whether the credential itself may be granted less than that ceiling:
+An `Authentication[]` entry states what it grants, on both endpoints, as `Permissions` — a list of published names, which is the ceiling on what any credential the entry admits may do. An entry that states none takes the whole of its surface as its ceiling, for the reason *An unstated grant is the whole surface* gives below. A second setting decides whether the credential itself may be granted less than that ceiling:
 
 - **Without `PermissionsFromTokenScopes`, the grant is the ceiling.** Every credential the entry admits holds every permission it lists. This is the only form available to an entry stating an `ApiKey` or a `PublicKey` block, because neither credential can carry anything the deployment did not write.
 - **With `PermissionsFromTokenScopes`, the grant is the ceiling narrowed by the token.** A token holds the published names its scopes carry *and* the entry lists, so the authorization server decides per subject within a bound the deployment fixed. Available only to an entry whose sole block is `OAuth`, so that the question is never asked of a credential that cannot answer it.
 
-The ceiling is what keeps one uniform rule for the whole list — every entry says what it grants, in the same setting, whichever credential it admits — and it is what makes the advertised set below a finite thing rather than "whatever this deployment happens to enforce".
+The ceiling is what keeps one uniform rule for the whole list — every entry has one, whichever credential it admits and whether or not the operator wrote it down — and it is what makes the advertised set below a finite thing rather than "whatever this deployment happens to enforce".
 
-Startup refuses an entry whose `Permissions` is absent or empty, `PermissionsFromTokenScopes` on an entry carrying a key or a public key, and any name that is unknown or belongs to the other surface — each naming the configuration path including the entry's index, in the form every other refusal in this section already takes. Issue 584 owns the binding and the exact wording; what this record fixes is the semantics and that every one of those arrangements is a refusal rather than a default.
+Startup refuses `PermissionsFromTokenScopes` on an entry carrying a key or a public key, and any name that is unknown or belongs to the other surface, each naming the configuration path including the entry's index, in the form every other refusal in this section already takes. Those are the arrangements that say something impossible. An absent list is not one of them.
 
-**The grant is a property of the entry and therefore of every credential the entry states.** An entry may carry several blocks, and until now which entry a block sat in was only a matter of how an operator grouped what they wrote. It stops being only that: two credentials that are to be granted differently are two entries. This is a change in what the existing shape means and is named in the changelog as one.
+**A client-certificate trust profile carries no grant**, and the record says so rather than leaving issue 584 to discover it. `McpClientCertificateValidation` runs ahead of credential authentication and is configured through `McpClientCertificateProfileOptions` rather than through an `Authentication[]` entry, so it decides which machine may reach the surface and never which caller is admitted or what one may do. It is a gate in front of the credentials rather than a fourth credential, no `Permissions` is written on it, and a request that presents nothing but a certificate is admitted by whatever `Authentication[]` says — including the no-entry posture above.
+
+`Permissions` written as an empty list means what an absent one means, and issue 584 does not build a distinction between them. The options types in this section bind a collection as a get-only property initialized to `[]`, so absence and emptiness arrive identically and a rule separating them would rest on a difference the binder does not preserve. An operator who wants a credential to reach nothing removes the entry rather than emptying its grant.
+
+**The grant is a property of the entry and therefore of every credential the entry states.** An entry may carry several blocks, and today which entry a block sits in is only a matter of how an operator grouped what they wrote. It stops being only that for anyone who writes a grant: two credentials to be granted differently are two entries. Nothing already configured changes meaning, because an entry with no grant holds what it always held; what changes is that grouping acquires a consequence the moment an operator uses the setting, which is what the documentation says where the setting is described.
 
 ### What the deployment advertises is what a client can ask for
 
 `scopes_supported` gains the `Permissions` of every entry that sets `PermissionsFromTokenScopes`, and nothing from an entry that does not. That follows from what the field means: it tells a client what to ask its authorization server for, and a permission the deployment grants from configuration is not something any client can ask for. It also tells an operator exactly which scopes to create in their authorization server — the union of those ceilings, read from the document rather than transcribed out of their own configuration file.
 
+Such an entry that also states no `Permissions` therefore advertises its surface's whole half, because that is genuinely what a token there may bring. An operator who wants a shorter list in the document writes the ceiling they meant, which is the same act as narrowing the grant.
+
 A permission name is refused in `RequiredScopes`, for the reason given above, and in `AdvertisedScopes`, because the grant that reads it already advertises it and an entry that reads none would be telling a client to ask for something nothing here grants. The composition issue 816 settled is otherwise unchanged: a required scope is advertised whether or not anything repeats it, and an advertised scope is never enforced.
 
-### There is no default grant
+### An unstated grant is the whole surface, and the startup record says so
 
-A credential that names no permission is not admitted with nothing, and not admitted with everything. It is a startup refusal.
+A credential whose entry names no permission holds every permission that entry's surface publishes. Nothing about this feature has to be configured before a deployment works, and nothing an operator has already written stops working when they upgrade into it.
 
-Denying everything silently would make an upgrade break at request time, where the operator learns from a client that stopped working. Granting everything would preserve today's behaviour, but it makes the safe configuration the one an operator has to go and find, and — decisively — every permission added later would silently widen every credential already configured. Refusing at startup is the only one of the three in which the upgrade is loud, happens before a request is served, and names the file and the setting. The operator's action is one line per entry, and it is written in the changelog against the configuration schema, per ADR 0004.
+**A surface carrying no `Authentication` entry at all grants the same thing**, so a caller admitted where no credential is configured holds every permission that surface publishes. There is no entry for a grant to hang on, and the two readings that would fill the gap are the ones this section already rejects: refusing to serve the surface turns a supported posture into a startup failure, and granting nothing turns it into a surface that admits callers and answers none of them. `McpTransportAuthenticationWarning` already reports that posture as what it is — a warning naming the entry the operator has not written — and it is the place the resolved grant is reported too. Nothing about this weakens the posture, because a surface admitting anybody is already the whole of the exposure and a permission model cannot narrow a caller it cannot tell apart. This is stated here so that issues 584 and 586 do not each decide it.
+
+The alternative was refusing at startup until every entry carried a grant. It is the safer default read on its own and it was rejected on what it costs: somebody standing up MailFathom for their own mail would meet an authorization model before they had a working deployment, and an existing deployment would refuse to start on an upgrade that changed nothing it was doing. A model nobody reaches because the first run refused is not a boundary; it is an obstacle in front of one. Authorization here is something an operator narrows into once there is a second credential to tell apart, which is exactly when the reason for it becomes visible to them.
+
+That reading is already this repository's on the neighbouring question. An `Authentication[]` list with no entries at all accepts no credential, and `TransportAuthenticationConfiguration` deliberately does not refuse it: a posture is reported by the startup warning each endpoint carries rather than treated as a mistake. A grant nobody narrowed is the same kind of fact, and it is reported the same way.
+
+Three things carry the cost of the permissive reading, and none of them asks the operator to configure anything:
+
+- **The startup record states what every entry resolved to**, naming the entries whose grant was not written down and what they therefore hold. An operator meets their own posture in the log on the first run rather than inferring it later from what a credential turned out to be able to do.
+- **The session route and `mfctl status` report the caller's grant.** An operator can ask what a credential holds without reading a configuration file back to themselves.
+- **A release that publishes a new permission says that unrestricted entries gain it.** This is the real hazard of a permissive default — a capability added later joining every credential already configured — and it is met by writing it down in the changelog beside the capability, in the same reading of ADR 0004 that governs any other operator-visible movement. A deployment that had already narrowed its entries gains nothing it did not name.
+
+One consequence reaches the children directly and is stated here so none of them goes looking for it: **nothing in this model breaks a public surface.** `Permissions`, `PermissionsFromTokenScopes` and `Accounts` are settings an entry may carry, and every existing entry is valid without them; a listing narrows only for a caller whose operator narrowed it, so the tool contract a shipped deployment serves does not move either. Issue 584's and issue 586's acceptance items about recording a break therefore have nothing to record, and what issue 590 predicted — that the configuration schema and part of the tool contract would break — is what this record decided against. A child that does introduce a break records it as any change would.
 
 ### The accounts a caller may reach are a second axis on the same grant
 
@@ -125,7 +146,11 @@ Both checks exist and they are not the same check.
 
 What the application layer receives is an application-owned contract describing the caller: the configured identity it was admitted under, the permissions it holds, and the accounts it may reach. Nothing from `System.Security.Claims`, ASP.NET Core, or the MCP SDK crosses that boundary, and no use case learns which credential admitted the caller. A host adapter populates it per request scope.
 
-**Work no caller requested runs under the process's own identity**, which is a distinct kind of principal rather than a caller holding everything. A use case that may run without a caller admits the process identity by name; it must never be admitted by holding a permission, because a principal that passes an ordinary permission check is a caller with everything granted wearing a different label. A use case reached with neither a caller nor the process identity fails rather than defaulting to permitted.
+**Work no caller requested runs under the process's own identity**, which is a distinct kind of principal rather than a caller holding everything. A use case that may run without a caller admits the process identity by name; it must never be admitted by holding a permission, because a principal that passes an ordinary permission check is a caller with everything granted wearing a different label.
+
+**A signed capability is the third principal**, and it is what the attachment download route carries. `GET /attachments/{capability}` answers without a credential by design: the URL holds a ticket this deployment signed, `IAttachmentDownloadTicketReader` verifies it against the key ring, and what it names is one attachment rather than a surface. So the capability *is* the authorization, already bounded to a single object and a lifetime, and the use case behind it is reached under that rather than under a caller who was never identified. It is a principal kind rather than an exception, because writing it as an exception would leave the next capability-authorized route to argue for its own.
+
+A use case reached under none of those three fails rather than defaulting to permitted.
 
 ### What a refused caller is told depends on who is reading it
 
@@ -139,6 +164,8 @@ Two consequences follow and are accepted rather than worked around. A caller can
 
 This settles issue 586's acceptance differently from the way that issue words it. That issue asks for a coded boundary failure naming the permission that would have sufficed; the answer here is the unknown-tool answer and no new code, and the operator learns the permission from the record rather than from the response.
 
+It settles one of issue 745's the same way. That issue asks the tool descriptor to state the required grant "in the metadata the protocol has for it", and the protocol has no such metadata — so the requirement is answered by the listing carrying the decision, and the acceptance item asking for an advertised value to be asserted beside the rest of the descriptor has nothing to assert.
+
 **On the administrative surface, the permission that would have sufficed.** The caller there is `mfctl` in the operator's own hands, so the refusal uses the endpoint's existing safe failure shape and names the one permission, and nothing else: no route inventory, no other credential, nothing about the deployment's configuration. `mfctl` reports it in an operator's terms.
 
 On both surfaces, a request naming an account outside the grant is answered indistinguishably from one naming an account the deployment does not configure. An answer never discloses that an account exists.
@@ -150,23 +177,25 @@ No user directory, no group or tenant claim mapping, no delegation or impersonat
 ### Consequences
 
 - Good, because every name an operator can write corresponds to a check that exists, and a name that does not is a startup failure rather than a grant nobody enforces.
-- Good, because the three credential kinds are authorized on terms each can actually carry, and a configured credential stops being unbounded by construction.
+- Good, because the three credential kinds are authorized on terms each can actually carry, and a configured credential can be bounded at all, which today it cannot.
+- Good, because nothing here has to be configured to stand a deployment up: the whole model is additive, a first credential works the moment it is written, and an existing deployment upgrades into it unchanged.
 - Good, because the listing decision has protocol sanction and the tool descriptor is left as the protocol defines it, so nothing here has to be unwound when the Tool Scopes working group settles.
 - Good, because the use-case check makes an entrypoint added later safe by default rather than safe by the author remembering.
 - Neutral, because one closed vocabulary spanning both surfaces is one register to publish and validate, at the cost of a startup refusal for a name written on the wrong surface.
-- Neutral, because the grant moving to the entry makes an existing grouping convenience meaningful; an operator whose entries grouped several blocks for tidiness splits them when the grants differ.
-- Bad, because no deployment upgrades without editing its configuration: every `Authentication[]` entry on both endpoints gains a grant, and startup refuses until it has one. This is a configuration-schema break under ADR 0004 and the changelog carries the operator's action.
+- Neutral, because the grant moving to the entry makes an existing grouping convenience meaningful for anyone who writes one; an operator whose entries grouped several blocks for tidiness splits them when the grants differ, and one who writes no grant sees no change at all.
+- Bad, because the safe configuration is the one an operator has to go and find. The permissive default is the deliberate price of a deployment that works before it is governed, and the startup record, the session route and the documentation are what keep the posture visible rather than implicit.
+- Bad, because a permission published in a later release joins every entry that never narrowed its grant. Nothing detects that for the operator, so the release that adds a capability says in the changelog that unrestricted entries gain it.
 - Bad, because an operator whose authorization server cannot mint custom scopes cannot use `PermissionsFromTokenScopes`, and writes the grant in configuration instead — which means the deployment rather than the authorization server decides what each admitted subject may do.
 - Bad, because a caller refused on the MCP surface learns nothing, so diagnosing a client that stopped working requires reading the deployment's own record rather than the response.
 - Bad, because adding a mail account widens every credential whose entry names no `Accounts`, which is today's behaviour preserved rather than a new hazard, and is stated where the setting is documented.
 
 ## Validation
 
-- Startup refusals are unit-tested per arrangement: an unknown name, a cross-surface name, a name repeated between `RequiredScopes` and a grant, both grant forms on one entry, neither, and `PermissionsFromTokenScopes` beside a key. Each asserts the configuration path in the message, including the entry's index.
-- `Boundaries.UnitTests` keeps `System.Security.Claims`, ASP.NET Core and MCP SDK types out of `Application` and `Domain`, so the caller contract cannot acquire a transport type without failing the build.
+- Startup refusals are unit-tested per arrangement: an unknown name, a cross-surface name, a name repeated between `RequiredScopes` and a grant, and `PermissionsFromTokenScopes` on an entry carrying a key or a public key. Each asserts the configuration path in the message, including the entry's index. Beside them a test asserts the arrangements that are *not* refusals — an absent grant and an empty one — and that both resolve to the whole surface.
+- Issue 585 adds a rule to `Boundaries.UnitTests` keeping `System.Security.Claims` out of `Application` and `Domain`. That project holds no such rule today and needs one, because `ClaimsPrincipal` ships in the shared framework and `Application` references only `Domain` — so it is the one type of the three the caller contract could name with the build staying green. ASP.NET Core and the MCP SDK are already unreachable there by project reference.
 - Per-tool and per-route tests cover the listing with and without each grant, the call refused as an unknown tool, the administrative refusal naming its permission, and a use case refusing an unauthorized principal directly, with the transport absent.
 - The refusal metric and log of issue 589 are what an operator observes the boundary through, and the redaction contract is asserted over them beside the rest of the telemetry surface.
-- `docs/operations/configuration-reference.md`, `docs/operations/mcp-endpoint.md`, `docs/operations/admin-endpoint.md`, `docs/features/mcp-tools.md` and `docs/operations/mcp-client-oauth.md` state the vocabulary, the grant, the default that is not one, and what each surface tells a refused caller.
+- `docs/operations/configuration-reference.md`, `docs/operations/mcp-endpoint.md`, `docs/operations/admin-endpoint.md`, `docs/features/mcp-tools.md` and `docs/operations/mcp-client-oauth.md` state the vocabulary, the grant, what an entry that writes none holds, and what each surface tells a refused caller. The pages that walk somebody through a first deployment say that a credential reaches the whole surface until its entry narrows it, because a posture nobody is told about is one nobody chose.
 
 ## Pros and Cons of the Options
 
@@ -186,7 +215,7 @@ An entry names one of `reader`, `operator`, `administrator`, and the bundle's co
 
 - Good, because it is the smallest thing to configure and the easiest to explain.
 - Neutral, because the initial contents would look much like the table above, grouped.
-- Bad, because a bundle's meaning drifts: every capability added later joins some role, silently widening every credential that holds it — the same defect as a permissive default, arriving one release at a time.
+- Bad, because a bundle's meaning drifts: every capability added later joins some role, silently widening every credential that holds it. The chosen option widens an unstated grant the same way, and the difference is that there the operator can stop it — a grant they wrote is a grant a later release never adds to — whereas a role's contents are never theirs, so no amount of configuring makes them safe from the next one.
 - Bad, because the separations that matter here cut across any small set of bundles. Reading state and reading mail-derived history, or causing work and starting a bill, land in the same role unless the roles multiply until they are permissions with a worse name.
 
 ### An operator's own vocabulary, mapped onto operations in configuration
@@ -202,7 +231,7 @@ The operator invents names and writes a mapping from each name onto the operatio
 
 Keep today's reading — a configured credential's authorization is the act of configuring it — and build permissions only for OAuth.
 
-- Good, because it changes nothing for existing deployments and needs no configuration break.
+- Good, because it changes nothing for existing deployments — though so does the chosen option, whose unstated grant leaves them exactly as they are.
 - Neutral, because it would satisfy the deployments whose clients all authenticate with tokens.
 - Bad, because it leaves every key-authenticated caller where it is, and the administrative surface is where that costs most: an API key is what `mfctl` signs in with wherever no `OAuth` entry is configured, so the surface that stores mailbox credentials, starts bills and erases mail would go on granting each of those to any key that can read the session route.
 - Bad, because it makes what a credential may do depend on how it authenticates, which is the drift `TransportAccessPolicy` was written as one shared judgement to avoid.
