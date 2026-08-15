@@ -8,7 +8,6 @@ using MailFathom.CodeCoverage;
 using MailFathom.Infrastructure.Observability;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
-using Npgsql;
 
 namespace MailFathom.Infrastructure.Persistence.Sessions;
 
@@ -50,67 +49,9 @@ internal sealed class PersistenceSessionFactory(
         public Task RollbackTransactionAsync(CancellationToken cancellationToken) =>
             transaction.RollbackAsync(cancellationToken);
 
-        /// <summary>Recognizes the inserts a competing writer can win, and nothing else.</summary>
-        /// <remarks>
-        /// <para>
-        /// Each names a constraint whose violation means "another run got here first" rather than "this data is
-        /// wrong": the first checkpoint of a folder, the first binding of an alias to a remote folder, and the account
-        /// row that first binding creates on its way. The account is listed because it is part of that same insert:
-        /// two runs binding an alias for the first time under an account nothing has stored yet collide on the account
-        /// before they ever reach the alias, and reporting only one half of one race would leave the other half an
-        /// unhandled failure. Every other unique violation stays a failure, because treating an unnamed collision as a
-        /// race would retry a write that will never succeed.
-        /// </para>
-        /// <para>
-        /// The fourth is the mutation identity, and it is the one where losing the race is the mechanism rather than an
-        /// accident. Two callers asking for the same change reach the database together, one of them is refused here,
-        /// and the retry reads back the record the winner wrote — which is exactly how the same request twice performs
-        /// one mutation.
-        /// </para>
-        /// <para>
-        /// The fifth is one audit entry per mutation ending, and it is listed for a reason the others do not have: what
-        /// reads the answer is a trail that swallows a failed append and counts it. An append repeated after a commit
-        /// whose answer was lost is the benign case that constraint exists for, and leaving it unrecognized would report
-        /// it as an entry the trail could not keep — on the very counter that makes swallowing defensible — while the
-        /// trail in fact holds exactly the one entry it should.
-        /// </para>
-        /// <para>
-        /// The last two are the embedding profile's, and both are races between two activations. A collision on the
-        /// identity fingerprint is the mutation identity's case again: the retry resolves to the profile the winner
-        /// registered, which is what makes activating one declaration twice register one row. A collision on the
-        /// lifecycle index is two activations of <em>different</em> geometries, where the retry cannot resolve it —
-        /// what recognizing it buys is that the loser meets a first-party conflict rather than a provider exception
-        /// crossing the application boundary, and the activation turns that into the answer the operator needs, which
-        /// is that a different reindex is already running.
-        /// </para>
-        /// <para>
-        /// The next is the mutation identity's case once more, for the account's whole-mailbox rule run: two requests
-        /// for an account that has never had one reach the database together, and the retry reads back the run the
-        /// winner asked for instead of the second caller starting a second walk of one mailbox.
-        /// </para>
-        /// <para>
-        /// The last is the passage ordinal, and it is two cutters meeting over one message. The account run's cut and
-        /// the embedding sweep select the same rows and walk them in the same order, and the sweep runs on its own
-        /// interval while a run is still fetching, so on a first synchronization both can reach one message. Each reads
-        /// the stored ordinals inside its own transaction, so the one that commits second read none and writes a second
-        /// ordinal zero. The retry is exactly right there: it re-reads the winner's passages, finds them identical to
-        /// what it would have written, and writes nothing.
-        /// </para>
-        /// </remarks>
+        /// <inheritdoc />
         public bool IsConcurrencyConflict(DbUpdateException exception) =>
-            exception.InnerException is PostgresException
-            {
-                SqlState: PostgresErrorCodes.UniqueViolation,
-                ConstraintName: MailFathomDbContext.SynchronizationCheckpointPrimaryKeyConstraintName
-                    or MailFathomDbContext.MailFolderBindingUniqueIndexName
-                    or MailFathomDbContext.MailboxAccountPrimaryKeyConstraintName
-                    or MailFathomDbContext.MailboxMutationIdentityUniqueIndexName
-                    or MailFathomDbContext.MailboxMutationAuditEntryMutationUniqueIndexName
-                    or MailFathomDbContext.EmbeddingProfileFingerprintUniqueIndexName
-                    or MailFathomDbContext.EmbeddingProfileLifecycleUniqueIndexName
-                    or MailFathomDbContext.MailRuleEvaluationRunPrimaryKeyConstraintName
-                    or MailFathomDbContext.EmailChunkOrdinalUniqueIndexName,
-            };
+            PersistenceConcurrencyConflicts.IsConcurrencyConflict(exception);
 
         public void ClearTrackedState() => dbContext.ChangeTracker.Clear();
 

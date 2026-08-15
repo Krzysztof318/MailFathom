@@ -49,9 +49,11 @@ internal sealed class EmailEmbeddingStore(MailFathomDbContext dbContext, TimePro
     /// <inheritdoc />
     /// <remarks>
     /// The existing rows are read first and updated in place, so re-embedding a passage under the profile already
-    /// serving it replaces one row rather than violating the key it is unique on. A losing writer in a genuine race
-    /// still fails at commit and is retried by the caller's policy, which is the same treatment every other write here
-    /// gets; the read is what keeps the ordinary repeat from being a race at all.
+    /// serving it replaces one row rather than violating the key it is unique on; the read is what keeps the ordinary
+    /// repeat from being a race at all. A losing writer in a genuine race reads none of the winner's rows inside its
+    /// own transaction and so still collides at commit, which is why
+    /// <see cref="PersistenceConcurrencyConflicts" /> names this key: the collision is classified as a
+    /// conflict, and the caller's policy retries it from a fresh read that finds the winner's rows and updates them.
     /// </remarks>
     public async Task SaveEmbeddingsAsync(
         IPersistenceSession session,
