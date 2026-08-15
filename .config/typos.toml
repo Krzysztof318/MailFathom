@@ -96,5 +96,9 @@ extend-ignore-re = [
 HashiCorp = "HashiCorp"
 
 [default.extend-words]
+# `passt`, the project whose `pasta` binary rootless Podman starts to hold a network namespace open.
+# The Compose and Quadlet deployment pages name the package because that is what owns the AppArmor
+# profile an operator has to edit, and a dictionary reads the name as a misspelling of `passed`.
+passt = "passt"
 requeueing = "requeueing"
 unparseable = "unparseable"
