@@ -176,7 +176,7 @@ internal sealed class ScopedMailKnowledgeRetrieval
     /// </para>
     /// </remarks>
     private async Task<string> SearchAsync(
-        [Description("The text to rank mail against, up to 512 characters. Quoted phrases, OR, and a leading - to exclude a word are understood; every other punctuation mark is ordinary text. Write the words you expect the mail itself to contain rather than the question you were asked.")]
+        [Description("The text to rank mail against, up to 512 characters. Quoted phrases, OR, and a leading - to exclude a word are understood; every other punctuation mark is ordinary text. Write the words you expect the mail itself to contain rather than the question you were asked, in the language that mail is likely written in: matching compares words rather than translating them, so a mailbox holding several languages is reached by a lookup per language.")]
         string queryText,
         [Description("Return only mail sent from this mail address. Matched as a whole address rather than as a fragment, without regard to case. Omit to match any sender.")]
         string? senderAddress = null,

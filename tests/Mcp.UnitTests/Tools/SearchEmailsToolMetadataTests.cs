@@ -124,6 +124,30 @@ public sealed class SearchEmailsToolMetadataTests
         Assert.Equal(["queryText"], required);
     }
 
+    /// <summary>
+    /// Matching compares words rather than translating them, so a caller that words every search in the language it was
+    /// asked in reads a multilingual mailbox as one that holds nothing. The schema is where that is said, because the
+    /// caller writing the query is the only party that knows which languages the question could be about.
+    /// </summary>
+    [Fact]
+    public void AddMailFathomServer_DescribesTheQueryTextAsWordedInTheLanguageTheMailWasWrittenIn()
+    {
+        // Arrange, Act
+        var queryText = AdvertisedSearchEmailsTool()
+            .InputSchema
+            .GetProperty("properties")
+            .GetProperty("queryText")
+            .GetProperty("description")
+            .GetString();
+
+        // Assert
+        Assert.NotNull(queryText);
+        Assert.Contains(
+            "in the language it was written in rather than the language of your request",
+            queryText,
+            StringComparison.Ordinal);
+    }
+
     /// <summary>An argument nobody can interpret is an argument a model guesses at, so every one carries its own description.</summary>
     [Fact]
     public void AddMailFathomServer_DescribesEveryInputSchemaProperty()

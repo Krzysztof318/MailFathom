@@ -190,6 +190,37 @@ public sealed class MailAnsweringAgentCompositionTests
     }
 
     /// <summary>
+    /// The run's instruction states which language a lookup is worded in, and the argument's own description states it
+    /// again where the model reads what the argument is for — the two are one rule and a model that read only the
+    /// schema would otherwise word every lookup in the language of the question.
+    /// </summary>
+    [Fact]
+    public async Task Compose_TheSearchTool_TellsTheModelWhichLanguageALookupIsWordedIn()
+    {
+        // Arrange
+        var knowledgeSearch = new RecordingEmailKnowledgeSearch();
+        using var chatClient = ScriptedChatClient.Answering("nothing to look up");
+        var agent = AgentOver(chatClient, knowledgeSearch, OnePrimaryAccount, out _);
+
+        // Act
+        await agent.RunAsync("what arrived", session: null, options: null, TestContext.Current.CancellationToken);
+
+        // Assert
+        var queryText = Assert.Single(OfferedTools(chatClient))
+            .JsonSchema
+            .GetProperty("properties")
+            .GetProperty(ScopedMailKnowledgeRetrieval.QueryArgumentName)
+            .GetProperty("description")
+            .GetString();
+
+        Assert.NotNull(queryText);
+        Assert.Contains(
+            "in the language that mail is likely written in",
+            queryText,
+            StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// A run that cannot send, delete, move, or mark mail is one composed with no such tool, which is a property of the
     /// composition rather than a rule written down beside it.
     /// </summary>

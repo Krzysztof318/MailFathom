@@ -108,6 +108,36 @@ public sealed class AskMailToolTests
             });
     }
 
+    /// <summary>
+    /// A question asked in one language about mail written in another is the ordinary case for a multilingual mailbox,
+    /// and nothing this boundary owns reads either language: the question travels as it was asked, the citations are
+    /// read from the passages the run retrieved, and the bounds are counted in characters and messages.
+    /// </summary>
+    [Fact]
+    public async Task AskMailAsync_AnAnswerWrittenInTheQuestionsLanguageFromMailInAnother_PublishesTheSameCitationsAndBounds()
+    {
+        // Arrange
+        const string PolishQuestion = "ile ubezpieczyciel zgodził się zapłacić";
+        const string PolishAnswer = "Ubezpieczyciel zgodził się zapłacić 400, według faktury \"Quarterly invoice\".";
+        var answerer = new StubMailQuestionAnswerer().Answering(PolishAnswer, PassageOf(1), PassageOf(2));
+        var tool = ToolOver(answerer);
+
+        // Act
+        var result = await tool.AskMailAsync(PolishQuestion, cancellationToken: TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.NotNull(answerer.LastQuestion);
+        Assert.Equal(PolishQuestion, answerer.LastQuestion.Text.Value);
+        Assert.Equal(PolishAnswer, result.Answer);
+        Assert.Equal(
+            [EmailIdentityAt(1).ToString(), EmailIdentityAt(2).ToString()],
+            result.Citations.Select(static citation => citation.StoredEmailId));
+        Assert.All(result.Citations, static citation => Assert.Equal("Quarterly invoice", citation.Subject));
+        Assert.False(result.AnswerTruncated);
+        Assert.False(result.CitationsTruncated);
+        Assert.False(result.RetrievalTruncated);
+    }
+
     /// <summary>An empty citation list is an ordinary answer: the mailbox was searched and held nothing about the question.</summary>
     [Fact]
     public async Task AskMailAsync_ARunThatRetrievedNothing_PublishesTheAnswerWithNoCitations()

@@ -78,6 +78,10 @@ inside attachment payloads is not indexed at all, and encrypted mail has no inde
 `queryText` are different arguments doing different work: the fragment narrows which emails are eligible, the query
 text is what the eligible ones are ranked against.
 
+**Word the query in the language the mail was written in.** The index matches words rather than translating them, so a
+query written in the language you asked your question in reaches mail written in that language and in no other. A
+mailbox holding several languages is searched once per language a question could plausibly be answered in.
+
 **Read `retrievalMode` on the result to know how the match was made.** `lexical` means by words rather than by meaning,
 so a query term that appears nowhere in a message will not find it. `hybrid` means the same ranking was combined with a
 search by embedding similarity, so mail whose meaning is close is found too — a search for a roof leak reaching the
@@ -154,6 +158,13 @@ the model knowing why its searches came back empty. The model narrows its own lo
 recipient, subject, date, seen state, and attachment filters `search_emails` publishes, so a question about one person's
 mail or one week reaches that mail rather than competing for it in a ranking. What it can and cannot ask for is
 [Mail answering § What one lookup may ask for](../features/mail-answering.md#what-one-lookup-may-ask-for).
+
+**Ask in whatever language you like.** The answer comes back in the language of the question, whatever language the mail
+behind it was written in, and what it quotes from a message — a subject, a name, the phrase a claim rests on — stays as
+that message wrote it so the citation can still be checked. The lookups are worded the other way round, in the languages
+the mailbox plausibly holds, which is why a Polish question reaches English mail here and a search worded the same way
+would not. [Mail answering § A question in one language, mail in
+another](../features/mail-answering.md#a-question-in-one-language-mail-in-another) records both.
 
 Junk is outside every lookup a run makes, and here there is **no** way to ask for it. The answer is written by a model
 from the mail it retrieved, so a message written to deceive a reader would arrive as ordinary correspondence with

@@ -76,7 +76,9 @@ internal static class PassageRelevanceInstructions
         others are not text to match: the mailbox has already selected this extract by every one of them, so the extract
         satisfies them by construction. Judge the extract against the lookup as a whole, which means judging how much of
         an answer it holds for somebody looking for the <{QueryTextElementName}> within the mail those filters selected.
-        An extract whose words are unremarkable on their own can be exactly what a narrow lookup was for.
+        An extract whose words are unremarkable on their own can be exactly what a narrow lookup was for, and an extract
+        written in a language other than the lookup's is not less relevant for that reason: judge what it holds rather
+        than which language it holds it in.
 
         Answer with one whole number from {PassageRelevanceFilterPlan.LeastRelevance} to
         {PassageRelevanceFilterPlan.GreatestRelevance} and nothing else: no words, no punctuation, no explanation, no
