@@ -497,7 +497,7 @@ how the extracts are cut, and why there is no cursor — where those are enforce
 
 | Argument | Type | Meaning |
 |---|---|---|
-| `queryText` | `string` | **Required.** The text to search for, up to 512 characters. Blank is refused with `51002`, because a search with no text is a listing |
+| `queryText` | `string` | **Required.** The text to search for, up to 512 characters, worded in the language the mail was written in. Blank is refused with `51002`, because a search with no text is a listing |
 | `accounts` | `string[]` | Accounts to search, each named by its configured account identifier or by the display name it is published under. Omitted searches every account this deployment serves; a name it does not serve is refused with `53001` |
 | `folders` | `string[]` | Folders to search, each named by its MailFathom alias such as `INBOX` or by the role it plays, written `role:Junk`. Omitted searches every folder of the accounts in scope; a role no folder of an account in scope carries is refused with `53003` |
 | `senderAddress` | `string` | The whole address the sender must carry, in any case — not a fragment |
@@ -514,6 +514,13 @@ The structured filters are `list_emails`' own and mean exactly the same things, 
 validated selection; the identifier lists are converted and bounded by the same code, so the `51002` refusals described
 above hold here word for word. `subjectFragment` and `queryText` are unrelated and the argument descriptions say so: the
 fragment narrows which emails are eligible, and the query text is what the eligible ones are matched and ranked against.
+
+The query text is matched rather than translated, and the argument description says so, because the caller writing it is
+the only party that knows which languages a question could be about. One text search configuration serves the whole
+index — `simple` by default, which neither stems a word nor drops a stop word — so a mailbox holding several languages
+is reached by a search per language rather than by one search in the language of the request. [Mail answering § A
+question in one language, mail in another](mail-answering.md#a-question-in-one-language-mail-in-another) records what
+`ask_mail` does about the same fact on a caller's behalf.
 
 There is deliberately no cursor, no offset, and no argument that widens how much of a message an extract may show. The
 first is unsound over a relevance order that moves as mail is indexed; the second would let a caller lift a privacy
@@ -663,7 +670,7 @@ same refusals; the section above records that rule once.
 
 | Field | Meaning |
 |---|---|
-| `answer` | The answer, in prose |
+| `answer` | The answer, in prose, written in the language the question was asked in whatever language the mail behind it was written in |
 | `citations` | The emails the run retrieved, one entry per email, in the order it first reached each |
 | `answerTruncated` | Whether the answer was cut to the length one response carries |
 | `citationsTruncated` | Whether the run reached more emails than `citations` names |

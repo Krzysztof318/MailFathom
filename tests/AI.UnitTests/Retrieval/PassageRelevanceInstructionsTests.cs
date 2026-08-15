@@ -153,6 +153,20 @@ public sealed class PassageRelevanceInstructionsTests
             StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// A run that words its lookups in the language the mail is likely to carry retrieves extracts in a language other
+    /// than the question's, so a filter that read the difference as distance would undo what the lookup found.
+    /// </summary>
+    [Fact]
+    public void Text_TheInstruction_StatesThatAnExtractInAnotherLanguageIsNotLessRelevant()
+    {
+        // Assert
+        Assert.Contains(
+            "written in a language other than the lookup's is not less relevant for that reason",
+            PassageRelevanceInstructions.Text.ReplaceLineEndings(" "),
+            StringComparison.Ordinal);
+    }
+
     /// <summary>Reads one element of the query back out of the turn, through a parser rather than by searching the text for it.</summary>
     private static string ElementIn(string turn, string elementName) =>
         QueryElementIn(turn).Element(elementName)?.Value

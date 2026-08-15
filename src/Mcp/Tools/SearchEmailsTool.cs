@@ -95,7 +95,7 @@ internal sealed class SearchEmailsTool(
         + "Returns one window of at most 50 results that nothing continues, so narrow the filters or write a different "
         + "query to reach other mail. Matching nothing is a normal empty result rather than an error.")]
     public async Task<SearchEmailsToolResult> SearchEmailsAsync(
-        [Description("The text to search for, up to 512 characters. Quoted phrases, OR, and a leading - to exclude a word are understood; every other punctuation mark is ordinary text. Required: a search with no text is a listing, which list_emails answers in a stable order and with a cursor.")]
+        [Description("The text to search for, up to 512 characters. Quoted phrases, OR, and a leading - to exclude a word are understood; every other punctuation mark is ordinary text. Write the words the mail itself is likely to contain, in the language it was written in rather than the language of your request: matching compares words rather than translating them, so a mailbox holding several languages is reached by a search per language. Required: a search with no text is a listing, which list_emails answers in a stable order and with a cursor.")]
         string queryText,
         [Description("MailFathom accounts to search, each named by its configured account identifier or by the display name it is published under. Omit to search every account this deployment serves; call list_accounts to see what they are. At most 64 may be named, and a name this deployment does not serve is refused rather than answered with an empty window.")]
         string[]? accounts = null,

@@ -57,6 +57,36 @@ code, because both reach the same use case. What differs is what happens next: t
 `<search-refused>` element naming the argument, and the model corrects it and calls again. Nothing was searched, which
 is exactly what an empty envelope would have failed to say.
 
+## A question in one language, mail in another
+
+A mailbox holding mail in several languages is the ordinary case, and both halves of a question meet it. Both are
+settled by the instruction the run carries, because both are properties of how a run is worded rather than of the
+retrieval underneath it, and neither is anything an operator configures.
+
+**A lookup is worded in the language the mail is likely to carry**, which need not be the language the question was
+asked in, and one that returns nothing useful is tried again in another language the mailbox plausibly holds before the
+run concludes that the mailbox does not answer. The extra lookups are ordinary lookups, bounded by
+[§ What one question may spend](#what-one-question-may-spend) like every other.
+
+It cannot be left to retrieval, because the lexical half of retrieval matches a word against a word. The index is built
+with one PostgreSQL text search configuration for the whole deployment —
+[`Persistence:TextSearchConfiguration`](../operations/configuration-reference.md#persistence-and-the-connection-string),
+`simple` by default, which neither stems a word nor drops a stop word — so it stems for one language at most, and a
+lookup worded in the language of the question reaches mail written in that language and in no other. Whether the vector
+half bridges the gap depends on the declared embedding model, which a deployment chose for other reasons. A run that
+worded every lookup in the question's language would therefore report a mailbox that plainly holds the answer as one
+that does not. [Email search](email-search.md) documents the ranking itself.
+
+**An answer is written in the language the question was asked in**, whatever language the mail it rests on was written
+in. What the answer quotes from mail — a subject, a name, the phrase a claim rests on — keeps its own wording, with a
+rendering into the question's language beside it where the claim turns on what those words mean. That is what keeps a
+citation checkable: the quoted words have to be the words the cited message carried for anybody to be able to look them
+up in it.
+
+The second retrieval pass, where a deployment turned it on, is told the same thing from the other side: an extract in a
+language other than the lookup's is not less relevant for being in it, so the filter does not drop what the lookup was
+worded to find.
+
 ## The scope is bound before the model sees anything
 
 A question carries the accounts and folders it may be answered from. That scope is bound into the run when it is

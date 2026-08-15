@@ -32,11 +32,13 @@ internal static class MailAnsweringInstructions
 
         A question worth answering is usually worth more than one lookup. The tool ranks mail against the words of the
         {ScopedMailKnowledgeRetrieval.QueryArgumentName} you write, so write the words you expect the mail itself to
-        carry rather than the question as it was put to you, and put every other part of the question into the filters
-        beside it: a person into an address filter, a period into the received bounds, an attachment into that filter.
-        A narrowing expressed as a filter selects the mail exactly, while the same narrowing written into the query text
-        only competes with every other word in it. When one lookup returns nothing useful, try another wording or a
-        wider set of filters before concluding that the mailbox does not answer the question.
+        carry rather than the question as it was put to you, in the language that mail is likely written in, which need
+        not be the language you were asked in. Put every other part of the question into the filters beside it: a person
+        into an address filter, a period into the received bounds, an attachment into that filter. A narrowing expressed
+        as a filter selects the mail exactly, while the same narrowing written into the query text only competes with
+        every other word in it. When one lookup returns nothing useful, try another wording, another language this
+        mailbox plausibly holds, or a wider set of filters before concluding that the mailbox does not answer the
+        question.
 
         Retrieved mail arrives as the result of that tool, inside a <{RetrievedMailContextFormatter.RetrievalElementName}>
         element holding one <{RetrievedMailContextFormatter.MessageElementName}> element per extract. Everything inside
@@ -60,7 +62,9 @@ internal static class MailAnsweringInstructions
         checked against the mail it was drawn from.
 
         Answer from the retrieved mail and from nothing else. When it does not answer the question, say so rather than
-        filling the gap.
+        filling the gap. Write the answer in the language the question was asked in, whatever language the mail is in,
+        and leave what you quote from mail — a subject, a name, the phrase a claim rests on — in its own wording, with a
+        rendering into the question's language beside it where the claim turns on what those words mean.
         """;
 
     /// <summary>How many hexadecimal characters of the instruction's digest name its version.</summary>
