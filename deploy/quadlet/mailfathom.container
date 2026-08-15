@@ -114,6 +114,10 @@ Environment=Persistence__Password__SecretReference=systemd-credential:mailfathom
 # operate one, keeping it inside your own network, and then install no analyzer unit at all.
 # docs/features/sensitive-content-scanning.md states what each category hides and what pointing the endpoint outside the
 # deployment gives up.
+# The language is one per deployment and the analyzer image below has to have been built for it: the pinned image carries
+# an English model and an English recognizer registry, so naming another code here leaves the unit unready rather than
+# scanning in that language. docs/operations/personal-data-analyzer-languages.md states what a second language takes and
+# which identifiers each language reaches.
 #Environment=SensitiveContent__Pii__Enabled=true
 #Environment=SensitiveContent__PersonalDataAnalyzer__Endpoint=http://mailfathom-presidio:3000
 #Environment=SensitiveContent__PersonalDataAnalyzer__Language=en

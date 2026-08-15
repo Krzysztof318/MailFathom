@@ -21,6 +21,11 @@ After=network-online.target
 # rather than a version it chooses. It is the same pin the Compose deployment, the Helm chart, and the integration suite
 # use, so an analyzer reviewed against one is the analyzer running in all of them. The image is MIT-licensed and loads an
 # MIT-licensed spaCy model; THIRD_PARTY_LICENSES.md records both.
+#
+# It is built for English and nothing else: one spaCy model, and a recognizer registry declaring English alone. A model
+# is installed while that image is built rather than while it starts, so running the analyzer in another language means
+# an image of your own named here — docs/operations/personal-data-analyzer-languages.md states what building one takes
+# and which identifiers each language reaches.
 Image=ghcr.io/data-privacy-stack/presidio-analyzer:2.2.364
 ContainerName=mailfathom-presidio
 

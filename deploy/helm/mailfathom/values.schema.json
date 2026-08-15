@@ -347,7 +347,7 @@
             "language": {
               "type": "string",
               "pattern": "^[a-z]{2}$",
-              "description": "The two-letter code of the language every request states. The pinned image carries an English model and nothing else, so changing this means supplying an analyzer configured for that language in the same edit."
+              "description": "The two-letter code of the language every request states, one per release. The pinned image carries an English model and an English recognizer registry, so changing this means supplying an analyzer built for that language in the same edit; the pod reports unready rather than falling back to English."
             },
             "minimumConfidence": {
               "type": "number",

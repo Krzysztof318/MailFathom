@@ -43,9 +43,11 @@ internal sealed class PersonalDataAnalyzerOptions
 
     /// <summary>Gets or sets the two-letter code of the language every request states.</summary>
     /// <remarks>
-    /// The analyzer selects a model by it and refuses a language it loaded none for, which is what the readiness probe finds
-    /// out. The default is the language the shipped analyzer image carries a model for; changing it means changing the
-    /// analyzer's own configuration in the same edit.
+    /// One per deployment, with no per-account, per-folder, or per-message language and no detection. The analyzer selects
+    /// a model by it and registers a recognizer against it, so a language it was not built for is one it recognises nothing
+    /// in — which the readiness probe reports rather than falling back. The default is what the shipped analyzer image
+    /// carries; naming another code means an analyzer image built for that language in the same edit, because a model is
+    /// installed while such an image is built rather than while it starts.
     /// </remarks>
     public string Language { get; set; } = "en";
 

@@ -394,6 +394,13 @@ outside gives up.
 The analyzer is attached to the `backend` network alone and publishes no port. It receives mail content in the clear and
 answers where the identifiers in it are, so nothing outside the host can reach it and MailFathom asks it over plain HTTP.
 
+**`MAILFATHOM_PERSONAL_DATA_LANGUAGE` is not a language switch on its own.** It states the one language every request
+is made in, and the pinned image is built for English alone — one model, and a recognizer registry declaring English.
+Naming another code leaves MailFathom unready rather than scanning in that language, because the analyzer answers that
+it recognises nothing for it. A second language means an image built for it, named in `MAILFATHOM_PRESIDIO_IMAGE`;
+[the analyzer's language](personal-data-analyzer-languages.md) records what that takes and which identifiers each
+language reaches.
+
 ## Spam scanning
 
 The stack has a fourth service, `spamassassin`, and it is not started either. It sits behind its own Compose profile, so
