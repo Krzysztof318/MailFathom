@@ -28,9 +28,12 @@ public sealed record SensitiveContentScanBounds
     /// <summary>Gets the bounds a deployment that states none receives.</summary>
     /// <remarks>
     /// The analyzed ceiling matches what one content read may return in total, so an ordinary mail body is analyzed
-    /// whole and only something pathological reaches the ceiling at all.
+    /// whole and only something pathological reaches the ceiling at all. The timeout is set above what an analyzer
+    /// spends on a body of that size rather than at the shortest budget an ordinary scan fits in: a scan that misses it
+    /// is refused rather than served unscanned, and on the derivation path that refusal ends the synchronization run
+    /// carrying it, which leaves a folder repeating the same batch instead of advancing past it.
     /// </remarks>
-    public static SensitiveContentScanBounds Default { get; } = new(200_000, TimeSpan.FromSeconds(5), 4);
+    public static SensitiveContentScanBounds Default { get; } = new(200_000, TimeSpan.FromSeconds(15), 4);
 
     /// <summary>Gets the greatest number of characters one scan analyzes.</summary>
     /// <remarks>

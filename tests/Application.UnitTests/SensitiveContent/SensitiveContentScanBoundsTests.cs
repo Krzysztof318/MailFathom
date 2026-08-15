@@ -19,7 +19,7 @@ public sealed class SensitiveContentScanBoundsTests
 
         // Assert
         Assert.Equal(200_000, bounds.MaximumAnalyzedCharacters);
-        Assert.Equal(TimeSpan.FromSeconds(5), bounds.ScanTimeout);
+        Assert.Equal(TimeSpan.FromSeconds(15), bounds.ScanTimeout);
         Assert.Equal(4, bounds.MaximumConcurrentScans);
     }
 
