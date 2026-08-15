@@ -54,6 +54,7 @@ using MailFathom.Application.Spam.Runs;
 using MailFathom.Application.Spam.Scanning;
 using MailFathom.Application.Spam.Signals;
 using MailFathom.Application.Synchronization;
+using MailFathom.Application.Synchronization.Administration;
 using MailFathom.Application.Synchronization.Checkpoints;
 using MailFathom.Application.Synchronization.Reconciliation;
 using MailFathom.Application.Synchronization.Sessions;
@@ -385,6 +386,13 @@ public static class ServiceCollectionExtensions
             provider.GetRequiredService<TimeProvider>(),
             provider.GetService<ITextEmbeddingGenerator>()));
         services.AddScoped<ISynchronizationFreshnessReader, SynchronizationFreshnessReader>();
+        // A singleton because what it holds is one account of what this process's synchronization is doing: a scoped
+        // ledger would be written by the workers and read, empty, by every administrative request. Registered whether or
+        // not this deployment synchronizes, because a deployment that switched it off is exactly the one whose operator
+        // is asking why no mail arrives, and the status surface answers that from the switch rather than from silence.
+        services.AddSingleton<MailSynchronizationRunLedger>();
+        services.AddScoped<IMailFolderSynchronizationProgressReader, MailFolderSynchronizationProgressReader>();
+        services.AddScoped<MailSynchronizationStatusReader>();
         // The one write a read path performs. It joins no session for the reason its port states, so it is registered
         // beside the readers rather than with the repositories that take one.
         services.AddScoped<IEmailContentRepairRequestStore, EmailContentRepairRequestStore>();

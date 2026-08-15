@@ -12,6 +12,7 @@ using MailFathom.Application.Persistence;
 using MailFathom.Application.Rules.Evaluation;
 using MailFathom.Application.Spam.Runs;
 using MailFathom.Application.Synchronization;
+using MailFathom.Application.Synchronization.Administration;
 using MailFathom.Application.Synchronization.Sessions;
 using MailFathom.Common.Observability;
 using MailFathom.Domain.Accounts;
@@ -416,6 +417,42 @@ public sealed class AccountSynchronizationSupervisorTests
         Assert.Contains(
             harness.Logger.Messages,
             message => message.Contains("Account primary has failed 1 runs in a row", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// The ledger is what an operator without a metrics stack reads, so a folder the mail server refused has to reach
+    /// it classified rather than only reach the log. The wait beside it is the other half: a folder that is failing and
+    /// an account that is approaching its server less often for it are one event read two ways.
+    /// </summary>
+    [Fact]
+    public async Task RunAsync_MailServerRefusesTheFolder_RecordsTheDeferralAndTheWaitInTheLedger()
+    {
+        // Arrange
+        var attemptedFolders = new List<string>();
+        var lastFolderAttempted = new TaskCompletionSource();
+        var sessionFactory = CreateFailingSessionFactory(
+            attemptedFolders,
+            lastFolderAttempted,
+            expectedFolderCount: 1,
+            folderAlias => new MailboxUnavailableException(
+                MailAccountId.Create("primary"),
+                MailFolderAlias.Create(folderAlias),
+                new TimeoutException("The server stopped answering.")));
+        using var harness = CreateHarness(
+            SynchronizationTestHost.CreateSingleAccountOptions(enabled: true, "INBOX"),
+            sessionFactory);
+
+        // Act
+        await harness.SuperviseUntilAsync(lastFolderAttempted.Task);
+
+        // Assert
+        var account = MailAccountId.Create("primary");
+        var folder = harness.RunLedger.ReadFolder(new MailFolderIdentity(account, MailFolderAlias.Create("INBOX")));
+        Assert.Equal(MailFolderRunOutcome.DeferredAfterMailServerUnavailable, folder?.Outcome);
+
+        var state = harness.RunLedger.ReadAccount(account);
+        Assert.Equal(1, state.ConsecutiveFailureCount);
+        Assert.NotNull(state.NextRunDueAt);
     }
 
     /// <summary>
@@ -1177,6 +1214,7 @@ public sealed class AccountSynchronizationSupervisorTests
             this.Clock = clock;
             this.Logger = new RecordingLogger<AccountSynchronizationSupervisor>();
             this.PushLogger = new RecordingLogger<AccountPushNotificationWatch>();
+            this.RunLedger = new MailSynchronizationRunLedger(clock);
             this.supervisor = new AccountSynchronizationSupervisor(
                 accountId,
                 services.GetRequiredService<IServiceScopeFactory>(),
@@ -1188,8 +1226,11 @@ public sealed class AccountSynchronizationSupervisorTests
                     this.PushLogger,
                     clock),
                 services.GetRequiredService<MailSynchronizationTelemetry>(),
+                this.RunLedger,
                 this.Logger);
         }
+
+        internal MailSynchronizationRunLedger RunLedger { get; }
 
         internal StubSettingsSnapshot<MailSynchronizationOptions> Settings { get; }
 

@@ -103,6 +103,24 @@ server, a refused folder, an unresolved persistence conflict. An alias that matc
 does **not** count: it is a configuration mistake whose remedy is an edit rather than a wait, and backing the account
 off for it would slow the folders that are working.
 
+### Where a run has got to is readable without a metrics stack
+
+Everything above is visible in telemetry and in the log, and neither reaches an operator running without a metrics
+stack: a run that is failing, backing off, or making no headway on one folder arrives as mail that does not turn up.
+[`mfctl mailbox status`](../operations/admin-endpoint.md#reading-what-synchronization-is-doing) answers it directly,
+per account and per mapped folder.
+
+What it composes is two halves that only settle the question together. The account half is this process's own state —
+which phase a supervisor is in, the instant the current wait ends, the consecutive failure count that wait was grown
+from, and how the last finished run ended. It is deliberately not durable: a restart resets the backoff it describes,
+so a count carried across one would name a delay nothing is applying. The folder half is the durable checkpoint —
+how far the forward pass has committed and when it last moved — which survives a restart because it is the row a run
+advances.
+
+Together they separate a folder with nothing left to fetch from one that has been repeating a batch it cannot get past.
+Both show a checkpoint that has stopped moving; only the folder's last outcome says which is which, and a folder that
+raises before committing leaves that outcome as the sole signal, since each run of it still reports itself as finished.
+
 ### Shutdown stops scheduling first and drains second
 
 Host shutdown cancels scheduling for every supervisor at once, so no further run starts and no further folder of a run

@@ -182,6 +182,10 @@ internal sealed class SyntheticMailAccount(
         [.. MappedFolders.Where(folder => !(foldersNotMirrored ?? []).Contains(folder))];
 
     /// <inheritdoc />
+    /// <remarks>Every folder this suite maps, whatever a test stopped mirroring or withheld, which is what being mapped means.</remarks>
+    public IReadOnlyList<MailFolderIdentity> FoldersMapped => MappedFolders;
+
+    /// <inheritdoc />
     /// <remarks>
     /// Every folder this suite maps, less the ones a test withheld. The subtraction is stated that way round because a
     /// withholding is what a test arranges, while being mapped at all is what makes MailFathom have the folder: an

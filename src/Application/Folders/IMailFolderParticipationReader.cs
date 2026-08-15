@@ -16,7 +16,7 @@ namespace MailFathom.Application.Folders;
 /// than from the tools somebody remembered.
 /// </para>
 /// <para>
-/// The three lists exist beside <see cref="GetParticipation" /> because a query cannot ask one folder at a time. A read
+/// The lists exist beside <see cref="GetParticipation" /> because a query cannot ask one folder at a time. A read
 /// narrows a table and needs the whole admitted set as a value it can put into a predicate, while a write path holds
 /// one email and asks about that email's folder; both answers come from the same configuration, so neither can drift
 /// from the other.
@@ -29,6 +29,15 @@ namespace MailFathom.Application.Folders;
 /// </remarks>
 public interface IMailFolderParticipationReader
 {
+    /// <summary>Gets every folder configuration names, whatever each of them is admitted to.</summary>
+    /// <remarks>
+    /// The set the three lists below are subsets of, and the only one that answers "which folders does this deployment
+    /// have". Nothing that acts on mail reads it, because acting is what the narrower lists decide; what needs it is a
+    /// surface reporting on the folders themselves, where a mapped folder nothing mirrors has to appear as exactly that
+    /// rather than be missing.
+    /// </remarks>
+    IReadOnlyList<MailFolderIdentity> FoldersMapped { get; }
+
     /// <summary>Gets the folders whose mail this deployment mirrors, and no others.</summary>
     /// <remarks>
     /// It is what a pass over stored mail runs against — rule evaluation today — rather than what a synchronization run

@@ -36,8 +36,13 @@ internal static class CliRootCommand
 
         var version = StampedAssemblyVersion.ReadFrom(typeof(CliRootCommand).Assembly);
 
+        // The reading belongs beside the authorization for the reason the group exists at all: both are about the
+        // accounts a deployment serves rather than about the deployment itself. "status" reads correctly at this level
+        // for the same reason it does under "embedding" — the root one asks whether the stored credential still works,
+        // and this one asks whether the mailbox is being kept up to date.
         Command mailboxCommand = new("mailbox", "Administer a configured mailbox account.")
         {
+            MailboxStatusCommand.Create(context),
             AuthorizeMailboxCommand.Create(context),
         };
 

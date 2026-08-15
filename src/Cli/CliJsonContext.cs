@@ -7,6 +7,7 @@ using MailFathom.Cli.Administration;
 using MailFathom.Cli.Administration.Embeddings;
 using MailFathom.Cli.Administration.Folders;
 using MailFathom.Cli.Administration.Jobs;
+using MailFathom.Cli.Administration.Mailboxes;
 using MailFathom.Cli.Administration.Rules;
 using MailFathom.Cli.Administration.Spam;
 using MailFathom.Cli.Authorization;
@@ -35,6 +36,7 @@ namespace MailFathom.Cli;
     WriteIndented = true)]
 [JsonSerializable(typeof(AdminSession))]
 [JsonSerializable(typeof(MailboxRefreshTokenRequest))]
+[JsonSerializable(typeof(MailboxSynchronizationStatus))]
 [JsonSerializable(typeof(AdminProblem))]
 [JsonSerializable(typeof(EmbeddingStatus))]
 [JsonSerializable(typeof(EmbeddingActivationAssessment))]

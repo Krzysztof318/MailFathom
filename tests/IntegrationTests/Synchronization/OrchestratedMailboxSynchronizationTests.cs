@@ -4,6 +4,7 @@
 
 using MailFathom.Application.Folders;
 using MailFathom.Application.Synchronization;
+using MailFathom.Application.Synchronization.Administration;
 using MailFathom.Application.Synchronization.Checkpoints;
 using MailFathom.Domain.Folders;
 using MailFathom.Domain.Synchronization;
@@ -143,6 +144,34 @@ public sealed class OrchestratedMailboxSynchronizationTests(MailFathomOrchestrat
         Assert.Equal(
             SeededSubjects.Append(subjectAfterRecreation).Order(StringComparer.Ordinal),
             storedSubjects);
+    }
+
+    /// <summary>
+    /// The administrative read over the state the three runs above left behind. It is here rather than in a class of its
+    /// own because the row shape it has to choose between is exactly what step 3 produces: two bindings of one alias,
+    /// each with a checkpoint, of which only the newest describes UIDs the mail server still recognizes. The choice is
+    /// made in SQL, so nothing but a real database settles whether it translates at all or picks the right row.
+    /// </summary>
+    [Fact]
+    [MailboxStateStep(4)]
+    public async Task ReadAsync_AfterAnAliasWasBoundTwice_ReportsTheProgressOfTheBindingThatMovedLast()
+    {
+        // Arrange
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var services = await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken);
+        var committedCheckpoint = await ReadCheckpointAsync(services, cancellationToken);
+
+        // Act
+        var progress = await services.InScopeAsync(
+            (scope, token) => scope.GetRequiredService<IMailFolderSynchronizationProgressReader>().ReadAsync(token),
+            cancellationToken);
+
+        // Assert
+        var reported = Assert.Single(progress, entry => entry.Folder.Alias == FolderMapping.Alias);
+        Assert.Equal(SyntheticMailAccount.AccountId, reported.Folder.AccountId);
+        Assert.Equal(committedCheckpoint?.UidValidity, reported.UidValidity);
+        Assert.Equal(committedCheckpoint?.LastSeenUid, reported.LastSeenUid);
+        Assert.Equal(committedCheckpoint?.SynchronizedAt, reported.AdvancedAt);
     }
 
     private static Task<MailboxSynchronizationResult> SynchronizeAsync(
