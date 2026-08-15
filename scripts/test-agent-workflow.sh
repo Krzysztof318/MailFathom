@@ -5827,6 +5827,53 @@ a_comment_never_cancels_a_review_in_flight() {
   done
 }
 
+# The reviewer's subscription credential is named in four places: the workflow-level `env` that
+# carries the secret's *name* into the annotation reporting a missing one, the action input that
+# spends it, and the two leak checks that refuse to publish findings containing it. Declaring the
+# secret once would also hand it to every step that has no business holding it, so the four
+# spellings are separate by design and this is what keeps them agreeing.
+#
+# The failure they can otherwise produce is silent in the worst way. A leak check comparing a review
+# against the token the run never spent matches nothing, passes every review it is given, and is
+# green while doing it — so the one step that stands between a credential and a published review
+# stops standing there with nothing to say so.
+the_reviewer_resolves_one_claude_credential_everywhere() {
+  local reviewer_workflow="$source_repository_root/.github/workflows/fathom-review.yml"
+  local selector="vars.CLAUDE_CODE_PROFILE == 'secondary'"
+  local value_expression="\${{ ${selector} && secrets.CLAUDE_CODE_OAUTH_TOKEN_SECONDARY || secrets.CLAUDE_CODE_OAUTH_TOKEN }}"
+  local name_expression="\${{ ${selector} && 'CLAUDE_CODE_OAUTH_TOKEN_SECONDARY' || 'CLAUDE_CODE_OAUTH_TOKEN' }}"
+  local selecting_reads
+  local unselected_reads
+
+  selecting_reads="$(grep -cF "$value_expression" "$reviewer_workflow" || true)"
+
+  if [[ "$selecting_reads" != '3' ]]; then
+    printf 'fathom-review.yml resolves the Claude credential through the profile in %s place(s), expected 3: the action input and both leak checks\n' \
+      "$selecting_reads" >&2
+    return 1
+  fi
+
+  # Every other read of a Claude secret, whatever it is spelled as. A step reaching one without the
+  # selector is either the profile being ignored or a fourth holder of the credential, and both are
+  # this contract's subject. A comment naming the secrets context is not: the file argues this
+  # arrangement at length, and a contract that failed on the argument would be one nobody could
+  # explain in the file it guards.
+  unselected_reads="$(grep -nF 'secrets.CLAUDE_CODE_OAUTH_TOKEN' "$reviewer_workflow" |
+    grep -vE '^[0-9]+:[[:space:]]*#' |
+    grep -vF "$value_expression" || true)"
+
+  if [[ -n "$unselected_reads" ]]; then
+    printf 'fathom-review.yml reads a Claude credential without selecting it by profile:\n%s\n' \
+      "$unselected_reads" >&2
+    return 1
+  fi
+
+  if ! grep -qF "CLAUDE_CREDENTIAL_SECRET: ${name_expression}" "$reviewer_workflow"; then
+    printf 'fathom-review.yml does not name the selected secret in CLAUDE_CREDENTIAL_SECRET, so a run missing one reports the other\n' >&2
+    return 1
+  fi
+}
+
 # `tools/` holds development tooling that must never ship. `tools/SyntheticMail` fabricates mail and
 # submits it under a stored credential, which is not an operator capability and has no business in
 # `mfctl`, in the container image, or in a release asset. Being outside `src/` is what makes that true
@@ -6245,6 +6292,7 @@ run_test no_channel_builds_an_artifact_before_the_commit_has_verified
 run_test a_paid_provider_run_is_never_the_default
 run_test only_the_reviewer_workflow_uses_pull_request_target
 run_test a_comment_never_cancels_a_review_in_flight
+run_test the_reviewer_resolves_one_claude_credential_everywhere
 run_test the_development_tooling_never_reaches_a_published_artifact
 run_test workflow_scripts_use_flat_manual_layout
 run_test every_yaml_file_carries_the_license_header

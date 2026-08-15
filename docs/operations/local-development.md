@@ -924,6 +924,7 @@ again locally in `scripts/verify-full.sh`, from `scripts/test-agent-workflow.sh`
 | `every_write_scope_is_one_the_policy_records` | A write scope appearing anywhere the list in that contract does not already name |
 | `every_checkout_refuses_to_persist_credentials` | An `actions/checkout` step that leaves the workflow token in `.git/config` for the steps after it |
 | `only_the_reviewer_workflow_uses_pull_request_target` | A second `pull_request_target` trigger beside the one `fathom-review.yml` holds |
+| `the_reviewer_resolves_one_claude_credential_everywhere` | A step in `fathom-review.yml` reaching a Claude credential without the `CLAUDE_CODE_PROFILE` selector, or a fourth step holding one, either of which leaves a leak check comparing a review against a token no run spent |
 
 Every write scope in the repository but one belongs to publishing something: `packages: write` with
 `id-token: write` and `attestations: write` in `nightly.yml`, `publish-container-image.yml`, and

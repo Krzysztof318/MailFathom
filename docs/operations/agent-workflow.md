@@ -1014,10 +1014,12 @@ does not inherit this reasoning; it argues its own case or uses `pull_request`.
 
 ### What bounds the cost
 
-The run spends the repository owner's personal Claude subscription through
-`CLAUDE_CODE_OAUTH_TOKEN`, so what limits how often it runs is a design concern
-rather than an operational one. Nine things do, and they are listed together
-because each closes a different way the bill could grow:
+The run spends the repository owner's personal Claude subscription — whichever of
+the two the `CLAUDE_CODE_PROFILE` variable selects, as
+[Provisioning the App](#provisioning-the-app) describes — so what limits how
+often it runs is a design concern rather than an operational one. Nine things do,
+and they are listed together because each closes a different way the bill could
+grow:
 
 - a draft is never reviewed automatically, so a branch still being written is
   pushed to freely and spends nothing;
@@ -1369,9 +1371,11 @@ depending on a promise it does not own, because a later action version that rena
 output or stopped failing on it would otherwise leave every review posting nothing under a
 green job — a pipeline that has silently stopped reviewing.
 
-Both steps refuse to compare against an unset `CLAUDE_CODE_OAUTH_TOKEN` and report the
-missing secret instead, because `grep -F ''` matches every file and an empty pattern
-would otherwise turn every review into a refusal that reads like a credential leak.
+Both steps refuse to compare against an unset Claude credential and report the missing
+secret by name instead, because `grep -F ''` matches every file and an empty pattern
+would otherwise turn every review into a refusal that reads like a credential leak. The
+name they report is the one the profile selected, so a run missing a credential says
+which of the two subscriptions it looked for.
 
 ### What the submission step guarantees
 
@@ -1585,13 +1589,41 @@ Rotating the key is generating a new one, replacing `REVIEWER_APP_PRIVATE_KEY`,
 and then deleting the old key from the App — in that order, so no run falls
 between a revoked key and its replacement.
 
-The reviewer authenticates with the `CLAUDE_CODE_OAUTH_TOKEN` repository secret,
-produced by `claude setup-token` against the owner's Claude subscription. Without
-it the run fails at the action step. That secret buys model time and nothing
-else; publishing is the App's, and the two credentials are never held by the same
-step. `THIRD_PARTY_LICENSES.md` records exactly what the run sends and under
-whose terms, including the consumer-plan data-training setting that decides
-whether what is submitted this way trains future models.
+The reviewer authenticates with a Claude Code OAuth token, produced by
+`claude setup-token` against a Claude subscription. Without it the run fails at
+the action step. That secret buys model time and nothing else; publishing is the
+App's, and the two credentials are never held by the same step.
+`THIRD_PARTY_LICENSES.md` records exactly what the run sends and under whose
+terms, including the consumer-plan data-training setting that decides whether
+what is submitted this way trains future models.
+
+**Which subscription pays for a review is a repository variable.** The owner runs
+Claude Code under more than one profile, and each profile's subscription has its
+own token, so both live in the secret store at once and one variable selects
+between them: `CLAUDE_CODE_PROFILE` set to `secondary` makes every run
+authenticate with `CLAUDE_CODE_OAUTH_TOKEN_SECONDARY`, and unset — or set to
+anything else — means `CLAUDE_CODE_OAUTH_TOKEN`. It is a variable rather than a
+secret because the name of a profile is not one, and keeping it out of the secret
+store is what lets a run's log say which subscription it selected instead of
+`***`. Switching back is that variable changing rather than a token regenerated
+over one somebody overwrote.
+
+A `secondary` profile whose secret was never stored falls back to the first
+profile's token rather than authenticating with nothing, because a GitHub
+expression yields its right operand whenever the middle one is empty. That is the
+better of the two outcomes — a review running on the other subscription beats one
+that cannot run — and it is why the two steps that compare findings against the
+credential still refuse an unset one outright: both secrets missing is the case
+no fallback covers, and each of those steps names the secret the run actually
+looked for.
+
+Three places in the workflow name that credential and a fourth names the secret,
+so `scripts/test-agent-workflow.sh` fails when they stop agreeing. Handing the
+secret to one place and letting every step read it would be the alternative, and
+it would put the credential in the environment of the two jobs that never touch
+one and of the step that runs the model. What the contract guards against is the
+failure that is otherwise silent: a leak check comparing a review against the
+token the run never spent matches nothing, passes every review, and is green.
 
 The board write is a third credential, `BOARD_PROJECT_TOKEN`, and it is optional:
 without it the review is published exactly as before and only the `Status` write
