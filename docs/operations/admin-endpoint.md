@@ -61,7 +61,8 @@ reverse proxy, write the public URL and keep the path: `https://mail.example.tes
 > credential is what bounds access, so provision one per client and rotate it like any other secret.
 >
 > Weigh that against what the operations are. The endpoint serves reads — who a credential makes the caller, two
-> records of what a mailbox has had done to it and what has been read from it, and where semantic search stands — and
+> records of what a mailbox has had done to it and what has been read from it, where semantic search stands, and what
+> synchronization is doing — and
 > writes that store a mailbox refresh token, start a provider bill, and erase what a folder has stored. Any credential
 > that can do the first can therefore do all of them, so an administrative key is as sensitive as the mailbox
 > credentials it can place, the histories it can read, the spend it can begin, and the mail it can dispose of.
@@ -72,6 +73,7 @@ reverse proxy, write the public URL and keep the path: `https://mail.example.tes
 | --- | --- |
 | `GET /api/admin/session` | Reports the credential that authenticated and the running version. `login` and `status` report what it answers; every other command reads it first to [check the two versions against each other](#take-the-command-from-the-deployments-own-release-line). |
 | `POST /api/admin/mailbox/refresh-token` | Stores a mailbox refresh token for one configured account, sealed under the deployment's data-encryption key. This is what [`mfctl mailbox authorize --account`](mailbox-oauth.md#sending-the-token-to-the-deployment) sends. |
+| `GET /api/admin/mailbox/synchronization` | Reports what synchronization is doing, per account and per mapped folder. This is what [`mfctl mailbox status`](#reading-what-synchronization-is-doing) asks. |
 | `GET /api/admin/mailbox/mutations/audit` | Reads one account's record of the changes MailFathom made to its mailbox, where that account [keeps one](../features/imap-synchronization.md#an-account-can-keep-a-record-of-what-was-done-to-it-and-none-does-by-default). |
 | `GET /api/admin/answering/audit` | Reads one account's record of the questions answered from its mailbox, where that account [keeps one](../features/mail-answering.md#an-account-can-keep-a-record-of-what-a-question-read-and-none-does-by-default). |
 | `GET /api/admin/embeddings` | Reports whether semantic search is working and how far behind it is. This is what [`mfctl embedding status`](#administering-the-embedding-profile) asks. |
@@ -100,6 +102,61 @@ can be read back out through it.
 Storing seals the token under the deployment's [data-encryption key](secret-provisioning.md). A deployment that
 configures no key ring cannot store one, and the route answers `500` rather than a refusal it can explain, because
 nothing about the request was wrong.
+
+### Reading what synchronization is doing
+
+`mfctl mailbox status` is the command to run when mail is not arriving. Nothing else a deployment ships answers that
+question: a run that is failing, backing off, or standing still on one folder is visible in telemetry and in the log,
+and without a metrics stack it reaches you as a mailbox that looks empty rather than as a worker that has stopped.
+
+```console
+$ mfctl mailbox status
+production (https://mail.example.test:8443)
+Synchronization: on
+
+work
+  Phase:    waiting; next run due at 2026-08-15 12:20:00Z
+  Backoff:  4 runs failed in a row, which is what the wait above was grown from
+  Last run: failed at 2026-08-15 11:55:00Z; 1 of 2 folders failed
+  Folders:
+    INBOX
+      Progress: UID 12,410 in UIDVALIDITY 3, last moved at 2026-08-15 11:55:00Z
+      Last run: synchronized at 2026-08-15 11:55:00Z; stored 0, 0 oversized, 0 unreadable, more to fetch: False
+    archive
+      Progress: UID 6,997 in UIDVALIDITY 3, last moved at 2026-08-14 09:00:00Z
+      Last run: at 2026-08-15 11:55:00Z, failed unexpectedly; the deployment's log holds what happened
+```
+
+**The two folder lines only mean something together.** `Progress` is the durable checkpoint: how far the forward pass
+has committed, and when it last moved. `Last run` is what happened the last time a run took that folder in hand. A
+folder whose progress stopped a day ago and whose last run succeeded has nothing left to fetch; a folder whose progress
+stopped a day ago and whose runs keep ending is stuck, and only the pair distinguishes them. That is the reading this
+output exists for — a folder that raises before its checkpoint commits reads the same batch on every run, the account's
+backoff grows behind it, and each individual run still reports itself as finished.
+
+**A folder's outcome names its remedy where it has one.** An alias matching no advertised folder and an alias matching
+several are both corrected by editing the mapping rather than by waiting, so both lines say so. A deferral after the
+mail server stopped answering, and one after a concurrency conflict, are waited out. An unexpected failure is the one
+that sends you to the log. A folder interrupted because the deployment was shutting down is none of those: the restart
+ended its turn, its checkpoint holds whatever that turn had already committed, and the first run after the deployment
+comes back resumes from there.
+
+**`Phase` says which of three things the account is doing** — running now, ready to run and waiting for one of the
+`MailSynchronization:MaxConcurrentAccounts` slots, or waiting out the delay its last run chose. The instant is the
+deployment's clock rather than yours. `Backoff` is the consecutive failure count that delay was grown from, so a wait
+far longer than `MailSynchronization:Interval` is explained rather than merely observed.
+
+**A folder the account maps and no longer mirrors is listed and marked**, rather than left out, so a folder whose
+mirroring was switched off never reads as a folder that vanished. `Synchronization: off` on the first line says the
+whole deployment fetches nothing, which is what makes every figure below it still.
+
+The account state is what the running process is doing, so a restart resets it: the phase reads as not started and the
+last run as none until the account runs again, which happens within one interval. The folder progress is a durable row
+and survives, which is deliberate — the half that tells a stalled folder from an idle one is the half that outlives the
+process, and the half a restart clears is the backoff a restart genuinely clears.
+
+Nothing in the answer is mail. Configured account identifiers, folder aliases, a phase, counts, UIDs, and timestamps are
+the whole of it: no subject, no address, no remote folder path, and no exception detail.
 
 ### Reading what MailFathom changed
 

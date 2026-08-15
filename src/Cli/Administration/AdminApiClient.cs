@@ -10,6 +10,7 @@ using System.Text.Json.Serialization.Metadata;
 using MailFathom.Cli.Administration.Embeddings;
 using MailFathom.Cli.Administration.Folders;
 using MailFathom.Cli.Administration.Jobs;
+using MailFathom.Cli.Administration.Mailboxes;
 using MailFathom.Cli.Administration.Rules;
 using MailFathom.Cli.Administration.Spam;
 using MailFathom.Cli.Transport;
@@ -157,6 +158,22 @@ internal sealed class AdminApiClient
             throw new CliFailure($"The deployment answered {(int)response.StatusCode} rather than storing the token.");
         }
     }
+
+    /// <summary>Asks the deployment what its mail synchronization is doing.</summary>
+    /// <param name="token">The bearer credential to present.</param>
+    /// <param name="cancellationToken">Cancels the request.</param>
+    /// <returns>What the deployment reports about each configured account and each of its folders.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="token" /> is <see langword="null" />.</exception>
+    /// <exception cref="CliFailure">Thrown when the deployment refused the credential, could not be reached, or answered with something that is not a status.</exception>
+    internal Task<MailboxSynchronizationStatus> ReadMailboxSynchronizationStatusAsync(
+        string token,
+        CancellationToken cancellationToken) =>
+        this.RequestAsync(
+            HttpMethod.Get,
+            AdminEndpointRoutes.MailboxSynchronizationPath,
+            token,
+            CliJsonContext.Default.MailboxSynchronizationStatus,
+            cancellationToken);
 
     /// <summary>Asks the deployment where its semantic search stands.</summary>
     /// <param name="token">The bearer credential to present.</param>

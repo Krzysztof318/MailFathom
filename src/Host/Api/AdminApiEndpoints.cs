@@ -25,14 +25,19 @@ namespace MailFathom.Host.Api;
 /// The second is the surface's only write, and <see cref="MailboxRefreshTokenEndpoint" /> states what that costs.
 /// </para>
 /// <para>
-/// The third reads one account's record of the changes MailFathom made to its mailbox, which
+/// The third reports what synchronization is doing, which <see cref="MailboxSynchronizationStatusEndpoint" />
+/// describes. It is here because a deployment that is failing to fetch mail looks from outside exactly like one whose
+/// mailbox is quiet, and telling the two apart is an operator's question rather than anything a model reasons over.
+/// </para>
+/// <para>
+/// The fourth reads one account's record of the changes MailFathom made to its mailbox, which
 /// <see cref="MailboxMutationAuditEndpoint" /> describes. It is here rather than on the MCP surface because its answer
 /// is an operator's accountability evidence rather than anything a model reasons over, and because the credential that
 /// bounds administrative access is what bounds who may read where a person's mail has been.
 /// </para>
 /// <para>
-/// The fourth reads one account's record of the questions this deployment answered from its mailbox, which
-/// <see cref="MailAnsweringAuditEndpoint" /> describes. It is here beside the third for the same reasons and one more:
+/// The fifth reads one account's record of the questions this deployment answered from its mailbox, which
+/// <see cref="MailAnsweringAuditEndpoint" /> describes. It is here beside the fourth for the same reasons and one more:
 /// the two together are what an operator answers "why is this message here" and "why did it answer that" from, and
 /// keeping them on one credential means one thing to provision and one thing to revoke.
 /// </para>
@@ -81,6 +86,7 @@ internal static class AdminApiEndpoints
 
         api.MapGet("/session", (ClaimsPrincipal caller) => Results.Ok(AdminSessionResponse.For(caller)));
         api.MapMailboxRefreshToken();
+        api.MapMailboxSynchronizationStatus();
         api.MapMailboxMutationAudit();
         api.MapMailAnsweringAudit();
         api.MapEmbeddingProfile();

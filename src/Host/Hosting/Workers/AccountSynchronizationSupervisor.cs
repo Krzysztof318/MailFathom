@@ -13,6 +13,7 @@ using MailFathom.Application.Rules.Evaluation;
 using MailFathom.Application.Rules.History;
 using MailFathom.Application.Spam.Runs;
 using MailFathom.Application.Synchronization;
+using MailFathom.Application.Synchronization.Administration;
 using MailFathom.Application.Synchronization.Reconciliation;
 using MailFathom.Application.Synchronization.Sessions;
 using MailFathom.Domain.Accounts;
@@ -45,6 +46,7 @@ internal sealed partial class AccountSynchronizationSupervisor
     private readonly SemaphoreSlim accountRunSlots;
     private readonly AccountPushNotificationWatch pushNotifications;
     private readonly MailSynchronizationTelemetry telemetry;
+    private readonly MailSynchronizationRunLedger runLedger;
     private readonly ILogger<AccountSynchronizationSupervisor> logger;
 
     /// <summary>Initializes a supervisor for one configured account.</summary>
@@ -54,6 +56,7 @@ internal sealed partial class AccountSynchronizationSupervisor
     /// <param name="accountRunSlots">Bounds how many accounts run at once; owned by the coordinator and never released beyond what this supervisor took.</param>
     /// <param name="pushNotifications">Ends the wait between runs early when a watched folder changes; owned by this supervisor and disposed with it.</param>
     /// <param name="telemetry">Publishes the run as a span with its folders beneath it, and the counts and waits an operator reads without opening a log; it also measures how long a run took.</param>
+    /// <param name="runLedger">Holds what this supervisor is doing for the administrative surface, which is what an operator without a metrics stack reads it from.</param>
     /// <param name="logger">Records run outcomes, which carry account and folder aliases and no message-level data.</param>
     public AccountSynchronizationSupervisor(
         MailAccountId accountId,
@@ -62,6 +65,7 @@ internal sealed partial class AccountSynchronizationSupervisor
         SemaphoreSlim accountRunSlots,
         AccountPushNotificationWatch pushNotifications,
         MailSynchronizationTelemetry telemetry,
+        MailSynchronizationRunLedger runLedger,
         ILogger<AccountSynchronizationSupervisor> logger)
     {
         this.accountId = accountId;
@@ -70,6 +74,7 @@ internal sealed partial class AccountSynchronizationSupervisor
         this.accountRunSlots = accountRunSlots;
         this.pushNotifications = pushNotifications;
         this.telemetry = telemetry;
+        this.runLedger = runLedger;
         this.logger = logger;
     }
 
@@ -151,6 +156,7 @@ internal sealed partial class AccountSynchronizationSupervisor
             // Published on every pass rather than only on a backed-off one, because a gauge that stops being written
             // holds its last value: an account that recovered would go on reporting the wait it was backing off by.
             this.telemetry.RecordScheduledDelay(this.accountId, delayBeforeNextRun, consecutiveFailureCount);
+            this.runLedger.RecordNextRunDue(this.accountId, delayBeforeNextRun, consecutiveFailureCount);
 
             if (consecutiveFailureCount > 0)
             {
@@ -207,10 +213,14 @@ internal sealed partial class AccountSynchronizationSupervisor
         // duration the cycle rather than the cycle plus however long the accounts in front of it took.
         using (this.telemetry.EnterRunQueue())
         {
+            this.runLedger.RecordRunQueued(this.accountId);
+
             await this.accountRunSlots.WaitAsync(schedulingToken);
         }
 
         using var run = this.telemetry.BeginAccountRun(this.accountId);
+
+        this.runLedger.RecordRunStarted(this.accountId);
 
         try
         {
@@ -278,6 +288,15 @@ internal sealed partial class AccountSynchronizationSupervisor
         }
 
         run.Completed(scheduledFolders.Length, failedFolderCount, convergenceFailed);
+
+        // Recorded on the same condition the span is, and for the same reason: a cycle shutdown stopped scheduling did
+        // not finish, so publishing its counts would leave an operator reading a run that skipped most of its folders as
+        // the account's last word on itself. The previous finished run stays the one reported instead.
+        this.runLedger.RecordRunEnded(
+            this.accountId,
+            scheduledFolders.Length,
+            failedFolderCount,
+            convergenceFailed);
 
         this.LogAccountRunFinished(
             this.accountId.Value,
@@ -707,6 +726,11 @@ internal sealed partial class AccountSynchronizationSupervisor
     {
         var folderAlias = configuredFolder.Alias;
 
+        // Null until the mapping is built, which is what decides whether this folder's turn reaches the ledger at all:
+        // an alias configuration wrote unusably names no folder the status surface lists, so a report filed under the
+        // configured spelling of it would be one nothing ever reads.
+        MailFolderIdentity? folder = null;
+
         // Opened before the mapping is built, so a folder whose configuration reached the run unusable is a span with
         // a failure on it rather than a gap under the cycle. The alias is carried by the outcome for the same reason:
         // until the mapping exists there is only the configured spelling of it.
@@ -716,6 +740,7 @@ internal sealed partial class AccountSynchronizationSupervisor
         {
             var folderMapping = configuredFolder.CreateMapping();
             folderAlias = folderMapping.Alias.Value;
+            folder = new MailFolderIdentity(this.accountId, folderMapping.Alias);
 
             using var scope = this.scopeFactory.CreateScope();
 
@@ -734,6 +759,8 @@ internal sealed partial class AccountSynchronizationSupervisor
                 scope.ServiceProvider.GetRequiredService<MailboxContentVolumeTelemetry>(),
                 folderRun);
 
+            this.RecordFolderRun(folder, result);
+
             return new FolderRunOutcome(Succeeded: true, result.Folder);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -741,6 +768,7 @@ internal sealed partial class AccountSynchronizationSupervisor
             // Shutdown rather than a defect, so the folder is recorded as interrupted and counted under no failure:
             // an account backed off for every restart would be an account approached less often for being stopped.
             folderRun.Interrupted(folderAlias);
+            this.RecordFolderRun(folder, MailFolderRunOutcome.InterruptedByShutdown);
 
             throw;
         }
@@ -748,6 +776,7 @@ internal sealed partial class AccountSynchronizationSupervisor
         {
             this.LogFolderSynchronizationDeferredAfterConcurrencyConflict(exception, this.accountId.Value, folderAlias);
             folderRun.ConcurrencyConflict(folderAlias);
+            this.RecordFolderRun(folder, MailFolderRunOutcome.DeferredAfterConcurrencyConflict);
 
             return FolderRunOutcome.Failed;
         }
@@ -755,6 +784,7 @@ internal sealed partial class AccountSynchronizationSupervisor
         {
             this.LogFolderSynchronizationDeferredAfterMailServerUnavailable(exception, this.accountId.Value, folderAlias);
             folderRun.MailServerUnavailable(folderAlias);
+            this.RecordFolderRun(folder, MailFolderRunOutcome.DeferredAfterMailServerUnavailable);
 
             return FolderRunOutcome.Failed;
         }
@@ -762,9 +792,57 @@ internal sealed partial class AccountSynchronizationSupervisor
         {
             this.LogFolderSynchronizationFailed(exception, this.accountId.Value, folderAlias);
             folderRun.UnexpectedFailure(folderAlias);
+            this.RecordFolderRun(folder, MailFolderRunOutcome.UnexpectedFailure);
 
             return FolderRunOutcome.Failed;
         }
+    }
+
+    /// <summary>Files what a completed folder turn did, translating the run's own outcome into the one an operator reads.</summary>
+    /// <remarks>
+    /// The counts are those of a folder the run reached; an alias that named no single advertised folder measured
+    /// nothing, so it is filed as the outcome alone. That distinction is the reason for the translation at all — the
+    /// synchronizer's outcome separates two configuration mistakes and nothing else, while the status surface has to
+    /// place them beside the failures that never reach the synchronizer.
+    /// </remarks>
+    private void RecordFolderRun(MailFolderIdentity? folder, MailboxSynchronizationResult result)
+    {
+        if (folder is null)
+        {
+            return;
+        }
+
+        switch (result.Outcome)
+        {
+            case MailboxSynchronizationOutcome.FolderAliasUnresolved:
+                this.runLedger.RecordFolderUnsynchronized(folder, MailFolderRunOutcome.AliasUnresolved);
+
+                break;
+            case MailboxSynchronizationOutcome.FolderAliasAmbiguous:
+                this.runLedger.RecordFolderUnsynchronized(folder, MailFolderRunOutcome.AliasAmbiguous);
+
+                break;
+            default:
+                this.runLedger.RecordFolderSynchronized(
+                    folder,
+                    result.StoredEmailCount,
+                    result.SkippedOversizedEmailCount,
+                    result.UnreadableMimeEmailCount,
+                    result.HasMoreEmails);
+
+                break;
+        }
+    }
+
+    /// <summary>Files a folder turn that never reached the folder, where the alias was usable enough to file it under.</summary>
+    private void RecordFolderRun(MailFolderIdentity? folder, MailFolderRunOutcome outcome)
+    {
+        if (folder is null)
+        {
+            return;
+        }
+
+        this.runLedger.RecordFolderUnsynchronized(folder, outcome);
     }
 
     /// <summary>Reports one folder's run, keeping an alias that named no single folder separate from a failure.</summary>

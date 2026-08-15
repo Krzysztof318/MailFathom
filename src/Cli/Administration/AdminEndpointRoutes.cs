@@ -23,6 +23,9 @@ internal static class AdminEndpointRoutes
     /// <summary>Where a deployment accepts the refresh token it should keep for one of its mail accounts.</summary>
     internal const string MailboxRefreshTokenPath = $"{Prefix}/mailbox/refresh-token";
 
+    /// <summary>Where a deployment reports what its mail synchronization is doing, account by account and folder by folder.</summary>
+    internal const string MailboxSynchronizationPath = $"{Prefix}/mailbox/synchronization";
+
     /// <summary>Where a deployment reports whether semantic search is working and how far behind it is.</summary>
     internal const string EmbeddingStatusPath = $"{Prefix}/embeddings";
 

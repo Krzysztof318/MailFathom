@@ -201,6 +201,30 @@ choice if you would rather place credentials yourself.
 [Mailbox OAuth](../operations/mailbox-oauth.md) is the whole procedure, including what each provider requires of the
 application you register and how a stored token relates to the reference in your configuration.
 
+## Finding out why mail is not arriving
+
+A mailbox that looks empty and a mailbox nothing is fetching look identical from the outside. This is the command that
+tells them apart:
+
+```console
+$ mfctl mailbox status
+```
+
+It reports, for every account your deployment configures and every folder it maps, what the deployment is doing right
+now, how its last run ended, how far each folder has actually got, and when that last moved.
+
+The reading worth learning is the pair of lines under each folder. **Progress** is how far the deployment has durably
+got and when it last got there; **Last run** is what happened the last time it tried. A folder whose progress stopped
+yesterday and whose last run succeeded has nothing left to fetch. A folder whose progress stopped yesterday and whose
+runs keep ending has stopped making headway, and the outcome beside it says why — an alias naming no folder your server
+advertises, a server that stopped answering, or a failure to look up in the log. Without both lines the two are
+indistinguishable, which is exactly the situation this command exists to end.
+
+The account lines above them say whether a run is happening now, queued behind other accounts, or waiting; and, when
+runs have been failing, how many in a row — which is what a wait far longer than your configured interval is explained
+by. [Administering a deployment](../operations/admin-endpoint.md#reading-what-synchronization-is-doing) reads every
+line of the output back to you.
+
 ## Turning semantic search on
 
 Which model your deployment embeds with is a configuration value, and editing it starts nothing. Turning semantic

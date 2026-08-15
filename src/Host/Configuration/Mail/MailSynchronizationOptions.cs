@@ -482,6 +482,10 @@ internal sealed class MailSynchronizationOptions
     ];
 
     /// <inheritdoc />
+    public IReadOnlyList<MailFolderIdentity> FoldersMapped =>
+        [.. this.ConfiguredFolders().Select(static folder => folder.Identity)];
+
+    /// <inheritdoc />
     public IReadOnlyList<MailFolderIdentity> FoldersSynchronized =>
         [.. this.ConfiguredFolders().Where(static folder => folder.Participation.IsSynchronized).Select(static folder => folder.Identity)];
 

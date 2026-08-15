@@ -26,6 +26,15 @@ public sealed class AdminEndpointRoutesTests
         Assert.Equal("/api/admin/session", AdminEndpointRoutes.SessionPath);
 
     /// <summary>
+    /// The route the status command reads, pinned as a literal for the reason every other path here is: the deployment's
+    /// own suite pins the same one, and a rename on either side would compile cleanly and leave the command reaching a
+    /// 404 that reads exactly like an administrative endpoint nobody enabled.
+    /// </summary>
+    [Fact]
+    public void MailboxSynchronizationPath_IsTheRouteTheDeploymentReportsItsRunsAt() =>
+        Assert.Equal("/api/admin/mailbox/synchronization", AdminEndpointRoutes.MailboxSynchronizationPath);
+
+    /// <summary>
     /// The three embedding paths, pinned as literals for the reason the prefix is: the deployment's own suite pins the
     /// same three, and a rename on either side would otherwise compile cleanly and leave every embedding command
     /// reaching a 404 that reads exactly like an administrative endpoint nobody enabled.

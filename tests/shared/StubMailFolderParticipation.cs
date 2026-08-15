@@ -25,6 +25,10 @@ internal sealed class StubMailFolderParticipation : IMailFolderParticipationRead
     public static StubMailFolderParticipation Nothing => new();
 
     /// <inheritdoc />
+    public IReadOnlyList<MailFolderIdentity> FoldersMapped =>
+        [.. this.folders.Select(static folder => folder.Identity)];
+
+    /// <inheritdoc />
     public IReadOnlyList<MailFolderIdentity> FoldersSynchronized =>
         [.. this.folders.Where(static folder => folder.Participation.IsSynchronized).Select(static folder => folder.Identity)];
 

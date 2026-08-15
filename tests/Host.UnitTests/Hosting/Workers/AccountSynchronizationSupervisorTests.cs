@@ -12,6 +12,7 @@ using MailFathom.Application.Persistence;
 using MailFathom.Application.Rules.Evaluation;
 using MailFathom.Application.Spam.Runs;
 using MailFathom.Application.Synchronization;
+using MailFathom.Application.Synchronization.Administration;
 using MailFathom.Application.Synchronization.Sessions;
 using MailFathom.Common.Observability;
 using MailFathom.Domain.Accounts;
@@ -416,6 +417,86 @@ public sealed class AccountSynchronizationSupervisorTests
         Assert.Contains(
             harness.Logger.Messages,
             message => message.Contains("Account primary has failed 1 runs in a row", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// The ledger is what an operator without a metrics stack reads, so a folder the mail server refused has to reach
+    /// it classified rather than only reach the log. The wait beside it is the other half: a folder that is failing and
+    /// an account that is approaching its server less often for it are one event read two ways.
+    /// </summary>
+    [Fact]
+    public async Task RunAsync_MailServerRefusesTheFolder_RecordsTheDeferralAndTheWaitInTheLedger()
+    {
+        // Arrange
+        var attemptedFolders = new List<string>();
+        var lastFolderAttempted = new TaskCompletionSource();
+        var sessionFactory = CreateFailingSessionFactory(
+            attemptedFolders,
+            lastFolderAttempted,
+            expectedFolderCount: 1,
+            folderAlias => new MailboxUnavailableException(
+                MailAccountId.Create("primary"),
+                MailFolderAlias.Create(folderAlias),
+                new TimeoutException("The server stopped answering.")));
+        using var harness = CreateHarness(
+            SynchronizationTestHost.CreateSingleAccountOptions(enabled: true, "INBOX"),
+            sessionFactory);
+
+        // Act
+        await harness.SuperviseUntilAsync(lastFolderAttempted.Task);
+
+        // Assert
+        var account = MailAccountId.Create("primary");
+        var folder = harness.RunLedger.ReadFolder(new MailFolderIdentity(account, MailFolderAlias.Create("INBOX")));
+        Assert.Equal(MailFolderRunOutcome.DeferredAfterMailServerUnavailable, folder?.Outcome);
+
+        var state = harness.RunLedger.ReadAccount(account);
+        Assert.Equal(1, state.ConsecutiveFailureCount);
+        Assert.NotNull(state.NextRunDueAt);
+    }
+
+    /// <summary>
+    /// A restart that cuts a folder short must reach the ledger as the restart it was. Classifying it as a failure
+    /// would tell an operator to go looking for a defect, and leaving it unrecorded would leave the folder reading as
+    /// whatever the run before the restart made it.
+    /// </summary>
+    [Fact]
+    public async Task RunAsync_DeploymentStopsWhileAFolderIsInFlight_RecordsTheFolderAsInterruptedByShutdown()
+    {
+        // Arrange
+        var folderEntered = new TaskCompletionSource();
+        var releaseFolder = new TaskCompletionSource();
+        var sessionFactory = Substitute.For<IMailboxSessionFactory>();
+        sessionFactory
+            .OpenReadOnlyAsync(
+                Arg.Any<MailAccountId>(),
+                Arg.Any<MailFolderResolution>(),
+                Arg.Any<MailTransportSecurityPolicy>(),
+                Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                folderEntered.TrySetResult();
+
+                return HoldUntilWorkUnitCancelledAsync(releaseFolder, call.Arg<CancellationToken>());
+            });
+        using var harness = CreateHarness(
+            SynchronizationTestHost.CreateSingleAccountOptions(enabled: true, "INBOX"),
+            sessionFactory);
+        var supervision = harness.StartSupervision();
+
+        // Act
+        await folderEntered.Task.WaitAsync(DeadlockGuard, TestContext.Current.CancellationToken);
+        await harness.StopWorkUnitsAsync();
+        releaseFolder.SetResult();
+        await supervision.WaitAsync(DeadlockGuard, TestContext.Current.CancellationToken);
+
+        // Assert
+        var account = MailAccountId.Create("primary");
+        var folder = harness.RunLedger.ReadFolder(new MailFolderIdentity(account, MailFolderAlias.Create("INBOX")));
+        Assert.Equal(MailFolderRunOutcome.InterruptedByShutdown, folder?.Outcome);
+
+        // The restart is not the account's fault, so nothing about it grows the wait before the next run.
+        Assert.Equal(0, harness.RunLedger.ReadAccount(account).ConsecutiveFailureCount);
     }
 
     /// <summary>
@@ -1095,6 +1176,17 @@ public sealed class AccountSynchronizationSupervisorTests
         throw new InvalidOperationException("connect failed");
     }
 
+    /// <summary>Models a folder work unit that the drain deadline cuts short, which is what a deployment stopping does to one.</summary>
+    private static async Task<IMailboxSession> HoldUntilWorkUnitCancelledAsync(
+        TaskCompletionSource release,
+        CancellationToken cancellationToken)
+    {
+        await release.Task;
+        cancellationToken.ThrowIfCancellationRequested();
+
+        throw new InvalidOperationException("The work unit was released without its token having been cancelled.");
+    }
+
     /// <summary>Models the same work unit ending in a folder the server serves, for a test about what a held run finishes as.</summary>
     private static async Task<IMailboxSession> HoldUntilReleasedAsync(
         TaskCompletionSource release,
@@ -1177,6 +1269,7 @@ public sealed class AccountSynchronizationSupervisorTests
             this.Clock = clock;
             this.Logger = new RecordingLogger<AccountSynchronizationSupervisor>();
             this.PushLogger = new RecordingLogger<AccountPushNotificationWatch>();
+            this.RunLedger = new MailSynchronizationRunLedger(clock);
             this.supervisor = new AccountSynchronizationSupervisor(
                 accountId,
                 services.GetRequiredService<IServiceScopeFactory>(),
@@ -1188,8 +1281,11 @@ public sealed class AccountSynchronizationSupervisorTests
                     this.PushLogger,
                     clock),
                 services.GetRequiredService<MailSynchronizationTelemetry>(),
+                this.RunLedger,
                 this.Logger);
         }
+
+        internal MailSynchronizationRunLedger RunLedger { get; }
 
         internal StubSettingsSnapshot<MailSynchronizationOptions> Settings { get; }
 
@@ -1203,6 +1299,9 @@ public sealed class AccountSynchronizationSupervisorTests
 
         /// <summary>Cancels scheduling the way host shutdown does, leaving the work-unit token live for the drain.</summary>
         internal Task StopSchedulingAsync() => this.scheduling.CancelAsync();
+
+        /// <summary>Ends the drain the way a host that waited long enough does, interrupting the work still in flight.</summary>
+        internal Task StopWorkUnitsAsync() => this.workUnits.CancelAsync();
 
         /// <summary>Supervises the account until the awaited signal arrives, then stops scheduling and lets it finish.</summary>
         internal async Task SuperviseUntilAsync(Task signal)
