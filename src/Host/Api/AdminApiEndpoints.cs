@@ -4,7 +4,7 @@
 
 using System.Security.Claims;
 using MailFathom.Host.Configuration.Endpoints;
-using MailFathom.Host.Security.ApiKeys;
+using MailFathom.Host.Security.Transport;
 using MailFathom.Versioning;
 
 namespace MailFathom.Host.Api;
@@ -134,16 +134,8 @@ internal sealed record AdminSessionResponse(string Service, string Version, stri
             NameOf(caller));
     }
 
-    /// <summary>Reports the configured name of whatever authenticated, without reaching for a claim nothing issued.</summary>
-    private static string NameOf(ClaimsPrincipal caller)
-    {
-        if (caller.Identity is not { IsAuthenticated: true })
-        {
-            return AnonymousCaller;
-        }
-
-        return caller.FindFirstValue(ApiKeyAuthentication.ApiKeyNameClaimType)
-            ?? caller.Identity.Name
-            ?? AnonymousCaller;
-    }
+    /// <summary>Reports the configured name of whatever authenticated, or that nothing did.</summary>
+    /// <remarks>The naming rule is the transport's own, shared with what the application layer is told the work is running for, so this response and a record of a refusal cannot call one caller two things.</remarks>
+    private static string NameOf(ClaimsPrincipal caller) =>
+        TransportCallerIdentity.NameOf(caller) ?? AnonymousCaller;
 }

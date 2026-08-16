@@ -9,7 +9,7 @@ informed:
 
 # Make a permission a named capability MailFathom publishes, grant it on the credential's own configuration entry or from a token's scopes, and enforce it in the use case as well as at the transport
 
-<!-- describes: src/Host/Security/**, src/Host/Configuration/Access/**, src/Host/Api/**, src/Mcp/Tools/** -->
+<!-- describes: src/Domain/Access/**, src/Application/Access/**, src/Host/Security/**, src/Host/Configuration/Access/**, src/Host/Api/**, src/Mcp/Tools/** -->
 
 ## Context and Problem Statement
 

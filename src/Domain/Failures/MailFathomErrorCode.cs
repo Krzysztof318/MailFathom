@@ -55,6 +55,15 @@ public readonly record struct MailFathomErrorCode
     /// <summary>Gets subcategory 3, mailbox access tokens: an operator-driven authorization run did not produce a refresh token to provision.</summary>
     public static MailFathomErrorCode MailboxAuthorizationFailed { get; } = new(13002);
 
+    /// <summary>Gets subcategory 4, principal authorization: a use case was reached by a principal that was not granted it.</summary>
+    /// <remarks>
+    /// One code covers every way the answer is no — a caller whose grant omits the permission, work admitted under the
+    /// wrong kind of principal, and a use case reached under no principal at all — because each boundary turns the
+    /// refusal into what its own callers understand rather than reporting the distinction. It sits in this category
+    /// because a grant is written in the deployment's configuration, which is where an operator resolves the refusal.
+    /// </remarks>
+    public static MailFathomErrorCode PrincipalNotAuthorized { get; } = new(14001);
+
     #endregion
 
     #region Category 2 — Mail protocol
@@ -374,6 +383,7 @@ public readonly record struct MailFathomErrorCode
         EnvironmentOnlySettingMisplaced,
         MailAccessTokenUnavailable,
         MailboxAuthorizationFailed,
+        PrincipalNotAuthorized,
         MailAuthenticationMechanismUnavailable,
         MailboxUnavailable,
         MailboxFolderRecreated,

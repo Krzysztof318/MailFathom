@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Application.Access;
 using MailFathom.Application.EmailContent.Attachments;
 using MailFathom.Application.EmailContent.Repair;
 using MailFathom.Application.EmailContent.Storage;
@@ -41,6 +42,7 @@ public sealed class EmailAttachmentDownloadReader
     private readonly IEmailAttachmentContentReader attachmentContentReader;
     private readonly IEmailContentRepairRequestStore repairRequestStore;
     private readonly MailboxScopeResolver scopeResolver;
+    private readonly AccessAuthorization authorization;
 
     /// <summary>Initializes the use case.</summary>
     /// <param name="summaryReader">Reads one stored email's summary by its identity.</param>
@@ -48,25 +50,29 @@ public sealed class EmailAttachmentDownloadReader
     /// <param name="attachmentContentReader">Opens one attachment of that stored MIME by its position.</param>
     /// <param name="repairRequestStore">Records durably that a local copy has to be fetched or read again.</param>
     /// <param name="scopeResolver">Answers whether a tool may read the mailbox an email was stored from.</param>
+    /// <param name="authorization">Answers which principal reached this use case.</param>
     /// <exception cref="ArgumentNullException">Thrown when any argument is <see langword="null" />.</exception>
     public EmailAttachmentDownloadReader(
         IStoredEmailSummaryReader summaryReader,
         IEmailContentStore contentStore,
         IEmailAttachmentContentReader attachmentContentReader,
         IEmailContentRepairRequestStore repairRequestStore,
-        MailboxScopeResolver scopeResolver)
+        MailboxScopeResolver scopeResolver,
+        AccessAuthorization authorization)
     {
         ArgumentNullException.ThrowIfNull(summaryReader);
         ArgumentNullException.ThrowIfNull(contentStore);
         ArgumentNullException.ThrowIfNull(attachmentContentReader);
         ArgumentNullException.ThrowIfNull(repairRequestStore);
         ArgumentNullException.ThrowIfNull(scopeResolver);
+        ArgumentNullException.ThrowIfNull(authorization);
 
         this.summaryReader = summaryReader;
         this.contentStore = contentStore;
         this.attachmentContentReader = attachmentContentReader;
         this.repairRequestStore = repairRequestStore;
         this.scopeResolver = scopeResolver;
+        this.authorization = authorization;
     }
 
     /// <summary>Opens the attachment the ticket authorizes.</summary>
@@ -74,16 +80,27 @@ public sealed class EmailAttachmentDownloadReader
     /// <param name="cancellationToken">Cancels the read when the reader disconnects.</param>
     /// <returns>The opened attachment, which the caller owns and must dispose, or <see langword="null" /> when there is nothing to serve.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="ticket" /> is <see langword="null" />.</exception>
+    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the use case was reached under anything but a capability this deployment signed.</exception>
     /// <remarks>
+    /// <para>
+    /// The principal is asked for before the ticket is acted on, and it is asked for here rather than only at the route,
+    /// so that an entrypoint added later cannot reach an attachment by holding a mailbox grant. A capability is the
+    /// authorization in full — it names one attachment of one email and expires — which is why this use case admits that
+    /// kind alone and asks for no permission beside it.
+    /// </para>
+    /// <para>
     /// A damaged or missing local copy records a repair request before the refusal, exactly as reading the message's
     /// content does. The finding is about the stored copy rather than about who asked for it, so discarding it because
     /// the request happened to arrive through a link would leave a defect discovered and unrecorded.
+    /// </para>
     /// </remarks>
     public async Task<IOpenedEmailAttachment?> OpenAsync(
         AttachmentDownloadTicket ticket,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(ticket);
+
+        this.authorization.RequireSignedCapability();
 
         var summary = await this.summaryReader.FindAsync(ticket.StoredEmailId, cancellationToken);
 

@@ -5,6 +5,7 @@
 using MailFathom.AI;
 using MailFathom.AI.Chat;
 using MailFathom.AI.Providers;
+using MailFathom.Application.Access;
 using MailFathom.Application.Accounts;
 using MailFathom.Application.AiProviders;
 using MailFathom.Application.EmailContent;
@@ -128,6 +129,13 @@ internal static class HostComposition
         builder.AddServiceDefaults();
         builder.Services.AddProblemDetails();
         builder.Services.AddSingleton(TimeProvider.System);
+        // What the application layer is told a unit of work is running for. Registered here rather than beside the
+        // transport, because it answers for work reached outside a request as well: a scope with no request behind it
+        // is this process's own, and a use case that runs without a caller depends on being told so.
+        builder.Services.AddHttpContextAccessor();
+        builder.Services.AddScoped<TransportAuthorizedPrincipalSource>();
+        builder.Services.AddScoped<IAuthorizedPrincipalSource>(provider =>
+            provider.GetRequiredService<TransportAuthorizedPrincipalSource>());
         // ReferenceOnly is the default, so a deployment that configures nothing gets the mode under which a plain-text value
         // where a reference belongs fails startup instead of authenticating.
         builder.Services.AddSecretResolution(

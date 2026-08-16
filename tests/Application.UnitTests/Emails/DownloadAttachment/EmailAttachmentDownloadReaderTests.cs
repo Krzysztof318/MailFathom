@@ -5,6 +5,7 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Security.Cryptography;
 using System.Text;
+using MailFathom.Application.Access;
 using MailFathom.Application.Accounts;
 using MailFathom.Application.EmailContent.Attachments;
 using MailFathom.Application.EmailContent.Repair;
@@ -16,6 +17,7 @@ using MailFathom.Application.Emails.Summaries;
 using MailFathom.Application.Folders;
 using MailFathom.Application.Synchronization.Sessions;
 using MailFathom.Application.UnitTests.TestDoubles;
+using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Folders;
@@ -36,6 +38,10 @@ public sealed class EmailAttachmentDownloadReaderTests
     private const string ServedAccountId = "primary";
 
     private static readonly byte[] StoredRawMime = Encoding.UTF8.GetBytes("From: sender@example.test\r\n\r\nBody");
+
+    /// <summary>The principal the download route states once it has verified a link, which is what this use case admits.</summary>
+    private static readonly AuthorizedPrincipal RedeemedCapability =
+        AuthorizedPrincipal.SignedCapability("/attachments/0198f0aa-0000-7000-8000-000000000000/0");
 
     [Fact]
     public async Task OpenAsync_AttachmentOfAServedEmail_OpensItThroughTheStoredCopy()
@@ -228,6 +234,54 @@ public sealed class EmailAttachmentDownloadReaderTests
     }
 
     /// <summary>
+    /// The transport is what usually states the principal, so this is the case where an entrypoint reached the use case
+    /// without saying what admitted it. It refuses rather than serving the attachment the ticket names, which is what
+    /// makes the check the authority instead of a second opinion.
+    /// </summary>
+    [Fact]
+    public async Task OpenAsync_ReachedUnderNoPrincipal_RefusesWithoutReadingStoredContent()
+    {
+        // Arrange
+        var summary = SyntheticEmailSummaries.Create(attachmentCount: 1);
+        var contentStore = ContentStoreReturning(IntactContent());
+        var reader = ReaderOver(summary, contentStore, authorization: AuthorizationOver(principal: null));
+
+        // Act
+        var refusal = await Assert.ThrowsAsync<PrincipalNotAuthorizedException>(async () =>
+            await reader.OpenAsync(
+                new AttachmentDownloadTicket(summary.StoredEmailId, AttachmentPosition: 0),
+                TestContext.Current.CancellationToken));
+
+        // Assert
+        Assert.False(refusal.RequiredPermission.IsSpecified);
+        await contentStore
+            .DidNotReceive()
+            .FindStoredContentAsync(Arg.Any<StoredEmailId>(), Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>
+    /// A capability is the authorization here, so holding a mailbox grant is not a second way in. A caller granted
+    /// everything the mail surface publishes is refused exactly as one granted nothing is.
+    /// </summary>
+    [Fact]
+    public async Task OpenAsync_ReachedByACallerRatherThanACapability_Refuses()
+    {
+        // Arrange
+        var summary = SyntheticEmailSummaries.Create(attachmentCount: 1);
+        var reader = ReaderOver(
+            summary,
+            authorization: AuthorizationOver(AuthorizedPrincipal.Caller(
+                "mcp-key",
+                MailFathomPermission.PublishedFor(ProtectedSurface.Mail))));
+
+        // Act & Assert
+        await Assert.ThrowsAsync<PrincipalNotAuthorizedException>(async () =>
+            await reader.OpenAsync(
+                new AttachmentDownloadTicket(summary.StoredEmailId, AttachmentPosition: 0),
+                TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>
     /// Serving a file must never fetch one, which is the acceptance criterion the whole content path exists under. The
     /// use case holds no mailbox port, so the guarantee is structural rather than a rule somebody has to keep.
     /// </summary>
@@ -258,7 +312,8 @@ public sealed class EmailAttachmentDownloadReaderTests
         IEmailAttachmentContentReader? contentReader = null,
         IEmailContentRepairRequestStore? repairRequestStore = null,
         IMailAccountCatalog? accountCatalog = null,
-        IMailFolderParticipationReader? folderParticipation = null) => new(
+        IMailFolderParticipationReader? folderParticipation = null,
+        AccessAuthorization? authorization = null) => new(
         SummaryReaderReturning(summary),
         contentStore ?? ContentStoreReturning(IntactContent()),
         contentReader ?? ContentReaderOpening("invoice.pdf"),
@@ -267,7 +322,17 @@ public sealed class EmailAttachmentDownloadReaderTests
             accountCatalog ?? CatalogServing(MailAccountId.Create(summary?.AccountId.Value ?? ServedAccountId)),
             folderParticipation ?? MappingFolderOf(summary),
             StubJunkMailFolderCatalog.None,
-            StubMailFolderMappings.ResolvingNothing));
+            StubMailFolderMappings.ResolvingNothing),
+        authorization ?? AuthorizationOver(RedeemedCapability));
+
+    /// <summary>Composes the authorization a use case asks, over whichever principal a test says reached it.</summary>
+    private static AccessAuthorization AuthorizationOver(AuthorizedPrincipal? principal)
+    {
+        var principals = Substitute.For<IAuthorizedPrincipalSource>();
+        principals.Current.Returns(principal);
+
+        return new AccessAuthorization(principals);
+    }
 
     /// <summary>Maps the folder this email was stored from, which is what a deployment holding it has configured.</summary>
     /// <remarks>
