@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.Text.Json;
+using MailFathom.Domain.Access;
 using MailFathom.Host.Api;
 using MailFathom.Host.Configuration.Access;
 using MailFathom.Host.Security.Transport;
@@ -99,6 +100,27 @@ public sealed class AdminProtectedResourceMetadataEndpointTests
 
         // Assert
         Assert.Equal(["header"], document.BearerMethodsSupported);
+    }
+
+    /// <summary>
+    /// The document is composed against this endpoint's own half of the vocabulary, and it is the only place that
+    /// argument is supplied. Composing it against the other half would tell an operator to create mail scopes in their
+    /// authorization server for the administrative surface, and leave every token they then minted holding nothing.
+    /// </summary>
+    [Fact]
+    public void For_AnEntryNarrowedByTokenScopes_PublishesTheAdministrativeHalfOfTheVocabulary()
+    {
+        // Arrange
+        var entry = new TransportAuthenticationOptions { OAuth = Configured(), PermissionsFromTokenScopes = true };
+        entry.GrantTheWholeSurface();
+
+        // Act
+        var document = ProtectedResourceMetadataDocument.For([entry]);
+
+        // Assert
+        Assert.Equal(
+            MailFathomPermission.PublishedFor(ProtectedSurface.Administration).Select(permission => permission.Name),
+            document.ScopesSupported.Where(scope => scope.StartsWith("mailfathom.admin.", StringComparison.Ordinal)));
     }
 
     /// <summary>The names RFC 9728 fixes, which a client matches on and a rename inside this repository must not move.</summary>

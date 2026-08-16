@@ -120,7 +120,7 @@ internal sealed partial class TransportGrantStartupReport : IHostedService
         foreach (var (index, method) in methods.Index())
         {
             var grant = Describe(method.GrantedPermissions(surface));
-            var entryPath = $"{settingPath}:{index}";
+            var entryPath = TransportAuthenticationConfiguration.SettingPathOf(sectionName, method, index);
 
             // The narrowing setting is asked first because it holds whether or not a list was written: an entry whose
             // sole block is OAuth may set it and state no ceiling, and what each token there holds is still its own

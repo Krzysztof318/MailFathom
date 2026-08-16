@@ -136,6 +136,12 @@ entry that narrows by token scopes publishes its whole ceiling in `scopes_suppor
 configuration publishes none of its permissions, because no client can ask for one. Skip this whole paragraph if you
 write the grant in configuration instead, which is the only form available where your server cannot mint custom scopes.
 
+**Nothing enforces a grant yet**, on either surface. What a token's scopes narrow is read, validated, carried on the
+authenticated caller and reported at startup, and no tool and no route consults it — so a scope you create here bounds
+what a credential is *meant* to reach rather than what it currently reaches, and starts refusing when the enforcement it
+describes ships. The scopes are worth creating now: an entry that narrows by them publishes them in `scopes_supported`,
+and a client that never receives one holds nothing under it the moment enforcement arrives.
+
 **Decide here whether clients should hold a refresh token.** A client asks for one by naming `offline_access`, and it
 learns to ask by reading that scope in MailFathom's metadata document — so if you do not advertise it, a client asks
 only for the scope above and its user signs in again whenever the access token expires, typically hourly. It goes in
@@ -275,9 +281,11 @@ opens the discovery document, and its `issuer` field is the value to copy.
 Nothing else about the server is configured here: MailFathom finds the discovery document itself, at addresses it derives
 from the issuer, and takes the key set address out of it.
 
-The entry writes down no grant, so every token it admits reaches everything the MCP surface publishes. To bound them,
+The entry writes down no grant, so every token it admits reaches everything the MCP surface publishes. To state a bound,
 add `Permissions` beside `OAuth` — and add `"PermissionsFromTokenScopes": true` as well where the scopes you created in
-step 2 should narrow the list per subject:
+step 2 should narrow the list per subject. It is a statement rather than a bound today, for the reason
+[step 2](#2-register-mailfathom-as-a-resource-in-the-provider) gives: nothing consults a grant yet, so every token this
+entry admits goes on reaching every tool whatever you write here.
 
 ```json
 {

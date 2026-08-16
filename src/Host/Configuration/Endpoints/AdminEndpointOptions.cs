@@ -164,7 +164,7 @@ internal sealed class AdminEndpointOptions
 
         // Each entry's grant is read the same way and for the same reason, and both endpoints ask it through one
         // method so the absent-versus-emptied reading exists once.
-        TransportAuthenticationConfiguration.GrantTheWholeSurfaceWhereNoneIsStated(section, [.. settings.Authentication]);
+        TransportAuthenticationConfiguration.ReadWhatTheBinderCannotSay(section, [.. settings.Authentication]);
 
         return settings;
     }

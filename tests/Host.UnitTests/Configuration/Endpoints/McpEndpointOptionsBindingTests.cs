@@ -362,6 +362,66 @@ public sealed class McpEndpointOptionsBindingTests
             options.Authentication[1].GrantedPermissions(McpEndpointOptions.GrantedSurface));
     }
 
+    /// <summary>A refusal names the position an operator has to go and edit, and where the numbering has a gap that is the key they wrote rather than the one the binder appended at.</summary>
+    [Fact]
+    public void FindConfigurationErrors_EntriesNumberedWithAGap_NameTheKeyTheOperatorWrote()
+    {
+        // Arrange
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>(StringComparer.Ordinal)
+            {
+                ["McpEndpoint:Enabled"] = "true",
+                ["McpEndpoint:Authentication:0:ApiKey:Name"] = "workstation",
+                ["McpEndpoint:Authentication:0:ApiKey:SecretReference"] = "plaintext:a-key",
+                ["McpEndpoint:Authentication:2:ApiKey:Name"] = "reporting-job",
+                ["McpEndpoint:Authentication:2:ApiKey:SecretReference"] = "plaintext:another-key",
+                ["McpEndpoint:Authentication:2:Permissions:0"] = "mailfathom.mail.write",
+            })
+            .Build();
+
+        // Act
+        var errors = McpEndpointOptions.ReadFrom(configuration).FindConfigurationErrors();
+
+        // Assert
+        var reported = Assert.Single(errors);
+        Assert.Contains("McpEndpoint:Authentication:2:Permissions:0", reported, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// An element carrying nothing binds to an entry rather than being dropped, so the children and the bound entries
+    /// stay the same length and every grant is still read off the entry that wrote it. The empty element is refused
+    /// for stating no method, which is the answer it already had before a grant could be written on one.
+    /// </summary>
+    [Fact]
+    public void ReadFrom_AnEmptyElementInTheList_BindsAnEntryThatIsRefusedRatherThanShiftingTheGrants()
+    {
+        // Arrange
+        var configuration = ConfigurationFromJson("""
+            {
+              "McpEndpoint": {
+                "Enabled": true,
+                "Authentication": [
+                  null,
+                  {
+                    "ApiKey": { "Name": "retired", "SecretReference": "plaintext:a-key" },
+                    "Permissions": []
+                  }
+                ]
+              }
+            }
+            """);
+
+        // Act
+        var options = McpEndpointOptions.ReadFrom(configuration);
+
+        // Assert
+        Assert.Equal(2, options.Authentication.Count);
+        Assert.Empty(options.Authentication[1].GrantedPermissions(McpEndpointOptions.GrantedSurface));
+
+        var reported = Assert.Single(options.FindConfigurationErrors());
+        Assert.Contains("McpEndpoint:Authentication:0", reported, StringComparison.Ordinal);
+    }
+
     /// <summary>The setting decides whether a token holds the entry's whole ceiling or only what its own scopes carry, and nothing else in the suite would notice it silently ceasing to bind.</summary>
     [Fact]
     public void ReadFrom_AnEntryNarrowingByTokenScopes_BindsTheSetting()

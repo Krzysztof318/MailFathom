@@ -103,6 +103,10 @@ internal sealed class TransportAuthenticationOptions
     /// </remarks>
     internal bool GrantsTheWholeSurface { get; private set; }
 
+    /// <summary>Gets the configuration key this entry was written under, or <see langword="null" /> where no read established one.</summary>
+    /// <remarks>A source may number its entries with a gap, so the key an operator wrote and the position the binder appended the entry at are different numbers. A refusal names this one wherever it is known, because a path nobody wrote is a path nobody can go and correct.</remarks>
+    internal string? ConfigurationKey { get; private set; }
+
     /// <summary>Gets whether this entry states any credential at all.</summary>
     public bool StatesAMethod => this.ApiKey is not null || this.OAuth is not null || this.PublicKey is not null;
 
@@ -112,6 +116,11 @@ internal sealed class TransportAuthenticationOptions
     /// <summary>Records that the deployment stated no grant on this entry, which is what leaves it reaching the whole surface.</summary>
     /// <remarks>Called by the endpoint's own read, which is the only place that holds the configuration section this was bound from.</remarks>
     internal void GrantTheWholeSurface() => this.GrantsTheWholeSurface = true;
+
+    /// <summary>Records the configuration key this entry was written under, which every refusal against it is named by.</summary>
+    /// <param name="key">The key of the configuration child the entry was bound from.</param>
+    /// <remarks>The bound position is what a refusal falls back to, and the two are the same number only while the source numbers its entries without a gap — so an operator reading a refusal is given the path they wrote wherever the read could establish it.</remarks>
+    internal void RecordConfigurationKey(string key) => this.ConfigurationKey = key;
 
     /// <summary>Reports the permissions this entry grants, resolved once from what the operator wrote.</summary>
     /// <param name="surface">The surface this entry guards, which decides which half of the vocabulary an unwritten grant reaches.</param>

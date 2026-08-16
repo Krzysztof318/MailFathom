@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using System.Globalization;
 using MailFathom.Domain.Access;
 using MailFathom.Infrastructure.Secrets.Discovery;
 
@@ -62,7 +63,7 @@ internal static class TransportAuthenticationConfiguration
         ProtectedSurface surface) =>
         GrantsByCredentialName(methods, method => method.PublicKey, surface);
 
-    /// <summary>Applies the permissive default to every entry that stated no grant, which the binder cannot say and only the section can.</summary>
+    /// <summary>Tells each bound entry the two things only the section it came from knows: the key it was written under, and whether it stated a grant.</summary>
     /// <param name="endpointSection">The endpoint section the entries were bound from.</param>
     /// <param name="methods">The bound entries, in configuration order.</param>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="endpointSection" /> or <paramref name="methods" /> is <see langword="null" />.</exception>
@@ -78,18 +79,35 @@ internal static class TransportAuthenticationConfiguration
     /// list, because the two come apart the moment a source numbers its entries with a gap: the binder appends a child
     /// per key it finds and keeps no record of which key that was, so an environment-variable configuration writing
     /// <c>…__0__…</c> and <c>…__2__…</c> binds two entries at positions 0 and 1. Reading a grant by position there
-    /// would hand the second entry the whole surface it had narrowed away from.
+    /// would hand the second entry the whole surface it had narrowed away from, and every refusal against that entry
+    /// would name a path the operator's configuration does not contain.
+    /// </para>
+    /// <para>
+    /// The pairing is positional, so it says nothing at all once the two lists are different lengths: pairing them
+    /// anyway would read one entry's grant off another entry's key. Today the binder makes an entry for every child it
+    /// finds, including an element carrying nothing, so the lengths agree and the guard below never fires. It is here
+    /// because what it guards is a grant: an element dropped by a binder this code does not own would otherwise hand a
+    /// narrowed entry the whole surface, and refusing to read is the direction to be wrong in.
     /// </para>
     /// </remarks>
-    internal static void GrantTheWholeSurfaceWhereNoneIsStated(
+    internal static void ReadWhatTheBinderCannotSay(
         IConfigurationSection endpointSection,
         IReadOnlyList<TransportAuthenticationOptions> methods)
     {
         ArgumentNullException.ThrowIfNull(endpointSection);
         ArgumentNullException.ThrowIfNull(methods);
 
-        foreach (var (entrySection, method) in endpointSection.GetSection(SettingName).GetChildren().Zip(methods))
+        var entrySections = endpointSection.GetSection(SettingName).GetChildren().ToArray();
+
+        if (entrySections.Length != methods.Count)
         {
+            return;
+        }
+
+        foreach (var (entrySection, method) in entrySections.Zip(methods))
+        {
+            method.RecordConfigurationKey(entrySection.Key);
+
             if (!entrySection.GetSection(nameof(TransportAuthenticationOptions.Permissions)).Exists())
             {
                 method.GrantTheWholeSurface();
@@ -162,7 +180,7 @@ internal static class TransportAuthenticationConfiguration
 
         foreach (var (index, method) in methods.Index())
         {
-            errors.AddRange(method.FindConfigurationErrors($"{sectionName}:{SettingName}:{index}", surface));
+            errors.AddRange(method.FindConfigurationErrors(SettingPathOf(sectionName, method, index), surface));
         }
 
         // The rules below read validated values, so they run only once every entry is usable on its own. Asking a
@@ -177,6 +195,19 @@ internal static class TransportAuthenticationConfiguration
 
         return errors;
     }
+
+    /// <summary>Composes the configuration path one entry is named by, everywhere an operator is told to go and edit it.</summary>
+    /// <param name="sectionName">The endpoint section the entries were bound from.</param>
+    /// <param name="method">The entry the path names.</param>
+    /// <param name="boundPosition">The position the entry bound at, which names it where no read established its key.</param>
+    /// <returns>The configuration path of the entry.</returns>
+    /// <remarks>
+    /// The key the entry was written under wherever the read established one, and the position it bound at otherwise.
+    /// The two are the same number until a source numbers its entries with a gap, and there the position names
+    /// something the operator's configuration does not contain.
+    /// </remarks>
+    internal static string SettingPathOf(string sectionName, TransportAuthenticationOptions method, int boundPosition) =>
+        $"{sectionName}:{SettingName}:{method.ConfigurationKey ?? boundPosition.ToString(CultureInfo.InvariantCulture)}";
 
     /// <summary>Maps one kind of configured credential onto the grant of the entry it sits in.</summary>
     /// <remarks>

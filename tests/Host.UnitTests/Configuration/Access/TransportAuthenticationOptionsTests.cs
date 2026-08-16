@@ -5,6 +5,7 @@
 using MailFathom.Domain.Access;
 using MailFathom.Host.Configuration.Access;
 using MailFathom.Infrastructure.Secrets.Discovery;
+using Microsoft.Extensions.Configuration;
 using Xunit;
 
 namespace MailFathom.Host.UnitTests.Configuration.Access;
@@ -287,6 +288,34 @@ public sealed class TransportAuthenticationOptionsTests
         var reported = Assert.Single(errors);
         Assert.Contains($"{SettingPath}:OAuth:AdvertisedScopes:0", reported, StringComparison.Ordinal);
         Assert.Contains(MailFathomPermission.MailAsk.Name, reported, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The pairing is positional, so it means nothing once the children and the bound entries are different lengths.
+    /// Marking anyway would read one entry's grant off another entry's key, so nothing is marked and every entry keeps
+    /// the grant that reaches nothing — which is the direction to fail in if a binder ever drops an element.
+    /// </summary>
+    [Fact]
+    public void ReadWhatTheBinderCannotSay_MoreChildrenThanEntries_LeavesEveryGrantAtTheRestrictiveDefault()
+    {
+        // Arrange
+        var section = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>(StringComparer.Ordinal)
+            {
+                ["McpEndpoint:Authentication:0:ApiKey:Name"] = "workstation",
+                ["McpEndpoint:Authentication:1:ApiKey:Name"] = "reporting-job",
+            })
+            .Build()
+            .GetSection("McpEndpoint");
+
+        var method = new TransportAuthenticationOptions { ApiKey = AnApiKey() };
+
+        // Act
+        TransportAuthenticationConfiguration.ReadWhatTheBinderCannotSay(section, [method]);
+
+        // Assert
+        Assert.False(method.GrantsTheWholeSurface);
+        Assert.Null(method.ConfigurationKey);
     }
 
     /// <summary>The grant belongs to the entry, so which entry a credential sits in decides what it may do rather than only how the file was grouped.</summary>
