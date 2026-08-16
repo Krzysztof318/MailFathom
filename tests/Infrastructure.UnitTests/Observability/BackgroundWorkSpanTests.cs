@@ -85,14 +85,12 @@ public sealed class BackgroundWorkSpanTests : IDisposable
         Assert.Equal(ActivityStatusCode.Ok, span.Status);
     }
 
-    /// <summary>An attempt that did not succeed is an error on the span, whichever of the endings it reached.</summary>
+    /// <summary>An attempt the work itself failed is an error on the span, whichever of the three endings it reached.</summary>
     [Theory]
     [InlineData(JobExecutionOutcome.HandlerFailed, "handler_failed", 11)]
     [InlineData(JobExecutionOutcome.HandlerMissing, "handler_missing", 12)]
     [InlineData(JobExecutionOutcome.TimedOut, "timed_out", 13)]
-    [InlineData(JobExecutionOutcome.ReleasedForShutdown, "released_for_shutdown", 14)]
-    [InlineData(JobExecutionOutcome.LeaseLost, "lease_lost", 15)]
-    public void BeginAttempt_AnAttemptThatDidNotSucceed_PublishesTheEndingItReachedAsAnError(
+    public void BeginAttempt_AnAttemptTheWorkFailed_PublishesTheEndingItReachedAsAnError(
         JobExecutionOutcome outcome,
         string expected,
         int attemptCount)
@@ -114,6 +112,39 @@ public sealed class BackgroundWorkSpanTests : IDisposable
 
         Assert.Equal(expected, span.GetTagItem(JobQueueTelemetry.OutcomeTagName));
         Assert.Equal(ActivityStatusCode.Error, span.Status);
+    }
+
+    /// <summary>An attempt that stopped without finishing carries the ending and no error.</summary>
+    /// <remarks>
+    /// A rolling deployment releases every attempt in flight and a reclaimed lease ends one the same way, so marking
+    /// either as an error would put a wave of failed job traces in front of an operator on every ordinary restart. Which
+    /// of the two it was is on the outcome tag, where a query can still find them.
+    /// </remarks>
+    [Theory]
+    [InlineData(JobExecutionOutcome.ReleasedForShutdown, "released_for_shutdown", 14)]
+    [InlineData(JobExecutionOutcome.LeaseLost, "lease_lost", 15)]
+    public void BeginAttempt_AnAttemptThatStoppedWithoutFinishing_PublishesTheEndingWithoutAnError(
+        JobExecutionOutcome outcome,
+        string expected,
+        int attemptCount)
+    {
+        // Arrange
+        var telemetry = new JobQueueTelemetry();
+
+        // Act
+        using (var attempt = telemetry.BeginAttempt(JobType.ClassifyEmailSpam))
+        {
+            attempt.Ended(Attempt(outcome, attemptCount));
+        }
+
+        // Assert
+        var span = this.Published(
+            JobQueueTelemetry.AttemptSpanName,
+            JobQueueTelemetry.AttemptNumberTagName,
+            attemptCount);
+
+        Assert.Equal(expected, span.GetTagItem(JobQueueTelemetry.OutcomeTagName));
+        Assert.Equal(ActivityStatusCode.Ok, span.Status);
     }
 
     /// <summary>An attempt that reached no result at all says so, rather than being published as an ordinary ending.</summary>

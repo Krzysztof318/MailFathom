@@ -428,6 +428,12 @@ produces one span each rather than one covering all of them.
 | `mailfathom.job.outcome` | How it ended, in the same six words the instruments below carry |
 | `mailfathom.job.failure` | `transient` or `permanent`, on the attempt that dead-lettered the job and on no other |
 
+Three of those six endings mark the span as an error, and they are the three where the work itself failed:
+`handler_failed`, `handler_missing`, and `timed_out`. An attempt the host released on shutdown and one whose lease had
+already moved on carry their ending and no error, for the same reason the counters below treat them as ordinary — a
+rolling deployment releases every attempt in flight, and marking those would put a wave of failed job traces in front of
+an operator on every restart, indistinguishable from a handler that is genuinely broken.
+
 Nothing else about the job reaches it. Not its identifier, not the account it belongs to, and above all not the
 idempotency key, which is composed of folder aliases and message occurrences — the same rule the instruments below are
 held to, for the same reason. An attempt that reported no outcome at all is published with an error status and no

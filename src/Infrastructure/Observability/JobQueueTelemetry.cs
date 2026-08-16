@@ -257,6 +257,24 @@ public sealed class JobQueueTelemetry
         _ => "unknown",
     };
 
+    /// <summary>Decides whether an ending is a failure of the work or an ordinary way for an attempt to stop.</summary>
+    /// <remarks>
+    /// A host that is stopping and a lease that has already moved on both end an attempt without finishing it, and
+    /// neither says anything went wrong — the same reading <see cref="RecordAttempt" /> counts them under. Marking them
+    /// as errors would make every rolling deployment arrive as a wave of failed job traces indistinguishable from a
+    /// handler that is genuinely broken. Which of the six endings it was stays on the outcome tag either way.
+    /// </remarks>
+    private static ActivityStatusCode StatusOf(JobExecutionOutcome outcome) => outcome switch
+    {
+        JobExecutionOutcome.Succeeded
+            or JobExecutionOutcome.ReleasedForShutdown
+            or JobExecutionOutcome.LeaseLost => ActivityStatusCode.Ok,
+        JobExecutionOutcome.HandlerFailed
+            or JobExecutionOutcome.HandlerMissing
+            or JobExecutionOutcome.TimedOut => ActivityStatusCode.Error,
+        _ => ActivityStatusCode.Error,
+    };
+
     private static string FailureTagOf(JobFailureClassification classification) => classification switch
     {
         JobFailureClassification.Transient => "transient",
@@ -290,8 +308,7 @@ public sealed class JobQueueTelemetry
 
             this.activity?.SetTag(AttemptNumberTagName, result.AttemptCount);
             this.activity?.SetTag(OutcomeTagName, OutcomeTagOf(result.Outcome));
-            this.activity?.SetStatus(
-                result.Outcome is JobExecutionOutcome.Succeeded ? ActivityStatusCode.Ok : ActivityStatusCode.Error);
+            this.activity?.SetStatus(StatusOf(result.Outcome));
 
             if (result.AttemptFailure is { Disposition: JobFailureDisposition.DeadLettered } deadLettered)
             {
