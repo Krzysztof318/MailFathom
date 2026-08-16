@@ -45,7 +45,12 @@ public sealed record MailboxEmailSelection
     /// </remarks>
     private const char CanonicalFieldSeparator = '\u001f';
 
-    /// <summary>Marks a filter nobody named in <see cref="CanonicalText" />.</summary>
+    /// <summary>Marks a filter nobody named in <see cref="CanonicalText" />, where no value written beside it can be it.</summary>
+    /// <remarks>
+    /// An instant is digits and a flag is one of two words, so neither can produce this text and a caller cannot reach
+    /// it. A free-text filter can be written as exactly this, which is why one is encoded by
+    /// <see cref="CanonicalOptionalText" /> rather than against this marker.
+    /// </remarks>
     private const string CanonicalAbsentValue = "-";
 
     private MailboxEmailSelection(
@@ -286,19 +291,31 @@ public sealed record MailboxEmailSelection
         // deliberately outside this text, for the reason MailboxScope.Hiding gives; whether the caller asked for them is
         // a filter, and a walk resumed under the other answer would skip or repeat rows in the middle of the ordering.
         LengthPrefixed(CanonicalFlag(this.Scope.IncludesJunkMail)),
-        LengthPrefixed(this.SenderNormalizedAddress ?? CanonicalAbsentValue),
-        LengthPrefixed(this.RecipientNormalizedAddress ?? CanonicalAbsentValue),
+        CanonicalOptionalText(this.SenderNormalizedAddress),
+        CanonicalOptionalText(this.RecipientNormalizedAddress),
         // Upper-cased because the subject filter is case-insensitive: two requests that differ only in the case they
         // wrote a fragment in select the same emails, so they must not be two walks with incompatible cursors.
-        LengthPrefixed(this.SubjectFragment?.ToUpperInvariant() ?? CanonicalAbsentValue),
+        CanonicalOptionalText(this.SubjectFragment?.ToUpperInvariant()),
         LengthPrefixed(CanonicalInstant(this.ReceivedOnOrAfter)),
         LengthPrefixed(CanonicalInstant(this.ReceivedBefore)),
         LengthPrefixed(CanonicalFlag(this.IsRemotelySeen)),
         LengthPrefixed(CanonicalFlag(this.IsRemotelyFlagged)),
         // Already the comparison form, so nothing is folded again here: two requests that wrote one keyword in
         // different cases are one walk, and they reached this text as one value rather than as two.
-        LengthPrefixed(this.Keyword ?? CanonicalAbsentValue),
+        CanonicalOptionalText(this.Keyword),
         LengthPrefixed(CanonicalFlag(this.HasAttachments)));
+
+    /// <summary>Writes an optional free-text filter, marking whether one was named ahead of what it said.</summary>
+    /// <remarks>
+    /// A keyword, a subject fragment, and an address are free text a caller writes, so any reserved value standing for
+    /// absence is one a caller can also send: a filter naming the single character <see cref="CanonicalAbsentValue" />
+    /// is written as would produce the text of a request that named no filter at all, and
+    /// <see cref="EmailTimelineFilter.Fingerprint" /> would then let a cursor issued under one resume the walk under
+    /// the other, over a different set of rows. The marker carries no such value space — it is one of two digits — so
+    /// prefixing it separates the two cases whatever the filter says.
+    /// </remarks>
+    private static string CanonicalOptionalText(string? value) =>
+        LengthPrefixed(value is { } named ? string.Concat("1", named) : "0");
 
     private static string CanonicalList(IEnumerable<string> values) =>
         LengthPrefixed(string.Join(CanonicalFieldSeparator, values.Select(LengthPrefixed)));

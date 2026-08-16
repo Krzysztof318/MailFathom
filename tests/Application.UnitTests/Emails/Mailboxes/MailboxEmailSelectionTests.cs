@@ -146,6 +146,31 @@ public sealed class MailboxEmailSelectionTests
         Assert.Equal(written.CanonicalText, shouted.CanonicalText);
     }
 
+    /// <summary>
+    /// A free-text filter can be written as whatever marks absence, so the marker cannot be the whole of how absence is
+    /// said. Were it, a walk over the mail labelled <c>-</c> and a walk over the whole mailbox would share one
+    /// fingerprint, and a cursor issued in the middle of the first would be accepted against the second.
+    /// </summary>
+    [Theory]
+    [InlineData("-")]
+    [InlineData("0")]
+    [InlineData("1")]
+    public void Create_AFilterWrittenAsTheMarkerForAbsence_IsStillItsOwnWalk(string filter)
+    {
+        // Act
+        var unfiltered = SelectionWith();
+        var keyworded = SelectionWith(keyword: filter);
+        var subjectFiltered = SelectionWith(subjectFragment: filter);
+
+        // Assert
+        Assert.Equal(
+            3,
+            new[] { unfiltered, keyworded, subjectFiltered }
+                .Select(selection => selection.CanonicalText)
+                .Distinct(StringComparer.Ordinal)
+                .Count());
+    }
+
     /// <summary>Nothing in the address grammar bounds a length, so a filter longer than any column could hold is refused.</summary>
     [Fact]
     public void Create_AddressFilterLongerThanTheLimit_IsRejected()
