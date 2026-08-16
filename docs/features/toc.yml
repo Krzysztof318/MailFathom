@@ -52,6 +52,9 @@
 - name: Mail rules
   href: mail-rules.md
   description: How a rule selects mail and what a match may change, written in the configuration a deployment already carries.
+- name: Contacts
+  href: contacts.md
+  description: What the contact book holds about a person, when two addresses are the same address, who may amend which record, and what erasing somebody removes.
 - name: MCP tools
   href: mcp-tools.md
   description: The conventions every tool follows, the contract of each tool that exists, and what a client reads when a call fails.

@@ -473,6 +473,33 @@ The row is never amended. An execution states a reading that has already happene
 
 Nothing in either table is personal data. Rule names, folder aliases, mutation names, fact names, a derived revision, two identifiers, an instant, and a duration are the whole of it, and none is derived from what a message said.
 
+## The contact book
+
+`contacts` holds one row per person the owner's book knows, and `contact_addresses` one row per address that person
+uses. It is the one record on this page that is not derived from mail at all: nothing in it arrives from a message, and
+today nothing writes to it automatically. [Contacts](../features/contacts.md) describes the rules every writer obeys;
+what the schema itself decides is below.
+
+| Column | What it records |
+|---|---|
+| `Id` | MailFathom's own UUIDv7, minted when the contact is recorded. Never an address, because an address is a thing a person has rather than a thing they are |
+| `DisplayName`, `DisplayNameSortKey` | The name as the owner wrote it, and the upper-cased comparison form the listing is ordered and paginated by. The form is stored rather than derived in the query and its column is pinned to the `C` collation, so the order is the ordinal one that form was derived to produce instead of whichever collation the database was created with |
+| `PreferredNormalizedAddress` | Which of the person's addresses to use by default, as its comparison form. A column on the person rather than a flag on each address, because changing the choice is then one update instead of two that pass through a state where nobody, or everybody, is preferred |
+| `Note` | What the owner wrote about the person, or null |
+| `Origin` | `Asserted` where somebody wrote the person down, `Collected` where an address merely appeared in arriving mail. Held as its own name for the reason every bounded value on this page is |
+| `RecordedAt`, `AmendedAt` | When the contact entered the book, and when it was last changed |
+| `ConcurrencyVersion` | The `xmin` token, because a contact is amended in place. What it settles is a row that changed or disappeared between the read an amendment is applied to and the commit — above all an amendment racing an erasure, which then writes nothing rather than putting the person back |
+
+`contact_addresses` carries the address as written beside its comparison form, and the contact it belongs to. It is rows
+rather than an array column, and that is what makes both rules over it structural. The comparison form is unique across
+the whole table, so one address stays in one person's hands however many callers claim it at once — the loser of that
+race is recognized by the constraint it violated and is answered with which contact holds the address. And the foreign
+key cascades, so erasing a person takes every address row with them rather than leaving a second statement to remember.
+
+The preferred address is deliberately **not** a foreign key onto the address row. The two tables already point one way,
+and a key pointing back would make inserting either of them first impossible without deferring the constraint; that the
+named address is one the contact holds is enforced by the domain when the record is written and again when it is read.
+
 ## Durable background work
 
 `jobs` holds work that is enqueued now and done later: what it is, what it points at, who is holding it, and until when. A [rule's schedule](../features/mail-rules.md#running-a-rule-on-a-schedule) is what enqueues into it today, and the handler that runs one records a whole-mailbox rule run for an account; this is the record every consumer of durable background work is written against, and [ADR 0009](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0009-durable-job-store-and-execution-identity.md) is the decision it implements. What paces the worker over it is the [`Jobs`](../operations/configuration-reference.md#jobs) configuration section.
@@ -586,6 +613,9 @@ names for things.
 | `ix_mail_answering_audit_entries_account_completed` | `(MailboxAccountId, CompletedAt, Id)` | The same two readers the trail above has: a keyset-paginated page of an account's runs, and the retention pass beside it |
 | `IX_mail_answering_audited_emails_StoredEmailId` | `(StoredEmailId)` | The foreign key back to the message, which is what makes erasing one reach the runs that read it without scanning the table |
 | `ix_email_spam_classification_signals_classification_ordinal` | `(StoredEmailId, Ordinal)`, unique | One classification's signals in the order the stages produced them, and the constraint a replaced record cannot write an ordinal twice past |
+| `ix_contacts_display_name_sort_key_id` | `(DisplayNameSortKey, Id)` | The one order the contact book is listed in and the one a keyset page continues from. The identity is in the key because two people can share a name and a walk needs a total order to continue from |
+| `ix_contact_addresses_normalized_address` | `(NormalizedAddress)`, unique | One address in one person's hands, across the whole book. It is also what the lookup from an address to a person is served from, rather than a scan |
+| `IX_contact_addresses_ContactId` | `(ContactId)` | The foreign key back to the person, which is what erasing one reaches their addresses by |
 | `ix_jobs_identity` | `(JobType, IdempotencyKey)`, unique | A job's idempotency identity, which is what makes the same execution enqueued twice one job. It spans terminal rows deliberately: a row that succeeded is what stops the same trigger asking again |
 | `ix_jobs_claimable` | `(JobType, AvailableAt)` where the state is `Pending` or `Claimed` | Both of the queries this table runs at any volume: the claim, and the queue-depth check every enqueue makes. The filter keeps the index the size of the backlog rather than of the queue's whole history, and the claim repeats that same membership in its own predicate so PostgreSQL can prove the index applies to it rather than having to derive it through a disjunction. It names the two claimable states rather than excluding the terminal ones, so a job that reaches a terminal state leaves the index whichever one it reaches. The depth check reads the same leading column and rechecks `Pending` against the heap, because the index carries both claimable states rather than that one; what keeps that cheap is the bound on the read rather than the index |
 | `ix_jobs_account` | `(MailboxAccountId, EnqueuedAt)` | An account's queued work, which is what erasure and any per-account bound reach a job by |
@@ -658,6 +688,8 @@ trace, or an error message.
 
 `mail_rederivation_positions` holds no personal data either, and for the same reason `job_schedules` does not: an account alias, a folder alias, the local identifier of the last message a batch read, and an instant say how far an operator's refresh has come, and none of them is anything a message supplied. Nothing cascades into it, which is deliberate rather than an omission — a walk's position is about work an operator started, and erasing the mail behind that position leaves a cursor that the next batch simply steps past.
 
+`contacts` and `contact_addresses` are the most concentrated personal data on this page, and the only kind that is not derived from anything: a name, the addresses somebody uses, and a note about them are an assembled record about an identified third party rather than mail that arrived. Nothing cascades into them, because nothing they hold came from a message — which is also why they have no retention window: a contact is held until somebody erases it, and erasing one removes the person and every address row through the cascade above rather than marking either. Nothing in either table reaches a log, a metric, a trace, or an error message; the contact identifier is what a failure names, and it is the one column that is not personal data.
+
 `embedding_profiles` is the exception on this page: it holds no personal data at all. It describes a model, and the credential that reaches that model is configuration rather than a column here, so nothing in this table is a secret or is derived from anybody's mail.
 
 ## How this schema reaches a database
@@ -689,4 +721,5 @@ Every claim on this page that is a claim about PostgreSQL rather than about the 
 - The [search read model](../features/email-search.md) composes that vector, `websearch_to_tsquery`, `ts_rank`, and `ts_headline` into commands PostgreSQL accepts — a malformed headline option list is a runtime failure rather than a compiler error — ranks the window it returns, cuts snippets inside the configured bounds, and leaves the change tracker empty across every query it issues.
 - Both guarantees the job store gets from PostgreSQL rather than from its own code: two callers racing to enqueue one execution produce one job, because the unique index refuses the second insert; and two workers claiming at the same moment take different jobs, because the claim selects and stamps under `FOR UPDATE SKIP LOCKED` in one statement. A lease that has run out is reclaimed with a second attempt counted, the attempt it was taken from writes nothing afterwards, a completed job keeps the key that refuses the same execution again, and a row whose type this build does not declare is left where it is. A dead letter is claimed by nothing and keeps the key and the recorded failure that ended it, a scheduled retry holds the job back until the instant it named, and a release hands the attempt back with the job.
 - A schedule's durable state is written by one statement whether the row is there or not: a schedule seeded and then advanced leaves one row carrying the latest occasion, and a schedule nothing has written is absent from the read rather than answered with an empty state — which is the difference between seeding once and seeding on every pass.
+- The contact book's four claims about PostgreSQL rather than about the model: erasing a person removes every address row through the cascade and frees those addresses for somebody else, two overlapping writers claiming one address leave the loser with a conflict rather than a provider failure, a keyset walk of the book serves every contact exactly once in the order the index is built in — which is also the only place the comparison translates to SQL at all — and an amendment that stops naming an address deletes its row and releases it.
 - The same read model's vector half ranks the eligible mail by a correlated minimum over each message's own embedded passages, measured by the operator the active profile's metric names. Mail carrying no vector under that profile is absent from the ranking rather than distant, and the ordering is the part only a server can settle: whether the distance operator, the aggregate, and the caller's filters compose into one statement at all is a translation question rather than a compile-time one.

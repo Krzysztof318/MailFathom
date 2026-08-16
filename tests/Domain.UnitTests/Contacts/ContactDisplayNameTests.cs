@@ -1,0 +1,159 @@
+// Copyright © 2026 Krzysztof Kasprowicz
+// Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
+// Project repository: https://github.com/Krzysztof318/MailFathom
+
+using MailFathom.Domain.Contacts;
+using Xunit;
+
+namespace MailFathom.Domain.UnitTests.Contacts;
+
+public sealed class ContactDisplayNameTests
+{
+    /// <summary>The owner's casing is what a reader is shown, and the sort key is what a listing is ordered by.</summary>
+    [Fact]
+    public void Create_NameWrittenByAnOwner_KeepsTheCasingAndDerivesTheComparisonForm()
+    {
+        // Arrange
+        const string written = "  Anna Kowalska  ";
+
+        // Act
+        var displayName = ContactDisplayName.Create(written);
+
+        // Assert
+        Assert.Equal("Anna Kowalska", displayName.Value);
+        Assert.Equal("ANNA KOWALSKA", displayName.SortKey);
+        Assert.Equal("Anna Kowalska", displayName.ToString());
+    }
+
+    /// <summary>Two spellings of one name order together, which is the whole reason the key exists.</summary>
+    [Fact]
+    public void Create_NamesDifferingOnlyInCase_ProduceOneSortKey()
+    {
+        // Act
+        var written = ContactDisplayName.Create("anna kowalska");
+        var shouted = ContactDisplayName.Create("ANNA KOWALSKA");
+
+        // Assert
+        Assert.Equal(written.SortKey, shouted.SortKey);
+    }
+
+    /// <summary>Blank text names nobody, so it is refused rather than stored as a contact with no name.</summary>
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    public void Create_BlankName_IsRefused(string written)
+    {
+        // Act, Assert
+        Assert.Throws<ArgumentException>(() => ContactDisplayName.Create(written));
+    }
+
+    /// <summary>A name may not carry a line break, because it is published into listings of the other contacts.</summary>
+    [Theory]
+    [InlineData("Anna\nKowalska")]
+    [InlineData("Anna\rKowalska")]
+    [InlineData("Anna\u0007Kowalska")]
+    public void Create_NameCarryingAControlCharacter_IsRefused(string written)
+    {
+        // Act, Assert
+        Assert.Throws<ArgumentException>(() => ContactDisplayName.Create(written));
+    }
+
+    /// <summary>A character that ends a line or reverses a run carries no glyph either, whatever category it sits in.</summary>
+    [Theory]
+    [InlineData("Anna\u2028Kowalska")]
+    [InlineData("Anna\u2029Kowalska")]
+    [InlineData("Anna\u202eKowalska")]
+    [InlineData("Anna\u2066Kowalska")]
+    [InlineData("Anna\u200bKowalska")]
+    public void Create_NameCarryingACharacterThatRendersAsNothing_IsRefused(string written)
+    {
+        // Act, Assert
+        Assert.Throws<ArgumentException>(() => ContactDisplayName.Create(written));
+    }
+
+    /// <summary>A formatting character outside the Basic Multilingual Plane is a surrogate pair, and is refused as one scalar.</summary>
+    [Fact]
+    public void Create_NameCarryingASupplementaryFormattingCharacter_IsRefused()
+    {
+        // Arrange
+        var written = string.Concat("Anna", char.ConvertFromUtf32(0xE0001), "Kowalska");
+
+        // Act, Assert
+        Assert.Throws<ArgumentException>(() => ContactDisplayName.Create(written));
+    }
+
+    /// <summary>An unpaired surrogate is no character at all, and the walk substitutes a printable one for it.</summary>
+    [Fact]
+    public void Create_NameCarryingAnUnpairedSurrogate_IsRefused()
+    {
+        // Arrange
+        var written = string.Concat("Anna", "\ud800", "Kowalska");
+
+        // Act, Assert
+        Assert.Throws<ArgumentException>(() => ContactDisplayName.Create(written));
+    }
+
+    /// <summary>A paired surrogate is an ordinary character, so the well-formedness rule refuses nothing people write.</summary>
+    [Fact]
+    public void Create_NameCarryingASupplementaryLetter_IsKeptAsWritten()
+    {
+        // Arrange
+        var written = string.Concat("Anna ", char.ConvertFromUtf32(0x1D400));
+
+        // Act
+        var displayName = ContactDisplayName.Create(written);
+
+        // Assert
+        Assert.Equal(written, displayName.Value);
+    }
+
+    /// <summary>The joiners decide how neighbouring letters are shaped, so refusing them would refuse names people write.</summary>
+    [Theory]
+    [InlineData("می\u200cخواهم")]
+    [InlineData("क्\u200dष")]
+    public void Create_NameJoiningItsLettersWithAZeroWidthJoiner_IsKeptAsWritten(string written)
+    {
+        // Act
+        var displayName = ContactDisplayName.Create(written);
+
+        // Assert
+        Assert.Equal(written, displayName.Value);
+    }
+
+    /// <summary>The sort key shares the name's column width, so the bound has to hold for the upper-cased form too.</summary>
+    /// <remarks>
+    /// The characters chosen are the ones whose full case mapping would expand — <c>ß</c> to <c>SS</c> and the <c>ﬁ</c>
+    /// ligature to <c>FI</c>. Invariant upper-casing in .NET maps one scalar to one scalar, so it does not, and a name
+    /// that fits therefore always produces a key that fits.
+    /// </remarks>
+    [Theory]
+    [InlineData('ß')]
+    [InlineData('ﬁ')]
+    public void Create_NameAtTheBoundWhoseCaseMappingCouldExpand_ProducesASortKeyWithinTheSameBound(char character)
+    {
+        // Arrange
+        var atBound = new string(character, ContactDisplayName.MaximumLength);
+
+        // Act
+        var accepted = ContactDisplayName.Create(atBound);
+
+        // Assert
+        Assert.Equal(ContactDisplayName.MaximumLength, accepted.SortKey.Length);
+    }
+
+    /// <summary>The bound is on the trimmed value, so surrounding whitespace never decides whether a name fits.</summary>
+    [Fact]
+    public void Create_NameAtTheBound_IsAcceptedAndOneCharacterLongerIsRefused()
+    {
+        // Arrange
+        var atBound = new string('a', ContactDisplayName.MaximumLength);
+        var overBound = new string('a', ContactDisplayName.MaximumLength + 1);
+
+        // Act
+        var accepted = ContactDisplayName.Create($"  {atBound}  ");
+
+        // Assert
+        Assert.Equal(atBound, accepted.Value);
+        Assert.Throws<ArgumentException>(() => ContactDisplayName.Create(overBound));
+    }
+}

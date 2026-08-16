@@ -66,10 +66,16 @@ internal static class PersistenceConcurrencyConflicts
     /// rather than inserting again.
     /// </para>
     /// <para>
-    /// The last is the re-derivation cursor of a scope nobody has walked, and it is the mutation identity's case a
+    /// The next is the re-derivation cursor of a scope nobody has walked, and it is the mutation identity's case a
     /// third time: two invocations of one refresh, or one request retried, both read no position and both insert it.
     /// The retry reads back what the winner recorded and moves the walk on from there, so the pass continues rather
     /// than ending on a unique violation the caller can do nothing about.
+    /// </para>
+    /// <para>
+    /// The last is one address claimed by two contacts. Both writers read that nobody holds it, both insert, and the
+    /// loser violates the index — which is what makes the retry the answer rather than a repair: it re-reads, finds
+    /// the winner's contact holding the address, and reports which contact that is instead of the second caller
+    /// putting one person into the book twice.
     /// </para>
     /// </remarks>
     internal static bool IsConcurrencyConflict(DbUpdateException exception) =>
@@ -86,6 +92,7 @@ internal static class PersistenceConcurrencyConflicts
                 or MailFathomDbContext.MailRuleEvaluationRunPrimaryKeyConstraintName
                 or MailFathomDbContext.EmailChunkOrdinalUniqueIndexName
                 or MailFathomDbContext.EmailEmbeddingPrimaryKeyConstraintName
-                or MailFathomDbContext.MailRederivationPositionPrimaryKeyConstraintName,
+                or MailFathomDbContext.MailRederivationPositionPrimaryKeyConstraintName
+                or MailFathomDbContext.ContactAddressUniqueIndexName,
         };
 }
