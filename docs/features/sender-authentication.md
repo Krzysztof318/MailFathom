@@ -228,8 +228,8 @@ were reached under different lists, and one carrying none was never put to a pol
 change to it and produces the same revision; adding to either half produces a different one.
 
 Adding a domain therefore does not silently rewrite what a reader was already shown. What re-judges mail already stored
-is [the extraction backfill](imap-synchronization.md#backfilling-messages-stored-earlier), the same deliberate act that
-re-reads mail after an account gains a trusted authority.
+is [`mfctl mailbox rederive`](imap-synchronization.md#bringing-stored-mail-up-to-a-later-release), the same deliberate
+act that re-reads mail after an account gains a trusted authority.
 
 ## What the read tools publish
 
@@ -292,8 +292,8 @@ of them characterizes the message or the sender's intent. A failed authenticatio
 The authentication verdict is derived from the raw MIME the deployment stored, so it is re-derivable from it, and the
 trust verdict is re-derived in the same pass against whatever list is in force then. Configuring a trusted identifier
 for an account that previously had none changes what a later extraction records and leaves mail already stored on the
-verdict it was given; [the extraction backfill](imap-synchronization.md#backfilling-messages-stored-earlier) is what
-re-reads that mail. The migration that adds each group of columns fills every stored message in with what was true of it
+verdict it was given; [`mfctl mailbox rederive`](imap-synchronization.md#bringing-stored-mail-up-to-a-later-release) is
+what re-reads that mail, writing the whole group of columns back through the extraction that first wrote them. The migration that adds each group of columns fills every stored message in with what was true of it
 — the not-established verdict, and the unknown answer under no policy at all.
 
 ## What is not recorded anywhere else

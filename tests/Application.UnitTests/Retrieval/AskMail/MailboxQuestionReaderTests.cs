@@ -18,6 +18,7 @@ using MailFathom.Application.UnitTests.TestDoubles;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Answering.Audit;
 using MailFathom.Domain.Emails;
+using MailFathom.Domain.Emails.Authentication;
 using MailFathom.Domain.Folders;
 using MailFathom.TestSupport;
 using Microsoft.Extensions.Time.Testing;
@@ -274,7 +275,15 @@ public sealed class MailboxQuestionReaderTests
     public async Task AnswerQuestionAsync_ACitedEmail_CarriesTheIdentityAndTheFieldsThatRecognizeIt()
     {
         // Arrange
-        var answerer = new RecordingMailQuestionAnswerer().Answering("An answer.", PassageOf(1, "an extract"));
+        var cited = PassageOf(
+            1,
+            "an extract",
+            senderVerification: new SenderVerification
+            {
+                AuthorAuthentication = AuthorAuthenticationOutcome.Authenticated,
+                DeploymentTrust = SenderTrustLevel.Trusted,
+            });
+        var answerer = new RecordingMailQuestionAnswerer().Answering("An answer.", cited);
         var reader = ReaderOver(answerer);
 
         // Act
@@ -287,6 +296,8 @@ public sealed class MailboxQuestionReaderTests
         Assert.Equal(MailFolderAlias.Create("INBOX"), citation.FolderAlias);
         Assert.Equal("Quarterly invoice", citation.Subject);
         Assert.Equal(Now, citation.ReceivedAt);
+        Assert.Equal(AuthorAuthenticationOutcome.Authenticated, citation.SenderVerification.AuthorAuthentication);
+        Assert.Equal(SenderTrustLevel.Trusted, citation.SenderVerification.DeploymentTrust);
     }
 
     /// <summary>Retrieval finding nothing is an ordinary outcome, and the answer that says so is a real answer.</summary>

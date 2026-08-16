@@ -12,9 +12,11 @@ namespace MailFathom.Mcp.Tools.Content;
 /// <summary>Publishes the normalized headers one email displays above its body.</summary>
 /// <remarks>
 /// <para>
-/// These are read from the stored message rather than from the columns a listing is served out of, so they carry what
-/// the listing deliberately narrows away: display names, every participant role, and the threading identifiers. An
-/// email whose content the size limit kept out of storage is the one exception, and its body state says so.
+/// Most of these are read from the stored message rather than from the columns a listing is served out of, so they
+/// carry what the listing deliberately narrows away: display names, every participant role, and the threading
+/// identifiers. An email whose content the size limit kept out of storage carries none of that, and its body state says
+/// so. <see cref="SenderAuthentication" /> departs from all of it: it is read off the stored columns on every read,
+/// including that one, because nothing here re-derives an authentication result from a header it parsed itself.
 /// </para>
 /// <para>
 /// The three threading identifiers are published beside the rest rather than nested under a heading of their own,

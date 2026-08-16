@@ -216,13 +216,14 @@ public sealed class GetEmailContentToolTests
         Assert.Equal(DmarcResult.NotReported, content.Headers.SenderAuthentication.Dmarc);
     }
 
-    /// <summary>An email whose raw MIME was never stored still carries the verdict its row holds.</summary>
+    /// <summary>An email whose raw MIME was never stored still carries the verdict its row holds, and its evidence.</summary>
     /// <remarks>
-    /// The narrower headers such a read produces come from the row rather than from a parse, and so does the verdict —
-    /// so a caller reading an oversized message is told the same thing about its author as a listing tells them.
+    /// The narrower headers such a read produces come from the row rather than from a parse, and so do the verdict and
+    /// the evidence — so a caller reading an oversized message is told the same thing about its author as a listing
+    /// tells them, and told what that answer rests on.
     /// </remarks>
     [Fact]
-    public async Task GetEmailContentAsync_EmailStoredWithoutItsContent_StillPublishesTheStoredVerdict()
+    public async Task GetEmailContentAsync_EmailStoredWithoutItsContent_StillPublishesTheStoredVerdictAndItsEvidence()
     {
         // Arrange
         var summary = SummaryOf(
@@ -231,6 +232,13 @@ public sealed class GetEmailContentToolTests
             {
                 AuthorAuthentication = AuthorAuthenticationOutcome.Authenticated,
                 DeploymentTrust = SenderTrustLevel.Trusted,
+            },
+            senderAuthenticationEvidence: new SenderAuthenticationEvidence
+            {
+                AuthenticatedDomain = DomainOf("bank.example.test"),
+                DisplayedAuthorDomain = DomainOf("bank.example.test"),
+                AuthenticatedBy = SenderAuthenticationMethod.DomainKeysIdentifiedMail,
+                Dmarc = DmarcOutcome.Pass,
             });
         var tool = ToolOver(new StubStoredEmailSummaryReader(summary));
 
@@ -244,6 +252,10 @@ public sealed class GetEmailContentToolTests
         Assert.Equal(EmailBodyAvailabilityState.NotStoredExceededSizeLimit, content.Body.Availability);
         Assert.Equal(AuthorAuthenticationState.Authenticated, content.SenderVerification.AuthorAuthentication);
         Assert.Equal(DeploymentTrustState.Trusted, content.SenderVerification.DeploymentTrust);
+        Assert.Equal("BANK.EXAMPLE.TEST", content.Headers.SenderAuthentication.AuthenticatedDomain);
+        Assert.Equal("BANK.EXAMPLE.TEST", content.Headers.SenderAuthentication.DisplayedAuthorDomain);
+        Assert.Equal(SenderAuthenticationCheck.Dkim, content.Headers.SenderAuthentication.AuthenticatedBy);
+        Assert.Equal(DmarcResult.Pass, content.Headers.SenderAuthentication.Dmarc);
     }
 
     /// <summary>A body and the fact that it is incomplete are never useful apart, so the second travels inside the first.</summary>
