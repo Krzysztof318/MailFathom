@@ -2,6 +2,8 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using System.Buffers.Text;
+using System.Text;
 using MailFathom.Application.Contacts;
 using MailFathom.Domain.Contacts;
 using Xunit;
@@ -77,9 +79,27 @@ public sealed class ContactCursorTests
     [Theory]
     [InlineData("")]
     [InlineData("not base64url at all!")]
-    [InlineData("MS4xMTExMTExMS0yMjIyLTMzMzMtNDQ0NC01NTU1NTU1NTU1NTUuQU5OQQ")]
     public void TryDecode_TextThisDidNotIssue_RefusesIt(string presented)
     {
+        // Act
+        var decoded = ContactCursor.TryDecode(presented, out var read);
+
+        // Assert
+        Assert.False(decoded);
+        Assert.Null(read);
+    }
+
+    /// <summary>
+    /// The shape a hand-built cursor actually takes: every field is present and only the identity is spelled the way a
+    /// person writes a UUID rather than the way this encodes one. Refusing it is what keeps a walk to the cursors this
+    /// deployment issued.
+    /// </summary>
+    [Fact]
+    public void TryDecode_ACursorAssembledByHandWithADashedIdentity_RefusesIt()
+    {
+        // Arrange
+        var presented = Base64Url.EncodeToString(Encoding.UTF8.GetBytes($"1.{Identity.Value:D}.ANNA"));
+
         // Act
         var decoded = ContactCursor.TryDecode(presented, out var read);
 
