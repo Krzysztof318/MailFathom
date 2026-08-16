@@ -1107,9 +1107,11 @@ same entries; the administrative one adds a single rule, stated with it below.
 | --- | --- | --- | --- | --- |
 | `…:<n>:ApiKey` | secret block | — | One [named secret](secret-provisioning.md#the-secret-block) with its own `Lifetime`; a second key is a second entry | restart; material per request |
 | `…:<n>:PublicKey` | secret block | — | One [named secret](secret-provisioning.md#the-secret-block) with its own `Lifetime`, resolving to one client's PEM public key. Startup refuses material that is not one, an RSA key below 2048 bits, and — explicitly — material carrying a private key | restart; material per request |
+| `…:<n>:Permissions` | string list | absent = everything this surface publishes | The [permissions](#what-a-credential-may-do--permissions) every credential this entry admits may hold; an empty list grants nothing. A name nothing publishes, a name belonging to the other surface, and a repeated name each fail startup naming the entry's index | restart |
+| `…:<n>:PermissionsFromTokenScopes` | bool | `false` | Narrows the list above by each token's own scopes instead of granting all of it. Refused on an entry that also carries `ApiKey` or `PublicKey`, neither of which can carry a scope | restart |
 | `…:<n>:OAuth:Resource` | string | — | Required; the canonical `https` URL clients reach this endpoint at — behind a proxy, the proxy's public URL. Every OAuth entry names the same one, because the endpoint publishes one metadata document at an address derived from it | restart |
-| `…:<n>:OAuth:RequiredScopes` | string list | empty | Scopes a token from *this entry's* servers must carry; empty accepts any token they issued for this resource | restart |
-| `…:<n>:OAuth:AdvertisedScopes` | string list | empty | Scopes published in `scopes_supported` for a client to ask for and checked on no token — `offline_access` is what a client needs to be issued a refresh token. Every required scope is published regardless, so a value repeating one is refused, as is one that is not a scope token | restart |
+| `…:<n>:OAuth:RequiredScopes` | string list | empty | Scopes a token from *this entry's* servers must carry; empty accepts any token they issued for this resource. A permission name is refused here, because requiring one would close the door on a caller the deployment meant to serve less | restart |
+| `…:<n>:OAuth:AdvertisedScopes` | string list | empty | Scopes published in `scopes_supported` for a client to ask for and checked on no token — `offline_access` is what a client needs to be issued a refresh token. Every required scope is published regardless, so a value repeating one is refused, as is one that is not a scope token, as is a permission name — the grant that reads one advertises it already | restart |
 | `…:<n>:OAuth:AuthorizationServers:<m>:Name` | string | — | Required; the identity diagnostics use, and unique across every entry because it composes the scheme its validator registers under | restart |
 | `…:<n>:OAuth:AuthorizationServers:<m>:Issuer` | string | — | Required; a well-formed `https` issuer, compared against `iss` exactly, and unique across every entry | restart |
 | `…:<n>:OAuth:AuthorizationServers:<m>:MetadataAddress` | string | unset | An absolute `https` URL on the issuer's own host; overrides issuer-derived discovery | restart |
@@ -1122,6 +1124,51 @@ is longer than the checked one,
 [API keys](mcp-endpoint.md#api-keys) what a key is compared against, and
 [Key pairs](mcp-endpoint.md#key-pairs) what a client signs and what the deployment verifies — including the audience,
 expiry, and replay identifier an assertion carries, none of which is a setting.
+
+### What a credential may do — `Permissions`
+
+A permission is a named capability MailFathom publishes. The set is closed, so every name a grant can carry has a check
+behind it and a misspelling fails startup instead of reading as a narrower grant than it is. The two endpoints draw from
+disjoint halves, and the name says which half it belongs to.
+
+| Permission | Surface | What it covers |
+| --- | --- | --- |
+| `mailfathom.mail.read` | MCP | The tools that read the local mailbox copy: `list_accounts`, `list_emails`, `get_email_content`, `search_emails`. Where semantic retrieval is configured, searching places the caller's own query text with the embedding provider, so this is not an egress-free grant |
+| `mailfathom.mail.ask` | MCP | `ask_mail`, which answers from mail content by sending it to a model provider. It does not imply `mailfathom.mail.read`, and granting it is granting access to mail |
+| `mailfathom.admin.read` | administrative | The reads reporting the deployment's own state and no mail: embedding status and the activation preview, the loaded rules, a run's progress, the stopped-job list |
+| `mailfathom.admin.audit.read` | administrative | The per-account records derived from mail: the mailbox-mutation audit, the answering audit, the rules history, the spam classifications |
+| `mailfathom.admin.operate` | administrative | Asking the deployment to do work it can already do: running rules, classifying an account, retrying or dropping a stopped job, cancelling a reindex |
+| `mailfathom.admin.credentials.write` | administrative | Storing a mailbox refresh token |
+| `mailfathom.admin.spend` | administrative | Activating the declared embedding model, which is the one operation that starts a provider bill |
+| `mailfathom.admin.erase` | administrative | Erasing the mail stored for a folder an account no longer mirrors |
+
+No permission implies another, so a credential that needs two is granted two.
+
+**The grant belongs to the entry, not to the block.** An entry may carry an `ApiKey`, a `PublicKey`, and an `OAuth`
+block at once, and `Permissions` on it applies to every credential it admits. Two credentials to be granted differently
+are therefore two entries — which is what turns grouping, until now only a matter of tidiness, into a decision.
+
+**An absent `Permissions` key and an empty list are opposites.** Writing no key at all leaves the entry holding
+everything its surface publishes, which is what makes a first deployment work before it is governed and what leaves an
+existing deployment unchanged on upgrade. Writing `Permissions: []` grants nothing, which is how a credential is retired
+without deleting its entry: it still authenticates, and on the administrative surface it can still read
+`GET /api/admin/session`, which needs no permission because it reports only what the caller already presented.
+
+**A surface with no `Authentication` entry at all grants that surface's whole half**, because there is no entry for a
+grant to be written on. That is the unauthenticated posture the startup warning already reports.
+
+**`PermissionsFromTokenScopes` makes the list a ceiling rather than a grant.** With it, a token holds the published
+names its scopes carry *and* the entry lists, so the authorization server decides per subject within a bound the
+deployment fixed; a scope naming anything else — `openid`, `offline_access`, another resource's scope — is ignored, and
+a scope naming a permission the entry never listed grants nothing. It is available only where the entry's sole block is
+`OAuth`: neither a key nor a public key can carry a scope, so startup refuses the combination rather than asking a
+credential a question it cannot answer. Every such entry's ceiling is published in `scopes_supported`, which is what an
+operator creates in their authorization server; an entry granting from configuration publishes none of its permissions,
+because a client cannot ask for one.
+
+Startup records what every entry resolved to, one line per entry, so the posture is read on the first run rather than
+inferred later. [The MCP endpoint](mcp-endpoint.md#what-a-credential-may-do) and
+[the administrative endpoint](admin-endpoint.md#what-a-credential-may-do) each carry the lines their surface produces.
 
 ### Browser origins — `McpEndpoint:Cors`
 
@@ -1247,7 +1294,7 @@ request or per handshake. [Administering a deployment](admin-endpoint.md) is the
 | `AdminEndpoint:BindAddress` | string | `0.0.0.0` | An IP address; binds the clear-text socket, which `HttpsOnly` does not open | restart |
 | `AdminEndpoint:Port` | int | `8080` | 1–65535. The MCP endpoint's default as well, so enabling both without stating a port publishes one shared socket — see [sharing a socket](#sharing-a-socket) | restart |
 | `AdminEndpoint:Transport` | enum | `Http` | `Http`, `HttpAndHttps`, `HttpsOnly` — the same setting the MCP endpoint carries, read the same way | restart |
-| `AdminEndpoint:Authentication` | list of credentials | empty | Same shape and rules as [`McpEndpoint:Authentication:<n>`](#the-accepted-credentials--mcpendpointauthenticationn), with two additions: every `OAuth` block's `Resource` must end in `/api/admin`, because that is where these routes answer and what `mfctl` appends to find the metadata document; and a client assertion presented here names the audience `urn:mailfathom:admin` rather than `urn:mailfathom:mcp` | restart; material per request |
+| `AdminEndpoint:Authentication` | list of credentials | empty | Same shape and rules as [`McpEndpoint:Authentication:<n>`](#the-accepted-credentials--mcpendpointauthenticationn), with three additions: every `OAuth` block's `Resource` must end in `/api/admin`, because that is where these routes answer and what `mfctl` appends to find the metadata document; a client assertion presented here names the audience `urn:mailfathom:admin` rather than `urn:mailfathom:mcp`; and `Permissions` draws from the `mailfathom.admin.*` half of [the published set](#what-a-credential-may-do--permissions), so a `mailfathom.mail.*` name written here fails startup | restart; material per request |
 | `AdminEndpoint:Https:Endpoints:<n>` | list of profiles | empty | Same shape and rules as `McpEndpoint:Https:Endpoints:<n>`, read under the two `Transport` modes that terminate TLS | restart; material per handshake |
 | `AdminEndpoint:Https:Redirect` | block | on | Same shape and rules as `McpEndpoint:Https:Redirect`; its socket is this surface's own `BindAddress` and `Port`, so terminating TLS on both surfaces opens two clear-text ports that do not collide | restart |
 | `AdminEndpoint:RateLimiting` | block | bounded | Same shape, defaults, and rules as `McpEndpoint:RateLimiting` above; applied whether or not it is written | restart |

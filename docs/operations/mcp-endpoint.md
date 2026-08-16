@@ -462,7 +462,9 @@ operator's decision to configure it.
 **`AdvertisedScopes` publishes a scope for clients to ask for, and checks it on nothing.** The metadata document's
 `scopes_supported` is what a client should request — that is what
 [RFC 9728](https://datatracker.ietf.org/doc/html/rfc9728) defines the field as — and it is not the same list as what a
-token is refused for lacking. Both lists reach the document; only `RequiredScopes` reaches the check.
+token is refused for lacking. Both lists reach the document; only `RequiredScopes` reaches the check. An entry that
+narrows by token scopes publishes its whole ceiling there too, for the reason
+[what a credential may do](#what-a-credential-may-do) gives: a client cannot ask for a permission nothing advertises.
 
 **`offline_access` is what the setting exists for.** A client asks for a refresh token by naming that scope, and the
 widely deployed authorization servers issue none without it. A client that reads your metadata document and asks for
@@ -611,14 +613,71 @@ The operational consequences are the ones that always applied to an unauthentica
 - **Treat the whole surface as read-only but not harmless.** The tools cannot send, delete, move, or mark mail as read, so
   the exposure is disclosure rather than modification. Disclosure of a mailbox is enough.
 
+### What a credential may do
+
+Every entry in `McpEndpoint:Authentication` states what the credentials it admits may do, as `Permissions` — a list of
+names MailFathom publishes. This surface's half is two:
+
+| Permission | What it covers |
+| --- | --- |
+| `mailfathom.mail.read` | The tools that read the local mailbox copy: `list_accounts`, `list_emails`, `get_email_content`, `search_emails` |
+| `mailfathom.mail.ask` | `ask_mail`, which answers from mail content by sending it to a model provider |
+
+Neither implies the other. `mailfathom.mail.ask` is not the weaker of the two — a cited answer returns mail content — and
+`mailfathom.mail.read` is not egress-free either: where semantic retrieval is configured, `search_emails` places the
+caller's own query text with the embedding provider before anything is read back. What withholding
+`mailfathom.mail.ask` stops is mail content going to a *chat* provider on a caller's behalf.
+
+An `mailfathom.admin.*` name written here fails startup, naming the entry's index: the two surfaces draw from disjoint
+halves, so a permission on the wrong one would sit in the file granting nothing.
+
+**The grant belongs to the entry.** An entry may carry an `ApiKey`, a `PublicKey`, and an `OAuth` block at once, and
+`Permissions` applies to every credential it admits — so two credentials to be granted differently are two entries.
+
+**Writing no `Permissions` key leaves the entry holding both.** That is the default a deployment gets for configuring
+nothing, and it is why nothing about this has to be configured before the endpoint works. Writing `Permissions: []`
+grants nothing instead: the credential still authenticates and holds no capability, which is how one is retired without
+its entry being deleted. An endpoint with no `Authentication` entry at all grants both to every caller it serves, for the
+same reason — there is no entry for a grant to be written on.
+
+**`PermissionsFromTokenScopes` turns the list into a ceiling.** On an entry whose sole block is `OAuth`, a token then
+holds the published names its scopes carry *and* the entry lists, so the authorization server decides per subject within
+a bound this deployment fixed. A scope naming anything else is ignored, and one naming a permission the entry never
+listed grants nothing. Startup refuses the setting beside an `ApiKey` or a `PublicKey`, because neither credential can
+carry a scope. A permission name written into `RequiredScopes` or `AdvertisedScopes` is refused too: the first would
+refuse at the door a caller meant to be served less, and the second is already published by the grant that reads it.
+
+Startup states what every entry resolved to, one line per entry, so the posture is one an operator reads on the first
+run rather than infers later. An entry that wrote no grant says so rather than being reported as though somebody had
+chosen what it holds:
+
+```text
+info: MailFathom.Host.Hosting.Warnings.TransportGrantStartupReport
+      The MCP endpoint entry McpEndpoint:Authentication:0 writes down no grant, so every credential it admits holds
+      mailfathom.mail.read, mailfathom.mail.ask — everything this surface publishes. Write a 'Permissions' list on the
+      entry to narrow it, or an empty one to grant nothing.
+```
+
+An entry that narrowed its grant is reported as what it grants, an entry with `PermissionsFromTokenScopes` as what it
+grants *at most*, and an entry granted nothing as `nothing` rather than as a line that lost its argument. An endpoint
+with no entry at all gets one line naming the section a grant would be written under. Nothing in the report names a key,
+a public key, a token, an authorization server, or a subject: a grant is what the deployment wrote, never who presented
+something.
+
+**What varies by the grant today is nothing.** The permissions are resolved from configuration, carried on the
+authenticated caller, and recorded at startup; the tool listing and the tool calls this endpoint serves do not yet
+consult them. Writing a narrower grant is therefore a statement about what a credential is meant to reach, and it starts
+being enforced when the enforcement it describes ships.
+
 ### What a credential decides, and what it does not
 
 **The endpoint asks whether this is a caller the deployment serves, and of a token also which person it names.** Beyond
 that, every tool call resolves the accounts the configured owner controls and refuses anything outside them, whichever
 credential got the caller in. Two admitted callers therefore see the same mailboxes — which is exactly why a token has to
 name an authorized subject: admitting a colleague of the same tenant would admit them to the owner's mail rather than to
-their own. Per-user permissions are future work; `RequiredScopes` is the seam they will be built on, which is why it
-exists before anything varies by it.
+their own. `Permissions` above says what a caller may do; which of the configured mail accounts it may do it to is not
+something a credential decides, and no setting narrows it. Every admitted caller reaches every account this deployment
+configures.
 
 A key identifies a *client*, a public key identifies a *client that can prove it holds the other half*, a token
 identifies a *person*, and the difference matters operationally. A shared bearer credential has the properties every

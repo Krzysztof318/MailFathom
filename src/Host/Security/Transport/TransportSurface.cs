@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Common.ClientAssertions;
+using MailFathom.Domain.Access;
 using MailFathom.Host.Api;
 using MailFathom.Host.Configuration.Endpoints;
 using MailFathom.Host.Security.ApiKeys;
@@ -49,11 +50,13 @@ internal readonly record struct TransportSurface
         string name,
         string routePrefix,
         string clientAssertionAudience,
+        ProtectedSurface grantedSurface,
         string[]? furtherRoutePrefixes = null)
     {
         this.name = name;
         this.routePrefix = routePrefix;
         this.clientAssertionAudience = clientAssertionAudience;
+        this.GrantedSurface = grantedSurface;
         this.furtherRoutePrefixes = furtherRoutePrefixes;
     }
 
@@ -69,6 +72,7 @@ internal readonly record struct TransportSurface
         "Mcp",
         McpEndpointRoute.Path,
         ClientAssertion.McpAudience,
+        McpEndpointOptions.GrantedSurface,
         [EmailAttachmentDownloadEndpoint.RoutePrefix]);
 
     /// <summary>Gets the surface serving the administrative API the <c>mfctl</c> command reaches.</summary>
@@ -76,10 +80,20 @@ internal readonly record struct TransportSurface
     internal static TransportSurface Admin { get; } = new(
         "Admin",
         AdminEndpointOptions.RoutePrefix,
-        ClientAssertion.AdminAudience);
+        ClientAssertion.AdminAudience,
+        AdminEndpointOptions.GrantedSurface);
 
     /// <summary>Gets whether this value names a surface rather than the unusable struct default.</summary>
     internal bool IsSpecified => this.name is not null;
+
+    /// <summary>Gets the half of the published permission vocabulary this surface's grants draw from.</summary>
+    /// <remarks>
+    /// Read from the endpoint section's own constant rather than restated, so the surface a permission belongs to is
+    /// one decision: what configuration validation refuses a grant against and what a registered scheme resolves an
+    /// unwritten grant to cannot come apart. The struct default reports the first enum member like any unset field, so
+    /// ask <see cref="IsSpecified" /> before reading it.
+    /// </remarks>
+    internal ProtectedSurface GrantedSurface { get; }
 
     /// <summary>Gets the surface's name, which every scheme and policy name below is composed from.</summary>
     /// <exception cref="InvalidOperationException">Thrown when the value is the struct default rather than a surface.</exception>

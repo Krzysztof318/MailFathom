@@ -123,6 +123,19 @@ scope, from its own name.
 If you require no scope, create the client scope anyway and call it something descriptive. It exists to carry the
 mapper.
 
+**Decide here whether a token should also carry MailFathom permissions.** It has to when the entry you write in
+[step 7](#7-write-the-mailfathom-entry) sets `PermissionsFromTokenScopes`, which is what lets your authorization server
+decide per subject what an admitted caller may do rather than the deployment granting every token the same thing. Create
+one further client scope per permission you intend a token to bring, named exactly as MailFathom publishes it —
+`mailfathom.mail.read`, `mailfathom.mail.ask`, or on the administrative endpoint one of the `mailfathom.admin.*` names
+[the reference](configuration-reference.md#what-a-credential-may-do--permissions) lists. The spelling is compared byte
+for byte, so a differently cased or padded name is a different scope and grants nothing. Leave **Include in token scope**
+on, as above, and assign each to the client in [step 4](#4-register-an-application-for-the-client) — a scope the client
+never receives is a permission the caller never holds. Step 8's metadata document lists exactly the ones to create: an
+entry that narrows by token scopes publishes its whole ceiling in `scopes_supported`, and one that grants from
+configuration publishes none of its permissions, because no client can ask for one. Skip this whole paragraph if you
+write the grant in configuration instead, which is the only form available where your server cannot mint custom scopes.
+
 **Decide here whether clients should hold a refresh token.** A client asks for one by naming `offline_access`, and it
 learns to ask by reading that scope in MailFathom's metadata document — so if you do not advertise it, a client asks
 only for the scope above and its user signs in again whenever the access token expires, typically hourly. It goes in
@@ -261,6 +274,22 @@ opens the discovery document, and its `issuer` field is the value to copy.
 
 Nothing else about the server is configured here: MailFathom finds the discovery document itself, at addresses it derives
 from the issuer, and takes the key set address out of it.
+
+The entry writes down no grant, so every token it admits reaches everything the MCP surface publishes. To bound them,
+add `Permissions` beside `OAuth` — and add `"PermissionsFromTokenScopes": true` as well where the scopes you created in
+step 2 should narrow the list per subject:
+
+```json
+{
+  "OAuth": { "…": "as above" },
+  "Permissions": [ "mailfathom.mail.read" ],
+  "PermissionsFromTokenScopes": true
+}
+```
+
+Both settings sit on the entry rather than inside the `OAuth` block, because the grant belongs to the credential entry
+and applies to every block in it; [what a credential may do](mcp-endpoint.md#what-a-credential-may-do) has the whole
+reading, including what an empty list means and why the setting is refused beside a key.
 
 The section is read once while the host is composed, so this takes effect on restart.
 

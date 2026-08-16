@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Domain.Access;
 using MailFathom.Infrastructure.Secrets.Discovery;
 
 namespace MailFathom.Host.Configuration.Access;
@@ -37,6 +38,56 @@ internal static class TransportAuthenticationConfiguration
         ArgumentNullException.ThrowIfNull(methods);
 
         return [.. methods.Select(method => method.PublicKey).OfType<ConfiguredSecret>()];
+    }
+
+    /// <summary>Maps each configured API key onto the permissions the entry that carries it grants.</summary>
+    /// <param name="methods">The configured entries, in configuration order.</param>
+    /// <param name="surface">The surface these entries guard, which decides what an entry that wrote no grant reaches.</param>
+    /// <returns>The granted permissions, keyed by the key's configured name.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="methods" /> is <see langword="null" />.</exception>
+    /// <remarks>Keyed by the name because that is the identity a successful authentication reports, and it is unique within the section a duplicate would be refused in.</remarks>
+    internal static IReadOnlyDictionary<string, IReadOnlyList<MailFathomPermission>> GrantsByApiKeyName(
+        IEnumerable<TransportAuthenticationOptions> methods,
+        ProtectedSurface surface) =>
+        GrantsByCredentialName(methods, method => method.ApiKey, surface);
+
+    /// <summary>Maps each configured client public key onto the permissions the entry that carries it grants.</summary>
+    /// <param name="methods">The configured entries, in configuration order.</param>
+    /// <param name="surface">The surface these entries guard, which decides what an entry that wrote no grant reaches.</param>
+    /// <returns>The granted permissions, keyed by the public key's configured name.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="methods" /> is <see langword="null" />.</exception>
+    /// <remarks>Keyed by the name for the reason <see cref="GrantsByApiKeyName" /> is.</remarks>
+    internal static IReadOnlyDictionary<string, IReadOnlyList<MailFathomPermission>> GrantsByPublicKeyName(
+        IEnumerable<TransportAuthenticationOptions> methods,
+        ProtectedSurface surface) =>
+        GrantsByCredentialName(methods, method => method.PublicKey, surface);
+
+    /// <summary>Records which entries wrote a grant, which the binder cannot say and only the section can.</summary>
+    /// <param name="endpointSection">The endpoint section the entries were bound from.</param>
+    /// <param name="methods">The bound entries, in configuration order.</param>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="endpointSection" /> or <paramref name="methods" /> is <see langword="null" />.</exception>
+    /// <remarks>
+    /// An absent list and an emptied one bind identically and mean opposite things — the whole surface against nothing
+    /// — so the two are told apart by asking configuration whether the key exists at all. Both endpoints call this
+    /// rather than each asking the question in its own words, because a reading that differed between them would grant
+    /// one surface what it refused the other from the same configuration.
+    /// </remarks>
+    internal static void MarkWrittenGrants(
+        IConfigurationSection endpointSection,
+        IReadOnlyList<TransportAuthenticationOptions> methods)
+    {
+        ArgumentNullException.ThrowIfNull(endpointSection);
+        ArgumentNullException.ThrowIfNull(methods);
+
+        foreach (var (index, method) in methods.Index())
+        {
+            if (endpointSection
+                .GetSection($"{SettingName}:{index}:{nameof(TransportAuthenticationOptions.Permissions)}")
+                .Exists())
+            {
+                method.MarkGrantWritten();
+            }
+        }
     }
 
     /// <summary>Reports what a token must prove, once per entry that states OAuth.</summary>
@@ -78,6 +129,7 @@ internal static class TransportAuthenticationConfiguration
     /// <summary>Finds everything an operator must fix before the configured credentials can guard an endpoint.</summary>
     /// <param name="sectionName">The endpoint section the list was bound from, which every message is written against.</param>
     /// <param name="methods">The configured entries, in configuration order.</param>
+    /// <param name="surface">The surface this list guards, which decides which half of the published vocabulary a grant may name.</param>
     /// <returns>One message per faulty setting, each naming its configuration path, empty when the settings are usable.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="sectionName" /> or <paramref name="methods" /> is <see langword="null" />.</exception>
     /// <remarks>
@@ -93,7 +145,8 @@ internal static class TransportAuthenticationConfiguration
     /// </remarks>
     internal static IReadOnlyList<string> FindConfigurationErrors(
         string sectionName,
-        IReadOnlyList<TransportAuthenticationOptions> methods)
+        IReadOnlyList<TransportAuthenticationOptions> methods,
+        ProtectedSurface surface)
     {
         ArgumentNullException.ThrowIfNull(sectionName);
         ArgumentNullException.ThrowIfNull(methods);
@@ -102,7 +155,7 @@ internal static class TransportAuthenticationConfiguration
 
         foreach (var (index, method) in methods.Index())
         {
-            errors.AddRange(method.FindConfigurationErrors($"{sectionName}:{SettingName}:{index}"));
+            errors.AddRange(method.FindConfigurationErrors($"{sectionName}:{SettingName}:{index}", surface));
         }
 
         // The rules below read validated values, so they run only once every entry is usable on its own. Asking a
@@ -116,6 +169,30 @@ internal static class TransportAuthenticationConfiguration
         errors.AddRange(FindAuthorizationServerCollisionErrors(sectionName, methods));
 
         return errors;
+    }
+
+    /// <summary>Maps one kind of configured credential onto the grant of the entry it sits in.</summary>
+    /// <remarks>
+    /// The first entry claiming a name wins rather than the last, and neither is a decision worth having: two entries
+    /// naming one credential identically is refused at startup by the secret validator, which is where an operator
+    /// reads about it. Composing the map is not the place to discover it, because raising here would replace that
+    /// message with a dictionary fault naming nothing an operator configured.
+    /// </remarks>
+    private static Dictionary<string, IReadOnlyList<MailFathomPermission>> GrantsByCredentialName(
+        IEnumerable<TransportAuthenticationOptions> methods,
+        Func<TransportAuthenticationOptions, ConfiguredSecret?> credentialIn,
+        ProtectedSurface surface)
+    {
+        ArgumentNullException.ThrowIfNull(methods);
+
+        return methods
+            .Select(method => (Credential: credentialIn(method), Method: method))
+            .Where(entry => entry.Credential is not null)
+            .GroupBy(entry => entry.Credential!.Name, StringComparer.Ordinal)
+            .ToDictionary(
+                group => group.Key,
+                group => group.First().Method.GrantedPermissions(surface),
+                StringComparer.Ordinal);
     }
 
     /// <summary>Reports the OAuth entries that name a different resource from the first one.</summary>

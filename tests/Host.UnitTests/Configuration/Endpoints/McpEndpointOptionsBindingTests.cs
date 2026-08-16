@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.Text;
+using MailFathom.Domain.Access;
 using MailFathom.Host.Configuration.Access;
 using MailFathom.Host.Configuration.Endpoints;
 using MailFathom.Infrastructure.Secrets;
@@ -236,9 +237,130 @@ public sealed class McpEndpointOptionsBindingTests
         Assert.Empty(options.FindConfigurationErrors());
     }
 
+    /// <summary>
+    /// The grant is read the way the origin list is, and the pair is pinned from real JSON for the same reason: an
+    /// absent list and an emptied one bind identically, and only the section can say which the operator wrote.
+    /// </summary>
+    [Fact]
+    public void ReadFrom_AnEntryWithNoPermissionsKey_ReachesTheWholeSurface()
+    {
+        // Arrange
+        var configuration = ConfigurationFromJson("""
+            {
+              "McpEndpoint": {
+                "Enabled": true,
+                "Authentication": [
+                  { "ApiKey": { "Name": "workstation", "SecretReference": "plaintext:a-key" } }
+                ]
+              }
+            }
+            """);
+
+        // Act
+        var options = McpEndpointOptions.ReadFrom(configuration);
+
+        // Assert
+        var entry = Assert.Single(options.Authentication);
+        Assert.False(entry.WasGrantWritten);
+        Assert.Equal(
+            MailFathomPermission.PublishedFor(McpEndpointOptions.GrantedSurface),
+            entry.GrantedPermissions(McpEndpointOptions.GrantedSurface));
+    }
+
+    /// <summary>An emptied grant retires a credential without deleting its entry, so it must not read as the entry that never narrowed.</summary>
+    [Fact]
+    public void ReadFrom_AnEntryWithAnEmptyPermissionsList_ReachesNothing()
+    {
+        // Arrange
+        var configuration = ConfigurationFromJson("""
+            {
+              "McpEndpoint": {
+                "Enabled": true,
+                "Authentication": [
+                  {
+                    "ApiKey": { "Name": "workstation", "SecretReference": "plaintext:a-key" },
+                    "Permissions": []
+                  }
+                ]
+              }
+            }
+            """);
+
+        // Act
+        var options = McpEndpointOptions.ReadFrom(configuration);
+
+        // Assert
+        var entry = Assert.Single(options.Authentication);
+        Assert.True(entry.WasGrantWritten);
+        Assert.Empty(entry.GrantedPermissions(McpEndpointOptions.GrantedSurface));
+        Assert.Empty(options.FindConfigurationErrors());
+    }
+
+    /// <summary>The grant belongs to the entry, so the read has to answer the question once per entry rather than once per section.</summary>
+    [Fact]
+    public void ReadFrom_TwoEntriesGrantedDifferently_ReadsEachEntrysOwnGrant()
+    {
+        // Arrange
+        var configuration = ConfigurationFromJson("""
+            {
+              "McpEndpoint": {
+                "Enabled": true,
+                "Authentication": [
+                  {
+                    "ApiKey": { "Name": "reporting-job", "SecretReference": "plaintext:a-key" },
+                    "Permissions": ["mailfathom.mail.read"]
+                  },
+                  { "ApiKey": { "Name": "workstation", "SecretReference": "plaintext:another-key" } }
+                ]
+              }
+            }
+            """);
+
+        // Act
+        var options = McpEndpointOptions.ReadFrom(configuration);
+
+        // Assert
+        Assert.Equal(["mailfathom.mail.read"], options.Authentication[0].Permissions);
+        Assert.Equal(
+            [MailFathomPermission.MailRead],
+            options.Authentication[0].GrantedPermissions(McpEndpointOptions.GrantedSurface));
+        Assert.Equal(
+            MailFathomPermission.PublishedFor(McpEndpointOptions.GrantedSurface),
+            options.Authentication[1].GrantedPermissions(McpEndpointOptions.GrantedSurface));
+    }
+
+    /// <summary>The whole point of a closed vocabulary is that a name nothing publishes fails startup instead of reading as a narrowed grant.</summary>
+    [Fact]
+    public void ReadFrom_AnEntryNamingAnUnpublishedPermission_IsRefusedNamingTheEntry()
+    {
+        // Arrange
+        var configuration = ConfigurationFromJson("""
+            {
+              "McpEndpoint": {
+                "Enabled": true,
+                "Authentication": [
+                  {
+                    "ApiKey": { "Name": "workstation", "SecretReference": "plaintext:a-key" },
+                    "Permissions": ["mailfathom.mail.write"]
+                  }
+                ]
+              }
+            }
+            """);
+
+        // Act
+        var errors = McpEndpointOptions.ReadFrom(configuration).FindConfigurationErrors();
+
+        // Assert
+        var reported = Assert.Single(errors);
+        Assert.Contains("McpEndpoint:Authentication:0:Permissions:0", reported, StringComparison.Ordinal);
+    }
+
     /// <summary>A misspelling that bound quietly would leave a security decision reading as one nobody made.</summary>
     [Theory]
     [InlineData("McpEndpoint:Enabeld", "true")]
+    [InlineData("McpEndpoint:Authentication:0:Permission:0", "mailfathom.mail.read")]
+    [InlineData("McpEndpoint:Authentication:0:PermissionsFromTokenScope", "true")]
     [InlineData("McpEndpoint:Authentication:0:ApiKeys:Name", "workstation")]
     [InlineData("McpEndpoint:Authentication:0:ApiKey:Named", "workstation")]
     [InlineData("McpEndpoint:ApiKeys:0:Name", "workstation")]

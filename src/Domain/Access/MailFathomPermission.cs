@@ -1,0 +1,209 @@
+// Copyright © 2026 Krzysztof Kasprowicz
+// Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
+// Project repository: https://github.com/Krzysztof318/MailFathom
+
+using System.Diagnostics.CodeAnalysis;
+using System.Text.Json;
+using System.Text.Json.Serialization;
+
+namespace MailFathom.Domain.Access;
+
+/// <summary>One named capability MailFathom publishes, which a grant lists and a caller either holds or does not.</summary>
+/// <remarks>
+/// <para>
+/// The type is a closed enumeration of values rather than a C# <see langword="enum" />, because the name is the
+/// identity and it travels outside this process: an operator writes it in configuration, a deployment advertises it in
+/// its protected resource metadata document, and an authorization server mints it as a scope so a token can carry it.
+/// A member's ordinal would mean nothing to any of the three, and its C# name has to be free to change without moving
+/// what an operator already wrote.
+/// </para>
+/// <para>
+/// The set is closed so that every name a grant can carry corresponds to a check that exists. A name nothing publishes
+/// is unknown rather than new, which is what lets startup refuse a misspelling instead of accepting a grant nobody
+/// enforces. Adding a member is a configuration-schema change and is made when the capability it names exists, never
+/// ahead of it.
+/// </para>
+/// <para>
+/// A name is <c>mailfathom.&lt;surface&gt;[.&lt;subject&gt;].&lt;verb&gt;</c>, lowercase and dot-separated, and is
+/// always a valid OAuth scope token so the same string can travel in a <c>scope</c> claim. The prefix after
+/// <c>mailfathom.</c> names the <see cref="Surface" /> the permission belongs to, and the two halves are disjoint: no
+/// permission implies another, and holding one says nothing about holding the next.
+/// </para>
+/// <para>
+/// Being a struct, <see langword="default" /> is reachable and is not a permission. It reports itself through
+/// <see cref="IsSpecified" />, refuses to answer for a name, and is rejected by the JSON converter below; a grant is
+/// composed from <see cref="TryParse" /> or from the members themselves, so no undeclared value can reach one.
+/// </para>
+/// </remarks>
+[JsonConverter(typeof(MailFathomPermissionJsonConverter))]
+[SuppressMessage("Naming", "CA1711:Identifiers should not have incorrect suffix", Justification = "The suffix is reserved for code access security, which .NET removed; permission is the word ADR 0012 fixed for this unit and the word an operator writes in configuration.")]
+public readonly record struct MailFathomPermission
+{
+    private readonly string? name;
+
+    private MailFathomPermission(string name, ProtectedSurface surface)
+    {
+        this.name = name;
+        this.Surface = surface;
+    }
+
+    #region Mail
+
+    /// <summary>Gets the permission covering the tools that read the local mailbox copy.</summary>
+    /// <remarks>
+    /// It is not an egress-free grant. Where semantic retrieval is configured, searching places the caller's own query
+    /// text with the embedding provider, which is why the pages describing the grant say so where an operator writes
+    /// it. What it does not permit is sending mail content to a chat provider, which is <see cref="MailAsk" />.
+    /// </remarks>
+    public static MailFathomPermission MailRead { get; } = new("mailfathom.mail.read", ProtectedSurface.Mail);
+
+    /// <summary>Gets the permission covering the tool that answers from mail content by sending it to a model provider.</summary>
+    /// <remarks>It does not imply <see cref="MailRead" /> and is not the weaker of the two: a cited answer returns mail content, so granting it is granting access to mail.</remarks>
+    public static MailFathomPermission MailAsk { get; } = new("mailfathom.mail.ask", ProtectedSurface.Mail);
+
+    #endregion
+
+    #region Administration
+
+    /// <summary>Gets the permission covering the administrative reads that report the deployment's own state and no mail.</summary>
+    public static MailFathomPermission AdminRead { get; } = new("mailfathom.admin.read", ProtectedSurface.Administration);
+
+    /// <summary>Gets the permission covering the per-account records derived from mail: the audits, the rules history, and the spam classifications.</summary>
+    public static MailFathomPermission AdminAuditRead { get; } = new("mailfathom.admin.audit.read", ProtectedSurface.Administration);
+
+    /// <summary>Gets the permission covering asking the deployment to do work it can already do.</summary>
+    public static MailFathomPermission AdminOperate { get; } = new("mailfathom.admin.operate", ProtectedSurface.Administration);
+
+    /// <summary>Gets the permission covering storing a mailbox refresh token.</summary>
+    public static MailFathomPermission AdminCredentialsWrite { get; } = new("mailfathom.admin.credentials.write", ProtectedSurface.Administration);
+
+    /// <summary>Gets the permission covering the one operation that starts a provider bill, which is activating the declared embedding model.</summary>
+    public static MailFathomPermission AdminSpend { get; } = new("mailfathom.admin.spend", ProtectedSurface.Administration);
+
+    /// <summary>Gets the permission covering erasing the mail stored for a folder an account no longer mirrors.</summary>
+    public static MailFathomPermission AdminErase { get; } = new("mailfathom.admin.erase", ProtectedSurface.Administration);
+
+    #endregion
+
+    /// <summary>Gets every published permission.</summary>
+    /// <remarks>Declared last so the members it lists are already initialized when this initializer runs.</remarks>
+    public static IReadOnlyList<MailFathomPermission> All { get; } =
+    [
+        MailRead,
+        MailAsk,
+        AdminRead,
+        AdminAuditRead,
+        AdminOperate,
+        AdminCredentialsWrite,
+        AdminSpend,
+        AdminErase,
+    ];
+
+    /// <summary>Gets whether this value names a published permission rather than the unusable struct default.</summary>
+    public bool IsSpecified => this.name is not null;
+
+    /// <summary>Gets the surface this permission belongs to.</summary>
+    /// <remarks>The struct default reports <see cref="ProtectedSurface.Mail" /> like any other unset enum field, so ask <see cref="IsSpecified" /> before reading it.</remarks>
+    public ProtectedSurface Surface { get; }
+
+    /// <summary>Gets the published name, which is what an operator writes and what a token carries as a scope.</summary>
+    /// <exception cref="InvalidOperationException">Thrown when the value is the struct default rather than a permission.</exception>
+    public string Name => this.name
+        ?? throw new InvalidOperationException("The value is the default of the struct and does not name a permission.");
+
+    /// <summary>Reports every permission one surface publishes, which is what a grant nobody narrowed reaches.</summary>
+    /// <param name="surface">The surface whose half is being asked for.</param>
+    /// <returns>The permissions belonging to that surface, in declaration order.</returns>
+    public static IReadOnlyList<MailFathomPermission> PublishedFor(ProtectedSurface surface) =>
+        [.. All.Where(permission => permission.Surface == surface)];
+
+    /// <summary>Parses an operator-supplied or token-supplied permission name.</summary>
+    /// <param name="name">The written name.</param>
+    /// <param name="permission">The parsed permission when the name is published; otherwise the unspecified default.</param>
+    /// <returns><see langword="true" /> when the name is one this repository publishes; otherwise <see langword="false" />.</returns>
+    /// <remarks>
+    /// The comparison is exact and neither trimmed nor case-folded, because the same string has to travel as an OAuth
+    /// scope token, where a scope is compared byte for byte. Accepting a spelling here that an authorization server
+    /// would treat as a different scope is how a grant comes to mean one thing in configuration and another in a token.
+    /// </remarks>
+    public static bool TryParse(string? name, out MailFathomPermission permission)
+    {
+        // No published permission is the struct default, so an unmatched name yields the unspecified value the caller
+        // already receives when parsing fails.
+        permission = name is null
+            ? default
+            : All.FirstOrDefault(candidate => string.Equals(candidate.Name, name, StringComparison.Ordinal));
+
+        return permission.IsSpecified;
+    }
+
+    /// <inheritdoc />
+    public override string ToString() => this.name ?? "(unspecified)";
+}
+
+/// <summary>Serializes <see cref="MailFathomPermission" /> as its published name.</summary>
+/// <remarks>
+/// The type carries this converter through <see cref="JsonConverterAttribute" />, so every serializer that meets the
+/// value uses it without per-call registration. The JSON form is the published name for the same reason the value
+/// object exists: it is the identity an operator, a metadata document, and an authorization server already agree on,
+/// while an ordinal would silently change meaning the first time the set gained a member.
+/// </remarks>
+public sealed class MailFathomPermissionJsonConverter : JsonConverter<MailFathomPermission>
+{
+    /// <inheritdoc />
+    /// <exception cref="JsonException">Thrown when the token is not a string or does not name a published permission.</exception>
+    public override MailFathomPermission Read(
+        ref Utf8JsonReader reader,
+        Type typeToConvert,
+        JsonSerializerOptions options)
+    {
+        if (reader.TokenType != JsonTokenType.String)
+        {
+            throw new JsonException($"A permission must be a JSON string, but the token was {reader.TokenType}.");
+        }
+
+        return ParseOrThrow(reader.GetString());
+    }
+
+    /// <inheritdoc />
+    /// <exception cref="JsonException">Thrown when the value is the unspecified struct default.</exception>
+    public override void Write(Utf8JsonWriter writer, MailFathomPermission value, JsonSerializerOptions options)
+    {
+        ArgumentNullException.ThrowIfNull(writer);
+
+        writer.WriteStringValue(NameOrThrow(value));
+    }
+
+    /// <inheritdoc />
+    /// <exception cref="JsonException">Thrown when the property name does not name a published permission.</exception>
+    public override MailFathomPermission ReadAsPropertyName(
+        ref Utf8JsonReader reader,
+        Type typeToConvert,
+        JsonSerializerOptions options) => ParseOrThrow(reader.GetString());
+
+    /// <inheritdoc />
+    /// <exception cref="JsonException">Thrown when the value is the unspecified struct default.</exception>
+    public override void WriteAsPropertyName(
+        Utf8JsonWriter writer,
+        MailFathomPermission value,
+        JsonSerializerOptions options)
+    {
+        ArgumentNullException.ThrowIfNull(writer);
+
+        writer.WritePropertyName(NameOrThrow(value));
+    }
+
+    private static MailFathomPermission ParseOrThrow(string? name)
+    {
+        if (!MailFathomPermission.TryParse(name, out var permission))
+        {
+            throw new JsonException($"'{name}' is not a permission MailFathom publishes.");
+        }
+
+        return permission;
+    }
+
+    private static string NameOrThrow(MailFathomPermission permission) => permission.IsSpecified
+        ? permission.Name
+        : throw new JsonException("An unspecified permission cannot be serialized.");
+}

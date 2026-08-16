@@ -30,6 +30,12 @@ namespace MailFathom.Host.Security.Transport;
 /// that decides for itself who receives one, which is what makes both worth checking. Asking either of a configured
 /// credential would mean asking it for something nothing can ever put in it.
 /// </para>
+/// <para>
+/// What an admitted caller may then <em>do</em> is a separate question and is not asked here. The permissions its
+/// credential's configuration entry granted travel on the principal this judges, written by whichever scheme
+/// authenticated it and read back through <see cref="TransportGrant" />, so admission stays one shared judgement while
+/// each surface enforces the grant in the terms its own callers are answered in.
+/// </para>
 /// </remarks>
 internal static class TransportAccessPolicy
 {

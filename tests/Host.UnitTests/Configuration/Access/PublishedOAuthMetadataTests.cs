@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Domain.Access;
 using MailFathom.Host.Configuration.Access;
 using Xunit;
 
@@ -29,7 +30,7 @@ public sealed class PublishedOAuthMetadataTests
         var workforce = EntryFor(WorkforceIssuer, "workforce", "mailfathom.read");
 
         // Act
-        var published = PublishedOAuthMetadata.For([workforce]);
+        var published = Published(workforce);
 
         // Assert
         Assert.Equal(Resource, published.Resource);
@@ -49,7 +50,7 @@ public sealed class PublishedOAuthMetadataTests
         var partners = EntryFor(PartnerIssuer, "partners", "partners.read");
 
         // Act
-        var published = PublishedOAuthMetadata.For([workforce, partners]);
+        var published = Published(workforce, partners);
 
         // Assert
         Assert.Equal([WorkforceIssuer, PartnerIssuer], published.AuthorizationServers);
@@ -64,7 +65,7 @@ public sealed class PublishedOAuthMetadataTests
         var partners = EntryFor(PartnerIssuer, "partners", "mailfathom.read", "partners.read");
 
         // Act
-        var published = PublishedOAuthMetadata.For([workforce, partners]);
+        var published = Published(workforce, partners);
 
         // Assert
         Assert.Equal(["mailfathom.read", "partners.read"], published.ScopesSupported);
@@ -79,7 +80,7 @@ public sealed class PublishedOAuthMetadataTests
         var partners = EntryFor(PartnerIssuer, "partners");
 
         // Act
-        var published = PublishedOAuthMetadata.For([workforce, partners]);
+        var published = Published(workforce, partners);
 
         // Assert
         Assert.Equal(["mailfathom.read"], published.ScopesSupported);
@@ -89,7 +90,7 @@ public sealed class PublishedOAuthMetadataTests
     /// <summary>A surface accepting no token publishes no document, so composing one from nothing is a fault rather than an empty answer.</summary>
     [Fact]
     public void For_NoEntryAtAll_IsRefusedRatherThanPublishingAnEmptyDocument() =>
-        Assert.Throws<ArgumentException>(() => PublishedOAuthMetadata.For([]));
+        Assert.Throws<ArgumentException>(() => Published());
 
     /// <summary>
     /// The document states what a client should ask for, so a scope the deployment advertises without checking is in it
@@ -105,7 +106,7 @@ public sealed class PublishedOAuthMetadataTests
         workforce.AdvertisedScopes.Add("offline_access");
 
         // Act
-        var published = PublishedOAuthMetadata.For([workforce]);
+        var published = Published(workforce);
 
         // Assert
         Assert.Equal(["mailfathom.read", "offline_access"], published.ScopesSupported);
@@ -119,7 +120,7 @@ public sealed class PublishedOAuthMetadataTests
         var workforce = EntryFor(WorkforceIssuer, "workforce", "mailfathom.read");
 
         // Act
-        var published = PublishedOAuthMetadata.For([workforce]);
+        var published = Published(workforce);
 
         // Assert
         Assert.Equal(["mailfathom.read"], published.ScopesSupported);
@@ -138,7 +139,7 @@ public sealed class PublishedOAuthMetadataTests
         partners.AdvertisedScopes.Add("openid");
 
         // Act
-        var published = PublishedOAuthMetadata.For([workforce, partners]);
+        var published = Published(workforce, partners);
 
         // Assert
         Assert.Equal(
@@ -159,7 +160,7 @@ public sealed class PublishedOAuthMetadataTests
         workforce.AdvertisedScopes.Add("offline_access");
 
         // Act
-        var published = PublishedOAuthMetadata.For([workforce]);
+        var published = Published(workforce);
 
         // Assert
         Assert.Contains("offline_access", published.ScopesSupported);
@@ -175,11 +176,99 @@ public sealed class PublishedOAuthMetadataTests
         workforce.AdvertisedScopes.Add("offline_access");
 
         // Act
-        var published = PublishedOAuthMetadata.For([workforce]);
+        var published = Published(workforce);
 
         // Assert
         Assert.Equal(["offline_access"], published.ScopesSupported);
     }
+
+    /// <summary>
+    /// The field tells a client what to ask its authorization server for, so a permission the deployment grants from
+    /// configuration is not in it: no client can ask for one. Only an entry whose grant a token narrows contributes.
+    /// </summary>
+    [Fact]
+    public void For_AnEntryNarrowedByTokenScopes_PublishesItsPermissionsBesideTheScopes()
+    {
+        // Arrange
+        var entry = new TransportAuthenticationOptions
+        {
+            OAuth = EntryFor(WorkforceIssuer, "workforce", "mailfathom.read"),
+            PermissionsFromTokenScopes = true,
+        };
+
+        entry.Permissions.Add(MailFathomPermission.MailRead.Name);
+        entry.MarkGrantWritten();
+
+        // Act
+        var published = PublishedOAuthMetadata.For([entry], ProtectedSurface.Mail);
+
+        // Assert
+        Assert.Equal(["mailfathom.read", "mailfathom.mail.read"], published.ScopesSupported);
+    }
+
+    /// <summary>An entry granting from configuration alone advertises none of its permissions, because a client asking for one would be asking for something nothing reads.</summary>
+    [Fact]
+    public void For_AnEntryGrantingFromConfiguration_PublishesNoneOfItsPermissions()
+    {
+        // Arrange
+        var entry = new TransportAuthenticationOptions { OAuth = EntryFor(WorkforceIssuer, "workforce", "mailfathom.read") };
+
+        entry.Permissions.Add(MailFathomPermission.MailAsk.Name);
+        entry.MarkGrantWritten();
+
+        // Act
+        var published = PublishedOAuthMetadata.For([entry], ProtectedSurface.Mail);
+
+        // Assert
+        Assert.Equal(["mailfathom.read"], published.ScopesSupported);
+    }
+
+    /// <summary>Such an entry genuinely admits a token bringing any of them, so the document names the half an operator has to create in their authorization server.</summary>
+    [Fact]
+    public void For_AnEntryNarrowedByTokenScopesThatWroteNoGrant_PublishesTheWholeSurface()
+    {
+        // Arrange
+        var entry = new TransportAuthenticationOptions
+        {
+            OAuth = EntryFor(WorkforceIssuer, "workforce"),
+            PermissionsFromTokenScopes = true,
+        };
+
+        // Act
+        var published = PublishedOAuthMetadata.For([entry], ProtectedSurface.Mail);
+
+        // Assert
+        Assert.Equal(
+            MailFathomPermission.PublishedFor(ProtectedSurface.Mail).Select(permission => permission.Name),
+            published.ScopesSupported);
+    }
+
+    /// <summary>An emptied grant grants nothing, so there is nothing a client should be told to ask for.</summary>
+    [Fact]
+    public void For_AnEntryNarrowedByTokenScopesThatGrantsNothing_PublishesNoPermission()
+    {
+        // Arrange
+        var entry = new TransportAuthenticationOptions
+        {
+            OAuth = EntryFor(WorkforceIssuer, "workforce"),
+            PermissionsFromTokenScopes = true,
+        };
+
+        entry.MarkGrantWritten();
+
+        // Act
+        var published = PublishedOAuthMetadata.For([entry], ProtectedSurface.Mail);
+
+        // Assert
+        Assert.Empty(published.ScopesSupported);
+    }
+
+    /// <summary>Publishes what the given OAuth blocks say, each on an entry of its own that writes down no grant.</summary>
+    /// <remarks>The unit is the entry rather than the block, because the grant belongs to the entry; a test about a grant builds its own entries, and the ones here are about what the blocks publish.</remarks>
+    private static PublishedOAuthMetadata Published(params OAuthValidationOptions[] oauthMethods) =>
+        PublishedOAuthMetadata.For(
+            [.. oauthMethods.Select(oauth => new TransportAuthenticationOptions { OAuth = oauth })],
+            ProtectedSurface.Mail);
 
     private static OAuthValidationOptions EntryFor(string issuer, string name, params string[] requiredScopes)
     {

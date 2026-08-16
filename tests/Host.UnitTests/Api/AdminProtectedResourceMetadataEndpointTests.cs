@@ -29,7 +29,7 @@ public sealed class AdminProtectedResourceMetadataEndpointTests
         var oauthSettings = Configured();
 
         // Act
-        var document = ProtectedResourceMetadataDocument.For([oauthSettings]);
+        var document = ProtectedResourceMetadataDocument.For([new TransportAuthenticationOptions { OAuth = oauthSettings }]);
 
         // Assert
         Assert.Equal(Resource, document.Resource);
@@ -61,7 +61,7 @@ public sealed class AdminProtectedResourceMetadataEndpointTests
         });
 
         // Act
-        var document = ProtectedResourceMetadataDocument.For([Configured(), partners]);
+        var document = ProtectedResourceMetadataDocument.For([Entry(), new TransportAuthenticationOptions { OAuth = partners }]);
 
         // Assert
         Assert.Equal(Resource, document.Resource);
@@ -84,7 +84,7 @@ public sealed class AdminProtectedResourceMetadataEndpointTests
         oauthSettings.AdvertisedScopes.Add("offline_access");
 
         // Act
-        var document = ProtectedResourceMetadataDocument.For([oauthSettings]);
+        var document = ProtectedResourceMetadataDocument.For([new TransportAuthenticationOptions { OAuth = oauthSettings }]);
 
         // Assert
         Assert.Equal(["mailfathom.admin", "mailfathom.read", "offline_access"], document.ScopesSupported);
@@ -95,7 +95,7 @@ public sealed class AdminProtectedResourceMetadataEndpointTests
     public void For_AnySettings_OffersTheHeaderAsTheOnlyWayToPresentAToken()
     {
         // Act
-        var document = ProtectedResourceMetadataDocument.For([Configured()]);
+        var document = ProtectedResourceMetadataDocument.For([Entry()]);
 
         // Assert
         Assert.Equal(["header"], document.BearerMethodsSupported);
@@ -106,7 +106,7 @@ public sealed class AdminProtectedResourceMetadataEndpointTests
     public void Serialized_TheDocument_CarriesTheNamesRfc9728Defines()
     {
         // Arrange
-        var document = ProtectedResourceMetadataDocument.For([Configured()]);
+        var document = ProtectedResourceMetadataDocument.For([Entry()]);
 
         // Act
         using var serialized = JsonDocument.Parse(JsonSerializer.Serialize(document));
@@ -141,6 +141,9 @@ public sealed class AdminProtectedResourceMetadataEndpointTests
         // Assert
         Assert.Equal("/.well-known/oauth-protected-resource/api/admin", path);
     }
+
+    /// <summary>Wraps the configured OAuth block in the entry that carries it, which is the unit the document is composed from.</summary>
+    private static TransportAuthenticationOptions Entry() => new() { OAuth = Configured() };
 
     private static OAuthValidationOptions Configured()
     {

@@ -307,7 +307,7 @@ try
         {
             // Outside the group the requirement was attached to, and deliberately: its reader is a client that has no
             // credential yet and is reading this to find out where to obtain one.
-            app.MapAdminProtectedResourceMetadata(composition.Admin.OAuthMethods());
+            app.MapAdminProtectedResourceMetadata([.. composition.Admin.Authentication]);
         }
     }
 

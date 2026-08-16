@@ -4,6 +4,7 @@
 
 using System.Text.Json.Serialization;
 using MailFathom.Host.Configuration.Access;
+using MailFathom.Host.Configuration.Endpoints;
 using MailFathom.Host.Security.Transport;
 
 namespace MailFathom.Host.Api;
@@ -32,17 +33,17 @@ internal static class AdminProtectedResourceMetadataEndpoint
 {
     /// <summary>Maps the document at the address its resource identifier places it.</summary>
     /// <param name="endpoints">The route builder.</param>
-    /// <param name="oauthMethods">The endpoint's authorization servers and token requirements, one entry per configured OAuth block.</param>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="endpoints" /> or <paramref name="oauthMethods" /> is <see langword="null" />.</exception>
-    /// <exception cref="ArgumentException">Thrown when <paramref name="oauthMethods" /> is empty, which is a surface accepting no token at all.</exception>
+    /// <param name="methods">The endpoint's configured credential entries, in configuration order.</param>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="endpoints" /> or <paramref name="methods" /> is <see langword="null" />.</exception>
+    /// <exception cref="ArgumentException">Thrown when no entry states OAuth, which is a surface accepting no token at all.</exception>
     internal static void MapAdminProtectedResourceMetadata(
         this IEndpointRouteBuilder endpoints,
-        IReadOnlyList<OAuthValidationOptions> oauthMethods)
+        IReadOnlyList<TransportAuthenticationOptions> methods)
     {
         ArgumentNullException.ThrowIfNull(endpoints);
-        ArgumentNullException.ThrowIfNull(oauthMethods);
+        ArgumentNullException.ThrowIfNull(methods);
 
-        var document = ProtectedResourceMetadataDocument.For(oauthMethods);
+        var document = ProtectedResourceMetadataDocument.For(methods);
 
         endpoints.MapGet(
             ProtectedResourceMetadataAddress.PathFor(document.Resource),
@@ -70,18 +71,18 @@ internal sealed record ProtectedResourceMetadataDocument(
     [property: JsonPropertyName("resource_name")] string ResourceName)
 {
     /// <summary>Describes what one endpoint's OAuth settings publish.</summary>
-    /// <param name="oauthMethods">The endpoint's authorization servers and token requirements, one entry per configured OAuth block.</param>
+    /// <param name="methods">The endpoint's configured credential entries, in configuration order.</param>
     /// <returns>The document.</returns>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="oauthMethods" /> is <see langword="null" />.</exception>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="methods" /> is <see langword="null" />.</exception>
     /// <remarks>
     /// What the entries publish between them is <see cref="PublishedOAuthMetadata" />'s to decide, because the MCP
     /// endpoint publishes the same document through the protocol SDK's own type and the two must not answer differently
     /// from one configuration. What is this record's own is the wire shape: the JSON names RFC 9728 fixes, and the
     /// bearer method and resource name that are constants rather than settings.
     /// </remarks>
-    internal static ProtectedResourceMetadataDocument For(IReadOnlyList<OAuthValidationOptions> oauthMethods)
+    internal static ProtectedResourceMetadataDocument For(IReadOnlyList<TransportAuthenticationOptions> methods)
     {
-        var published = PublishedOAuthMetadata.For(oauthMethods);
+        var published = PublishedOAuthMetadata.For(methods, AdminEndpointOptions.GrantedSurface);
 
         return new ProtectedResourceMetadataDocument(
             published.Resource,
