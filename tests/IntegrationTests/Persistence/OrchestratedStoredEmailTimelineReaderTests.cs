@@ -143,6 +143,8 @@ public sealed class OrchestratedStoredEmailTimelineReaderTests(MailFathomOrchest
             receivedOnOrAfter: null,
             receivedBefore: null,
             isRemotelySeen: null,
+            isRemotelyFlagged: null,
+            keyword: null,
             hasAttachments: null,
             EmailTimelineDirection.NewestFirst);
 
@@ -191,6 +193,8 @@ public sealed class OrchestratedStoredEmailTimelineReaderTests(MailFathomOrchest
                 receivedOnOrAfter: null,
                 receivedBefore: null,
                 isRemotelySeen: null,
+                isRemotelyFlagged: null,
+                keyword: null,
                 hasAttachments: null,
                 EmailTimelineDirection.NewestFirst),
             cancellationToken);
@@ -442,6 +446,8 @@ public sealed class OrchestratedStoredEmailTimelineReaderTests(MailFathomOrchest
         DateTimeOffset? receivedOnOrAfter = null,
         DateTimeOffset? receivedBefore = null,
         bool? isRemotelySeen = null,
+        bool? isRemotelyFlagged = null,
+        string? keyword = null,
         bool? hasAttachments = null,
         CancellationToken cancellationToken = default) => await ReadAllAsync(
             services,
@@ -453,6 +459,8 @@ public sealed class OrchestratedStoredEmailTimelineReaderTests(MailFathomOrchest
                 receivedOnOrAfter,
                 receivedBefore,
                 isRemotelySeen,
+                isRemotelyFlagged,
+                keyword,
                 hasAttachments,
                 EmailTimelineDirection.NewestFirst),
             cancellationToken);
@@ -481,6 +489,8 @@ public sealed class OrchestratedStoredEmailTimelineReaderTests(MailFathomOrchest
             receivedOnOrAfter: null,
             receivedBefore: null,
             isRemotelySeen: null,
+            isRemotelyFlagged: null,
+            keyword: null,
             hasAttachments: null,
             direction);
     }

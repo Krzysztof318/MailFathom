@@ -82,6 +82,8 @@ public sealed class ListEmailsToolTests
             receivedOnOrAfter: rangeStart,
             receivedBefore: rangeEnd,
             isRemotelySeen: false,
+            isRemotelyFlagged: true,
+            keyword: "$Junk",
             hasAttachments: true,
             direction: ListEmailsDirection.OldestFirst,
             pageSize: 10,
@@ -98,6 +100,8 @@ public sealed class ListEmailsToolTests
         Assert.Equal(rangeStart, filter.Selection.ReceivedOnOrAfter);
         Assert.Equal(rangeEnd, filter.Selection.ReceivedBefore);
         Assert.False(filter.Selection.IsRemotelySeen);
+        Assert.True(filter.Selection.IsRemotelyFlagged);
+        Assert.Equal("$JUNK", filter.Selection.Keyword);
         Assert.True(filter.Selection.HasAttachments);
         Assert.Equal(EmailTimelineDirection.OldestFirst, filter.Direction);
         Assert.Equal(11, timeline.LastLimit);
@@ -404,7 +408,8 @@ public sealed class ListEmailsToolTests
                 IsAnswered: true,
                 IsFlagged: false,
                 IsDraft: false,
-                IsDeleted: false),
+                IsDeleted: false,
+                Keywords: RemoteEmailKeywords.Create(["$Junk"])),
         };
         var tool = ToolOver(new StubStoredEmailTimelineReader(summary));
 
@@ -435,6 +440,7 @@ public sealed class ListEmailsToolTests
         Assert.True(published.RemoteFlags.Seen);
         Assert.True(published.RemoteFlags.Answered);
         Assert.False(published.RemoteFlags.Flagged);
+        Assert.Equal(["$JUNK"], published.RemoteFlags.Keywords);
         Assert.Equal(observedAt, published.RemoteFlags.ObservedAt);
         Assert.True(published.RemoteFlags.WasObserved);
     }

@@ -56,6 +56,8 @@ public sealed record MailboxEmailSelection
         DateTimeOffset? receivedOnOrAfter,
         DateTimeOffset? receivedBefore,
         bool? isRemotelySeen,
+        bool? isRemotelyFlagged,
+        string? keyword,
         bool? hasAttachments)
     {
         this.Scope = scope;
@@ -65,6 +67,8 @@ public sealed record MailboxEmailSelection
         this.ReceivedOnOrAfter = receivedOnOrAfter;
         this.ReceivedBefore = receivedBefore;
         this.IsRemotelySeen = isRemotelySeen;
+        this.IsRemotelyFlagged = isRemotelyFlagged;
+        this.Keyword = keyword;
         this.HasAttachments = hasAttachments;
         this.CanonicalText = this.ComputeCanonicalText();
     }
@@ -106,6 +110,23 @@ public sealed record MailboxEmailSelection
     /// </remarks>
     public bool? IsRemotelySeen { get; }
 
+    /// <summary>Gets the remote <c>\Flagged</c> state an email must have, or <see langword="null" /> when either matches.</summary>
+    /// <remarks>
+    /// The flag is what a mail client shows as a star, and it reads from the same snapshot <see cref="IsRemotelySeen" />
+    /// does, with the same consequence for mail nobody has observed: it carries the flag unset and matches the unflagged
+    /// side. It is unrelated to the <c>Flagged</c> folder role, which names a folder a provider synthesizes rather than a
+    /// flag on a message, so a scope naming that role and this filter are two different narrowings.
+    /// </remarks>
+    public bool? IsRemotelyFlagged { get; }
+
+    /// <summary>Gets the keyword an email must carry, in its comparison form, or <see langword="null" /> when any matches.</summary>
+    /// <remarks>
+    /// One keyword rather than a set, because a set immediately owes an answer to whether it means all of them or any of
+    /// them, and neither has been asked for. The value is folded the way the stored keywords were, so a caller writing
+    /// <c>$Junk</c> matches mail whose server reported <c>$junk</c>.
+    /// </remarks>
+    public string? Keyword { get; }
+
     /// <summary>Gets whether an email must carry attachments, or <see langword="null" /> when either matches.</summary>
     /// <remarks>
     /// Attachment presence is the classification rule the MIME extraction applies, not a disposition header: a message
@@ -131,10 +152,12 @@ public sealed record MailboxEmailSelection
     /// <param name="receivedOnOrAfter">The inclusive start of the received range, or <see langword="null" /> for no start.</param>
     /// <param name="receivedBefore">The exclusive end of the received range, or <see langword="null" /> for no end.</param>
     /// <param name="isRemotelySeen">The remote <c>\Seen</c> state to require, or <see langword="null" /> for either.</param>
+    /// <param name="isRemotelyFlagged">The remote <c>\Flagged</c> state to require, or <see langword="null" /> for either.</param>
+    /// <param name="keyword">The keyword an email must carry, in any case, or <see langword="null" /> for any.</param>
     /// <param name="hasAttachments">Whether attachments are required, or <see langword="null" /> for either.</param>
     /// <returns>The validated selection.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="scope" /> is <see langword="null" />.</exception>
-    /// <exception cref="MailboxQueryFilterInvalidException">Thrown when an address is unusable or over-long, the subject fragment is too long, or the received range can select nothing.</exception>
+    /// <exception cref="MailboxQueryFilterInvalidException">Thrown when an address is unusable or over-long, the subject fragment is too long, the keyword is not one this system stores, or the received range can select nothing.</exception>
     public static MailboxEmailSelection Create(
         MailboxScope scope,
         string? senderAddress,
@@ -143,6 +166,8 @@ public sealed record MailboxEmailSelection
         DateTimeOffset? receivedOnOrAfter,
         DateTimeOffset? receivedBefore,
         bool? isRemotelySeen,
+        bool? isRemotelyFlagged,
+        string? keyword,
         bool? hasAttachments)
     {
         ArgumentNullException.ThrowIfNull(scope);
@@ -164,6 +189,8 @@ public sealed record MailboxEmailSelection
             receivedOnOrAfter?.ToUniversalTime(),
             receivedBefore?.ToUniversalTime(),
             isRemotelySeen,
+            isRemotelyFlagged,
+            ComparableKeyword(keyword),
             hasAttachments);
     }
 
@@ -198,6 +225,29 @@ public sealed record MailboxEmailSelection
         return EmailAddress.TryCreate(displayName: null, address, out var emailAddress)
             ? emailAddress.NormalizedAddress
             : throw MailboxQueryFilterInvalidException.NotAnAddress(filterName);
+    }
+
+    /// <summary>Puts a keyword filter into the one form stored keywords are compared in.</summary>
+    /// <remarks>
+    /// The domain type does the folding, so a filter and a stored keyword are compared in the same form by construction
+    /// rather than by two call sites agreeing about case. A value it will not fold is refused here instead of becoming a
+    /// filter that matches nothing: no stored keyword is empty, over-long, or carries a control character, so such a
+    /// value would return an empty page that reads as an answer about the mailbox.
+    /// </remarks>
+    private static string? ComparableKeyword(string? keyword)
+    {
+        if (string.IsNullOrWhiteSpace(keyword))
+        {
+            return null;
+        }
+
+        MailboxQueryFilterInvalidException.ThrowIfLengthExceeded(
+            keyword.Trim().Length,
+            RemoteEmailKeywords.MaximumKeywordLength,
+            "keyword");
+
+        return RemoteEmailKeywords.Normalized(keyword)
+            ?? throw MailboxQueryFilterInvalidException.NotAUsableIdentifier("keyword");
     }
 
     private static string? BoundedSubjectFragment(string? subjectFragment)
@@ -244,6 +294,10 @@ public sealed record MailboxEmailSelection
         LengthPrefixed(CanonicalInstant(this.ReceivedOnOrAfter)),
         LengthPrefixed(CanonicalInstant(this.ReceivedBefore)),
         LengthPrefixed(CanonicalFlag(this.IsRemotelySeen)),
+        LengthPrefixed(CanonicalFlag(this.IsRemotelyFlagged)),
+        // Already the comparison form, so nothing is folded again here: two requests that wrote one keyword in
+        // different cases are one walk, and they reached this text as one value rather than as two.
+        LengthPrefixed(this.Keyword ?? CanonicalAbsentValue),
         LengthPrefixed(CanonicalFlag(this.HasAttachments)));
 
     private static string CanonicalList(IEnumerable<string> values) =>

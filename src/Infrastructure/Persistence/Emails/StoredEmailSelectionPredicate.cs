@@ -98,6 +98,18 @@ internal static class StoredEmailSelectionPredicate
             emails = emails.Where(email => email.IsRemotelySeen == isRemotelySeen);
         }
 
+        if (selection.IsRemotelyFlagged is { } isRemotelyFlagged)
+        {
+            emails = emails.Where(email => email.IsRemotelyFlagged == isRemotelyFlagged);
+        }
+
+        if (selection.Keyword is { } keyword)
+        {
+            // Containment over the array rather than a comparison against each element, which is the operation the
+            // column's GIN index serves and the same shape the recipient filter uses over the address arrays.
+            emails = emails.Where(email => email.RemoteKeywords.Contains(keyword));
+        }
+
         if (selection.HasAttachments is { } hasAttachments)
         {
             emails = hasAttachments

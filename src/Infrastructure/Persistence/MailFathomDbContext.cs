@@ -60,6 +60,8 @@ internal sealed class MailFathomDbContext : DbContext
 
     internal const string StoredEmailReplyToAddressesIndexName = "ix_stored_emails_reply_to_addresses";
 
+    internal const string StoredEmailRemoteKeywordsIndexName = "ix_stored_emails_remote_keywords";
+
     internal const string EmailSearchDocumentVectorIndexName = "ix_email_search_documents_search_vector";
 
     internal const string EmailChunkOrdinalUniqueIndexName = "ix_email_chunks_email_ordinal";
@@ -1314,6 +1316,12 @@ internal sealed class MailFathomDbContext : DbContext
 
         entity.HasIndex(email => email.ReplyToAddresses)
             .HasDatabaseName(StoredEmailReplyToAddressesIndexName)
+            .HasMethod("GIN");
+
+        // A keyword filter asks whether the array contains one value, which is the containment operator a GIN index
+        // over a text[] serves — the same shape and the same reason as the three address arrays above.
+        entity.HasIndex(email => email.RemoteKeywords)
+            .HasDatabaseName(StoredEmailRemoteKeywordsIndexName)
             .HasMethod("GIN");
     }
 }

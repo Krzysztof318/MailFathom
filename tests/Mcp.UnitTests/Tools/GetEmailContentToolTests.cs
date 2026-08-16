@@ -979,7 +979,8 @@ public sealed class GetEmailContentToolTests
                     IsAnswered: false,
                     IsFlagged: false,
                     IsDraft: false,
-                    IsDeleted: false)
+                    IsDeleted: false,
+                    Keywords: RemoteEmailKeywords.None)
                 : RemoteEmailFlagSnapshot.NeverObserved,
         };
 

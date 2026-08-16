@@ -165,6 +165,8 @@ public sealed class StoredEmailSearchIndexReaderCommandTests
             receivedOnOrAfter: null,
             receivedBefore: null,
             isRemotelySeen: null,
+            isRemotelyFlagged: null,
+            keyword: null,
             hasAttachments: false);
 
         using var context = new MailFathomDbContextDesignTimeFactory().CreateDbContext([]);
@@ -192,6 +194,8 @@ public sealed class StoredEmailSearchIndexReaderCommandTests
             receivedOnOrAfter: null,
             receivedBefore: null,
             isRemotelySeen: null,
+            isRemotelyFlagged: null,
+            keyword: null,
             hasAttachments: true);
 
         // Act
@@ -211,6 +215,8 @@ public sealed class StoredEmailSearchIndexReaderCommandTests
         receivedOnOrAfter: null,
         receivedBefore: null,
         isRemotelySeen: null,
+        isRemotelyFlagged: null,
+        keyword: null,
         hasAttachments: null);
 
     private static EmailSearchQueryText QueryTextFor(string text) => EmailSearchQueryText.Create(text);

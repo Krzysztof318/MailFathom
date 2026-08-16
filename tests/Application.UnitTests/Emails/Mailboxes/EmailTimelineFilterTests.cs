@@ -34,6 +34,8 @@ public sealed class EmailTimelineFilterTests
             receivedOnOrAfter: null,
             receivedBefore: null,
             isRemotelySeen: null,
+            isRemotelyFlagged: null,
+            keyword: null,
             hasAttachments: null,
             EmailTimelineDirection.NewestFirst));
     }
@@ -149,6 +151,8 @@ public sealed class EmailTimelineFilterTests
         DateTimeOffset? receivedOnOrAfter = null,
         DateTimeOffset? receivedBefore = null,
         bool? isRemotelySeen = null,
+        bool? isRemotelyFlagged = null,
+        string? keyword = null,
         bool? hasAttachments = null,
         EmailTimelineDirection direction = EmailTimelineDirection.NewestFirst) => EmailTimelineFilter.Create(
         scope ?? MailboxScope.NothingReadable,
@@ -158,6 +162,8 @@ public sealed class EmailTimelineFilterTests
         receivedOnOrAfter,
         receivedBefore,
         isRemotelySeen,
+        isRemotelyFlagged,
+        keyword,
         hasAttachments,
         direction);
 }

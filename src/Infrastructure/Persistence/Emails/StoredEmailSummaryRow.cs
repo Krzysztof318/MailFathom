@@ -55,7 +55,8 @@ internal sealed record StoredEmailSummaryRow(
     bool IsRemotelyAnswered,
     bool IsRemotelyFlagged,
     bool IsRemotelyDraft,
-    bool IsRemotelyDeleted)
+    bool IsRemotelyDeleted,
+    string[] RemoteKeywords)
 {
     /// <summary>Gets the projection every summary query selects, which is what keeps the two readers publishing one shape.</summary>
     public static Expression<Func<StoredEmailEntity, StoredEmailSummaryRow>> Projection { get; } = email =>
@@ -83,7 +84,8 @@ internal sealed record StoredEmailSummaryRow(
             email.IsRemotelyAnswered,
             email.IsRemotelyFlagged,
             email.IsRemotelyDraft,
-            email.IsRemotelyDeleted);
+            email.IsRemotelyDeleted,
+            email.RemoteKeywords);
 
     /// <summary>Turns the returned columns into the application read model.</summary>
     /// <returns>The summary, with every domain value object built by its own factory.</returns>
@@ -115,6 +117,9 @@ internal sealed record StoredEmailSummaryRow(
             this.IsRemotelyAnswered,
             this.IsRemotelyFlagged,
             this.IsRemotelyDraft,
-            this.IsRemotelyDeleted),
+            this.IsRemotelyDeleted,
+            // Rebuilt through the factory rather than wrapped, because the column is what an earlier build's
+            // normalization left behind and this one's rules are the ones a caller's filter is folded by.
+            RemoteEmailKeywords.Create(this.RemoteKeywords)),
     };
 }

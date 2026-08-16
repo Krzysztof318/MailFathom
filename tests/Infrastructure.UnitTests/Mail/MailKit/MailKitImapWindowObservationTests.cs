@@ -230,6 +230,54 @@ public sealed class MailKitImapWindowObservationTests
         Assert.Equal([11U, 12U], observation.UnchangedUids.Select(uid => uid.Value));
     }
 
+    /// <summary>
+    /// The keywords arrive in the same FLAGS answer the five system flags do, so reading them costs no wider request
+    /// and no second round trip. What reaches the snapshot is the normalized set rather than the strings the server
+    /// happened to write.
+    /// </summary>
+    [Fact]
+    public async Task ObserveWindowWithoutSettingSeenAsync_ServerReportsKeywords_CarriesThemIntoTheSnapshot()
+    {
+        // Arrange
+        using var resilience = CreateSingleAttemptResilience();
+        var client = new FakeImapClient { Capabilities = ImapCapabilities.None };
+        var folder = CreateSelectedFolder();
+        AnswerFetchWith(folder, [DescribedUid(10, "$Junk", "nonjunk", "$junk")]);
+        await using var session = await OpenSessionAsync(resilience, client, folder);
+
+        // Act
+        var observation = await session.ObserveWindowWithoutSettingSeenAsync(
+            Window,
+            reconciledThroughModSeq: null,
+            CancellationToken.None);
+
+        // Assert
+        Assert.Equal(
+            ["$JUNK", "NONJUNK"],
+            observation.Observations.Single().Snapshot.Keywords.Values);
+    }
+
+    /// <summary>A server that reports no keyword leaves the set empty rather than absent, which is what an email carrying none holds.</summary>
+    [Fact]
+    public async Task ObserveWindowWithoutSettingSeenAsync_ServerReportsNoKeyword_LeavesTheSetEmpty()
+    {
+        // Arrange
+        using var resilience = CreateSingleAttemptResilience();
+        var client = new FakeImapClient { Capabilities = ImapCapabilities.None };
+        var folder = CreateSelectedFolder();
+        AnswerFetchWith(folder, DescribedUids(10));
+        await using var session = await OpenSessionAsync(resilience, client, folder);
+
+        // Act
+        var observation = await session.ObserveWindowWithoutSettingSeenAsync(
+            Window,
+            reconciledThroughModSeq: null,
+            CancellationToken.None);
+
+        // Assert
+        Assert.Empty(observation.Observations.Single().Snapshot.Keywords.Values);
+    }
+
     /// <summary>Every occurrence the folder still holds, however the server said so, in the order the window asked.</summary>
     private static IReadOnlyList<uint> SurvivingUids(RemoteFolderWindowObservation observation) =>
     [
@@ -240,16 +288,18 @@ public sealed class MailKitImapWindowObservationTests
     ];
 
     private static IMessageSummary[] DescribedUids(params uint[] uids) =>
-    [
-        .. uids.Select(uid =>
-        {
-            var summary = Substitute.For<IMessageSummary>();
-            summary.UniqueId.Returns(new UniqueId(uid));
-            summary.Flags.Returns(MessageFlags.Seen);
+        [.. uids.Select(uid => DescribedUid(uid))];
 
-            return summary;
-        }),
-    ];
+    /// <summary>Describes one UID the way a server does, with the system flags and the keywords in one answer.</summary>
+    private static IMessageSummary DescribedUid(uint uid, params string[] keywords)
+    {
+        var summary = Substitute.For<IMessageSummary>();
+        summary.UniqueId.Returns(new UniqueId(uid));
+        summary.Flags.Returns(MessageFlags.Seen);
+        summary.Keywords.Returns(new HashSet<string>(keywords, StringComparer.Ordinal));
+
+        return summary;
+    }
 
     /// <summary>Answers the fetch with the supplied summaries, and reports the vanished messages while it runs.</summary>
     /// <remarks>

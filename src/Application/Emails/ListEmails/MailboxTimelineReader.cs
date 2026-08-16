@@ -187,6 +187,8 @@ public sealed class MailboxTimelineReader
         request.ReceivedOnOrAfter,
         request.ReceivedBefore,
         request.IsRemotelySeen,
+        request.IsRemotelyFlagged,
+        request.Keyword,
         request.HasAttachments,
         request.Direction);
 

@@ -25,6 +25,7 @@ public sealed class RemoteEmailFlagSnapshotTests
         Assert.Null(snapshot.ObservedAt);
         Assert.False(snapshot.WasObserved);
         Assert.Equal([false, false, false, false, false], Flags(snapshot));
+        Assert.Empty(snapshot.Keywords.Values);
     }
 
     [Fact]
@@ -40,12 +41,31 @@ public sealed class RemoteEmailFlagSnapshotTests
             IsAnswered: false,
             IsFlagged: true,
             IsDraft: false,
-            IsDeleted: false);
+            IsDeleted: false,
+            Keywords: RemoteEmailKeywords.None);
 
         // Assert
         Assert.True(snapshot.WasObserved);
         Assert.Equal(observedAt, snapshot.ObservedAt);
         Assert.Equal([true, false, true, false, false], Flags(snapshot));
+    }
+
+    /// <summary>Keywords are part of the one FLAGS answer, so they travel with the five booleans rather than beside them.</summary>
+    [Fact]
+    public void Keywords_SnapshotOfAnEmailCarryingThem_ReportsThemWithTheFlags()
+    {
+        // Act
+        var snapshot = new RemoteEmailFlagSnapshot(
+            new DateTimeOffset(2026, 7, 30, 6, 0, 0, TimeSpan.Zero),
+            IsSeen: false,
+            IsAnswered: false,
+            IsFlagged: true,
+            IsDraft: false,
+            IsDeleted: false,
+            Keywords: RemoteEmailKeywords.Create(["$Junk"]));
+
+        // Assert
+        Assert.Equal(["$JUNK"], snapshot.Keywords.Values);
     }
 
     /// <summary>An unobserved snapshot reads the same whichever code path produced it.</summary>
@@ -59,7 +79,8 @@ public sealed class RemoteEmailFlagSnapshotTests
             IsAnswered: false,
             IsFlagged: false,
             IsDraft: false,
-            IsDeleted: false);
+            IsDeleted: false,
+            Keywords: RemoteEmailKeywords.None);
 
         // Assert
         Assert.Equal(RemoteEmailFlagSnapshot.NeverObserved, built);

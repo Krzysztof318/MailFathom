@@ -379,7 +379,7 @@ internal sealed class MailKitImapMailboxSession(
         [
             .. answered.Select(summary => new RemoteEmailFlagObservation(
                 ImapUid.Create(summary.UniqueId.Id),
-                SnapshotOf(summary.Flags!.Value, observedAt))),
+                SnapshotOf(summary, observedAt))),
         ];
     }
 
@@ -393,19 +393,27 @@ internal sealed class MailKitImapMailboxSession(
     private static ulong? ReportedModSeqOf(IMailFolder openFolder) =>
         openFolder.HighestModSeq is > 0UL and <= (ulong)long.MaxValue ? openFolder.HighestModSeq : null;
 
-    /// <summary>Reads the five flags the stored snapshot keeps out of what the server reported.</summary>
+    /// <summary>Reads the stored snapshot out of the one <c>FLAGS</c> answer the server gave for a message.</summary>
     /// <remarks>
-    /// Only the system flags a mailbox reader asks about are kept. Keywords a server or another client defines are
-    /// deliberately not stored: they are mail-derived data nothing queries, and copying them would widen what a
-    /// deletion or an export has to account for.
+    /// The five system flags and the keywords arrive in that same answer — MailKit splits the response into
+    /// <see cref="IMessageSummary.Flags" /> and <see cref="IMessageSummary.Keywords" /> and both are filled by the one
+    /// <see cref="MessageSummaryItems.Flags" /> item the reconciliation fetch already asks for — so reading the keywords
+    /// costs no extra round trip and no wider request. What they are worth normalizing into is
+    /// <see cref="RemoteEmailKeywords" />'s to say; MailKit reports them as the server wrote them.
     /// </remarks>
-    private static RemoteEmailFlagSnapshot SnapshotOf(MessageFlags flags, DateTimeOffset observedAt) => new(
-        observedAt,
-        flags.HasFlag(MessageFlags.Seen),
-        flags.HasFlag(MessageFlags.Answered),
-        flags.HasFlag(MessageFlags.Flagged),
-        flags.HasFlag(MessageFlags.Draft),
-        flags.HasFlag(MessageFlags.Deleted));
+    private static RemoteEmailFlagSnapshot SnapshotOf(IMessageSummary summary, DateTimeOffset observedAt)
+    {
+        var flags = summary.Flags!.Value;
+
+        return new RemoteEmailFlagSnapshot(
+            observedAt,
+            flags.HasFlag(MessageFlags.Seen),
+            flags.HasFlag(MessageFlags.Answered),
+            flags.HasFlag(MessageFlags.Flagged),
+            flags.HasFlag(MessageFlags.Draft),
+            flags.HasFlag(MessageFlags.Deleted),
+            RemoteEmailKeywords.Create(summary.Keywords));
+    }
 
     private async Task<RemoteEmailContentFetchResult> FetchRawMimeWithPeekAsync(
         IMailFolder openFolder,

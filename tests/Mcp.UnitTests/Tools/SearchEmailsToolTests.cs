@@ -84,6 +84,8 @@ public sealed class SearchEmailsToolTests
             receivedOnOrAfter: rangeStart,
             receivedBefore: rangeEnd,
             isRemotelySeen: false,
+            isRemotelyFlagged: true,
+            keyword: "$Junk",
             hasAttachments: true,
             resultLimit: 10,
             cancellationToken: TestContext.Current.CancellationToken);
@@ -99,6 +101,8 @@ public sealed class SearchEmailsToolTests
         Assert.Equal(rangeStart, selection.ReceivedOnOrAfter);
         Assert.Equal(rangeEnd, selection.ReceivedBefore);
         Assert.False(selection.IsRemotelySeen);
+        Assert.True(selection.IsRemotelyFlagged);
+        Assert.Equal("$JUNK", selection.Keyword);
         Assert.True(selection.HasAttachments);
         Assert.Equal(Query, index.LastQueryText?.Value);
         Assert.Equal(10, index.LastLimit);

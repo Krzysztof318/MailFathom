@@ -55,6 +55,8 @@ the same reason. It stays distinguishable from a message whose body was genuinel
 | `ReceivedOnOrAfter` | Inclusive start of the received range | no start |
 | `ReceivedBefore` | Exclusive end of the received range | no end |
 | `IsRemotelySeen` | The remote `\Seen` state to require | either state |
+| `IsRemotelyFlagged` | The remote `\Flagged` state to require | either state |
+| `Keyword` | One keyword the email must carry, compared without regard to case | any keyword |
 | `HasAttachments` | Whether attachments are required | either |
 | `IncludeJunkMail` | Whether the account's junk folder takes part | it does not |
 | `ResultLimit` | How many ranked results to return | the default of 20 |

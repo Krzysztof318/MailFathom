@@ -73,6 +73,8 @@ public sealed class SearchEmailsToolMetadataTests
             "receivedOnOrAfter",
             "receivedBefore",
             "isRemotelySeen",
+            "isRemotelyFlagged",
+            "keyword",
             "hasAttachments",
             "includeJunkMail",
             "resultLimit",

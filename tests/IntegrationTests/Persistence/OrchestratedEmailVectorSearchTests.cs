@@ -102,6 +102,8 @@ public sealed class OrchestratedEmailVectorSearchTests(MailFathomOrchestrationFi
         receivedOnOrAfter: null,
         receivedBefore: null,
         isRemotelySeen: null,
+        isRemotelyFlagged: null,
+        keyword: null,
         hasAttachments: null);
 
     /// <summary>Stores one synthetic message and cuts it, which is the state an account run leaves one in.</summary>

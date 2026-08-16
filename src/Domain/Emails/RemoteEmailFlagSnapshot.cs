@@ -11,6 +11,7 @@ namespace MailFathom.Domain.Emails;
 /// <param name="IsFlagged">Whether the server reported the <c>\Flagged</c> flag.</param>
 /// <param name="IsDraft">Whether the server reported the <c>\Draft</c> flag.</param>
 /// <param name="IsDeleted">Whether the server reported the <c>\Deleted</c> flag.</param>
+/// <param name="Keywords">The keywords the server reported beside those five, which are flags nobody standardized.</param>
 /// <remarks>
 /// <para>
 /// The snapshot is an observation of server state and travels in one direction only: MailFathom reads mail read-only, so
@@ -20,8 +21,13 @@ namespace MailFathom.Domain.Emails;
 /// <para>
 /// <paramref name="ObservedAt" /> is what separates "the server reported none of these flags" from "nobody has looked
 /// yet", which no combination of the booleans can express on its own. A caller that filters or displays a flag reads it
-/// together with the timestamp, because <see cref="NeverObserved" /> carries every flag as <see langword="false" />
-/// without having asked any server.
+/// together with the timestamp, because <see cref="NeverObserved" /> carries every flag as <see langword="false" /> and
+/// no keyword at all without having asked any server.
+/// </para>
+/// <para>
+/// The five booleans and the keywords are one observation rather than two, because one <c>FLAGS</c> response carries
+/// both and the timestamp answers for all of them. What separates them is only that the five have meanings the protocol
+/// fixes, while a keyword means whatever the client that set it meant.
 /// </para>
 /// </remarks>
 public sealed record RemoteEmailFlagSnapshot(
@@ -30,7 +36,8 @@ public sealed record RemoteEmailFlagSnapshot(
     bool IsAnswered,
     bool IsFlagged,
     bool IsDraft,
-    bool IsDeleted)
+    bool IsDeleted,
+    RemoteEmailKeywords Keywords)
 {
     /// <summary>Gets the snapshot of an email whose remote flags no run has read yet.</summary>
     public static RemoteEmailFlagSnapshot NeverObserved { get; } = new(
@@ -39,7 +46,8 @@ public sealed record RemoteEmailFlagSnapshot(
         IsAnswered: false,
         IsFlagged: false,
         IsDraft: false,
-        IsDeleted: false);
+        IsDeleted: false,
+        RemoteEmailKeywords.None);
 
     /// <summary>Gets whether these flags were read from a server rather than never observed.</summary>
     public bool WasObserved => this.ObservedAt is not null;

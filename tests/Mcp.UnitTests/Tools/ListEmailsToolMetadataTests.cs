@@ -71,6 +71,8 @@ public sealed class ListEmailsToolMetadataTests
             "receivedOnOrAfter",
             "receivedBefore",
             "isRemotelySeen",
+            "isRemotelyFlagged",
+            "keyword",
             "hasAttachments",
             "includeJunkMail",
             "direction",

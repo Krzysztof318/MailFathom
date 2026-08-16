@@ -220,6 +220,8 @@ public sealed class OrchestratedEmailSearchIndexReaderTests(MailFathomOrchestrat
         receivedOnOrAfter: null,
         receivedBefore: null,
         isRemotelySeen: null,
+        isRemotelyFlagged: null,
+        keyword: null,
         hasAttachments: null);
 
     /// <summary>Ensures the seeded folder exists and returns the selection every test in this class searches through.</summary>

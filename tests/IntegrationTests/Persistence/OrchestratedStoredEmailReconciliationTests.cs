@@ -252,7 +252,8 @@ public sealed class OrchestratedStoredEmailReconciliationTests(MailFathomOrchest
         IsAnswered: false,
         IsFlagged: false,
         IsDraft: false,
-        IsDeleted: false);
+        IsDeleted: false,
+        Keywords: RemoteEmailKeywords.None);
 
     private static RemoteEmailFlagSnapshot FlaggedAt(DateTimeOffset observedAt) => new(
         observedAt,
@@ -260,7 +261,8 @@ public sealed class OrchestratedStoredEmailReconciliationTests(MailFathomOrchest
         IsAnswered: false,
         IsFlagged: true,
         IsDraft: false,
-        IsDeleted: false);
+        IsDeleted: false,
+        Keywords: RemoteEmailKeywords.None);
 
     /// <summary>Writes one email per UID through the production upsert, indexed so a test can name a row by its UID.</summary>
     private static async Task<IReadOnlyDictionary<uint, StoredEmailId>> StoreEmailsAsync(
@@ -378,6 +380,8 @@ public sealed class OrchestratedStoredEmailReconciliationTests(MailFathomOrchest
                     receivedOnOrAfter: null,
                     receivedBefore: null,
                     isRemotelySeen: null,
+                    isRemotelyFlagged: null,
+                    keyword: null,
                     hasAttachments: null,
                     EmailTimelineDirection.NewestFirst),
                 continueAfter: null,
@@ -400,6 +404,8 @@ public sealed class OrchestratedStoredEmailReconciliationTests(MailFathomOrchest
                     receivedOnOrAfter: null,
                     receivedBefore: null,
                     isRemotelySeen: null,
+                    isRemotelyFlagged: null,
+                    keyword: null,
                     hasAttachments: null);
                 var queryText = EmailSearchQueryText.Create(ReconciledTerm);
 

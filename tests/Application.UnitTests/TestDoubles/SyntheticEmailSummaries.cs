@@ -74,7 +74,8 @@ internal static class SyntheticEmailSummaries
                 IsAnswered: false,
                 IsFlagged: false,
                 IsDraft: false,
-                IsDeleted: false),
+                IsDeleted: false,
+                Keywords: RemoteEmailKeywords.None),
         };
 
     /// <summary>Builds a run of summaries one day apart, oldest first, so a test can page over a known order.</summary>

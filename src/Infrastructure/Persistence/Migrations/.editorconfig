@@ -10,5 +10,6 @@
 # them.
 
 [*.cs]
+dotnet_diagnostic.CA1825.severity = none # Avoid unnecessary zero-length array allocations.
 dotnet_diagnostic.CA1861.severity = none # Prefer static readonly fields over constant array arguments.
 dotnet_diagnostic.IDE0005.severity = none # Using directive is unnecessary.

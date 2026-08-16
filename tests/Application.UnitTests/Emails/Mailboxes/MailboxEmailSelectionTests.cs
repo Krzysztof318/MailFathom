@@ -6,6 +6,7 @@ using MailFathom.Application.Accounts;
 using MailFathom.Application.Emails.Mailboxes;
 using MailFathom.Application.Folders;
 using MailFathom.Domain.Accounts;
+using MailFathom.Domain.Emails;
 using MailFathom.Domain.Folders;
 using MailFathom.Domain.Synchronization;
 using MailFathom.TestSupport;
@@ -58,6 +59,91 @@ public sealed class MailboxEmailSelectionTests
 
         // Assert
         Assert.Equal("sender address", failure.FilterName);
+    }
+
+    /// <summary>A keyword is compared without regard to case, so which case a caller wrote it in never decides a match.</summary>
+    [Theory]
+    [InlineData("$Junk")]
+    [InlineData("$JUNK")]
+    [InlineData("  $junk  ")]
+    public void Create_KeywordFilter_KeepsTheComparisonFormStoredKeywordsUse(string keyword)
+    {
+        // Act
+        var selection = SelectionWith(keyword: keyword);
+
+        // Assert
+        Assert.Equal("$JUNK", selection.Keyword);
+    }
+
+    /// <summary>An empty keyword is no filter rather than a filter for nothing, which is how every other optional text filter reads.</summary>
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public void Create_BlankKeywordFilter_NamesNoKeyword(string? keyword)
+    {
+        // Act
+        var selection = SelectionWith(keyword: keyword);
+
+        // Assert
+        Assert.Null(selection.Keyword);
+    }
+
+    /// <summary>No stored keyword carries a control character, so such a filter would match nothing and is refused instead of returning an empty page that reads as an answer.</summary>
+    [Fact]
+    public void Create_KeywordCarryingAControlCharacter_IsRejected()
+    {
+        // Act
+        var failure = Assert.Throws<MailboxQueryFilterInvalidException>(() =>
+            SelectionWith(keyword: "$Ju\u0001nk"));
+
+        // Assert
+        Assert.Equal("keyword", failure.FilterName);
+    }
+
+    /// <summary>The bound is the one the stored keywords were kept under, so a longer filter could not match any of them.</summary>
+    [Fact]
+    public void Create_KeywordLongerThanTheLimit_IsRejected()
+    {
+        // Arrange
+        var overlyLongKeyword = new string('a', RemoteEmailKeywords.MaximumKeywordLength + 1);
+
+        // Act
+        var failure = Assert.Throws<MailboxQueryFilterInvalidException>(() =>
+            SelectionWith(keyword: overlyLongKeyword));
+
+        // Assert
+        Assert.Equal("keyword", failure.FilterName);
+    }
+
+    /// <summary>
+    /// A cursor names a boundary in one walk over one filtered set, so every filter is part of the text it is
+    /// authenticated against. A flag or keyword filter left out of it would let a cursor issued over the starred mail
+    /// be presented against the whole mailbox.
+    /// </summary>
+    [Fact]
+    public void Create_TheFlagAndKeywordFilters_ArePartOfWhatACursorIsAuthenticatedAgainst()
+    {
+        // Act
+        var unfiltered = SelectionWith();
+        var flagged = SelectionWith(isRemotelyFlagged: true);
+        var unflagged = SelectionWith(isRemotelyFlagged: false);
+        var keyworded = SelectionWith(keyword: "$Junk");
+
+        // Assert
+        Assert.Equal(4, new[] { unfiltered, flagged, unflagged, keyworded }.Select(selection => selection.CanonicalText).Distinct(StringComparer.Ordinal).Count());
+    }
+
+    /// <summary>Two requests that wrote one keyword in different cases select the same mail, so they are one walk and their cursors are interchangeable.</summary>
+    [Fact]
+    public void Create_OneKeywordWrittenInTwoCases_IsOneWalk()
+    {
+        // Act
+        var written = SelectionWith(keyword: "$Junk");
+        var shouted = SelectionWith(keyword: "$JUNK");
+
+        // Assert
+        Assert.Equal(written.CanonicalText, shouted.CanonicalText);
     }
 
     /// <summary>Nothing in the address grammar bounds a length, so a filter longer than any column could hold is refused.</summary>
@@ -232,6 +318,8 @@ public sealed class MailboxEmailSelectionTests
             receivedOnOrAfter: null,
             receivedBefore: null,
             isRemotelySeen: null,
+            isRemotelyFlagged: null,
+            keyword: null,
             hasAttachments: null));
     }
 
@@ -263,6 +351,8 @@ public sealed class MailboxEmailSelectionTests
         DateTimeOffset? receivedOnOrAfter = null,
         DateTimeOffset? receivedBefore = null,
         bool? isRemotelySeen = null,
+        bool? isRemotelyFlagged = null,
+        string? keyword = null,
         bool? hasAttachments = null) => MailboxEmailSelection.Create(
         scope ?? MailboxScope.NothingReadable,
         senderAddress,
@@ -271,5 +361,7 @@ public sealed class MailboxEmailSelectionTests
         receivedOnOrAfter,
         receivedBefore,
         isRemotelySeen,
+        isRemotelyFlagged,
+        keyword,
         hasAttachments);
 }

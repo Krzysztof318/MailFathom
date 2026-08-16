@@ -1245,6 +1245,14 @@ folder no longer holds rather than to fail the command, so the answer describes 
 and **silence is the finding**. A UID the server answered for has its stored flag snapshot refreshed; a UID it said
 nothing about is a message that left the folder.
 
+One `FLAGS` answer carries both halves of the snapshot: the five system flags and the keywords a client or a server set
+beside them, such as `$Junk` or a label. Both are refreshed together, so reading the keywords costs no wider request and
+no second round trip, and the stored value stays a mirror of the last observation rather than becoming state of its own.
+What one message keeps is bounded — at most 64 keywords of at most 64 characters each, folded to one case and
+deduplicated — and a server reporting more has the excess discarded rather than failing the window, because a window
+exists to record what the server said about mail that is already stored.
+[Stored email schema](../architecture/stored-email-schema.md) describes the column and its index.
+
 ### Asking only about what changed
 
 A server that supports modification sequences can be asked a narrower question, and the checkpoint records what it needs

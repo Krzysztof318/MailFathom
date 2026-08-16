@@ -33,6 +33,8 @@ divergence neither copy would look wrong for on its own.
 | `ReceivedOnOrAfter` | Inclusive start of the received range | no start |
 | `ReceivedBefore` | Exclusive end of the received range | no end |
 | `IsRemotelySeen` | The remote `\Seen` state to require | either state |
+| `IsRemotelyFlagged` | The remote `\Flagged` state to require | either state |
+| `Keyword` | One keyword the email must carry, compared without regard to case | any keyword |
 | `HasAttachments` | Whether attachments are required | either |
 | `IncludeJunkMail` | Whether the account's junk folder takes part | it does not |
 | `Direction` | Which end of the timeline to read from | `NewestFirst` |
@@ -78,6 +80,10 @@ and its result would read as an answer about the mailbox.
   caller writes are escaped, so a fragment of `%` matches the character rather than every subject. A control character is
   refused: PostgreSQL text cannot hold a zero byte, so a fragment carrying one would leave the query as a provider
   exception rather than as a stable failure, and no subject anyone searches part of contains one.
+- **A keyword** is folded the way the stored keywords were, so a caller writing `$Junk` matches mail whose server
+  reported `$junk`, and is matched whole rather than as a fragment. A value no stored keyword could be — longer than 64
+  characters, or carrying a control character — is refused with `51002 MailboxQueryFilterInvalid` rather than kept as a
+  filter that matches nothing, for the reason an unusable address is.
 - **A received range** may be unbounded at either end; only an unbounded page is disallowed. A range whose end is not
   after its start selects nothing and is refused. An email whose received timestamp is unknown falls inside neither
   bound, so naming either one excludes undated mail. Each bound names an instant, so it may be written at any UTC offset
@@ -221,6 +227,13 @@ what separates "the server reported none of these flags" from "nobody has looked
 booleans can express on its own. Reconciliation refreshes the snapshot one bounded window per run, so a row it has not
 reached yet still carries the never-observed value and matches the unseen side of `IsRemotelySeen` — and `WasObserved` is
 how a caller tells the two apart.
+
+Beside the five system flags the snapshot carries `RemoteEmailKeywords`, the flags the protocol leaves to whoever set
+them. RFC 9051 compares flag names without regard to case, so they are held in one case, deduplicated, and ordered: two
+observations that found the same keywords produce the same value whatever order the server listed them in, which is what
+keeps the stored mirror from being rewritten by a server that reorders its own answer. What one email keeps is bounded —
+at most 64 keywords of at most 64 characters each — and the excess is discarded rather than failing the window, because
+a window exists to record what the server said about mail that is already stored.
 
 The snapshot travels in one direction only. Nothing in any read path turns a flag into an IMAP `STORE`.
 

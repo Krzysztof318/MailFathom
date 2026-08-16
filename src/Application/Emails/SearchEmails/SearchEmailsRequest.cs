@@ -63,6 +63,12 @@ public sealed record SearchEmailsRequest
     /// <summary>Gets the remote <c>\Seen</c> state to require, or <see langword="null" /> for either.</summary>
     public bool? IsRemotelySeen { get; init; }
 
+    /// <summary>Gets the remote <c>\Flagged</c> state to require, or <see langword="null" /> for either.</summary>
+    public bool? IsRemotelyFlagged { get; init; }
+
+    /// <summary>Gets the keyword an email must carry, in any case, or <see langword="null" /> for any keyword.</summary>
+    public string? Keyword { get; init; }
+
     /// <summary>Gets whether attachments are required, or <see langword="null" /> for either.</summary>
     public bool? HasAttachments { get; init; }
 

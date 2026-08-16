@@ -109,6 +109,8 @@ public sealed class EmailVectorSearchIndexReaderCommandTests
             receivedOnOrAfter: null,
             receivedBefore: null,
             isRemotelySeen: null,
+            isRemotelyFlagged: null,
+            keyword: null,
             hasAttachments: true);
 
         // Act
@@ -199,5 +201,7 @@ public sealed class EmailVectorSearchIndexReaderCommandTests
         receivedOnOrAfter: null,
         receivedBefore: null,
         isRemotelySeen: null,
+        isRemotelyFlagged: null,
+        keyword: null,
         hasAttachments: null);
 }

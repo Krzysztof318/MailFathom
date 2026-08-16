@@ -333,7 +333,8 @@ public sealed class MailboxReconcilerTests
                     IsAnswered: true,
                     IsFlagged: false,
                     IsDraft: false,
-                    IsDeleted: true)),
+                    IsDeleted: true,
+                    Keywords: RemoteEmailKeywords.None)),
         ];
         mailboxSession
             .ObserveWindowWithoutSettingSeenAsync(Arg.Any<IReadOnlyList<ImapUid>>(), Arg.Any<ulong?>(), Arg.Any<CancellationToken>())
@@ -1038,7 +1039,8 @@ public sealed class MailboxReconcilerTests
                         IsAnswered: false,
                         IsFlagged: false,
                         IsDraft: false,
-                        IsDeleted: false))),
+                        IsDeleted: false,
+                        Keywords: RemoteEmailKeywords.None))),
             ],
             [.. confirmedUids.Select(ImapUid.Create)],
             FolderHighestModSeq: 91UL);
@@ -1064,7 +1066,8 @@ public sealed class MailboxReconcilerTests
                     IsAnswered: false,
                     IsFlagged: false,
                     IsDraft: false,
-                    IsDeleted: false))),
+                    IsDeleted: false,
+                    Keywords: RemoteEmailKeywords.None))),
         ];
 
         mailboxSession
@@ -1097,7 +1100,8 @@ public sealed class MailboxReconcilerTests
                     IsAnswered: false,
                     IsFlagged: false,
                     IsDraft: false,
-                    IsDeleted: false))),
+                    IsDeleted: false,
+                    Keywords: RemoteEmailKeywords.None))),
         ];
 
         mailboxSession
@@ -1411,7 +1415,8 @@ public sealed class MailboxReconcilerTests
                 IsAnswered: false,
                 IsFlagged: false,
                 IsDraft: false,
-                IsDeleted: false);
+                IsDeleted: false,
+                Keywords: RemoteEmailKeywords.None);
         }
 
         public uint Uid { get; }
