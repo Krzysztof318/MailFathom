@@ -278,6 +278,53 @@ public sealed class SearchEmailsToolTests
         Assert.Equal(0, index.ReadCount);
     }
 
+    /// <summary>
+    /// A keyword no stored keyword could be would narrow the search to nothing, and an empty result set reads as an
+    /// answer about the mailbox rather than as a filter the boundary refused, so the refusal reaches the caller.
+    /// </summary>
+    [Theory]
+    [InlineData("$Ju\u0001nk")]
+    [InlineData("keyword\u0000")]
+    public async Task SearchEmailsAsync_KeywordNoStoredKeywordCouldBe_IsRefusedWithoutReading(string unusable)
+    {
+        // Arrange
+        var index = new StubEmailSearchIndexReader();
+        var tool = ToolOver(index);
+
+        // Act
+        var failure = await Assert.ThrowsAsync<MailboxQueryFilterInvalidException>(
+            () => tool.SearchEmailsAsync(
+                Query,
+                keyword: unusable,
+                cancellationToken: TestContext.Current.CancellationToken));
+
+        // Assert
+        Assert.Equal(MailFathomErrorCode.MailboxQueryFilterInvalid, failure.ErrorCode);
+        Assert.Equal("keyword", failure.FilterName);
+        Assert.Equal(0, index.ReadCount);
+    }
+
+    /// <summary>The bound is the one the stored keywords were kept under, so a longer filter could match none of them.</summary>
+    [Fact]
+    public async Task SearchEmailsAsync_KeywordLongerThanTheBound_IsRefusedWithoutReading()
+    {
+        // Arrange
+        var index = new StubEmailSearchIndexReader();
+        var tool = ToolOver(index);
+        var overlyLongKeyword = new string('a', RemoteEmailKeywords.MaximumKeywordLength + 1);
+
+        // Act
+        var failure = await Assert.ThrowsAsync<MailboxQueryFilterInvalidException>(
+            () => tool.SearchEmailsAsync(
+                Query,
+                keyword: overlyLongKeyword,
+                cancellationToken: TestContext.Current.CancellationToken));
+
+        // Assert
+        Assert.Equal("keyword", failure.FilterName);
+        Assert.Equal(0, index.ReadCount);
+    }
+
     [Fact]
     public async Task SearchEmailsAsync_MatchedEmail_PublishesTheSummaryTheRankAndTheSnippetsAsTheyWereMatched()
     {

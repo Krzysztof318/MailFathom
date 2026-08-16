@@ -128,6 +128,9 @@ public sealed class EmailTimelineFilterTests
             FilterWith(receivedBefore: FirstJuly),
             FilterWith(isRemotelySeen: true),
             FilterWith(isRemotelySeen: false),
+            FilterWith(isRemotelyFlagged: true),
+            FilterWith(isRemotelyFlagged: false),
+            FilterWith(keyword: "$Junk"),
             FilterWith(hasAttachments: true),
             FilterWith(hasAttachments: false),
         };

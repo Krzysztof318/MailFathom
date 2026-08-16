@@ -216,11 +216,14 @@ public sealed class OrchestratedStoredEmailTimelineReaderTests(MailFathomOrchest
         Assert.Equal(SeededEmailCount, await CountSeededEmailsAsync(services, binding, cancellationToken));
     }
 
-    /// <summary>Applies every filter the read model publishes, which is what proves each one translates and selects.</summary>
+    /// <summary>Applies every filter this folder can be seeded for, which is what proves each one translates and selects.</summary>
     /// <remarks>
-    /// The remote flag filter is asserted as an all-or-nothing partition deliberately. Nothing writes the flag snapshot
-    /// yet — remote flag reconciliation is not implemented — so every seeded row carries the never-observed default, and what this
-    /// establishes is that the predicate reaches the column and that such a row counts as unseen.
+    /// The seeding here stores mail and observes nothing, so every row carries the never-observed default and the
+    /// <c>isRemotelySeen</c> filter is asserted as an all-or-nothing partition: what that establishes is that the
+    /// predicate reaches the column and that an unobserved row counts as unseen. For the same reason the two filters
+    /// that need a flag actually written — <c>isRemotelyFlagged</c> and <c>keyword</c> — are covered where a window
+    /// writes one, in <c>OrchestratedStoredEmailReconciliationTests</c>, against a folder holding mail on both sides of
+    /// each. Seeding them here would mean applying a reconciliation outcome from a class about reading.
     /// </remarks>
     [Fact]
     public async Task ReadPageAsync_EachPublishedFilter_IsTranslatedAndSelectsTheMatchingEmails()
