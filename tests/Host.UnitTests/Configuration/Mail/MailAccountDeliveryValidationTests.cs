@@ -73,13 +73,18 @@ public sealed class MailAccountDeliveryValidationTests
         Assert.Equal(MailConnectionSecurity.StartTlsRequired, deliveryPolicy?.ConnectionSecurity);
     }
 
-    /// <summary>A downgrade the account refuses for reading is refused for submitting, and names the block that carries it.</summary>
+    /// <summary>
+    /// A downgrade the account refuses for reading is refused for submitting, under the rule the mode actually breaks:
+    /// a mode that is never encrypted breaks a different one from a mode that gives the server the choice, and a report
+    /// naming the wrong one would send an operator to the wrong opt-in.
+    /// </summary>
     [Theory]
-    [InlineData(MailConnectionSecurity.None)]
-    [InlineData(MailConnectionSecurity.StartTlsWhenAvailable)]
-    [InlineData(MailConnectionSecurity.Auto)]
+    [InlineData(MailConnectionSecurity.None, MailTransportSecurityViolation.UnencryptedConnectionRequiresExplicitOptIn)]
+    [InlineData(MailConnectionSecurity.StartTlsWhenAvailable, MailTransportSecurityViolation.OpportunisticEncryptionRequiresExplicitOptIn)]
+    [InlineData(MailConnectionSecurity.Auto, MailTransportSecurityViolation.OpportunisticEncryptionRequiresExplicitOptIn)]
     public void Validate_SubmissionEndpointWeakeningTheChannelWithoutTheOptIn_IsRefused(
-        MailConnectionSecurity connectionSecurity)
+        MailConnectionSecurity connectionSecurity,
+        MailTransportSecurityViolation expectedViolation)
     {
         // Arrange
         var account = CreateAccount();
@@ -93,6 +98,7 @@ public sealed class MailAccountDeliveryValidationTests
         Assert.Contains(
             results,
             result => result.ErrorMessage!.Contains("submission endpoint", StringComparison.Ordinal)
+                && result.ErrorMessage.EndsWith($"[{expectedViolation}]", StringComparison.Ordinal)
                 && result.MemberNames.Contains($"{nameof(MailSynchronizationAccountOptions.Delivery)}.{nameof(MailAccountDeliveryOptions.ConnectionSecurity)}"));
     }
 

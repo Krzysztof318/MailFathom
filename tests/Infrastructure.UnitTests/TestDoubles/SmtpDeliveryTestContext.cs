@@ -59,27 +59,6 @@ internal static class SmtpDeliveryTestContext
         return client;
     }
 
-    /// <summary>Hands out one already-connected socket per attempt and records the endpoints it was asked for.</summary>
-    /// <param name="requestedEndpoints">Every host and port the adapter opened a transport to, in order.</param>
-    /// <returns>The connector the adapter opens its transport through.</returns>
-    /// <remarks>
-    /// The socket is never connected to anything. It exists because the mail library's contract takes one, and the
-    /// scripted client does nothing with it, so a test costs no descriptor beyond the one it disposes with the client.
-    /// </remarks>
-    internal static Func<string, int, CancellationToken, Task<Socket>> CreateSocketConnector(
-        out List<(string Host, int Port)> requestedEndpoints)
-    {
-        var endpoints = new List<(string Host, int Port)>();
-        requestedEndpoints = endpoints;
-
-        return (host, port, _) =>
-        {
-            endpoints.Add((host, port));
-
-            return Task.FromResult(new Socket(SocketType.Stream, ProtocolType.Tcp));
-        };
-    }
-
     /// <summary>Builds a settings provider that resolves a password for the scripted endpoint on every attempt.</summary>
     internal static ISmtpAccountSettingsProvider CreateSettingsProvider() => CreateSettingsProvider(out _);
 
@@ -111,16 +90,23 @@ internal static class SmtpDeliveryTestContext
     }
 
     /// <summary>Builds a factory over one scripted client, the real classifier, and the host's controllable clock.</summary>
+    /// <remarks>
+    /// The transport is a parameter rather than something built here, because every attempt it serves allocates a
+    /// socket that only its owner can release: a test holds it for as long as it holds the factory. A test about a
+    /// transport that never opens supplies <paramref name="socketConnector" /> instead, which hands out no socket at
+    /// all and therefore owns nothing.
+    /// </remarks>
     internal static MailKitSmtpDeliverySessionFactory CreateFactory(
         OutboundResilienceTestHost resilience,
         ISmtpClient client,
-        Func<string, int, CancellationToken, Task<Socket>>? socketConnector = null,
+        ScriptedSubmissionTransport transport,
         ISmtpAccountSettingsProvider? settingsProvider = null,
         IMailAccessTokenSource? accessTokenSource = null,
-        MailDeliveryTimeouts? timeouts = null) =>
+        MailDeliveryTimeouts? timeouts = null,
+        Func<string, int, CancellationToken, Task<Socket>>? socketConnector = null) =>
         new(
             () => client,
-            socketConnector ?? CreateSocketConnector(out _),
+            socketConnector ?? transport.ConnectAsync,
             settingsProvider ?? CreateSettingsProvider(),
             accessTokenSource ?? new UnusedMailAccessTokenSource(),
             resilience.Executor,

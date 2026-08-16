@@ -121,7 +121,7 @@ internal static class MailKitTransportSecurityMapping
     }
 
     /// <summary>Chooses the token-bearing mechanism to authenticate with, from what survived the allow-list.</summary>
-    /// <param name="advertisedMechanisms">The mechanism set left after <see cref="RestrictAdvertisedMechanisms" /> narrowed it.</param>
+    /// <param name="advertisedMechanisms">The mechanism set left after <see cref="RestrictAdvertisedMechanisms" /> narrowed it for a mailbox connection, or <see cref="RestrictAdvertisedSubmissionMechanisms" /> for a submission one.</param>
     /// <param name="authentication">The policy that decides which mechanisms may be negotiated.</param>
     /// <param name="mechanism">The chosen mechanism when one applies; otherwise the unspecified default.</param>
     /// <returns><see langword="true" /> when the connection authenticates with an access token rather than a password.</returns>
@@ -137,7 +137,9 @@ internal static class MailKitTransportSecurityMapping
     /// An emptied set never selects a token mechanism, however token-bearing the allow-list is. The fallback an empty
     /// set permits is the IMAP <c>LOGIN</c> command, which carries a password and cannot carry a bearer token, so a
     /// token-only account facing a server that advertises nothing has already been refused by
-    /// <see cref="RestrictAdvertisedMechanisms" />.
+    /// <see cref="RestrictAdvertisedMechanisms" /> — and on the submission path by
+    /// <see cref="RestrictAdvertisedSubmissionMechanisms" />, which refuses an emptied set whatever the allow-list
+    /// permits, because SMTP has no such fallback for any account.
     /// </para>
     /// </remarks>
     internal static bool TrySelectAccessTokenMechanism(

@@ -115,9 +115,11 @@ distinguishable from the two other reasons the same call would stop: **caller ca
 arrive as the caller's token being cancelled and are propagated as cancellation, never rewritten into a timeout. A hung
 server can therefore never be read as a process shutting down, and a shutdown never as a server that stopped answering.
 
-The four sit inside the attempt budget of the `EmailDelivery` resilience class, which is what a deployment configures
-and what bounds the whole exchange; their defaults total less than its default attempt timeout so that a stage can
-expire on its own before the enclosing budget takes the attempt away from it.
+The first three bound the stages of establishing the session and sit inside the attempt budget of the `EmailDelivery`
+resilience class, which is what a deployment configures. Their defaults total 50 s against that class's 60 s default
+attempt timeout, so a stage can expire on its own before the enclosing budget takes the attempt away from it. The
+command budget is not one of them and is not part of that total: it is set on the client itself and bounds a command
+over the session once it is established, which is outside the establishment attempt.
 [Outbound resilience](../architecture/outbound-resilience.md) holds that class, why delivery has the smallest shipped
 budget of the six, and the single-layer rule the adapter follows.
 

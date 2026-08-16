@@ -24,12 +24,13 @@ public sealed class MailKitSmtpDeliverySessionTests
         // Arrange
         using var resilience = SmtpDeliveryTestContext.CreateSingleAttemptResilience();
         using var client = SmtpDeliveryTestContext.CreateClient("PLAIN");
+        using var transport = new ScriptedSubmissionTransport();
         client.Capabilities.Returns(SmtpCapabilities.Size | SmtpCapabilities.EightBitMime | SmtpCapabilities.UTF8);
         client.MaxSize.Returns(35_882_577U);
 
         // Act
         await using var session = await SmtpDeliveryTestContext
-            .CreateFactory(resilience, client)
+            .CreateFactory(resilience, client, transport)
             .OpenForDeliveryAsync(
                 SmtpDeliveryTestContext.Account,
                 SmtpDeliveryTestContext.TlsOnConnectWithPlainPolicy,
@@ -48,12 +49,13 @@ public sealed class MailKitSmtpDeliverySessionTests
         // Arrange
         using var resilience = SmtpDeliveryTestContext.CreateSingleAttemptResilience();
         using var client = SmtpDeliveryTestContext.CreateClient("PLAIN");
+        using var transport = new ScriptedSubmissionTransport();
         client.Capabilities.Returns(SmtpCapabilities.Size);
         client.MaxSize.Returns(0U);
 
         // Act
         await using var session = await SmtpDeliveryTestContext
-            .CreateFactory(resilience, client)
+            .CreateFactory(resilience, client, transport)
             .OpenForDeliveryAsync(
                 SmtpDeliveryTestContext.Account,
                 SmtpDeliveryTestContext.TlsOnConnectWithPlainPolicy,
@@ -71,18 +73,18 @@ public sealed class MailKitSmtpDeliverySessionTests
         // Arrange
         using var resilience = SmtpDeliveryTestContext.CreateSingleAttemptResilience();
         using var client = SmtpDeliveryTestContext.CreateClient("PLAIN");
-        var socketConnector = SmtpDeliveryTestContext.CreateSocketConnector(out var requestedEndpoints);
+        using var transport = new ScriptedSubmissionTransport();
 
         // Act
         await using var session = await SmtpDeliveryTestContext
-            .CreateFactory(resilience, client, socketConnector)
+            .CreateFactory(resilience, client, transport)
             .OpenForDeliveryAsync(
                 SmtpDeliveryTestContext.Account,
                 SmtpDeliveryTestContext.TlsOnConnectWithPlainPolicy,
                 TestContext.Current.CancellationToken);
 
         // Assert
-        Assert.Equal([(SmtpDeliveryTestContext.SubmissionHost, SmtpDeliveryTestContext.SubmissionPort)], requestedEndpoints);
+        Assert.Equal([(SmtpDeliveryTestContext.SubmissionHost, SmtpDeliveryTestContext.SubmissionPort)], transport.RequestedEndpoints);
         await client.Received(1).ConnectAsync(
             Arg.Any<System.Net.Sockets.Socket>(),
             SmtpDeliveryTestContext.SubmissionHost,
@@ -98,11 +100,12 @@ public sealed class MailKitSmtpDeliverySessionTests
         // Arrange
         using var resilience = SmtpDeliveryTestContext.CreateSingleAttemptResilience();
         using var client = SmtpDeliveryTestContext.CreateClient("PLAIN");
+        using var transport = new ScriptedSubmissionTransport();
         var timeouts = MailDeliveryTimeouts.Default with { Command = TimeSpan.FromSeconds(42) };
 
         // Act
         await using var session = await SmtpDeliveryTestContext
-            .CreateFactory(resilience, client, timeouts: timeouts)
+            .CreateFactory(resilience, client, transport, timeouts: timeouts)
             .OpenForDeliveryAsync(
                 SmtpDeliveryTestContext.Account,
                 SmtpDeliveryTestContext.TlsOnConnectWithPlainPolicy,
@@ -119,10 +122,11 @@ public sealed class MailKitSmtpDeliverySessionTests
         // Arrange
         using var resilience = SmtpDeliveryTestContext.CreateSingleAttemptResilience();
         using var client = SmtpDeliveryTestContext.CreateClient("PLAIN", "CRAM-MD5");
+        using var transport = new ScriptedSubmissionTransport();
 
         // Act
         await using var session = await SmtpDeliveryTestContext
-            .CreateFactory(resilience, client)
+            .CreateFactory(resilience, client, transport)
             .OpenForDeliveryAsync(
                 SmtpDeliveryTestContext.Account,
                 SmtpDeliveryTestContext.TlsOnConnectWithPlainPolicy,
@@ -142,11 +146,12 @@ public sealed class MailKitSmtpDeliverySessionTests
         // Arrange
         using var resilience = SmtpDeliveryTestContext.CreateSingleAttemptResilience();
         using var client = SmtpDeliveryTestContext.CreateClient("CRAM-MD5");
+        using var transport = new ScriptedSubmissionTransport();
 
         // Act
         var failure = await Assert.ThrowsAsync<MailAuthenticationMechanismUnavailableException>(() =>
             SmtpDeliveryTestContext
-                .CreateFactory(resilience, client)
+                .CreateFactory(resilience, client, transport)
                 .OpenForDeliveryAsync(
                     SmtpDeliveryTestContext.Account,
                     SmtpDeliveryTestContext.TlsOnConnectWithPlainPolicy,
@@ -167,11 +172,12 @@ public sealed class MailKitSmtpDeliverySessionTests
         // Arrange
         using var resilience = SmtpDeliveryTestContext.CreateSingleAttemptResilience();
         using var client = SmtpDeliveryTestContext.CreateClient("OAUTHBEARER");
+        using var transport = new ScriptedSubmissionTransport();
         var accessTokenSource = new RecordingMailAccessTokenSource(new DateTimeOffset(2026, 8, 16, 12, 0, 0, TimeSpan.Zero));
 
         // Act
         await using var session = await SmtpDeliveryTestContext
-            .CreateFactory(resilience, client, accessTokenSource: accessTokenSource)
+            .CreateFactory(resilience, client, transport, accessTokenSource: accessTokenSource)
             .OpenForDeliveryAsync(
                 SmtpDeliveryTestContext.Account,
                 SmtpDeliveryTestContext.TlsOnConnectWithOAuthBearerPolicy,
@@ -197,6 +203,7 @@ public sealed class MailKitSmtpDeliverySessionTests
         // Arrange
         using var resilience = SmtpDeliveryTestContext.CreateSingleAttemptResilience();
         using var client = SmtpDeliveryTestContext.CreateClient("PLAIN");
+        using var transport = new ScriptedSubmissionTransport();
         client.AuthenticateAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
             .ThrowsAsync(new SmtpCommandException(
                 SmtpErrorCode.UnexpectedStatusCode,
@@ -206,7 +213,7 @@ public sealed class MailKitSmtpDeliverySessionTests
         // Act
         await Assert.ThrowsAsync<SmtpCommandException>(() =>
             SmtpDeliveryTestContext
-                .CreateFactory(resilience, client)
+                .CreateFactory(resilience, client, transport)
                 .OpenForDeliveryAsync(
                     SmtpDeliveryTestContext.Account,
                     SmtpDeliveryTestContext.TlsOnConnectWithPlainPolicy,
@@ -231,9 +238,11 @@ public sealed class MailKitSmtpDeliverySessionTests
         // Arrange
         using var resilience = SmtpDeliveryTestContext.CreateSingleAttemptResilience();
         using var client = SmtpDeliveryTestContext.CreateClient("PLAIN");
+        using var transport = new ScriptedSubmissionTransport();
         var factory = SmtpDeliveryTestContext.CreateFactory(
             resilience,
             client,
+            transport,
             socketConnector: async (_, _, connectionToken) =>
             {
                 await Task.Delay(Timeout.Infinite, connectionToken);
@@ -263,9 +272,11 @@ public sealed class MailKitSmtpDeliverySessionTests
         using var resilience = SmtpDeliveryTestContext.CreateSingleAttemptResilience();
         using var caller = new CancellationTokenSource();
         using var client = SmtpDeliveryTestContext.CreateClient("PLAIN");
+        using var transport = new ScriptedSubmissionTransport();
         var factory = SmtpDeliveryTestContext.CreateFactory(
             resilience,
             client,
+            transport,
             socketConnector: async (_, _, connectionToken) =>
             {
                 await caller.CancelAsync();
@@ -288,6 +299,7 @@ public sealed class MailKitSmtpDeliverySessionTests
         // Arrange
         using var resilience = SmtpDeliveryTestContext.CreateSingleAttemptResilience();
         using var client = SmtpDeliveryTestContext.CreateClient("PLAIN");
+        using var transport = new ScriptedSubmissionTransport();
         client.AuthenticateAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
             .ThrowsAsync(new SmtpCommandException(
                 SmtpErrorCode.UnexpectedStatusCode,
@@ -297,7 +309,7 @@ public sealed class MailKitSmtpDeliverySessionTests
         // Act
         var failure = await Assert.ThrowsAsync<MailDeliveryUnavailableException>(() =>
             SmtpDeliveryTestContext
-                .CreateFactory(resilience, client)
+                .CreateFactory(resilience, client, transport)
                 .OpenForDeliveryAsync(
                     SmtpDeliveryTestContext.Account,
                     SmtpDeliveryTestContext.TlsOnConnectWithPlainPolicy,
@@ -315,6 +327,7 @@ public sealed class MailKitSmtpDeliverySessionTests
         // Arrange
         using var resilience = SmtpDeliveryTestContext.CreateSingleAttemptResilience();
         using var client = SmtpDeliveryTestContext.CreateClient("PLAIN");
+        using var transport = new ScriptedSubmissionTransport();
         client.AuthenticateAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
             .ThrowsAsync(new AuthenticationException("The credential was refused."));
         var settingsProvider = SmtpDeliveryTestContext.CreateSettingsProvider(out var resolvedMaterial);
@@ -322,7 +335,7 @@ public sealed class MailKitSmtpDeliverySessionTests
         // Act
         await Assert.ThrowsAsync<AuthenticationException>(() =>
             SmtpDeliveryTestContext
-                .CreateFactory(resilience, client, settingsProvider: settingsProvider)
+                .CreateFactory(resilience, client, transport, settingsProvider: settingsProvider)
                 .OpenForDeliveryAsync(
                     SmtpDeliveryTestContext.Account,
                     SmtpDeliveryTestContext.TlsOnConnectWithPlainPolicy,
@@ -340,9 +353,10 @@ public sealed class MailKitSmtpDeliverySessionTests
         // Arrange
         using var resilience = SmtpDeliveryTestContext.CreateSingleAttemptResilience();
         using var client = SmtpDeliveryTestContext.CreateClient("PLAIN");
+        using var transport = new ScriptedSubmissionTransport();
         client.IsConnected.Returns(true);
         var session = await SmtpDeliveryTestContext
-            .CreateFactory(resilience, client)
+            .CreateFactory(resilience, client, transport)
             .OpenForDeliveryAsync(
                 SmtpDeliveryTestContext.Account,
                 SmtpDeliveryTestContext.TlsOnConnectWithPlainPolicy,

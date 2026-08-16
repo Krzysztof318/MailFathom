@@ -11,16 +11,17 @@ namespace MailFathom.Infrastructure.Mail.MailKit.Delivery;
 /// <param name="Command">How long any command over the established session may take, which the client enforces itself.</param>
 /// <remarks>
 /// <para>
-/// These sit inside the attempt budget of the <c>EmailDelivery</c> resilience class, which is the value a deployment
-/// configures and the one that bounds the whole exchange. What they add is attribution: a submission that stops is
-/// reported against the stage it stopped in rather than as one unexplained wait, and a stage that expires is a
+/// The first three bound the stages of establishing a session, which run inside the attempt budget of the
+/// <c>EmailDelivery</c> resilience class. What they add is attribution: an establishment that stops is reported against
+/// the stage it stopped in rather than as one unexplained wait, and a stage that expires is a
 /// <see cref="TimeoutException" /> rather than a cancellation, so a hung server can never be read as a host shutting
-/// down.
+/// down. Their defaults total less than that class's default attempt timeout, which is what keeps a stage able to
+/// expire on its own before the enclosing budget takes the attempt away from it.
 /// </para>
 /// <para>
-/// The defaults total less than that class's default attempt timeout, which keeps every stage able to expire on its own
-/// before the enclosing budget takes the attempt away from it — the arrangement that makes the attribution worth
-/// anything.
+/// <see cref="Command" /> is not one of them. It is applied to the client as its own timeout and bounds a command over
+/// the established session, which is outside the establishment attempt, so it is not part of the total above and adding
+/// it to one would describe a budget nothing enforces.
 /// </para>
 /// </remarks>
 internal sealed record MailDeliveryTimeouts(
