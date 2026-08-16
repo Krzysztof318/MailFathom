@@ -8,7 +8,7 @@ using Xunit;
 
 namespace MailFathom.Domain.UnitTests.Delivery;
 
-public sealed class OutgoingMessageRecordTests
+public sealed class OutgoingEmailRecordTests
 {
     private static readonly DateTimeOffset Answered =
         DateTimeOffset.Parse("2026-08-16T10:00:04Z", CultureInfo.InvariantCulture);
@@ -18,13 +18,13 @@ public sealed class OutgoingMessageRecordTests
     /// three terminal ones stop the send being attempted at all.
     /// </summary>
     [Theory]
-    [InlineData(OutgoingMessageStage.Recorded, false, false)]
-    [InlineData(OutgoingMessageStage.TransmissionBegun, true, false)]
-    [InlineData(OutgoingMessageStage.Sent, false, true)]
-    [InlineData(OutgoingMessageStage.Refused, false, true)]
-    [InlineData(OutgoingMessageStage.Cancelled, false, true)]
+    [InlineData(OutgoingEmailStage.Recorded, false, false)]
+    [InlineData(OutgoingEmailStage.TransmissionBegun, true, false)]
+    [InlineData(OutgoingEmailStage.Sent, false, true)]
+    [InlineData(OutgoingEmailStage.Refused, false, true)]
+    [InlineData(OutgoingEmailStage.Cancelled, false, true)]
     public void Stage_EveryStageASendCanBeResumedFrom_ReportsWhetherItIsUndecidableOrFinished(
-        OutgoingMessageStage stage,
+        OutgoingEmailStage stage,
         bool expectedUnknownOutcome,
         bool expectedTerminal)
     {
@@ -54,7 +54,7 @@ public sealed class OutgoingMessageRecordTests
 
         // Act
         var record = OutgoingDeliveryFixture.Record(
-            OutgoingMessageStage.Recorded,
+            OutgoingEmailStage.Recorded,
             OutgoingRecipientOutcome.Answered(delivered, OutgoingRecipientStatus.Accepted, 250, Answered),
             OutgoingRecipientOutcome.Answered(refused, OutgoingRecipientStatus.Refused, 550, Answered),
             OutgoingRecipientOutcome.Answered(deferred, OutgoingRecipientStatus.Pending, 451, Answered));
@@ -88,7 +88,7 @@ public sealed class OutgoingMessageRecordTests
 
         // Act
         var record = OutgoingDeliveryFixture.Record(
-            OutgoingMessageStage.Sent,
+            OutgoingEmailStage.Sent,
             OutgoingRecipientOutcome.Answered(delivered, OutgoingRecipientStatus.Accepted, 250, Answered));
 
         // Assert
@@ -105,7 +105,7 @@ public sealed class OutgoingMessageRecordTests
 
         // Act
         var record = OutgoingDeliveryFixture.Record(
-            OutgoingMessageStage.Recorded,
+            OutgoingEmailStage.Recorded,
             OutgoingRecipientOutcome.Unanswered(anna),
             OutgoingRecipientOutcome.Unanswered(bruno));
 

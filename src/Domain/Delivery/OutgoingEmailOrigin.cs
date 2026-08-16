@@ -15,7 +15,7 @@ namespace MailFathom.Domain.Delivery;
 /// message originates from an act somebody authored.
 /// </para>
 /// </remarks>
-public enum OutgoingMessageOrigin
+public enum OutgoingEmailOrigin
 {
     /// <summary>A rule matched an email and asked for the message without anybody present.</summary>
     Rule = 0,

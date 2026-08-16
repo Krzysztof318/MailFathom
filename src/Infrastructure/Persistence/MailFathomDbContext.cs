@@ -204,10 +204,21 @@ internal sealed class MailFathomDbContext : DbContext
     /// nothing further, which is the whole of what stops one authored request putting two copies of a message in
     /// somebody's mailbox — a duplication that, unlike a local one, cannot be withdrawn afterwards.
     /// </remarks>
-    internal const string OutgoingMessageIdentityUniqueIndexName = "ix_outgoing_messages_identity";
+    internal const string OutgoingEmailIdentityUniqueIndexName = "ix_outgoing_emails_identity";
 
     /// <summary>The index the outbox is read through, filtered to the sends that have not finished.</summary>
-    internal const string OutgoingMessageOutstandingIndexName = "ix_outgoing_messages_outstanding";
+    internal const string OutgoingEmailOutstandingIndexName = "ix_outgoing_emails_outstanding";
+
+    /// <summary>The foreign key that removes an outgoing message's recipients with the record.</summary>
+    /// <remarks>
+    /// Named because EF's convention composes one from both table names and PostgreSQL truncates an identifier at 63
+    /// characters, which would leave a permanent constraint whose name ends in a tilde.
+    /// </remarks>
+    internal const string OutgoingEmailRecipientForeignKeyName = "fk_outgoing_email_recipients_emails";
+
+    /// <summary>The foreign key that removes the stored MIME with the record that says who it was for.</summary>
+    /// <remarks>Named for the reason above: the composed name would be truncated and permanent.</remarks>
+    internal const string OutgoingEmailContentForeignKeyName = "fk_outgoing_email_contents_emails";
 
     /// <summary>The uniqueness a job's idempotency rests on, which spans every state a row can reach.</summary>
     internal const string JobIdentityUniqueIndexName = "ix_jobs_identity";
@@ -283,13 +294,13 @@ internal sealed class MailFathomDbContext : DbContext
 
     internal DbSet<MailboxMutationEntity> MailboxMutations => this.Set<MailboxMutationEntity>();
 
-    internal DbSet<OutgoingMessageEntity> OutgoingMessages => this.Set<OutgoingMessageEntity>();
+    internal DbSet<OutgoingEmailEntity> OutgoingEmails => this.Set<OutgoingEmailEntity>();
 
-    internal DbSet<OutgoingMessageRecipientEntity> OutgoingMessageRecipients =>
-        this.Set<OutgoingMessageRecipientEntity>();
+    internal DbSet<OutgoingEmailRecipientEntity> OutgoingEmailRecipients =>
+        this.Set<OutgoingEmailRecipientEntity>();
 
-    internal DbSet<OutgoingMessageContentEntity> OutgoingMessageContents =>
-        this.Set<OutgoingMessageContentEntity>();
+    internal DbSet<OutgoingEmailContentEntity> OutgoingEmailContents =>
+        this.Set<OutgoingEmailContentEntity>();
 
     internal DbSet<MailboxMutationAuditEntryEntity> MailboxMutationAuditEntries =>
         this.Set<MailboxMutationAuditEntryEntity>();
@@ -623,9 +634,9 @@ internal sealed class MailFathomDbContext : DbContext
         });
 
         ConfigureMailboxMutation(modelBuilder);
-        ConfigureOutgoingMessage(modelBuilder);
-        ConfigureOutgoingMessageRecipient(modelBuilder);
-        ConfigureOutgoingMessageContent(modelBuilder);
+        ConfigureOutgoingEmail(modelBuilder);
+        ConfigureOutgoingEmailRecipient(modelBuilder);
+        ConfigureOutgoingEmailContent(modelBuilder);
         ConfigureMailboxMutationAuditEntry(modelBuilder);
         ConfigureMailAnsweringAuditEntry(modelBuilder);
         ConfigureMailRuleExecution(modelBuilder);
@@ -1172,15 +1183,15 @@ internal sealed class MailFathomDbContext : DbContext
     /// be left out: a send cannot be resumed without knowing who is still owed it.
     /// </para>
     /// </remarks>
-    private static void ConfigureOutgoingMessage(ModelBuilder modelBuilder) =>
-        modelBuilder.Entity<OutgoingMessageEntity>(entity =>
+    private static void ConfigureOutgoingEmail(ModelBuilder modelBuilder) =>
+        modelBuilder.Entity<OutgoingEmailEntity>(entity =>
         {
-            entity.ToTable("outgoing_messages");
+            entity.ToTable("outgoing_emails");
             entity.HasKey(message => message.Id);
             entity.Property(message => message.Id).ValueGeneratedNever();
             entity.Property(message => message.MailboxAccountId).HasMaxLength(128).IsRequired();
             entity.Property(message => message.RequesterIdentity)
-                .HasMaxLength(OutgoingMessageRequester.MaximumIdentityLength)
+                .HasMaxLength(OutgoingEmailRequester.MaximumIdentityLength)
                 .IsRequired();
 
             // Stored as text for the reason the mutation stage is: both stay readable in an ad-hoc audit query and
@@ -1198,19 +1209,19 @@ internal sealed class MailFathomDbContext : DbContext
                 message.RequesterIdentity,
             })
                 .IsUnique()
-                .HasDatabaseName(OutgoingMessageIdentityUniqueIndexName);
+                .HasDatabaseName(OutgoingEmailIdentityUniqueIndexName);
 
             // Filtered to the sends that have not finished, so the structure holds what is queued and in flight rather
             // than every message the deployment has ever sent. A refused send stays in for the reason an abandoned
             // mutation does: giving up on it is what stops it being attempted, and it would be worth nothing if it also
             // stopped it being seen — so the filter names the three terminal stages rather than only the successful one.
             entity.HasIndex(message => new { message.MailboxAccountId, message.RecordedAt })
-                .HasDatabaseName(OutgoingMessageOutstandingIndexName)
+                .HasDatabaseName(OutgoingEmailOutstandingIndexName)
                 .HasFilter(
-                    $"\"{nameof(OutgoingMessageEntity.Stage)}\" NOT IN ("
-                    + $"'{nameof(OutgoingMessageStage.Sent)}', "
-                    + $"'{nameof(OutgoingMessageStage.Refused)}', "
-                    + $"'{nameof(OutgoingMessageStage.Cancelled)}')");
+                    $"\"{nameof(OutgoingEmailEntity.Stage)}\" NOT IN ("
+                    + $"'{nameof(OutgoingEmailStage.Sent)}', "
+                    + $"'{nameof(OutgoingEmailStage.Refused)}', "
+                    + $"'{nameof(OutgoingEmailStage.Cancelled)}')");
         });
 
     /// <summary>Declares the people one outgoing message is offered to, and what the server said about each.</summary>
@@ -1226,11 +1237,11 @@ internal sealed class MailFathomDbContext : DbContext
     /// request named them, which is the order a composed message writes its headers in.
     /// </para>
     /// </remarks>
-    private static void ConfigureOutgoingMessageRecipient(ModelBuilder modelBuilder) =>
-        modelBuilder.Entity<OutgoingMessageRecipientEntity>(entity =>
+    private static void ConfigureOutgoingEmailRecipient(ModelBuilder modelBuilder) =>
+        modelBuilder.Entity<OutgoingEmailRecipientEntity>(entity =>
         {
-            entity.ToTable("outgoing_message_recipients");
-            entity.HasKey(recipient => new { recipient.OutgoingMessageId, recipient.Ordinal });
+            entity.ToTable("outgoing_email_recipients");
+            entity.HasKey(recipient => new { recipient.OutgoingEmailId, recipient.Ordinal });
             entity.Property(recipient => recipient.Address)
                 .HasMaxLength(OutgoingRecipient.MaximumAddressLength)
                 .IsRequired();
@@ -1240,9 +1251,14 @@ internal sealed class MailFathomDbContext : DbContext
             entity.Property(recipient => recipient.Role).HasConversion<string>().HasMaxLength(64).IsRequired();
             entity.Property(recipient => recipient.Status).HasConversion<string>().HasMaxLength(64).IsRequired();
 
-            entity.HasOne(recipient => recipient.OutgoingMessage)
+            // A recipient row is mutated on its own — an attempt answers about this address without touching the record
+            // above it — so the record's token would not notice two attempts settling one recipient differently.
+            entity.Property(recipient => recipient.ConcurrencyVersion).IsRowVersion();
+
+            entity.HasOne(recipient => recipient.OutgoingEmail)
                 .WithMany(message => message.Recipients)
-                .HasForeignKey(recipient => recipient.OutgoingMessageId)
+                .HasForeignKey(recipient => recipient.OutgoingEmailId)
+                .HasConstraintName(OutgoingEmailRecipientForeignKeyName)
                 .OnDelete(DeleteBehavior.Cascade);
         });
 
@@ -1260,18 +1276,19 @@ internal sealed class MailFathomDbContext : DbContext
     /// cannot outlive the record that says who it was for.
     /// </para>
     /// </remarks>
-    private static void ConfigureOutgoingMessageContent(ModelBuilder modelBuilder) =>
-        modelBuilder.Entity<OutgoingMessageContentEntity>(entity =>
+    private static void ConfigureOutgoingEmailContent(ModelBuilder modelBuilder) =>
+        modelBuilder.Entity<OutgoingEmailContentEntity>(entity =>
         {
-            entity.ToTable("outgoing_message_contents");
-            entity.HasKey(content => content.OutgoingMessageId);
-            entity.Property(content => content.OutgoingMessageId).ValueGeneratedNever();
+            entity.ToTable("outgoing_email_contents");
+            entity.HasKey(content => content.OutgoingEmailId);
+            entity.Property(content => content.OutgoingEmailId).ValueGeneratedNever();
             entity.Property(content => content.RawMime).IsRequired();
             entity.Property(content => content.Sha256Hash).HasMaxLength(32).IsRequired();
 
-            entity.HasOne(content => content.OutgoingMessage)
+            entity.HasOne(content => content.OutgoingEmail)
                 .WithOne(message => message.Content)
-                .HasForeignKey<OutgoingMessageContentEntity>(content => content.OutgoingMessageId)
+                .HasForeignKey<OutgoingEmailContentEntity>(content => content.OutgoingEmailId)
+                .HasConstraintName(OutgoingEmailContentForeignKeyName)
                 .OnDelete(DeleteBehavior.Cascade);
         });
 

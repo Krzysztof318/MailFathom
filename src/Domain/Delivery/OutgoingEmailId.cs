@@ -10,9 +10,9 @@ namespace MailFathom.Domain.Delivery;
 /// sending account and the authoring act. This surrogate is what everything afterwards refers to the record by, so
 /// advancing a stage — or reaching the stored MIME — names one value rather than restating that composite.
 /// </remarks>
-public readonly record struct OutgoingMessageId
+public readonly record struct OutgoingEmailId
 {
-    private OutgoingMessageId(Guid value) => this.Value = value;
+    private OutgoingEmailId(Guid value) => this.Value = value;
 
     /// <summary>Gets the non-empty UUID value.</summary>
     public Guid Value { get; }
@@ -21,14 +21,14 @@ public readonly record struct OutgoingMessageId
     /// <param name="value">The UUID to wrap.</param>
     /// <returns>A validated outgoing message identifier.</returns>
     /// <exception cref="ArgumentException">Thrown when <paramref name="value" /> is empty.</exception>
-    public static OutgoingMessageId Create(Guid value)
+    public static OutgoingEmailId Create(Guid value)
     {
         if (value == Guid.Empty)
         {
             throw new ArgumentException("An outgoing message identifier cannot be empty.", nameof(value));
         }
 
-        return new OutgoingMessageId(value);
+        return new OutgoingEmailId(value);
     }
 
     /// <inheritdoc />

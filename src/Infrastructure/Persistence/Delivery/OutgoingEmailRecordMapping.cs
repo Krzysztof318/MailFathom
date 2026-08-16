@@ -11,13 +11,13 @@ using MailFathom.Infrastructure.Persistence.Entities;
 namespace MailFathom.Infrastructure.Persistence.Delivery;
 
 /// <summary>Rebuilds the domain record one stored outgoing message and its recipient rows describe.</summary>
-internal static class OutgoingMessageRecordMapping
+internal static class OutgoingEmailRecordMapping
 {
     /// <summary>Rebuilds the record a row and its recipients describe.</summary>
     /// <param name="entity">The stored row, with its recipient rows loaded.</param>
     /// <returns>The record that row states.</returns>
     /// <exception cref="InvalidOperationException">Thrown when the row names no recipients or carries an address that no longer parses.</exception>
-    internal static OutgoingMessageRecord ToRecord(OutgoingMessageEntity entity)
+    internal static OutgoingEmailRecord ToRecord(OutgoingEmailEntity entity)
     {
         // Ordered here rather than trusted from the collection: the recipients are the order a composed message writes
         // its headers in, and a navigation loaded by EF Core carries no order of its own.
@@ -32,11 +32,11 @@ internal static class OutgoingMessageRecordMapping
                 $"Outgoing message record {entity.Id} names no recipients, so nothing can be offered for it.");
         }
 
-        return new OutgoingMessageRecord
+        return new OutgoingEmailRecord
         {
-            Id = OutgoingMessageId.Create(entity.Id),
+            Id = OutgoingEmailId.Create(entity.Id),
             AccountId = MailAccountId.Create(entity.MailboxAccountId),
-            Requester = OutgoingMessageRequester.Create(entity.RequesterOrigin, entity.RequesterIdentity),
+            Requester = OutgoingEmailRequester.Create(entity.RequesterOrigin, entity.RequesterIdentity),
             Recipients = recipients,
             Stage = entity.Stage,
             MimeByteLength = entity.MimeByteLength,
@@ -54,7 +54,7 @@ internal static class OutgoingMessageRecordMapping
     /// it was authored for is a message somebody never receives and nothing afterwards would say so, which is a worse
     /// answer than a record that refuses to be read.
     /// </remarks>
-    private static OutgoingRecipientOutcome ToOutcome(Guid recordId, OutgoingMessageRecipientEntity entity)
+    private static OutgoingRecipientOutcome ToOutcome(Guid recordId, OutgoingEmailRecipientEntity entity)
     {
         if (!EmailAddress.TryCreate(displayName: null, entity.Address, out var address))
         {
@@ -76,7 +76,7 @@ internal static class OutgoingMessageRecordMapping
     /// detail rather than something acted on, so it is reported as absent instead of failing the read of a send that is
     /// otherwise perfectly readable.
     /// </remarks>
-    private static MailFathomErrorCode? ToFailure(OutgoingMessageEntity entity)
+    private static MailFathomErrorCode? ToFailure(OutgoingEmailEntity entity)
     {
         if (entity.LastFailureCode is not { } failureCode)
         {

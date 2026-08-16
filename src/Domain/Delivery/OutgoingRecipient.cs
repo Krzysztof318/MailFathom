@@ -75,6 +75,12 @@ public readonly record struct OutgoingRecipient
         return new OutgoingRecipient(address, role);
     }
 
-    /// <inheritdoc />
-    public override string ToString() => $"{this.Role}:{this.Address}";
+    /// <summary>Describes the recipient by the header they are named in, and never by their address.</summary>
+    /// <returns>The role alone.</returns>
+    /// <remarks>
+    /// The override exists to suppress the one a record struct would synthesize, which prints every property and would
+    /// therefore put the address into any interpolated string, log template, or exception message that mentions a
+    /// recipient. That is the invariant this type's remarks state, and nothing but an override enforces it.
+    /// </remarks>
+    public override string ToString() => $"{this.Role} recipient";
 }

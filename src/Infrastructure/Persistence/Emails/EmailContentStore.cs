@@ -171,7 +171,7 @@ internal sealed class EmailContentStore(
     /// </remarks>
     public async Task SaveOutgoingContentAsync(
         IPersistenceSession session,
-        OutgoingMessageId outgoingMessageId,
+        OutgoingEmailId outgoingEmailId,
         ReadOnlyMemory<byte> rawMime,
         CancellationToken cancellationToken)
     {
@@ -188,31 +188,31 @@ internal sealed class EmailContentStore(
 
         // The record is added earlier in this same uncommitted session on the enqueue path, so FindAsync resolves it
         // from the change tracker without a query there and falls back to the database otherwise.
-        var outgoingMessage = await writeContext.OutgoingMessages.FindAsync([outgoingMessageId.Value], cancellationToken)
+        var outgoingEmail = await writeContext.OutgoingEmails.FindAsync([outgoingEmailId.Value], cancellationToken)
             ?? throw new InvalidOperationException(
                 "Raw MIME cannot be stored without the outgoing message record it belongs to.");
 
-        Expression<Func<OutgoingMessageContentEntity, bool>> matchesRecord =
-            candidate => candidate.OutgoingMessageId == outgoingMessage.Id;
+        Expression<Func<OutgoingEmailContentEntity, bool>> matchesRecord =
+            candidate => candidate.OutgoingEmailId == outgoingEmail.Id;
 
-        if (writeContext.OutgoingMessageContents.Local.AsQueryable().Any(matchesRecord))
+        if (writeContext.OutgoingEmailContents.Local.AsQueryable().Any(matchesRecord))
         {
             return;
         }
 
-        var isRecordPending = writeContext.Entry(outgoingMessage).State == EntityState.Added;
+        var isRecordPending = writeContext.Entry(outgoingEmail).State == EntityState.Added;
         if (!isRecordPending
-            && await writeContext.OutgoingMessageContents.AnyAsync(matchesRecord, cancellationToken))
+            && await writeContext.OutgoingEmailContents.AnyAsync(matchesRecord, cancellationToken))
         {
             return;
         }
 
         var bytes = GetCompleteArray(rawMime);
 
-        writeContext.OutgoingMessageContents.Add(new OutgoingMessageContentEntity
+        writeContext.OutgoingEmailContents.Add(new OutgoingEmailContentEntity
         {
-            OutgoingMessageId = outgoingMessage.Id,
-            OutgoingMessage = outgoingMessage,
+            OutgoingEmailId = outgoingEmail.Id,
+            OutgoingEmail = outgoingEmail,
             RawMime = bytes,
             MimeByteLength = bytes.LongLength,
             Sha256Hash = SHA256.HashData(rawMime.Span),
@@ -227,12 +227,12 @@ internal sealed class EmailContentStore(
     /// about a send is which stage it is at rather than how long its bytes took to leave the database.
     /// </remarks>
     public async Task<StoredEmailContent?> FindOutgoingContentAsync(
-        OutgoingMessageId outgoingMessageId,
+        OutgoingEmailId outgoingEmailId,
         CancellationToken cancellationToken)
     {
-        var storedContent = await dbContext.OutgoingMessageContents
+        var storedContent = await dbContext.OutgoingEmailContents
             .AsNoTracking()
-            .Where(content => content.OutgoingMessageId == outgoingMessageId.Value)
+            .Where(content => content.OutgoingEmailId == outgoingEmailId.Value)
             .Select(content => new StoredEmailContentRow(content.RawMime, content.MimeByteLength, content.Sha256Hash))
             .SingleOrDefaultAsync(cancellationToken);
 

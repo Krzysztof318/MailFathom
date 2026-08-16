@@ -44,14 +44,14 @@ internal sealed class StubEmailContentStore(StoredEmailContent? storedContent = 
     /// <inheritdoc />
     public Task SaveOutgoingContentAsync(
         IPersistenceSession session,
-        OutgoingMessageId outgoingMessageId,
+        OutgoingEmailId outgoingEmailId,
         ReadOnlyMemory<byte> rawMime,
         CancellationToken cancellationToken) =>
         throw new NotSupportedException("Reading an email never stores an outgoing message.");
 
     /// <inheritdoc />
     public Task<StoredEmailContent?> FindOutgoingContentAsync(
-        OutgoingMessageId outgoingMessageId,
+        OutgoingEmailId outgoingEmailId,
         CancellationToken cancellationToken) =>
         throw new NotSupportedException("A mailbox tool never reads an outgoing message.");
 }

@@ -25,7 +25,7 @@ namespace MailFathom.Domain.Delivery;
 /// did not mean.
 /// </para>
 /// </remarks>
-public sealed record OutgoingMessageRequest
+public sealed record OutgoingEmailRequest
 {
     /// <summary>The greatest number of people one message may be addressed to.</summary>
     /// <remarks>
@@ -37,9 +37,9 @@ public sealed record OutgoingMessageRequest
     /// </remarks>
     public const int MaximumRecipientCount = 256;
 
-    private OutgoingMessageRequest(
+    private OutgoingEmailRequest(
         MailAccountId accountId,
-        OutgoingMessageRequester requester,
+        OutgoingEmailRequester requester,
         IReadOnlyList<OutgoingRecipient> recipients)
     {
         this.AccountId = accountId;
@@ -51,7 +51,7 @@ public sealed record OutgoingMessageRequest
     public MailAccountId AccountId { get; }
 
     /// <summary>Gets the authored act that asked, which is what makes the same request twice one delivery.</summary>
-    public OutgoingMessageRequester Requester { get; }
+    public OutgoingEmailRequester Requester { get; }
 
     /// <summary>Gets the people the message is offered to, each named once.</summary>
     public IReadOnlyList<OutgoingRecipient> Recipients { get; }
@@ -63,9 +63,9 @@ public sealed record OutgoingMessageRequest
     /// <returns>The request to write down.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="requester" /> or <paramref name="recipients" /> is <see langword="null" />.</exception>
     /// <exception cref="ArgumentException">Thrown when <paramref name="recipients" /> is empty, holds more than <see cref="MaximumRecipientCount" /> entries, or names one mailbox more than once.</exception>
-    public static OutgoingMessageRequest Create(
+    public static OutgoingEmailRequest Create(
         MailAccountId accountId,
-        OutgoingMessageRequester requester,
+        OutgoingEmailRequester requester,
         IReadOnlyList<OutgoingRecipient> recipients)
     {
         ArgumentNullException.ThrowIfNull(requester);
@@ -94,6 +94,6 @@ public sealed record OutgoingMessageRequest
                 nameof(recipients));
         }
 
-        return new OutgoingMessageRequest(accountId, requester, [.. recipients]);
+        return new OutgoingEmailRequest(accountId, requester, [.. recipients]);
     }
 }

@@ -23,7 +23,7 @@ namespace MailFathom.Application.Mail.Delivery;
 /// take none, because a read joins no transaction.
 /// </para>
 /// </remarks>
-public interface IOutgoingMessageStore
+public interface IOutgoingEmailStore
 {
     /// <summary>Writes the intent down, or reads back the record that already holds this idempotency identity.</summary>
     /// <param name="session">The session the write joins.</param>
@@ -34,22 +34,22 @@ public interface IOutgoingMessageStore
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="session" /> or <paramref name="request" /> is <see langword="null" />.</exception>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="mimeByteLength" /> is not positive.</exception>
     /// <remarks>
-    /// The record starts at <see cref="OutgoingMessageStage.Recorded" /> with every recipient unanswered and no attempt
+    /// The record starts at <see cref="OutgoingEmailStage.Recorded" /> with every recipient unanswered and no attempt
     /// counted, so opening one sends nothing by itself. An identity that already has a record is answered with that
     /// record unchanged — including its recipients and its recorded length — because the message a retry transmits has
     /// to be the one a previous attempt may already have begun transmitting.
     /// </remarks>
-    Task<OutgoingMessageRecord> OpenAsync(
+    Task<OutgoingEmailRecord> OpenAsync(
         IPersistenceSession session,
-        OutgoingMessageRequest request,
+        OutgoingEmailRequest request,
         long mimeByteLength,
         CancellationToken cancellationToken);
 
     /// <summary>Reads one record back by the identifier everything after the first write refers to it by.</summary>
-    /// <param name="outgoingMessageId">The record to read.</param>
+    /// <param name="outgoingEmailId">The record to read.</param>
     /// <param name="cancellationToken">Cancels the read.</param>
     /// <returns>The record, or <see langword="null" /> when none carries that identifier.</returns>
-    Task<OutgoingMessageRecord?> FindAsync(OutgoingMessageId outgoingMessageId, CancellationToken cancellationToken);
+    Task<OutgoingEmailRecord?> FindAsync(OutgoingEmailId outgoingEmailId, CancellationToken cancellationToken);
 
     /// <summary>Reads the sends of one account that have not reached a terminal stage.</summary>
     /// <param name="accountId">The account whose sends are read.</param>
@@ -60,7 +60,7 @@ public interface IOutgoingMessageStore
     /// <remarks>
     /// <para>
     /// This is what a restart reads, and the one answer it must not lose is a record left at
-    /// <see cref="OutgoingMessageStage.TransmissionBegun" />: that message may or may not have been delivered, and a
+    /// <see cref="OutgoingEmailStage.TransmissionBegun" />: that message may or may not have been delivered, and a
     /// process that never looked at it again would leave the question permanently unasked.
     /// </para>
     /// <para>
@@ -68,30 +68,30 @@ public interface IOutgoingMessageStore
     /// public query, and a caller treats the bound as a page it comes back for rather than as a cut.
     /// </para>
     /// </remarks>
-    Task<IReadOnlyList<OutgoingMessageRecord>> ReadOutstandingAsync(
+    Task<IReadOnlyList<OutgoingEmailRecord>> ReadOutstandingAsync(
         MailAccountId accountId,
         int limit,
         CancellationToken cancellationToken);
 
     /// <summary>Counts one attempt against the record before that attempt is made.</summary>
     /// <param name="session">The session the write joins.</param>
-    /// <param name="outgoingMessageId">The record to count against.</param>
+    /// <param name="outgoingEmailId">The record to count against.</param>
     /// <param name="cancellationToken">Cancels the write.</param>
     /// <returns>The number this attempt is, counting from one.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="session" /> is <see langword="null" />.</exception>
-    /// <exception cref="InvalidOperationException">Thrown when no record carries <paramref name="outgoingMessageId" />, or when it has reached a terminal stage.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when no record carries <paramref name="outgoingEmailId" />, or when it has reached a terminal stage.</exception>
     Task<int> CountAttemptAsync(
         IPersistenceSession session,
-        OutgoingMessageId outgoingMessageId,
+        OutgoingEmailId outgoingEmailId,
         CancellationToken cancellationToken);
 
-    /// <summary>Moves the record to <see cref="OutgoingMessageStage.TransmissionBegun" />.</summary>
+    /// <summary>Moves the record to <see cref="OutgoingEmailStage.TransmissionBegun" />.</summary>
     /// <param name="session">The session the write joins.</param>
-    /// <param name="outgoingMessageId">The record to advance.</param>
+    /// <param name="outgoingEmailId">The record to advance.</param>
     /// <param name="cancellationToken">Cancels the write.</param>
     /// <returns>A task that completes when the stage is written.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="session" /> is <see langword="null" />.</exception>
-    /// <exception cref="InvalidOperationException">Thrown when no record carries <paramref name="outgoingMessageId" />, or when it is not at <see cref="OutgoingMessageStage.Recorded" />.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when no record carries <paramref name="outgoingEmailId" />, or when it is not at <see cref="OutgoingEmailStage.Recorded" />.</exception>
     /// <remarks>
     /// It is a transition of its own rather than a value passed to <see cref="AdvanceAsync" />, because it is the one
     /// that has to be durable <em>before</em> the act it describes. Announcing it afterwards would be announcing it
@@ -99,19 +99,19 @@ public interface IOutgoingMessageStore
     /// </remarks>
     Task RecordTransmissionBegunAsync(
         IPersistenceSession session,
-        OutgoingMessageId outgoingMessageId,
+        OutgoingEmailId outgoingEmailId,
         CancellationToken cancellationToken);
 
     /// <summary>Moves the record to a terminal stage, recording the reply the server answered the transmission with.</summary>
     /// <param name="session">The session the write joins.</param>
-    /// <param name="outgoingMessageId">The record to advance.</param>
+    /// <param name="outgoingEmailId">The record to advance.</param>
     /// <param name="stage">The terminal stage the send has reached.</param>
     /// <param name="replyCode">The reply code the server answered the message with, or <see langword="null" /> when it answered none.</param>
     /// <param name="cancellationToken">Cancels the write.</param>
     /// <returns>A task that completes when the stage is written.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="session" /> is <see langword="null" />.</exception>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="stage" /> is not a terminal stage, or when <paramref name="replyCode" /> is supplied and is not a three-digit reply code.</exception>
-    /// <exception cref="InvalidOperationException">Thrown when no record carries <paramref name="outgoingMessageId" />, when it has already reached a terminal stage, or when the stage asked for does not follow the one the record reached.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when no record carries <paramref name="outgoingEmailId" />, when it has already reached a terminal stage, or when the stage asked for does not follow the one the record reached.</exception>
     /// <remarks>
     /// <para>
     /// A terminal stage is the only thing this writes, because every non-terminal stage is reached by a transition of
@@ -119,29 +119,29 @@ public interface IOutgoingMessageStore
     /// </para>
     /// <para>
     /// Two of the three follow one stage only, which is the unknown window read from either end.
-    /// <see cref="OutgoingMessageStage.Sent" /> follows only <see cref="OutgoingMessageStage.TransmissionBegun" />, so
-    /// no record claims a delivery it never recorded a transmission for; <see cref="OutgoingMessageStage.Cancelled" />
-    /// follows only <see cref="OutgoingMessageStage.Recorded" />, so no record claims a withdrawal after bytes that may
+    /// <see cref="OutgoingEmailStage.Sent" /> follows only <see cref="OutgoingEmailStage.TransmissionBegun" />, so
+    /// no record claims a delivery it never recorded a transmission for; <see cref="OutgoingEmailStage.Cancelled" />
+    /// follows only <see cref="OutgoingEmailStage.Recorded" />, so no record claims a withdrawal after bytes that may
     /// already have reached somebody. A send stopped mid-transmission therefore ends at
-    /// <see cref="OutgoingMessageStage.Refused" />, which states that nothing more will be attempted and states nothing
+    /// <see cref="OutgoingEmailStage.Refused" />, which states that nothing more will be attempted and states nothing
     /// about what was received.
     /// </para>
     /// </remarks>
     Task AdvanceAsync(
         IPersistenceSession session,
-        OutgoingMessageId outgoingMessageId,
-        OutgoingMessageStage stage,
+        OutgoingEmailId outgoingEmailId,
+        OutgoingEmailStage stage,
         int? replyCode,
         CancellationToken cancellationToken);
 
     /// <summary>Records what one attempt settled about the recipients it offered.</summary>
     /// <param name="session">The session the write joins.</param>
-    /// <param name="outgoingMessageId">The record the outcomes belong to.</param>
+    /// <param name="outgoingEmailId">The record the outcomes belong to.</param>
     /// <param name="outcomes">What the attempt settled, one entry per recipient it offered.</param>
     /// <param name="cancellationToken">Cancels the write.</param>
     /// <returns>A task that completes when the outcomes are written.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="session" /> or <paramref name="outcomes" /> is <see langword="null" />.</exception>
-    /// <exception cref="InvalidOperationException">Thrown when no record carries <paramref name="outgoingMessageId" />, or when an outcome names an address the record does not.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when no record carries <paramref name="outgoingEmailId" />, or when an outcome names an address the record does not.</exception>
     /// <remarks>
     /// A recipient the record already settled keeps the answer it has. Nothing offers such a recipient again, so an
     /// outcome about one is an attempt reporting what it was told rather than a fact that can have changed, and taking
@@ -149,22 +149,22 @@ public interface IOutgoingMessageStore
     /// </remarks>
     Task RecordRecipientOutcomesAsync(
         IPersistenceSession session,
-        OutgoingMessageId outgoingMessageId,
+        OutgoingEmailId outgoingEmailId,
         IReadOnlyList<OutgoingRecipientOutcome> outcomes,
         CancellationToken cancellationToken);
 
     /// <summary>Records the failure the last attempt ended in, without moving the stage.</summary>
     /// <param name="session">The session the write joins.</param>
-    /// <param name="outgoingMessageId">The record the attempt belonged to.</param>
+    /// <param name="outgoingEmailId">The record the attempt belonged to.</param>
     /// <param name="failure">The code identifying what ended the attempt.</param>
     /// <param name="cancellationToken">Cancels the write.</param>
     /// <returns>A task that completes when the failure is written.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="session" /> is <see langword="null" />.</exception>
-    /// <exception cref="InvalidOperationException">Thrown when no record carries <paramref name="outgoingMessageId" />.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when no record carries <paramref name="outgoingEmailId" />.</exception>
     /// <remarks>The stage stays where the attempt actually got to, which is what a later one reads; the failure says why it got no further.</remarks>
     Task RecordFailureAsync(
         IPersistenceSession session,
-        OutgoingMessageId outgoingMessageId,
+        OutgoingEmailId outgoingEmailId,
         MailFathomErrorCode failure,
         CancellationToken cancellationToken);
 }

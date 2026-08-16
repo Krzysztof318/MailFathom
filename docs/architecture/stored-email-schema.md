@@ -583,7 +583,7 @@ names for things.
 
 ## The outgoing messages waiting to be sent
 
-`outgoing_messages` holds one row per message MailFathom has been asked to send, written **before** the first SMTP
+`outgoing_emails` holds one row per message MailFathom has been asked to send, written **before** the first SMTP
 command is issued and advanced as the attempt proceeds. It is `mailbox_mutations` again in a second protocol, with the
 consequence raised: a submission is the MIME being built, an intent being recorded, a connection being opened, each
 recipient being offered, the body being transmitted, and the server answering — and a process can die between any two of
@@ -627,11 +627,14 @@ A send that has not reached a terminal stage is what a restart reads, oldest fir
 query. A refused row stays in that answer for the reason an abandoned mutation does: being given up on is what stops a
 send being attempted, and it would be worth nothing if it also stopped the send being seen.
 
-`outgoing_message_recipients` holds one row per person the message is addressed to, keyed by the record and the position
+`outgoing_email_recipients` holds one row per person the message is addressed to, keyed by the record and the position
 in its recipient list. A message is offered per address and answered per address, so a mistyped address among five must
 not stop the other four, and the four the message reached must not be offered it again when the fifth is retried. Each
 row carries the `Address`, the `Role` the composed message names them in — `To`, `Cc`, or `Bcc`, which reach `RCPT TO`
-identically — the `Status`, and the `LastReplyCode` and `AnsweredAt` of the last answer about them.
+identically — the `Status`, and the `LastReplyCode` and `AnsweredAt` of the last answer about them. It carries an `xmin`
+token of its own rather than relying on the record's, because an attempt answers about one address without touching the
+record above it: without one, two attempts settling the same recipient would be a last writer winning silently, and
+settling a recipient is what decides whether anybody is offered the message again.
 
 `Status` has exactly three values, and it answers exactly one question: is this recipient offered on the next attempt.
 `Accepted` means an acknowledged transmission covered them, so nothing offers them again; `Refused` means a server
@@ -646,7 +649,7 @@ order a composed message writes its headers in. The comparison form of the addre
 unlike a received message's participants: those are filtered and grouped by address in queries the database answers,
 while these are read back with their record and compared in memory against the handful of answers one attempt produced.
 
-`outgoing_message_contents` is the message itself, in the same one-to-one arrangement `email_message_contents` has with
+`outgoing_email_contents` is the message itself, in the same one-to-one arrangement `email_message_contents` has with
 `stored_emails` and for the same reason: keeping the `bytea` out of the record means listing what is queued never loads
 a single message's bytes. It is written **once** and read back for every attempt rather than recomposed, which is not an
 optimization — a message rebuilt between attempts carries a different `Message-ID` and would thread as a second message
@@ -676,8 +679,8 @@ in every recipient's client. A second enqueue of the same identity therefore lea
 | `ix_mailbox_mutations_outstanding` | `(MailboxAccountId, RecordedAt)` where the stage is not `Completed` | The changes an operator asks about: those in flight and those given up on |
 | `ix_mailbox_mutations_placement` | `(MailboxAccountId, DestinationFolderPath, PlacementUidValidity, PlacementUid)` where `PlacementObservedAt` is null | The question the forward pass asks of every batch it discovers: is one of these UIDs where a relocation or a copy put an email |
 | `ix_mailbox_mutation_audit_entries_mutation` | `(MutationRecordId)`, unique | One audit entry per mutation ending, whatever a repeated append attempts |
-| `ix_outgoing_messages_identity` | `(MailboxAccountId, RequesterOrigin, RequesterIdentity)`, unique | An outgoing message's idempotency identity, which is what makes the same authored request twice one delivery. It spans terminal rows deliberately: a row that was sent is what stops the same request asking again |
-| `ix_outgoing_messages_outstanding` | `(MailboxAccountId, RecordedAt)` where the stage is none of `Sent`, `Refused`, or `Cancelled` | The outbox a restart reads and an operator asks about: what is queued, what is in flight, and what has stopped. The filter names the three terminal stages rather than the successful one alone, so a refused send stays visible while the deployment's whole sending history does not |
+| `ix_outgoing_emails_identity` | `(MailboxAccountId, RequesterOrigin, RequesterIdentity)`, unique | An outgoing message's idempotency identity, which is what makes the same authored request twice one delivery. It spans terminal rows deliberately: a row that was sent is what stops the same request asking again |
+| `ix_outgoing_emails_outstanding` | `(MailboxAccountId, RecordedAt)` where the stage is none of `Sent`, `Refused`, or `Cancelled` | The outbox a restart reads and an operator asks about: what is queued, what is in flight, and what has stopped. The filter names the three terminal stages rather than the successful one alone, so a refused send stays visible while the deployment's whole sending history does not |
 | `ix_mail_rule_executions_account_evaluated` | `(MailboxAccountId, EvaluatedAt, Id)` | An account's rule history newest first, and the retention pass that erases what has outlived its window. The identifier is in the key because two executions of one batch share an instant and a keyset page needs a total order to continue from |
 | `ix_mail_rule_executions_account_rule_evaluated` | `(MailboxAccountId, RuleName, EvaluatedAt, Id)` | What one rule has been concluding, which is the question a rule that never seems to fire is investigated with |
 | `ix_mail_rule_executions_email_evaluated` | `(StoredEmailId, EvaluatedAt, Id)` | Why one message is where it is, and the rows the cascade removes when that message is erased |
@@ -763,13 +766,13 @@ trace, or an error message.
 
 `contacts` and `contact_addresses` are the most concentrated personal data on this page, and the only kind that is not derived from anything: a name, the addresses somebody uses, and a note about them are an assembled record about an identified third party rather than mail that arrived. Nothing cascades into them, because nothing they hold came from a message — which is also why they have no retention window: a contact is held until somebody erases it, and erasing one removes the person and every address row through the cascade above rather than marking either. Nothing in either table reaches a log, a metric, a trace, or an error message; the contact identifier is what a failure names, and it is the one column that is not personal data.
 
-`outgoing_messages`, `outgoing_message_recipients`, and `outgoing_message_contents` are derived personal data of a kind
+`outgoing_emails`, `outgoing_email_recipients`, and `outgoing_email_contents` are derived personal data of a kind
 nothing else on this page holds: an outgoing record says who this mailbox's owner wrote to and when, and the recipients
 it names are people other than the owner. They are stored because a send cannot be resumed without knowing who is still
 owed it, and the columns above are the minimum that supports that — which is why a recipient's display name is not among
 them, and why the record carries no subject, no body, and no header of its own. The message stays in
-`outgoing_message_contents` and is reached by identifier, so listing the outbox, advancing a stage, or answering about a
-recipient never loads it. The two cascades from `outgoing_messages` are what make erasure structural: deleting the
+`outgoing_email_contents` and is reached by identifier, so listing the outbox, advancing a stage, or answering about a
+recipient never loads it. The two cascades from `outgoing_emails` are what make erasure structural: deleting the
 record destroys the recipients and the stored message with it, so an outgoing message cannot outlive the record that
 says who it was for. Nothing in any of the three reaches a log, a metric, a trace, or an exception message — an
 exception about a recipient names the record and the position rather than the address.

@@ -29,14 +29,14 @@ public sealed class MailOutboxTests
         // Arrange
         var contentStore = Substitute.For<IEmailContentStore>();
         var stagedSessions = new List<IPersistenceSession>();
-        var outbox = CreateOutbox(new InMemoryOutgoingMessageStore(), contentStore, stagedSessions);
+        var outbox = CreateOutbox(new InMemoryOutgoingEmailStore(), contentStore, stagedSessions);
         var request = CreateRequest("mfctl-4f2a");
 
         // Act
         var record = await outbox.EnqueueAsync(request, RawMime, CancellationToken.None);
 
         // Assert
-        Assert.Equal(OutgoingMessageStage.Recorded, record.Stage);
+        Assert.Equal(OutgoingEmailStage.Recorded, record.Stage);
         Assert.Equal(RawMime.Length, record.MimeByteLength);
         Assert.Equal(request.Recipients, record.OutstandingRecipients);
         await contentStore.Received(1).SaveOutgoingContentAsync(
@@ -52,7 +52,7 @@ public sealed class MailOutboxTests
     {
         // Arrange
         var contentStore = Substitute.For<IEmailContentStore>();
-        var store = new InMemoryOutgoingMessageStore();
+        var store = new InMemoryOutgoingEmailStore();
         var outbox = CreateOutbox(store, contentStore);
         var first = await outbox.EnqueueAsync(CreateRequest("mfctl-4f2a"), RawMime, CancellationToken.None);
 
@@ -71,7 +71,7 @@ public sealed class MailOutboxTests
     public async Task EnqueueAsync_SecondAuthoredRequest_IsASecondRecord()
     {
         // Arrange
-        var store = new InMemoryOutgoingMessageStore();
+        var store = new InMemoryOutgoingEmailStore();
         var outbox = CreateOutbox(store, Substitute.For<IEmailContentStore>());
         var first = await outbox.EnqueueAsync(CreateRequest("mfctl-4f2a"), RawMime, CancellationToken.None);
 
@@ -89,7 +89,7 @@ public sealed class MailOutboxTests
     public async Task EnqueueAsync_NoMime_IsRefusedBeforeAnythingIsWritten()
     {
         // Arrange
-        var store = new InMemoryOutgoingMessageStore();
+        var store = new InMemoryOutgoingEmailStore();
         var outbox = CreateOutbox(store, Substitute.For<IEmailContentStore>());
 
         // Act
@@ -109,37 +109,47 @@ public sealed class MailOutboxTests
     public async Task EnqueueAsync_LosesTheRaceForOneIdentity_RetriesAndFindsTheWinnersRecord()
     {
         // Arrange
-        var store = new InMemoryOutgoingMessageStore();
+        var losing = Substitute.For<IPersistenceSession>();
+        var retrying = Substitute.For<IPersistenceSession>();
+        var store = new InMemoryOutgoingEmailStore(session => session != losing);
         var contentStore = Substitute.For<IEmailContentStore>();
         var sessionFactory = Substitute.For<IPersistenceSessionFactory>();
-        var losing = Substitute.For<IPersistenceSession>();
-        var winning = Substitute.For<IPersistenceSession>();
-        sessionFactory.BeginSessionAsync(Arg.Any<CancellationToken>()).Returns(losing, winning);
-        losing.CommitAsync(Arg.Any<CancellationToken>()).Returns(PersistenceCommitResult.ConcurrencyConflict);
-        winning.CommitAsync(Arg.Any<CancellationToken>()).Returns(PersistenceCommitResult.Committed);
+        sessionFactory.BeginSessionAsync(Arg.Any<CancellationToken>()).Returns(losing, retrying);
+        OutgoingEmailRecord? winnersRecord = null;
+
+        // The other caller's row appears while this one holds an open session, which is the moment the unique index
+        // refuses this insert. Its own staged record is discarded with the session, so only the winner's survives.
+        losing.CommitAsync(Arg.Any<CancellationToken>()).Returns(_ =>
+        {
+            winnersRecord ??= store.Publish(CreateRequest("mfctl-4f2a"), RawMime.Length);
+
+            return PersistenceCommitResult.ConcurrencyConflict;
+        });
+        retrying.CommitAsync(Arg.Any<CancellationToken>()).Returns(PersistenceCommitResult.Committed);
         var outbox = new MailOutbox(store, contentStore, CreateRetryPolicy(sessionFactory));
 
         // Act
         var record = await outbox.EnqueueAsync(CreateRequest("mfctl-4f2a"), RawMime, CancellationToken.None);
 
         // Assert
+        Assert.Equal(winnersRecord?.Id, record.Id);
         Assert.Equal(2, store.OpenRequests.Count);
         var outstanding = await store.ReadOutstandingAsync(Account, limit: 10, CancellationToken.None);
         Assert.Equal(record.Id, Assert.Single(outstanding).Id);
     }
 
-    private static OutgoingMessageRequest CreateRequest(string invocationIdentity)
+    private static OutgoingEmailRequest CreateRequest(string invocationIdentity)
     {
         Assert.True(EmailAddress.TryCreate(displayName: null, "anna@example.test", out var address));
 
-        return OutgoingMessageRequest.Create(
+        return OutgoingEmailRequest.Create(
             Account,
-            OutgoingMessageRequester.Command(invocationIdentity),
+            OutgoingEmailRequester.Command(invocationIdentity),
             [OutgoingRecipient.Create(address, OutgoingRecipientRole.To)]);
     }
 
     private static MailOutbox CreateOutbox(
-        IOutgoingMessageStore store,
+        IOutgoingEmailStore store,
         IEmailContentStore contentStore,
         List<IPersistenceSession>? stagedSessions = null)
     {

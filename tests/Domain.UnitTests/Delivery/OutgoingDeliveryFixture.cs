@@ -25,13 +25,13 @@ internal static class OutgoingDeliveryFixture
     }
 
     /// <summary>Builds a record at one stage, with the recipient outcomes the scenario is about.</summary>
-    internal static OutgoingMessageRecord Record(
-        OutgoingMessageStage stage,
+    internal static OutgoingEmailRecord Record(
+        OutgoingEmailStage stage,
         params OutgoingRecipientOutcome[] recipients) => new()
         {
-            Id = OutgoingMessageId.Create(Guid.Parse("0198f0a0-1111-7000-8000-000000000001")),
+            Id = OutgoingEmailId.Create(Guid.Parse("0198f0a0-1111-7000-8000-000000000001")),
             AccountId = MailAccountId.Create("work"),
-            Requester = OutgoingMessageRequester.Command("mfctl-4f2a"),
+            Requester = OutgoingEmailRequester.Command("mfctl-4f2a"),
             Recipients = recipients,
             Stage = stage,
             MimeByteLength = 4096,

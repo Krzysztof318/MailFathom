@@ -28,22 +28,22 @@ namespace MailFathom.Domain.Delivery;
 /// store.
 /// </para>
 /// </remarks>
-public sealed record OutgoingMessageRecord
+public sealed record OutgoingEmailRecord
 {
     /// <summary>Gets what everything after the first write refers to this record by, including its stored MIME.</summary>
-    public required OutgoingMessageId Id { get; init; }
+    public required OutgoingEmailId Id { get; init; }
 
     /// <summary>Gets the account the message is submitted through and sent as.</summary>
     public required MailAccountId AccountId { get; init; }
 
     /// <summary>Gets the authored act that asked, restored exactly as it was written down.</summary>
-    public required OutgoingMessageRequester Requester { get; init; }
+    public required OutgoingEmailRequester Requester { get; init; }
 
     /// <summary>Gets every recipient the message names, with what the server has said about each.</summary>
     public required IReadOnlyList<OutgoingRecipientOutcome> Recipients { get; init; }
 
     /// <summary>Gets how far along its submission sequence the message has durably reached.</summary>
-    public required OutgoingMessageStage Stage { get; init; }
+    public required OutgoingEmailStage Stage { get; init; }
 
     /// <summary>Gets how many bytes of MIME were stored for this message.</summary>
     /// <remarks>
@@ -85,9 +85,9 @@ public sealed record OutgoingMessageRecord
 
     /// <summary>Gets whether the record has reached a stage nothing moves it out of.</summary>
     public bool IsTerminal => this.Stage
-        is OutgoingMessageStage.Sent
-        or OutgoingMessageStage.Refused
-        or OutgoingMessageStage.Cancelled;
+        is OutgoingEmailStage.Sent
+        or OutgoingEmailStage.Refused
+        or OutgoingEmailStage.Cancelled;
 
     /// <summary>Gets whether the message went out and the server's answer to it never came back.</summary>
     /// <remarks>
@@ -95,7 +95,7 @@ public sealed record OutgoingMessageRecord
     /// received it, and nothing an outbox can read afterwards says whether the first transmission landed — so the
     /// outcome is established another way or the record is given up on visibly.
     /// </remarks>
-    public bool HasUnknownOutcome => this.Stage == OutgoingMessageStage.TransmissionBegun;
+    public bool HasUnknownOutcome => this.Stage == OutgoingEmailStage.TransmissionBegun;
 
     /// <summary>Gets the recipients a later attempt still offers the message to.</summary>
     /// <remarks>

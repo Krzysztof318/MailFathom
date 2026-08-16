@@ -27,7 +27,7 @@ namespace MailFathom.IntegrationTests.Persistence;
 /// scope after the one that wrote it is gone, which is the closest a test gets to the restart it describes.
 /// </remarks>
 [Collection(OrchestratedInfrastructureCollectionDefinition.Name)]
-public sealed class OrchestratedOutgoingMessageStoreTests(MailFathomOrchestrationFixture orchestration)
+public sealed class OrchestratedOutgoingEmailStoreTests(MailFathomOrchestrationFixture orchestration)
 {
     private static readonly MailAccountId Account = SyntheticMailAccount.AccountId;
 
@@ -50,9 +50,9 @@ public sealed class OrchestratedOutgoingMessageStoreTests(MailFathomOrchestratio
 
                 // Both open before either commits, which is the whole point: neither transaction can see the other's
                 // pending row, so both reach the insert and only the index can refuse one.
-                await firstScope.GetRequiredService<IOutgoingMessageStore>()
+                await firstScope.GetRequiredService<IOutgoingEmailStore>()
                     .OpenAsync(first, request, MimeOf("race").Length, token);
-                await secondScope.GetRequiredService<IOutgoingMessageStore>()
+                await secondScope.GetRequiredService<IOutgoingEmailStore>()
                     .OpenAsync(second, request, MimeOf("race").Length, token);
 
                 return (First: await first.CommitAsync(token), Second: await second.CommitAsync(token));
@@ -126,7 +126,7 @@ public sealed class OrchestratedOutgoingMessageStoreTests(MailFathomOrchestratio
         var announced = await services.CommitAsync(
             async (scope, session, token) =>
             {
-                var store = scope.GetRequiredService<IOutgoingMessageStore>();
+                var store = scope.GetRequiredService<IOutgoingEmailStore>();
                 await store.CountAttemptAsync(session, enqueued.Id, token);
                 await store.RecordTransmissionBegunAsync(session, enqueued.Id, token);
             },
@@ -136,17 +136,17 @@ public sealed class OrchestratedOutgoingMessageStoreTests(MailFathomOrchestratio
         Assert.Equal(PersistenceCommitResult.Committed, announced);
 
         var found = Assert.Single(await ReadOutstandingAsync(services, request, cancellationToken));
-        Assert.Equal(OutgoingMessageStage.TransmissionBegun, found.Stage);
+        Assert.Equal(OutgoingEmailStage.TransmissionBegun, found.Stage);
         Assert.True(found.HasUnknownOutcome);
         Assert.False(found.IsTerminal);
         Assert.Equal(1, found.AttemptCount);
 
         // A message that may already have been transmitted can never be recorded as withdrawn.
         await Assert.ThrowsAsync<InvalidOperationException>(() => services.CommitAsync(
-            (scope, session, token) => scope.GetRequiredService<IOutgoingMessageStore>().AdvanceAsync(
+            (scope, session, token) => scope.GetRequiredService<IOutgoingEmailStore>().AdvanceAsync(
                 session,
                 enqueued.Id,
-                OutgoingMessageStage.Cancelled,
+                OutgoingEmailStage.Cancelled,
                 replyCode: null,
                 token),
             cancellationToken));
@@ -175,7 +175,7 @@ public sealed class OrchestratedOutgoingMessageStoreTests(MailFathomOrchestratio
 
         // Act
         var answered = await services.CommitAsync(
-            (scope, session, token) => scope.GetRequiredService<IOutgoingMessageStore>()
+            (scope, session, token) => scope.GetRequiredService<IOutgoingEmailStore>()
                 .RecordRecipientOutcomesAsync(
                     session,
                     enqueued.Id,
@@ -191,7 +191,7 @@ public sealed class OrchestratedOutgoingMessageStoreTests(MailFathomOrchestratio
         Assert.Equal(PersistenceCommitResult.Committed, answered);
 
         var reread = await services.InScopeAsync(
-            (scope, token) => scope.GetRequiredService<IOutgoingMessageStore>().FindAsync(enqueued.Id, token),
+            (scope, token) => scope.GetRequiredService<IOutgoingEmailStore>().FindAsync(enqueued.Id, token),
             cancellationToken);
         Assert.NotNull(reread);
         Assert.Equal([request.Recipients[2]], reread.OutstandingRecipients);
@@ -200,7 +200,7 @@ public sealed class OrchestratedOutgoingMessageStoreTests(MailFathomOrchestratio
         // A later attempt answering about a recipient already settled changes nothing, so a transient reply cannot
         // undo a delivery that already happened.
         var reanswered = await services.CommitAsync(
-            (scope, session, token) => scope.GetRequiredService<IOutgoingMessageStore>()
+            (scope, session, token) => scope.GetRequiredService<IOutgoingEmailStore>()
                 .RecordRecipientOutcomesAsync(
                     session,
                     enqueued.Id,
@@ -210,7 +210,7 @@ public sealed class OrchestratedOutgoingMessageStoreTests(MailFathomOrchestratio
         Assert.Equal(PersistenceCommitResult.Committed, reanswered);
 
         var afterTheLateAnswer = await services.InScopeAsync(
-            (scope, token) => scope.GetRequiredService<IOutgoingMessageStore>().FindAsync(enqueued.Id, token),
+            (scope, token) => scope.GetRequiredService<IOutgoingEmailStore>().FindAsync(enqueued.Id, token),
             cancellationToken);
         Assert.NotNull(afterTheLateAnswer);
         Assert.Equal([request.Recipients[2]], afterTheLateAnswer.OutstandingRecipients);
@@ -231,7 +231,7 @@ public sealed class OrchestratedOutgoingMessageStoreTests(MailFathomOrchestratio
         // Act
         await services.InScopeAsync(
             (scope, token) => scope.GetRequiredService<MailFathomDbContext>()
-                .OutgoingMessages
+                .OutgoingEmails
                 .Where(message => message.Id == enqueued.Id.Value)
                 .ExecuteDeleteAsync(token),
             cancellationToken);
@@ -245,15 +245,15 @@ public sealed class OrchestratedOutgoingMessageStoreTests(MailFathomOrchestratio
 
         var remainingRecipientCount = await services.InScopeAsync(
             (scope, token) => scope.GetRequiredService<MailFathomDbContext>()
-                .OutgoingMessageRecipients
+                .OutgoingEmailRecipients
                 .AsNoTracking()
-                .CountAsync(recipient => recipient.OutgoingMessageId == enqueued.Id.Value, token),
+                .CountAsync(recipient => recipient.OutgoingEmailId == enqueued.Id.Value, token),
             cancellationToken);
         Assert.Equal(0, remainingRecipientCount);
     }
 
     private static OutgoingRecipientOutcome Answered(
-        OutgoingMessageRequest request,
+        OutgoingEmailRequest request,
         int recipientIndex,
         OutgoingRecipientStatus status,
         int replyCode,
@@ -268,23 +268,23 @@ public sealed class OrchestratedOutgoingMessageStoreTests(MailFathomOrchestratio
     /// Narrowed by the requester rather than asserted as the whole answer, because every class in this collection shares
     /// one database and one account: another test's queued send is somebody else's row, not a defect in this one.
     /// </remarks>
-    private static async Task<IReadOnlyList<OutgoingMessageRecord>> ReadOutstandingAsync(
+    private static async Task<IReadOnlyList<OutgoingEmailRecord>> ReadOutstandingAsync(
         OrchestratedMailFathomServices services,
-        OutgoingMessageRequest request,
+        OutgoingEmailRequest request,
         CancellationToken cancellationToken)
     {
         var outstanding = await services.InScopeAsync(
-            (scope, token) => scope.GetRequiredService<IOutgoingMessageStore>()
+            (scope, token) => scope.GetRequiredService<IOutgoingEmailStore>()
                 .ReadOutstandingAsync(Account, limit: 100, token),
             cancellationToken);
 
         return [.. outstanding.Where(record => record.Requester == request.Requester)];
     }
 
-    private static OutgoingMessageRequest CreateRequest(string invocationIdentity, params string[] addresses) =>
-        OutgoingMessageRequest.Create(
+    private static OutgoingEmailRequest CreateRequest(string invocationIdentity, params string[] addresses) =>
+        OutgoingEmailRequest.Create(
             Account,
-            OutgoingMessageRequester.Command(invocationIdentity),
+            OutgoingEmailRequester.Command(invocationIdentity),
             [.. addresses.Select(address => RecipientOf(address))]);
 
     private static OutgoingRecipient RecipientOf(string address)

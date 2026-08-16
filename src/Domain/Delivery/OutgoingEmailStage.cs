@@ -28,7 +28,7 @@ namespace MailFathom.Domain.Delivery;
 /// this enum, which is the same reason the mutation stage and the stored content availability are stored that way.
 /// </para>
 /// </remarks>
-public enum OutgoingMessageStage
+public enum OutgoingEmailStage
 {
     /// <summary>The intent and the message are durable, and no SMTP command has been issued for them.</summary>
     /// <remarks>

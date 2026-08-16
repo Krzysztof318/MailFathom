@@ -101,6 +101,6 @@ internal static class PersistenceConcurrencyConflicts
                 or MailFathomDbContext.EmailEmbeddingPrimaryKeyConstraintName
                 or MailFathomDbContext.MailRederivationPositionPrimaryKeyConstraintName
                 or MailFathomDbContext.ContactAddressUniqueIndexName
-                or MailFathomDbContext.OutgoingMessageIdentityUniqueIndexName,
+                or MailFathomDbContext.OutgoingEmailIdentityUniqueIndexName,
         };
 }

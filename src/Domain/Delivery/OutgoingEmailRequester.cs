@@ -27,19 +27,19 @@ namespace MailFathom.Domain.Delivery;
 /// what keeps the identity of an outgoing record free of the message it is about.
 /// </para>
 /// </remarks>
-public sealed record OutgoingMessageRequester
+public sealed record OutgoingEmailRequester
 {
     /// <summary>The greatest length an identity may have, which bounds the column it is stored in and the index over it.</summary>
     public const int MaximumIdentityLength = 128;
 
-    private OutgoingMessageRequester(OutgoingMessageOrigin origin, string identity)
+    private OutgoingEmailRequester(OutgoingEmailOrigin origin, string identity)
     {
         this.Origin = origin;
         this.Identity = identity;
     }
 
     /// <summary>Gets what kind of authored act asked.</summary>
-    public OutgoingMessageOrigin Origin { get; }
+    public OutgoingEmailOrigin Origin { get; }
 
     /// <summary>Gets the identity that decides whether asking again is the same request.</summary>
     public string Identity { get; }
@@ -56,26 +56,34 @@ public sealed record OutgoingMessageRequester
     /// while an outgoing message is recorded against an account and would otherwise let one rule send once for a whole
     /// mailbox. The value is MailFathom's own local identifier rather than anything the message said.
     /// </remarks>
-    public static OutgoingMessageRequester Rule(string ruleName, string revision, StoredEmailId actedOn)
+    public static OutgoingEmailRequester Rule(string ruleName, string revision, StoredEmailId actedOn)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(ruleName);
-        ArgumentException.ThrowIfNullOrWhiteSpace(revision);
+        var trimmedRuleName = ValidIdentityPart(ruleName, nameof(ruleName));
+        var trimmedRevision = ValidIdentityPart(revision, nameof(revision));
 
         var identity = string.Create(
             CultureInfo.InvariantCulture,
-            $"{ruleName.Trim()}@{revision.Trim()}#{actedOn}");
+            $"{trimmedRuleName}@{trimmedRevision}#{actedOn}");
 
-        // Reported against the rule name rather than against the composed identity, because that is the part the caller
-        // supplied and the only part they can shorten.
-        return new OutgoingMessageRequester(OutgoingMessageOrigin.Rule, ValidIdentity(identity, nameof(ruleName)));
+        // Both parts are the caller's and either can be the one that overflowed, so the refusal names whichever no
+        // longer fits beside the other rather than always the first. The email is MailFathom's own identifier and is
+        // fixed in length, so it is never the part somebody can shorten.
+        if (identity.Length > MaximumIdentityLength)
+        {
+            throw new ArgumentException(
+                $"An outgoing message requester identity may be at most {MaximumIdentityLength} characters long.",
+                trimmedRuleName.Length >= trimmedRevision.Length ? nameof(ruleName) : nameof(revision));
+        }
+
+        return new OutgoingEmailRequester(OutgoingEmailOrigin.Rule, identity);
     }
 
     /// <summary>Names one act somebody asked for, by the key they supplied for it.</summary>
     /// <param name="invocationIdentity">The key that decides whether asking again is the same request: the same for a retry of one act and different for a second act.</param>
     /// <returns>A requester naming that act.</returns>
     /// <exception cref="ArgumentException">Thrown when <paramref name="invocationIdentity" /> is blank, carries a control character, or is longer than <see cref="MaximumIdentityLength" />.</exception>
-    public static OutgoingMessageRequester Command(string invocationIdentity) => new(
-        OutgoingMessageOrigin.Command,
+    public static OutgoingEmailRequester Command(string invocationIdentity) => new(
+        OutgoingEmailOrigin.Command,
         ValidIdentity(invocationIdentity, nameof(invocationIdentity)));
 
     /// <summary>Restores a requester from the origin and identity a record holds.</summary>
@@ -84,7 +92,7 @@ public sealed record OutgoingMessageRequester
     /// <returns>The requester those two name.</returns>
     /// <exception cref="ArgumentException">Thrown when <paramref name="identity" /> is blank, carries a control character, or is longer than <see cref="MaximumIdentityLength" />.</exception>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="origin" /> is not a declared origin.</exception>
-    public static OutgoingMessageRequester Create(OutgoingMessageOrigin origin, string identity)
+    public static OutgoingEmailRequester Create(OutgoingEmailOrigin origin, string identity)
     {
         if (!Enum.IsDefined(origin))
         {
@@ -94,7 +102,7 @@ public sealed record OutgoingMessageRequester
                 "The outgoing message requester origin is not one this system declares.");
         }
 
-        return new OutgoingMessageRequester(origin, ValidIdentity(identity, nameof(identity)));
+        return new OutgoingEmailRequester(origin, ValidIdentity(identity, nameof(identity)));
     }
 
     /// <summary>Validates an identity and reports a refusal against the parameter the caller actually supplied.</summary>
@@ -105,9 +113,7 @@ public sealed record OutgoingMessageRequester
     /// </remarks>
     private static string ValidIdentity(string identity, string parameterName)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(identity, parameterName);
-
-        var trimmedIdentity = identity.Trim();
+        var trimmedIdentity = ValidIdentityPart(identity, parameterName);
 
         if (trimmedIdentity.Length > MaximumIdentityLength)
         {
@@ -116,16 +122,30 @@ public sealed record OutgoingMessageRequester
                 parameterName);
         }
 
+        return trimmedIdentity;
+    }
+
+    /// <summary>Validates what a caller supplied, whether it is the whole identity or one part of a composed one.</summary>
+    /// <remarks>
+    /// Length is deliberately not checked here. A part is bounded by what the composed identity may be rather than on
+    /// its own, so the caller that composes decides which parameter an overflow is reported against.
+    /// </remarks>
+    private static string ValidIdentityPart(string identityPart, string parameterName)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(identityPart, parameterName);
+
+        var trimmedPart = identityPart.Trim();
+
         // A control character would make the identity unreadable in the outbox query the record exists to serve, and it
         // is never part of a name an operator wrote or a key a caller generated.
-        if (trimmedIdentity.Any(char.IsControl))
+        if (trimmedPart.Any(char.IsControl))
         {
             throw new ArgumentException(
                 "An outgoing message requester identity cannot contain a control character.",
                 parameterName);
         }
 
-        return trimmedIdentity;
+        return trimmedPart;
     }
 
     /// <inheritdoc />

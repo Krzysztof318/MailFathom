@@ -29,13 +29,13 @@ namespace MailFathom.Infrastructure.Persistence.Delivery;
 /// </para>
 /// </remarks>
 [RequiresIntegrationCoverage]
-internal sealed class OutgoingMessageStore(MailFathomDbContext readContext, TimeProvider timeProvider)
-    : IOutgoingMessageStore
+internal sealed class OutgoingEmailStore(MailFathomDbContext readContext, TimeProvider timeProvider)
+    : IOutgoingEmailStore
 {
     /// <inheritdoc />
-    public async Task<OutgoingMessageRecord> OpenAsync(
+    public async Task<OutgoingEmailRecord> OpenAsync(
         IPersistenceSession session,
-        OutgoingMessageRequest request,
+        OutgoingEmailRequest request,
         long mimeByteLength,
         CancellationToken cancellationToken)
     {
@@ -53,17 +53,17 @@ internal sealed class OutgoingMessageStore(MailFathomDbContext readContext, Time
             // addressed to nobody rather than the one that is already there.
             await LoadRecipientsAsync(session, existing, cancellationToken);
 
-            return OutgoingMessageRecordMapping.ToRecord(existing);
+            return OutgoingEmailRecordMapping.ToRecord(existing);
         }
 
         var recordedAt = timeProvider.GetUtcNow();
-        var entity = new OutgoingMessageEntity
+        var entity = new OutgoingEmailEntity
         {
             Id = Guid.CreateVersion7(recordedAt),
             MailboxAccountId = request.AccountId.Value,
             RequesterOrigin = request.Requester.Origin,
             RequesterIdentity = request.Requester.Identity,
-            Stage = OutgoingMessageStage.Recorded,
+            Stage = OutgoingEmailStage.Recorded,
             MimeByteLength = mimeByteLength,
             AttemptCount = 0,
             RecordedAt = recordedAt,
@@ -74,10 +74,10 @@ internal sealed class OutgoingMessageStore(MailFathomDbContext readContext, Time
         // record they belong to and a record can never be committed without them.
         foreach (var (recipient, ordinal) in request.Recipients.Select((recipient, ordinal) => (recipient, ordinal)))
         {
-            entity.Recipients.Add(new OutgoingMessageRecipientEntity
+            entity.Recipients.Add(new OutgoingEmailRecipientEntity
             {
-                OutgoingMessageId = entity.Id,
-                OutgoingMessage = entity,
+                OutgoingEmailId = entity.Id,
+                OutgoingEmail = entity,
                 Ordinal = ordinal,
                 Address = recipient.Address.Address,
                 Role = recipient.Role,
@@ -85,22 +85,22 @@ internal sealed class OutgoingMessageStore(MailFathomDbContext readContext, Time
             });
         }
 
-        writeContext.OutgoingMessages.Add(entity);
+        writeContext.OutgoingEmails.Add(entity);
 
-        return OutgoingMessageRecordMapping.ToRecord(entity);
+        return OutgoingEmailRecordMapping.ToRecord(entity);
     }
 
     /// <inheritdoc />
-    public async Task<OutgoingMessageRecord?> FindAsync(
-        OutgoingMessageId outgoingMessageId,
+    public async Task<OutgoingEmailRecord?> FindAsync(
+        OutgoingEmailId outgoingEmailId,
         CancellationToken cancellationToken)
     {
-        var entity = await readContext.OutgoingMessages
+        var entity = await readContext.OutgoingEmails
             .AsNoTracking()
             .Include(message => message.Recipients)
-            .SingleOrDefaultAsync(message => message.Id == outgoingMessageId.Value, cancellationToken);
+            .SingleOrDefaultAsync(message => message.Id == outgoingEmailId.Value, cancellationToken);
 
-        return entity is null ? null : OutgoingMessageRecordMapping.ToRecord(entity);
+        return entity is null ? null : OutgoingEmailRecordMapping.ToRecord(entity);
     }
 
     /// <inheritdoc />
@@ -108,7 +108,7 @@ internal sealed class OutgoingMessageStore(MailFathomDbContext readContext, Time
     /// The stored MIME is deliberately not included. Listing what is queued must not pull every queued message's bytes
     /// into memory, and an attempt that is going to transmit one reads it through the content store by identifier.
     /// </remarks>
-    public async Task<IReadOnlyList<OutgoingMessageRecord>> ReadOutstandingAsync(
+    public async Task<IReadOnlyList<OutgoingEmailRecord>> ReadOutstandingAsync(
         MailAccountId accountId,
         int limit,
         CancellationToken cancellationToken)
@@ -117,28 +117,28 @@ internal sealed class OutgoingMessageStore(MailFathomDbContext readContext, Time
 
         var accountValue = accountId.Value;
 
-        var entities = await readContext.OutgoingMessages
+        var entities = await readContext.OutgoingEmails
             .AsNoTracking()
             .Include(message => message.Recipients)
             .Where(message => message.MailboxAccountId == accountValue
-                && message.Stage != OutgoingMessageStage.Sent
-                && message.Stage != OutgoingMessageStage.Refused
-                && message.Stage != OutgoingMessageStage.Cancelled)
+                && message.Stage != OutgoingEmailStage.Sent
+                && message.Stage != OutgoingEmailStage.Refused
+                && message.Stage != OutgoingEmailStage.Cancelled)
             .OrderBy(message => message.RecordedAt)
             .ThenBy(message => message.Id)
             .Take(limit)
             .ToArrayAsync(cancellationToken);
 
-        return [.. entities.Select(OutgoingMessageRecordMapping.ToRecord)];
+        return [.. entities.Select(OutgoingEmailRecordMapping.ToRecord)];
     }
 
     /// <inheritdoc />
     public async Task<int> CountAttemptAsync(
         IPersistenceSession session,
-        OutgoingMessageId outgoingMessageId,
+        OutgoingEmailId outgoingEmailId,
         CancellationToken cancellationToken)
     {
-        var entity = await RequireEntityAsync(session, outgoingMessageId, cancellationToken);
+        var entity = await RequireEntityAsync(session, outgoingEmailId, cancellationToken);
 
         RequireNotTerminal(entity);
 
@@ -150,30 +150,30 @@ internal sealed class OutgoingMessageStore(MailFathomDbContext readContext, Time
     /// <inheritdoc />
     public async Task RecordTransmissionBegunAsync(
         IPersistenceSession session,
-        OutgoingMessageId outgoingMessageId,
+        OutgoingEmailId outgoingEmailId,
         CancellationToken cancellationToken)
     {
-        var entity = await RequireEntityAsync(session, outgoingMessageId, cancellationToken);
+        var entity = await RequireEntityAsync(session, outgoingEmailId, cancellationToken);
 
-        if (entity.Stage != OutgoingMessageStage.Recorded)
+        if (entity.Stage != OutgoingEmailStage.Recorded)
         {
             throw new InvalidOperationException(
-                $"Outgoing message record {entity.Id} is at stage {entity.Stage}, and a transmission begins from {OutgoingMessageStage.Recorded}.");
+                $"Outgoing message record {entity.Id} is at stage {entity.Stage}, and a transmission begins from {OutgoingEmailStage.Recorded}.");
         }
 
-        entity.Stage = OutgoingMessageStage.TransmissionBegun;
+        entity.Stage = OutgoingEmailStage.TransmissionBegun;
         entity.StageChangedAt = timeProvider.GetUtcNow();
     }
 
     /// <inheritdoc />
     public async Task AdvanceAsync(
         IPersistenceSession session,
-        OutgoingMessageId outgoingMessageId,
-        OutgoingMessageStage stage,
+        OutgoingEmailId outgoingEmailId,
+        OutgoingEmailStage stage,
         int? replyCode,
         CancellationToken cancellationToken)
     {
-        if (stage is not (OutgoingMessageStage.Sent or OutgoingMessageStage.Refused or OutgoingMessageStage.Cancelled))
+        if (stage is not (OutgoingEmailStage.Sent or OutgoingEmailStage.Refused or OutgoingEmailStage.Cancelled))
         {
             throw new ArgumentOutOfRangeException(
                 nameof(stage),
@@ -192,7 +192,7 @@ internal sealed class OutgoingMessageStore(MailFathomDbContext readContext, Time
                 "An SMTP reply code is a three-digit number.");
         }
 
-        var entity = await RequireEntityAsync(session, outgoingMessageId, cancellationToken);
+        var entity = await RequireEntityAsync(session, outgoingEmailId, cancellationToken);
 
         RequireNotTerminal(entity);
         RequireReachable(entity, stage);
@@ -209,13 +209,13 @@ internal sealed class OutgoingMessageStore(MailFathomDbContext readContext, Time
     /// <inheritdoc />
     public async Task RecordRecipientOutcomesAsync(
         IPersistenceSession session,
-        OutgoingMessageId outgoingMessageId,
+        OutgoingEmailId outgoingEmailId,
         IReadOnlyList<OutgoingRecipientOutcome> outcomes,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(outcomes);
 
-        var entity = await RequireEntityAsync(session, outgoingMessageId, cancellationToken);
+        var entity = await RequireEntityAsync(session, outgoingEmailId, cancellationToken);
 
         await LoadRecipientsAsync(session, entity, cancellationToken);
 
@@ -228,11 +228,11 @@ internal sealed class OutgoingMessageStore(MailFathomDbContext readContext, Time
     /// <inheritdoc />
     public async Task RecordFailureAsync(
         IPersistenceSession session,
-        OutgoingMessageId outgoingMessageId,
+        OutgoingEmailId outgoingEmailId,
         MailFathomErrorCode failure,
         CancellationToken cancellationToken)
     {
-        var entity = await RequireEntityAsync(session, outgoingMessageId, cancellationToken);
+        var entity = await RequireEntityAsync(session, outgoingEmailId, cancellationToken);
 
         entity.LastFailureCode = failure.Value;
     }
@@ -244,7 +244,7 @@ internal sealed class OutgoingMessageStore(MailFathomDbContext readContext, Time
     /// rather than added: the recipient list is what the message was authored for, and growing it here would offer the
     /// message to somebody nobody asked to write to.
     /// </remarks>
-    private static void Apply(OutgoingMessageEntity entity, OutgoingRecipientOutcome outcome)
+    private static void Apply(OutgoingEmailEntity entity, OutgoingRecipientOutcome outcome)
     {
         var normalizedAddress = outcome.Recipient.Address.NormalizedAddress;
         var recipient = entity.Recipients.SingleOrDefault(candidate =>
@@ -273,19 +273,19 @@ internal sealed class OutgoingMessageStore(MailFathomDbContext readContext, Time
     /// <summary>Refuses a terminal stage that does not follow the stage the record actually reached.</summary>
     /// <remarks>
     /// Two of the three are reachable from one stage only, and both restrictions are the same guarantee read from
-    /// either end of the unknown window. A send is <see cref="OutgoingMessageStage.Sent" /> only after a recorded
+    /// either end of the unknown window. A send is <see cref="OutgoingEmailStage.Sent" /> only after a recorded
     /// transmission, so no record claims a delivery nothing could have produced; a send is
-    /// <see cref="OutgoingMessageStage.Cancelled" /> only before one, so no record claims a withdrawal after bytes that
+    /// <see cref="OutgoingEmailStage.Cancelled" /> only before one, so no record claims a withdrawal after bytes that
     /// may already have reached somebody. What is left for a message stopped mid-transmission is
-    /// <see cref="OutgoingMessageStage.Refused" />, which says nothing more will be attempted and claims nothing about
+    /// <see cref="OutgoingEmailStage.Refused" />, which says nothing more will be attempted and claims nothing about
     /// what the recipients received.
     /// </remarks>
-    private static void RequireReachable(OutgoingMessageEntity entity, OutgoingMessageStage stage)
+    private static void RequireReachable(OutgoingEmailEntity entity, OutgoingEmailStage stage)
     {
         var isReachable = stage switch
         {
-            OutgoingMessageStage.Sent => entity.Stage == OutgoingMessageStage.TransmissionBegun,
-            OutgoingMessageStage.Cancelled => entity.Stage == OutgoingMessageStage.Recorded,
+            OutgoingEmailStage.Sent => entity.Stage == OutgoingEmailStage.TransmissionBegun,
+            OutgoingEmailStage.Cancelled => entity.Stage == OutgoingEmailStage.Recorded,
             _ => true,
         };
 
@@ -297,11 +297,11 @@ internal sealed class OutgoingMessageStore(MailFathomDbContext readContext, Time
     }
 
     /// <summary>Refuses a write against a record nothing attempts again.</summary>
-    private static void RequireNotTerminal(OutgoingMessageEntity entity)
+    private static void RequireNotTerminal(OutgoingEmailEntity entity)
     {
-        if (entity.Stage is OutgoingMessageStage.Sent
-            or OutgoingMessageStage.Refused
-            or OutgoingMessageStage.Cancelled)
+        if (entity.Stage is OutgoingEmailStage.Sent
+            or OutgoingEmailStage.Refused
+            or OutgoingEmailStage.Cancelled)
         {
             throw new InvalidOperationException(
                 $"Outgoing message record {entity.Id} is at terminal stage {entity.Stage} and is never attempted again.");
@@ -317,7 +317,7 @@ internal sealed class OutgoingMessageStore(MailFathomDbContext readContext, Time
     /// </remarks>
     private static async Task LoadRecipientsAsync(
         IPersistenceSession session,
-        OutgoingMessageEntity entity,
+        OutgoingEmailEntity entity,
         CancellationToken cancellationToken)
     {
         var writeContext = EfCorePersistenceSessionAccessor.DbContextOf(session);
@@ -335,9 +335,9 @@ internal sealed class OutgoingMessageStore(MailFathomDbContext readContext, Time
         }
     }
 
-    private static async Task<OutgoingMessageEntity?> FindByIdentityAsync(
+    private static async Task<OutgoingEmailEntity?> FindByIdentityAsync(
         MailFathomDbContext writeContext,
-        OutgoingMessageRequest request,
+        OutgoingEmailRequest request,
         CancellationToken cancellationToken)
     {
         var accountValue = request.AccountId.Value;
@@ -348,17 +348,17 @@ internal sealed class OutgoingMessageStore(MailFathomDbContext readContext, Time
         // request opened earlier in this same uncommitted session would be invisible to a query. The database pass
         // carries the recipients, because a record read back is a record about to be returned whole.
         return await TrackedEntityLookup.SinglePendingOrPersistedAsync(
-            writeContext.OutgoingMessages,
-            writeContext.OutgoingMessages.Include(message => message.Recipients),
+            writeContext.OutgoingEmails,
+            writeContext.OutgoingEmails.Include(message => message.Recipients),
             message => message.MailboxAccountId == accountValue
                 && message.RequesterOrigin == origin
                 && message.RequesterIdentity == identity,
             cancellationToken);
     }
 
-    private static async Task<OutgoingMessageEntity> RequireEntityAsync(
+    private static async Task<OutgoingEmailEntity> RequireEntityAsync(
         IPersistenceSession session,
-        OutgoingMessageId outgoingMessageId,
+        OutgoingEmailId outgoingEmailId,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(session);
@@ -366,8 +366,8 @@ internal sealed class OutgoingMessageStore(MailFathomDbContext readContext, Time
         var writeContext = EfCorePersistenceSessionAccessor.DbContextOf(session);
 
         // A primary-key lookup, so FindAsync already resolves an insert this session may still be holding.
-        return await writeContext.OutgoingMessages.FindAsync([outgoingMessageId.Value], cancellationToken)
+        return await writeContext.OutgoingEmails.FindAsync([outgoingEmailId.Value], cancellationToken)
             ?? throw new InvalidOperationException(
-                $"No outgoing message record carries the identifier {outgoingMessageId}.");
+                $"No outgoing message record carries the identifier {outgoingEmailId}.");
     }
 }

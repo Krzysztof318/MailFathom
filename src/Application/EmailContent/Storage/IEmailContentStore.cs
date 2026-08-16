@@ -54,13 +54,13 @@ public interface IEmailContentStore
 
     /// <summary>Saves the raw MIME one outgoing message will be transmitted as, once and only once.</summary>
     /// <param name="session">The explicit persistence session this content write participates in.</param>
-    /// <param name="outgoingMessageId">The record of the send this message was composed for.</param>
+    /// <param name="outgoingEmailId">The record of the send this message was composed for.</param>
     /// <param name="rawMime">The composed RFC 822 bytes.</param>
     /// <param name="cancellationToken">Propagates caller cancellation.</param>
     /// <returns>A task that completes after durable storage.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="session" /> is <see langword="null" />.</exception>
     /// <exception cref="ArgumentException">Thrown when <paramref name="rawMime" /> is empty.</exception>
-    /// <exception cref="InvalidOperationException">Thrown when no outgoing record carries <paramref name="outgoingMessageId" />.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when no outgoing record carries <paramref name="outgoingEmailId" />.</exception>
     /// <remarks>
     /// <para>
     /// A message already stored for this record is left exactly as it is, and that is the contract rather than a
@@ -76,12 +76,12 @@ public interface IEmailContentStore
     /// </remarks>
     Task SaveOutgoingContentAsync(
         IPersistenceSession session,
-        OutgoingMessageId outgoingMessageId,
+        OutgoingEmailId outgoingEmailId,
         ReadOnlyMemory<byte> rawMime,
         CancellationToken cancellationToken);
 
     /// <summary>Reads back the raw MIME stored for one outgoing message, with what was recorded about it.</summary>
-    /// <param name="outgoingMessageId">The record of the send.</param>
+    /// <param name="outgoingEmailId">The record of the send.</param>
     /// <param name="cancellationToken">Propagates caller cancellation.</param>
     /// <returns>The stored content, or <see langword="null" /> when no content is stored for that record.</returns>
     /// <remarks>
@@ -91,6 +91,6 @@ public interface IEmailContentStore
     /// that can never happen — and the caller is the one that decides what to do about that.
     /// </remarks>
     Task<StoredEmailContent?> FindOutgoingContentAsync(
-        OutgoingMessageId outgoingMessageId,
+        OutgoingEmailId outgoingEmailId,
         CancellationToken cancellationToken);
 }

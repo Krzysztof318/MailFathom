@@ -8,9 +8,9 @@ using MailFathom.Domain.Delivery;
 namespace MailFathom.Infrastructure.Persistence.Entities;
 
 [RequiresIntegrationCoverage]
-internal sealed class OutgoingMessageRecipientEntity
+internal sealed class OutgoingEmailRecipientEntity
 {
-    public Guid OutgoingMessageId { get; set; }
+    public Guid OutgoingEmailId { get; set; }
 
     /// <summary>Gets or sets this recipient's position in the message's recipient list, which completes the key.</summary>
     /// <remarks>
@@ -20,7 +20,7 @@ internal sealed class OutgoingMessageRecipientEntity
     /// </remarks>
     public int Ordinal { get; set; }
 
-    public required OutgoingMessageEntity OutgoingMessage { get; set; }
+    public required OutgoingEmailEntity OutgoingEmail { get; set; }
 
     /// <summary>Gets or sets the address exactly as the request named it.</summary>
     /// <remarks>
@@ -40,4 +40,13 @@ internal sealed class OutgoingMessageRecipientEntity
 
     /// <summary>Gets or sets when that answer was recorded, and <see langword="null" /> while there has been none.</summary>
     public DateTimeOffset? AnsweredAt { get; set; }
+
+    /// <summary>Gets or sets PostgreSQL's <c>xmin</c> token, which is what makes an answer about this recipient a conditional write.</summary>
+    /// <remarks>
+    /// The row carries one of its own rather than relying on the record's, because an attempt answers about an address
+    /// without touching the record above it: without a token here two attempts settling one recipient would be a silent
+    /// last-writer-win, and settling a recipient is the answer that decides whether anybody is offered the message
+    /// again.
+    /// </remarks>
+    public uint ConcurrencyVersion { get; set; }
 }

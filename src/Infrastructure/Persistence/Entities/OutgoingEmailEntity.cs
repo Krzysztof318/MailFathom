@@ -8,7 +8,7 @@ using MailFathom.Domain.Delivery;
 namespace MailFathom.Infrastructure.Persistence.Entities;
 
 [RequiresIntegrationCoverage]
-internal sealed class OutgoingMessageEntity
+internal sealed class OutgoingEmailEntity
 {
     public Guid Id { get; set; }
 
@@ -22,11 +22,11 @@ internal sealed class OutgoingMessageEntity
     /// </remarks>
     public required string MailboxAccountId { get; set; }
 
-    public OutgoingMessageOrigin RequesterOrigin { get; set; }
+    public OutgoingEmailOrigin RequesterOrigin { get; set; }
 
     public required string RequesterIdentity { get; set; }
 
-    public OutgoingMessageStage Stage { get; set; }
+    public OutgoingEmailStage Stage { get; set; }
 
     /// <summary>Gets or sets how many bytes of MIME were stored for this message.</summary>
     /// <remarks>
@@ -53,7 +53,7 @@ internal sealed class OutgoingMessageEntity
     /// <summary>Gets or sets the reply code the server last answered the transmission with, and <see langword="null" /> while it has answered none.</summary>
     public int? LastReplyCode { get; set; }
 
-    public ICollection<OutgoingMessageRecipientEntity> Recipients { get; } = [];
+    public ICollection<OutgoingEmailRecipientEntity> Recipients { get; } = [];
 
     /// <summary>Gets or sets the stored MIME this record points at, loaded only where a caller asked for it.</summary>
     /// <remarks>
@@ -61,7 +61,7 @@ internal sealed class OutgoingMessageEntity
     /// send loads it, for the reason every raw MIME column carries: a query that materialized it would pull whole
     /// messages into memory to answer a question about their state.
     /// </remarks>
-    public OutgoingMessageContentEntity? Content { get; set; }
+    public OutgoingEmailContentEntity? Content { get; set; }
 
     /// <summary>Gets or sets the PostgreSQL <c>xmin</c> token this row's optimistic concurrency is detected through.</summary>
     /// <remarks>See the stored-email mapping: this is the system column, not a user-defined one.</remarks>

@@ -8,12 +8,12 @@ using Xunit;
 
 namespace MailFathom.Domain.UnitTests.Delivery;
 
-public sealed class OutgoingMessageRequestTests
+public sealed class OutgoingEmailRequestTests
 {
     private static readonly MailAccountId Account = MailAccountId.Create("work");
 
-    private static readonly OutgoingMessageRequester Requester =
-        OutgoingMessageRequester.Command("mfctl-4f2a");
+    private static readonly OutgoingEmailRequester Requester =
+        OutgoingEmailRequester.Command("mfctl-4f2a");
 
     [Fact]
     public void Create_Recipients_KeepsThemInTheOrderTheyWereNamed()
@@ -27,7 +27,7 @@ public sealed class OutgoingMessageRequestTests
         };
 
         // Act
-        var request = OutgoingMessageRequest.Create(Account, Requester, recipients);
+        var request = OutgoingEmailRequest.Create(Account, Requester, recipients);
 
         // Assert
         Assert.Equal(recipients, request.Recipients);
@@ -48,7 +48,7 @@ public sealed class OutgoingMessageRequestTests
 
         // Act
         var thrown = Assert.Throws<ArgumentException>(
-            () => OutgoingMessageRequest.Create(Account, Requester, recipients));
+            () => OutgoingEmailRequest.Create(Account, Requester, recipients));
 
         // Assert
         Assert.Equal("recipients", thrown.ParamName);
@@ -60,7 +60,7 @@ public sealed class OutgoingMessageRequestTests
     {
         // Act
         var thrown = Assert.Throws<ArgumentException>(
-            () => OutgoingMessageRequest.Create(Account, Requester, []));
+            () => OutgoingEmailRequest.Create(Account, Requester, []));
 
         // Assert
         Assert.Equal("recipients", thrown.ParamName);
@@ -75,7 +75,7 @@ public sealed class OutgoingMessageRequestTests
         {
             OutgoingDeliveryFixture.Recipient("anna@example.test", OutgoingRecipientRole.To),
         };
-        var request = OutgoingMessageRequest.Create(Account, Requester, recipients);
+        var request = OutgoingEmailRequest.Create(Account, Requester, recipients);
 
         // Act
         recipients.Add(OutgoingDeliveryFixture.Recipient("bruno@example.test", OutgoingRecipientRole.Bcc));
@@ -90,7 +90,7 @@ public sealed class OutgoingMessageRequestTests
     {
         // Arrange
         var recipients = Enumerable
-            .Range(0, OutgoingMessageRequest.MaximumRecipientCount + 1)
+            .Range(0, OutgoingEmailRequest.MaximumRecipientCount + 1)
             .Select(index => OutgoingDeliveryFixture.Recipient(
                 $"recipient-{index}@example.test",
                 OutgoingRecipientRole.Bcc))
@@ -98,7 +98,7 @@ public sealed class OutgoingMessageRequestTests
 
         // Act
         var thrown = Assert.Throws<ArgumentException>(
-            () => OutgoingMessageRequest.Create(Account, Requester, recipients));
+            () => OutgoingEmailRequest.Create(Account, Requester, recipients));
 
         // Assert
         Assert.Equal("recipients", thrown.ParamName);
@@ -133,6 +133,25 @@ public sealed class OutgoingMessageRequestTests
 
         // Assert
         Assert.Equal("address", thrown.ParamName);
+    }
+
+    /// <summary>
+    /// A recipient's address is personal data of somebody who is not this mailbox's owner, so nothing that describes a
+    /// recipient — including the description a record struct would synthesize — may carry it into a log line, a span
+    /// attribute, or an exception message.
+    /// </summary>
+    [Fact]
+    public void ToString_ARecipientAndTheOutcomeAroundIt_NamesTheRoleAndNeverTheAddress()
+    {
+        // Arrange
+        var recipient = OutgoingDeliveryFixture.Recipient("anna@example.test", OutgoingRecipientRole.Bcc);
+
+        // Act
+        var described = $"{recipient} {OutgoingRecipientOutcome.Unanswered(recipient)}";
+
+        // Assert
+        Assert.DoesNotContain("anna@example.test", described, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains(nameof(OutgoingRecipientRole.Bcc), described, StringComparison.Ordinal);
     }
 
     [Fact]

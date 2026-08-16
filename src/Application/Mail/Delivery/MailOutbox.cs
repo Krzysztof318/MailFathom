@@ -23,15 +23,15 @@ namespace MailFathom.Application.Mail.Delivery;
 /// any check here: two callers arriving together both reach the database, and the loser's retry finds the winner's row.
 /// </para>
 /// <para>
-/// Nothing is sent by this. The record it leaves is at <see cref="OutgoingMessageStage.Recorded" /> with every recipient
+/// Nothing is sent by this. The record it leaves is at <see cref="OutgoingEmailStage.Recorded" /> with every recipient
 /// unanswered, which is the state a delivery attempt reads and continues from.
 /// </para>
 /// </remarks>
-/// <param name="outgoingMessages">Holds the durable record and its idempotency identity.</param>
+/// <param name="outgoingEmails">Holds the durable record and its idempotency identity.</param>
 /// <param name="contentStore">Holds the composed MIME the record points at.</param>
 /// <param name="retryPolicy">Commits both writes together and resolves a lost race for the same identity.</param>
 public sealed class MailOutbox(
-    IOutgoingMessageStore outgoingMessages,
+    IOutgoingEmailStore outgoingEmails,
     IEmailContentStore contentStore,
     OptimisticConcurrencyRetryPolicy retryPolicy)
 {
@@ -48,8 +48,8 @@ public sealed class MailOutbox(
     /// ignored rather than written over the stored ones. That is what keeps a resumed send one message: a
     /// <c>Message-ID</c> that changed between attempts would thread as a second message in every recipient's client.
     /// </remarks>
-    public Task<OutgoingMessageRecord> EnqueueAsync(
-        OutgoingMessageRequest request,
+    public Task<OutgoingEmailRecord> EnqueueAsync(
+        OutgoingEmailRequest request,
         ReadOnlyMemory<byte> rawMime,
         CancellationToken cancellationToken)
     {
@@ -65,7 +65,7 @@ public sealed class MailOutbox(
         return retryPolicy.CommitAsync(
             async (session, attemptCancellationToken) =>
             {
-                var record = await outgoingMessages.OpenAsync(
+                var record = await outgoingEmails.OpenAsync(
                     session,
                     request,
                     rawMime.Length,

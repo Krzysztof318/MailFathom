@@ -7,9 +7,9 @@ using MailFathom.CodeCoverage;
 namespace MailFathom.Infrastructure.Persistence.Entities;
 
 [RequiresIntegrationCoverage]
-internal sealed class OutgoingMessageContentEntity
+internal sealed class OutgoingEmailContentEntity
 {
-    public Guid OutgoingMessageId { get; set; }
+    public Guid OutgoingEmailId { get; set; }
 
     public required byte[] RawMime { get; set; }
 
@@ -19,5 +19,5 @@ internal sealed class OutgoingMessageContentEntity
 
     public DateTimeOffset StoredAt { get; set; }
 
-    public required OutgoingMessageEntity OutgoingMessage { get; set; }
+    public required OutgoingEmailEntity OutgoingEmail { get; set; }
 }
