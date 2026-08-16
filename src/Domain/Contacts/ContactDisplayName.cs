@@ -47,10 +47,12 @@ public readonly record struct ContactDisplayName
     /// <summary>Creates a contact name from text an owner supplied.</summary>
     /// <param name="value">The name to record.</param>
     /// <returns>A validated name, trimmed and otherwise as written.</returns>
-    /// <exception cref="ArgumentException">Thrown when <paramref name="value" /> is blank, longer than <see cref="MaximumLength" />, or contains a control character.</exception>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="value" /> is blank, longer than <see cref="MaximumLength" />, or carries a character that does not render as part of the name.</exception>
     /// <remarks>
-    /// Control characters are refused because the value is published in every answer that names the contact; a newline in
-    /// it would let one record write arbitrary lines into a listing of the others.
+    /// Characters carrying no glyph of their own are refused because the value is published in every answer that names the
+    /// contact: a newline in it would let one record write arbitrary lines into a listing of the others, and a
+    /// bidirectional override would let one render as a name it does not contain. <see cref="ContactText" /> holds which
+    /// characters those are and why two of them are admitted.
     /// </remarks>
     public static ContactDisplayName Create(string value)
     {
@@ -63,9 +65,9 @@ public readonly record struct ContactDisplayName
             throw new ArgumentException($"A contact name cannot be longer than {MaximumLength} characters.", nameof(value));
         }
 
-        if (trimmed.Any(char.IsControl))
+        if (trimmed.EnumerateRunes().Any(ContactText.IsUnprintable))
         {
-            throw new ArgumentException("A contact name cannot contain control characters.", nameof(value));
+            throw new ArgumentException("A contact name cannot contain characters that carry no glyph of their own.", nameof(value));
         }
 
         return new ContactDisplayName(trimmed, trimmed.ToUpperInvariant());

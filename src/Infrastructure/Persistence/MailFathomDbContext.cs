@@ -642,6 +642,7 @@ internal sealed class MailFathomDbContext : DbContext
                 .IsRequired();
             entity.Property(contact => contact.DisplayNameSortKey)
                 .HasMaxLength(ContactEntity.MaximumDisplayNameLength)
+                .UseCollation("C")
                 .IsRequired();
             entity.Property(contact => contact.PreferredNormalizedAddress)
                 .HasMaxLength(ContactAddressEntity.MaximumAddressLength)
@@ -651,7 +652,9 @@ internal sealed class MailFathomDbContext : DbContext
             entity.Property(contact => contact.ConcurrencyVersion).IsRowVersion();
 
             // The one order the book is walked in, and the one a keyset page continues from. The identity settles two
-            // people whose names compare equal, which is what makes the order total and the walk terminate.
+            // people whose names compare equal, which is what makes the order total and the walk terminate. The column
+            // is pinned to the C collation so that order is the ordinal one the domain derived the key to produce,
+            // rather than whichever collation the database this runs on happens to have been created with.
             entity.HasIndex(contact => new { contact.DisplayNameSortKey, contact.Id })
                 .HasDatabaseName(ContactListingIndexName);
         });

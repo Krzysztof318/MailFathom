@@ -16,7 +16,9 @@ namespace MailFathom.Application.Contacts;
 /// <para>
 /// The ordering is total and the same under every filter, so a cursor issued while listing one origin still names a
 /// valid boundary when the walk is continued over all of them. That is why nothing here binds a cursor to the filters it
-/// was issued under: there is no combination in which reusing one skips a contact or serves one twice.
+/// was issued under: no combination of them makes reusing one skip a contact or serve one twice. What can is a rename,
+/// which moves a contact within the order the cursor was cut from, exactly as
+/// <see cref="ContactQuery" /> states — the boundary is a position in the order rather than a snapshot of it.
 /// </para>
 /// </remarks>
 public sealed record ContactCursor

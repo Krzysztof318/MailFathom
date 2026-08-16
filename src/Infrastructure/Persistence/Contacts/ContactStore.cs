@@ -87,20 +87,19 @@ internal sealed class ContactStore : IContactStore
         var writeContext = EfCorePersistenceSessionAccessor.DbContextOf(session);
         var contactValue = contactId.Value;
 
-        // Counted before the delete and inside the same transaction, so what the erasure reports having removed is what
-        // it removed rather than what the book held a moment earlier.
-        var addressCount = await writeContext.ContactAddresses
+        // Deleted rather than counted and then cascaded, so the number reported is the number of rows this statement
+        // removed. Counting first would report what a separate statement saw, which a write committed between the two
+        // makes a different set. The foreign key still cascades and is still what guarantees no address outlives its
+        // person; this only takes the same rows first, inside the caller's transaction, to be able to report them.
+        var erasedAddresses = await writeContext.ContactAddresses
             .Where(address => address.ContactId == contactValue)
-            .CountAsync(cancellationToken);
+            .ExecuteDeleteAsync(cancellationToken);
 
-        // The addresses go with the contact rather than being deleted beside it, because the foreign key cascades. A
-        // second statement here would be a second place the same rule was written, and the one that ran first would
-        // decide what a crash between them left behind.
         var erasedContacts = await writeContext.Contacts
             .Where(record => record.Id == contactValue)
             .ExecuteDeleteAsync(cancellationToken);
 
-        return new ContactErasure(contactId, erasedContacts > 0, erasedContacts > 0 ? addressCount : 0);
+        return new ContactErasure(contactId, erasedContacts > 0, erasedAddresses);
     }
 
     /// <summary>Brings the stored address rows to exactly the set the amended contact names.</summary>

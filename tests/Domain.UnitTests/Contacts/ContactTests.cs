@@ -253,6 +253,26 @@ public sealed class ContactTests
         Assert.Equal(expected, amendable);
     }
 
+    /// <summary>Only a writer acting for the owner promotes, whichever origin the contact itself carries.</summary>
+    [Theory]
+    [InlineData(ContactOrigin.Collected, ContactOrigin.Asserted, true)]
+    [InlineData(ContactOrigin.Collected, ContactOrigin.Collected, false)]
+    [InlineData(ContactOrigin.Asserted, ContactOrigin.Collected, false)]
+    public void IsPromotableBy_AWriterOfEachOrigin_AnswersForTheOwnersWriterAlone(
+        ContactOrigin contactOrigin,
+        ContactOrigin writer,
+        bool expected)
+    {
+        // Arrange
+        var contact = ContactOf([Address("anna@example.test")], origin: contactOrigin);
+
+        // Act
+        var promotable = contact.IsPromotableBy(writer);
+
+        // Assert
+        Assert.Equal(expected, promotable);
+    }
+
     private static EmailAddress[] AddressesNumbered(int count) =>
         [.. Enumerable.Range(0, count).Select(number => Address($"anna{number}@example.test"))];
 

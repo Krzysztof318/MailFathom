@@ -20,10 +20,10 @@ person and the addresses hang off them.
 | Part | What it holds |
 | --- | --- |
 | Identity | MailFathom's own UUID, minted when the contact is recorded and never derived from an address |
-| Name | What the owner wrote, kept in their casing, at most 256 characters and carrying no control character |
+| Name | What the owner wrote, kept in their casing, at most 256 characters and carrying no character that renders as nothing |
 | Addresses | At least one and at most 32, each at most 320 characters |
 | Preferred address | Which of them to use when something addresses the person without naming which |
-| Note | Optional free text, at most 4000 characters, in which line breaks and tabs are kept and every other control character is refused |
+| Note | Optional free text, at most 4000 characters, in which line breaks and tabs are kept and every other character that renders as nothing is refused |
 | Origin | How the contact came to be in the book — see [§ Two origins](#two-origins-and-who-may-write-which) |
 | Recorded, amended | When the contact entered the book, and when it was last changed |
 
@@ -33,6 +33,13 @@ appear in a log line, a metric, or a failure message — everything else is pers
 
 Which address is preferred is the owner's choice rather than an ordering accident. Nothing picks one, and a record
 naming a preferred address the contact does not hold is refused rather than repaired.
+
+A name and a note are published into listings of the other contacts, into an answer an agent reads, and into an export,
+so both refuse the characters that carry no glyph of their own: the control characters, the line and paragraph
+separators, and the formatting characters, among which the bidirectional overrides are what would let one name render as
+text it does not contain. A note keeps line breaks and tabs, because a note is written to be read as somebody wrote it.
+The zero-width joiner and non-joiner are admitted in both, because Persian, Arabic, and the Indic scripts write them
+inside ordinary words and refusing them would refuse names people actually have.
 
 ## When two addresses are the same address
 
@@ -67,9 +74,10 @@ What the difference decides is who may change the record without anybody asking:
 - A writer amends the contacts of its own origin and no others. Collection never touches what an owner wrote down, and
   an owner does not amend a collected record in place either.
 - **Promotion** is the one crossing, and it runs one way: a collected contact becomes asserted, which is the act of the
-  owner taking responsibility for it. Nothing turns an asserted contact back into a collected one, because nothing can
-  unsay that somebody wrote a person down. Promoting a contact that is already asserted is answered as such rather than
-  written again.
+  owner taking responsibility for it. It names its writer for the same reason an amendment does, so collection is refused
+  the promotion of the record it just created rather than being able to award itself the authority that comes with it.
+  Nothing turns an asserted contact back into a collected one, because nothing can unsay that somebody wrote a person
+  down. Promoting a contact that is already asserted is answered as such rather than written again.
 - Origin is recorded when the contact is created and is never changed by an amendment.
 
 Erasure is deliberately outside that rule. It is the data-subject path, and somebody asking to be removed from a contact
@@ -103,8 +111,9 @@ Two lookups and one listing:
   serves every contact exactly once. A page holds 50 contacts unless the caller asks for fewer, and never more than 200.
   A listing may be narrowed to one origin, which is the question "what did my instance pick up" and its inverse.
 
-The order is taken on a comparison form stored beside the name rather than on the name itself, so it is decided by one
-rule instead of by the collation of a database MailFathom does not control.
+The order is taken on a comparison form stored beside the name rather than on the name itself, and the column holding it
+is pinned to PostgreSQL's `C` collation, so the order is the ordinal one MailFathom derived the form to produce rather
+than whichever collation the database was created with.
 
 ## Erasing and exporting a person
 
@@ -112,10 +121,10 @@ A contact book is the most concentrated personal data this system holds: not mai
 assembled record about identified third parties. Both data-subject paths therefore exist from the first commit rather
 than as a later addition, and both are proven by test rather than described.
 
-**Erasing a contact removes them and everything derived from them.** The address rows go with the person through the
-schema's own foreign key rather than through a second statement somebody remembers to write, and the erasure answers
-with what it removed — the contact and how many addresses went with it — so an owner asking for one gets an answer
-rather than a call that returned without complaint. Erasing somebody the book does not hold is a completed erasure, not
+**Erasing a contact removes them and everything derived from them.** The schema's own foreign key is what guarantees no
+address outlives its person, rather than a second statement somebody remembers to write; the erasure takes those rows
+first inside the same transaction so it can answer with what it removed — the contact and how many addresses went with
+it — and an owner asking for one gets an answer rather than a call that returned without complaint. Erasing somebody the book does not hold is a completed erasure, not
 a failure: the state the owner asked for is the state the book is in.
 
 **Exporting a contact produces everything held about them** as of the instant it was taken: the name, every address,

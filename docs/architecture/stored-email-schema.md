@@ -483,7 +483,7 @@ what the schema itself decides is below.
 | Column | What it records |
 |---|---|
 | `Id` | MailFathom's own UUIDv7, minted when the contact is recorded. Never an address, because an address is a thing a person has rather than a thing they are |
-| `DisplayName`, `DisplayNameSortKey` | The name as the owner wrote it, and the upper-cased comparison form the listing is ordered and paginated by. The order is stored rather than derived in the query, so it is decided by one rule instead of by a collation MailFathom does not control |
+| `DisplayName`, `DisplayNameSortKey` | The name as the owner wrote it, and the upper-cased comparison form the listing is ordered and paginated by. The form is stored rather than derived in the query and its column is pinned to the `C` collation, so the order is the ordinal one that form was derived to produce instead of whichever collation the database was created with |
 | `PreferredNormalizedAddress` | Which of the person's addresses to use by default, as its comparison form. A column on the person rather than a flag on each address, because changing the choice is then one update instead of two that pass through a state where nobody, or everybody, is preferred |
 | `Note` | What the owner wrote about the person, or null |
 | `Origin` | `Asserted` where somebody wrote the person down, `Collected` where an address merely appeared in arriving mail. Held as its own name for the reason every bounded value on this page is |

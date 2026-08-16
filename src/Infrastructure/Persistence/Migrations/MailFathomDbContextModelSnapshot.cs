@@ -98,7 +98,8 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                     b.Property<string>("DisplayNameSortKey")
                         .IsRequired()
                         .HasMaxLength(256)
-                        .HasColumnType("character varying(256)");
+                        .HasColumnType("character varying(256)")
+                        .UseCollation("C");
 
                     b.Property<string>("Note")
                         .HasMaxLength(4000)

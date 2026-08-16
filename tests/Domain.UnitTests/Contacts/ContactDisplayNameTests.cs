@@ -58,6 +58,43 @@ public sealed class ContactDisplayNameTests
         Assert.Throws<ArgumentException>(() => ContactDisplayName.Create(written));
     }
 
+    /// <summary>A character that ends a line or reverses a run carries no glyph either, whatever category it sits in.</summary>
+    [Theory]
+    [InlineData("Anna\u2028Kowalska")]
+    [InlineData("Anna\u2029Kowalska")]
+    [InlineData("Anna\u202eKowalska")]
+    [InlineData("Anna\u2066Kowalska")]
+    [InlineData("Anna\u200bKowalska")]
+    public void Create_NameCarryingACharacterThatRendersAsNothing_IsRefused(string written)
+    {
+        // Act, Assert
+        Assert.Throws<ArgumentException>(() => ContactDisplayName.Create(written));
+    }
+
+    /// <summary>A formatting character outside the Basic Multilingual Plane is a surrogate pair, and is refused as one scalar.</summary>
+    [Fact]
+    public void Create_NameCarryingASupplementaryFormattingCharacter_IsRefused()
+    {
+        // Arrange
+        var written = string.Concat("Anna", char.ConvertFromUtf32(0xE0001), "Kowalska");
+
+        // Act, Assert
+        Assert.Throws<ArgumentException>(() => ContactDisplayName.Create(written));
+    }
+
+    /// <summary>The joiners decide how neighbouring letters are shaped, so refusing them would refuse names people write.</summary>
+    [Theory]
+    [InlineData("می\u200cخواهم")]
+    [InlineData("क्\u200dष")]
+    public void Create_NameJoiningItsLettersWithAZeroWidthJoiner_IsKeptAsWritten(string written)
+    {
+        // Act
+        var displayName = ContactDisplayName.Create(written);
+
+        // Assert
+        Assert.Equal(written, displayName.Value);
+    }
+
     /// <summary>The bound is on the trimmed value, so surrounding whitespace never decides whether a name fits.</summary>
     [Fact]
     public void Create_NameAtTheBound_IsAcceptedAndOneCharacterLongerIsRefused()

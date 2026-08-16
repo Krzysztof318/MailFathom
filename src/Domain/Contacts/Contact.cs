@@ -183,6 +183,16 @@ public sealed class Contact
     /// </remarks>
     public bool IsAmendableBy(ContactOrigin writer) => this.Origin == writer;
 
+    /// <summary>Answers whether a writer of the given origin may promote this contact.</summary>
+    /// <param name="writer">The origin the writer acts under.</param>
+    /// <returns><see langword="true" /> when the writer is one acting for the owner.</returns>
+    /// <remarks>
+    /// Promotion is the act of taking a record on, so only a writer acting under <see cref="ContactOrigin.Asserted" />
+    /// performs it. Collection reads its own mail and would otherwise be able to declare the person it just inferred one
+    /// the owner had written down, which is the whole distinction the origin exists to keep.
+    /// </remarks>
+    public bool IsPromotableBy(ContactOrigin writer) => writer == ContactOrigin.Asserted;
+
     /// <summary>Produces this contact with the parts an amendment replaced, keeping its identity, origin, and arrival.</summary>
     /// <param name="displayName">The name to record instead.</param>
     /// <param name="addresses">Every address this person uses after the amendment.</param>

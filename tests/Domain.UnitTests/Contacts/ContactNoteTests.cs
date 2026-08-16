@@ -35,6 +35,31 @@ public sealed class ContactNoteTests
         Assert.Throws<ArgumentException>(() => ContactNote.Create(written));
     }
 
+    /// <summary>The layout exception is the two line breaks and the tab, not every character that renders as nothing.</summary>
+    [Theory]
+    [InlineData("Owes \u2028 an answer")]
+    [InlineData("Owes \u202e an answer")]
+    [InlineData("Owes \u200b an answer")]
+    public void Create_NoteCarryingACharacterThatRendersAsNothing_IsRefused(string written)
+    {
+        // Act, Assert
+        Assert.Throws<ArgumentException>(() => ContactNote.Create(written));
+    }
+
+    /// <summary>A note is written in whatever script the owner writes in, joiners included.</summary>
+    [Fact]
+    public void Create_NoteJoiningItsLettersWithAZeroWidthJoiner_IsKeptAsWritten()
+    {
+        // Arrange
+        const string written = "Signs their mail \u0645\u06cc\u200c\u062e\u0648\u0627\u0647\u0645.";
+
+        // Act
+        var note = ContactNote.Create(written);
+
+        // Assert
+        Assert.Equal(written, note.Value);
+    }
+
     /// <summary>A contact without a note holds none, so blank text cannot become a second way to say the same absence.</summary>
     [Theory]
     [InlineData("")]

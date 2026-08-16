@@ -14,6 +14,8 @@ namespace MailFathom.Application.Contacts;
 /// these five acts and no others, which is what keeps the origin rule from being a convention each of them remembers.
 /// A writer names the origin it acts under, and a contact is amendable only by a writer of its own: collection never
 /// touches what an owner wrote down, and an owner promotes a collected contact rather than editing it in place.
+/// Promotion names the writer for the same reason, so the act of taking a record on is the owner's rather than something
+/// collection can perform on its own behalf.
 /// </para>
 /// <para>
 /// Each write is idempotent from a fresh read and is committed through the optimistic concurrency policy, so two callers
@@ -145,14 +147,20 @@ public sealed class ContactBook
 
     /// <summary>Promotes a collected contact to one the owner has taken responsibility for.</summary>
     /// <param name="contactId">The contact to promote.</param>
+    /// <param name="writer">The origin the writer acts under.</param>
     /// <param name="cancellationToken">Cancels the write.</param>
     /// <returns>The promoted record, or the refusal naming what stopped it.</returns>
     /// <exception cref="PersistenceConcurrencyConflictException">Thrown when every allowed attempt lost the race.</exception>
     /// <remarks>
-    /// The one act that changes an origin, and it runs one way. A contact that is already asserted is answered as such
-    /// rather than written again, so an owner repeating the request learns that nothing was left to do.
+    /// The one act that changes an origin, and it runs one way. It is gated on the writer for the reason an amendment is:
+    /// promotion is the owner taking a record on, so collection asking for it is refused rather than granted the authority
+    /// it was about to award itself. A contact that is already asserted is answered as such rather than written again, so
+    /// an owner repeating the request learns that nothing was left to do.
     /// </remarks>
-    public Task<ContactWriteResult> PromoteAsync(ContactId contactId, CancellationToken cancellationToken) =>
+    public Task<ContactWriteResult> PromoteAsync(
+        ContactId contactId,
+        ContactOrigin writer,
+        CancellationToken cancellationToken) =>
         this.commitPolicy.CommitAsync(
             async (session, token) =>
             {
@@ -161,6 +169,11 @@ public sealed class ContactBook
                 if (held is null)
                 {
                     return ContactWriteResult.NotFound();
+                }
+
+                if (!held.IsPromotableBy(writer))
+                {
+                    return ContactWriteResult.OriginRefusesWriter(held);
                 }
 
                 if (held.Origin == ContactOrigin.Asserted)

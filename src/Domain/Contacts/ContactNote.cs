@@ -14,7 +14,8 @@ namespace MailFathom.Domain.Contacts;
 /// </para>
 /// <para>
 /// Line breaks are kept because a note is written to be read as somebody wrote it, and a note about a person genuinely
-/// runs to more than one line. Every other control character is refused, for the reason a name refuses all of them.
+/// runs to more than one line. Every other character that carries no glyph of its own is refused, for the reason a name
+/// refuses all of them; <see cref="ContactText" /> holds which ones those are.
 /// </para>
 /// </remarks>
 public readonly record struct ContactNote
@@ -35,7 +36,7 @@ public readonly record struct ContactNote
     /// <summary>Creates a note from text an owner supplied.</summary>
     /// <param name="value">The note to record.</param>
     /// <returns>A validated note, trimmed and otherwise as written.</returns>
-    /// <exception cref="ArgumentException">Thrown when <paramref name="value" /> is blank, longer than <see cref="MaximumLength" />, or contains a control character other than a line break or a tab.</exception>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="value" /> is blank, longer than <see cref="MaximumLength" />, or carries a character that does not render as part of the note, other than a line break or a tab.</exception>
     /// <remarks>
     /// Blank text is refused rather than stored as an empty note, because a contact without a note holds no note at all:
     /// two ways to say the same absence would leave every reader deciding which one it was looking at.
@@ -51,9 +52,9 @@ public readonly record struct ContactNote
             throw new ArgumentException($"A contact note cannot be longer than {MaximumLength} characters.", nameof(value));
         }
 
-        if (trimmed.Any(character => char.IsControl(character) && !IsPermittedLayout(character)))
+        if (trimmed.EnumerateRunes().Any(scalar => ContactText.IsUnprintable(scalar) && !ContactText.IsLayout(scalar)))
         {
-            throw new ArgumentException("A contact note cannot contain control characters other than line breaks and tabs.", nameof(value));
+            throw new ArgumentException("A contact note cannot contain characters that carry no glyph of their own, other than line breaks and tabs.", nameof(value));
         }
 
         return new ContactNote(trimmed);
@@ -61,8 +62,4 @@ public readonly record struct ContactNote
 
     /// <inheritdoc />
     public override string ToString() => this.Value;
-
-    /// <summary>Accepts the two control characters that carry layout rather than terminal behavior.</summary>
-    private static bool IsPermittedLayout(char character) =>
-        character is '\r' or '\n' or '\t';
 }

@@ -21,7 +21,7 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                 {
                     Id = table.Column<Guid>(type: "uuid", nullable: false),
                     DisplayName = table.Column<string>(type: "character varying(256)", maxLength: 256, nullable: false),
-                    DisplayNameSortKey = table.Column<string>(type: "character varying(256)", maxLength: 256, nullable: false),
+                    DisplayNameSortKey = table.Column<string>(type: "character varying(256)", maxLength: 256, nullable: false, collation: "C"),
                     PreferredNormalizedAddress = table.Column<string>(type: "character varying(320)", maxLength: 320, nullable: false),
                     Note = table.Column<string>(type: "character varying(4000)", maxLength: 4000, nullable: true),
                     Origin = table.Column<string>(type: "character varying(32)", maxLength: 32, nullable: false),

@@ -162,7 +162,10 @@ public sealed class ContactBookTests
         book.Hold(contact);
 
         // Act
-        var result = await BookOver(book).PromoteAsync(contact.Id, TestContext.Current.CancellationToken);
+        var result = await BookOver(book).PromoteAsync(
+            contact.Id,
+            ContactOrigin.Asserted,
+            TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(ContactWriteOutcome.Written, result.Outcome);
@@ -180,11 +183,36 @@ public sealed class ContactBookTests
         book.Hold(contact);
 
         // Act
-        var result = await BookOver(book).PromoteAsync(contact.Id, TestContext.Current.CancellationToken);
+        var result = await BookOver(book).PromoteAsync(
+            contact.Id,
+            ContactOrigin.Asserted,
+            TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(ContactWriteOutcome.AlreadyAsserted, result.Outcome);
         Assert.Equal(contact.Id, result.Contact?.Id);
+    }
+
+    /// <summary>Collection cannot award itself the authority promotion confers; only a writer acting for the owner promotes.</summary>
+    [Fact]
+    public async Task PromoteAsync_AWriterCollectingMail_IsRefusedTheContactItCollected()
+    {
+        // Arrange
+        var book = new InMemoryContactBookStore();
+        var contact = ContactOf("Anna Kowalska", ["anna@example.test"], ContactOrigin.Collected);
+        book.Hold(contact);
+
+        // Act
+        var result = await BookOver(book).PromoteAsync(
+            contact.Id,
+            ContactOrigin.Collected,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        var stillHeld = await book.FindAsync(contact.Id, TestContext.Current.CancellationToken);
+
+        Assert.Equal(ContactWriteOutcome.OriginRefusesWriter, result.Outcome);
+        Assert.Equal(ContactOrigin.Collected, stillHeld?.Origin);
     }
 
     /// <summary>Erasure reports what it removed, which is how the path is proven rather than described.</summary>
