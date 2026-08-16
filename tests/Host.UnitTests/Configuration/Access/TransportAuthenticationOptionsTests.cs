@@ -150,6 +150,22 @@ public sealed class TransportAuthenticationOptionsTests
         Assert.Equal([MailFathomPermission.MailRead], granted);
     }
 
+    /// <summary>A grant is a set, and the order it resolves in is what the startup line reads in and what the claims are stamped in — so two entries granting the same permissions must not be reported as two different grants.</summary>
+    [Fact]
+    public void GrantedPermissions_AGrantWrittenOutOfOrder_ResolvesInThePublishedOrder()
+    {
+        // Arrange
+        var entry = new TransportAuthenticationOptions { ApiKey = AnApiKey() };
+        entry.Permissions.Add(MailFathomPermission.MailAsk.Name);
+        entry.Permissions.Add(MailFathomPermission.MailRead.Name);
+
+        // Act
+        var granted = entry.GrantedPermissions(ProtectedSurface.Mail);
+
+        // Assert
+        Assert.Equal([MailFathomPermission.MailRead, MailFathomPermission.MailAsk], granted);
+    }
+
     /// <summary>A name nothing publishes is a grant nobody enforces, so it fails startup rather than being written into a configuration file that reads as narrowed.</summary>
     [Fact]
     public void FindConfigurationErrors_AGrantNamingAnUnpublishedPermission_NamesTheEntryAndTheIndex()

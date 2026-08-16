@@ -270,7 +270,7 @@ internal sealed class AdminEndpointOptions
                 continue;
             }
 
-            yield return $"{SectionName}:{TransportAuthenticationConfiguration.SettingName}:{index}:{nameof(TransportAuthenticationOptions.OAuth)}:{nameof(OAuthValidationOptions.Resource)} — the path must be '{RoutePrefix}', because that is where the endpoint's routes answer and it is what a client appends to the address it was given. Write the absolute https URL clients reach this endpoint at, ending in that prefix.";
+            yield return $"{TransportAuthenticationConfiguration.SettingPathOf(SectionName, method, index)}:{nameof(TransportAuthenticationOptions.OAuth)}:{nameof(OAuthValidationOptions.Resource)} — the path must be '{RoutePrefix}', because that is where the endpoint's routes answer and it is what a client appends to the address it was given. Write the absolute https URL clients reach this endpoint at, ending in that prefix.";
         }
     }
 

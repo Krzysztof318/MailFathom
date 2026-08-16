@@ -1,6 +1,6 @@
 # Administering a deployment
 
-<!-- describes: src/Host/Configuration/Endpoints/AdminEndpointOptions.cs, src/Host/Api/Admin*.cs, src/Host/Api/Embedding*.cs, src/Host/Api/Job*.cs, src/Host/Api/Mail*.cs, src/Host/Api/Spam*.cs, src/Host/Hosting/Startup/SurfaceIsolation.cs, src/Host/Hosting/Warnings/AdminTransportSecurityWarning.cs, src/Host/Hosting/Warnings/TransportGrantStartupReport.cs, src/Host/Security/Endpoints/TransportListenerBinder.cs, src/Host/Security/Transport/TransportRateLimiting.cs, src/Cli/**, scripts/install-mfctl.sh -->
+<!-- describes: src/Host/Configuration/Endpoints/AdminEndpointOptions.cs, src/Host/Api/Admin*.cs, src/Host/Api/Embedding*.cs, src/Host/Api/Job*.cs, src/Host/Api/Mail*.cs, src/Host/Api/Spam*.cs, src/Host/Hosting/Startup/SurfaceIsolation.cs, src/Host/Hosting/Warnings/AdminTransportSecurityWarning.cs, src/Host/Hosting/Warnings/TransportGrantStartupReport.cs, src/Domain/Access/MailFathomPermission.cs, src/Host/Security/Endpoints/TransportListenerBinder.cs, src/Host/Security/Transport/TransportRateLimiting.cs, src/Cli/**, scripts/install-mfctl.sh -->
 
 How the `mfctl` command reaches a running deployment, and what that deployment has to have enabled before it will
 answer.
@@ -75,16 +75,17 @@ six names, allocated so that the separations an operator would plausibly want to
 
 | Permission | What it covers |
 | --- | --- |
-| `mailfathom.admin.read` | The reads reporting the deployment's own state and no mail: embedding status and the activation preview, the loaded rules, a run's progress, the stopped-job list |
+| `mailfathom.admin.read` | The reads reporting the deployment's own state and no mail: what synchronization is doing per account and per folder, embedding status and the activation preview, the loaded rules, a run's progress, the stopped-job list |
 | `mailfathom.admin.audit.read` | The per-account records derived from mail: the mailbox-mutation audit, the answering audit, the rules history, the spam classifications |
 | `mailfathom.admin.operate` | Asking the deployment to do work it can already do: running rules over an account, classifying an account, retrying or dropping a stopped job, cancelling a reindex |
 | `mailfathom.admin.credentials.write` | Storing a mailbox refresh token |
 | `mailfathom.admin.spend` | Activating the declared embedding model, which is the one operation that starts a provider bill |
 | `mailfathom.admin.erase` | Erasing the mail stored for a folder an account no longer mirrors |
 
-No permission implies another, so a credential that needs to read state and to run rules is granted both names. A
-`mailfathom.mail.*` name written here fails startup, naming the entry's index: it belongs to the MCP surface and would
-grant nothing on this one.
+No permission implies another, so a credential that needs to read state and to run rules is granted both names. A name
+nothing publishes fails startup, naming the entry and the position in the list, so a misspelling is refused rather than
+read as a narrower grant than you meant; so is a name the same grant already carries. A `mailfathom.mail.*` name is
+refused for a second reason as well — it belongs to the MCP surface and would grant nothing on this one.
 
 `GET /api/admin/session` sits outside the model and needs no permission. It reports the credential the caller already
 presented and the version this deployment already publishes, so it discloses nothing a caller did not bring — and it is

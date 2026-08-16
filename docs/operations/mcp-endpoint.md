@@ -1,6 +1,6 @@
 # The MCP endpoint and what protects it
 
-<!-- describes: src/Mcp/**, src/Host/Security/**, src/Infrastructure/Security/**, src/Common/OAuth/**, src/Common/ClientAssertions/**, src/Host/Hosting/Warnings/McpTransportAuthenticationWarning.cs, src/Host/Hosting/Warnings/TransportGrantStartupReport.cs, src/Host/Configuration/Endpoints/TransportClearTextRedirectOptions.cs, src/Host/Configuration/Endpoints/TransportListenerConfiguration.cs, src/Host/Configuration/Endpoints/ExternalListenerConfiguration.cs, src/Host/Configuration/Endpoints/ReverseProxyOptions.cs, src/Host/Hosting/Startup/ClearTextRedirectToHttps.cs, src/Host/Hosting/Warnings/TransportClearTextRedirectReport.cs, src/Host/Hosting/Warnings/ReverseProxyTrustWarning.cs, src/Host/Hosting/Warnings/McpTransportEncryptionWarning.cs -->
+<!-- describes: src/Mcp/**, src/Host/Security/**, src/Infrastructure/Security/**, src/Common/OAuth/**, src/Common/ClientAssertions/**, src/Host/Hosting/Warnings/McpTransportAuthenticationWarning.cs, src/Host/Hosting/Warnings/TransportGrantStartupReport.cs, src/Domain/Access/MailFathomPermission.cs, src/Host/Configuration/Endpoints/TransportClearTextRedirectOptions.cs, src/Host/Configuration/Endpoints/TransportListenerConfiguration.cs, src/Host/Configuration/Endpoints/ExternalListenerConfiguration.cs, src/Host/Configuration/Endpoints/ReverseProxyOptions.cs, src/Host/Hosting/Startup/ClearTextRedirectToHttps.cs, src/Host/Hosting/Warnings/TransportClearTextRedirectReport.cs, src/Host/Hosting/Warnings/ReverseProxyTrustWarning.cs, src/Host/Hosting/Warnings/McpTransportEncryptionWarning.cs -->
 
 The MCP endpoint is how an agent reaches MailFathom. This page records what enabling it means operationally, what a client
 has to present to reach it, which browser origins it answers, which client applications it accepts a certificate from,
@@ -630,8 +630,10 @@ Neither implies the other. `mailfathom.mail.ask` is not the weaker of the two �
 caller's own query text with the embedding provider before anything is read back. What withholding
 `mailfathom.mail.ask` stops is mail content going to a *chat* provider on a caller's behalf.
 
-An `mailfathom.admin.*` name written here fails startup, naming the entry's index: the two surfaces draw from disjoint
-halves, so a permission on the wrong one would sit in the file granting nothing.
+**A name nothing publishes fails startup, naming the entry and the position in the list.** That is what the closed
+vocabulary buys: `mailfathom.mail.raed` is refused rather than read as a grant narrower than the one you meant. A
+`mailfathom.admin.*` name is refused the same way and for a second reason — the two surfaces draw from disjoint halves,
+so a permission on the wrong one would sit in the file granting nothing. So is a name the same grant already carries.
 
 **The grant belongs to the entry.** An entry may carry an `ApiKey`, a `PublicKey`, and an `OAuth` block at once, and
 `Permissions` applies to every credential it admits — so two credentials to be granted differently are two entries.

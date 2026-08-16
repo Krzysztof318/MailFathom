@@ -1,6 +1,6 @@
 # Configuration reference
 
-<!-- describes: src/**/*Options.cs, src/Host/Configuration/** -->
+<!-- describes: src/**/*Options.cs, src/Host/Configuration/**, src/Domain/Access/MailFathomPermission.cs -->
 
 Every user-settable option, in one place, checked against the options classes that bind it. Each section's table
 states the key, its type, the value a deployment gets by writing nothing, the constraint startup enforces, and what a
@@ -1137,7 +1137,7 @@ disjoint halves, and the name says which half it belongs to.
 | --- | --- | --- |
 | `mailfathom.mail.read` | MCP | The tools that read the local mailbox copy: `list_accounts`, `list_emails`, `get_email_content`, `search_emails`. Where semantic retrieval is configured, searching places the caller's own query text with the embedding provider, so this is not an egress-free grant |
 | `mailfathom.mail.ask` | MCP | `ask_mail`, which answers from mail content by sending it to a model provider. It does not imply `mailfathom.mail.read`, and granting it is granting access to mail |
-| `mailfathom.admin.read` | administrative | The reads reporting the deployment's own state and no mail: embedding status and the activation preview, the loaded rules, a run's progress, the stopped-job list |
+| `mailfathom.admin.read` | administrative | The reads reporting the deployment's own state and no mail: what synchronization is doing, embedding status and the activation preview, the loaded rules, a run's progress, the stopped-job list |
 | `mailfathom.admin.audit.read` | administrative | The per-account records derived from mail: the mailbox-mutation audit, the answering audit, the rules history, the spam classifications |
 | `mailfathom.admin.operate` | administrative | Asking the deployment to do work it can already do: running rules, classifying an account, retrying or dropping a stopped job, cancelling a reindex |
 | `mailfathom.admin.credentials.write` | administrative | Storing a mailbox refresh token |

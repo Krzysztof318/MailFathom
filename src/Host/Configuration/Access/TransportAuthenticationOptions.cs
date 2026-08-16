@@ -127,9 +127,17 @@ internal sealed class TransportAuthenticationOptions
     /// <returns>The granted permissions, in the published order.</returns>
     /// <exception cref="InvalidOperationException">Thrown when the settings have not passed <see cref="FindConfigurationErrors" />, which is what proves every written name is one this repository publishes.</exception>
     /// <remarks>
+    /// <para>
     /// This is the ceiling rather than what a particular caller holds. Where
     /// <see cref="PermissionsFromTokenScopes" /> is set, a token holds this narrowed by its own scopes, which is a
     /// question about the token and is asked where one is validated.
+    /// </para>
+    /// <para>
+    /// A grant is a set, so a written one is returned in the published order rather than the order it was typed in.
+    /// The order is what the startup line reads in and what the claims are stamped in, and two entries granting the
+    /// same permissions differently ordered are the same grant — reporting them as two would invite an operator to
+    /// look for a difference that is not there.
+    /// </para>
     /// </remarks>
     public IReadOnlyList<MailFathomPermission> GrantedPermissions(ProtectedSurface surface)
     {
@@ -138,14 +146,15 @@ internal sealed class TransportAuthenticationOptions
             return MailFathomPermission.PublishedFor(surface);
         }
 
-        return
-        [
-            .. this.Permissions.Select(configuredPermission =>
+        var granted = this.Permissions
+            .Select(configuredPermission =>
                 MailFathomPermission.TryParse(configuredPermission, out var permission)
                     ? permission
                     : throw new InvalidOperationException(
-                        "The grant was resolved before it was validated, so at least one written name is not a permission this repository publishes.")),
-        ];
+                        "The grant was resolved before it was validated, so at least one written name is not a permission this repository publishes."))
+            .ToHashSet();
+
+        return [.. MailFathomPermission.All.Where(granted.Contains)];
     }
 
     /// <summary>Finds everything an operator must fix before this entry can accept a credential.</summary>

@@ -284,6 +284,32 @@ public sealed class AdminEndpointOptionsTests
             error => error.Contains($"must be '{AdminEndpointOptions.RoutePrefix}'", StringComparison.Ordinal));
     }
 
+    /// <summary>This endpoint's own rule composes its path like every shared one, so an operator is sent to the key they wrote rather than to the position the binder appended the entry at.</summary>
+    [Fact]
+    public void FindConfigurationErrors_AResourcePrefixRefusalOnAGappedSource_NamesTheKeyTheOperatorWrote()
+    {
+        // Arrange
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>(StringComparer.Ordinal)
+            {
+                ["AdminEndpoint:Enabled"] = "true",
+                ["AdminEndpoint:Authentication:0:ApiKey:Name"] = "workstation",
+                ["AdminEndpoint:Authentication:0:ApiKey:SecretReference"] = "plaintext:a-key",
+                ["AdminEndpoint:Authentication:2:OAuth:Resource"] = "https://mail.example.test:8090/admin",
+                ["AdminEndpoint:Authentication:2:OAuth:AuthorizationServers:0:Name"] = "workforce",
+                ["AdminEndpoint:Authentication:2:OAuth:AuthorizationServers:0:Issuer"] = "https://sso.example.test/realms/mailfathom",
+                ["AdminEndpoint:Authentication:2:OAuth:AuthorizationServers:0:AuthorizedSubjects:0"] = "11111111-2222-3333-4444-555555555555",
+            })
+            .Build();
+
+        // Act
+        var errors = AdminEndpointOptions.ReadFrom(configuration).FindConfigurationErrors();
+
+        // Assert
+        var reported = Assert.Single(errors);
+        Assert.Contains("AdminEndpoint:Authentication:2:OAuth:Resource", reported, StringComparison.Ordinal);
+    }
+
     [Theory]
     [InlineData("https://mail.example.test:8090/api/admin")]
     [InlineData("https://mail.example.test:8090/api/admin/")]
