@@ -68,9 +68,9 @@ and its result would read as an answer about the mailbox.
   `51001 MailboxQueryPageSizeOutOfRange`, because a page clamped to a hundredth of what a client planned for looks
   exactly like the page it asked for. Naming none is a different input and takes the default.
 - **Blank text names no filter.** A text filter that arrives empty or as whitespace alone is read as one the request did
-  not name, rather than as a value to match: it takes the "absent means" column above. This holds for the addresses and
-  the subject fragment alike, so a client that sends a field it left empty gets the unfiltered read it meant rather than
-  a refusal. The free-text search query is the one exception, and refuses blank, because a search with no text is a
+  not name, rather than as a value to match: it takes the "absent means" column above. This holds for the addresses, the
+  subject fragment, and a keyword alike, so a client that sends a field it left empty gets the unfiltered read it meant
+  rather than a refusal. The free-text search query is the one exception, and refuses blank, because a search with no text is a
   listing rather than an unfiltered search.
 - **Addresses** are normalized by the domain into the comparison form the persistence layer indexes, so a filter and a
   stored participant are compared in one form by construction. An unusable address is refused with
@@ -83,7 +83,8 @@ and its result would read as an answer about the mailbox.
 - **A keyword** is folded the way the stored keywords were, so a caller writing `$Junk` matches mail whose server
   reported `$junk`, and is matched whole rather than as a fragment. A value no stored keyword could be — longer than 64
   characters, or carrying a control character — is refused with `51002 MailboxQueryFilterInvalid` rather than kept as a
-  filter that matches nothing, for the reason an unusable address is.
+  filter that matches nothing, for the reason an unusable address is. Blank is not such a value: it names no keyword
+  filter at all, as the bullet above says of every text filter but the search query.
 - **A received range** may be unbounded at either end; only an unbounded page is disallowed. A range whose end is not
   after its start selects nothing and is refused. An email whose received timestamp is unknown falls inside neither
   bound, so naming either one excludes undated mail. Each bound names an instant, so it may be written at any UTC offset

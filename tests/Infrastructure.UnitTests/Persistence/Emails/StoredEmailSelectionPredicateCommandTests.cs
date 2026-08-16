@@ -18,17 +18,28 @@ namespace MailFathom.Infrastructure.UnitTests.Persistence.Emails;
 /// </summary>
 public sealed class StoredEmailSelectionPredicateCommandTests
 {
-    /// <summary>The flag is a column of its own, so the filter is a comparison rather than anything the snapshot has to be unpacked for.</summary>
+    /// <summary>
+    /// The flag is a column of its own, so the filter is a comparison rather than anything the snapshot has to be
+    /// unpacked for — and it is a comparison against the value the caller asked for. Reading only the column name would
+    /// pass a predicate that always compared against <see langword="true" />, which is the regression worth catching:
+    /// the two rows of this theory would then be one assertion made twice.
+    /// </summary>
     [Theory]
-    [InlineData(true)]
-    [InlineData(false)]
-    public void Matching_FlaggedFilter_ComparesTheStoredFlagColumn(bool isRemotelyFlagged)
+    [InlineData(true, "True")]
+    [InlineData(false, "False")]
+    public void Matching_FlaggedFilter_ComparesTheStoredFlagColumnAgainstTheRequestedValue(
+        bool isRemotelyFlagged,
+        string boundValue)
     {
         // Act
-        var narrowing = NarrowingOf(SelectionWith(isRemotelyFlagged: isRemotelyFlagged));
+        var command = CommandFor(SelectionWith(isRemotelyFlagged: isRemotelyFlagged));
 
         // Assert
-        Assert.Contains(nameof(StoredEmailEntity.IsRemotelyFlagged), narrowing, StringComparison.Ordinal);
+        Assert.Contains(
+            $"\"{nameof(StoredEmailEntity.IsRemotelyFlagged)}\" = @isRemotelyFlagged",
+            NarrowingIn(command),
+            StringComparison.Ordinal);
+        Assert.Contains($"@isRemotelyFlagged='{boundValue}'", DeclarationsIn(command), StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -63,17 +74,31 @@ public sealed class StoredEmailSelectionPredicateCommandTests
     /// Only the part after <c>WHERE</c> is read. Every flag column is in the select list of any query over this table,
     /// so a test written against the whole command would report a filter as present whether or not one was applied.
     /// </remarks>
-    private static string NarrowingOf(MailboxEmailSelection selection)
+    private static string NarrowingOf(MailboxEmailSelection selection) => NarrowingIn(CommandFor(selection));
+
+    /// <summary>Generates the whole command, declarations included, without opening a connection.</summary>
+    private static string CommandFor(MailboxEmailSelection selection)
     {
         using var context = new MailFathomDbContextDesignTimeFactory().CreateDbContext([]);
 
-        var command = StoredEmailSelectionPredicate
+        return StoredEmailSelectionPredicate
             .Matching(context.StoredEmails.AsNoTracking(), selection)
             .ToQueryString();
+    }
 
+    private static string NarrowingIn(string command)
+    {
         var whereIndex = command.IndexOf("WHERE", StringComparison.Ordinal);
 
         return whereIndex < 0 ? string.Empty : command[whereIndex..];
+    }
+
+    /// <summary>Keeps the parameter declarations EF Core prefixes, which is the one place a bound value is written out.</summary>
+    private static string DeclarationsIn(string command)
+    {
+        var statementStart = command.IndexOf("SELECT", StringComparison.Ordinal);
+
+        return statementStart < 0 ? string.Empty : command[..statementStart];
     }
 
     private static MailboxEmailSelection SelectionWith(
