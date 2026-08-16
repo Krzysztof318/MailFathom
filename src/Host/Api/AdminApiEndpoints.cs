@@ -118,8 +118,6 @@ internal static class AdminApiEndpoints
 /// </remarks>
 internal sealed record AdminSessionResponse(string Service, string Version, string Credential)
 {
-    private const string AnonymousCaller = "anonymous";
-
     /// <summary>Describes the caller a validated credential produced.</summary>
     /// <param name="caller">The principal the authentication scheme produced.</param>
     /// <returns>The response body.</returns>
@@ -137,5 +135,5 @@ internal sealed record AdminSessionResponse(string Service, string Version, stri
     /// <summary>Reports the configured name of whatever authenticated, or that nothing did.</summary>
     /// <remarks>The naming rule is the transport's own, shared with what the application layer is told the work is running for, so this response and a record of a refusal cannot call one caller two things.</remarks>
     private static string NameOf(ClaimsPrincipal caller) =>
-        TransportCallerIdentity.NameOf(caller) ?? AnonymousCaller;
+        TransportCallerIdentity.NameOf(caller) ?? TransportCallerIdentity.AnonymousCaller;
 }

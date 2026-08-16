@@ -3,6 +3,9 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.Access;
+using MailFathom.Domain.Access;
+using MailFathom.Host.Configuration.Endpoints;
+using Microsoft.Extensions.Options;
 
 namespace MailFathom.Host.Security.Transport;
 
@@ -41,23 +44,38 @@ namespace MailFathom.Host.Security.Transport;
 /// </item>
 /// </list>
 /// <para>
-/// A request that authenticated nothing is none of the three, and is reported as such rather than as an anonymous
-/// caller holding nothing: the difference matters at the one route that is reached that way legitimately, where a
-/// principal appearing out of the transport instead of out of a verified signature would be a second, weaker way in.
+/// A request that authenticated nothing is a caller only where the surface it reached configures no credential at all,
+/// and that caller holds everything the surface publishes — ADR 0012 decided that posture and the startup report states
+/// it, so a use case refusing there would refuse on a deployment whose own record says it grants everything. Where the
+/// surface does configure a credential, a request that authenticated nothing is none of the three: the difference
+/// matters at the one route reached that way legitimately, where a principal appearing out of the transport instead of
+/// out of a verified signature would be a second, weaker way in.
 /// </para>
 /// </remarks>
 internal sealed class TransportAuthorizedPrincipalSource : IAuthorizedPrincipalSource
 {
     private readonly IHttpContextAccessor httpContextAccessor;
+    private readonly McpEndpointOptions mcpEndpointSettings;
+    private readonly AdminEndpointOptions adminEndpointSettings;
 
     /// <summary>Initializes the adapter over the request being served, if there is one.</summary>
     /// <param name="httpContextAccessor">Reports the request this scope belongs to, or nothing outside one.</param>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="httpContextAccessor" /> is <see langword="null" />.</exception>
-    public TransportAuthorizedPrincipalSource(IHttpContextAccessor httpContextAccessor)
+    /// <param name="mcpEndpointSettings">The MCP endpoint settings startup was composed from.</param>
+    /// <param name="adminEndpointSettings">The administrative endpoint settings startup was composed from.</param>
+    /// <exception cref="ArgumentNullException">Thrown when any argument is <see langword="null" />.</exception>
+    /// <remarks>The settings are the startup snapshot the schemes were registered from, which is the same one the startup report states the resolved grant out of; reading a reloaded value here would answer for a posture no scheme was composed against.</remarks>
+    public TransportAuthorizedPrincipalSource(
+        IHttpContextAccessor httpContextAccessor,
+        IOptions<McpEndpointOptions> mcpEndpointSettings,
+        IOptions<AdminEndpointOptions> adminEndpointSettings)
     {
         ArgumentNullException.ThrowIfNull(httpContextAccessor);
+        ArgumentNullException.ThrowIfNull(mcpEndpointSettings);
+        ArgumentNullException.ThrowIfNull(adminEndpointSettings);
 
         this.httpContextAccessor = httpContextAccessor;
+        this.mcpEndpointSettings = mcpEndpointSettings.Value;
+        this.adminEndpointSettings = adminEndpointSettings.Value;
     }
 
     /// <inheritdoc />
@@ -83,6 +101,31 @@ internal sealed class TransportAuthorizedPrincipalSource : IAuthorizedPrincipalS
 
         return TransportCallerIdentity.NameOf(context.User) is { } identity
             ? AuthorizedPrincipal.Caller(identity, TransportGrant.PermissionsCarriedBy(context.User))
-            : null;
+            : this.UnnarrowedCallerOn(context.Request.Path);
     }
+
+    /// <summary>Describes the caller a surface admits where it configures no credential for one to be told apart by.</summary>
+    /// <remarks>
+    /// There is no entry for a grant to hang on, so the grant is the surface's whole half. The administrative surface is
+    /// asked first because it is the narrower of the two paths, and a surface that does configure a credential answers
+    /// nothing here: a request that reached it without authenticating was admitted by nothing.
+    /// </remarks>
+    private AuthorizedPrincipal? UnnarrowedCallerOn(PathString path)
+    {
+        if (TransportSurface.Admin.Serves(path))
+        {
+            return this.adminEndpointSettings.RequiresAuthentication ? null : WholeSurfaceCaller(TransportSurface.Admin);
+        }
+
+        if (TransportSurface.Mcp.Serves(path))
+        {
+            return this.mcpEndpointSettings.RequiresAuthentication ? null : WholeSurfaceCaller(TransportSurface.Mcp);
+        }
+
+        return null;
+    }
+
+    private static AuthorizedPrincipal WholeSurfaceCaller(TransportSurface surface) => AuthorizedPrincipal.Caller(
+        TransportCallerIdentity.AnonymousCaller,
+        MailFathomPermission.PublishedFor(surface.GrantedSurface));
 }

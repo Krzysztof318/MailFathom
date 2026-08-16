@@ -29,11 +29,16 @@ transport having already asked, and the transport never relies on the use case b
 
 ## What the application layer is told
 
-`AuthorizedPrincipal` is the whole of it: the configured identity the work was admitted under, and the permissions that
-identity holds. Nothing from `System.Security.Claims`, ASP.NET Core, or the MCP SDK crosses that line, and no use case
-learns *which* credential admitted a caller — that is a question the transport already answered. `Boundaries.UnitTests`
-holds a rule keeping claims types out of `Application` and `Domain`, because those are the one family of types the
-project references cannot refuse on their own.
+`AuthorizedPrincipal` is the whole of it: the identity the work was admitted under, and the permissions that identity
+holds. Nothing from `System.Security.Claims`, ASP.NET Core, or the MCP SDK crosses that line, and no use case learns
+*which* credential admitted a caller — that is a question the transport already answered. `Boundaries.UnitTests` holds a
+rule keeping claims types out of `Application` and `Domain`, because those are the one family of types the project
+references cannot refuse on their own.
+
+The identity is not one shape. Where an operator wrote the credential it is that entry's own name; where a token brought
+it, it is the issuer and subject the deployment authorized — a host name and that authorization server's identifier for
+a person. So a boundary that names the caller to its own readers reads the identity and decides for itself what it may
+show, and a refusal never carries it.
 
 There are three kinds of principal, and none of them is a weaker version of another:
 
@@ -57,19 +62,23 @@ so the next capability-authorized route does not have to argue for its own.
 
 The host composes one `IAuthorizedPrincipalSource` per scope, which for a served request is that request:
 
-- **A request an authentication scheme validated** becomes a caller, named by what this deployment configured — an API
-  key's name, a client public key's name, or the subject the access policy checked against the configured authorization
-  servers. The permissions travel as claims the scheme wrote when the credential was judged, so nothing per request
-  re-reads a configuration section.
+- **A request an authentication scheme validated** becomes a caller, named by what this deployment authorized — an API
+  key's name, a client public key's name, or the issuer and subject the access policy checked against the configured
+  authorization servers. The permissions travel as claims the scheme wrote when the credential was judged, so nothing
+  per request re-reads a configuration section.
 - **A scope with no request behind it** is the process's own identity. Work reached outside a request in this process is
   work no caller asked for.
 - **A route that verified a capability** states that principal onto its own scope before it reaches the use case. The
   download route is the one that does.
 
-**A request that authenticated nothing is none of the three**, and is reported as none rather than as an anonymous
-caller holding nothing. The difference matters at the download route, which is reached that way legitimately: a
-principal appearing out of the transport there would be a second and weaker way into an attachment than the signature
-the route exists to check.
+**A request that authenticated nothing depends on what the surface it reached configures.** Where that surface
+configures no `Authentication` entry at all, the caller holds everything the surface publishes — there is no entry for a
+grant to hang on, which is the posture ADR 0012 settled and the startup record already states, so reporting no principal
+there would have a use case refuse every call on a deployment whose own record says it grants everything. Where the
+surface does configure a credential, such a request is none of the three, and that is what protects the download route:
+it is reached without a credential legitimately, and a principal appearing out of the transport there would be a second
+and weaker way into an attachment than the signature the route exists to check. The route's own statement overrides
+either answer once the ticket verifies.
 
 ## What a refusal is, and what each boundary does with it
 

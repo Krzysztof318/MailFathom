@@ -17,11 +17,14 @@ using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Folders;
 using MailFathom.Host.Api;
+using MailFathom.Host.Configuration.Access;
+using MailFathom.Host.Configuration.Endpoints;
 using MailFathom.Host.Security.Transport;
 using MailFathom.TestSupport;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Options;
 using NSubstitute;
 using Xunit;
 
@@ -283,7 +286,15 @@ public sealed class EmailAttachmentDownloadEndpointTests
         var httpContextAccessor = Substitute.For<IHttpContextAccessor>();
         httpContextAccessor.HttpContext.Returns(context);
 
-        return new TransportAuthorizedPrincipalSource(httpContextAccessor);
+        // The MCP endpoint configures a credential here, so nothing about the transport hands this route a caller: what
+        // the use case is told is only what the route states once the ticket has verified.
+        var mcpEndpoint = new McpEndpointOptions();
+        mcpEndpoint.Authentication.Add(new TransportAuthenticationOptions());
+
+        return new TransportAuthorizedPrincipalSource(
+            httpContextAccessor,
+            Options.Create(mcpEndpoint),
+            Options.Create(new AdminEndpointOptions()));
     }
 
     private static IAttachmentDownloadTicketReader TicketReaderRedeeming(AttachmentDownloadTicket? ticket)

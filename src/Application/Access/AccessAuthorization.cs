@@ -56,14 +56,12 @@ public sealed class AccessAuthorization
 
         if (principal.Kind != AuthorizedPrincipalKind.Caller)
         {
-            throw PrincipalNotAuthorizedException.WrongPrincipalKind(
-                AuthorizedPrincipalKind.Caller,
-                principal.Identity);
+            throw PrincipalNotAuthorizedException.WrongPrincipalKind(AuthorizedPrincipalKind.Caller);
         }
 
         if (!principal.Holds(permission))
         {
-            throw PrincipalNotAuthorizedException.MissingPermission(permission, principal.Identity);
+            throw PrincipalNotAuthorizedException.MissingPermission(permission);
         }
     }
 
@@ -87,7 +85,7 @@ public sealed class AccessAuthorization
 
         if (principal.Kind != admittedKind)
         {
-            throw PrincipalNotAuthorizedException.WrongPrincipalKind(admittedKind, principal.Identity);
+            throw PrincipalNotAuthorizedException.WrongPrincipalKind(admittedKind);
         }
     }
 

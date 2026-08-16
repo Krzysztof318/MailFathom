@@ -5,9 +5,14 @@
 using System.Security.Claims;
 using MailFathom.Application.Access;
 using MailFathom.Domain.Access;
+using MailFathom.Host.Api;
+using MailFathom.Host.Configuration.Access;
+using MailFathom.Host.Configuration.Endpoints;
 using MailFathom.Host.Security.ApiKeys;
 using MailFathom.Host.Security.Transport;
+using MailFathom.Mcp;
 using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.Options;
 using NSubstitute;
 using Xunit;
 
@@ -58,14 +63,52 @@ public sealed class TransportAuthorizedPrincipalSourceTests
     }
 
     /// <summary>
-    /// A request nothing authenticated is none of the three kinds. Reporting it as an anonymous caller would give the
-    /// download route a principal it never verified, which is what its capability is for.
+    /// A request nothing authenticated, on a surface that configures a credential, is none of the three kinds.
+    /// Reporting it as an anonymous caller would give the download route a principal it never verified, which is what
+    /// its capability is for.
     /// </summary>
     [Fact]
-    public void Current_ARequestThatAuthenticatedNothing_ReportsNoPrincipal()
+    public void Current_ARequestThatAuthenticatedNothingWhereTheSurfaceConfiguresACredential_ReportsNoPrincipal()
     {
         // Arrange
-        var source = SourceOver(new DefaultHttpContext());
+        var source = SourceOver(RequestTo(McpEndpointRoute.Path), mcpConfiguresACredential: true);
+
+        // Act & Assert
+        Assert.Null(source.Current);
+    }
+
+    /// <summary>
+    /// ADR 0012 leaves a surface with no <c>Authentication</c> entry granting its whole half, because there is no entry
+    /// for a grant to hang on, and the startup report tells the operator exactly that. Reporting no principal here
+    /// would have a use case refuse every call on a deployment whose own record says it grants everything.
+    /// </summary>
+    [Theory]
+    [InlineData(McpEndpointRoute.Path, ProtectedSurface.Mail)]
+    [InlineData(EmailAttachmentDownloadEndpoint.RoutePrefix + "/an-object", ProtectedSurface.Mail)]
+    [InlineData(AdminEndpointOptions.RoutePrefix + "/session", ProtectedSurface.Administration)]
+    public void Current_ARequestOnASurfaceConfiguringNoCredential_ReportsACallerHoldingThatWholeSurface(
+        string path,
+        ProtectedSurface surface)
+    {
+        // Arrange
+        var source = SourceOver(RequestTo(path));
+
+        // Act
+        var principal = source.Current;
+
+        // Assert
+        Assert.Equal(AuthorizedPrincipalKind.Caller, principal?.Kind);
+        Assert.Equal(
+            MailFathomPermission.PublishedFor(surface).ToHashSet(),
+            principal?.Permissions);
+    }
+
+    /// <summary>A path neither surface serves is nobody's, so the posture of either endpoint decides nothing about it.</summary>
+    [Fact]
+    public void Current_ARequestToAPathNeitherSurfaceServes_ReportsNoPrincipal()
+    {
+        // Arrange
+        var source = SourceOver(RequestTo("/health"));
 
         // Act & Assert
         Assert.Null(source.Current);
@@ -100,15 +143,37 @@ public sealed class TransportAuthorizedPrincipalSourceTests
         Assert.Same(capability, source.Current);
     }
 
-    private static TransportAuthorizedPrincipalSource SourceOver(HttpContext? context)
+    /// <summary>Composes the adapter over one request, and over endpoints that configure a credential or do not.</summary>
+    /// <remarks>Both endpoints default to configuring none, which is the posture whose grant the tests above are about; a test that needs the ordinary posture says so.</remarks>
+    private static TransportAuthorizedPrincipalSource SourceOver(
+        HttpContext? context,
+        bool mcpConfiguresACredential = false,
+        bool adminConfiguresACredential = false)
     {
         var httpContextAccessor = Substitute.For<IHttpContextAccessor>();
         httpContextAccessor.HttpContext.Returns(context);
 
-        return new TransportAuthorizedPrincipalSource(httpContextAccessor);
+        var mcpEndpoint = new McpEndpointOptions();
+        var adminEndpoint = new AdminEndpointOptions();
+        if (mcpConfiguresACredential)
+        {
+            mcpEndpoint.Authentication.Add(new TransportAuthenticationOptions());
+        }
+
+        if (adminConfiguresACredential)
+        {
+            adminEndpoint.Authentication.Add(new TransportAuthenticationOptions());
+        }
+
+        return new TransportAuthorizedPrincipalSource(
+            httpContextAccessor,
+            Options.Create(mcpEndpoint),
+            Options.Create(adminEndpoint));
     }
 
     private static DefaultHttpContext RequestBy(ClaimsPrincipal caller) => new() { User = caller };
+
+    private static DefaultHttpContext RequestTo(string path) => new() { Request = { Path = path } };
 
     /// <summary>Composes the principal an API key scheme produces, which names the entry and carries the grant it resolved to.</summary>
     private static ClaimsPrincipal AuthenticatedCallerHolding(params MailFathomPermission[] granted) =>

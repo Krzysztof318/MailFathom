@@ -21,8 +21,11 @@ namespace MailFathom.Application.Access;
 /// does, and a boundary reports <see cref="RequiredPermission" /> rather than parsing prose.
 /// </para>
 /// <para>
-/// The message carries a published permission name, the identity the work was admitted under, or neither. All three are
-/// MailFathom's own configured names, which is what the message rule on <see cref="MailFathomException" /> permits.
+/// The message names a published permission, a kind of principal, or neither, and never the identity the work was
+/// admitted under. That identity is MailFathom's own name for a configured key, but for a token it is the issuer and
+/// subject the deployment authorized — a host name and a remote party's identifier for a person — and the message rule
+/// on <see cref="MailFathomException" /> admits neither. A boundary that has to name the caller reads
+/// <see cref="AuthorizedPrincipal.Identity" /> and decides for itself what its own readers may see.
 /// </para>
 /// </remarks>
 public sealed class PrincipalNotAuthorizedException : MailFathomException
@@ -43,25 +46,15 @@ public sealed class PrincipalNotAuthorizedException : MailFathomException
 
     /// <summary>Reports a caller that reached an operation its grant does not carry.</summary>
     /// <param name="requiredPermission">The permission the operation requires.</param>
-    /// <param name="identity">The configured identity the work was admitted under.</param>
     /// <returns>The failure to raise.</returns>
-    internal static PrincipalNotAuthorizedException MissingPermission(
-        MailFathomPermission requiredPermission,
-        string identity) =>
-        new(
-            $"'{identity}' was not granted '{requiredPermission.Name}'.",
-            requiredPermission);
+    internal static PrincipalNotAuthorizedException MissingPermission(MailFathomPermission requiredPermission) =>
+        new($"The caller was not granted '{requiredPermission.Name}'.", requiredPermission);
 
     /// <summary>Reports an operation reached under a kind of principal it does not admit.</summary>
     /// <param name="admittedKind">The one kind the operation admits.</param>
-    /// <param name="identity">The configured identity the work was admitted under.</param>
     /// <returns>The failure to raise.</returns>
-    internal static PrincipalNotAuthorizedException WrongPrincipalKind(
-        AuthorizedPrincipalKind admittedKind,
-        string identity) =>
-        new(
-            $"The operation is reached under {Describe(admittedKind)} and '{identity}' is not one.",
-            default);
+    internal static PrincipalNotAuthorizedException WrongPrincipalKind(AuthorizedPrincipalKind admittedKind) =>
+        new($"The operation is reached under {Describe(admittedKind)}, and what reached it is not one.", default);
 
     /// <summary>Reports an operation reached under no principal at all.</summary>
     /// <returns>The failure to raise.</returns>

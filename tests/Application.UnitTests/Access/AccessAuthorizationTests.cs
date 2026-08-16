@@ -152,14 +152,15 @@ public sealed class AccessAuthorizationTests
     {
         // Arrange
         var authorization = AuthorizationOver(principal: null);
-
-        // Act
-        var refusals = new Action[]
-        {
+        Action[] requirements =
+        [
             () => authorization.RequirePermission(MailFathomPermission.MailRead),
             authorization.RequireProcessIdentity,
             authorization.RequireSignedCapability,
-        }.Select(requirement => Record.Exception(requirement));
+        ];
+
+        // Act
+        Exception?[] refusals = [.. requirements.Select(Record.Exception)];
 
         // Assert
         Assert.All(refusals, refusal => Assert.IsType<PrincipalNotAuthorizedException>(refusal));

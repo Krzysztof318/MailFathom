@@ -9,8 +9,8 @@ namespace MailFathom.Application.Access;
 /// <summary>Whoever a unit of work is running for, and what they were granted.</summary>
 /// <remarks>
 /// <para>
-/// This is the whole of what the application layer learns about the outside of a request. It carries the configured
-/// identity the work was admitted under and the permissions that identity holds, and nothing else: no credential, no
+/// This is the whole of what the application layer learns about the outside of a request. It carries the identity the
+/// work was admitted under and the permissions that identity holds, and nothing else: no credential, no
 /// claim an authorization server issued, no scheme, no transport. Which credential admitted a caller is a question the
 /// transport answered and no use case has any business re-deciding, which is why nothing here can be asked it.
 /// </para>
@@ -50,35 +50,42 @@ public sealed class AuthorizedPrincipal
     /// <summary>Gets which of the three things this principal is.</summary>
     public AuthorizedPrincipalKind Kind { get; }
 
-    /// <summary>Gets the configured identity the work was admitted under.</summary>
+    /// <summary>Gets the identity the work was admitted under.</summary>
     /// <remarks>
-    /// For a caller it is MailFathom's own name for the credential entry that admitted it, never the material and never
-    /// a claim beyond the subject the deployment already authorized. For the process identity it is
+    /// <para>
+    /// For a caller it is what the transport admitted it as, and that is not one shape: a configured key's own name
+    /// where the operator wrote the credential, and the issuer and subject the deployment authorized where a token
+    /// brought it. Never the credential material either way. For the process identity it is
     /// <see cref="ProcessIdentityName" />, and for a signed capability it is the object the signature was bounded to.
-    /// It exists so an operator's record of a refusal names something they can act on; nothing decides access from it.
+    /// </para>
+    /// <para>
+    /// Nothing decides access from it. It is here for a boundary that has to name the caller to its own readers, and
+    /// because the token form carries a host name and a remote party's identifier for a person, it never reaches a
+    /// failure message — <see cref="PrincipalNotAuthorizedException" /> states why.
+    /// </para>
     /// </remarks>
     public string Identity { get; }
 
     /// <summary>Gets the permissions this principal holds, which is empty for every kind but a caller.</summary>
     public IReadOnlySet<MailFathomPermission> Permissions { get; }
 
-    /// <summary>Describes a caller a configured entry admitted.</summary>
-    /// <param name="configuredIdentity">MailFathom's own name for the credential entry that admitted the caller.</param>
-    /// <param name="grantedPermissions">The permissions that entry resolved to, empty when it granted none.</param>
+    /// <summary>Describes a caller the transport admitted.</summary>
+    /// <param name="identity">What the transport admitted the caller as, in the two forms <see cref="Identity" /> describes.</param>
+    /// <param name="grantedPermissions">The permissions the entry that admitted it resolved to, empty when it granted none.</param>
     /// <returns>The principal the use cases the caller reaches are consulted with.</returns>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="configuredIdentity" /> or <paramref name="grantedPermissions" /> is <see langword="null" />.</exception>
-    /// <exception cref="ArgumentException">Thrown when <paramref name="configuredIdentity" /> is empty or white space, which would leave a refusal naming nothing.</exception>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="identity" /> or <paramref name="grantedPermissions" /> is <see langword="null" />.</exception>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="identity" /> is empty or white space, which would leave a principal nothing can be reported by.</exception>
     /// <remarks>An unspecified permission is dropped rather than carried, because the struct default names no capability and holding one would mean holding nothing under a name that reads like something.</remarks>
     public static AuthorizedPrincipal Caller(
-        string configuredIdentity,
+        string identity,
         IEnumerable<MailFathomPermission> grantedPermissions)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(configuredIdentity);
+        ArgumentException.ThrowIfNullOrWhiteSpace(identity);
         ArgumentNullException.ThrowIfNull(grantedPermissions);
 
         return new AuthorizedPrincipal(
             AuthorizedPrincipalKind.Caller,
-            configuredIdentity,
+            identity,
             grantedPermissions.Where(permission => permission.IsSpecified).ToHashSet());
     }
 
