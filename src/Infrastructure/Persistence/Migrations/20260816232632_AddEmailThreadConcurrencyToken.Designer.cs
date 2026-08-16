@@ -3,6 +3,7 @@ using System;
 using MailFathom.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using NpgsqlTypes;
@@ -13,9 +14,11 @@ using Pgvector;
 namespace MailFathom.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(MailFathomDbContext))]
-    partial class MailFathomDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260816232632_AddEmailThreadConcurrencyToken")]
+    partial class AddEmailThreadConcurrencyToken
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -1147,133 +1150,6 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                     b.ToTable("mailbox_refresh_tokens", (string)null);
                 });
 
-            modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.OutgoingEmailContentEntity", b =>
-                {
-                    b.Property<Guid>("OutgoingEmailId")
-                        .HasColumnType("uuid");
-
-                    b.Property<long>("MimeByteLength")
-                        .HasColumnType("bigint");
-
-                    b.Property<byte[]>("RawMime")
-                        .IsRequired()
-                        .HasColumnType("bytea");
-
-                    b.Property<byte[]>("Sha256Hash")
-                        .IsRequired()
-                        .HasMaxLength(32)
-                        .HasColumnType("bytea");
-
-                    b.Property<DateTimeOffset>("StoredAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.HasKey("OutgoingEmailId");
-
-                    b.ToTable("outgoing_email_contents", (string)null);
-                });
-
-            modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.OutgoingEmailEntity", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .HasColumnType("uuid");
-
-                    b.Property<int>("AttemptCount")
-                        .HasColumnType("integer");
-
-                    b.Property<uint>("ConcurrencyVersion")
-                        .IsConcurrencyToken()
-                        .ValueGeneratedOnAddOrUpdate()
-                        .HasColumnType("xid")
-                        .HasColumnName("xmin");
-
-                    b.Property<int?>("LastFailureCode")
-                        .HasColumnType("integer");
-
-                    b.Property<int?>("LastReplyCode")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("MailboxAccountId")
-                        .IsRequired()
-                        .HasMaxLength(128)
-                        .HasColumnType("character varying(128)");
-
-                    b.Property<long>("MimeByteLength")
-                        .HasColumnType("bigint");
-
-                    b.Property<DateTimeOffset>("RecordedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("RequesterIdentity")
-                        .IsRequired()
-                        .HasMaxLength(128)
-                        .HasColumnType("character varying(128)");
-
-                    b.Property<string>("RequesterOrigin")
-                        .IsRequired()
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)");
-
-                    b.Property<string>("Stage")
-                        .IsRequired()
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)");
-
-                    b.Property<DateTimeOffset>("StageChangedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("MailboxAccountId", "RecordedAt")
-                        .HasDatabaseName("ix_outgoing_emails_outstanding")
-                        .HasFilter("\"Stage\" NOT IN ('Sent', 'Refused', 'Cancelled')");
-
-                    b.HasIndex("MailboxAccountId", "RequesterOrigin", "RequesterIdentity")
-                        .IsUnique()
-                        .HasDatabaseName("ix_outgoing_emails_identity");
-
-                    b.ToTable("outgoing_emails", (string)null);
-                });
-
-            modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.OutgoingEmailRecipientEntity", b =>
-                {
-                    b.Property<Guid>("OutgoingEmailId")
-                        .HasColumnType("uuid");
-
-                    b.Property<int>("Ordinal")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("Address")
-                        .IsRequired()
-                        .HasMaxLength(320)
-                        .HasColumnType("character varying(320)");
-
-                    b.Property<DateTimeOffset?>("AnsweredAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<uint>("ConcurrencyVersion")
-                        .IsConcurrencyToken()
-                        .ValueGeneratedOnAddOrUpdate()
-                        .HasColumnType("xid")
-                        .HasColumnName("xmin");
-
-                    b.Property<int?>("LastReplyCode")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("Role")
-                        .IsRequired()
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)");
-
-                    b.Property<string>("Status")
-                        .IsRequired()
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)");
-
-                    b.HasKey("OutgoingEmailId", "Ordinal");
-
-                    b.ToTable("outgoing_email_recipients", (string)null);
-                });
-
             modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.SpamClassificationRunEntity", b =>
                 {
                     b.Property<string>("MailboxAccountId")
@@ -1389,10 +1265,6 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                         .IsRequired()
                         .HasMaxLength(64)
                         .HasColumnType("character varying(64)");
-
-                    b.Property<string>("DisplayedAuthorDomain")
-                        .HasMaxLength(253)
-                        .HasColumnType("character varying(253)");
 
                     b.Property<string>("DkimSignerDomain")
                         .HasMaxLength(253)
@@ -1825,30 +1697,6 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                     b.Navigation("StoredEmail");
                 });
 
-            modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.OutgoingEmailContentEntity", b =>
-                {
-                    b.HasOne("MailFathom.Infrastructure.Persistence.Entities.OutgoingEmailEntity", "OutgoingEmail")
-                        .WithOne("Content")
-                        .HasForeignKey("MailFathom.Infrastructure.Persistence.Entities.OutgoingEmailContentEntity", "OutgoingEmailId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired()
-                        .HasConstraintName("fk_outgoing_email_contents_emails");
-
-                    b.Navigation("OutgoingEmail");
-                });
-
-            modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.OutgoingEmailRecipientEntity", b =>
-                {
-                    b.HasOne("MailFathom.Infrastructure.Persistence.Entities.OutgoingEmailEntity", "OutgoingEmail")
-                        .WithMany("Recipients")
-                        .HasForeignKey("OutgoingEmailId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired()
-                        .HasConstraintName("fk_outgoing_email_recipients_emails");
-
-                    b.Navigation("OutgoingEmail");
-                });
-
             modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.StoredEmailEntity", b =>
                 {
                     b.HasOne("MailFathom.Infrastructure.Persistence.Entities.EmailThreadEntity", null)
@@ -1921,13 +1769,6 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
             modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.MailboxAccountEntity", b =>
                 {
                     b.Navigation("MailFolders");
-                });
-
-            modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.OutgoingEmailEntity", b =>
-                {
-                    b.Navigation("Content");
-
-                    b.Navigation("Recipients");
                 });
 
             modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.StoredEmailEntity", b =>

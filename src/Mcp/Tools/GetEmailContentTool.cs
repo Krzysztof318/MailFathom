@@ -114,8 +114,11 @@ internal sealed class GetEmailContentTool(EmailContentReader emailContentReader)
         bool includeAttachmentDownloadLinks = false,
         CancellationToken cancellationToken = default)
     {
+        // The list is handed over unresolved so the selection is settled before it is counted or parsed: a call naming
+        // a conversation and an empty list is one that named both, and reporting the list as too short would answer a
+        // question the caller never asked.
         var request = GetEmailContentRequest.CreateForSelection(
-            storedEmailIds is null ? null : NamedEmails(storedEmailIds),
+            storedEmailIds is null ? null : () => NamedEmails(storedEmailIds),
             NamedThread(threadId),
             includeSanitizedHtml,
             includeAttachmentDownloadLinks);

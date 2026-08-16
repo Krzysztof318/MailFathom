@@ -1141,6 +1141,29 @@ public sealed class GetEmailContentToolTests
         Assert.Equal(0, summaryReader.ReadCount);
     }
 
+    /// <summary>
+    /// An empty list is still a list the caller sent, so the call named both and is refused for that rather than for a
+    /// count: reporting the list as too short would answer a question about a selection the caller never made.
+    /// </summary>
+    [Fact]
+    public async Task GetEmailContentAsync_AnEmptyEmailListBesideAConversation_IsRefusedAsBothRatherThanAsTooFewEmails()
+    {
+        // Arrange
+        var summaryReader = new StubStoredEmailSummaryReader(SummaryOf());
+        var tool = ToolOver(summaryReader);
+
+        // Act
+        var failure = await Assert.ThrowsAsync<EmailContentReadSelectionInvalidException>(
+            () => tool.GetEmailContentAsync(
+                [],
+                Guid.CreateVersion7().ToString(),
+                cancellationToken: TestContext.Current.CancellationToken));
+
+        // Assert
+        Assert.Equal(MailFathomErrorCode.EmailContentReadSelectionInvalid, failure.ErrorCode);
+        Assert.Equal(0, summaryReader.ReadCount);
+    }
+
     [Fact]
     public async Task GetEmailContentAsync_NeitherEmailsNorAConversation_IsRefusedWithoutReadingAnything()
     {
@@ -1255,13 +1278,13 @@ public sealed class GetEmailContentToolTests
     }
 
     /// <summary>Builds a conversation as a chain, one message a minute apart, all of it in the served inbox.</summary>
-    private static EmailThreadMessage[] ConversationOf(int count) =>
+    private static ThreadedEmailSummary[] ConversationOf(int count) =>
     [
         .. Enumerable.Range(0, count).Aggregate(
-            new List<EmailThreadMessage>(count),
+            new List<ThreadedEmailSummary>(count),
             (chain, ordinal) =>
             {
-                chain.Add(new EmailThreadMessage
+                chain.Add(new ThreadedEmailSummary
                 {
                     StoredEmailId = StoredEmailId.Create(Guid.CreateVersion7()),
                     AccountId = MailAccountId.Create(ServedAccountId),
@@ -1276,7 +1299,7 @@ public sealed class GetEmailContentToolTests
             }),
     ];
 
-    private static StubEmailThreadReader ThreadReaderOver(EmailThreadId threadId, EmailThreadMessage[] conversation) =>
+    private static StubEmailThreadReader ThreadReaderOver(EmailThreadId threadId, ThreadedEmailSummary[] conversation) =>
         new([.. conversation.Select(message => (threadId, message))]);
 
     private static GetEmailContentTool ToolOver(

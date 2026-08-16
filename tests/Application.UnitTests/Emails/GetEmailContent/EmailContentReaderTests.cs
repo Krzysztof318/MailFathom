@@ -1490,7 +1490,7 @@ public sealed class EmailContentReaderTests
         bool asAChain = false) =>
         new(
         [
-            .. conversation.Select((summary, ordinal) => (threadId, new EmailThreadMessage
+            .. conversation.Select((summary, ordinal) => (threadId, new ThreadedEmailSummary
             {
                 StoredEmailId = summary.StoredEmailId,
                 AccountId = summary.AccountId,

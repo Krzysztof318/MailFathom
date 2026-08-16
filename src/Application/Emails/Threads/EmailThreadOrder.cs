@@ -36,7 +36,7 @@ public static class EmailThreadOrder
     /// returned exactly once, including one caught in a reply cycle no walk could reach the end of: such a message is
     /// emitted as a root, so a conversation is never published with a message silently missing from it.
     /// </remarks>
-    public static IReadOnlyList<PlacedEmailThreadMessage> Of(IReadOnlyList<EmailThreadMessage> visibleMessages)
+    public static IReadOnlyList<PlacedThreadedEmail> Of(IReadOnlyList<ThreadedEmailSummary> visibleMessages)
     {
         ArgumentNullException.ThrowIfNull(visibleMessages);
 
@@ -52,7 +52,7 @@ public static class EmailThreadOrder
             .GroupBy(message => answered[message.StoredEmailId]!.Value)
             .ToDictionary(group => group.Key, group => Sorted(group));
 
-        var placed = new List<PlacedEmailThreadMessage>(visibleMessages.Count);
+        var placed = new List<PlacedThreadedEmail>(visibleMessages.Count);
         var emitted = new HashSet<StoredEmailId>();
 
         foreach (var root in Sorted(visibleMessages.Where(message => answered[message.StoredEmailId] is null)))
@@ -62,10 +62,14 @@ public static class EmailThreadOrder
 
         // Anything still unemitted sits in a reply cycle, which no walk from a root reaches. The relation cannot order
         // it, so the fallback is the one the relation leaves: each such message becomes a root in the same total order
-        // the roots above were taken in. Nothing here can produce a cycle — the assembler refuses to write one — so this
-        // exists for a chain that reached the database by some other route.
+        // the roots above were taken in, and becomes one in full — the parent it recorded is dropped along with its
+        // place, because publishing the edge that closes the loop would hand a reader the cycle this order exists to
+        // never contain. Nothing here can produce one: the assembler refuses to write it, so this exists for a chain
+        // that reached the database by some other route.
         foreach (var stranded in Sorted(visibleMessages.Where(message => !emitted.Contains(message.StoredEmailId))))
         {
+            answered[stranded.StoredEmailId] = null;
+
             Emit(stranded, answers, answered, emitted, placed);
         }
 
@@ -78,18 +82,18 @@ public static class EmailThreadOrder
     /// belongs directly under what it answers, and the branch it starts is read out before the next sibling begins.
     /// </remarks>
     private static void Emit(
-        EmailThreadMessage message,
-        IReadOnlyDictionary<StoredEmailId, IReadOnlyList<EmailThreadMessage>> answers,
+        ThreadedEmailSummary message,
+        IReadOnlyDictionary<StoredEmailId, IReadOnlyList<ThreadedEmailSummary>> answers,
         IReadOnlyDictionary<StoredEmailId, StoredEmailId?> answered,
         HashSet<StoredEmailId> emitted,
-        List<PlacedEmailThreadMessage> placed)
+        List<PlacedThreadedEmail> placed)
     {
         if (!emitted.Add(message.StoredEmailId))
         {
             return;
         }
 
-        placed.Add(new PlacedEmailThreadMessage(message, placed.Count, answered[message.StoredEmailId]));
+        placed.Add(new PlacedThreadedEmail(message, placed.Count, answered[message.StoredEmailId]));
 
         if (!answers.TryGetValue(message.StoredEmailId, out var children))
         {
@@ -108,7 +112,7 @@ public static class EmailThreadOrder
     /// mailbox timeline gives an undated message. The identity then settles two messages a sender stamped identically,
     /// which is what makes the comparison total rather than merely usually decisive.
     /// </remarks>
-    private static IReadOnlyList<EmailThreadMessage> Sorted(IEnumerable<EmailThreadMessage> messages) =>
+    private static IReadOnlyList<ThreadedEmailSummary> Sorted(IEnumerable<ThreadedEmailSummary> messages) =>
     [
         .. messages
             .OrderBy(message => message.SentAt is null)

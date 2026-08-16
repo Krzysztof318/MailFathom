@@ -136,7 +136,7 @@ public sealed record GetEmailContentRequest
         new([], threadId, includeSanitizedHtml, includeAttachmentDownloadLinks);
 
     /// <summary>Creates a request from the two ways a caller may select what to read, refusing anything but one of them.</summary>
-    /// <param name="storedEmailIds">The emails the caller named, or <see langword="null" /> when it named none.</param>
+    /// <param name="namedEmails">Resolves the emails the caller named, or <see langword="null" /> when it named none.</param>
     /// <param name="threadId">The conversation the caller named, or <see langword="null" /> when it named none.</param>
     /// <param name="includeSanitizedHtml">Whether to also produce the sanitized HTML representation of each body.</param>
     /// <param name="includeAttachmentDownloadLinks">Whether to mint a link for each attachment rather than only describe it.</param>
@@ -145,23 +145,32 @@ public sealed record GetEmailContentRequest
     /// <exception cref="EmailContentReadCountOutOfRangeException">Thrown when a named list holds no email, or more than <see cref="MaximumEmails" />.</exception>
     /// <exception cref="EmailContentReadDuplicateEmailException">Thrown when a named list holds the same email more than once.</exception>
     /// <remarks>
+    /// <para>
     /// A call carrying both is refused rather than resolved by precedence, because either reading of it returns mail the
     /// caller did not ask for: honouring the list ignores a conversation somebody wanted, and honouring the conversation
     /// returns messages nobody named. Which one was meant is theirs to say.
+    /// </para>
+    /// <para>
+    /// The emails arrive unresolved, which is what puts that refusal in front of everything a list is checked for.
+    /// Whether the caller named them is knowable from the selection alone, while what they named costs a boundary a
+    /// parse over text it did not choose the length of — so a call this method refuses pays for none of it, and a caller
+    /// sending an empty list beside a conversation is told which of the two arguments to drop rather than that the list
+    /// it never meant to use is too short.
+    /// </para>
     /// </remarks>
     public static GetEmailContentRequest CreateForSelection(
-        IReadOnlyList<StoredEmailId>? storedEmailIds,
+        Func<IReadOnlyList<StoredEmailId>>? namedEmails,
         EmailThreadId? threadId,
         bool includeSanitizedHtml = false,
         bool includeAttachmentDownloadLinks = false)
     {
-        if ((storedEmailIds is null) == (threadId is null))
+        if ((namedEmails is null) == (threadId is null))
         {
             throw new EmailContentReadSelectionInvalidException();
         }
 
         return threadId is { } thread
             ? CreateForThread(thread, includeSanitizedHtml, includeAttachmentDownloadLinks)
-            : Create(storedEmailIds!, includeSanitizedHtml, includeAttachmentDownloadLinks);
+            : Create(namedEmails!(), includeSanitizedHtml, includeAttachmentDownloadLinks);
     }
 }

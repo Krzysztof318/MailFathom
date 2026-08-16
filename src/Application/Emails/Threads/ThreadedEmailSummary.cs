@@ -26,7 +26,7 @@ namespace MailFathom.Application.Emails.Threads;
 /// It still carries personal data — a subject and an address — and inherits the classification of the mail it describes.
 /// </para>
 /// </remarks>
-public sealed record EmailThreadMessage
+public sealed record ThreadedEmailSummary
 {
     /// <summary>Gets the stable local identity of the message, which a caller names it by to read its content.</summary>
     public required StoredEmailId StoredEmailId { get; init; }

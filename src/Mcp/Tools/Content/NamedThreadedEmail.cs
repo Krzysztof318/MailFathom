@@ -14,7 +14,7 @@ namespace MailFathom.Mcp.Tools.Content;
 /// message, rather than receiving a conversation inside every call that touches one of it.
 /// </remarks>
 [Description("One other message of the same conversation, named rather than reproduced: no body text, no attachments, and no raw MIME.")]
-internal sealed record EmailThreadMessageSummary
+internal sealed record NamedThreadedEmail
 {
     /// <summary>Gets the stable local identity a caller reads this message's content by.</summary>
     [Description("The stable local identifier of the message. Pass it as a storedEmailId to read this message's content.")]
@@ -44,11 +44,11 @@ internal sealed record EmailThreadMessageSummary
     /// <param name="placed">The message and where it sits in the conversation's order.</param>
     /// <returns>The wire representation of <paramref name="placed" />.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="placed" /> is <see langword="null" />.</exception>
-    public static EmailThreadMessageSummary From(PlacedEmailThreadMessage placed)
+    public static NamedThreadedEmail From(PlacedThreadedEmail placed)
     {
         ArgumentNullException.ThrowIfNull(placed);
 
-        return new EmailThreadMessageSummary
+        return new NamedThreadedEmail
         {
             StoredEmailId = placed.Message.StoredEmailId.ToString(),
             Position = placed.Position,

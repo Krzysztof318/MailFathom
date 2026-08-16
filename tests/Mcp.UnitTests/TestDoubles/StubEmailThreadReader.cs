@@ -8,14 +8,14 @@ using MailFathom.Domain.Emails;
 namespace MailFathom.Mcp.UnitTests.TestDoubles;
 
 /// <summary>Answers thread reads from a list held in memory, keyed by the thread each message belongs to.</summary>
-internal sealed class StubEmailThreadReader(params IReadOnlyList<(EmailThreadId ThreadId, EmailThreadMessage Message)> messages)
+internal sealed class StubEmailThreadReader(params IReadOnlyList<(EmailThreadId ThreadId, ThreadedEmailSummary Message)> messages)
     : IEmailThreadReader
 {
     /// <inheritdoc />
-    public Task<IReadOnlyList<EmailThreadMessage>> ReadMessagesAsync(
+    public Task<IReadOnlyList<ThreadedEmailSummary>> ReadEmailsAsync(
         EmailThreadId threadId,
         CancellationToken cancellationToken) =>
-        Task.FromResult<IReadOnlyList<EmailThreadMessage>>(
+        Task.FromResult<IReadOnlyList<ThreadedEmailSummary>>(
         [
             .. messages
                 .Where(held => held.ThreadId == threadId)

@@ -166,7 +166,7 @@ public sealed class EmailThreadContextsTests
         Assert.DoesNotContain("secret-value", named.Message.Subject, StringComparison.Ordinal);
     }
 
-    private static EmailThreadContexts ContextsOver(IReadOnlyList<EmailThreadMessage> messages) =>
+    private static EmailThreadContexts ContextsOver(IReadOnlyList<ThreadedEmailSummary> messages) =>
         ContextsOver(new StubEmailThreadReader([.. messages.Select(message => (Thread, message))]));
 
     private static EmailThreadContexts ContextsOver(
@@ -188,13 +188,13 @@ public sealed class EmailThreadContextsTests
             egressGuard ?? SensitiveContentEgressGuards.Inactive());
     }
 
-    private static EmailThreadMessage Message(
+    private static ThreadedEmailSummary Message(
         int ordinal,
         MailFolderAlias folderAlias,
         string sentAt,
-        EmailThreadMessage? answers = null)
+        ThreadedEmailSummary? answers = null)
     {
-        return new EmailThreadMessage
+        return new ThreadedEmailSummary
         {
             StoredEmailId = StoredEmailId.Create(new Guid($"00000000-0000-0000-0000-{ordinal:D12}")),
             AccountId = Account,

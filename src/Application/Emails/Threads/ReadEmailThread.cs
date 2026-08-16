@@ -50,7 +50,7 @@ public sealed record ReadEmailThread
     public required int MessageCount { get; init; }
 
     /// <summary>Gets the conversation's other messages in its own order, bounded by <see cref="MaximumNamedMessages" />.</summary>
-    public required IReadOnlyList<PlacedEmailThreadMessage> OtherMessages { get; init; }
+    public required IReadOnlyList<PlacedThreadedEmail> OtherMessages { get; init; }
 
     /// <summary>Gets whether the conversation holds messages this list does not name.</summary>
     /// <remarks>

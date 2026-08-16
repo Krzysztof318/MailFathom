@@ -41,7 +41,7 @@ public interface IEmailThreadReader
     /// it for every other read, rather than a rule this query and that one would each have to keep.
     /// </para>
     /// </remarks>
-    Task<IReadOnlyList<EmailThreadMessage>> ReadMessagesAsync(
+    Task<IReadOnlyList<ThreadedEmailSummary>> ReadEmailsAsync(
         EmailThreadId threadId,
         CancellationToken cancellationToken);
 }

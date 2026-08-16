@@ -30,7 +30,7 @@ internal sealed class StoredEmailThreadReader(MailFathomDbContext dbContext) : I
     private const int MaximumMergeChainWalk = 64;
 
     /// <inheritdoc />
-    public async Task<IReadOnlyList<EmailThreadMessage>> ReadMessagesAsync(
+    public async Task<IReadOnlyList<ThreadedEmailSummary>> ReadEmailsAsync(
         EmailThreadId threadId,
         CancellationToken cancellationToken)
     {
@@ -59,7 +59,7 @@ internal sealed class StoredEmailThreadReader(MailFathomDbContext dbContext) : I
 
         return
         [
-            .. rows.Select(row => new EmailThreadMessage
+            .. rows.Select(row => new ThreadedEmailSummary
             {
                 StoredEmailId = StoredEmailId.Create(row.Id),
                 AccountId = MailAccountId.Create(row.MailboxAccountId),

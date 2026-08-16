@@ -18,7 +18,7 @@ namespace MailFathom.Application.Emails.Threads;
 /// in a folder withheld from tools is published as a root naming no ancestor, so the withheld message is not disclosed
 /// by the gap it would otherwise leave.
 /// </remarks>
-public sealed record PlacedEmailThreadMessage(
-    EmailThreadMessage Message,
+public sealed record PlacedThreadedEmail(
+    ThreadedEmailSummary Message,
     int Position,
     StoredEmailId? AnsweredStoredEmailId);

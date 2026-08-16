@@ -709,6 +709,7 @@ internal sealed class MailFathomDbContext : DbContext
             entity.HasKey(thread => thread.Id);
             entity.Property(thread => thread.Id).ValueGeneratedNever();
             entity.Property(thread => thread.MailboxAccountId).HasMaxLength(128).IsRequired();
+            entity.Property(thread => thread.ConcurrencyVersion).IsRowVersion();
 
             entity.HasOne<MailboxAccountEntity>()
                 .WithMany()

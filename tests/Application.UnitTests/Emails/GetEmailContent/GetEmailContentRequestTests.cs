@@ -101,7 +101,7 @@ public sealed class GetEmailContentRequestTests
 
         // Act
         var failure = Assert.Throws<EmailContentReadSelectionInvalidException>(
-            () => GetEmailContentRequest.CreateForSelection(storedEmailIds, threadId));
+            () => GetEmailContentRequest.CreateForSelection(() => storedEmailIds, threadId));
 
         // Assert
         Assert.Equal(MailFathomErrorCode.EmailContentReadSelectionInvalid, failure.ErrorCode);
@@ -112,7 +112,7 @@ public sealed class GetEmailContentRequestTests
     {
         // Act
         var failure = Assert.Throws<EmailContentReadSelectionInvalidException>(
-            () => GetEmailContentRequest.CreateForSelection(storedEmailIds: null, threadId: null));
+            () => GetEmailContentRequest.CreateForSelection(namedEmails: null, threadId: null));
 
         // Assert
         Assert.Equal(MailFathomErrorCode.EmailContentReadSelectionInvalid, failure.ErrorCode);
@@ -125,7 +125,7 @@ public sealed class GetEmailContentRequestTests
         var threadId = EmailThreadId.Create(Guid.CreateVersion7());
 
         // Act
-        var request = GetEmailContentRequest.CreateForSelection(storedEmailIds: null, threadId);
+        var request = GetEmailContentRequest.CreateForSelection(namedEmails: null, threadId);
 
         // Assert
         Assert.Equal(threadId, request.ThreadId);
@@ -139,7 +139,7 @@ public sealed class GetEmailContentRequestTests
         var storedEmailIds = IdentitiesOf(2);
 
         // Act
-        var request = GetEmailContentRequest.CreateForSelection(storedEmailIds, threadId: null);
+        var request = GetEmailContentRequest.CreateForSelection(() => storedEmailIds, threadId: null);
 
         // Assert
         Assert.Equal(storedEmailIds, request.StoredEmailIds);
@@ -155,7 +155,7 @@ public sealed class GetEmailContentRequestTests
 
         // Act
         var failure = Assert.Throws<EmailContentReadCountOutOfRangeException>(
-            () => GetEmailContentRequest.CreateForSelection(storedEmailIds, threadId: null));
+            () => GetEmailContentRequest.CreateForSelection(() => storedEmailIds, threadId: null));
 
         // Assert
         Assert.Equal(GetEmailContentRequest.MaximumEmails, failure.MaximumEmails);

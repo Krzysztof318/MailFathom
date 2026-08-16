@@ -116,8 +116,12 @@ public sealed class EmailThreadOrderTests
             readAgain.Select(message => message.Message.StoredEmailId));
     }
 
+    /// <summary>
+    /// The published order must never contain the loop it exists to rule out, so the message the fallback promotes is
+    /// published as a root in full: the edge that would close the cycle is dropped along with its place.
+    /// </summary>
     [Fact]
-    public void Of_MessagesCaughtInAReplyCycle_ReturnsEveryOneOfThemExactlyOnce()
+    public void Of_MessagesCaughtInAReplyCycle_PublishesTheFirstAsARootAnsweringNothing()
     {
         // Arrange
         var one = Message(1, "2026-08-16T09:00:00Z");
@@ -132,6 +136,32 @@ public sealed class EmailThreadOrderTests
             [looping.StoredEmailId.Value, other.StoredEmailId.Value],
             placed.Select(message => message.Message.StoredEmailId.Value).Order());
         Assert.Equal([0, 1], placed.Select(message => message.Position));
+
+        var root = placed[0];
+        Assert.Equal(looping.StoredEmailId, root.Message.StoredEmailId);
+        Assert.Null(root.AnsweredStoredEmailId);
+        Assert.Equal(looping.StoredEmailId, placed[1].AnsweredStoredEmailId);
+    }
+
+    /// <summary>A longer loop is unwound the same way: one root, and every other message answering the one before it.</summary>
+    [Fact]
+    public void Of_ThreeMessagesCaughtInAReplyCycle_PublishesOneRootAndNoMessageAnsweringItself()
+    {
+        // Arrange
+        var first = Message(1, "2026-08-16T09:00:00Z");
+        var second = Message(2, "2026-08-16T10:00:00Z", answers: first);
+        var third = Message(3, "2026-08-16T11:00:00Z", answers: second);
+        var looping = first with { ParentStoredEmailId = third.StoredEmailId };
+
+        // Act
+        var placed = EmailThreadOrder.Of([looping, second, third]);
+
+        // Assert
+        Assert.Equal(3, placed.Count);
+        Assert.Single(placed, message => message.AnsweredStoredEmailId is null);
+        Assert.All(
+            placed,
+            message => Assert.NotEqual(message.Message.StoredEmailId, message.AnsweredStoredEmailId));
     }
 
     [Fact]
@@ -157,7 +187,7 @@ public sealed class EmailThreadOrderTests
             placed.Select(message => message.Message.StoredEmailId));
     }
 
-    private static EmailThreadMessage Message(int ordinal, string? sentAt, EmailThreadMessage? answers = null) => new()
+    private static ThreadedEmailSummary Message(int ordinal, string? sentAt, ThreadedEmailSummary? answers = null) => new()
     {
         StoredEmailId = StoredEmailId.Create(new Guid($"00000000-0000-0000-0000-{ordinal:D12}")),
         AccountId = Account,

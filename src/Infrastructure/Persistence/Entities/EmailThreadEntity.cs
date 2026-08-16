@@ -51,4 +51,15 @@ internal sealed class EmailThreadEntity
     /// never has to follow this.
     /// </remarks>
     public Guid? MergedIntoEmailThreadId { get; set; }
+
+    /// <summary>The row's version, which is what stops one merge from being written over by another.</summary>
+    /// <remarks>
+    /// The insert is a race the identity settles, because a thread is started under an identifier nothing else holds.
+    /// The merge after it is a different race and the key says nothing about it: an account run and an operator's
+    /// re-derivation can both read this row unmerged and both decide, and without the token the later commit would
+    /// silently replace the survivor the earlier one recorded — leaving stored mail repointed at a thread this row does
+    /// not admit having merged into. The token turns that into a conflict the retry resolves from a fresh read, which
+    /// re-reads the merge the winner performed and converges on it.
+    /// </remarks>
+    public uint ConcurrencyVersion { get; set; }
 }

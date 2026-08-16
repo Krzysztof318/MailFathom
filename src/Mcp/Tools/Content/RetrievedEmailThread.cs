@@ -34,7 +34,7 @@ internal sealed record RetrievedEmailThread
 
     /// <summary>Gets the conversation's other messages, in its own order.</summary>
     [Description("The conversation's other messages in its own order, without this one. Bounded: moreMessagesNotNamed says when the list stops short of the conversation.")]
-    public required IReadOnlyList<EmailThreadMessageSummary> OtherMessages { get; init; }
+    public required IReadOnlyList<NamedThreadedEmail> OtherMessages { get; init; }
 
     /// <summary>Gets whether the conversation holds messages this list does not name.</summary>
     [Description("Whether the conversation holds messages otherMessages does not name. When true, read the conversation itself by calling again with threadId.")]
@@ -54,7 +54,7 @@ internal sealed record RetrievedEmailThread
             Position = thread.Position,
             InReplyToStoredEmailId = thread.AnsweredStoredEmailId?.ToString(),
             MessageCount = thread.MessageCount,
-            OtherMessages = [.. thread.OtherMessages.Select(EmailThreadMessageSummary.From)],
+            OtherMessages = [.. thread.OtherMessages.Select(NamedThreadedEmail.From)],
             MoreMessagesNotNamed = thread.MoreMessagesNotNamed,
         };
     }

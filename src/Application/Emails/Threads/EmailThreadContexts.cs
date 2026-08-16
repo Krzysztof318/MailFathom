@@ -60,7 +60,7 @@ public sealed class EmailThreadContexts
             return already;
         }
 
-        var messages = await this.threadReader.ReadMessagesAsync(threadId, cancellationToken);
+        var messages = await this.threadReader.ReadEmailsAsync(threadId, cancellationToken);
         var visible = messages
             .Where(message => this.scopeResolver.IsReadableByTools(message.AccountId, message.FolderAlias))
             .ToArray();
@@ -120,8 +120,8 @@ public sealed class EmailThreadContexts
     /// the subject beside it did not already carry. No display name is published here at all, so none is scanned.
     /// </para>
     /// </remarks>
-    private async Task<IReadOnlyList<EmailThreadMessage>> GuardedAsync(
-        EmailThreadMessage[] messages,
+    private async Task<IReadOnlyList<ThreadedEmailSummary>> GuardedAsync(
+        ThreadedEmailSummary[] messages,
         CancellationToken cancellationToken)
     {
         if (!this.egressGuard.IsActive)
@@ -129,7 +129,7 @@ public sealed class EmailThreadContexts
             return messages;
         }
 
-        var guarded = new List<EmailThreadMessage>(messages.Length);
+        var guarded = new List<ThreadedEmailSummary>(messages.Length);
 
         foreach (var message in messages)
         {
@@ -148,5 +148,5 @@ public sealed class EmailThreadContexts
     /// <summary>One conversation as a read sees it: its visible messages in order, and whether more of it exists.</summary>
     /// <param name="Messages">The visible messages in the conversation's own order.</param>
     /// <param name="WasCutShort">Whether the conversation holds more messages than one read assembles.</param>
-    public sealed record AssembledThread(IReadOnlyList<PlacedEmailThreadMessage> Messages, bool WasCutShort);
+    public sealed record AssembledThread(IReadOnlyList<PlacedThreadedEmail> Messages, bool WasCutShort);
 }

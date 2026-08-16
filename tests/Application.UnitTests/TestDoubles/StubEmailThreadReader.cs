@@ -14,20 +14,20 @@ namespace MailFathom.Application.UnitTests.TestDoubles;
 /// hold a set of messages and hand back the ones a thread names.
 /// </remarks>
 internal sealed class StubEmailThreadReader(
-    params IReadOnlyList<(EmailThreadId ThreadId, EmailThreadMessage Message)> messages)
+    params IReadOnlyList<(EmailThreadId ThreadId, ThreadedEmailSummary Message)> messages)
     : IEmailThreadReader
 {
     /// <summary>Gets how many times a thread was read, which is what proves one read assembles a conversation once.</summary>
     public int ReadCount { get; private set; }
 
     /// <inheritdoc />
-    public Task<IReadOnlyList<EmailThreadMessage>> ReadMessagesAsync(
+    public Task<IReadOnlyList<ThreadedEmailSummary>> ReadEmailsAsync(
         EmailThreadId threadId,
         CancellationToken cancellationToken)
     {
         this.ReadCount++;
 
-        return Task.FromResult<IReadOnlyList<EmailThreadMessage>>(
+        return Task.FromResult<IReadOnlyList<ThreadedEmailSummary>>(
         [
             .. messages
                 .Where(held => held.ThreadId == threadId)
