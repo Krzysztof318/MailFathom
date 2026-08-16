@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Application.Emails.Summaries;
 using MailFathom.Application.Retrieval;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
@@ -31,6 +32,7 @@ internal static class KnowledgePassages
             FolderAlias = MailFolderAlias.Create(folderAlias),
             Subject = subject,
             ReceivedAt = null,
+            SenderVerification = SenderVerification.NotEstablished,
             Text = text,
         };
 }

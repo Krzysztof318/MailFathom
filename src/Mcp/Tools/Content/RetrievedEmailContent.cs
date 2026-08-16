@@ -4,6 +4,7 @@
 
 using System.ComponentModel;
 using MailFathom.Application.Emails.GetEmailContent;
+using MailFathom.Mcp.Tools.Senders;
 using MailFathom.Mcp.Tools.Summaries;
 
 namespace MailFathom.Mcp.Tools.Content;
@@ -40,6 +41,13 @@ internal sealed record RetrievedEmailContent
     [Description("The size of the whole email in bytes, as reported by the mail server. No sum over the body and the attachments reproduces it, because it counts the headers and the MIME encoding as well.")]
     public required long SizeBytes { get; init; }
 
+    /// <summary>Gets what was established about the author the email displays, and what this deployment made of it.</summary>
+    /// <remarks>
+    /// The same pair a listing and a citation publish, so one client shape reads all three. What this read adds is the
+    /// evidence behind it, which sits with the headers it was read out of.
+    /// </remarks>
+    public required ReportedSenderVerification SenderVerification { get; init; }
+
     /// <summary>Gets the normalized headers the email displays.</summary>
     public required NormalizedEmailHeaders Headers { get; init; }
 
@@ -70,7 +78,8 @@ internal sealed record RetrievedEmailContent
             AccountId = content.AccountId.Value,
             FolderAlias = content.FolderAlias.Value,
             SizeBytes = content.SizeOctets,
-            Headers = NormalizedEmailHeaders.From(content.Headers),
+            SenderVerification = ReportedSenderVerification.From(content.SenderVerification),
+            Headers = NormalizedEmailHeaders.From(content.Headers, content.SenderAuthenticationEvidence),
             Body = EmailBodyContent.From(content.Body),
             Attachments = [.. content.Attachments.Select(RetrievedEmailAttachment.From)],
             AttachmentCounts = content.AttachmentSummary is { } attachmentSummary

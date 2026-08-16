@@ -5,6 +5,7 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using MailFathom.Application.Emails.Mailboxes;
+using MailFathom.Application.Emails.Summaries;
 using MailFathom.Application.Retrieval;
 using MailFathom.Application.Retrieval.AskMail;
 using MailFathom.Common.Observability;
@@ -165,6 +166,7 @@ public sealed class MailAnsweringRunTelemetryTests : IDisposable
         FolderAlias = MailFolderAlias.Create("inbox"),
         Subject = "Quarterly invoice",
         ReceivedAt = StartedAt,
+        SenderVerification = SenderVerification.NotEstablished,
         Text = "the invoice is attached",
     };
 

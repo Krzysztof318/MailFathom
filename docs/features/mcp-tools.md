@@ -302,14 +302,24 @@ states whether the account's junk folder took part, and `folderFreshness` states
 covered folder is.
 
 Each summary carries the stable local identifier a content read is performed by, the account identifier and the display
-name it is published under, the folder alias, the message identifier, the subject, the sender address and display name, the `To` addresses, the sent and received timestamps, the
+name it is published under, the folder alias, the message identifier, the subject, the sender address and display name, the sender verdict, the `To` addresses, the sent and received timestamps, the
 size in bytes, the attachment summary, the remote flags with the time they were observed, and whether raw content is
 available locally. It is the use case's projection published as it stands, not narrowed a second time here — a boundary
 that re-decided what a listing may carry would put the privacy rule in two places and leave the one a client reads
 untested. [Mailbox queries](mailbox-queries.md#what-a-summary-carries) records what it carries and why.
 
-Three parts of it are worth reading before a caller writes against them:
+Four parts of it are worth reading before a caller writes against them:
 
+- **`senderVerification` is two answers, never one.** `senderAddress` beside it is a claim the email wrote about itself,
+  and nothing on the way to a listing verified it. `authorAuthentication` is what the receiving mail server established
+  about the author the email displays — `authenticated`, `failed`, or `notEstablished` — and `deploymentTrust` is
+  whether this deployment's own trusted-sender configuration names that author — `trusted` or `unknown`. Neither is
+  derived from the other and no field merges them, because **`authenticated` beside `unknown` is the ordinary state of
+  legitimate mail from a correspondent nobody has named** and must not read as a finding against the message. `unknown`
+  is also what an email whose author failed carries, which is why the pair is read together. Both values are read from
+  what synchronization stored; a listing evaluates nothing and contacts no mail server. [Sender
+  authentication](sender-authentication.md#what-the-read-tools-publish) records what each value means and what it
+  deliberately does not claim.
 - **`toAddresses` and nothing beyond it.** `Cc` and `Reply-To` are searchable but not listed, and recipient display names
   are not returned at all. A listing exists to let a reader recognize a message; the full participant set belongs to
   reading one.
@@ -419,14 +429,24 @@ in it.
 |---|---|
 | `accountId`, `folderAlias` | Where the email is, in MailFathom's own names |
 | `sizeBytes` | The size of the whole email as the mail server reported it |
-| `headers` | Subject, sent and received timestamps, every participant with its header role, and the three threading identifiers |
+| `senderVerification` | The same verdict pair a listing publishes: what was established about the displayed author, and what this deployment made of them |
+| `headers` | Subject, sent and received timestamps, every participant with its header role, the three threading identifiers, and `senderAuthentication` — the evidence the verdict was reached from |
 | `body` | The representations, or the reason there are none |
 | `attachments` | One entry per attachment, always: normalized file name, media type, and decoded size, plus a short-lived address to fetch it from when the call asked for one |
 | `attachmentCounts` | What the email carries besides its body, returned either way, or `null` when nothing has ever read its parts |
 | `remoteFlags` | The flags a server last showed, and when they were read |
 
-Seven parts of it are worth reading before a caller writes against them:
+Eight parts of it are worth reading before a caller writes against them:
 
+- **The verdict is beside the headers and its evidence is inside them.** `senderVerification` is the pair a listing, a
+  search match, and a citation all publish, in one shape, so a client reads one thing everywhere. What only this read
+  adds is `headers.senderAuthentication`: `authenticatedDomain`, the domain that actually authenticated;
+  `displayedAuthorDomain`, the domain the `From` header wrote; `authenticatedBy`, the check that established the first —
+  `dkim`, `spf`, or `none`; and `dmarc`, the result the trusted server reported. Both domains are published in the
+  comparison form MailFathom stores — upper-cased, and an internationalized name in its ASCII form — so **comparing them
+  is what shows an email that authenticated as one domain while displaying another.** A `null` domain is an ordinary
+  outcome rather than missing data: nothing authenticated, or the email wrote no usable `From` mailbox. Nothing here is
+  evaluated on the read path, and an email whose raw MIME was never stored carries the same stored verdict as any other.
 - **Truncation travels inside each representation, and names the bound.** `plainText` and `sanitizedHtml` each carry
   `text`, `originalCharacterCount`, and `truncatedBy`, because a body and the fact that it is incomplete are never useful
   apart: a model handed only the text would summarize a cut message as a whole one. `truncatedBy` is `none`,
@@ -546,7 +566,8 @@ because an argument added later would be the one thing that quietly changes what
 | `folderFreshness` | How current the local copy of each covered folder is, exactly as a listing reports it |
 
 Each match carries `summary`, which is the same shape `list_emails` publishes and is documented above, together with
-`relevanceRank` and `snippets`.
+`relevanceRank` and `snippets`. `senderVerification` therefore arrives with the summary rather than as a shape of its
+own, so a client written against a listing reads a match's sender verdict with nothing new.
 
 - **`relevanceRank` is comparable within one response and nowhere else.** It is computed for the query that produced it,
   so storing it or comparing it with a rank from another call compares two different scales — and the scale itself
@@ -685,10 +706,16 @@ same refusals; the section above records that rule once.
 | `retrievalTruncated` | Whether the run hit this deployment's ceiling on how much mail one question may read |
 
 Each citation carries the `storedEmailId` a content read is performed by, the account identifier and the display name it
-is published under, the folder alias, the subject, and the received time. It deliberately carries no extract: the passage
-the run retrieved has already reached a model, and returning it here would put mail content into a response whose purpose
-is an answer. The subject and the received time
+is published under, the folder alias, the subject, the received time, and `senderVerification`. It deliberately carries
+no extract: the passage the run retrieved has already reached a model, and returning it here would put mail content into
+a response whose purpose is an answer. The subject and the received time
 are what let a reader recognize a message before fetching it.
+
+`senderVerification` is the same pair a listing publishes, in the same shape and without the evidence, so an answer says
+what was established about the author of each message it was drawn from. It is what a reader weighs a claim by: an
+answer is worth what the mail behind it is worth, and a claim traced to a message whose displayed author failed
+authentication is worth reading differently from one traced to a correspondent this deployment recognizes. The evidence
+behind the verdict stays with the single-email read the citation points at.
 
 **The citations are what the run retrieved, not what the model demonstrably used.** Nothing outside the model knows which
 of them it drew on, so publishing the narrower set would state something this system cannot observe. What they are good

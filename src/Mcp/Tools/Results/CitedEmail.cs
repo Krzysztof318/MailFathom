@@ -4,6 +4,7 @@
 
 using System.ComponentModel;
 using MailFathom.Application.Retrieval.AskMail;
+using MailFathom.Mcp.Tools.Senders;
 
 namespace MailFathom.Mcp.Tools.Results;
 
@@ -40,6 +41,13 @@ internal sealed record CitedEmail
     [Description("When the last receiving hop recorded the message, as an ISO 8601 timestamp, or null when no header carried a usable date.")]
     public DateTimeOffset? ReceivedAt { get; init; }
 
+    /// <summary>Gets what was established about the author of the email the claim came from.</summary>
+    /// <remarks>
+    /// The same shape a listing publishes, so a reader weighs a cited message exactly as they would a listed one. The
+    /// evidence behind it stays with the single-email read the citation points at.
+    /// </remarks>
+    public required ReportedSenderVerification SenderVerification { get; init; }
+
     /// <summary>Publishes one citation the use case produced.</summary>
     /// <param name="citation">The citation to publish.</param>
     /// <param name="accountNames">Reads the name the citation's account is published under.</param>
@@ -58,6 +66,7 @@ internal sealed record CitedEmail
             FolderAlias = citation.FolderAlias.Value,
             Subject = citation.Subject,
             ReceivedAt = citation.ReceivedAt,
+            SenderVerification = ReportedSenderVerification.From(citation.SenderVerification),
         };
     }
 }

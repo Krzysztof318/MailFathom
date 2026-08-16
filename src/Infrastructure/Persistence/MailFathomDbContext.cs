@@ -390,6 +390,7 @@ internal sealed class MailFathomDbContext : DbContext
             entity.Property(email => email.DkimSignerDomain).HasMaxLength(StoredEmailEntity.MaximumDomainLength);
             entity.Property(email => email.SpfMailFromDomain).HasMaxLength(StoredEmailEntity.MaximumDomainLength);
             entity.Property(email => email.AuthenticatedAuthorDomain).HasMaxLength(StoredEmailEntity.MaximumDomainLength);
+            entity.Property(email => email.DisplayedAuthorDomain).HasMaxLength(StoredEmailEntity.MaximumDomainLength);
 
             // What this deployment made of that verdict, stored the same way and defaulted the same way: a row written
             // before authors were judged at all recognized nobody, which is exactly what the two defaults say. The

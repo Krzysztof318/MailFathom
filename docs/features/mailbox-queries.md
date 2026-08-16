@@ -201,8 +201,8 @@ values, beside the total attachment size and the encrypted, unverified-signature
 
 `EmailSummary` is the bounded projection a listing returns: the stable local identifier every later request names the
 email by, its account and folder alias, the message identifier, subject, sent and received timestamps, size, the sender's
-display name and address, the `To` addresses, the attachment summary, whether raw MIME is stored locally, and the remote
-flag snapshot.
+display name and address, the sender verdict, the `To` addresses, the attachment summary, whether raw MIME is stored
+locally, and the remote flag snapshot.
 
 It carries no raw MIME, no body, and no attachment bytes, and the query that produces it selects only the columns it
 publishes — a privacy control before a performance one, because it makes the stored content unreachable through this
@@ -220,6 +220,24 @@ caller acts on, and are protected by who may reach this deployment rather than b
 answer refuses the listing. Both switches are off by default, and nothing on this path is scanned then.
 [Sensitive-content scanning § the guarded egress
 points](sensitive-content-scanning.md#the-guarded-egress-points) holds the contract.
+
+### The sender verdict a summary carries
+
+The sender's address is what the message wrote about itself, so the summary carries beside it what somebody else
+established: `SenderVerification`, the pair of *what the receiving mail server concluded about the displayed author* and
+*whether this deployment recognizes that author*. Both are read from the columns synchronization wrote. A listing
+evaluates no policy, resolves no DNS, and re-reads no header — a query that reached a verdict of its own would answer a
+different question from the one the message was stored with.
+
+The summary carries a second value the listing does not publish: `SenderAuthenticationEvidence`, the domain that
+authenticated, the domain the `From` header displayed, which check established the first, and the DMARC result. One
+projection reads both because the single-email read is built from this same summary and is where the evidence is
+published; a second query for it would let the two reads disagree about one message. [Sender
+authentication](sender-authentication.md#what-the-read-tools-publish) holds what each value means, and
+[MCP tools](mcp-tools.md#list_emails) holds the published shape.
+
+Every domain either value names is personal data on the same footing as an address, and neither reaches a log line, a
+metric label, or an exception message.
 
 ### The remote flag snapshot
 

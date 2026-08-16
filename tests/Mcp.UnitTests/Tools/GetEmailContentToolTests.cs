@@ -17,11 +17,14 @@ using MailFathom.Application.Emails.Summaries;
 using MailFathom.Application.Observability;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
+using MailFathom.Domain.Emails.Authentication;
 using MailFathom.Domain.Failures;
 using MailFathom.Domain.Folders;
 using MailFathom.Mcp.Tools;
 using MailFathom.Mcp.Tools.Content;
 using MailFathom.Mcp.Tools.Results;
+using MailFathom.Mcp.Tools.Senders;
+using MailFathom.Mcp.Tools.Summaries;
 using MailFathom.Mcp.UnitTests.TestDoubles;
 using MailFathom.TestSupport;
 using NSubstitute;
@@ -118,6 +121,129 @@ public sealed class GetEmailContentToolTests
         Assert.True(content.RemoteFlags.Seen);
         Assert.Equal(observedAt, content.RemoteFlags.ObservedAt);
         Assert.True(content.RemoteFlags.WasObserved);
+    }
+
+    /// <summary>An email that authenticated as one domain while displaying another is published as exactly that.</summary>
+    /// <remarks>
+    /// The case the whole verdict exists for. A delivery provider's signature verified, so the transport authenticated
+    /// and an unrelated domain is named; the displayed author failed under its own published policy. The read publishes
+    /// the conclusion and both domains, and the listing publishes the same conclusion for the same message.
+    /// </remarks>
+    [Fact]
+    public async Task GetEmailContentAsync_DisplayedAuthorFailedWhileAnotherDomainAuthenticated_PublishesBothDomainsAndTheFailedVerdict()
+    {
+        // Arrange
+        var summary = SummaryOf(
+            senderVerification: new SenderVerification
+            {
+                AuthorAuthentication = AuthorAuthenticationOutcome.Failed,
+                DeploymentTrust = SenderTrustLevel.Unknown,
+            },
+            senderAuthenticationEvidence: new SenderAuthenticationEvidence
+            {
+                AuthenticatedDomain = DomainOf("delivery.example.test"),
+                DisplayedAuthorDomain = DomainOf("bank.example.test"),
+                AuthenticatedBy = SenderAuthenticationMethod.DomainKeysIdentifiedMail,
+                Dmarc = DmarcOutcome.Fail,
+            });
+        var tool = ToolOver(new StubStoredEmailSummaryReader(summary));
+
+        // Act
+        var result = await tool.GetEmailContentAsync(
+            [summary.StoredEmailId.ToString()],
+            cancellationToken: TestContext.Current.CancellationToken);
+
+        // Assert
+        var content = ContentOf(Assert.Single(result.Emails));
+        Assert.Equal(AuthorAuthenticationState.Failed, content.SenderVerification.AuthorAuthentication);
+        Assert.Equal(DeploymentTrustState.Unknown, content.SenderVerification.DeploymentTrust);
+        Assert.Equal("DELIVERY.EXAMPLE.TEST", content.Headers.SenderAuthentication.AuthenticatedDomain);
+        Assert.Equal("BANK.EXAMPLE.TEST", content.Headers.SenderAuthentication.DisplayedAuthorDomain);
+        Assert.Equal(SenderAuthenticationCheck.Dkim, content.Headers.SenderAuthentication.AuthenticatedBy);
+        Assert.Equal(DmarcResult.Fail, content.Headers.SenderAuthentication.Dmarc);
+        Assert.Equal(ListedVerdictOf(summary), content.SenderVerification);
+    }
+
+    /// <summary>An authenticated author nobody has named is published as unknown rather than as anything against it.</summary>
+    [Fact]
+    public async Task GetEmailContentAsync_AuthenticatedAuthorOnNoTrustList_PublishesTrustUnknownBesideTheAuthentication()
+    {
+        // Arrange
+        var summary = SummaryOf(
+            senderVerification: new SenderVerification
+            {
+                AuthorAuthentication = AuthorAuthenticationOutcome.Authenticated,
+                DeploymentTrust = SenderTrustLevel.Unknown,
+            });
+        var tool = ToolOver(new StubStoredEmailSummaryReader(summary));
+
+        // Act
+        var result = await tool.GetEmailContentAsync(
+            [summary.StoredEmailId.ToString()],
+            cancellationToken: TestContext.Current.CancellationToken);
+
+        // Assert
+        var content = ContentOf(Assert.Single(result.Emails));
+        Assert.Equal(AuthorAuthenticationState.Authenticated, content.SenderVerification.AuthorAuthentication);
+        Assert.Equal(DeploymentTrustState.Unknown, content.SenderVerification.DeploymentTrust);
+        Assert.Equal(ListedVerdictOf(summary), content.SenderVerification);
+    }
+
+    /// <summary>Mail stored before the verdict was recorded is published as it is stored.</summary>
+    /// <remarks>
+    /// The stored default is what such a row holds, so it is published rather than replaced with a state saying the
+    /// value is unfilled. The domains are absent for the same reason, which is an ordinary outcome rather than a gap.
+    /// </remarks>
+    [Fact]
+    public async Task GetEmailContentAsync_EmailStoredBeforeTheVerdictWasRecorded_PublishesTheStoredDefault()
+    {
+        // Arrange
+        var summary = SummaryOf();
+        var tool = ToolOver(new StubStoredEmailSummaryReader(summary));
+
+        // Act
+        var result = await tool.GetEmailContentAsync(
+            [summary.StoredEmailId.ToString()],
+            cancellationToken: TestContext.Current.CancellationToken);
+
+        // Assert
+        var content = ContentOf(Assert.Single(result.Emails));
+        Assert.Equal(AuthorAuthenticationState.NotEstablished, content.SenderVerification.AuthorAuthentication);
+        Assert.Equal(DeploymentTrustState.Unknown, content.SenderVerification.DeploymentTrust);
+        Assert.Null(content.Headers.SenderAuthentication.AuthenticatedDomain);
+        Assert.Null(content.Headers.SenderAuthentication.DisplayedAuthorDomain);
+        Assert.Equal(SenderAuthenticationCheck.None, content.Headers.SenderAuthentication.AuthenticatedBy);
+        Assert.Equal(DmarcResult.NotReported, content.Headers.SenderAuthentication.Dmarc);
+    }
+
+    /// <summary>An email whose raw MIME was never stored still carries the verdict its row holds.</summary>
+    /// <remarks>
+    /// The narrower headers such a read produces come from the row rather than from a parse, and so does the verdict —
+    /// so a caller reading an oversized message is told the same thing about its author as a listing tells them.
+    /// </remarks>
+    [Fact]
+    public async Task GetEmailContentAsync_EmailStoredWithoutItsContent_StillPublishesTheStoredVerdict()
+    {
+        // Arrange
+        var summary = SummaryOf(
+            contentAvailability: StoredEmailContentAvailability.ExceededSizeLimit,
+            senderVerification: new SenderVerification
+            {
+                AuthorAuthentication = AuthorAuthenticationOutcome.Authenticated,
+                DeploymentTrust = SenderTrustLevel.Trusted,
+            });
+        var tool = ToolOver(new StubStoredEmailSummaryReader(summary));
+
+        // Act
+        var result = await tool.GetEmailContentAsync(
+            [summary.StoredEmailId.ToString()],
+            cancellationToken: TestContext.Current.CancellationToken);
+
+        // Assert
+        var content = ContentOf(Assert.Single(result.Emails));
+        Assert.Equal(EmailBodyAvailabilityState.NotStoredExceededSizeLimit, content.Body.Availability);
+        Assert.Equal(AuthorAuthenticationState.Authenticated, content.SenderVerification.AuthorAuthentication);
+        Assert.Equal(DeploymentTrustState.Trusted, content.SenderVerification.DeploymentTrust);
     }
 
     /// <summary>A body and the fact that it is incomplete are never useful apart, so the second travels inside the first.</summary>
@@ -916,6 +1042,22 @@ public sealed class GetEmailContentToolTests
             ? type.GetGenericArguments()[0]
             : type;
 
+    /// <summary>Publishes one summary the way a listing would, so a read's verdict can be compared with a listing's.</summary>
+    /// <remarks>
+    /// The mapping the listing tool itself uses rather than a restatement of it, which is what makes the comparison a
+    /// claim about the two tools agreeing rather than about this test's own arithmetic.
+    /// </remarks>
+    private static ReportedSenderVerification ListedVerdictOf(EmailSummary summary) =>
+        ListedEmailSummary.From(summary, PublishedAccountNames.From(new StubMailAccountCatalog(ServedAccountId)))
+            .SenderVerification;
+
+    private static SenderDomain DomainOf(string value)
+    {
+        Assert.True(SenderDomain.TryCreate(value, out var domain));
+
+        return domain;
+    }
+
     private static RetrievedEmailContent ContentOf(RetrievedEmail email) =>
         email.Content ?? throw new InvalidOperationException(
             $"The email was not served: {email.Failure?.Message}");
@@ -957,7 +1099,9 @@ public sealed class GetEmailContentToolTests
         DateTimeOffset? receivedAt = null,
         DateTimeOffset? observedAt = null,
         string accountId = ServedAccountId,
-        StoredEmailContentAvailability contentAvailability = StoredEmailContentAvailability.Available) => new()
+        StoredEmailContentAvailability contentAvailability = StoredEmailContentAvailability.Available,
+        SenderVerification? senderVerification = null,
+        SenderAuthenticationEvidence? senderAuthenticationEvidence = null) => new()
         {
             StoredEmailId = StoredEmailId.Create(Guid.CreateVersion7()),
             AccountId = MailAccountId.Create(accountId),
@@ -982,6 +1126,8 @@ public sealed class GetEmailContentToolTests
                     IsDeleted: false,
                     Keywords: RemoteEmailKeywords.None)
                 : RemoteEmailFlagSnapshot.NeverObserved,
+            SenderVerification = senderVerification ?? SenderVerification.NotEstablished,
+            SenderAuthenticationEvidence = senderAuthenticationEvidence ?? SenderAuthenticationEvidence.None,
         };
 
     private static EmailContentRendering RenderingOf(

@@ -64,6 +64,7 @@ holds the columns.
 | The DKIM signing domain and the SPF envelope domain, separately | The two disagreeing is itself a fact about the message |
 | The DMARC result the server reported | It is where an authenticated domain meets the displayed one, under the sender's own published policy |
 | Whether the displayed author authenticated, and their domain where they did | The identity a reader is shown is the one an impersonation gets wrong, and it is a different fact from the identity that handed the message over |
+| The domain the `From` header displayed, whether or not anything held | It is the other half of the comparison, and the half a reader needs most on the messages where nothing established an author. It is read from `From` alone, never from the `Sender` fallback a timeline names a message's sender by, so it cannot be derived from the stored address |
 
 **DKIM is the authoritative identity wherever both checks produced one.** It is cryptographic — a key the signing
 domain publishes signed these bytes — while SPF says only that a particular address was permitted to connect on behalf
@@ -230,13 +231,61 @@ Adding a domain therefore does not silently rewrite what a reader was already sh
 is [the extraction backfill](imap-synchronization.md#backfilling-messages-stored-earlier), the same deliberate act that
 re-reads mail after an account gains a trusted authority.
 
+## What the read tools publish
+
+Every read tool publishes the verdict, because a caller that cannot see it cannot weigh a message — and the caller these
+tools were built for is an agent, which reads a listing row as fact. What reaches a caller is **two published values and
+never one**: `authorAuthentication`, which is [the conclusion about the displayed
+author](#whether-the-displayed-author-authenticated) with its three values intact, and `deploymentTrust`, which is
+[whether this deployment recognizes them](#whether-the-author-is-one-this-deployment-recognizes) with its two. Neither
+is derived from the other and no published field merges them, because a single value would lose the distinction the two
+conclusions exist to make.
+
+| Tool | What it publishes |
+| --- | --- |
+| `list_emails` | The pair, on each listed email's summary |
+| `search_emails` | The same pair, by republishing that summary rather than reshaping it |
+| `get_email_content` | The pair, and beside it the evidence: the domain that authenticated, the domain the `From` header displayed, which check established the first, and the DMARC result |
+| `ask_mail` | The pair, on each citation, without the evidence |
+
+**The listing carries the verdict and the single-email read carries the evidence.** A listing exists to let a reader
+recognize a message and already narrows `Cc` and `Reply-To` away, and the two outcomes are what a caller branches on;
+the domains, the method, and the DMARC result are how a reader judges the verdict rather than acts on it, so they sit
+with the rest of the headers, on the read of a message somebody has already found. Both domains are published in the
+comparison form the columns hold — upper-cased, and an internationalized name in its ASCII form — so comparing them is
+exact, and a message that authenticated as one domain while displaying another is visible as precisely that. A `null`
+domain is an ordinary outcome rather than missing data: nothing authenticated, or the message wrote no usable `From`
+mailbox. Nothing published restates the comparison as a flag of its own; the conclusion drawn from it is
+`authorAuthentication`.
+
+**Every published value was stored when the message was extracted.** A read evaluates nothing, resolves no DNS, re-reads
+no header, and triggers no IMAP fetch. Mail stored before the columns existed therefore reads as *not established* and
+*unknown*, with every domain absent, which is what its row holds rather than a state invented for it — and an absent
+domain there is indistinguishable from a message that displayed none. [`mfctl mailbox
+rederive`](imap-synchronization.md#bringing-stored-mail-up-to-a-later-release) is what fills it in, by re-reading the raw
+MIME the deployment already stored back through the same extraction that wrote the columns in the first place. It is
+that pass rather than [the extraction backfill](imap-synchronization.md#backfilling-messages-stored-earlier), which
+selects only messages carrying no search document and therefore steps over every message already extracted — which is
+all of them, on a deployment where the gap is a column a later release added rather than an extraction that never ran.
+
+The published descriptions are the advertised output schema and are therefore the whole of what a model is told about
+these values, so they say what the values mean rather than only what they are called: that deployment trust is this
+deployment's own classification and not an authentication result, that *unknown* is the ordinary state of legitimate
+mail from a new correspondent, and that the sender address beside them is a claim the message wrote about itself. None
+of them characterizes the message or the sender's intent. A failed authentication is stated as a failed authentication.
+[MCP tools](mcp-tools.md#list_emails) holds the published shape of each result.
+
 ## What MailFathom does not do
 
 - It resolves no DNS, verifies no DKIM signature, and evaluates no SPF or DMARC policy. It computes no organizational
   domain and consults no public suffix list, so it never reconstructs DMARC's relaxed alignment for itself. Everything
   recorded was read back out of one header.
 - It does not reason from the `Received` chain beyond identifying the trusted header.
-- It never acts on either verdict. Nothing here files, flags, or hides a message, and no rule reads them yet.
+- It never acts on either verdict. Nothing here files, flags, or hides a message, and no rule reads them yet. Publishing
+  them through the read tools is not acting on them: what a caller is handed is the stored conclusion, and what to make
+  of it is the caller's.
+- It does not let a caller filter or sort a listing or a search by either verdict. That is a question about what may be
+  asked for rather than about what a result carries, and it is a decision of its own.
 
 ## Re-deriving what is already stored
 

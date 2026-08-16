@@ -496,6 +496,8 @@ public sealed class EmailContentReader
             AttachmentSummary = SummaryOf(rendering.AttachmentSummary),
             Attachments = attachments,
             RemoteFlags = summary.RemoteFlags,
+            SenderVerification = summary.SenderVerification,
+            SenderAuthenticationEvidence = summary.SenderAuthenticationEvidence,
         };
     }
 
@@ -546,6 +548,8 @@ public sealed class EmailContentReader
             AttachmentSummary = null,
             Attachments = [],
             RemoteFlags = summary.RemoteFlags,
+            SenderVerification = summary.SenderVerification,
+            SenderAuthenticationEvidence = summary.SenderAuthenticationEvidence,
         };
     }
 

@@ -87,6 +87,7 @@ internal static class StoredEmailMetadataMapping
         entity.AuthenticatedSenderDomain = authentication.AuthenticatedDomain?.NormalizedValue;
         entity.DkimSignerDomain = authentication.DkimDomain?.NormalizedValue;
         entity.SpfMailFromDomain = authentication.SpfDomain?.NormalizedValue;
+        entity.DisplayedAuthorDomain = authentication.FromDomain?.NormalizedValue;
         entity.DmarcOutcome = authentication.Dmarc;
         entity.AuthorAuthenticationOutcome = authentication.AuthorAuthentication;
         entity.AuthenticatedAuthorDomain = authentication.AuthenticatedAuthorDomain?.NormalizedValue;

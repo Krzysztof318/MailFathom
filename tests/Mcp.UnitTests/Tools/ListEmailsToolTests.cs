@@ -12,10 +12,12 @@ using MailFathom.Application.SensitiveContent.Egress;
 using MailFathom.Application.Synchronization.Checkpoints;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
+using MailFathom.Domain.Emails.Authentication;
 using MailFathom.Domain.Failures;
 using MailFathom.Domain.Folders;
 using MailFathom.Mcp.Tools;
 using MailFathom.Mcp.Tools.Results;
+using MailFathom.Mcp.Tools.Senders;
 using MailFathom.Mcp.Tools.Summaries;
 using MailFathom.Mcp.UnitTests.TestDoubles;
 using MailFathom.TestSupport;
@@ -453,6 +455,12 @@ public sealed class ListEmailsToolTests
                 IsDraft: false,
                 IsDeleted: false,
                 Keywords: RemoteEmailKeywords.Create(["$Junk"])),
+            SenderVerification = new SenderVerification
+            {
+                AuthorAuthentication = AuthorAuthenticationOutcome.Authenticated,
+                DeploymentTrust = SenderTrustLevel.Trusted,
+            },
+            SenderAuthenticationEvidence = SenderAuthenticationEvidence.None,
         };
         var tool = ToolOver(new StubStoredEmailTimelineReader(summary));
 
@@ -486,6 +494,54 @@ public sealed class ListEmailsToolTests
         Assert.Equal(["$JUNK"], published.RemoteFlags.Keywords);
         Assert.Equal(observedAt, published.RemoteFlags.ObservedAt);
         Assert.True(published.RemoteFlags.WasObserved);
+        Assert.Equal(AuthorAuthenticationState.Authenticated, published.SenderVerification.AuthorAuthentication);
+        Assert.Equal(DeploymentTrustState.Trusted, published.SenderVerification.DeploymentTrust);
+    }
+
+    /// <summary>A listed email whose author authenticated but whom nobody has named is published as unknown, not as a failure.</summary>
+    /// <remarks>
+    /// The ordinary state of legitimate mail from a first-time correspondent, and the reading a caller most easily gets
+    /// wrong: the two values answer different questions, so an unknown beside an authenticated author says only that
+    /// this deployment's own list does not name them.
+    /// </remarks>
+    [Fact]
+    public async Task ListEmailsAsync_AuthenticatedAuthorOnNoTrustList_PublishesTrustUnknownBesideTheAuthentication()
+    {
+        // Arrange
+        var summary = SummaryReceivedAt(new DateTimeOffset(2026, 3, 1, 8, 0, 0, TimeSpan.Zero)) with
+        {
+            SenderVerification = new SenderVerification
+            {
+                AuthorAuthentication = AuthorAuthenticationOutcome.Authenticated,
+                DeploymentTrust = SenderTrustLevel.Unknown,
+            },
+        };
+        var tool = ToolOver(new StubStoredEmailTimelineReader(summary));
+
+        // Act
+        var result = await tool.ListEmailsAsync(cancellationToken: TestContext.Current.CancellationToken);
+
+        // Assert
+        var published = Assert.Single(result.Emails);
+        Assert.Equal(AuthorAuthenticationState.Authenticated, published.SenderVerification.AuthorAuthentication);
+        Assert.Equal(DeploymentTrustState.Unknown, published.SenderVerification.DeploymentTrust);
+    }
+
+    /// <summary>A listed email stored before the verdict was recorded is published as its row holds it.</summary>
+    [Fact]
+    public async Task ListEmailsAsync_EmailStoredBeforeTheVerdictWasRecorded_PublishesTheStoredDefault()
+    {
+        // Arrange
+        var tool = ToolOver(new StubStoredEmailTimelineReader(
+            SummaryReceivedAt(new DateTimeOffset(2026, 3, 1, 8, 0, 0, TimeSpan.Zero))));
+
+        // Act
+        var result = await tool.ListEmailsAsync(cancellationToken: TestContext.Current.CancellationToken);
+
+        // Assert
+        var published = Assert.Single(result.Emails);
+        Assert.Equal(AuthorAuthenticationState.NotEstablished, published.SenderVerification.AuthorAuthentication);
+        Assert.Equal(DeploymentTrustState.Unknown, published.SenderVerification.DeploymentTrust);
     }
 
     /// <summary>An email waiting for storage room is published as waiting, rather than ending the listing.</summary>
@@ -676,6 +732,8 @@ public sealed class ListEmailsToolTests
         Attachments = StoredEmailAttachmentSummary.None,
         ContentAvailability = StoredEmailContentAvailability.Available,
         RemoteFlags = RemoteEmailFlagSnapshot.NeverObserved,
+        SenderVerification = SenderVerification.NotEstablished,
+        SenderAuthenticationEvidence = SenderAuthenticationEvidence.None,
     };
 
     private static ListEmailsTool ToolOver(

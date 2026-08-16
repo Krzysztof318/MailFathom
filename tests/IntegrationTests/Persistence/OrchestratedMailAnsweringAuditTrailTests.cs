@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.Emails.Mailboxes;
+using MailFathom.Application.Emails.Summaries;
 using MailFathom.Application.Folders;
 using MailFathom.Application.Persistence;
 using MailFathom.Application.Retrieval;
@@ -161,6 +162,7 @@ public sealed class OrchestratedMailAnsweringAuditTrailTests(MailFathomOrchestra
         FolderAlias = Inbox.Alias,
         Subject = "Quarterly invoice",
         ReceivedAt = Clock.GetUtcNow(),
+        SenderVerification = SenderVerification.NotEstablished,
         Text = "the invoice is attached",
     };
 

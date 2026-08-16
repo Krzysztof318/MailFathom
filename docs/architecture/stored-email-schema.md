@@ -42,17 +42,28 @@ Recipients are PostgreSQL `text[]` columns — `to_addresses`, `cc_addresses`, `
 
 ### The sender-authentication verdict
 
-Eight columns record what the receiving mail server established about who actually sent the message:
+Nine columns record what the receiving mail server established about who actually sent the message:
 `SenderAuthenticationOutcome`, `SenderAuthenticationMethod`, `AuthenticatedSenderDomain`, `DkimSignerDomain`,
-`SpfMailFromDomain`, `DmarcOutcome`, `AuthorAuthenticationOutcome`, and `AuthenticatedAuthorDomain`. The four enums are
-text for the reason `content_availability` is, and the four domains are `character varying(253)` — the length a
+`SpfMailFromDomain`, `DmarcOutcome`, `AuthorAuthenticationOutcome`, `AuthenticatedAuthorDomain`, and
+`DisplayedAuthorDomain`. The four enums are
+text for the reason `content_availability` is, and the five domains are `character varying(253)` — the length a
 resolver accepts, which the domain value already refuses to exceed, so no value ever reaches a column that would reject
 it.
 
-The last two are a conclusion about the author the message displays, which is a different question from the six before
-them: those name the identity that handed the message over, and a relay, a mailing list, or a delivery provider
-authenticates as itself while carrying somebody else's `From`. `AuthenticatedAuthorDomain` is present exactly when the
-author authenticated, and it is the domain a reader was shown rather than whichever identity established it.
+The last three are about the author the message displays, which is a different question from the six before them: those
+name the identity that handed the message over, and a relay, a mailing list, or a delivery provider authenticates as
+itself while carrying somebody else's `From`. `AuthenticatedAuthorDomain` is present exactly when the author
+authenticated, and it is the domain a reader was shown rather than whichever identity established it.
+
+`DisplayedAuthorDomain` is the domain the `From` header wrote, recorded whether or not anything held it, so the two
+halves of the comparison exist on the row where they are most needed — the messages whose author was *not* established,
+where `AuthenticatedAuthorDomain` is empty by construction. It overlaps that column and does not replace it: one says
+what a trusted server stood behind, and this says what the message claimed. It is not derivable from the sender columns
+either, because those fall back to `Sender` for a message that named no author while this is `From`'s alone. A message
+stored before the column existed holds null in it and nothing fills that in by itself, because neither synchronization
+pass re-reads mail that stayed where it was; [`mfctl mailbox
+rederive`](../features/imap-synchronization.md#bringing-stored-mail-up-to-a-later-release) is the pass that does, from
+the raw MIME the deployment already holds.
 
 They are columns on the row rather than a table hanging off it, unlike [what classification
 concluded](#what-classification-concluded-about-a-message). The rows would not be sparse: every message whose MIME was
@@ -62,7 +73,9 @@ so a join per row would buy a nullable association nothing is ever without.
 
 Every enum column carries a database default naming the value that establishes nothing — `NotEstablished`, `None`,
 `NotReported`, and `NotEstablished` again for the author — so the migration that adds them fills every stored message
-in with what was true of it rather than with a value nothing wrote. The whole group is written together on every extraction, so re-reading a
+in with what was true of it rather than with a value nothing wrote. A domain column takes no default and is simply
+absent on a row written before it existed, which reads the same as a message that wrote no such domain at all: the two
+are indistinguishable from the row, and re-reading the message is what tells them apart. The whole group is written together on every extraction, so re-reading a
 message after its account gained a trusted identifier replaces the verdict rather than leaving one column of the
 previous reading behind. The domains are stored in the upper-cased comparison form, which is what a later reader matches
 on; [sender authentication](../features/sender-authentication.md) states how the verdict is reached and which header it

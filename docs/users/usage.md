@@ -49,9 +49,15 @@ are, and a folder it does not name is one this deployment does not have.
 
 A summary is enough to recognize a message — subject, sender, recipients, timestamps, size, attachment counts, remote
 flags — and carries `storedEmailId`, the identifier a content read uses. It names its account both ways, as `accountId`
-and `accountDisplayName`, so telling a person which mailbox a message came from needs no second call. Three fields prevent
+and `accountDisplayName`, so telling a person which mailbox a message came from needs no second call. Four fields prevent
 common misreadings:
 
+- `senderVerification` is what somebody else established, next to the `senderAddress` the message wrote about itself.
+  `authorAuthentication` is what your mail server concluded about the sender shown in `From` — `authenticated`,
+  `failed`, or `notEstablished` — and `deploymentTrust` is whether your own trusted-sender configuration names that
+  sender — `trusted` or `unknown`. **Read the two together.** `authenticated` beside `unknown` is ordinary mail from
+  somebody you have never listed and says nothing against it; `unknown` on its own says only that this deployment does
+  not recognize the sender, and it is what an email whose sender failed authentication carries too.
 - `attachments` counts real attachments separately from inline images, so a message whose only payload is a logo in
   its signature does not read as one carrying a document.
 - `remoteFlags` reports what the mail server last said about the message, including `flagged` — the star a mail client
@@ -116,8 +122,14 @@ Reading the top few results of a search is therefore one call rather than one pe
 order you named them, and each carries either `content` or a `failure` saying why there is none, so one message this
 deployment cannot serve does not discard the others.
 
-Seven parts of the result exist so that an agent does not misreport a message:
+Eight parts of the result exist so that an agent does not misreport a message:
 
+- **The sender verdict comes with the evidence behind it.** `senderVerification` is the same pair a listing carries, and
+  `headers.senderAuthentication` adds what it was reached from: the domain that actually authenticated, the domain the
+  `From` header displayed, which check established the first (`dkim`, `spf`, or `none`), and the DMARC result your
+  server reported. Comparing the two domains is what shows a message that authenticated as one domain while displaying
+  another. Either domain can be `null`, which means nothing authenticated or the message wrote no usable `From` — an
+  outcome rather than missing data.
 - **Truncation is explicit, and says which limit cut.** Each body representation carries `truncatedBy` and the original
   character count, so a cut message is never summarized as a whole one. `bodyCharacterLimit` means the message is longer
   than any single call returns; `readCharacterBudget` means the messages named before it used up the call's shared
@@ -206,8 +218,10 @@ neither can the model.
 Five parts of the result are worth reading before an agent presents it:
 
 - **`citations` is what makes the answer checkable.** Each entry carries the `storedEmailId` you pass straight to
-  `get_email_content`, plus the account, folder, subject, and received time. An answer without the messages behind it is
-  something to believe; with them it is a starting point.
+  `get_email_content`, plus the account, folder, subject, received time, and the same `senderVerification` pair a
+  listing carries — so a claim drawn from a message whose sender failed authentication reads differently from one drawn
+  from a correspondent you recognize. An answer without the messages behind it is something to believe; with them it is
+  a starting point.
 - **They are what the run *retrieved*, not what the model provably used.** Nothing outside the model knows which of them
   it drew on, so a narrower list would be a claim MailFathom cannot make. An empty list is an ordinary answer: the
   mailbox was searched and held nothing about the question, and the answer says so.

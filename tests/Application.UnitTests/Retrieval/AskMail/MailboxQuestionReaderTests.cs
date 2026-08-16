@@ -8,6 +8,7 @@ using MailFathom.Application.Chat;
 using MailFathom.Application.Emails.Embeddings;
 using MailFathom.Application.Emails.Mailboxes;
 using MailFathom.Application.Emails.Search;
+using MailFathom.Application.Emails.Summaries;
 using MailFathom.Application.Retrieval;
 using MailFathom.Application.Retrieval.AskMail;
 using MailFathom.Application.Retrieval.AskMail.Audit;
@@ -614,15 +615,19 @@ public sealed class MailboxQuestionReaderTests
     private static Task<AskMailResult> AnswerAsync(MailboxQuestionReader reader, AskMailRequest request) =>
         reader.AnswerQuestionAsync(request, TestContext.Current.CancellationToken);
 
-    private static EmailKnowledgePassage PassageOf(int position, string text) => new()
-    {
-        StoredEmailId = StoredEmailId.Create(EmailIdentityAt(position)),
-        AccountId = MailAccountId.Create(ServedAccountId),
-        FolderAlias = MailFolderAlias.Create("INBOX"),
-        Subject = "Quarterly invoice",
-        ReceivedAt = Now,
-        Text = text,
-    };
+    private static EmailKnowledgePassage PassageOf(
+        int position,
+        string text,
+        SenderVerification? senderVerification = null) => new()
+        {
+            StoredEmailId = StoredEmailId.Create(EmailIdentityAt(position)),
+            AccountId = MailAccountId.Create(ServedAccountId),
+            FolderAlias = MailFolderAlias.Create("INBOX"),
+            Subject = "Quarterly invoice",
+            ReceivedAt = Now,
+            SenderVerification = senderVerification ?? SenderVerification.NotEstablished,
+            Text = text,
+        };
 
     /// <summary>Names one email by its position, so the same run of a test always uses the same identifiers.</summary>
     private static Guid EmailIdentityAt(int position) => new($"00000000-0000-0000-0000-{position:D12}");

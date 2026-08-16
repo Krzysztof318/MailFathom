@@ -365,9 +365,57 @@ public sealed class StoredEmailMetadataMappingTests
         Assert.Equal("SIGNER.TEST", entity.AuthenticatedSenderDomain);
         Assert.Equal("SIGNER.TEST", entity.DkimSignerDomain);
         Assert.Equal("RELAY.TEST", entity.SpfMailFromDomain);
+        Assert.Equal("BANK.TEST", entity.DisplayedAuthorDomain);
         Assert.Equal(DmarcOutcome.Fail, entity.DmarcOutcome);
         Assert.Equal(AuthorAuthenticationOutcome.Failed, entity.AuthorAuthenticationOutcome);
         Assert.Null(entity.AuthenticatedAuthorDomain);
+    }
+
+    /// <summary>The displayed author's domain is recorded whether or not anything established it.</summary>
+    /// <remarks>
+    /// It is the half of the comparison a reader needs most where the author was not established, which is exactly
+    /// where the column holding the established author is empty.
+    /// </remarks>
+    [Fact]
+    public void ApplyExtractedMetadata_UnestablishedAuthor_StillRecordsTheDisplayedDomain()
+    {
+        // Arrange
+        var entity = CreateEntity();
+        Assert.True(SenderDomain.TryCreate("Bank.Test", out var fromDomain));
+
+        // Act
+        StoredEmailMetadataMapping.ApplyExtractedMetadata(
+            entity,
+            CreateExtractedMetadata(
+                senderAuthentication: SenderAuthentication.Failed(fromDomain, DmarcOutcome.Fail)));
+
+        // Assert
+        Assert.Equal("BANK.TEST", entity.DisplayedAuthorDomain);
+        Assert.Null(entity.AuthenticatedAuthorDomain);
+        Assert.Null(entity.AuthenticatedSenderDomain);
+    }
+
+    /// <summary>A message that wrote no author displays none, whatever address the timeline names it by.</summary>
+    /// <remarks>
+    /// The row's sender falls back to the submitting address, and the displayed author's domain deliberately does not:
+    /// the two answer different questions, which is why the domain is stored rather than derived from the address.
+    /// </remarks>
+    [Fact]
+    public void ApplyExtractedMetadata_MessageWithoutAnAuthor_RecordsNoDisplayedDomainBesideTheSubmittersAddress()
+    {
+        // Arrange
+        var entity = CreateEntity();
+
+        // Act
+        StoredEmailMetadataMapping.ApplyExtractedMetadata(
+            entity,
+            CreateExtractedMetadata(
+                participants: [Participant(EmailAddressRole.Sender, null, "list@example.test")],
+                senderAuthentication: SenderAuthentication.NotEstablished()));
+
+        // Assert
+        Assert.Equal("list@example.test", entity.SenderAddress);
+        Assert.Null(entity.DisplayedAuthorDomain);
     }
 
     /// <summary>An established author reaches a column of its own, so a stored trust verdict names who it judged.</summary>
@@ -422,6 +470,7 @@ public sealed class StoredEmailMetadataMappingTests
         Assert.Null(entity.AuthenticatedSenderDomain);
         Assert.Null(entity.DkimSignerDomain);
         Assert.Null(entity.SpfMailFromDomain);
+        Assert.Null(entity.DisplayedAuthorDomain);
         Assert.Equal(DmarcOutcome.NotReported, entity.DmarcOutcome);
         Assert.Equal(AuthorAuthenticationOutcome.NotEstablished, entity.AuthorAuthenticationOutcome);
         Assert.Null(entity.AuthenticatedAuthorDomain);

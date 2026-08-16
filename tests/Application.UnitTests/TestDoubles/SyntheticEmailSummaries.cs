@@ -35,6 +35,8 @@ internal static class SyntheticEmailSummaries
     /// <param name="remoteFlagsObservedAt">When the flags were observed, or <see langword="null" /> when they never were.</param>
     /// <param name="attachmentCount">How many attachments the classification counted.</param>
     /// <param name="inlineResourceCount">How many inline resources the classification counted.</param>
+    /// <param name="senderVerification">What was established about the displayed author, or the stored default.</param>
+    /// <param name="senderAuthenticationEvidence">What that conclusion was reached from, or the stored default.</param>
     /// <returns>The summary.</returns>
     public static EmailSummary Create(
         DateTimeOffset? receivedAt = null,
@@ -47,7 +49,9 @@ internal static class SyntheticEmailSummaries
         bool isRemotelySeen = false,
         DateTimeOffset? remoteFlagsObservedAt = null,
         int attachmentCount = 0,
-        int inlineResourceCount = 0) => new()
+        int inlineResourceCount = 0,
+        SenderVerification? senderVerification = null,
+        SenderAuthenticationEvidence? senderAuthenticationEvidence = null) => new()
         {
             StoredEmailId = StoredEmailId.Create(storedEmailId ?? Guid.CreateVersion7()),
             AccountId = MailAccountId.Create(accountId),
@@ -76,6 +80,8 @@ internal static class SyntheticEmailSummaries
                 IsDraft: false,
                 IsDeleted: false,
                 Keywords: RemoteEmailKeywords.None),
+            SenderVerification = senderVerification ?? SenderVerification.NotEstablished,
+            SenderAuthenticationEvidence = senderAuthenticationEvidence ?? SenderAuthenticationEvidence.None,
         };
 
     /// <summary>Builds a run of summaries one day apart, oldest first, so a test can page over a known order.</summary>

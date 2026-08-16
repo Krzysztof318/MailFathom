@@ -7,6 +7,7 @@ using MailFathom.Application.Emails.Summaries;
 using MailFathom.CodeCoverage;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
+using MailFathom.Domain.Emails.Authentication;
 using MailFathom.Domain.Folders;
 using MailFathom.Infrastructure.Persistence.Entities;
 
@@ -20,9 +21,11 @@ namespace MailFathom.Infrastructure.Persistence.Emails;
 /// Mapping outside the query keeps what PostgreSQL computes and what the process computes separable by reading.
 /// </para>
 /// <para>
-/// It carries exactly the columns the summary publishes and no others. Notably absent are the <c>Cc</c>, <c>Reply-To</c>,
+/// It carries exactly the columns the summary carries and no others. Notably absent are the <c>Cc</c>, <c>Reply-To</c>,
 /// and thread-reference arrays, which are filterable but not listed, and every column of the raw MIME table, which no
-/// summary query joins to at all.
+/// summary query joins to at all. The sender-authentication columns are the one group a listing reads without
+/// publishing all of it: the single-email read is built from this same summary and publishes the evidence, and one
+/// projection reading it is cheaper than a second query for the read that needs it.
 /// </para>
 /// <para>
 /// The projection and the mapping live on the row rather than in either reader, because a listing and a single-email
@@ -56,7 +59,13 @@ internal sealed record StoredEmailSummaryRow(
     bool IsRemotelyFlagged,
     bool IsRemotelyDraft,
     bool IsRemotelyDeleted,
-    string[] RemoteKeywords)
+    string[] RemoteKeywords,
+    AuthorAuthenticationOutcome AuthorAuthenticationOutcome,
+    SenderTrustLevel SenderTrustLevel,
+    string? AuthenticatedSenderDomain,
+    string? DisplayedAuthorDomain,
+    SenderAuthenticationMethod SenderAuthenticationMethod,
+    DmarcOutcome DmarcOutcome)
 {
     /// <summary>Gets the projection every summary query selects, which is what keeps the two readers publishing one shape.</summary>
     public static Expression<Func<StoredEmailEntity, StoredEmailSummaryRow>> Projection { get; } = email =>
@@ -85,7 +94,13 @@ internal sealed record StoredEmailSummaryRow(
             email.IsRemotelyFlagged,
             email.IsRemotelyDraft,
             email.IsRemotelyDeleted,
-            email.RemoteKeywords);
+            email.RemoteKeywords,
+            email.AuthorAuthenticationOutcome,
+            email.SenderTrustLevel,
+            email.AuthenticatedSenderDomain,
+            email.DisplayedAuthorDomain,
+            email.SenderAuthenticationMethod,
+            email.DmarcOutcome);
 
     /// <summary>Turns the returned columns into the application read model.</summary>
     /// <returns>The summary, with every domain value object built by its own factory.</returns>
@@ -121,5 +136,26 @@ internal sealed record StoredEmailSummaryRow(
             // Rebuilt through the factory rather than wrapped, because the column is what an earlier build's
             // normalization left behind and this one's rules are the ones a caller's filter is folded by.
             RemoteEmailKeywords.Create(this.RemoteKeywords)),
+        SenderVerification = new SenderVerification
+        {
+            AuthorAuthentication = this.AuthorAuthenticationOutcome,
+            DeploymentTrust = this.SenderTrustLevel,
+        },
+        SenderAuthenticationEvidence = new SenderAuthenticationEvidence
+        {
+            AuthenticatedDomain = StoredDomain(this.AuthenticatedSenderDomain),
+            DisplayedAuthorDomain = StoredDomain(this.DisplayedAuthorDomain),
+            AuthenticatedBy = this.SenderAuthenticationMethod,
+            Dmarc = this.DmarcOutcome,
+        },
     };
+
+    /// <summary>Reads one stored domain column back into its value object, or reports that the column holds none.</summary>
+    /// <remarks>
+    /// A column value the factory refuses is read as absent rather than raised, because the alternative is a stored
+    /// email that can never be listed again. Nothing writes one: the columns are written from the same value object,
+    /// and its own bound is what the column length was taken from.
+    /// </remarks>
+    private static SenderDomain? StoredDomain(string? domain) =>
+        domain is not null && SenderDomain.TryCreate(domain, out var stored) ? stored : null;
 }
