@@ -52,6 +52,8 @@ internal sealed class ListEmailsTool(
     /// <param name="receivedOnOrAfter">The inclusive start of the received range.</param>
     /// <param name="receivedBefore">The exclusive end of the received range.</param>
     /// <param name="isRemotelySeen">The remote <c>\Seen</c> state to require.</param>
+    /// <param name="isRemotelyFlagged">The remote <c>\Flagged</c> state to require.</param>
+    /// <param name="keyword">The keyword an email must carry.</param>
     /// <param name="hasAttachments">Whether attachments are required.</param>
     /// <param name="direction">Which end of the timeline to read from.</param>
     /// <param name="pageSize">How many summaries to return, or none to take the default.</param>
@@ -75,7 +77,8 @@ internal sealed class ListEmailsTool(
     [Description(
         "Lists summaries of emails already synchronized into MailFathom's local mailbox copy, newest received first by "
         + "default. Filters by account, folder, sender address, recipient address, subject text, received date range, "
-        + "remote seen state, and attachment presence. Reads the local copy only: it never contacts a mail server, never "
+        + "remote seen state, remote flagged (starred) state, a keyword the mail server reported, and attachment "
+        + "presence. Reads the local copy only: it never contacts a mail server, never "
         + "marks mail as read, and never returns body text, raw MIME, or attachment content. Mail in the account's junk "
         + "folder is left out unless includeJunkMail is set. Returns at most 100 "
         + "summaries per call, with an opaque cursor for the next page and a per-folder statement of how current the "
@@ -97,6 +100,10 @@ internal sealed class ListEmailsTool(
         DateTimeOffset? receivedBefore = null,
         [Description("Return only emails the mail server last reported as read (true) or unread (false). Omit to match either. Listing never changes this state. An email whose flags no run has observed yet counts as unread.")]
         bool? isRemotelySeen = null,
+        [Description("Return only emails the mail server last reported as flagged (true) or unflagged (false), which is the star most mail clients show. Omit to match either. This is the \\Flagged flag on a message and is unrelated to the Flagged folder role; an email whose flags no run has observed yet counts as unflagged.")]
+        bool? isRemotelyFlagged = null,
+        [Description("Return only emails carrying this keyword, which is a flag a mail client or server set rather than one of the five standard ones, such as $Junk or a label. Matched as a whole keyword without regard to case; up to 64 characters, and a value that is not a keyword this system stores is refused. Omit to match any, which an empty string does too. The keywords each email carries are reported in its remoteFlags.")]
+        string? keyword = null,
         [Description("Return only emails that carry attachments (true) or that carry none (false). Omit to match either. Inline images and cryptographic signature parts do not count as attachments.")]
         bool? hasAttachments = null,
         [Description("Which end of the timeline to read from: newestFirst to browse recent mail, oldestFirst to walk a mailbox in full.")]
@@ -119,6 +126,8 @@ internal sealed class ListEmailsTool(
             ReceivedOnOrAfter = receivedOnOrAfter,
             ReceivedBefore = receivedBefore,
             IsRemotelySeen = isRemotelySeen,
+            IsRemotelyFlagged = isRemotelyFlagged,
+            Keyword = keyword,
             HasAttachments = hasAttachments,
             Direction = DomainDirection(direction),
             PageSize = pageSize,

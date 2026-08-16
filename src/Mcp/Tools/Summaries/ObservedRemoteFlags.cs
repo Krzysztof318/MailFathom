@@ -36,6 +36,10 @@ internal sealed record ObservedRemoteFlags
     [Description("Whether the mail server reported the email as deleted but not yet expunged from the folder.")]
     public required bool Deleted { get; init; }
 
+    /// <summary>Gets the keywords the server reported, which are the flags nobody standardized.</summary>
+    [Description("The keywords the mail server reported for the email, such as $JUNK or a label a mail client set, in upper case and without duplicates. Flag names are compared without regard to case, so the case a keyword is written in never decides a match; an empty list means the server reported none, or that nothing has observed this email yet.")]
+    public required IReadOnlyList<string> Keywords { get; init; }
+
     /// <summary>Gets when the flags were last read from the server, or <see langword="null" /> when no run has observed them.</summary>
     [Description("When the flags were last read from the mail server, as an ISO 8601 timestamp, or null when no synchronization run has observed this email yet. The flags are only as current as this timestamp.")]
     public DateTimeOffset? ObservedAt { get; init; }
@@ -59,6 +63,7 @@ internal sealed record ObservedRemoteFlags
             Flagged = flags.IsFlagged,
             Draft = flags.IsDraft,
             Deleted = flags.IsDeleted,
+            Keywords = flags.Keywords.Values,
             ObservedAt = flags.ObservedAt,
             WasObserved = flags.WasObserved,
         };

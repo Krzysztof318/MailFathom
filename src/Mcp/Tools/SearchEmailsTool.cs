@@ -64,6 +64,8 @@ internal sealed class SearchEmailsTool(
     /// <param name="receivedOnOrAfter">The inclusive start of the received range.</param>
     /// <param name="receivedBefore">The exclusive end of the received range.</param>
     /// <param name="isRemotelySeen">The remote <c>\Seen</c> state to require.</param>
+    /// <param name="isRemotelyFlagged">The remote <c>\Flagged</c> state to require.</param>
+    /// <param name="keyword">The keyword an email must carry.</param>
     /// <param name="hasAttachments">Whether attachments are required.</param>
     /// <param name="resultLimit">How many ranked results to return, or none to take the default.</param>
     /// <param name="includeJunkMail">Whether the account's junk folder takes part in the search.</param>
@@ -89,7 +91,8 @@ internal sealed class SearchEmailsTool(
         + "field: lexical finds the words a query contains rather than what they mean, while hybrid also finds mail "
         + "whose meaning is close and combines the two rankings. Words that appear only inside an attachment are never "
         + "searchable either way. Narrows by account, folder, sender address, recipient address, subject text, "
-        + "received date range, remote seen state, and attachment presence. Reads the local copy only: it never contacts "
+        + "received date range, remote seen state, remote flagged (starred) state, a keyword the mail server reported, "
+        + "and attachment presence. Reads the local copy only: it never contacts "
         + "a mail server, never marks mail as read, and never returns whole bodies, raw MIME, or attachment content. "
         + "Mail in the account's junk folder is left out unless includeJunkMail is set. "
         + "Returns one window of at most 50 results that nothing continues, so narrow the filters or write a different "
@@ -113,6 +116,10 @@ internal sealed class SearchEmailsTool(
         DateTimeOffset? receivedBefore = null,
         [Description("Return only emails the mail server last reported as read (true) or unread (false). Omit to match either. Searching never changes this state. An email whose flags no run has observed yet counts as unread.")]
         bool? isRemotelySeen = null,
+        [Description("Return only emails the mail server last reported as flagged (true) or unflagged (false), which is the star most mail clients show. Omit to match either. This is the \\Flagged flag on a message and is unrelated to the Flagged folder role; an email whose flags no run has observed yet counts as unflagged.")]
+        bool? isRemotelyFlagged = null,
+        [Description("Return only emails carrying this keyword, which is a flag a mail client or server set rather than one of the five standard ones, such as $Junk or a label. Matched as a whole keyword without regard to case; up to 64 characters, and a value that is not a keyword this system stores is refused. Omit to match any, which an empty string does too. The keywords each email carries are reported in its remoteFlags.")]
+        string? keyword = null,
         [Description("Return only emails that carry attachments (true) or that carry none (false). Omit to match either. Inline images and cryptographic signature parts do not count as attachments.")]
         bool? hasAttachments = null,
         [Description("How many ranked results to return, from 1 to 50. Omit to take the default of 20. A value outside the range is refused rather than clamped, so a window is never smaller than it claims to be.")]
@@ -132,6 +139,8 @@ internal sealed class SearchEmailsTool(
             ReceivedOnOrAfter = receivedOnOrAfter,
             ReceivedBefore = receivedBefore,
             IsRemotelySeen = isRemotelySeen,
+            IsRemotelyFlagged = isRemotelyFlagged,
+            Keyword = keyword,
             HasAttachments = hasAttachments,
             ResultLimit = resultLimit,
             IncludeJunkMail = includeJunkMail,

@@ -62,12 +62,14 @@ public sealed record EmailTimelineFilter
     /// <param name="receivedOnOrAfter">The inclusive start of the received range, or <see langword="null" /> for no start.</param>
     /// <param name="receivedBefore">The exclusive end of the received range, or <see langword="null" /> for no end.</param>
     /// <param name="isRemotelySeen">The remote <c>\Seen</c> state to require, or <see langword="null" /> for either.</param>
+    /// <param name="isRemotelyFlagged">The remote <c>\Flagged</c> state to require, or <see langword="null" /> for either.</param>
+    /// <param name="keyword">The keyword an email must carry, in any case, or <see langword="null" /> for any.</param>
     /// <param name="hasAttachments">Whether attachments are required, or <see langword="null" /> for either.</param>
     /// <param name="direction">The end of the timeline to read from.</param>
     /// <returns>The validated filter.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="scope" /> is <see langword="null" />.</exception>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="direction" /> is not a defined member.</exception>
-    /// <exception cref="MailboxQueryFilterInvalidException">Thrown when an address is unusable or over-long, the subject fragment is too long, or the received range can select nothing.</exception>
+    /// <exception cref="MailboxQueryFilterInvalidException">Thrown when an address is unusable or over-long, the subject fragment is too long, the keyword is not one this system stores, or the received range can select nothing.</exception>
     public static EmailTimelineFilter Create(
         MailboxScope scope,
         string? senderAddress,
@@ -76,6 +78,8 @@ public sealed record EmailTimelineFilter
         DateTimeOffset? receivedOnOrAfter,
         DateTimeOffset? receivedBefore,
         bool? isRemotelySeen,
+        bool? isRemotelyFlagged,
+        string? keyword,
         bool? hasAttachments,
         EmailTimelineDirection direction) => ReadIn(
         MailboxEmailSelection.Create(
@@ -86,6 +90,8 @@ public sealed record EmailTimelineFilter
             receivedOnOrAfter,
             receivedBefore,
             isRemotelySeen,
+            isRemotelyFlagged,
+            keyword,
             hasAttachments),
         direction);
 

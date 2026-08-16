@@ -249,5 +249,6 @@ internal sealed class StoredEmailReconciliationStore(MailFathomDbContext readCon
         row.IsRemotelyFlagged = snapshot.IsFlagged;
         row.IsRemotelyDraft = snapshot.IsDraft;
         row.IsRemotelyDeleted = snapshot.IsDeleted;
+        row.RemoteKeywords = [.. snapshot.Keywords.Values];
     }
 }

@@ -82,6 +82,8 @@ public sealed class ListEmailsToolTests
             receivedOnOrAfter: rangeStart,
             receivedBefore: rangeEnd,
             isRemotelySeen: false,
+            isRemotelyFlagged: true,
+            keyword: "$Junk",
             hasAttachments: true,
             direction: ListEmailsDirection.OldestFirst,
             pageSize: 10,
@@ -98,6 +100,8 @@ public sealed class ListEmailsToolTests
         Assert.Equal(rangeStart, filter.Selection.ReceivedOnOrAfter);
         Assert.Equal(rangeEnd, filter.Selection.ReceivedBefore);
         Assert.False(filter.Selection.IsRemotelySeen);
+        Assert.True(filter.Selection.IsRemotelyFlagged);
+        Assert.Equal("$JUNK", filter.Selection.Keyword);
         Assert.True(filter.Selection.HasAttachments);
         Assert.Equal(EmailTimelineDirection.OldestFirst, filter.Direction);
         Assert.Equal(11, timeline.LastLimit);
@@ -264,6 +268,49 @@ public sealed class ListEmailsToolTests
         Assert.Equal(0, timeline.ReadCount);
     }
 
+    /// <summary>
+    /// No stored keyword is over-long or carries a control character, so such a filter would select nothing. The
+    /// refusal has to reach the caller rather than becoming an empty page, which reads as an answer about the mailbox.
+    /// </summary>
+    [Theory]
+    [InlineData("$Ju\u0001nk")]
+    [InlineData("keyword\u0000")]
+    public async Task ListEmailsAsync_KeywordNoStoredKeywordCouldBe_IsRefusedWithoutReading(string unusable)
+    {
+        // Arrange
+        var timeline = new StubStoredEmailTimelineReader();
+        var tool = ToolOver(timeline);
+
+        // Act
+        var failure = await Assert.ThrowsAsync<MailboxQueryFilterInvalidException>(
+            () => tool.ListEmailsAsync(keyword: unusable, cancellationToken: TestContext.Current.CancellationToken));
+
+        // Assert
+        Assert.Equal(MailFathomErrorCode.MailboxQueryFilterInvalid, failure.ErrorCode);
+        Assert.Equal("keyword", failure.FilterName);
+        Assert.Equal(0, timeline.ReadCount);
+    }
+
+    /// <summary>The bound is the one the stored keywords were kept under, so a longer filter could match none of them.</summary>
+    [Fact]
+    public async Task ListEmailsAsync_KeywordLongerThanTheBound_IsRefusedWithoutReading()
+    {
+        // Arrange
+        var timeline = new StubStoredEmailTimelineReader();
+        var tool = ToolOver(timeline);
+        var overlyLongKeyword = new string('a', RemoteEmailKeywords.MaximumKeywordLength + 1);
+
+        // Act
+        var failure = await Assert.ThrowsAsync<MailboxQueryFilterInvalidException>(
+            () => tool.ListEmailsAsync(
+                keyword: overlyLongKeyword,
+                cancellationToken: TestContext.Current.CancellationToken));
+
+        // Assert
+        Assert.Equal("keyword", failure.FilterName);
+        Assert.Equal(0, timeline.ReadCount);
+    }
+
     [Fact]
     public async Task ListEmailsAsync_IdentifierLongerThanTheBoundaryAccepts_IsRefusedWithoutReading()
     {
@@ -404,7 +451,8 @@ public sealed class ListEmailsToolTests
                 IsAnswered: true,
                 IsFlagged: false,
                 IsDraft: false,
-                IsDeleted: false),
+                IsDeleted: false,
+                Keywords: RemoteEmailKeywords.Create(["$Junk"])),
         };
         var tool = ToolOver(new StubStoredEmailTimelineReader(summary));
 
@@ -435,6 +483,7 @@ public sealed class ListEmailsToolTests
         Assert.True(published.RemoteFlags.Seen);
         Assert.True(published.RemoteFlags.Answered);
         Assert.False(published.RemoteFlags.Flagged);
+        Assert.Equal(["$JUNK"], published.RemoteFlags.Keywords);
         Assert.Equal(observedAt, published.RemoteFlags.ObservedAt);
         Assert.True(published.RemoteFlags.WasObserved);
     }

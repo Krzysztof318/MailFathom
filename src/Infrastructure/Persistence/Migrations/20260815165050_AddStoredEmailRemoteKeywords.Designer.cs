@@ -3,6 +3,7 @@ using System;
 using MailFathom.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using NpgsqlTypes;
@@ -13,9 +14,11 @@ using Pgvector;
 namespace MailFathom.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(MailFathomDbContext))]
-    partial class MailFathomDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260815165050_AddStoredEmailRemoteKeywords")]
+    partial class AddStoredEmailRemoteKeywords
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -1066,10 +1069,6 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                     b.Property<long>("AttachmentTotalSizeOctets")
                         .HasColumnType("bigint");
 
-                    b.Property<string>("AuthenticatedSenderDomain")
-                        .HasMaxLength(253)
-                        .HasColumnType("character varying(253)");
-
                     b.Property<bool>("CarriesUnverifiedSignature")
                         .HasColumnType("boolean");
 
@@ -1093,17 +1092,6 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                         .IsRequired()
                         .HasMaxLength(64)
                         .HasColumnType("character varying(64)");
-
-                    b.Property<string>("DkimSignerDomain")
-                        .HasMaxLength(253)
-                        .HasColumnType("character varying(253)");
-
-                    b.Property<string>("DmarcOutcome")
-                        .IsRequired()
-                        .ValueGeneratedOnAdd()
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)")
-                        .HasDefaultValue("NotReported");
 
                     b.Property<string>("InReplyTo")
                         .HasMaxLength(998)
@@ -1169,29 +1157,8 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                         .HasMaxLength(320)
                         .HasColumnType("character varying(320)");
 
-                    b.Property<string>("SenderAuthenticationMethod")
-                        .IsRequired()
-                        .ValueGeneratedOnAdd()
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)")
-                        .HasDefaultValue("None");
-
-                    b.Property<string>("SenderAuthenticationOutcome")
-                        .IsRequired()
-                        .ValueGeneratedOnAdd()
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)")
-                        .HasDefaultValue("NotEstablished");
-
                     b.Property<string>("SenderDisplayName")
                         .HasColumnType("text");
-
-                    b.Property<string>("SenderDomainAlignment")
-                        .IsRequired()
-                        .ValueGeneratedOnAdd()
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)")
-                        .HasDefaultValue("NotAssessed");
 
                     b.Property<string>("SenderNormalizedAddress")
                         .HasMaxLength(320)
@@ -1202,10 +1169,6 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
 
                     b.Property<long>("SizeOctets")
                         .HasColumnType("bigint");
-
-                    b.Property<string>("SpfMailFromDomain")
-                        .HasMaxLength(253)
-                        .HasColumnType("character varying(253)");
 
                     b.Property<DateTimeOffset>("StoredAt")
                         .HasColumnType("timestamp with time zone");

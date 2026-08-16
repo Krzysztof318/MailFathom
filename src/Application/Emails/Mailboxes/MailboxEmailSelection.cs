@@ -45,7 +45,12 @@ public sealed record MailboxEmailSelection
     /// </remarks>
     private const char CanonicalFieldSeparator = '\u001f';
 
-    /// <summary>Marks a filter nobody named in <see cref="CanonicalText" />.</summary>
+    /// <summary>Marks a filter nobody named in <see cref="CanonicalText" />, where no value written beside it can be it.</summary>
+    /// <remarks>
+    /// An instant is digits and a flag is one of two words, so neither can produce this text and a caller cannot reach
+    /// it. A free-text filter can be written as exactly this, which is why one is encoded by
+    /// <see cref="CanonicalOptionalText" /> rather than against this marker.
+    /// </remarks>
     private const string CanonicalAbsentValue = "-";
 
     private MailboxEmailSelection(
@@ -56,6 +61,8 @@ public sealed record MailboxEmailSelection
         DateTimeOffset? receivedOnOrAfter,
         DateTimeOffset? receivedBefore,
         bool? isRemotelySeen,
+        bool? isRemotelyFlagged,
+        string? keyword,
         bool? hasAttachments)
     {
         this.Scope = scope;
@@ -65,6 +72,8 @@ public sealed record MailboxEmailSelection
         this.ReceivedOnOrAfter = receivedOnOrAfter;
         this.ReceivedBefore = receivedBefore;
         this.IsRemotelySeen = isRemotelySeen;
+        this.IsRemotelyFlagged = isRemotelyFlagged;
+        this.Keyword = keyword;
         this.HasAttachments = hasAttachments;
         this.CanonicalText = this.ComputeCanonicalText();
     }
@@ -106,6 +115,23 @@ public sealed record MailboxEmailSelection
     /// </remarks>
     public bool? IsRemotelySeen { get; }
 
+    /// <summary>Gets the remote <c>\Flagged</c> state an email must have, or <see langword="null" /> when either matches.</summary>
+    /// <remarks>
+    /// The flag is what a mail client shows as a star, and it reads from the same snapshot <see cref="IsRemotelySeen" />
+    /// does, with the same consequence for mail nobody has observed: it carries the flag unset and matches the unflagged
+    /// side. It is unrelated to the <c>Flagged</c> folder role, which names a folder a provider synthesizes rather than a
+    /// flag on a message, so a scope naming that role and this filter are two different narrowings.
+    /// </remarks>
+    public bool? IsRemotelyFlagged { get; }
+
+    /// <summary>Gets the keyword an email must carry, in its comparison form, or <see langword="null" /> when any matches.</summary>
+    /// <remarks>
+    /// One keyword rather than a set, because a set immediately owes an answer to whether it means all of them or any of
+    /// them, and neither has been asked for. The value is folded the way the stored keywords were, so a caller writing
+    /// <c>$Junk</c> matches mail whose server reported <c>$junk</c>.
+    /// </remarks>
+    public string? Keyword { get; }
+
     /// <summary>Gets whether an email must carry attachments, or <see langword="null" /> when either matches.</summary>
     /// <remarks>
     /// Attachment presence is the classification rule the MIME extraction applies, not a disposition header: a message
@@ -131,10 +157,12 @@ public sealed record MailboxEmailSelection
     /// <param name="receivedOnOrAfter">The inclusive start of the received range, or <see langword="null" /> for no start.</param>
     /// <param name="receivedBefore">The exclusive end of the received range, or <see langword="null" /> for no end.</param>
     /// <param name="isRemotelySeen">The remote <c>\Seen</c> state to require, or <see langword="null" /> for either.</param>
+    /// <param name="isRemotelyFlagged">The remote <c>\Flagged</c> state to require, or <see langword="null" /> for either.</param>
+    /// <param name="keyword">The keyword an email must carry, in any case, or <see langword="null" /> for any.</param>
     /// <param name="hasAttachments">Whether attachments are required, or <see langword="null" /> for either.</param>
     /// <returns>The validated selection.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="scope" /> is <see langword="null" />.</exception>
-    /// <exception cref="MailboxQueryFilterInvalidException">Thrown when an address is unusable or over-long, the subject fragment is too long, or the received range can select nothing.</exception>
+    /// <exception cref="MailboxQueryFilterInvalidException">Thrown when an address is unusable or over-long, the subject fragment is too long, the keyword is not one this system stores, or the received range can select nothing.</exception>
     public static MailboxEmailSelection Create(
         MailboxScope scope,
         string? senderAddress,
@@ -143,6 +171,8 @@ public sealed record MailboxEmailSelection
         DateTimeOffset? receivedOnOrAfter,
         DateTimeOffset? receivedBefore,
         bool? isRemotelySeen,
+        bool? isRemotelyFlagged,
+        string? keyword,
         bool? hasAttachments)
     {
         ArgumentNullException.ThrowIfNull(scope);
@@ -164,6 +194,8 @@ public sealed record MailboxEmailSelection
             receivedOnOrAfter?.ToUniversalTime(),
             receivedBefore?.ToUniversalTime(),
             isRemotelySeen,
+            isRemotelyFlagged,
+            ComparableKeyword(keyword),
             hasAttachments);
     }
 
@@ -198,6 +230,31 @@ public sealed record MailboxEmailSelection
         return EmailAddress.TryCreate(displayName: null, address, out var emailAddress)
             ? emailAddress.NormalizedAddress
             : throw MailboxQueryFilterInvalidException.NotAnAddress(filterName);
+    }
+
+    /// <summary>Puts a keyword filter into the one form stored keywords are compared in.</summary>
+    /// <remarks>
+    /// The domain type does the folding, so a filter and a stored keyword are compared in the same form by construction
+    /// rather than by two call sites agreeing about case. A value it will not fold is refused here instead of becoming a
+    /// filter that matches nothing: no stored keyword is empty, over-long, or carries a control character, so such a
+    /// value would return an empty page that reads as an answer about the mailbox.
+    /// </remarks>
+    private static string? ComparableKeyword(string? keyword)
+    {
+        if (string.IsNullOrWhiteSpace(keyword))
+        {
+            return null;
+        }
+
+        MailboxQueryFilterInvalidException.ThrowIfLengthExceeded(
+            keyword.Trim().Length,
+            RemoteEmailKeywords.MaximumKeywordLength,
+            "keyword");
+
+        // The blank and the over-long cases have both been answered above, so a value the domain type still refuses is
+        // one carrying a control character, and the caller is told that rather than that it named no known identity.
+        return RemoteEmailKeywords.Normalized(keyword)
+            ?? throw MailboxQueryFilterInvalidException.ContainsControlCharacter("keyword");
     }
 
     private static string? BoundedSubjectFragment(string? subjectFragment)
@@ -236,15 +293,31 @@ public sealed record MailboxEmailSelection
         // deliberately outside this text, for the reason MailboxScope.Hiding gives; whether the caller asked for them is
         // a filter, and a walk resumed under the other answer would skip or repeat rows in the middle of the ordering.
         LengthPrefixed(CanonicalFlag(this.Scope.IncludesJunkMail)),
-        LengthPrefixed(this.SenderNormalizedAddress ?? CanonicalAbsentValue),
-        LengthPrefixed(this.RecipientNormalizedAddress ?? CanonicalAbsentValue),
+        CanonicalOptionalText(this.SenderNormalizedAddress),
+        CanonicalOptionalText(this.RecipientNormalizedAddress),
         // Upper-cased because the subject filter is case-insensitive: two requests that differ only in the case they
         // wrote a fragment in select the same emails, so they must not be two walks with incompatible cursors.
-        LengthPrefixed(this.SubjectFragment?.ToUpperInvariant() ?? CanonicalAbsentValue),
+        CanonicalOptionalText(this.SubjectFragment?.ToUpperInvariant()),
         LengthPrefixed(CanonicalInstant(this.ReceivedOnOrAfter)),
         LengthPrefixed(CanonicalInstant(this.ReceivedBefore)),
         LengthPrefixed(CanonicalFlag(this.IsRemotelySeen)),
+        LengthPrefixed(CanonicalFlag(this.IsRemotelyFlagged)),
+        // Already the comparison form, so nothing is folded again here: two requests that wrote one keyword in
+        // different cases are one walk, and they reached this text as one value rather than as two.
+        CanonicalOptionalText(this.Keyword),
         LengthPrefixed(CanonicalFlag(this.HasAttachments)));
+
+    /// <summary>Writes an optional free-text filter, marking whether one was named ahead of what it said.</summary>
+    /// <remarks>
+    /// A keyword, a subject fragment, and an address are free text a caller writes, so any reserved value standing for
+    /// absence is one a caller can also send: a filter naming the single character <see cref="CanonicalAbsentValue" />
+    /// is written as would produce the text of a request that named no filter at all, and
+    /// <see cref="EmailTimelineFilter.Fingerprint" /> would then let a cursor issued under one resume the walk under
+    /// the other, over a different set of rows. The marker carries no such value space — it is one of two digits — so
+    /// prefixing it separates the two cases whatever the filter says.
+    /// </remarks>
+    private static string CanonicalOptionalText(string? value) =>
+        LengthPrefixed(value is { } named ? string.Concat("1", named) : "0");
 
     private static string CanonicalList(IEnumerable<string> values) =>
         LengthPrefixed(string.Join(CanonicalFieldSeparator, values.Select(LengthPrefixed)));

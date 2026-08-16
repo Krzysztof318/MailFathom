@@ -351,5 +351,7 @@ public sealed class SemanticEmailSearchTests
         receivedOnOrAfter: null,
         receivedBefore: null,
         isRemotelySeen: null,
+        isRemotelyFlagged: null,
+        keyword: null,
         hasAttachments: null);
 }

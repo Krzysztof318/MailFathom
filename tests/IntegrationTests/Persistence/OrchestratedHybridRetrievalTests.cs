@@ -182,6 +182,8 @@ public sealed class OrchestratedHybridRetrievalTests(MailFathomOrchestrationFixt
         receivedOnOrAfter: null,
         receivedBefore: null,
         isRemotelySeen: null,
+        isRemotelyFlagged: null,
+        keyword: null,
         hasAttachments: null);
 
     /// <summary>Counts how many of the named messages this database actually holds.</summary>

@@ -127,7 +127,7 @@ configured name for an account and carries nothing the caller did not already wr
 | Code | Meaning | Typical cause |
 |---|---|---|
 | `51001` | A page size outside the range the query serves | A page size of 0 or above 100, refused rather than clamped |
-| `51002` | A filter carries a value, a count, or a length the query does not accept | An unusable address, a subject fragment over 256 characters or carrying a control character, a received range that ends before it starts, more than 64 accounts or folders, an account identifier or folder alias that is blank, over 256 characters, or carrying a control character, a search query that is blank, over 512 characters, or carrying a control character |
+| `51002` | A filter carries a value, a count, or a length the query does not accept | An unusable address, a subject fragment over 256 characters or carrying a control character, a received range that ends before it starts, more than 64 accounts or folders, an account identifier or folder alias that is blank, over 256 characters, or carrying a control character, a keyword over 64 characters or carrying a control character, a search query that is blank, over 512 characters, or carrying a control character |
 | `51003` | A search asked for more ranked results than a search serves | A `resultLimit` of 0 or above 50, refused rather than clamped |
 | `51004` | The call named an email with text that is no identifier this system issues | A `storedEmailIds` element that is blank, not a UUID, or the all-zero UUID, refused before anything is looked up |
 | `51005` | A content read named no emails, or more than one call serves | A `storedEmailIds` list that is empty or holds more than 10 entries, refused rather than truncated |
@@ -257,6 +257,8 @@ Every argument is optional.
 | `receivedOnOrAfter` | `date-time` | Inclusive start of the received range |
 | `receivedBefore` | `date-time` | Exclusive end, so consecutive ranges built from one instant neither overlap nor leave a gap |
 | `isRemotelySeen` | `boolean` | The remote seen state to require. Listing never changes it |
+| `isRemotelyFlagged` | `boolean` | The remote `\Flagged` state to require, which is the star a mail client shows. Unrelated to the `Flagged` folder role, which names a folder rather than a flag |
+| `keyword` | `string` | One keyword the email must carry, matched whole and without regard to case, up to 64 characters. A value no stored keyword could be is refused with `51002` |
 | `hasAttachments` | `boolean` | Whether to match only emails with attachments or only those without |
 | `includeJunkMail` | `boolean` | Whether the account's junk folder takes part. Omitted leaves it out, and the result says which of the two answers it gave |
 | `direction` | `newestFirst` \| `oldestFirst` | Which end of the timeline to read from |
@@ -321,9 +323,13 @@ Three parts of it are worth reading before a caller writes against them:
   will refuse in the same way; `awaitingStorageHeadroom` is one that arrived while local storage stood at its ceiling,
   whose content a later synchronization run fetches once there is room.
 
-The remote flags carry `wasObserved` beside `observedAt`. Reconciliation has not landed, so every row currently reports
-flags nobody has read, and a caller that ignored the distinction would read "no flag set" where the truth is "nobody has
-looked".
+The remote flags carry `wasObserved` beside `observedAt`, because a row a reconciliation window has not reached yet
+reports every flag unset and no keyword at all. A caller that ignored the distinction would read "no flag set" where the
+truth is "nobody has looked".
+
+Beside the five booleans they carry `keywords`, the flags the protocol leaves to whoever set them — `$Junk`, a label a
+mail client wrote. Flag names are compared without regard to case, so they are published in one case rather than in the
+one a server happened to write, and `keyword` on both tools folds a caller's value the same way before matching.
 
 ### Freshness
 
@@ -506,6 +512,8 @@ how the extracts are cut, and why there is no cursor — where those are enforce
 | `receivedOnOrAfter` | `date-time` | Inclusive start of the received range |
 | `receivedBefore` | `date-time` | Exclusive end of the received range |
 | `isRemotelySeen` | `boolean` | The remote seen state to require. Searching never changes it |
+| `isRemotelyFlagged` | `boolean` | The remote `\Flagged` state to require |
+| `keyword` | `string` | One keyword the email must carry, matched whole and without regard to case |
 | `hasAttachments` | `boolean` | Whether to match only emails with attachments or only those without |
 | `includeJunkMail` | `boolean` | Whether the account's junk folder takes part. Omitted leaves it out, and the result says which of the two answers it gave |
 | `resultLimit` | `integer` | 1 to 50. Omitted takes the default of 20; a value outside the range is refused with `51003` rather than clamped |

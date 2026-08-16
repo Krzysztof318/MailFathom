@@ -222,6 +222,18 @@ internal sealed class StoredEmailEntity
     public bool IsRemotelyDeleted { get; set; }
 
     /// <summary>
+    /// Gets or sets the keywords the server reported beside the five flags above, in the normalized form
+    /// <see cref="RemoteEmailKeywords" /> produces, which is the form a keyword filter matches on.
+    /// </summary>
+    /// <remarks>
+    /// An empty array is what both an email carrying no keyword and an email nobody has observed hold, which is the same
+    /// ambiguity the five booleans carry and is resolved by the same timestamp. The column sits on the email's own row
+    /// rather than in a table of its own, so every tombstone, retention, erasure, and export path that already carries
+    /// the row carries the keywords with it and none of them gains a second thing to account for.
+    /// </remarks>
+    public string[] RemoteKeywords { get; set; } = [];
+
+    /// <summary>
     /// Gets or sets when a rule pass last evaluated this email, or <see langword="null" /> while none has.
     /// </summary>
     /// <remarks>
