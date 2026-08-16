@@ -88,8 +88,21 @@ public sealed class MailAccountTransportSecurityOptions
     /// Startup validation rejects these settings long before this runs, so a failure here means an unsafe policy
     /// reached the runtime through some other path. It fails closed rather than connecting.
     /// </remarks>
-    public MailTransportSecurityPolicy CreatePolicy() => MailTransportSecurityPolicy.Create(
-        this.ConnectionSecurity,
+    public MailTransportSecurityPolicy CreatePolicy() => this.CreatePolicy(this.ConnectionSecurity);
+
+    /// <summary>Builds the validated domain policy for one of this account's endpoints.</summary>
+    /// <param name="connectionSecurity">The connection security mode that endpoint is reached under.</param>
+    /// <returns>The policy the transport adapter must obey.</returns>
+    /// <exception cref="MailTransportSecurityPolicyViolationException">Thrown when the configured combination is unsafe.</exception>
+    /// <exception cref="ArgumentException">Thrown when no supported SASL mechanism is configured.</exception>
+    /// <remarks>
+    /// An account reaches two servers and the mode is the one part of this block that belongs to an endpoint rather
+    /// than to the account: reading over implicit TLS and submitting over STARTTLS is the ordinary provider shape. The
+    /// mechanisms, the accepted weakenings, and the certificate authority are the account's and are judged here by the
+    /// same rules whichever mode is supplied, so a clear-text mechanism refused on one endpoint is refused on both.
+    /// </remarks>
+    public MailTransportSecurityPolicy CreatePolicy(MailConnectionSecurity connectionSecurity) => MailTransportSecurityPolicy.Create(
+        connectionSecurity,
         MailAuthenticationPolicy.Create(
             this.ParsePermittedMechanisms(out _),
             this.AllowInsecureConnection,
@@ -131,12 +144,23 @@ public sealed class MailAccountTransportSecurityOptions
     /// Descriptions name the setting and the rule only. The user name, password, and trust anchor reference stay out
     /// of them, because startup validation output reaches operator consoles and logs.
     /// </remarks>
-    public IReadOnlyList<MailAccountTransportSecurityConfigurationError> FindConfigurationErrors()
+    public IReadOnlyList<MailAccountTransportSecurityConfigurationError> FindConfigurationErrors() =>
+        this.FindConfigurationErrors(this.ConnectionSecurity);
+
+    /// <summary>Finds every unsupported mechanism name and every rule one of this account's endpoints violates.</summary>
+    /// <param name="connectionSecurity">The connection security mode that endpoint is reached under.</param>
+    /// <returns>The errors to report at startup, empty when the settings are safe.</returns>
+    /// <remarks>
+    /// The rules are the ones the account's own endpoint is judged by, so a second endpoint cannot be configured under
+    /// a weaker standard than the first. Descriptions name the setting and the rule only.
+    /// </remarks>
+    public IReadOnlyList<MailAccountTransportSecurityConfigurationError> FindConfigurationErrors(
+        MailConnectionSecurity connectionSecurity)
     {
         var permittedMechanisms = this.ParsePermittedMechanisms(out var unsupportedMechanismNames);
 
         var violations = MailTransportSecurityPolicy.FindViolations(
-            this.ConnectionSecurity,
+            connectionSecurity,
             permittedMechanisms,
             this.AllowInsecureConnection,
             this.AllowClearTextAuthenticationOverUnencryptedConnection,

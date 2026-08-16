@@ -509,6 +509,7 @@ internal static class HostComposition
         builder.Services.AddScoped<ISpamClassificationSettingsReader, ConfiguredSpamClassificationSettingsReader>();
         builder.Services.AddScoped<ISpamActionSettingsReader, ConfiguredSpamActionSettingsReader>();
         builder.Services.AddScoped<IImapAccountSettingsProvider, ConfiguredImapAccountSettingsProvider>();
+        builder.Services.AddScoped<ISmtpAccountSettingsProvider, ConfiguredSmtpAccountSettingsProvider>();
         builder.Services.AddScoped<IMailOAuthSettingsProvider, ConfiguredMailOAuthSettingsProvider>();
         // A singleton, unlike the settings around it, because the pool that reads it is one: the write connection is
         // bounded per account across the process rather than per work unit. The idle period is therefore read once at
