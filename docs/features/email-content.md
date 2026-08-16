@@ -461,7 +461,11 @@ those leaves an email to report an outcome against.
 - `MailFathom.Application.Emails.GetEmailContent` — the use case, its request, its per-email outcome and failure, and the
   two refusals a request itself can earn.
 - `MailFathom.Application.EmailContent.Storage` — the content store port and what a read of it returns, remote and
-  stored.
+  stored. The port covers mail leaving as well as mail arriving: an outgoing message is stored against the record of the
+  send it was composed for rather than against a local occurrence, and is written once so a retry transmits the bytes an
+  earlier attempt may already have begun transmitting. One port is what keeps raw MIME behind one seam, so the move to
+  object storage this port was shaped for stays one adapter's rather than two. [Mail delivery](mail-delivery.md) holds
+  why that write may never be repeated.
 - `MailFathom.Application.EmailContent.Rendering` — the renderer port, the body representations with their bounds, and
   the headers.
 - `MailFathom.Application.EmailContent.Repair` — the repair-request port, the request it carries, and the defect that

@@ -4,6 +4,7 @@
 
 using MailFathom.Application.EmailContent.Storage;
 using MailFathom.Application.Persistence;
+using MailFathom.Domain.Delivery;
 using MailFathom.Domain.Emails;
 
 namespace MailFathom.Mcp.UnitTests.TestDoubles;
@@ -11,7 +12,9 @@ namespace MailFathom.Mcp.UnitTests.TestDoubles;
 /// <summary>Answers a content read with one fixed stored payload and records that it was asked.</summary>
 /// <remarks>
 /// Writing is unimplemented on purpose. A read never stores content, so a stub that quietly accepted a write would let
-/// a boundary that started writing pass unnoticed.
+/// a boundary that started writing pass unnoticed. The outgoing half is unimplemented for a stronger reason: a mailbox
+/// tool must not reach a message this deployment is sending, so a boundary that asked for one fails here rather than
+/// being answered with nothing.
 /// </remarks>
 internal sealed class StubEmailContentStore(StoredEmailContent? storedContent = null) : IEmailContentStore
 {
@@ -37,4 +40,18 @@ internal sealed class StubEmailContentStore(StoredEmailContent? storedContent = 
 
         return Task.FromResult(storedContent);
     }
+
+    /// <inheritdoc />
+    public Task SaveOutgoingContentAsync(
+        IPersistenceSession session,
+        OutgoingMessageId outgoingMessageId,
+        ReadOnlyMemory<byte> rawMime,
+        CancellationToken cancellationToken) =>
+        throw new NotSupportedException("Reading an email never stores an outgoing message.");
+
+    /// <inheritdoc />
+    public Task<StoredEmailContent?> FindOutgoingContentAsync(
+        OutgoingMessageId outgoingMessageId,
+        CancellationToken cancellationToken) =>
+        throw new NotSupportedException("A mailbox tool never reads an outgoing message.");
 }

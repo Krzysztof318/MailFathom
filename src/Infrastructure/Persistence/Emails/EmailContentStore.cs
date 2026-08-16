@@ -8,6 +8,7 @@ using System.Security.Cryptography;
 using MailFathom.Application.EmailContent.Storage;
 using MailFathom.Application.Persistence;
 using MailFathom.CodeCoverage;
+using MailFathom.Domain.Delivery;
 using MailFathom.Domain.Emails;
 using MailFathom.Infrastructure.Observability;
 using MailFathom.Infrastructure.Persistence.Entities;
@@ -148,6 +149,99 @@ internal sealed class EmailContentStore(
         }
 
         write.Stored(byteLength);
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// The existence check is what enforces "written once", and it is here rather than in the caller because a caller
+    /// cannot close the window: the record and its message are inserted in one transaction, so the only writer that can
+    /// meet an existing payload is one working from a record an earlier request already committed.
+    /// </para>
+    /// <para>
+    /// A record still being inserted in this very session can carry no persisted content, so the database pass is
+    /// skipped for one — the change-tracker pass is the whole answer there.
+    /// </para>
+    /// <para>
+    /// Unlike the incoming write, this publishes no measurement.
+    /// <see cref="StoredEmailContentTelemetry" /> reports what synchronization stored for a mailbox, and counting a
+    /// message this deployment is about to send into that would make the mailbox's content volume read as larger than
+    /// the mail it holds.
+    /// </para>
+    /// </remarks>
+    public async Task SaveOutgoingContentAsync(
+        IPersistenceSession session,
+        OutgoingMessageId outgoingMessageId,
+        ReadOnlyMemory<byte> rawMime,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(session);
+
+        if (rawMime.IsEmpty)
+        {
+            throw new ArgumentException(
+                "An outgoing message is stored with the MIME it will be transmitted as.",
+                nameof(rawMime));
+        }
+
+        var writeContext = EfCorePersistenceSessionAccessor.DbContextOf(session);
+
+        // The record is added earlier in this same uncommitted session on the enqueue path, so FindAsync resolves it
+        // from the change tracker without a query there and falls back to the database otherwise.
+        var outgoingMessage = await writeContext.OutgoingMessages.FindAsync([outgoingMessageId.Value], cancellationToken)
+            ?? throw new InvalidOperationException(
+                "Raw MIME cannot be stored without the outgoing message record it belongs to.");
+
+        Expression<Func<OutgoingMessageContentEntity, bool>> matchesRecord =
+            candidate => candidate.OutgoingMessageId == outgoingMessage.Id;
+
+        if (writeContext.OutgoingMessageContents.Local.AsQueryable().Any(matchesRecord))
+        {
+            return;
+        }
+
+        var isRecordPending = writeContext.Entry(outgoingMessage).State == EntityState.Added;
+        if (!isRecordPending
+            && await writeContext.OutgoingMessageContents.AnyAsync(matchesRecord, cancellationToken))
+        {
+            return;
+        }
+
+        var bytes = GetCompleteArray(rawMime);
+
+        writeContext.OutgoingMessageContents.Add(new OutgoingMessageContentEntity
+        {
+            OutgoingMessageId = outgoingMessage.Id,
+            OutgoingMessage = outgoingMessage,
+            RawMime = bytes,
+            MimeByteLength = bytes.LongLength,
+            Sha256Hash = SHA256.HashData(rawMime.Span),
+            StoredAt = timeProvider.GetUtcNow(),
+        });
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Projected to the three columns for the reason the incoming read is, and spanned for none: an outgoing message is
+    /// read once per delivery attempt rather than once per request meeting a whole mailbox, and what an operator asks
+    /// about a send is which stage it is at rather than how long its bytes took to leave the database.
+    /// </remarks>
+    public async Task<StoredEmailContent?> FindOutgoingContentAsync(
+        OutgoingMessageId outgoingMessageId,
+        CancellationToken cancellationToken)
+    {
+        var storedContent = await dbContext.OutgoingMessageContents
+            .AsNoTracking()
+            .Where(content => content.OutgoingMessageId == outgoingMessageId.Value)
+            .Select(content => new StoredEmailContentRow(content.RawMime, content.MimeByteLength, content.Sha256Hash))
+            .SingleOrDefaultAsync(cancellationToken);
+
+        return storedContent is null
+            ? null
+            : new StoredEmailContent(
+                storedContent.RawMime.AsMemory(),
+                storedContent.MimeByteLength,
+                storedContent.Sha256Hash.AsMemory());
     }
 
     private static void EnsureOccurrenceMatches(
