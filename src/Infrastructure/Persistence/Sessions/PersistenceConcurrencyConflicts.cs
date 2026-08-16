@@ -65,6 +65,12 @@ internal static class PersistenceConcurrencyConflicts
     /// winner's rows in a fresh session, finds them identical to what it would have written, and updates in place
     /// rather than inserting again.
     /// </para>
+    /// <para>
+    /// The last is the re-derivation cursor of a scope nobody has walked, and it is the mutation identity's case a
+    /// third time: two invocations of one refresh, or one request retried, both read no position and both insert it.
+    /// The retry reads back what the winner recorded and moves the walk on from there, so the pass continues rather
+    /// than ending on a unique violation the caller can do nothing about.
+    /// </para>
     /// </remarks>
     internal static bool IsConcurrencyConflict(DbUpdateException exception) =>
         exception.InnerException is PostgresException
@@ -79,6 +85,7 @@ internal static class PersistenceConcurrencyConflicts
                 or MailFathomDbContext.EmbeddingProfileLifecycleUniqueIndexName
                 or MailFathomDbContext.MailRuleEvaluationRunPrimaryKeyConstraintName
                 or MailFathomDbContext.EmailChunkOrdinalUniqueIndexName
-                or MailFathomDbContext.EmailEmbeddingPrimaryKeyConstraintName,
+                or MailFathomDbContext.EmailEmbeddingPrimaryKeyConstraintName
+                or MailFathomDbContext.MailRederivationPositionPrimaryKeyConstraintName,
         };
 }

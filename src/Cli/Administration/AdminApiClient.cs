@@ -175,6 +175,94 @@ internal sealed class AdminApiClient
             CliJsonContext.Default.MailboxSynchronizationStatus,
             cancellationToken);
 
+    /// <summary>Asks the deployment what discarding one scope's synchronization progress would cost, without discarding it.</summary>
+    /// <param name="token">The bearer credential to present.</param>
+    /// <param name="account">The account the rewind would cover, as the deployment's configuration names it.</param>
+    /// <param name="folder">The one folder of it to cover, or <see langword="null" /> for every folder the account holds mail in.</param>
+    /// <param name="cancellationToken">Cancels the request.</param>
+    /// <returns>The assessment the operator is asked to confirm against.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
+    /// <exception cref="CliFailure">Thrown when the deployment refused the request or the credential, could not be reached, or answered with something that is not an assessment.</exception>
+    internal Task<MailboxRewindAssessment> ReadMailboxRewindAsync(
+        string token,
+        string account,
+        string? folder,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(account);
+
+        return this.RequestAsync(
+            HttpMethod.Get,
+            $"{AdminEndpointRoutes.MailboxRewindPath}{ScopeQuery(account, folder)}",
+            token,
+            CliJsonContext.Default.MailboxRewindAssessment,
+            cancellationToken);
+    }
+
+    /// <summary>Tells the deployment to discard one scope's durable synchronization progress.</summary>
+    /// <param name="token">The bearer credential to present.</param>
+    /// <param name="account">The account whose progress is discarded, as the deployment's configuration names it.</param>
+    /// <param name="folder">The one folder of it to discard, or <see langword="null" /> for every folder the account holds mail in.</param>
+    /// <param name="cancellationToken">Cancels the request.</param>
+    /// <returns>Which of the scope's folders held progress.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
+    /// <exception cref="CliFailure">Thrown when the deployment refused the request or the credential, could not be reached, or answered with something that is not a rewind.</exception>
+    /// <remarks>
+    /// It returns as soon as the deployment has removed the progress. What the removal costs is carried by the account's
+    /// own synchronization runs afterwards, so this command is never what keeps a re-read of a mailbox alive and closing
+    /// the terminal cannot stop one.
+    /// </remarks>
+    internal Task<MailboxRewind> RewindMailboxAsync(
+        string token,
+        string account,
+        string? folder,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(account);
+
+        return this.RequestAsync(
+            HttpMethod.Post,
+            AdminEndpointRoutes.MailboxRewindPath,
+            token,
+            CliJsonContext.Default.MailboxRewind,
+            cancellationToken,
+            JsonContent.Create(
+                new MailboxMaintenanceRequest(account, folder),
+                CliJsonContext.Default.MailboxMaintenanceRequest));
+    }
+
+    /// <summary>Asks the deployment to re-read one bounded pass of the raw MIME it already stores.</summary>
+    /// <param name="token">The bearer credential to present.</param>
+    /// <param name="account">The account whose stored mail is re-read, as the deployment's configuration names it.</param>
+    /// <param name="folder">The one folder of it to re-read, or <see langword="null" /> for every folder the account holds mail in.</param>
+    /// <param name="cancellationToken">Cancels the request.</param>
+    /// <returns>What the pass re-read, and whether the scope still holds mail a further pass would reach.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
+    /// <exception cref="CliFailure">Thrown when the deployment refused the request or the credential, could not be reached, or answered with something that is not a pass.</exception>
+    /// <remarks>
+    /// One pass per request, and the command sends as many as the scope needs. The work is local reads and a local
+    /// transaction rather than anything on a mail server, so the answer arrives when the pass has committed and what it
+    /// reports is what the deployment has already written.
+    /// </remarks>
+    internal Task<MailboxRederivationPass> RederiveMailboxAsync(
+        string token,
+        string account,
+        string? folder,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(account);
+
+        return this.RequestAsync(
+            HttpMethod.Post,
+            AdminEndpointRoutes.MailboxRederivationPath,
+            token,
+            CliJsonContext.Default.MailboxRederivationPass,
+            cancellationToken,
+            JsonContent.Create(
+                new MailboxMaintenanceRequest(account, folder),
+                CliJsonContext.Default.MailboxMaintenanceRequest));
+    }
+
     /// <summary>Asks the deployment where its semantic search stands.</summary>
     /// <param name="token">The bearer credential to present.</param>
     /// <param name="cancellationToken">Cancels the request.</param>
@@ -497,6 +585,17 @@ internal sealed class AdminApiClient
                 new MailFolderErasureRequest(account, folder),
                 CliJsonContext.Default.MailFolderErasureRequest));
     }
+
+    /// <summary>Writes the scope an operator named as a query string, escaping both halves.</summary>
+    /// <remarks>
+    /// An omitted folder is left out of the query rather than sent empty, so the request says what the operator said:
+    /// a deployment reads an absent folder as the whole account, and a parameter present but blank would be one more
+    /// shape for it to have an opinion about.
+    /// </remarks>
+    private static string ScopeQuery(string account, string? folder) =>
+        folder is { Length: > 0 } narrowed
+            ? $"?account={Uri.EscapeDataString(account)}&folder={Uri.EscapeDataString(narrowed)}"
+            : $"?account={Uri.EscapeDataString(account)}";
 
     /// <summary>Sends one credentialed request and reads the answer, or turns the refusal into a sentence.</summary>
     /// <remarks>

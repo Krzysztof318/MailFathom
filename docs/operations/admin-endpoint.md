@@ -74,6 +74,9 @@ reverse proxy, write the public URL and keep the path: `https://mail.example.tes
 | `GET /api/admin/session` | Reports the credential that authenticated and the running version. `login` and `status` report what it answers; every other command reads it first to [check the two versions against each other](#take-the-command-from-the-deployments-own-release-line). |
 | `POST /api/admin/mailbox/refresh-token` | Stores a mailbox refresh token for one configured account, sealed under the deployment's data-encryption key. This is what [`mfctl mailbox authorize --account`](mailbox-oauth.md#sending-the-token-to-the-deployment) sends. |
 | `GET /api/admin/mailbox/synchronization` | Reports what synchronization is doing, per account and per mapped folder. This is what [`mfctl mailbox status`](#reading-what-synchronization-is-doing) asks. |
+| `GET /api/admin/mailbox/rewind` | Reports how much mail discarding an account's synchronization progress would have fetched again, discarding nothing. |
+| `POST /api/admin/mailbox/rewind` | Discards it, so the next runs read the scope's folders from the start of the account's window. **This is the one route that makes a deployment pull a mailbox over IMAP again.** |
+| `POST /api/admin/mailbox/rederivation` | Re-reads one bounded pass of the raw MIME already stored, into the properties a newer release records from it. Opens no mailbox session. |
 | `GET /api/admin/mailbox/mutations/audit` | Reads one account's record of the changes MailFathom made to its mailbox, where that account [keeps one](../features/imap-synchronization.md#an-account-can-keep-a-record-of-what-was-done-to-it-and-none-does-by-default). |
 | `GET /api/admin/answering/audit` | Reads one account's record of the questions answered from its mailbox, where that account [keeps one](../features/mail-answering.md#an-account-can-keep-a-record-of-what-a-question-read-and-none-does-by-default). |
 | `GET /api/admin/embeddings` | Reports whether semantic search is working and how far behind it is. This is what [`mfctl embedding status`](#administering-the-embedding-profile) asks. |
@@ -580,6 +583,73 @@ running total as it goes. That is what makes an interrupted erasure resumable ra
 can finish: a pass either committed or did not, so interrupting the command leaves the rest where it was and running it
 again continues from there. Running it against a folder that already holds nothing succeeds having removed nothing,
 which is the ordinary end of every erasure.
+
+### Bringing stored mail up to a later release
+
+Two routes beneath `/api/admin/mailbox`, and which one a property needs is decided by where its value comes from. A
+release adds properties to stored mail and nothing in a running deployment fills them in for the mail already mirrored,
+because a run resumes from the UID its folder's checkpoint records. [Bringing stored mail up to a later
+release](../features/imap-synchronization.md#bringing-stored-mail-up-to-a-later-release) is the whole of what each one
+refreshes and what neither touches; this is what the endpoint serves.
+
+**`mfctl mailbox rederive` is the cheap one, and the one to reach for first.** Everything the stored payload itself
+carries — the sender identity the receiving server authenticated is today's example — is already on the deployment's
+own disk, so it is a local read, a parse, and an update of the message's own columns. It opens no mailbox session, so
+it cannot set `\Seen`, and it rewrites no stored content:
+
+```console
+$ mfctl mailbox rederive --account work
+500 stored emails re-read so far
+1,000 stored emails re-read so far
+1,043 stored emails re-read for every folder under work.
+2 stored emails carried MIME no reader could parse and kept what was already recorded for them.
+```
+
+One request is one bounded pass and the command repeats it until the deployment reports nothing left, printing a
+running total as it goes. Interrupting it is safe: what a batch committed stays committed, the deployment remembers
+where the walk got to, and running the same command again continues from there rather than starting the scope over. A
+walk that reaches the end forgets its position, so asking again after the next release re-reads the scope from the
+beginning — which is what the command exists for.
+
+**`mfctl mailbox rewind` is the expensive one, and the only answer for a property the mail server alone knows** — a
+flag, a keyword, the internal date. It discards the durable synchronization progress of the scope's folder bindings, so
+the next runs read them from the first UID inside the account's window and everything the server knows is read again:
+
+```console
+$ mfctl mailbox rewind --account work
+Scope:    every folder under work
+Cost:     22,500 stored emails would be fetched from the mail server, re-read, and stored again.
+Rewind that scope? [y/N] y
+Rewound:
+  ARCHIVE
+  INBOX
+Each reads from the first UID inside the account's synchronization window on its next run. Nothing was erased, and a
+run already under way is refused its next advance rather than corrupting this.
+```
+
+**The cost is read before it is performed**, which is one path answering `GET` with what the scope holds and `POST`
+with what was discarded — the same arrangement the embedding activation uses, and for the same reason: the figure an
+operator agrees to and the figure the deployment acts on have to be one figure. `--yes` states the agreement in the
+command, which is what a scripted rewind needs; an invocation with input redirected and no flag is refused rather than
+reading an answer out of whatever was piped in. A scope the assessment counted nothing in is asked about like any
+other: the count is the mail the deployment stores rather than what a run would fetch, and a folder whose local copies
+are all tombstoned counts nothing while its bindings still hold the progress the rewind takes away.
+
+**Nothing is erased and nothing is duplicated.** A rewind removes one row of progress per binding; the mail, its raw
+MIME, its passages, and their vectors stay where they are, and re-reading an occurrence stores over the local email
+already at that identity. A synchronization run already under way loses the race safely — it decided from progress that
+no longer exists, so its own advance is refused rather than written over the rewind — and the answer names the folders
+whose bindings held progress, which is what says the removal won.
+
+Both take `--account` and an optional `--folder`; without it they cover every folder the account holds mail in,
+including one whose mapping was withdrawn. Each write reads at most 4 KB of body — the assessment is a `GET` and names
+its scope in the query string — and every refusal is `400` naming what to
+change: an account this deployment does not configure, and text that is not a folder alias. A folder named blank is an
+omission rather than a refusal, because a caller writing a URL cannot express the difference.
+
+**Neither route touches embeddings, and neither re-runs classification for a verdict already recorded.** Chunks and
+vectors stay the [embedding profile's](embedding-profiles.md) business, so a refresh cannot quietly spend the provider
+budget an operator has not asked to spend.
 
 ## Rate limiting
 

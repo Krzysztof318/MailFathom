@@ -103,8 +103,8 @@ public sealed class AdminApiEndpointsTests
             .Select(endpoint => $"/{endpoint.RoutePattern.RawText?.TrimStart('/')}")
             .Order(StringComparer.Ordinal);
 
-        // The activation path, the rule-run path, and the classification-run path each appear twice, because each is one
-        // resource read with a get and performed with a post, and both verbs are mapped separately.
+        // The activation path, the rule-run path, the classification-run path, and the rewind path each appear twice,
+        // because each is one resource read with a get and performed with a post, and both verbs are mapped separately.
         Assert.Equal(
             [
                 $"{AdminEndpointOptions.RoutePrefix}{MailAnsweringAuditEndpoint.Route}",
@@ -117,7 +117,10 @@ public sealed class AdminApiEndpointsTests
                 $"{AdminEndpointOptions.RoutePrefix}{JobDeadLetterEndpoints.DropRoute}",
                 $"{AdminEndpointOptions.RoutePrefix}{JobDeadLetterEndpoints.RetryRoute}",
                 $"{AdminEndpointOptions.RoutePrefix}{MailboxMutationAuditEndpoint.Route}",
+                $"{AdminEndpointOptions.RoutePrefix}{MailboxMaintenanceEndpoints.RederivationRoute}",
                 $"{AdminEndpointOptions.RoutePrefix}{MailboxRefreshTokenEndpoint.Route}",
+                $"{AdminEndpointOptions.RoutePrefix}{MailboxMaintenanceEndpoints.RewindRoute}",
+                $"{AdminEndpointOptions.RoutePrefix}{MailboxMaintenanceEndpoints.RewindRoute}",
                 $"{AdminEndpointOptions.RoutePrefix}{MailboxSynchronizationStatusEndpoint.StatusRoute}",
                 $"{AdminEndpointOptions.RoutePrefix}{MailRuleEndpoints.RulesRoute}",
                 $"{AdminEndpointOptions.RoutePrefix}{MailRuleEndpoints.HistoryRoute}",

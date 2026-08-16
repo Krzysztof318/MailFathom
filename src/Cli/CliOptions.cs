@@ -57,6 +57,20 @@ internal static class CliOptions
         Required = true,
     };
 
+    /// <summary>Builds the option narrowing a whole-account command to one of the account's folders.</summary>
+    /// <returns>The option.</returns>
+    /// <remarks>
+    /// Optional where <see cref="MailFolder" /> is required, and that is the whole difference: a command taking this
+    /// one acts on an account and the folder merely narrows it, so omitting it means every folder the account holds
+    /// mail in rather than a folder nobody named. It is an alias for the same reason the required one is — a role is
+    /// resolved through the mapping that declares it, and mail outlives the mapping that brought it in.
+    /// </remarks>
+    internal static Option<string?> NarrowedMailFolder() => new("--folder")
+    {
+        Description =
+            "Narrow to one folder, by the alias the deployment's configuration gave it. Every folder the account holds mail in when omitted.",
+    };
+
     /// <summary>Builds the option naming the profile a sign-in is remembered under.</summary>
     /// <returns>The option.</returns>
     internal static Option<string?> ProfileName() => new("--name")

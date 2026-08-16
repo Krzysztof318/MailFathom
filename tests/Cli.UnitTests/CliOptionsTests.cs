@@ -88,4 +88,20 @@ public sealed class CliOptionsTests
         Assert.True(option.Required);
         Assert.False(option.HasDefaultValue);
     }
+
+    /// <summary>
+    /// The narrowing folder is the mirror of the required one, and the difference is the whole point: a command taking
+    /// it acts on an account, so omitting it means every folder the account holds mail in rather than a folder nobody
+    /// named. Required here would leave the whole-account shape unreachable from the command line.
+    /// </summary>
+    [Fact]
+    public void NarrowedMailFolder_Always_IsOptionalAndDefaultsToNothing()
+    {
+        // Act
+        var option = CliOptions.NarrowedMailFolder();
+
+        // Assert
+        Assert.False(option.Required);
+        Assert.False(option.HasDefaultValue);
+    }
 }

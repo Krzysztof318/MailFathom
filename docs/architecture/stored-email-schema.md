@@ -529,6 +529,31 @@ The row carries no foreign key onto anything. A schedule is declared in configur
 
 Nothing in it is personal data. An account alias, a rule name, two instants and a job identifier are MailFathom's own names for things.
 
+## Where an operator's re-derivation has got to
+
+`mail_rederivation_positions` holds one row per unfinished re-read of stored MIME — the walk [`mfctl mailbox
+rederive`](../features/imap-synchronization.md#bringing-stored-mail-up-to-a-later-release) drives when a release starts
+recording something the payload already carried. It is what makes an interrupted invocation resume rather than restart.
+
+| Column | What it records |
+|---|---|
+| `MailboxAccountId` | The account being walked, and the first half of the primary key |
+| `FolderAlias` | The one folder the walk was narrowed to, and the second half of the key. The empty string is the whole-account walk: a primary key holds no null, and no folder can collide with it because an alias is validated non-blank wherever one is created |
+| `LastProcessedStoredEmailId` | The last stored email a committed batch read. The walk is ordered by that identity, which is total, stable, and already indexed, so the next batch continues past this value |
+| `UpdatedAt` | When the position last moved, which is what says whether a walk somebody abandoned is worth finishing |
+| `ConcurrencyVersion` | The `xmin` token again. The insert of a scope's first position is settled by the key; the updates after it are the same race one row later, and without the token a slower walk's earlier position would be written over a faster one's later one and re-read the difference on every pass afterwards |
+
+It is a table of its own rather than a row in `backfill_positions` because that walk is one per deployment and named by
+a constant, while this one is one per scope an operator names — keying it by the scope is what lets two accounts be
+refreshed independently. There is no foreign key onto the account: the row is a cursor over rows that are already keyed
+to one, and requiring the account row would make the walk depend on a table it never reads.
+
+A row exists only while a walk is unfinished. An invocation that reaches the end of its scope removes it, so the same
+scope asked for again after a later release starts at the beginning rather than behind where the last refresh stopped.
+
+Nothing in it is personal data. An account alias, a folder alias, a local identifier and an instant are MailFathom's own
+names for things.
+
 ## Indexes
 
 | Index | Columns | Purpose |
@@ -630,6 +655,8 @@ trace, or an error message.
 `jobs` is derived personal data by the same reading as a chunk or a classification: a row says that something is to be done about somebody's message, and it points at that message by its occurrence identity. What keeps it a pointer rather than a copy is the payload contract — a document of references with no property a subject, an address, or a body could go in, bounded in size at the enqueue boundary so a payload that grew into a copy is refused instead of stored. The account column and the cascade from `mailbox_accounts` are what erasure reaches queued work by. The message the payload names is deliberately not a foreign key: the identity in the document is the remote occurrence rather than the local row, so there is nothing for a constraint to point at, and reaching the message is a lookup by that identity like every other read of it.
 
 `job_schedules` holds no personal data either, for the reason `embedding_spend_periods` does not: an identity composed of MailFathom's own configured names, two instants, and the identifier of a job say when a recurring dispatch last acted and on which occasion, and none of them names a message. That is also why nothing cascades into it — erasing an account's mail says nothing about when its rules are due to run again.
+
+`mail_rederivation_positions` holds no personal data either, and for the same reason `job_schedules` does not: an account alias, a folder alias, the local identifier of the last message a batch read, and an instant say how far an operator's refresh has come, and none of them is anything a message supplied. Nothing cascades into it, which is deliberate rather than an omission — a walk's position is about work an operator started, and erasing the mail behind that position leaves a cursor that the next batch simply steps past.
 
 `embedding_profiles` is the exception on this page: it holds no personal data at all. It describes a model, and the credential that reaches that model is configuration rather than a column here, so nothing in this table is a secret or is derived from anybody's mail.
 

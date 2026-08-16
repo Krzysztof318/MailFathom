@@ -1,6 +1,6 @@
 # IMAP synchronization
 
-<!-- describes: src/Application/Synchronization/**, src/Domain/Synchronization/**, src/Domain/Folders/**, src/Application/Folders/**, src/Infrastructure/Mail/**, src/Application/Mail/Mutations/**, src/Domain/Mutations/**, src/Host/Hosting/Workers/MailSynchronizationCoordinator.cs, src/Host/Hosting/Workers/AccountSynchronizationSupervisor.cs, src/Host/Hosting/Workers/AccountPushNotificationWatch.cs -->
+<!-- describes: src/Application/Synchronization/**, src/Domain/Synchronization/**, src/Domain/Folders/**, src/Application/Folders/**, src/Infrastructure/Mail/**, src/Application/Mail/Mutations/**, src/Application/Mail/Maintenance/**, src/Domain/Mutations/**, src/Host/Hosting/Workers/MailSynchronizationCoordinator.cs, src/Host/Hosting/Workers/AccountSynchronizationSupervisor.cs, src/Host/Hosting/Workers/AccountPushNotificationWatch.cs -->
 
 MailFathom synchronizes mailboxes read-only, on a bounded schedule, and — for an account that asks for it — the moment the mail server says something changed. Both mechanisms run the same synchronization pass over the same read-only session; what differs is only what starts one.
 
@@ -1480,6 +1480,76 @@ reading the counts would see mail arriving in one folder and vanishing from anot
 join exists to stop the system itself from drawing. No subject, address, or fragment of a message takes part in deciding
 whether a message still exists, so none of it is read to decide it and none of it can reach an audit line.
 
+## Bringing stored mail up to a later release
+
+A release adds properties to stored mail, and every message stored before it carries none of them. Nothing above fills
+them in: the forward pass asks the server only about UIDs above the folder's checkpoint, and the backward pass
+reconciles what disappeared rather than re-reading what stayed, so mail already mirrored keeps whatever shape it had on
+the day it arrived. Two commands answer that, because the properties have two sources and very different costs.
+
+**Which one a property needs is decided by where its value comes from.** A property the stored payload already carries —
+the [sender-authentication
+verdict](../architecture/stored-email-schema.md#the-sender-authentication-verdict) is the worked example, read out of
+the headers a receiving server wrote — is re-derivable from the MIME on this deployment's own disk. A property only the mailbox knows
+— the [remote flags and keywords](#reconciling-against-the-server), the internal date, anything a later release starts
+recording from the envelope — exists nowhere locally, so nothing short of fetching the message again produces it.
+
+**`mfctl mailbox rederive --account <id> [--folder <alias>]` re-reads what is already stored.** It walks the scope's
+stored emails in the order of their local identity, reads each one's raw MIME back through
+[`IEmailMimeReader`](#mime-metadata-extraction), and writes the row's own columns. It opens no mailbox session at all,
+so it cannot touch a remote `\Seen` flag however long it runs, and it rewrites no stored content. One request is one
+bounded pass — fifty messages a batch, ten batches, and no more than sixty-four mebibytes of raw MIME read, whichever
+comes first, because a scope of messages carrying attachments reaches the second ceiling long before the first — and
+the command repeats it until the deployment reports nothing
+left, so an interrupted invocation resumes rather than starting the scope over: the position each batch commits is
+stored beside the batch's writes in one transaction, in `mail_rederivation_positions`, keyed by the scope. A walk that
+reaches the end of its scope removes its row, so asking again after the next release starts at the beginning.
+
+A message no reader can parse keeps whatever an earlier release read from it and the walk moves past it; a row whose
+raw MIME is no longer stored is counted apart, because only a fetch could bring that message back. Neither is a failure
+and the command reports both.
+
+**`mfctl mailbox rewind --account <id> [--folder <alias>]` discards the durable progress instead.** It removes the
+`synchronization_checkpoints` row of every binding in the scope — the UID the forward pass resumes from and the
+`ReconciledThroughModSeq` beside it, which go together because they describe one UIDVALIDITY scope — so the next run
+starts at the first UID inside the account's [synchronization window](#bounding-how-much-mail-a-run-brings-in) and
+everything the server knows is read again. That is also its cost: the whole scope off the wire, back through MIME
+extraction, and back into the content store. The command therefore reads how many stored emails the scope holds and
+puts that figure in front of the operator before it discards anything, in the way `mfctl embedding activate` confirms a
+figure it will spend; `--yes` states the agreement in the command for a scripted rewind.
+
+**The figure informs the question and never answers it**, including when it is zero. What the count measures is the
+mail this deployment stores, which is deliberately not what a run would fetch: mail that arrived since is fetched
+without ever having been stored, and a folder whose local copies are all tombstoned counts nothing while its bindings
+still hold the progress a rewind takes away. So every rewind is confirmed or carries `--yes`, and an invocation with
+input redirected and neither is refused rather than reading an answer out of whatever was piped in.
+
+**A rewind erases nothing and duplicates nothing.** What it removes is one row of progress per binding; the mail, its
+raw MIME, its passages, and their vectors stay exactly where they are, and re-reading an occurrence upserts the local
+email already stored at `(account, folder, UIDVALIDITY, UID)` rather than storing a second one. It records no second
+placement observation either — an observation belongs to a mutation record naming that occurrence, and an ordinary
+re-read names none — so [mutation reconciliation](#a-change-nobody-finished-finishes-by-itself) reads a rewound folder
+as the folder it already knew rather than as a mailbox that filled up with copies.
+
+**A run in flight loses the race rather than corrupting the rewind.** Such a run decided from progress the removal has
+taken away, so its advance is refused by the checkpoint's compare-and-set contract instead of being written in front of
+mail the rewind was about to have re-read; the folder is deferred and the account's next run picks it up from the start
+of the window. The rewind's own answer names the folders whose bindings held progress, which is what says the removal
+was the write that won.
+
+**Neither command touches embeddings, and neither re-runs classification.** Passages and vectors are derived from text
+that the same bytes read by the same reader produce unchanged, so re-deriving them would spend a re-cut and a provider
+bill to arrive back where they already are — [ADR
+0006](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0006-embedding-profile-identity-lifecycle-and-activation-cost.md)
+makes that a deliberately confirmed act rather than something a metadata refresh performs. A message re-read after a
+rewind is chunked, classified, and evaluated only where it carries no passages, no verdict, and no rule stamp already,
+which is the same gate every arriving message passes. Text written under a sensitive-content configuration this
+deployment no longer runs is the one derived value a refresh does not correct, and the [extraction
+backfill's rebuild](sensitive-content-scanning.md#derived-data-is-written-redacted-and-stamped) already owns it.
+
+[Administering a deployment](../operations/admin-endpoint.md#bringing-stored-mail-up-to-a-later-release) is the
+operator's reference for both routes.
+
 ## Configuration
 
 Synchronization is disabled by default:
@@ -1605,9 +1675,10 @@ introduced by the bound can set `\Seen`.
 **Widening the bound later does not revisit mail a run already passed.** The folder checkpoint records how far the UID
 sequence has been walked, and nothing about a changed date rewinds it, so moving the bound further back only affects UIDs
 that have not been reached yet — mail below the checkpoint stays absent, and the absence shows up as a missing search
-result rather than as an error. Recovering it means clearing that folder's `synchronization_checkpoints` row so the next
-run walks the folder from its first UID again, which is safe because metadata and content writes are idempotent on the
-remote occurrence identity, and expensive because everything inside the widened window is fetched and indexed again.
+result rather than as an error. Recovering it means discarding that folder's progress with [`mfctl mailbox
+rewind`](#bringing-stored-mail-up-to-a-later-release) so the next run walks the folder from its first UID again, which
+is safe because metadata and content writes are idempotent on the remote occurrence identity, and expensive because
+everything inside the widened window is fetched and indexed again.
 Narrowing the bound removes nothing that is already stored; pruning stored mail is a separate concern.
 
 A date later than the current UTC date fails startup, naming the account, because it would exclude every email in the
