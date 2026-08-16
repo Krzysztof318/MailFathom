@@ -25,8 +25,25 @@ namespace MailFathom.Infrastructure.Observability;
 /// </remarks>
 public sealed class EmailEmbeddingTelemetry
 {
-    private const string OutcomeTagName = "mailfathom.embedding.outcome";
-    private const string FailureTagName = "mailfathom.embedding.failure";
+    /// <summary>The name one message's turn at being embedded opens its span under.</summary>
+    /// <remarks>
+    /// A turn is caused by a backlog rather than by a request, and it is the one place this deployment reaches a paid
+    /// provider outside a tool call. Without a span of its own the provider call the AI decorators publish arrives
+    /// parentless, so the most expensive thing the process does would be attributable to nothing — and the database
+    /// commands that store the vectors would sit beside it unexplained.
+    /// <para>
+    /// Published rather than kept inside this assembly, because the span is opened around a boundary the worker draws
+    /// — one message, one scope — so what asserts that the provider call really is inside it lives with the worker. A
+    /// second copy of the word would be a second place for it to drift.
+    /// </para>
+    /// </remarks>
+    public const string MessageSpanName = "embed_stored_email";
+
+    internal const string OutcomeTagName = "mailfathom.embedding.outcome";
+    internal const string FailureTagName = "mailfathom.embedding.failure";
+
+    /// <summary>How many passages of the message the turn gave a vector, which is the same quantity the counter sums.</summary>
+    internal const string PassageCountTagName = "mailfathom.embedding.passages";
 
     private readonly Counter<long> messageCount;
     private readonly Counter<long> passageCount;
@@ -67,6 +84,15 @@ public sealed class EmailEmbeddingTelemetry
             unit: "{character}",
             description: "Characters the per-message embedding ceiling left out of the passages it cut.");
     }
+
+    /// <summary>Opens the span one message's turn at being embedded is reported as, and returns the scope that ends it.</summary>
+    /// <returns>The scope, which the caller must dispose; a scope disposed without <see cref="MessageScope.Ended" /> reports a turn that produced no result.</returns>
+    /// <remarks>
+    /// Nothing about the message reaches the span. Which message was embedded is a stored identity and would open a
+    /// series per message, so the span carries what the turn did — how it ended, and how many passages it gave a vector
+    /// to — and the message itself stays in the queue the worker took it from.
+    /// </remarks>
+    public MessageScope BeginMessage() => new(Telemetry.ActivitySource.StartActivity(MessageSpanName));
 
     /// <summary>Records one message's turn at being embedded.</summary>
     /// <param name="run">How the turn ended and how much it produced.</param>
@@ -140,4 +166,49 @@ public sealed class EmailEmbeddingTelemetry
         EmbeddingGenerationFailure.VectorShapeUnexpected => "vector_shape_unexpected",
         _ => "none",
     };
+
+    /// <summary>Carries one message's turn at being embedded from the span that opens it to the run that ends it.</summary>
+    /// <remarks>
+    /// A turn that reached no run is published with an error status and no outcome. Every outcome this subsystem
+    /// publishes is one the generator decided, so there is no word for a turn that ended before it did — which is what
+    /// an unresolved concurrency conflict and an unexpected failure both produce, and both are already logged by the
+    /// worker that isolates them.
+    /// </remarks>
+    public sealed class MessageScope : IDisposable
+    {
+        private readonly Activity? activity;
+
+        private bool reported;
+
+        internal MessageScope(Activity? activity) => this.activity = activity;
+
+        /// <summary>Records how the turn ended and what it produced.</summary>
+        /// <param name="run">The run the generator reported.</param>
+        /// <exception cref="ArgumentNullException">Thrown when <paramref name="run" /> is <see langword="null" />.</exception>
+        public void Ended(StoredEmailEmbeddingRun run)
+        {
+            ArgumentNullException.ThrowIfNull(run);
+
+            this.reported = true;
+
+            this.activity?.SetTag(OutcomeTagName, OutcomeTagOf(run.Outcome));
+            this.activity?.SetTag(FailureTagName, FailureTagOf(run.Failure));
+            this.activity?.SetTag(PassageCountTagName, run.EmbeddedChunkCount);
+            this.activity?.SetStatus(
+                run.Outcome is StoredEmailEmbeddingOutcome.ProviderFailed
+                    ? ActivityStatusCode.Error
+                    : ActivityStatusCode.Ok);
+        }
+
+        /// <inheritdoc />
+        public void Dispose()
+        {
+            if (!this.reported)
+            {
+                this.activity?.SetStatus(ActivityStatusCode.Error);
+            }
+
+            this.activity?.Dispose();
+        }
+    }
 }

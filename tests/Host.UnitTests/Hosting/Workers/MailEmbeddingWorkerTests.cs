@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using System.Diagnostics;
 using MailFathom.Application.Emails.Chunking;
 using MailFathom.Application.Emails.Embeddings;
 using MailFathom.Application.Emails.Embeddings.Generation;
@@ -42,6 +43,38 @@ public sealed class MailEmbeddingWorkerTests
             Arg.Any<EmbeddingProfileId>(),
             Arg.Any<int>(),
             Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>The turn's work runs inside the turn's own span, which is what makes the provider call attributable.</summary>
+    /// <remarks>
+    /// Asserted from inside the work rather than from the published span, because a span opened and closed around
+    /// nothing looks identical from outside — and that is exactly what moving the call past the await would produce.
+    /// The profile read is the first thing the turn does, so what was current there is what the provider call and the
+    /// commands after it will be children of.
+    /// </remarks>
+    [Fact]
+    public async Task ExecuteAsync_AMessageIsWaiting_EmbedsItInsideTheTurnSpan()
+    {
+        // Arrange
+        var spansTheTurnRanInside = new List<string?>();
+        var profileReader = Substitute.For<IActiveEmbeddingProfileReader>();
+        profileReader.FindActiveProfileAsync(Arg.Any<CancellationToken>())
+            .Returns(_ =>
+            {
+                spansTheTurnRanInside.Add(Activity.Current?.OperationName);
+
+                return Task.FromResult<RegisteredEmbeddingProfile?>(CreateProfile());
+            });
+
+        using var listener = SampledMailFathomSpans.Sampling();
+        using var worker = CreateWorker(CreateMessages(1), profileReader, CreateStoreWithNothingOutstanding(), out _);
+
+        // Act
+        await worker.StartAsync(CancellationToken.None);
+        await worker.ExecuteTask!.WaitAsync(DeadlockGuard, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal([EmailEmbeddingTelemetry.MessageSpanName], spansTheTurnRanInside);
     }
 
     [Fact]

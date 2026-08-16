@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using System.Collections.Concurrent;
 using MailFathom.Application.Emails.Chunking;
 using MailFathom.Application.Emails.Embeddings;
 using MailFathom.Application.Emails.Embeddings.Backfill;
@@ -64,6 +65,32 @@ public sealed class MailEmbeddingBackfillWorkerTests
 
         // Assert
         Assert.Null(world.Schedule.NextPassDueAt);
+    }
+
+    /// <summary>Every pass is published as a span, which is what keeps its provider calls and commands out of a trace as orphans.</summary>
+    /// <remarks>
+    /// What the span carries is covered where the publisher is; what this establishes is the part only the worker
+    /// decides — that a pass opens one at all. The count is not asserted, because the worker is a loop and how many
+    /// passes it got through before the assertion is timing rather than behavior.
+    /// </remarks>
+    [Fact]
+    public async Task ExecuteAsync_APassRuns_PublishesItAsASpanOfItsOwn()
+    {
+        // Arrange
+        var passes = new ConcurrentQueue<string>();
+        using var listener = SampledMailFathomSpans.Recording(passes.Enqueue);
+        using var world = CreateWorld(new EmbeddingBackfillOptions());
+
+        // Act
+        await world.Worker.StartAsync(CancellationToken.None);
+        await world.Logger.WaitForOccurrences(
+            "reached the end of the stored mail",
+            occurrences: 1,
+            TestContext.Current.CancellationToken);
+        await world.Worker.StopAsync(CancellationToken.None);
+
+        // Assert
+        Assert.Contains(EmailEmbeddingBackfillTelemetry.PassSpanName, passes);
     }
 
     /// <summary>

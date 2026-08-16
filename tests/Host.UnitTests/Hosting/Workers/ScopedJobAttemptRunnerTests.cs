@@ -3,9 +3,12 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.Collections.Concurrent;
+using System.Diagnostics;
 using MailFathom.Application.Jobs;
 using MailFathom.Application.Jobs.Execution;
 using MailFathom.Host.Hosting.Workers;
+using MailFathom.Host.UnitTests.TestDoubles;
+using MailFathom.Infrastructure.Observability;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Time.Testing;
 using NSubstitute;
@@ -13,11 +16,19 @@ using Xunit;
 
 namespace MailFathom.Host.UnitTests.Hosting.Workers;
 
-public sealed class ScopedJobAttemptRunnerTests
+public sealed class ScopedJobAttemptRunnerTests : IDisposable
 {
     private static readonly DateTimeOffset Noon = new(2026, 8, 13, 12, 0, 0, TimeSpan.Zero);
 
     private readonly ConcurrentQueue<IJobStore> resolvedStores = new();
+    private readonly ConcurrentQueue<string?> spansTheAttemptRanInside = new();
+    private readonly ActivityListener listener;
+
+    // Without a listener that samples, the source starts no activity at all, so the nesting this class asserts would
+    // be indistinguishable from a runner that opened no span.
+    public ScopedJobAttemptRunnerTests() => this.listener = SampledMailFathomSpans.Sampling();
+
+    public void Dispose() => this.listener.Dispose();
 
     /// <summary>
     /// Two attempts running at once must not write through one persistence session, so each is given a scope of its
@@ -28,7 +39,9 @@ public sealed class ScopedJobAttemptRunnerTests
     {
         // Arrange
         await using var services = this.ComposedServices();
-        var runner = new ScopedJobAttemptRunner(services.GetRequiredService<IServiceScopeFactory>());
+        var runner = new ScopedJobAttemptRunner(
+            services.GetRequiredService<IServiceScopeFactory>(),
+            new JobQueueTelemetry());
 
         // Act
         await runner.RunAsync(LeasedJobFor(1), CancellationToken.None);
@@ -44,7 +57,9 @@ public sealed class ScopedJobAttemptRunnerTests
     {
         // Arrange
         await using var services = this.ComposedServices();
-        var runner = new ScopedJobAttemptRunner(services.GetRequiredService<IServiceScopeFactory>());
+        var runner = new ScopedJobAttemptRunner(
+            services.GetRequiredService<IServiceScopeFactory>(),
+            new JobQueueTelemetry());
         var job = LeasedJobFor(3);
 
         // Act
@@ -53,6 +68,28 @@ public sealed class ScopedJobAttemptRunnerTests
         // Assert
         Assert.Equal(job.JobId, result.JobId);
         Assert.Equal(JobExecutionOutcome.HandlerMissing, result.Outcome);
+    }
+
+    /// <summary>Everything the attempt reaches for runs inside the attempt's own span, which is what makes it a parent.</summary>
+    /// <remarks>
+    /// Asserted from inside the scope rather than from the published span, because a span that was opened and closed
+    /// around nothing would look identical from outside. What the defect this guards against looks like is a database
+    /// command with no parent, so the claim has to be about what was current while the work ran.
+    /// </remarks>
+    [Fact]
+    public async Task RunAsync_AnAttempt_RunsTheWorkInsideTheAttemptSpan()
+    {
+        // Arrange
+        await using var services = this.ComposedServices();
+        var runner = new ScopedJobAttemptRunner(
+            services.GetRequiredService<IServiceScopeFactory>(),
+            new JobQueueTelemetry());
+
+        // Act
+        await runner.RunAsync(LeasedJobFor(4), CancellationToken.None);
+
+        // Assert
+        Assert.Equal([JobQueueTelemetry.AttemptSpanName], this.spansTheAttemptRanInside);
     }
 
     private static LeasedJob LeasedJobFor(int uid) => new(
@@ -89,6 +126,7 @@ public sealed class ScopedJobAttemptRunnerTests
                 .Returns(true);
 
             this.resolvedStores.Enqueue(store);
+            this.spansTheAttemptRanInside.Enqueue(Activity.Current?.OperationName);
 
             return store;
         });

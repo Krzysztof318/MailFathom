@@ -325,6 +325,8 @@ public sealed class JobWorkerTests
             .Returns(Task.FromResult<IReadOnlyList<JobQueueDepthReading>>([]));
         world.Schedules.ReadSchedules().Returns([]);
 
+        var queueTelemetry = new JobQueueTelemetry();
+
         var services = new ServiceCollection();
         services.AddSingleton<TimeProvider>(world.TimeProvider);
         services.AddSingleton(world.Store);
@@ -345,6 +347,10 @@ public sealed class JobWorkerTests
         services.AddSingleton<IJobScheduleStore>(world.ScheduleStore);
         services.AddScoped<JobSchedulePass>();
         services.AddSingleton<JobConcurrencyGate>();
+
+        // The one instance both the worker and the attempt runner report through, so the span an attempt opens and the
+        // measurement the pass records come from the same publisher rather than from two that share a meter.
+        services.AddSingleton(queueTelemetry);
         services.AddSingleton<IJobAttemptRunner, ScopedJobAttemptRunner>();
         services.AddScoped<JobHandlerRegistry>();
         services.AddScoped<JobExecutor>();
@@ -358,7 +364,7 @@ public sealed class JobWorkerTests
             new JobWorker(
                 serviceProvider.GetRequiredService<IServiceScopeFactory>(),
                 Options.Create(settings),
-                new JobQueueTelemetry(),
+                queueTelemetry,
                 world.Logger,
                 world.TimeProvider));
 

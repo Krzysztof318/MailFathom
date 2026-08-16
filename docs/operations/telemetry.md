@@ -1,6 +1,6 @@
 # Telemetry and the Aspire dashboard
 
-<!-- describes: src/Application/Observability/**, src/Common/Observability/**, src/Host/Observability/**, src/Host/ServiceDefaultsExtensions.cs, src/Host/Hosting/Workers/MailExtractionBackfillWorker.cs, src/Infrastructure/Observability/**, src/Infrastructure/Mail/MailKit/MailKitImapClientFactory.cs, src/Infrastructure/HostApplicationBuilderExtensions.cs, src/Mcp/Observability/**, src/AppHost/**, src/AI/ProviderAdapters/OpenAiCompatibleClientFactory.cs -->
+<!-- describes: src/Application/Observability/**, src/Common/Observability/**, src/Host/Observability/**, src/Host/ServiceDefaultsExtensions.cs, src/Host/Hosting/Workers/**, src/Infrastructure/Observability/**, src/Infrastructure/Mail/MailKit/MailKitImapClientFactory.cs, src/Infrastructure/HostApplicationBuilderExtensions.cs, src/Mcp/Observability/**, src/Cli/Observability/**, src/Cli/CliRunner.cs, src/AppHost/**, src/AI/ProviderAdapters/OpenAiCompatibleClientFactory.cs -->
 
 The host instruments itself with OpenTelemetry throughout — logs, metrics, and traces — and exports none of it unless
 the environment names a destination. Today exactly one environment does that out of the box: a local run under the
@@ -208,6 +208,27 @@ passages it embedded and how long that took, broken down by outcome and by the c
 [Automatic embedding](../features/automatic-embedding.md#what-an-operator-can-see) names each instrument and what it
 answers; the depth is the one an instance falling behind shows up in first.
 
+Two spans carry that work rather than only counting it. **`embed_stored_email`** is opened around one message's turn
+and **`backfill_email_embeddings`** around one bounded backfill pass, and both exist for the reason `run_job` does: the
+work is caused by a queue or by an interval rather than by a request. What makes these two worth more than the counters
+beside them is what sits underneath: a provider call, published by the AI decorators, and the commands that store the
+vectors it produced. Without the span the most expensive thing this deployment does arrives in a trace store
+attributable to nothing at all.
+
+| Span | Tag | What it carries |
+| --- | --- | --- |
+| `embed_stored_email` | `mailfathom.embedding.outcome`, `…failure` | How the turn ended and what a provider refused, in the same words the instruments use |
+| `embed_stored_email` | `mailfathom.embedding.passages` | How many passages of that message were given a vector |
+| `backfill_email_embeddings` | `mailfathom.embedding.outcome`, `…failure` | The same two, for the sweep the pass performed |
+| `backfill_email_embeddings` | `mailfathom.embedding.backfill.chunked`, `…messages`, `…passages` | What the pass cut, brought up to date, and gave vectors to |
+| `backfill_email_embeddings` | `mailfathom.embedding.generation.switched` | Whether a generation being built became the one searches are answered from during this pass |
+
+A provider that refused is the one ending that marks either span as an error. Everything else — no active profile, a
+declaration that disagrees with what was activated, a spend ceiling that bound, a turn that spent its call budget — is
+an ordinary ending the deployment is meant to reach, and marking those as errors would make a correctly idle instance
+read as a failing one. Which message was embedded is nowhere on either span: a stored identity would open a series per
+message, so what is published is what the work did and the message stays in the queue the worker took it from.
+
 Three counters beside those answer what embedding is costing rather than how it is going.
 `mailfathom.embedding.budget.consumed` is the characters sent to a provider and charged against the spend ceiling,
 which summed over a period is what that period spent and summed over any other window is a question a ceiling cannot
@@ -356,7 +377,9 @@ read about. `stored` is therefore the count of messages this deployment holds, `
 threw away, and a `discarded` rate that is anything but negligible is the same finding as a conflict rate that is,
 priced in bytes.
 
-One more span belongs to no request at all. The extraction backfill opens **`backfill_email_extraction`** once per
+One more span here belongs to no request at all, and it is one of four — the others are
+[`run_job`](#durable-background-work), [`embed_stored_email`, and `backfill_email_embeddings`](#what-mailfathom-publishes-under-its-own-name),
+each described with the subsystem that opens it. The extraction backfill opens **`backfill_email_extraction`** once per
 bounded pass, which is what tells work an interval caused apart from work a caller caused — without it the pass appears
 as parentless database commands competing with the requests around them. It carries
 `mailfathom.mail.extraction.backfill.extracted`, `…unreadable`, and `…missing_content` as the counts the pass reached,
@@ -391,6 +414,25 @@ cursor, a subject, an address, or a stored identity — the values are counts, s
 words, which is a cardinality rule as much as a privacy one.
 
 ### Durable background work
+
+Every attempt at a job opens **`run_job`**, and that span is what makes durable work readable as work at all. A job is
+dispatched by an interval rather than by a request, so without it everything an attempt issues — its database commands
+above all — reaches a trace store parentless, competing with whatever the process was serving at that moment. The span
+is opened around the attempt rather than around the pass that dispatched it, so a pass running several jobs at once
+produces one span each rather than one covering all of them.
+
+| Tag | What it carries |
+| --- | --- |
+| `mailfathom.job.type` | The job type's own name, which is the same word the log line, the instruments, and the stored row use |
+| `mailfathom.job.attempt` | Which attempt this was, counting from one, which is what separates a slow job from one that has been failing all day |
+| `mailfathom.job.outcome` | How it ended, in the same six words the instruments below carry |
+| `mailfathom.job.failure` | `transient` or `permanent`, on the attempt that dead-lettered the job and on no other |
+
+Nothing else about the job reaches it. Not its identifier, not the account it belongs to, and above all not the
+idempotency key, which is composed of folder aliases and message occurrences — the same rule the instruments below are
+held to, for the same reason. An attempt that reported no outcome at all is published with an error status and no
+outcome tag rather than an invented one: every word in that dimension is a decision the executor reached, and a
+dispatch that never got that far reached none of them.
 
 The queue of durable background work publishes six instruments, all broken down by `mailfathom.job.type` — the job
 type's own name, which is the same word the log line, the span, and the stored row use. Nothing else about a job reaches
@@ -624,6 +666,35 @@ it lands on synchronization and on the extraction backfill, which is where a mai
 either keeps up or does not. The refusals are how much of a mailbox is being left underived, and every refused message
 is retried on a later run rather than lost. All five read zero on a deployment with both switches off, which constructs
 no detector on this path at all.
+
+## What the administration command emits
+
+`mfctl` runs on the operator's own machine and holds no exporter, no collector address, and no telemetry configuration
+of any kind — and this section does not give it one. What it does is open one span per invocation,
+**`run_mfctl_command`**, for the length of the invocation. That span is never exported anywhere. Its whole purpose is
+that `HttpClient` sends `traceparent` with every request the command issues while it is open, so the deployment
+continues the command's trace instead of starting one per call.
+
+The difference is what an operator sees on their own collector. A command that signs in, performs an action, and reads
+a status back is three requests; without the span they arrive as three unrelated traces with nothing saying they
+belonged to one act, and with it they are one trace whose spans are the deployment's own. That is the whole of the
+change: the deployment's spans are what get recorded, exactly as before, and they are now grouped.
+
+| Tag | What it carries |
+| --- | --- |
+| `mailfathom.cli.command` | The command that ran, as `mfctl` followed by the declared names of the subcommands beneath it |
+| `mailfathom.cli.exit_code` | The code the invocation reported, which is the whole of what the span says about how it ended |
+
+**The command name is read from the parser rather than from the argument list**, and that is a privacy decision rather
+than a convenience. An argument list is where a deployment address, an account alias, a folder alias, a message
+identity, and — for a sign-in — a credential are, so none of it is read: what reaches the span is a name this
+repository declares. The root is supplied as the constant `mfctl` rather than taken from the parser, because the parser
+names the root after the running executable.
+
+Two consequences are worth stating plainly. A collector receives server spans whose parent it never received, which is
+what a trace begun outside the collected system always looks like and which every trace store renders as a trace with
+no root. And the deployment honours the trace the command started, because its sampler is parent-based — so a command's
+requests are recorded on the same terms the deployment records everything else.
 
 ## What no signal carries, and what holds every signal to it
 

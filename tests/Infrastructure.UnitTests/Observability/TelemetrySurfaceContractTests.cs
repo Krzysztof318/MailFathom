@@ -293,6 +293,27 @@ public sealed class TelemetrySurfaceContractTests
 
         Embedding.RecordTruncatedEmbeddingInput(61_009);
 
+        using (var turn = Embedding.BeginMessage())
+        {
+            turn.Ended(StoredEmailEmbeddingRun.Embedded(3));
+        }
+
+        using (var pass = EmbeddingBackfill.BeginPass())
+        {
+            pass.Ended(new EmbeddingGenerationUpkeepResult(
+                new StoredEmailEmbeddingBackfillResult(
+                    StoredEmailEmbeddingBackfillOutcome.SweepCompleted,
+                    ChunkedEmailCount: 2,
+                    EmbeddedEmailCount: 2,
+                    EmbeddedChunkCount: 5,
+                    CallBudgetExhaustedEmailCount: 0,
+                    OutstandingEmailCountAtSweepStart: 61_011,
+                    Failure: null,
+                    SpendPeriodEndsAt: null),
+                EmbeddingGenerationTransition.Switched,
+                RemovedSupersededVectorCount: 1));
+        }
+
         EmbeddingBackfill.RecordPass(new EmbeddingGenerationUpkeepResult(
             new StoredEmailEmbeddingBackfillResult(
                 StoredEmailEmbeddingBackfillOutcome.SweepCompleted,
@@ -311,12 +332,17 @@ public sealed class TelemetrySurfaceContractTests
     {
         foreach (var outcome in Enum.GetValues<JobExecutionOutcome>())
         {
-            JobQueue.RecordAttempt(new JobExecutionResult(
+            var result = new JobExecutionResult(
                 JobId.Create(Guid.CreateVersion7()),
                 JobType.ClassifyEmailSpam,
                 AttemptCount: 1,
                 outcome,
-                TimeSpan.FromSeconds(1)));
+                TimeSpan.FromSeconds(1));
+
+            JobQueue.RecordAttempt(result);
+
+            using var attempt = JobQueue.BeginAttempt(result.JobType);
+            attempt.Ended(result);
         }
 
         foreach (var outcome in Enum.GetValues<JobScheduleDispatchOutcome>())
