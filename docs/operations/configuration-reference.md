@@ -1148,11 +1148,17 @@ No permission implies another, so a credential that needs two is granted two.
 block at once, and `Permissions` on it applies to every credential it admits. Two credentials to be granted differently
 are therefore two entries — which is what turns grouping, until now only a matter of tidiness, into a decision.
 
+**Nothing enforces a grant yet.** The permissions are read, validated, carried on the authenticated caller, and reported
+at startup; no tool and no route consults them, so every admitted caller still reaches everything its surface serves.
+Writing a grant states what a credential is meant to reach and starts refusing when the enforcement it describes ships.
+Read every sentence below as what the setting says rather than as what it currently stops.
+
 **An absent `Permissions` key and an empty list are opposites.** Writing no key at all leaves the entry holding
 everything its surface publishes, which is what makes a first deployment work before it is governed and what leaves an
-existing deployment unchanged on upgrade. Writing `Permissions: []` grants nothing, which is how a credential is retired
-without deleting its entry: it still authenticates, and on the administrative surface it can still read
-`GET /api/admin/session`, which needs no permission because it reports only what the caller already presented.
+existing deployment unchanged on upgrade. Writing `Permissions: []` grants nothing, which is how a credential will be
+retired without deleting its entry: it still authenticates, and on the administrative surface it will still read
+`GET /api/admin/session`, which needs no permission because it reports only what the caller already presented. Until
+enforcement ships, an emptied grant retires nothing — the credential goes on reaching every tool and every route.
 
 **A surface with no `Authentication` entry at all grants that surface's whole half**, because there is no entry for a
 grant to be written on. That is the unauthenticated posture the startup warning already reports.

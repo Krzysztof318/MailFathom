@@ -1,6 +1,6 @@
 # The MCP endpoint and what protects it
 
-<!-- describes: src/Mcp/**, src/Host/Security/**, src/Infrastructure/Security/**, src/Common/OAuth/**, src/Common/ClientAssertions/**, src/Host/Hosting/Warnings/McpTransportAuthenticationWarning.cs, src/Host/Configuration/Endpoints/TransportClearTextRedirectOptions.cs, src/Host/Configuration/Endpoints/TransportListenerConfiguration.cs, src/Host/Configuration/Endpoints/ExternalListenerConfiguration.cs, src/Host/Configuration/Endpoints/ReverseProxyOptions.cs, src/Host/Hosting/Startup/ClearTextRedirectToHttps.cs, src/Host/Hosting/Warnings/TransportClearTextRedirectReport.cs, src/Host/Hosting/Warnings/ReverseProxyTrustWarning.cs, src/Host/Hosting/Warnings/McpTransportEncryptionWarning.cs -->
+<!-- describes: src/Mcp/**, src/Host/Security/**, src/Infrastructure/Security/**, src/Common/OAuth/**, src/Common/ClientAssertions/**, src/Host/Hosting/Warnings/McpTransportAuthenticationWarning.cs, src/Host/Hosting/Warnings/TransportGrantStartupReport.cs, src/Host/Configuration/Endpoints/TransportClearTextRedirectOptions.cs, src/Host/Configuration/Endpoints/TransportListenerConfiguration.cs, src/Host/Configuration/Endpoints/ExternalListenerConfiguration.cs, src/Host/Configuration/Endpoints/ReverseProxyOptions.cs, src/Host/Hosting/Startup/ClearTextRedirectToHttps.cs, src/Host/Hosting/Warnings/TransportClearTextRedirectReport.cs, src/Host/Hosting/Warnings/ReverseProxyTrustWarning.cs, src/Host/Hosting/Warnings/McpTransportEncryptionWarning.cs -->
 
 The MCP endpoint is how an agent reaches MailFathom. This page records what enabling it means operationally, what a client
 has to present to reach it, which browser origins it answers, which client applications it accepts a certificate from,
@@ -151,9 +151,11 @@ for each:
 makes a method impossible to select without configuring it, or to configure without selecting it: a key is the entry that
 turns keys on. There is no limit on how many entries state any method — a second key is a second entry, and a second
 authorization server may be either — and an entry may carry several blocks at once, which is a matter of how you group
-what you wrote rather than a distinction the endpoint draws. Exactly one shape of entry fails startup, named by its
-position: one carrying no block. So does a value written where the list belongs, because a value contributes no entries
-and would otherwise leave the endpoint served with no credential at all.
+what you wrote rather than a distinction the endpoint draws, until you write a grant on one:
+[what a credential may do](#what-a-credential-may-do) is where grouping acquires a consequence, and it names the one
+combination of blocks that is refused. Otherwise one shape of entry fails startup, named by its position: one carrying
+no block. So does a value written where the list belongs, because a value contributes no entries and would otherwise
+leave the endpoint served with no credential at all.
 
 A request is served when it satisfies **any one** of the entries. The credentials are told apart by shape: a client
 assertion is a JSON Web Token declaring MailFathom's own media type in its header, an access token is a JSON Web Token

@@ -122,13 +122,16 @@ internal sealed partial class TransportGrantStartupReport : IHostedService
             var grant = Describe(method.GrantedPermissions(surface));
             var entryPath = $"{settingPath}:{index}";
 
-            if (!method.WasGrantWritten)
-            {
-                this.LogEntryGrantedWithoutBeingNarrowed(endpointName, entryPath, grant);
-            }
-            else if (method.PermissionsFromTokenScopes)
+            // The narrowing setting is asked first because it holds whether or not a list was written: an entry whose
+            // sole block is OAuth may set it and state no ceiling, and what each token there holds is still its own
+            // scopes rather than the whole surface the line would otherwise report.
+            if (method.PermissionsFromTokenScopes)
             {
                 this.LogEntryGrantNarrowedByTokenScopes(endpointName, entryPath, grant);
+            }
+            else if (method.GrantsTheWholeSurface)
+            {
+                this.LogEntryGrantedWithoutBeingNarrowed(endpointName, entryPath, grant);
             }
             else
             {

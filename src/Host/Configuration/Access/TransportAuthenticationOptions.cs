@@ -70,11 +70,12 @@ internal sealed class TransportAuthenticationOptions
     /// <remarks>
     /// <para>
     /// An absent key and an empty list are opposite statements and the binder cannot tell them apart, so the property's
-    /// own default is the restrictive one — nothing — and the permissive default belongs to the read: an entry whose
-    /// key configuration never carried holds its surface's whole half, which <see cref="WasGrantWritten" /> is what
-    /// records. An operator who wrote <c>[]</c> has reached this setting and narrowed all the way, which is how a
-    /// credential is retired without its entry being deleted. An entry constructed anywhere but from configuration
-    /// therefore starts from the grant that reaches nothing.
+    /// own default is the restrictive one — nothing — and the permissive default belongs to the read: the endpoint's
+    /// own read calls <see cref="GrantTheWholeSurface" /> on an entry whose key configuration never carried. An
+    /// operator who wrote <c>[]</c> has reached this setting and narrowed all the way, which is how a credential is
+    /// retired without its entry being deleted. An entry constructed anywhere but from configuration therefore starts
+    /// from the grant that reaches nothing, which is why the permissive case is the one recorded rather than the
+    /// narrowed one.
     /// </para>
     /// <para>
     /// Every name is one <see cref="MailFathomPermission" /> publishes and belongs to this entry's own surface;
@@ -92,14 +93,15 @@ internal sealed class TransportAuthenticationOptions
     /// </remarks>
     public bool PermissionsFromTokenScopes { get; set; }
 
-    /// <summary>Gets whether the deployment wrote this entry's grant, as opposed to leaving the key out entirely.</summary>
+    /// <summary>Gets whether this entry left its grant unstated and therefore reaches everything its surface publishes.</summary>
     /// <remarks>
     /// It is what tells a grant narrowed to nothing from a grant nobody narrowed, which is the difference between a
     /// credential that is refused everything and one that reaches the whole surface. The binder cannot answer it — an
     /// absent list and an empty one bind identically — so it is read from configuration by the endpoint that owns the
-    /// section, exactly as the origin list and the clear-text redirect are.
+    /// section, exactly as the origin list and the clear-text redirect are. It is the permissive case that is recorded
+    /// rather than the narrowed one, so an entry no read ever reached grants nothing instead of everything.
     /// </remarks>
-    internal bool WasGrantWritten { get; private set; }
+    internal bool GrantsTheWholeSurface { get; private set; }
 
     /// <summary>Gets whether this entry states any credential at all.</summary>
     public bool StatesAMethod => this.ApiKey is not null || this.OAuth is not null || this.PublicKey is not null;
@@ -107,9 +109,9 @@ internal sealed class TransportAuthenticationOptions
     /// <summary>Gets whether this entry states a credential the deployment itself configured, which can carry no scope of its own.</summary>
     public bool StatesAConfiguredCredential => this.ApiKey is not null || this.PublicKey is not null;
 
-    /// <summary>Records that the deployment wrote this entry's grant.</summary>
+    /// <summary>Records that the deployment stated no grant on this entry, which is what leaves it reaching the whole surface.</summary>
     /// <remarks>Called by the endpoint's own read, which is the only place that holds the configuration section this was bound from.</remarks>
-    internal void MarkGrantWritten() => this.WasGrantWritten = true;
+    internal void GrantTheWholeSurface() => this.GrantsTheWholeSurface = true;
 
     /// <summary>Reports the permissions this entry grants, resolved once from what the operator wrote.</summary>
     /// <param name="surface">The surface this entry guards, which decides which half of the vocabulary an unwritten grant reaches.</param>
@@ -122,7 +124,7 @@ internal sealed class TransportAuthenticationOptions
     /// </remarks>
     public IReadOnlyList<MailFathomPermission> GrantedPermissions(ProtectedSurface surface)
     {
-        if (!this.WasGrantWritten)
+        if (this.GrantsTheWholeSurface)
         {
             return MailFathomPermission.PublishedFor(surface);
         }

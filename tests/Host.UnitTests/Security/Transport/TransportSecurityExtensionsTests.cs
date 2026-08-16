@@ -381,12 +381,13 @@ public sealed class TransportSecurityExtensionsTests
         };
 
         narrowed.Permissions.Add(MailFathomPermission.MailRead.Name);
-        narrowed.MarkGrantWritten();
 
         var unnarrowed = new TransportAuthenticationOptions
         {
             ApiKey = new ConfiguredSecret { Name = "workstation", SecretReference = "plaintext:another-key" },
         };
+
+        unnarrowed.GrantTheWholeSurface();
 
         // Act
         services.AddTransportAuthentication(
@@ -419,7 +420,6 @@ public sealed class TransportSecurityExtensionsTests
             PublicKey = new ConfiguredSecret { Name = "nightly", SecretReference = "plaintext:a-public-key" },
         };
 
-        retired.MarkGrantWritten();
 
         // Act
         services.AddTransportAuthentication(
@@ -443,7 +443,6 @@ public sealed class TransportSecurityExtensionsTests
         // Arrange
         var entry = new TransportAuthenticationOptions { OAuth = AnAuthorizationServer() };
         entry.Permissions.Add(MailFathomPermission.MailRead.Name);
-        entry.MarkGrantWritten();
 
         var context = TokenValidatedFor(entry, tokenScopes: "mailfathom.mail.ask");
 
@@ -469,7 +468,6 @@ public sealed class TransportSecurityExtensionsTests
 
         entry.Permissions.Add(MailFathomPermission.MailRead.Name);
         entry.Permissions.Add(MailFathomPermission.MailAsk.Name);
-        entry.MarkGrantWritten();
 
         var context = TokenValidatedFor(entry, tokenScopes: "mailfathom.mail.read offline_access");
 
@@ -494,7 +492,6 @@ public sealed class TransportSecurityExtensionsTests
         };
 
         entry.Permissions.Add(MailFathomPermission.MailRead.Name);
-        entry.MarkGrantWritten();
 
         var context = TokenValidatedFor(entry, tokenScopes: "mailfathom.mail.ask");
 

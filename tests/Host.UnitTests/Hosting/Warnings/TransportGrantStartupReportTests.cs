@@ -64,7 +64,7 @@ public sealed class TransportGrantStartupReportTests
     {
         // Arrange
         using var logs = new RecordingLoggerProvider();
-        var report = ReportFor(McpEndpointWith(AnApiKeyEntry()), new AdminEndpointOptions(), logs);
+        var report = ReportFor(McpEndpointWith(AnEntryThatStatedNoGrant()), new AdminEndpointOptions(), logs);
 
         // Act
         await report.StartAsync(TestContext.Current.CancellationToken);
@@ -85,7 +85,6 @@ public sealed class TransportGrantStartupReportTests
         using var logs = new RecordingLoggerProvider();
         var entry = AnApiKeyEntry();
         entry.Permissions.Add(MailFathomPermission.MailRead.Name);
-        entry.MarkGrantWritten();
 
         var report = ReportFor(McpEndpointWith(entry), new AdminEndpointOptions(), logs);
 
@@ -105,7 +104,6 @@ public sealed class TransportGrantStartupReportTests
         // Arrange
         using var logs = new RecordingLoggerProvider();
         var entry = AnApiKeyEntry();
-        entry.MarkGrantWritten();
 
         var report = ReportFor(McpEndpointWith(entry), new AdminEndpointOptions(), logs);
 
@@ -130,7 +128,6 @@ public sealed class TransportGrantStartupReportTests
         };
 
         entry.Permissions.Add(MailFathomPermission.MailAsk.Name);
-        entry.MarkGrantWritten();
 
         var report = ReportFor(McpEndpointWith(entry), new AdminEndpointOptions(), logs);
 
@@ -143,6 +140,34 @@ public sealed class TransportGrantStartupReportTests
         Assert.Equal("mailfathom.mail.ask", Assert.Contains("GrantedPermissions", record.Properties));
     }
 
+    /// <summary>Such an entry states no ceiling and is still narrowed per token, so reporting it as the entry that wrote nothing down would tell an operator every token holds the whole surface.</summary>
+    [Fact]
+    public async Task StartAsync_AnEntryNarrowedByTokenScopesThatWroteNoList_StillSaysTheGrantIsACeiling()
+    {
+        // Arrange
+        using var logs = new RecordingLoggerProvider();
+        var entry = new TransportAuthenticationOptions
+        {
+            OAuth = new OAuthValidationOptions { Resource = "https://mail.example.test/mcp" },
+            PermissionsFromTokenScopes = true,
+        };
+
+        entry.GrantTheWholeSurface();
+
+        var report = ReportFor(McpEndpointWith(entry), new AdminEndpointOptions(), logs);
+
+        // Act
+        await report.StartAsync(TestContext.Current.CancellationToken);
+
+        // Assert
+        var record = Assert.Single(logs.Records);
+        Assert.Contains("at most", record.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("writes down no grant", record.Message, StringComparison.Ordinal);
+        Assert.Equal(
+            "mailfathom.mail.read, mailfathom.mail.ask",
+            Assert.Contains("GrantedPermissions", record.Properties));
+    }
+
     /// <summary>The two surfaces draw from disjoint halves, so an operator has to be able to read back that they narrowed the one they meant.</summary>
     [Fact]
     public async Task StartAsync_BothEndpointsEnabled_ReportsEachEntryAgainstItsOwnSurface()
@@ -150,9 +175,9 @@ public sealed class TransportGrantStartupReportTests
         // Arrange
         using var logs = new RecordingLoggerProvider();
         var adminEndpoint = new AdminEndpointOptions { Enabled = true };
-        adminEndpoint.Authentication.Add(AnApiKeyEntry());
+        adminEndpoint.Authentication.Add(AnEntryThatStatedNoGrant());
 
-        var report = ReportFor(McpEndpointWith(AnApiKeyEntry()), adminEndpoint, logs);
+        var report = ReportFor(McpEndpointWith(AnEntryThatStatedNoGrant()), adminEndpoint, logs);
 
         // Act
         await report.StartAsync(TestContext.Current.CancellationToken);
@@ -207,6 +232,15 @@ public sealed class TransportGrantStartupReportTests
     {
         ApiKey = new ConfiguredSecret { Name = "workstation", SecretReference = "plaintext:a-key" },
     };
+
+    /// <summary>An entry the endpoint's own read found no grant on, which is the permissive posture the report exists to state.</summary>
+    private static TransportAuthenticationOptions AnEntryThatStatedNoGrant()
+    {
+        var entry = AnApiKeyEntry();
+        entry.GrantTheWholeSurface();
+
+        return entry;
+    }
 
     private static McpEndpointOptions McpEndpointWith(TransportAuthenticationOptions entry)
     {

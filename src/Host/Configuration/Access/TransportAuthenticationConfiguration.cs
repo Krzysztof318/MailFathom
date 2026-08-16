@@ -62,30 +62,37 @@ internal static class TransportAuthenticationConfiguration
         ProtectedSurface surface) =>
         GrantsByCredentialName(methods, method => method.PublicKey, surface);
 
-    /// <summary>Records which entries wrote a grant, which the binder cannot say and only the section can.</summary>
+    /// <summary>Applies the permissive default to every entry that stated no grant, which the binder cannot say and only the section can.</summary>
     /// <param name="endpointSection">The endpoint section the entries were bound from.</param>
     /// <param name="methods">The bound entries, in configuration order.</param>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="endpointSection" /> or <paramref name="methods" /> is <see langword="null" />.</exception>
     /// <remarks>
+    /// <para>
     /// An absent list and an emptied one bind identically and mean opposite things — the whole surface against nothing
     /// — so the two are told apart by asking configuration whether the key exists at all. Both endpoints call this
     /// rather than each asking the question in its own words, because a reading that differed between them would grant
     /// one surface what it refused the other from the same configuration.
+    /// </para>
+    /// <para>
+    /// Each entry is paired with the configuration child it was bound from rather than with its position in the bound
+    /// list, because the two come apart the moment a source numbers its entries with a gap: the binder appends a child
+    /// per key it finds and keeps no record of which key that was, so an environment-variable configuration writing
+    /// <c>…__0__…</c> and <c>…__2__…</c> binds two entries at positions 0 and 1. Reading a grant by position there
+    /// would hand the second entry the whole surface it had narrowed away from.
+    /// </para>
     /// </remarks>
-    internal static void MarkWrittenGrants(
+    internal static void GrantTheWholeSurfaceWhereNoneIsStated(
         IConfigurationSection endpointSection,
         IReadOnlyList<TransportAuthenticationOptions> methods)
     {
         ArgumentNullException.ThrowIfNull(endpointSection);
         ArgumentNullException.ThrowIfNull(methods);
 
-        foreach (var (index, method) in methods.Index())
+        foreach (var (entrySection, method) in endpointSection.GetSection(SettingName).GetChildren().Zip(methods))
         {
-            if (endpointSection
-                .GetSection($"{SettingName}:{index}:{nameof(TransportAuthenticationOptions.Permissions)}")
-                .Exists())
+            if (!entrySection.GetSection(nameof(TransportAuthenticationOptions.Permissions)).Exists())
             {
-                method.MarkGrantWritten();
+                method.GrantTheWholeSurface();
             }
         }
     }

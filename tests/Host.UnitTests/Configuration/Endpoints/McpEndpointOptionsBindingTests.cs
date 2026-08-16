@@ -261,7 +261,7 @@ public sealed class McpEndpointOptionsBindingTests
 
         // Assert
         var entry = Assert.Single(options.Authentication);
-        Assert.False(entry.WasGrantWritten);
+        Assert.True(entry.GrantsTheWholeSurface);
         Assert.Equal(
             MailFathomPermission.PublishedFor(McpEndpointOptions.GrantedSurface),
             entry.GrantedPermissions(McpEndpointOptions.GrantedSurface));
@@ -291,7 +291,7 @@ public sealed class McpEndpointOptionsBindingTests
 
         // Assert
         var entry = Assert.Single(options.Authentication);
-        Assert.True(entry.WasGrantWritten);
+        Assert.False(entry.GrantsTheWholeSurface);
         Assert.Empty(entry.GrantedPermissions(McpEndpointOptions.GrantedSurface));
         Assert.Empty(options.FindConfigurationErrors());
     }
@@ -327,6 +327,77 @@ public sealed class McpEndpointOptionsBindingTests
         Assert.Equal(
             MailFathomPermission.PublishedFor(McpEndpointOptions.GrantedSurface),
             options.Authentication[1].GrantedPermissions(McpEndpointOptions.GrantedSurface));
+    }
+
+    /// <summary>
+    /// A configuration source numbering its entries with a gap — the environment-variable form a container deployment
+    /// writes — binds them into consecutive list positions, so a grant read by position would land on the wrong entry
+    /// and hand the narrowed one its surface's whole half.
+    /// </summary>
+    [Fact]
+    public void ReadFrom_EntriesNumberedWithAGap_ReadsEachGrantFromTheEntryThatWroteIt()
+    {
+        // Arrange
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>(StringComparer.Ordinal)
+            {
+                ["McpEndpoint:Enabled"] = "true",
+                ["McpEndpoint:Authentication:0:ApiKey:Name"] = "workstation",
+                ["McpEndpoint:Authentication:0:ApiKey:SecretReference"] = "plaintext:a-key",
+                ["McpEndpoint:Authentication:2:ApiKey:Name"] = "reporting-job",
+                ["McpEndpoint:Authentication:2:ApiKey:SecretReference"] = "plaintext:another-key",
+                ["McpEndpoint:Authentication:2:Permissions:0"] = "mailfathom.mail.read",
+            })
+            .Build();
+
+        // Act
+        var options = McpEndpointOptions.ReadFrom(configuration);
+
+        // Assert
+        Assert.Equal(
+            MailFathomPermission.PublishedFor(McpEndpointOptions.GrantedSurface),
+            options.Authentication[0].GrantedPermissions(McpEndpointOptions.GrantedSurface));
+        Assert.Equal(
+            [MailFathomPermission.MailRead],
+            options.Authentication[1].GrantedPermissions(McpEndpointOptions.GrantedSurface));
+    }
+
+    /// <summary>The setting decides whether a token holds the entry's whole ceiling or only what its own scopes carry, and nothing else in the suite would notice it silently ceasing to bind.</summary>
+    [Fact]
+    public void ReadFrom_AnEntryNarrowingByTokenScopes_BindsTheSetting()
+    {
+        // Arrange
+        var configuration = ConfigurationFromJson("""
+            {
+              "McpEndpoint": {
+                "Enabled": true,
+                "Authentication": [
+                  {
+                    "OAuth": {
+                      "Resource": "https://mail.example.test/mcp",
+                      "AuthorizationServers": [
+                        {
+                          "Name": "workforce",
+                          "Issuer": "https://sso.example.test/realms/mailfathom",
+                          "AuthorizedSubjects": [ "11111111-2222-3333-4444-555555555555" ]
+                        }
+                      ]
+                    },
+                    "Permissions": ["mailfathom.mail.read"],
+                    "PermissionsFromTokenScopes": true
+                  }
+                ]
+              }
+            }
+            """);
+
+        // Act
+        var options = McpEndpointOptions.ReadFrom(configuration);
+
+        // Assert
+        var entry = Assert.Single(options.Authentication);
+        Assert.True(entry.PermissionsFromTokenScopes);
+        Assert.Empty(options.FindConfigurationErrors());
     }
 
     /// <summary>The whole point of a closed vocabulary is that a name nothing publishes fails startup instead of reading as a narrowed grant.</summary>

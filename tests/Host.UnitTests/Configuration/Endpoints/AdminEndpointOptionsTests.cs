@@ -114,6 +114,44 @@ public sealed class AdminEndpointOptionsTests
         Assert.Empty(settings.FindConfigurationErrors());
     }
 
+    /// <summary>The setting decides whether a token holds the entry's whole ceiling or only what its own scopes carry, and nothing else in the suite would notice it silently ceasing to bind.</summary>
+    [Fact]
+    public void ReadFrom_AnEntryNarrowingByTokenScopes_BindsTheSetting()
+    {
+        // Arrange
+        var configuration = ConfigurationFromJson("""
+            {
+              "AdminEndpoint": {
+                "Enabled": true,
+                "Authentication": [
+                  {
+                    "OAuth": {
+                      "Resource": "https://mail.example.test/api/admin",
+                      "AuthorizationServers": [
+                        {
+                          "Name": "workforce",
+                          "Issuer": "https://sso.example.test/realms/mailfathom",
+                          "AuthorizedSubjects": [ "11111111-2222-3333-4444-555555555555" ]
+                        }
+                      ]
+                    },
+                    "Permissions": ["mailfathom.admin.read"],
+                    "PermissionsFromTokenScopes": true
+                  }
+                ]
+              }
+            }
+            """);
+
+        // Act
+        var settings = AdminEndpointOptions.ReadFrom(configuration);
+
+        // Assert
+        var entry = Assert.Single(settings.Authentication);
+        Assert.True(entry.PermissionsFromTokenScopes);
+        Assert.Empty(settings.FindConfigurationErrors());
+    }
+
     /// <summary>The half a grant draws from is the endpoint's own, so a mail permission written here grants nothing and is refused rather than left in the file.</summary>
     [Fact]
     public void FindConfigurationErrors_AGrantNamingAMailPermission_IsRefusedAsBelongingToTheOtherSurface()

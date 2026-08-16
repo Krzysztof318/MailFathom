@@ -197,7 +197,6 @@ public sealed class PublishedOAuthMetadataTests
         };
 
         entry.Permissions.Add(MailFathomPermission.MailRead.Name);
-        entry.MarkGrantWritten();
 
         // Act
         var published = PublishedOAuthMetadata.For([entry], ProtectedSurface.Mail);
@@ -214,7 +213,6 @@ public sealed class PublishedOAuthMetadataTests
         var entry = new TransportAuthenticationOptions { OAuth = EntryFor(WorkforceIssuer, "workforce", "mailfathom.read") };
 
         entry.Permissions.Add(MailFathomPermission.MailAsk.Name);
-        entry.MarkGrantWritten();
 
         // Act
         var published = PublishedOAuthMetadata.For([entry], ProtectedSurface.Mail);
@@ -233,6 +231,8 @@ public sealed class PublishedOAuthMetadataTests
             OAuth = EntryFor(WorkforceIssuer, "workforce"),
             PermissionsFromTokenScopes = true,
         };
+
+        entry.GrantTheWholeSurface();
 
         // Act
         var published = PublishedOAuthMetadata.For([entry], ProtectedSurface.Mail);
@@ -254,7 +254,6 @@ public sealed class PublishedOAuthMetadataTests
             PermissionsFromTokenScopes = true,
         };
 
-        entry.MarkGrantWritten();
 
         // Act
         var published = PublishedOAuthMetadata.For([entry], ProtectedSurface.Mail);

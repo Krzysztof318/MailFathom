@@ -171,7 +171,7 @@ internal sealed class McpEndpointOptions
 
         // Each entry's grant is read the same way and for the same reason, and both endpoints ask it through one
         // method so the absent-versus-emptied reading exists once.
-        TransportAuthenticationConfiguration.MarkWrittenGrants(section, [.. settings.Authentication]);
+        TransportAuthenticationConfiguration.GrantTheWholeSurfaceWhereNoneIsStated(section, [.. settings.Authentication]);
 
         return settings;
     }

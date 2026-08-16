@@ -101,6 +101,7 @@ public sealed class TransportAuthenticationOptionsTests
     {
         // Arrange
         var entry = new TransportAuthenticationOptions { ApiKey = AnApiKey() };
+        entry.GrantTheWholeSurface();
 
         // Act
         var granted = entry.GrantedPermissions(ProtectedSurface.Mail);
@@ -114,7 +115,6 @@ public sealed class TransportAuthenticationOptionsTests
     {
         // Arrange
         var entry = new TransportAuthenticationOptions { ApiKey = AnApiKey() };
-        entry.MarkGrantWritten();
 
         // Act
         var granted = entry.GrantedPermissions(ProtectedSurface.Mail);
@@ -132,7 +132,7 @@ public sealed class TransportAuthenticationOptionsTests
 
         // Assert
         Assert.Empty(entry.Permissions);
-        Assert.False(entry.WasGrantWritten);
+        Assert.False(entry.GrantsTheWholeSurface);
     }
 
     [Fact]
@@ -141,7 +141,6 @@ public sealed class TransportAuthenticationOptionsTests
         // Arrange
         var entry = new TransportAuthenticationOptions { ApiKey = AnApiKey() };
         entry.Permissions.Add(MailFathomPermission.MailRead.Name);
-        entry.MarkGrantWritten();
 
         // Act
         var granted = entry.GrantedPermissions(ProtectedSurface.Mail);
@@ -207,7 +206,6 @@ public sealed class TransportAuthenticationOptionsTests
     {
         // Arrange
         var entry = new TransportAuthenticationOptions { ApiKey = AnApiKey() };
-        entry.MarkGrantWritten();
 
         // Act, Assert
         Assert.Empty(entry.FindConfigurationErrors(SettingPath, ProtectedSurface.Mail));
@@ -298,9 +296,9 @@ public sealed class TransportAuthenticationOptionsTests
         // Arrange
         var narrowed = new TransportAuthenticationOptions { ApiKey = AnApiKey("reporting-job") };
         narrowed.Permissions.Add(MailFathomPermission.MailRead.Name);
-        narrowed.MarkGrantWritten();
 
         var unnarrowed = new TransportAuthenticationOptions { ApiKey = AnApiKey("workstation") };
+        unnarrowed.GrantTheWholeSurface();
 
         // Act
         var grants = TransportAuthenticationConfiguration.GrantsByApiKeyName(
@@ -317,7 +315,6 @@ public sealed class TransportAuthenticationOptionsTests
     {
         // Arrange
         var retired = new TransportAuthenticationOptions { PublicKey = APublicKey("nightly") };
-        retired.MarkGrantWritten();
 
         // Act
         var grants = TransportAuthenticationConfiguration.GrantsByPublicKeyName([retired], ProtectedSurface.Mail);
