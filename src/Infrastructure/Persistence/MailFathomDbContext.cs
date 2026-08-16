@@ -365,7 +365,7 @@ internal sealed class MailFathomDbContext : DbContext
             // by the length a resolver accepts, which the domain value already refuses to exceed. Each enum carries a
             // database default naming the value that establishes nothing, because that is what is true of a row written
             // before this deployment read the header: the migration that adds the columns fills every stored message in
-            // with it, and a mailbox re-reads its own raw MIME through the extraction backfill.
+            // with it, and a mailbox re-reads its own raw MIME through a re-derivation pass.
             entity.Property(email => email.SenderAuthenticationOutcome)
                 .HasConversion<string>()
                 .HasMaxLength(64)

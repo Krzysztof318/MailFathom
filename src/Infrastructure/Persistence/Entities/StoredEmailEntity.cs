@@ -80,8 +80,8 @@ internal sealed class StoredEmailEntity
     /// nothing is ever without.
     /// </para>
     /// <para>
-    /// The whole group is written by extraction from the stored raw MIME and is re-derivable from it, which is what the
-    /// extraction backfill does after a trusted authority is configured for an account that had none.
+    /// The whole group is written by extraction from the stored raw MIME and is re-derivable from it, which is what a
+    /// re-derivation pass does after a trusted authority is configured for an account that had none.
     /// </para>
     /// </remarks>
     public SenderAuthenticationOutcome SenderAuthenticationOutcome { get; set; }
