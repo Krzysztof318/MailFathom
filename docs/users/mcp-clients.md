@@ -268,6 +268,14 @@ A fifth tool, `ask_mail`, appears only once a chat model and an embedding model 
 absence is the deployment saying it cannot answer questions yet rather than a connection fault, and no client setting
 changes it.
 
+**A credential reaches the whole surface until its entry narrows it.** Every configuration above writes a credential and
+no `Permissions` list, so the client connects holding everything the MCP surface publishes. Narrowing that will be a
+change to the entry in `McpEndpoint:Authentication` rather than anything the client sets:
+[what a credential may do](../operations/mcp-endpoint.md#what-a-credential-may-do). Nothing enforces a grant yet — the
+permissions are read, validated, carried on the authenticated caller and reported at startup, and no tool consults them —
+so a client whose entry you narrow goes on listing and calling every tool. That is the deployment, not the client
+configuration on this page.
+
 Then ask the assistant to list recent mail, and read `folderFreshness` in the result before reading the emails:
 [getting started § make the first call](getting-started.md#8-make-the-first-call-and-read-it-correctly) is what that
 field means, and [using the tools](usage.md) is the day-to-day surface.

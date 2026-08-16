@@ -84,14 +84,12 @@ internal static class McpTransportSecurityExtensions
 
         var authentication = services.AddTransportAuthentication(
             TransportSurface.Mcp,
-            endpointSettings.ApiKeys(),
-            endpointSettings.PublicKeys(),
-            oauthMethods,
+            [.. endpointSettings.Authentication],
             challengeSchemeName);
 
         if (oauthMethods.Count > 0)
         {
-            AddProtectedResourceMetadataScheme(authentication, oauthMethods);
+            AddProtectedResourceMetadataScheme(authentication, [.. endpointSettings.Authentication]);
             AddInsufficientScopeRefusal(services, oauthMethods);
         }
 
@@ -132,9 +130,9 @@ internal static class McpTransportSecurityExtensions
     /// </remarks>
     private static void AddProtectedResourceMetadataScheme(
         AuthenticationBuilder authentication,
-        IReadOnlyList<OAuthValidationOptions> oauthMethods)
+        IReadOnlyList<TransportAuthenticationOptions> methods)
     {
-        var published = PublishedOAuthMetadata.For(oauthMethods);
+        var published = PublishedOAuthMetadata.For(methods, McpEndpointOptions.GrantedSurface);
 
         authentication.AddMcp(mcpOptions =>
         {

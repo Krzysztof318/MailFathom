@@ -6,6 +6,7 @@ using System.Diagnostics.CodeAnalysis;
 using System.Security.Claims;
 using System.Text.Encodings.Web;
 using MailFathom.Host.Security.ApiKeys;
+using MailFathom.Host.Security.Transport;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.Extensions.Options;
 
@@ -71,8 +72,17 @@ internal sealed class ClientAssertionAuthenticationHandler
             return AuthenticateResult.Fail("The request presented no usable credential.");
         }
 
+        // The grant was resolved from the entry that carries this public key while the host was composed, so what a
+        // caller may do travels on the principal rather than being looked up behind it.
+        var grantedPermissions = this.Options.GrantsByKeyName.TryGetValue(keyName.Value!, out var permissions)
+            ? permissions
+            : [];
+
         var identity = new ClaimsIdentity(
-            [new Claim(ClientAssertionAuthentication.KeyNameClaimType, keyName.Value!)],
+            [
+                new Claim(ClientAssertionAuthentication.KeyNameClaimType, keyName.Value!),
+                .. TransportGrant.ClaimsFor(grantedPermissions),
+            ],
             this.Options.Surface.ClientAssertionSchemeName,
             ClientAssertionAuthentication.KeyNameClaimType,
             ClientAssertionAuthentication.RoleClaimType);

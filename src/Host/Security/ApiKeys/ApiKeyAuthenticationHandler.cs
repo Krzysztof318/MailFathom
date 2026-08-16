@@ -5,6 +5,7 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Security.Claims;
 using System.Text.Encodings.Web;
+using MailFathom.Host.Security.Transport;
 using MailFathom.Infrastructure.Security.ApiKeys;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.Extensions.Options;
@@ -68,8 +69,17 @@ internal sealed class ApiKeyAuthenticationHandler : AuthenticationHandler<ApiKey
             return AuthenticateResult.Fail("The request presented no usable credential.");
         }
 
+        // The grant was resolved from the entry that carries this key while the host was composed, so what a caller may
+        // do travels on the principal rather than being looked up behind it.
+        var grantedPermissions = this.Options.GrantsByKeyName.TryGetValue(keyName.Value!, out var permissions)
+            ? permissions
+            : [];
+
         var identity = new ClaimsIdentity(
-            [new Claim(ApiKeyAuthentication.ApiKeyNameClaimType, keyName.Value!)],
+            [
+                new Claim(ApiKeyAuthentication.ApiKeyNameClaimType, keyName.Value!),
+                .. TransportGrant.ClaimsFor(grantedPermissions),
+            ],
             this.Options.Surface.ApiKeySchemeName,
             ApiKeyAuthentication.ApiKeyNameClaimType,
             ApiKeyAuthentication.RoleClaimType);

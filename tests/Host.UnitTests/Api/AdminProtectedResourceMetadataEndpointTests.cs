@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.Text.Json;
+using MailFathom.Domain.Access;
 using MailFathom.Host.Api;
 using MailFathom.Host.Configuration.Access;
 using MailFathom.Host.Security.Transport;
@@ -29,7 +30,7 @@ public sealed class AdminProtectedResourceMetadataEndpointTests
         var oauthSettings = Configured();
 
         // Act
-        var document = ProtectedResourceMetadataDocument.For([oauthSettings]);
+        var document = ProtectedResourceMetadataDocument.For([new TransportAuthenticationOptions { OAuth = oauthSettings }]);
 
         // Assert
         Assert.Equal(Resource, document.Resource);
@@ -61,7 +62,7 @@ public sealed class AdminProtectedResourceMetadataEndpointTests
         });
 
         // Act
-        var document = ProtectedResourceMetadataDocument.For([Configured(), partners]);
+        var document = ProtectedResourceMetadataDocument.For([Entry(), new TransportAuthenticationOptions { OAuth = partners }]);
 
         // Assert
         Assert.Equal(Resource, document.Resource);
@@ -84,7 +85,7 @@ public sealed class AdminProtectedResourceMetadataEndpointTests
         oauthSettings.AdvertisedScopes.Add("offline_access");
 
         // Act
-        var document = ProtectedResourceMetadataDocument.For([oauthSettings]);
+        var document = ProtectedResourceMetadataDocument.For([new TransportAuthenticationOptions { OAuth = oauthSettings }]);
 
         // Assert
         Assert.Equal(["mailfathom.admin", "mailfathom.read", "offline_access"], document.ScopesSupported);
@@ -95,10 +96,31 @@ public sealed class AdminProtectedResourceMetadataEndpointTests
     public void For_AnySettings_OffersTheHeaderAsTheOnlyWayToPresentAToken()
     {
         // Act
-        var document = ProtectedResourceMetadataDocument.For([Configured()]);
+        var document = ProtectedResourceMetadataDocument.For([Entry()]);
 
         // Assert
         Assert.Equal(["header"], document.BearerMethodsSupported);
+    }
+
+    /// <summary>
+    /// The document is composed against this endpoint's own half of the vocabulary, and it is the only place that
+    /// argument is supplied. Composing it against the other half would tell an operator to create mail scopes in their
+    /// authorization server for the administrative surface, and leave every token they then minted holding nothing.
+    /// </summary>
+    [Fact]
+    public void For_AnEntryNarrowedByTokenScopes_PublishesTheAdministrativeHalfOfTheVocabulary()
+    {
+        // Arrange
+        var entry = new TransportAuthenticationOptions { OAuth = Configured(), PermissionsFromTokenScopes = true };
+        entry.GrantTheWholeSurface();
+
+        // Act
+        var document = ProtectedResourceMetadataDocument.For([entry]);
+
+        // Assert
+        Assert.Equal(
+            MailFathomPermission.PublishedFor(ProtectedSurface.Administration).Select(permission => permission.Name),
+            document.ScopesSupported.Where(scope => scope.StartsWith("mailfathom.admin.", StringComparison.Ordinal)));
     }
 
     /// <summary>The names RFC 9728 fixes, which a client matches on and a rename inside this repository must not move.</summary>
@@ -106,7 +128,7 @@ public sealed class AdminProtectedResourceMetadataEndpointTests
     public void Serialized_TheDocument_CarriesTheNamesRfc9728Defines()
     {
         // Arrange
-        var document = ProtectedResourceMetadataDocument.For([Configured()]);
+        var document = ProtectedResourceMetadataDocument.For([Entry()]);
 
         // Act
         using var serialized = JsonDocument.Parse(JsonSerializer.Serialize(document));
@@ -141,6 +163,9 @@ public sealed class AdminProtectedResourceMetadataEndpointTests
         // Assert
         Assert.Equal("/.well-known/oauth-protected-resource/api/admin", path);
     }
+
+    /// <summary>Wraps the configured OAuth block in the entry that carries it, which is the unit the document is composed from.</summary>
+    private static TransportAuthenticationOptions Entry() => new() { OAuth = Configured() };
 
     private static OAuthValidationOptions Configured()
     {

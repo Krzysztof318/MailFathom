@@ -4,6 +4,7 @@
 
 using System.Diagnostics.CodeAnalysis;
 using MailFathom.Common.OAuth;
+using MailFathom.Domain.Access;
 
 namespace MailFathom.Host.Configuration.Access;
 
@@ -64,6 +65,12 @@ internal sealed class OAuthValidationOptions
     /// accepts any token this resource's authorization servers issued, which is a coarser boundary rather than a broken
     /// one; it is the right setting only where the authorization server already restricts who receives a token for this
     /// resource.
+    /// <para>
+    /// It decides admission and never what an admitted caller may do, so a <see cref="MailFathomPermission" /> name
+    /// written here is refused at startup: it would close the door on a caller the deployment meant to serve less
+    /// rather than granting them less. The grant lives in
+    /// <see cref="TransportAuthenticationOptions.Permissions" /> on the entry this block sits in.
+    /// </para>
     /// </remarks>
     public IList<string> RequiredScopes { get; } = [];
 
@@ -81,6 +88,11 @@ internal sealed class OAuthValidationOptions
     /// Published beside <see cref="RequiredScopes" /> rather than instead of it: a required scope is advertised whether
     /// it appears here or not, and a scope named here is never enforced. A value repeating a required one is refused
     /// rather than folded away, so this list goes on saying exactly what the required list does not.
+    /// </para>
+    /// <para>
+    /// A <see cref="MailFathomPermission" /> name is refused here too, and for the opposite reason: an entry whose
+    /// grant a token narrows already advertises its own ceiling, and an entry whose grant it does not narrow would be
+    /// telling a client to ask its authorization server for a scope nothing here reads.
     /// </para>
     /// </remarks>
     public IList<string> AdvertisedScopes { get; } = [];
@@ -148,6 +160,10 @@ internal sealed class OAuthValidationOptions
             {
                 yield return $"{settingPath} — '{configuredScope}' is not a scope; write the value the authorization server issues, with no space, quotation mark, or backslash in it.";
             }
+            else if (MailFathomPermission.TryParse(configuredScope, out _))
+            {
+                yield return $"{settingPath} — '{configuredScope}' is a MailFathom permission, and requiring one would turn a smaller grant into a closed door: a caller the deployment meant to serve less would be refused at the entrance instead. Write it in '{nameof(TransportAuthenticationOptions.Permissions)}' on this entry, which is what decides what an admitted caller may do.";
+            }
             else if (!claimedScopes.Add(configuredScope))
             {
                 yield return $"{settingPath} — '{configuredScope}' repeats a scope the list already carries.";
@@ -177,6 +193,10 @@ internal sealed class OAuthValidationOptions
             if (!IsScopeToken(configuredScope))
             {
                 yield return $"{settingPath} — '{configuredScope}' is not a scope; write the value the authorization server issues, with no space, quotation mark, or backslash in it.";
+            }
+            else if (MailFathomPermission.TryParse(configuredScope, out _))
+            {
+                yield return $"{settingPath} — '{configuredScope}' is a MailFathom permission, and the grant that reads one already advertises it; an entry granting none would be telling a client to ask for something nothing here grants. Write it in '{nameof(TransportAuthenticationOptions.Permissions)}' on this entry and set '{nameof(TransportAuthenticationOptions.PermissionsFromTokenScopes)}'.";
             }
             else if (!claimedScopes.Add(configuredScope))
             {

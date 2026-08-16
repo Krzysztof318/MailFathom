@@ -123,6 +123,25 @@ scope, from its own name.
 If you require no scope, create the client scope anyway and call it something descriptive. It exists to carry the
 mapper.
 
+**Decide here whether a token should also carry MailFathom permissions.** It has to when the entry you write in
+[step 7](#7-write-the-mailfathom-entry) sets `PermissionsFromTokenScopes`, which is what lets your authorization server
+decide per subject what an admitted caller may do rather than the deployment granting every token the same thing. Create
+one further client scope per permission you intend a token to bring, named exactly as MailFathom publishes it —
+`mailfathom.mail.read`, `mailfathom.mail.ask`, or on the administrative endpoint one of the `mailfathom.admin.*` names
+[the reference](configuration-reference.md#what-a-credential-may-do--permissions) lists. The spelling is compared byte
+for byte, so a differently cased or padded name is a different scope and grants nothing. Leave **Include in token scope**
+on, as above, and assign each to the client in [step 4](#4-register-an-application-for-the-client) — a scope the client
+never receives is a permission the caller never holds. Step 8's metadata document lists exactly the ones to create: an
+entry that narrows by token scopes publishes its whole ceiling in `scopes_supported`, and one that grants from
+configuration publishes none of its permissions, because no client can ask for one. Skip this whole paragraph if you
+write the grant in configuration instead, which is the only form available where your server cannot mint custom scopes.
+
+**Nothing enforces a grant yet**, on either surface. What a token's scopes narrow is read, validated, carried on the
+authenticated caller and reported at startup, and no tool and no route consults it — so a scope you create here bounds
+what a credential is *meant* to reach rather than what it currently reaches, and starts refusing when the enforcement it
+describes ships. The scopes are worth creating now: an entry that narrows by them publishes them in `scopes_supported`,
+and a client that never receives one holds nothing under it the moment enforcement arrives.
+
 **Decide here whether clients should hold a refresh token.** A client asks for one by naming `offline_access`, and it
 learns to ask by reading that scope in MailFathom's metadata document — so if you do not advertise it, a client asks
 only for the scope above and its user signs in again whenever the access token expires, typically hourly. It goes in
@@ -262,6 +281,24 @@ opens the discovery document, and its `issuer` field is the value to copy.
 Nothing else about the server is configured here: MailFathom finds the discovery document itself, at addresses it derives
 from the issuer, and takes the key set address out of it.
 
+The entry writes down no grant, so every token it admits reaches everything the MCP surface publishes. To state a bound,
+add `Permissions` beside `OAuth` — and add `"PermissionsFromTokenScopes": true` as well where the scopes you created in
+step 2 should narrow the list per subject. It is a statement rather than a bound today, for the reason
+[step 2](#2-register-mailfathom-as-a-resource-in-the-provider) gives: nothing consults a grant yet, so every token this
+entry admits goes on reaching every tool whatever you write here.
+
+```json
+{
+  "OAuth": { "…": "as above" },
+  "Permissions": [ "mailfathom.mail.read" ],
+  "PermissionsFromTokenScopes": true
+}
+```
+
+Both settings sit on the entry rather than inside the `OAuth` block, because the grant belongs to the credential entry
+and applies to every block in it; [what a credential may do](mcp-endpoint.md#what-a-credential-may-do) has the whole
+reading, including what an empty list means and why the setting is refused beside a key.
+
 The section is read once while the host is composed, so this takes effect on restart.
 
 [The reference](mcp-endpoint.md#oauth) is where the rules on these five live: what happens with several entries, why
@@ -295,7 +332,10 @@ $ curl -sS https://mail.example.com/.well-known/oauth-protected-resource/mcp | j
 Check `resource` against what you will type into the client, and `authorization_servers` against your issuer. A
 deployment configuring several authorization servers publishes them all here, and a client may use only the first —
 order them accordingly. `scopes_supported` is what a client will ask for, which is why `offline_access` appears in it
-without being required: an absence here is a client that never asks for a refresh token.
+without being required: an absence here is a client that never asks for a refresh token. An entry setting
+`PermissionsFromTokenScopes` publishes its whole ceiling here as well, so the permission names in this field are exactly
+the client scopes to create in your authorization server — the document above is from a deployment that sets none. An
+entry granting from configuration publishes none of its permissions, because no client can ask for one.
 
 **An unauthenticated request is refused, and says where to authorize:**
 

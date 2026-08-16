@@ -1,6 +1,6 @@
 # Administering a deployment
 
-<!-- describes: src/Host/Configuration/Endpoints/AdminEndpointOptions.cs, src/Host/Api/Admin*.cs, src/Host/Api/Embedding*.cs, src/Host/Api/Job*.cs, src/Host/Api/Mail*.cs, src/Host/Api/Spam*.cs, src/Host/Hosting/Startup/SurfaceIsolation.cs, src/Host/Hosting/Warnings/AdminTransportSecurityWarning.cs, src/Host/Security/Endpoints/TransportListenerBinder.cs, src/Host/Security/Transport/TransportRateLimiting.cs, src/Cli/**, scripts/install-mfctl.sh -->
+<!-- describes: src/Host/Configuration/Endpoints/AdminEndpointOptions.cs, src/Host/Api/Admin*.cs, src/Host/Api/Embedding*.cs, src/Host/Api/Job*.cs, src/Host/Api/Mail*.cs, src/Host/Api/Spam*.cs, src/Host/Hosting/Startup/SurfaceIsolation.cs, src/Host/Hosting/Warnings/AdminTransportSecurityWarning.cs, src/Host/Hosting/Warnings/TransportGrantStartupReport.cs, src/Domain/Access/MailFathomPermission.cs, src/Host/Security/Endpoints/TransportListenerBinder.cs, src/Host/Security/Transport/TransportRateLimiting.cs, src/Cli/**, scripts/install-mfctl.sh -->
 
 How the `mfctl` command reaches a running deployment, and what that deployment has to have enabled before it will
 answer.
@@ -57,8 +57,9 @@ location exactly when the resource names the same one. A deployment whose resour
 document nothing could find, and OAuth sign-in would be unreachable for a reason no refusal would explain. Behind a
 reverse proxy, write the public URL and keep the path: `https://mail.example.test/api/admin`.
 
-> **Every authenticated caller may perform every administrative operation.** There is no permission model. The
-> credential is what bounds access, so provision one per client and rotate it like any other secret.
+> **Every authenticated caller may still perform every administrative operation.** A grant can now be written on an
+> entry — see below — and nothing on this surface varies by it yet, so the credential remains what bounds access.
+> Provision one per client and rotate it like any other secret.
 >
 > Weigh that against what the operations are. The endpoint serves reads — who a credential makes the caller, two
 > records of what a mailbox has had done to it and what has been read from it, where semantic search stands, and what
@@ -66,6 +67,50 @@ reverse proxy, write the public URL and keep the path: `https://mail.example.tes
 > writes that store a mailbox refresh token, start a provider bill, and erase what a folder has stored. Any credential
 > that can do the first can therefore do all of them, so an administrative key is as sensitive as the mailbox
 > credentials it can place, the histories it can read, the spend it can begin, and the mail it can dispose of.
+
+## What a credential may do
+
+Each entry states what the credentials it admits may do, as `Permissions`. This surface's half of the published set is
+six names, allocated so that the separations an operator would plausibly want to make are the ones they can:
+
+| Permission | What it covers |
+| --- | --- |
+| `mailfathom.admin.read` | The reads reporting the deployment's own state and no mail: what synchronization is doing per account and per folder, embedding status and the activation preview, the loaded rules, a run's progress, the stopped-job list |
+| `mailfathom.admin.audit.read` | The per-account records derived from mail: the mailbox-mutation audit, the answering audit, the rules history, the spam classifications |
+| `mailfathom.admin.operate` | Asking the deployment to do work it can already do: running rules over an account, classifying an account, retrying or dropping a stopped job, cancelling a reindex |
+| `mailfathom.admin.credentials.write` | Storing a mailbox refresh token |
+| `mailfathom.admin.spend` | Activating the declared embedding model, which is the one operation that starts a provider bill |
+| `mailfathom.admin.erase` | Erasing the mail stored for a folder an account no longer mirrors |
+
+No permission implies another, so a credential that needs to read state and to run rules is granted both names. A name
+nothing publishes fails startup, naming the entry and the position in the list, so a misspelling is refused rather than
+read as a narrower grant than you meant; so is a name the same grant already carries. A `mailfathom.mail.*` name is
+refused for a second reason as well — it belongs to the MCP surface and would grant nothing on this one.
+
+`GET /api/admin/session` sits outside the model and needs no permission. It reports the credential the caller already
+presented and the version this deployment already publishes, so it discloses nothing a caller did not bring — and it is
+what every command reads first, `mfctl login` included. Requiring a permission for it would make that permission a
+component of every administrative grant.
+
+The rest of the reading is the same on both surfaces and is written once, under
+[what a credential may do](mcp-endpoint.md#what-a-credential-may-do): the grant belongs to the entry rather than to the
+block inside it, an absent `Permissions` key leaves the entry holding everything this surface publishes while
+`Permissions: []` grants nothing, an endpoint with no entry at all grants everything to every caller it serves, and
+`PermissionsFromTokenScopes` turns the list into a ceiling a token's own scopes narrow.
+
+Startup records what every entry resolved to, one line per entry, and names the ones that wrote no grant:
+
+```text
+info: MailFathom.Host.Hosting.Warnings.TransportGrantStartupReport
+      The administrative endpoint entry AdminEndpoint:Authentication:0 grants mailfathom.admin.read,
+      mailfathom.admin.operate to every credential it admits.
+```
+
+Nothing in those lines names a key, a public key, a token, an authorization server, or a subject: a grant is what the
+deployment wrote, never who presented something.
+
+**Nothing on this surface varies by the grant today.** The permissions are read, validated, carried on the authenticated
+caller, and reported at startup; every route still serves any authenticated caller, which is what the note above says.
 
 ## What the endpoint serves
 

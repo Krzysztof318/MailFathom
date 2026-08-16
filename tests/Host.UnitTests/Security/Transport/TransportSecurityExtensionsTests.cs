@@ -2,8 +2,11 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using System.Security.Claims;
 using MailFathom.Common.ClientAssertions;
+using MailFathom.Domain.Access;
 using MailFathom.Host.Configuration.Access;
+using MailFathom.Host.Security.ApiKeys;
 using MailFathom.Host.Security.ClientAssertions;
 using MailFathom.Host.Security.Transport;
 using MailFathom.Infrastructure.Secrets.Discovery;
@@ -116,9 +119,7 @@ public sealed class TransportSecurityExtensionsTests
         // Act
         services.AddTransportAuthentication(
             TransportSurface.Admin,
-            apiKeys: [],
-            [publicKey],
-            oauthMethods: [],
+            [new TransportAuthenticationOptions { PublicKey = publicKey }],
             TransportSurface.Admin.ClientAssertionSchemeName);
 
         // Assert
@@ -249,9 +250,7 @@ public sealed class TransportSecurityExtensionsTests
         services.AddLogging();
         services.AddTransportAuthentication(
             TransportSurface.Mcp,
-            [],
-            [],
-            [AnAuthorizationServer()],
+            [new TransportAuthenticationOptions { OAuth = AnAuthorizationServer() }],
             TransportSurface.Mcp.OAuthSchemeNameFor("workforce"));
 
         using var composed = services.BuildServiceProvider();
@@ -283,9 +282,7 @@ public sealed class TransportSecurityExtensionsTests
         services.AddLogging();
         services.AddTransportAuthentication(
             TransportSurface.Mcp,
-            [],
-            [],
-            [AnAuthorizationServer()],
+            [new TransportAuthenticationOptions { OAuth = AnAuthorizationServer() }],
             TransportSurface.Mcp.OAuthSchemeNameFor("workforce"));
 
         using var composed = services.BuildServiceProvider();
@@ -315,9 +312,7 @@ public sealed class TransportSecurityExtensionsTests
         services.AddLogging();
         services.AddTransportAuthentication(
             TransportSurface.Mcp,
-            [],
-            [],
-            [AnAuthorizationServer()],
+            [new TransportAuthenticationOptions { OAuth = AnAuthorizationServer() }],
             TransportSurface.Mcp.OAuthSchemeNameFor("workforce"));
 
         using var composed = services.BuildServiceProvider();
@@ -353,9 +348,7 @@ public sealed class TransportSecurityExtensionsTests
         {
             services.AddTransportAuthentication(
                 surface,
-                [],
-                [],
-                [AnAuthorizationServer()],
+                [new TransportAuthenticationOptions { OAuth = AnAuthorizationServer() }],
                 surface.OAuthSchemeNameFor("workforce"));
         }
 
@@ -368,6 +361,184 @@ public sealed class TransportSecurityExtensionsTests
 
         var connection = Assert.IsType<SocketsHttpHandler>(chain[^1]);
         Assert.Equal(OAuthValidationOptions.MetadataConnectionLifetime, connection.PooledConnectionLifetime);
+    }
+
+    /// <summary>
+    /// The grant belongs to the entry, so the scheme has to be registered with each key's own entry's grant rather
+    /// than with one set for the surface. Registering a shared set would give a key an operator narrowed whatever the
+    /// entry beside it holds, which is the failure the entry-scoped grant exists to prevent.
+    /// </summary>
+    [Fact]
+    public void AddTransportAuthentication_TwoKeysGrantedDifferently_GivesTheApiKeySchemeTheGrantOfEachEntry()
+    {
+        // Arrange
+        var services = new ServiceCollection();
+        services.AddLogging();
+
+        var narrowed = new TransportAuthenticationOptions
+        {
+            ApiKey = new ConfiguredSecret { Name = "reporting-job", SecretReference = "plaintext:a-key" },
+        };
+
+        narrowed.Permissions.Add(MailFathomPermission.MailRead.Name);
+
+        var unnarrowed = new TransportAuthenticationOptions
+        {
+            ApiKey = new ConfiguredSecret { Name = "workstation", SecretReference = "plaintext:another-key" },
+        };
+
+        unnarrowed.GrantTheWholeSurface();
+
+        // Act
+        services.AddTransportAuthentication(
+            TransportSurface.Mcp,
+            [narrowed, unnarrowed],
+            TransportSurface.Mcp.ApiKeySchemeName);
+
+        // Assert
+        using var composed = services.BuildServiceProvider();
+        var schemeOptions = composed
+            .GetRequiredService<IOptionsMonitor<ApiKeyAuthenticationSchemeOptions>>()
+            .Get(TransportSurface.Mcp.ApiKeySchemeName);
+
+        Assert.Equal([MailFathomPermission.MailRead], schemeOptions.GrantsByKeyName["reporting-job"]);
+        Assert.Equal(
+            MailFathomPermission.PublishedFor(ProtectedSurface.Mail),
+            schemeOptions.GrantsByKeyName["workstation"]);
+    }
+
+    /// <summary>The assertion scheme carries the same map for the same reason, because a public key's entry is where its grant was written too.</summary>
+    [Fact]
+    public void AddTransportAuthentication_AnAssertionEntryGrantedNothing_GivesTheSchemeAnEmptyGrantForThatKey()
+    {
+        // Arrange
+        var services = new ServiceCollection();
+        services.AddLogging();
+
+        var retired = new TransportAuthenticationOptions
+        {
+            PublicKey = new ConfiguredSecret { Name = "nightly", SecretReference = "plaintext:a-public-key" },
+        };
+
+
+        // Act
+        services.AddTransportAuthentication(
+            TransportSurface.Admin,
+            [retired],
+            TransportSurface.Admin.ClientAssertionSchemeName);
+
+        // Assert
+        using var composed = services.BuildServiceProvider();
+        var schemeOptions = composed
+            .GetRequiredService<IOptionsMonitor<ClientAssertionAuthenticationSchemeOptions>>()
+            .Get(TransportSurface.Admin.ClientAssertionSchemeName);
+
+        Assert.Empty(schemeOptions.GrantsByKeyName["nightly"]);
+    }
+
+    /// <summary>Without the narrowing setting the deployment wrote the grant and the authorization server was never asked, so every token the entry admits holds the whole ceiling.</summary>
+    [Fact]
+    public async Task OnTokenValidated_AnEntryGrantingFromConfiguration_GivesEveryTokenTheWholeGrant()
+    {
+        // Arrange
+        var entry = new TransportAuthenticationOptions { OAuth = AnAuthorizationServer() };
+        entry.Permissions.Add(MailFathomPermission.MailRead.Name);
+
+        var context = TokenValidatedFor(entry, tokenScopes: "mailfathom.mail.ask");
+
+        // Act
+        await ValidatedTokenEventOf(entry).Invoke(context);
+
+        // Assert
+        Assert.Equal(
+            [MailFathomPermission.MailRead],
+            TransportGrant.PermissionsCarriedBy(context.Principal!));
+    }
+
+    /// <summary>With it, the authorization server decides per subject within the bound the deployment fixed, so a token holds the intersection and nothing else.</summary>
+    [Fact]
+    public async Task OnTokenValidated_AnEntryNarrowedByTokenScopes_GivesTheTokenOnlyWhatItsScopesCarry()
+    {
+        // Arrange
+        var entry = new TransportAuthenticationOptions
+        {
+            OAuth = AnAuthorizationServer(),
+            PermissionsFromTokenScopes = true,
+        };
+
+        entry.Permissions.Add(MailFathomPermission.MailRead.Name);
+        entry.Permissions.Add(MailFathomPermission.MailAsk.Name);
+
+        var context = TokenValidatedFor(entry, tokenScopes: "mailfathom.mail.read offline_access");
+
+        // Act
+        await ValidatedTokenEventOf(entry).Invoke(context);
+
+        // Assert
+        Assert.Equal(
+            [MailFathomPermission.MailRead],
+            TransportGrant.PermissionsCarriedBy(context.Principal!));
+    }
+
+    /// <summary>A scope naming a permission the entry never granted must not widen it, or the authorization server would be deciding the ceiling rather than the deployment.</summary>
+    [Fact]
+    public async Task OnTokenValidated_ATokenCarryingAPermissionOutsideTheCeiling_HoldsNoneOfIt()
+    {
+        // Arrange
+        var entry = new TransportAuthenticationOptions
+        {
+            OAuth = AnAuthorizationServer(),
+            PermissionsFromTokenScopes = true,
+        };
+
+        entry.Permissions.Add(MailFathomPermission.MailRead.Name);
+
+        var context = TokenValidatedFor(entry, tokenScopes: "mailfathom.mail.ask");
+
+        // Act
+        await ValidatedTokenEventOf(entry).Invoke(context);
+
+        // Assert
+        Assert.Empty(TransportGrant.PermissionsCarriedBy(context.Principal!));
+    }
+
+    /// <summary>Reads the registered event that reduces a validated token to the identity this host keeps and writes the grant onto it.</summary>
+    /// <remarks>Reached through the registration rather than called directly, because what is under test is that the entry's grant was captured where the scheme was configured.</remarks>
+    private static Func<TokenValidatedContext, Task> ValidatedTokenEventOf(TransportAuthenticationOptions entry)
+    {
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddTransportAuthentication(
+            TransportSurface.Mcp,
+            [entry],
+            TransportSurface.Mcp.OAuthSchemeNameFor("workforce"));
+
+        using var composed = services.BuildServiceProvider();
+
+        var schemeOptions = composed.GetRequiredService<IOptionsMonitor<JwtBearerOptions>>()
+            .Get(TransportSurface.Mcp.OAuthSchemeNameFor("workforce"));
+
+        return schemeOptions.Events!.OnTokenValidated;
+    }
+
+    /// <summary>Builds the context the authentication framework hands the event once a token's signature, issuer, audience, and lifetime have been checked.</summary>
+    private static TokenValidatedContext TokenValidatedFor(TransportAuthenticationOptions entry, string tokenScopes)
+    {
+        var scheme = new AuthenticationScheme(
+            TransportSurface.Mcp.OAuthSchemeNameFor("workforce"),
+            displayName: null,
+            typeof(JwtBearerHandler));
+
+        return new TokenValidatedContext(new DefaultHttpContext(), scheme, new JwtBearerOptions())
+        {
+            Principal = new ClaimsPrincipal(new ClaimsIdentity(
+                [
+                    new Claim("iss", entry.OAuth!.AuthorizationServers[0].Issuer!),
+                    new Claim("sub", "11111111-2222-3333-4444-555555555555"),
+                    new Claim("scope", tokenScopes),
+                ],
+                "test")),
+        };
     }
 
     /// <summary>Reads a built handler chain from its outermost handler down to the one that opens the connection.</summary>
@@ -399,9 +570,12 @@ public sealed class TransportSecurityExtensionsTests
     private static void AddApiKeyAuthentication(IServiceCollection services, TransportSurface surface) =>
         services.AddTransportAuthentication(
             surface,
-            [new ConfiguredSecret { Name = "workstation", SecretReference = "plaintext:not-a-real-key" }],
-            publicKeys: [],
-            oauthMethods: [],
+            [
+                new TransportAuthenticationOptions
+                {
+                    ApiKey = new ConfiguredSecret { Name = "workstation", SecretReference = "plaintext:not-a-real-key" },
+                },
+            ],
             surface.IsSpecified ? surface.ApiKeySchemeName : "unused");
 
     private static MessageReceivedContext MessageReceivedOver(string scheme)

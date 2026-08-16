@@ -252,6 +252,16 @@ announced with a startup warning, because an unauthenticated endpoint serves you
 [the MCP endpoint](../operations/mcp-endpoint.md) before widening anything: it records the OAuth alternative, browser
 origins, serving your own domain over TLS, client certificates, and the rate limits that apply out of the box.
 
+**A credential reaches the whole surface until its entry narrows it.** The entry above writes no `Permissions` list, so
+the key it configures may do everything the MCP surface publishes — read the local mailbox copy and ask questions of it.
+That is deliberate: nothing has to be granted before a first deployment works. Writing a `Permissions` list on the entry
+states a narrower grant, and startup reports what every entry resolved to either way —
+[what a credential may do](../operations/mcp-endpoint.md#what-a-credential-may-do) has the names and the rules.
+
+Nothing enforces that grant yet: the permissions are read, validated, carried on the authenticated caller and reported at
+startup, and no tool consults them, so a narrowed entry still reaches every tool the endpoint serves. Write one to say
+what a credential is meant to reach; it starts refusing when the enforcement it describes ships.
+
 MailFathom itself serves plain HTTP unless its own TLS termination is configured, so keep the application port on
 loopback or behind a TLS-terminating proxy — the Compose deployment's default — and give the proxy the certificate. If
 you put a proxy in front, name it in `ReverseProxy:TrustedProxies` as well. The public scheme and host survive the hop

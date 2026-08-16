@@ -4,6 +4,7 @@
 
 using System.Diagnostics.CodeAnalysis;
 using System.Net.Quic;
+using MailFathom.Domain.Access;
 using MailFathom.Host.Configuration.Access;
 using MailFathom.Infrastructure.Secrets.Discovery;
 using MailFathom.Infrastructure.Security.ClientCertificates;
@@ -46,6 +47,10 @@ internal sealed class McpEndpointOptions
 {
     /// <summary>The configuration section the endpoint settings are bound from.</summary>
     public const string SectionName = "McpEndpoint";
+
+    /// <summary>The half of the published permission vocabulary a grant on this endpoint draws from.</summary>
+    /// <remarks>Stated once here rather than derived wherever a grant is read, so a permission belonging to the other surface is refused by the same rule everywhere the section is judged.</remarks>
+    public const ProtectedSurface GrantedSurface = ProtectedSurface.Mail;
 
     /// <summary>Gets or sets whether the MCP endpoint is served at all.</summary>
     /// <remarks>Disabled unless a deployment states otherwise, so reaching a mailbox over MCP is always something an operator turned on.</remarks>
@@ -164,6 +169,10 @@ internal sealed class McpEndpointOptions
             settings.Https.Redirect.MarkStated();
         }
 
+        // Each entry's grant is read the same way and for the same reason, and both endpoints ask it through one
+        // method so the absent-versus-emptied reading exists once.
+        TransportAuthenticationConfiguration.ReadWhatTheBinderCannotSay(section, [.. settings.Authentication]);
+
         return settings;
     }
 
@@ -219,7 +228,8 @@ internal sealed class McpEndpointOptions
 
         var errors = new List<string>(TransportAuthenticationConfiguration.FindConfigurationErrors(
             SectionName,
-            [.. this.Authentication]));
+            [.. this.Authentication],
+            GrantedSurface));
 
         errors.AddRange(this.Cors.FindConfigurationErrors()
             .Select(error => $"{SectionName}:{nameof(this.Cors)}:{error}"));

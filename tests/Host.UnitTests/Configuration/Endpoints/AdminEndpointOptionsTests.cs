@@ -2,6 +2,8 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using System.Text;
+using MailFathom.Domain.Access;
 using MailFathom.Host.Configuration.Access;
 using MailFathom.Host.Configuration.Endpoints;
 using MailFathom.Host.Security.Transport;
@@ -68,6 +70,114 @@ public sealed class AdminEndpointOptionsTests
         Assert.True(settings.AllowsApiKey);
         Assert.True(settings.AllowsOAuth);
         Assert.Empty(settings.FindConfigurationErrors());
+    }
+
+    /// <summary>
+    /// Both endpoints read the grant through one method, so the pair that decides everything about it — an absent key
+    /// against an emptied list — has to answer here exactly as it does on the MCP endpoint. A reading that differed
+    /// would grant one surface what it refused the other from the same configuration.
+    /// </summary>
+    [Fact]
+    public void ReadFrom_TheGrantOnEachEntry_TellsAnAbsentKeyFromAnEmptiedList()
+    {
+        // Arrange
+        var configuration = ConfigurationFromJson("""
+            {
+              "AdminEndpoint": {
+                "Enabled": true,
+                "Authentication": [
+                  { "ApiKey": { "Name": "workstation", "SecretReference": "plaintext:a-key" } },
+                  {
+                    "ApiKey": { "Name": "retired", "SecretReference": "plaintext:another-key" },
+                    "Permissions": []
+                  },
+                  {
+                    "ApiKey": { "Name": "reporting-job", "SecretReference": "plaintext:a-third-key" },
+                    "Permissions": ["mailfathom.admin.read"]
+                  }
+                ]
+              }
+            }
+            """);
+
+        // Act
+        var settings = AdminEndpointOptions.ReadFrom(configuration);
+
+        // Assert
+        Assert.Equal(
+            MailFathomPermission.PublishedFor(AdminEndpointOptions.GrantedSurface),
+            settings.Authentication[0].GrantedPermissions(AdminEndpointOptions.GrantedSurface));
+        Assert.Empty(settings.Authentication[1].GrantedPermissions(AdminEndpointOptions.GrantedSurface));
+        Assert.Equal(
+            [MailFathomPermission.AdminRead],
+            settings.Authentication[2].GrantedPermissions(AdminEndpointOptions.GrantedSurface));
+        Assert.Empty(settings.FindConfigurationErrors());
+    }
+
+    /// <summary>The setting decides whether a token holds the entry's whole ceiling or only what its own scopes carry, and nothing else in the suite would notice it silently ceasing to bind.</summary>
+    [Fact]
+    public void ReadFrom_AnEntryNarrowingByTokenScopes_BindsTheSetting()
+    {
+        // Arrange
+        var configuration = ConfigurationFromJson("""
+            {
+              "AdminEndpoint": {
+                "Enabled": true,
+                "Authentication": [
+                  {
+                    "OAuth": {
+                      "Resource": "https://mail.example.test/api/admin",
+                      "AuthorizationServers": [
+                        {
+                          "Name": "workforce",
+                          "Issuer": "https://sso.example.test/realms/mailfathom",
+                          "AuthorizedSubjects": [ "11111111-2222-3333-4444-555555555555" ]
+                        }
+                      ]
+                    },
+                    "Permissions": ["mailfathom.admin.read"],
+                    "PermissionsFromTokenScopes": true
+                  }
+                ]
+              }
+            }
+            """);
+
+        // Act
+        var settings = AdminEndpointOptions.ReadFrom(configuration);
+
+        // Assert
+        var entry = Assert.Single(settings.Authentication);
+        Assert.True(entry.PermissionsFromTokenScopes);
+        Assert.Empty(settings.FindConfigurationErrors());
+    }
+
+    /// <summary>The half a grant draws from is the endpoint's own, so a mail permission written here grants nothing and is refused rather than left in the file.</summary>
+    [Fact]
+    public void FindConfigurationErrors_AGrantNamingAMailPermission_IsRefusedAsBelongingToTheOtherSurface()
+    {
+        // Arrange
+        var configuration = ConfigurationFromJson("""
+            {
+              "AdminEndpoint": {
+                "Enabled": true,
+                "Authentication": [
+                  {
+                    "ApiKey": { "Name": "workstation", "SecretReference": "plaintext:a-key" },
+                    "Permissions": ["mailfathom.mail.read"]
+                  }
+                ]
+              }
+            }
+            """);
+
+        // Act
+        var errors = AdminEndpointOptions.ReadFrom(configuration).FindConfigurationErrors();
+
+        // Assert
+        var reported = Assert.Single(errors);
+        Assert.Contains("AdminEndpoint:Authentication:0:Permissions", reported, StringComparison.Ordinal);
+        Assert.Contains("mailfathom.mail.read", reported, StringComparison.Ordinal);
     }
 
     /// <summary>A value where the list belongs must never read as an unauthenticated deployment, which is what makes the binder raising on it a contract rather than an accident.</summary>
@@ -172,6 +282,32 @@ public sealed class AdminEndpointOptionsTests
         Assert.Contains(
             settings.FindConfigurationErrors(),
             error => error.Contains($"must be '{AdminEndpointOptions.RoutePrefix}'", StringComparison.Ordinal));
+    }
+
+    /// <summary>This endpoint's own rule composes its path like every shared one, so an operator is sent to the key they wrote rather than to the position the binder appended the entry at.</summary>
+    [Fact]
+    public void FindConfigurationErrors_AResourcePrefixRefusalOnAGappedSource_NamesTheKeyTheOperatorWrote()
+    {
+        // Arrange
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>(StringComparer.Ordinal)
+            {
+                ["AdminEndpoint:Enabled"] = "true",
+                ["AdminEndpoint:Authentication:0:ApiKey:Name"] = "workstation",
+                ["AdminEndpoint:Authentication:0:ApiKey:SecretReference"] = "plaintext:a-key",
+                ["AdminEndpoint:Authentication:2:OAuth:Resource"] = "https://mail.example.test:8090/admin",
+                ["AdminEndpoint:Authentication:2:OAuth:AuthorizationServers:0:Name"] = "workforce",
+                ["AdminEndpoint:Authentication:2:OAuth:AuthorizationServers:0:Issuer"] = "https://sso.example.test/realms/mailfathom",
+                ["AdminEndpoint:Authentication:2:OAuth:AuthorizationServers:0:AuthorizedSubjects:0"] = "11111111-2222-3333-4444-555555555555",
+            })
+            .Build();
+
+        // Act
+        var errors = AdminEndpointOptions.ReadFrom(configuration).FindConfigurationErrors();
+
+        // Assert
+        var reported = Assert.Single(errors);
+        Assert.Contains("AdminEndpoint:Authentication:2:OAuth:Resource", reported, StringComparison.Ordinal);
     }
 
     [Theory]
@@ -422,4 +558,12 @@ public sealed class AdminEndpointOptionsTests
 
     private static IConfiguration Configuration(Dictionary<string, string?> values) =>
         new ConfigurationBuilder().AddInMemoryCollection(values).Build();
+
+    /// <summary>Reads a JSON document, which is what tells an absent list from an emptied one; a dictionary provider can spell only the first.</summary>
+    private static IConfiguration ConfigurationFromJson(string document)
+    {
+        using var stream = new MemoryStream(Encoding.UTF8.GetBytes(document));
+
+        return new ConfigurationBuilder().AddJsonStream(stream).Build();
+    }
 }

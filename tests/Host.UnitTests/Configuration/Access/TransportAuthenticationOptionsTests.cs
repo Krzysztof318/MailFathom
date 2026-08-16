@@ -2,8 +2,10 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Domain.Access;
 using MailFathom.Host.Configuration.Access;
 using MailFathom.Infrastructure.Secrets.Discovery;
+using Microsoft.Extensions.Configuration;
 using Xunit;
 
 namespace MailFathom.Host.UnitTests.Configuration.Access;
@@ -35,7 +37,7 @@ public sealed class TransportAuthenticationOptionsTests
         var entry = new TransportAuthenticationOptions { PublicKey = APublicKey() };
 
         // Act, Assert
-        Assert.Empty(entry.FindConfigurationErrors(SettingPath));
+        Assert.Empty(entry.FindConfigurationErrors(SettingPath, ProtectedSurface.Mail));
     }
 
     /// <summary>Nothing conflicts between the methods, so an operator who groups a key and a public key into one entry gets both rather than a refusal.</summary>
@@ -50,7 +52,7 @@ public sealed class TransportAuthenticationOptionsTests
         };
 
         // Act, Assert
-        Assert.Empty(entry.FindConfigurationErrors(SettingPath));
+        Assert.Empty(entry.FindConfigurationErrors(SettingPath, ProtectedSurface.Mail));
     }
 
     /// <summary>The refusal has to name every block an operator could have meant, or the one they misspelled goes unmentioned.</summary>
@@ -61,7 +63,7 @@ public sealed class TransportAuthenticationOptionsTests
         var entry = new TransportAuthenticationOptions();
 
         // Act
-        var errors = entry.FindConfigurationErrors(SettingPath);
+        var errors = entry.FindConfigurationErrors(SettingPath, ProtectedSurface.Mail);
 
         // Assert
         var reported = Assert.Single(errors);
@@ -90,6 +92,301 @@ public sealed class TransportAuthenticationOptionsTests
         Assert.Equal(["nightly", "nightly-next"], publicKeys.Select(key => key.Name));
     }
 
+    /// <summary>
+    /// The pair this whole reading exists for. An absent key and an emptied list arrive from the binder identically
+    /// and mean opposite things, so both are pinned together: one reaches the surface's whole half, the other reaches
+    /// nothing and is how a credential is retired without its entry being deleted.
+    /// </summary>
+    [Fact]
+    public void GrantedPermissions_AnEntryThatWroteNoGrant_ReachesTheWholeSurface()
+    {
+        // Arrange
+        var entry = new TransportAuthenticationOptions { ApiKey = AnApiKey() };
+        entry.GrantTheWholeSurface();
+
+        // Act
+        var granted = entry.GrantedPermissions(ProtectedSurface.Mail);
+
+        // Assert
+        Assert.Equal(MailFathomPermission.PublishedFor(ProtectedSurface.Mail), granted);
+    }
+
+    [Fact]
+    public void GrantedPermissions_AnEntryThatWroteAnEmptyGrant_ReachesNothing()
+    {
+        // Arrange
+        var entry = new TransportAuthenticationOptions { ApiKey = AnApiKey() };
+
+        // Act
+        var granted = entry.GrantedPermissions(ProtectedSurface.Mail);
+
+        // Assert
+        Assert.Empty(granted);
+    }
+
+    /// <summary>An entry built anywhere but from configuration starts from the grant that reaches nothing, so nothing composed by hand inherits the permissive default.</summary>
+    [Fact]
+    public void Permissions_AnEntryTheBinderNeverTouched_StartsFromNothing()
+    {
+        // Arrange
+        var entry = new TransportAuthenticationOptions();
+
+        // Assert
+        Assert.Empty(entry.Permissions);
+        Assert.False(entry.GrantsTheWholeSurface);
+    }
+
+    [Fact]
+    public void GrantedPermissions_AnEntryNamingPermissions_ReachesExactlyThose()
+    {
+        // Arrange
+        var entry = new TransportAuthenticationOptions { ApiKey = AnApiKey() };
+        entry.Permissions.Add(MailFathomPermission.MailRead.Name);
+
+        // Act
+        var granted = entry.GrantedPermissions(ProtectedSurface.Mail);
+
+        // Assert
+        Assert.Equal([MailFathomPermission.MailRead], granted);
+    }
+
+    /// <summary>A grant is a set, and the order it resolves in is what the startup line reads in and what the claims are stamped in — so two entries granting the same permissions must not be reported as two different grants.</summary>
+    [Fact]
+    public void GrantedPermissions_AGrantWrittenOutOfOrder_ResolvesInThePublishedOrder()
+    {
+        // Arrange
+        var entry = new TransportAuthenticationOptions { ApiKey = AnApiKey() };
+        entry.Permissions.Add(MailFathomPermission.MailAsk.Name);
+        entry.Permissions.Add(MailFathomPermission.MailRead.Name);
+
+        // Act
+        var granted = entry.GrantedPermissions(ProtectedSurface.Mail);
+
+        // Assert
+        Assert.Equal([MailFathomPermission.MailRead, MailFathomPermission.MailAsk], granted);
+    }
+
+    /// <summary>A name nothing publishes is a grant nobody enforces, so it fails startup rather than being written into a configuration file that reads as narrowed.</summary>
+    [Fact]
+    public void FindConfigurationErrors_AGrantNamingAnUnpublishedPermission_NamesTheEntryAndTheIndex()
+    {
+        // Arrange
+        var entry = new TransportAuthenticationOptions { ApiKey = AnApiKey() };
+        entry.Permissions.Add("mailfathom.mail.write");
+
+        // Act
+        var errors = entry.FindConfigurationErrors(SettingPath, ProtectedSurface.Mail);
+
+        // Assert
+        var reported = Assert.Single(errors);
+        Assert.Contains($"{SettingPath}:Permissions", reported, StringComparison.Ordinal);
+        Assert.Contains("mailfathom.mail.write", reported, StringComparison.Ordinal);
+        Assert.Contains(MailFathomPermission.MailRead.Name, reported, StringComparison.Ordinal);
+    }
+
+    /// <summary>A cross-surface name would sit in the file granting nothing while an operator believed they had granted something.</summary>
+    [Fact]
+    public void FindConfigurationErrors_AGrantNamingTheOtherSurfacesPermission_IsRefused()
+    {
+        // Arrange
+        var entry = new TransportAuthenticationOptions { ApiKey = AnApiKey() };
+        entry.Permissions.Add(MailFathomPermission.AdminSpend.Name);
+
+        // Act
+        var errors = entry.FindConfigurationErrors(SettingPath, ProtectedSurface.Mail);
+
+        // Assert
+        var reported = Assert.Single(errors);
+        Assert.Contains($"{SettingPath}:Permissions", reported, StringComparison.Ordinal);
+        Assert.Contains(MailFathomPermission.AdminSpend.Name, reported, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void FindConfigurationErrors_AGrantRepeatingAPermission_IsRefused()
+    {
+        // Arrange
+        var entry = new TransportAuthenticationOptions { ApiKey = AnApiKey() };
+        entry.Permissions.Add(MailFathomPermission.MailRead.Name);
+        entry.Permissions.Add(MailFathomPermission.MailRead.Name);
+
+        // Act
+        var errors = entry.FindConfigurationErrors(SettingPath, ProtectedSurface.Mail);
+
+        // Assert
+        var reported = Assert.Single(errors);
+        Assert.Contains($"{SettingPath}:Permissions", reported, StringComparison.Ordinal);
+    }
+
+    /// <summary>An emptied grant is a posture rather than a mistake, so it is the one arrangement here that is not refused.</summary>
+    [Fact]
+    public void FindConfigurationErrors_AnEmptiedGrant_ReportsNothing()
+    {
+        // Arrange
+        var entry = new TransportAuthenticationOptions { ApiKey = AnApiKey() };
+
+        // Act, Assert
+        Assert.Empty(entry.FindConfigurationErrors(SettingPath, ProtectedSurface.Mail));
+    }
+
+    /// <summary>Neither credential can carry a scope, so asking a token to narrow the grant beside one is a question nothing could answer.</summary>
+    [Theory]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    [InlineData(true, true)]
+    public void FindConfigurationErrors_TokenScopeNarrowingBesideAConfiguredCredential_IsRefused(
+        bool statesAnApiKey,
+        bool statesAPublicKey)
+    {
+        // Arrange
+        var entry = new TransportAuthenticationOptions
+        {
+            ApiKey = statesAnApiKey ? AnApiKey() : null,
+            PublicKey = statesAPublicKey ? APublicKey() : null,
+            PermissionsFromTokenScopes = true,
+        };
+
+        // Act
+        var errors = entry.FindConfigurationErrors(SettingPath, ProtectedSurface.Mail);
+
+        // Assert
+        var reported = Assert.Single(errors);
+        Assert.Contains($"{SettingPath}:PermissionsFromTokenScopes", reported, StringComparison.Ordinal);
+    }
+
+    /// <summary>It is the form an entry whose sole block is OAuth exists to use, so it must not be refused there.</summary>
+    [Fact]
+    public void FindConfigurationErrors_TokenScopeNarrowingOnAnOAuthOnlyEntry_ReportsNothing()
+    {
+        // Arrange
+        var entry = new TransportAuthenticationOptions
+        {
+            OAuth = AnOAuthBlock(),
+            PermissionsFromTokenScopes = true,
+        };
+
+        // Act, Assert
+        Assert.Empty(entry.FindConfigurationErrors(SettingPath, ProtectedSurface.Mail));
+    }
+
+    /// <summary>Requiring a permission would close the door on a caller the deployment meant to serve less, which is the opposite of narrowing them.</summary>
+    [Fact]
+    public void FindConfigurationErrors_APermissionWrittenIntoTheRequiredScopes_IsRefused()
+    {
+        // Arrange
+        var oauth = AnOAuthBlock();
+        oauth.RequiredScopes.Add(MailFathomPermission.MailRead.Name);
+
+        var entry = new TransportAuthenticationOptions { OAuth = oauth };
+
+        // Act
+        var errors = entry.FindConfigurationErrors(SettingPath, ProtectedSurface.Mail);
+
+        // Assert
+        var reported = Assert.Single(errors);
+        Assert.Contains($"{SettingPath}:OAuth:RequiredScopes:0", reported, StringComparison.Ordinal);
+        Assert.Contains(MailFathomPermission.MailRead.Name, reported, StringComparison.Ordinal);
+    }
+
+    /// <summary>The grant that reads a permission already advertises it, and an entry reading none would be telling a client to ask for something nothing here grants.</summary>
+    [Fact]
+    public void FindConfigurationErrors_APermissionWrittenIntoTheAdvertisedScopes_IsRefused()
+    {
+        // Arrange
+        var oauth = AnOAuthBlock();
+        oauth.AdvertisedScopes.Add(MailFathomPermission.MailAsk.Name);
+
+        var entry = new TransportAuthenticationOptions { OAuth = oauth };
+
+        // Act
+        var errors = entry.FindConfigurationErrors(SettingPath, ProtectedSurface.Mail);
+
+        // Assert
+        var reported = Assert.Single(errors);
+        Assert.Contains($"{SettingPath}:OAuth:AdvertisedScopes:0", reported, StringComparison.Ordinal);
+        Assert.Contains(MailFathomPermission.MailAsk.Name, reported, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The pairing is positional, so it means nothing once the children and the bound entries are different lengths.
+    /// Marking anyway would read one entry's grant off another entry's key, so nothing is marked and every entry keeps
+    /// the grant that reaches nothing — which is the direction to fail in if a binder ever drops an element.
+    /// </summary>
+    [Fact]
+    public void ReadWhatTheBinderCannotSay_MoreChildrenThanEntries_LeavesEveryGrantAtTheRestrictiveDefault()
+    {
+        // Arrange
+        var section = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>(StringComparer.Ordinal)
+            {
+                ["McpEndpoint:Authentication:0:ApiKey:Name"] = "workstation",
+                ["McpEndpoint:Authentication:1:ApiKey:Name"] = "reporting-job",
+            })
+            .Build()
+            .GetSection("McpEndpoint");
+
+        var method = new TransportAuthenticationOptions { ApiKey = AnApiKey() };
+
+        // Act
+        TransportAuthenticationConfiguration.ReadWhatTheBinderCannotSay(section, [method]);
+
+        // Assert
+        Assert.False(method.GrantsTheWholeSurface);
+        Assert.Null(method.ConfigurationKey);
+    }
+
+    /// <summary>The grant belongs to the entry, so which entry a credential sits in decides what it may do rather than only how the file was grouped.</summary>
+    [Fact]
+    public void GrantsByApiKeyName_TwoEntriesGrantedDifferently_MapsEachKeyToTheGrantOfItsOwnEntry()
+    {
+        // Arrange
+        var narrowed = new TransportAuthenticationOptions { ApiKey = AnApiKey("reporting-job") };
+        narrowed.Permissions.Add(MailFathomPermission.MailRead.Name);
+
+        var unnarrowed = new TransportAuthenticationOptions { ApiKey = AnApiKey("workstation") };
+        unnarrowed.GrantTheWholeSurface();
+
+        // Act
+        var grants = TransportAuthenticationConfiguration.GrantsByApiKeyName(
+            [narrowed, unnarrowed],
+            ProtectedSurface.Mail);
+
+        // Assert
+        Assert.Equal([MailFathomPermission.MailRead], grants["reporting-job"]);
+        Assert.Equal(MailFathomPermission.PublishedFor(ProtectedSurface.Mail), grants["workstation"]);
+    }
+
+    [Fact]
+    public void GrantsByPublicKeyName_AnEntryGrantedNothing_MapsItsKeyToAnEmptyGrant()
+    {
+        // Arrange
+        var retired = new TransportAuthenticationOptions { PublicKey = APublicKey("nightly") };
+
+        // Act
+        var grants = TransportAuthenticationConfiguration.GrantsByPublicKeyName([retired], ProtectedSurface.Mail);
+
+        // Assert
+        Assert.Empty(grants["nightly"]);
+    }
+
     private static ConfiguredSecret APublicKey(string name = "nightly") =>
         new() { Name = name, SecretReference = "file:/etc/mailfathom/nightly.pub" };
+
+    private static ConfiguredSecret AnApiKey(string name = "workstation") =>
+        new() { Name = name, SecretReference = "plaintext:a-key" };
+
+    private static OAuthValidationOptions AnOAuthBlock()
+    {
+        var oauth = new OAuthValidationOptions { Resource = "https://mail.example.test/mcp" };
+
+        var authorizationServer = new AuthorizationServerOptions
+        {
+            Name = "workforce",
+            Issuer = "https://sso.example.test",
+        };
+
+        authorizationServer.AuthorizedSubjects.Add("11111111-2222-3333-4444-555555555555");
+        oauth.AuthorizationServers.Add(authorizationServer);
+
+        return oauth;
+    }
 }

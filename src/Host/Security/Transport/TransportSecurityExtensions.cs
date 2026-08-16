@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.Security.Claims;
+using MailFathom.Domain.Access;
 using MailFathom.Host.Configuration.Access;
 using MailFathom.Host.Security.ApiKeys;
 using MailFathom.Host.Security.ClientAssertions;
@@ -42,14 +43,17 @@ internal static class TransportSecurityExtensions
     /// <summary>Adds one surface's authentication schemes and its authorization requirement.</summary>
     /// <param name="services">The container to add to.</param>
     /// <param name="surface">The surface being protected, which names every scheme and the policy.</param>
-    /// <param name="apiKeys">The keys a request may present one of, empty where the surface accepts none.</param>
-    /// <param name="publicKeys">The client public keys a signed assertion may be verified against, empty where the surface accepts no assertion.</param>
-    /// <param name="oauthMethods">What a token must prove, one entry per configured OAuth block, empty where the surface accepts no access token.</param>
+    /// <param name="methods">The surface's configured credential entries, in configuration order.</param>
     /// <param name="challengeSchemeName">The scheme answering a request that presented no credential this surface can place, which is both what authenticates it and what challenges it.</param>
     /// <returns>The authentication builder, so a surface can add schemes only it needs.</returns>
     /// <exception cref="ArgumentNullException">Thrown when any reference argument is <see langword="null" />.</exception>
     /// <exception cref="ArgumentException">Thrown when <paramref name="surface" /> is the struct default.</exception>
     /// <remarks>
+    /// <para>
+    /// The whole entries rather than the credentials pulled out of them, because an entry is what carries a grant as
+    /// well as a credential, and the two have to be registered together: a key is compared by the scheme its entry
+    /// selected, and what the caller may do afterwards is what that same entry wrote down.
+    /// </para>
     /// <para>
     /// The routing scheme becomes the application's default, so every part of the pipeline that asks for "the" scheme
     /// reaches the one place that knows how many schemes there are, and nothing downstream names an individual scheme.
@@ -66,21 +70,21 @@ internal static class TransportSecurityExtensions
     internal static AuthenticationBuilder AddTransportAuthentication(
         this IServiceCollection services,
         TransportSurface surface,
-        IReadOnlyList<ConfiguredSecret> apiKeys,
-        IReadOnlyList<ConfiguredSecret> publicKeys,
-        IReadOnlyList<OAuthValidationOptions> oauthMethods,
+        IReadOnlyList<TransportAuthenticationOptions> methods,
         string challengeSchemeName)
     {
         ArgumentNullException.ThrowIfNull(services);
-        ArgumentNullException.ThrowIfNull(apiKeys);
-        ArgumentNullException.ThrowIfNull(publicKeys);
-        ArgumentNullException.ThrowIfNull(oauthMethods);
+        ArgumentNullException.ThrowIfNull(methods);
         ArgumentNullException.ThrowIfNull(challengeSchemeName);
 
         if (!surface.IsSpecified)
         {
             throw new ArgumentException("A transport surface is required to name the schemes and the policy.", nameof(surface));
         }
+
+        var apiKeys = TransportAuthenticationConfiguration.ApiKeysIn(methods);
+        var publicKeys = TransportAuthenticationConfiguration.PublicKeysIn(methods);
+        var oauthMethods = TransportAuthenticationConfiguration.OAuthMethodsIn(methods);
 
         var authentication = services.AddAuthentication(surface.RoutingSchemeName);
 
@@ -100,6 +104,9 @@ internal static class TransportSecurityExtensions
                 {
                     schemeOptions.Surface = surface;
                     schemeOptions.PublicKeys = publicKeys;
+                    schemeOptions.GrantsByKeyName = TransportAuthenticationConfiguration.GrantsByPublicKeyName(
+                        methods,
+                        surface.GrantedSurface);
                 });
         }
 
@@ -115,6 +122,9 @@ internal static class TransportSecurityExtensions
                 {
                     schemeOptions.Surface = surface;
                     schemeOptions.ApiKeys = apiKeys;
+                    schemeOptions.GrantsByKeyName = TransportAuthenticationConfiguration.GrantsByApiKeyName(
+                        methods,
+                        surface.GrantedSurface);
                 });
         }
 
@@ -123,10 +133,14 @@ internal static class TransportSecurityExtensions
             AddMetadataBackchannel(services);
         }
 
-        // Each entry's own servers are registered against that entry's resource, which is what makes an entry the unit
-        // a token is judged by rather than one merged set the whole endpoint shares.
-        foreach (var oauthMethod in oauthMethods)
+        // Each entry's own servers are registered against that entry's resource and that entry's grant, which is what
+        // makes an entry the unit a token is judged by rather than one merged set the whole endpoint shares.
+        foreach (var method in methods.Where(method => method.OAuth is not null))
         {
+            var oauthMethod = method.OAuth!;
+            var grant = method.GrantedPermissions(surface.GrantedSurface);
+            var narrowedByTokenScopes = method.PermissionsFromTokenScopes;
+
             foreach (var authorizationServer in oauthMethod.AuthorizationServers)
             {
                 var schemeName = surface.OAuthSchemeNameFor(authorizationServer.Name!);
@@ -138,6 +152,8 @@ internal static class TransportSecurityExtensions
                             jwtOptions,
                             authorizationServer,
                             oauthMethod,
+                            grant,
+                            narrowedByTokenScopes,
                             transportFactory));
             }
         }
@@ -228,6 +244,8 @@ internal static class TransportSecurityExtensions
         JwtBearerOptions jwtOptions,
         AuthorizationServerOptions authorizationServer,
         OAuthValidationOptions oauthSettings,
+        IReadOnlyList<MailFathomPermission> grant,
+        bool narrowedByTokenScopes,
         IHttpClientFactory transportFactory)
     {
         var issuer = authorizationServer.ValidatedIssuer();
@@ -264,17 +282,27 @@ internal static class TransportSecurityExtensions
         jwtOptions.Events = new JwtBearerEvents
         {
             OnMessageReceived = RefuseATokenThatArrivedWithoutTransportEncryption,
-            OnTokenValidated = ReplacePrincipalWithMinimalIdentity,
+            OnTokenValidated = context =>
+                ReplacePrincipalWithMinimalIdentity(context, grant, narrowedByTokenScopes),
         };
     }
 
-    /// <summary>Reduces a validated token to the identity MailFathom keeps of it.</summary>
+    /// <summary>Reduces a validated token to the identity MailFathom keeps of it, and writes the grant it holds.</summary>
     /// <remarks>
+    /// <para>
     /// The validated principal carries every claim the authorization server chose to include, which routinely means a
     /// name, an address, and a set of groups. Replacing it here means nothing downstream can read one, so a later change
     /// cannot start depending on a claim the operator never mapped.
+    /// </para>
+    /// <para>
+    /// The grant is written onto the identity that survives rather than left to be recomposed later, which is what
+    /// keeps a permission the entry never granted unreachable however a token is read afterwards.
+    /// </para>
     /// </remarks>
-    private static Task ReplacePrincipalWithMinimalIdentity(TokenValidatedContext context)
+    private static Task ReplacePrincipalWithMinimalIdentity(
+        TokenValidatedContext context,
+        IReadOnlyList<MailFathomPermission> grant,
+        bool narrowedByTokenScopes)
     {
         var identity = context.Principal is { } validatedPrincipal
             ? OAuthIdentity.FromValidatedToken(validatedPrincipal.Claims, context.Scheme.Name)
@@ -287,9 +315,37 @@ internal static class TransportSecurityExtensions
             return Task.CompletedTask;
         }
 
+        identity.AddClaims(TransportGrant.ClaimsFor(GrantHeldByToken(identity, grant, narrowedByTokenScopes)));
+
         context.Principal = new ClaimsPrincipal(identity);
 
         return Task.CompletedTask;
+    }
+
+    /// <summary>Reports which of the entry's permissions this particular token holds.</summary>
+    /// <remarks>
+    /// Without the narrowing setting every token the entry admits holds the whole ceiling, because the deployment wrote
+    /// the grant and the authorization server was never asked. With it, a scope bearing a published permission name
+    /// grants that permission and nothing else does — so the intersection is the answer, and a scope naming anything
+    /// else is ignored rather than refused, since a token legitimately carries scopes about its client's own session
+    /// and about resources that are not this one.
+    /// </remarks>
+    private static IEnumerable<MailFathomPermission> GrantHeldByToken(
+        ClaimsIdentity identity,
+        IReadOnlyList<MailFathomPermission> grant,
+        bool narrowedByTokenScopes)
+    {
+        if (!narrowedByTokenScopes)
+        {
+            return grant;
+        }
+
+        var tokenScopes = identity
+            .FindAll(OAuthIdentity.ScopeClaimType)
+            .Select(scope => scope.Value)
+            .ToHashSet(StringComparer.Ordinal);
+
+        return grant.Where(permission => tokenScopes.Contains(permission.Name));
     }
 
     /// <summary>Registers the transport the discovery document and key set are retrieved through.</summary>

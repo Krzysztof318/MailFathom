@@ -4,6 +4,7 @@
 
 using System.Diagnostics.CodeAnalysis;
 using System.Net.Quic;
+using MailFathom.Domain.Access;
 using MailFathom.Host.Configuration.Access;
 using MailFathom.Infrastructure.Secrets.Discovery;
 
@@ -46,6 +47,10 @@ internal sealed class AdminEndpointOptions
 {
     /// <summary>The configuration section the endpoint settings are bound from.</summary>
     public const string SectionName = "AdminEndpoint";
+
+    /// <summary>The half of the published permission vocabulary a grant on this endpoint draws from.</summary>
+    /// <remarks>Stated once here rather than derived wherever a grant is read, so a permission belonging to the other surface is refused by the same rule everywhere the section is judged.</remarks>
+    public const ProtectedSurface GrantedSurface = ProtectedSurface.Administration;
 
     /// <summary>The path every administrative route is served beneath.</summary>
     /// <remarks>
@@ -157,6 +162,10 @@ internal sealed class AdminEndpointOptions
             settings.Https.Redirect.MarkStated();
         }
 
+        // Each entry's grant is read the same way and for the same reason, and both endpoints ask it through one
+        // method so the absent-versus-emptied reading exists once.
+        TransportAuthenticationConfiguration.ReadWhatTheBinderCannotSay(section, [.. settings.Authentication]);
+
         return settings;
     }
 
@@ -207,7 +216,8 @@ internal sealed class AdminEndpointOptions
 
         var authenticationErrors = TransportAuthenticationConfiguration.FindConfigurationErrors(
             SectionName,
-            [.. this.Authentication]);
+            [.. this.Authentication],
+            GrantedSurface);
 
         var errors = new List<string>(authenticationErrors);
 
@@ -260,7 +270,7 @@ internal sealed class AdminEndpointOptions
                 continue;
             }
 
-            yield return $"{SectionName}:{TransportAuthenticationConfiguration.SettingName}:{index}:{nameof(TransportAuthenticationOptions.OAuth)}:{nameof(OAuthValidationOptions.Resource)} — the path must be '{RoutePrefix}', because that is where the endpoint's routes answer and it is what a client appends to the address it was given. Write the absolute https URL clients reach this endpoint at, ending in that prefix.";
+            yield return $"{TransportAuthenticationConfiguration.SettingPathOf(SectionName, method, index)}:{nameof(TransportAuthenticationOptions.OAuth)}:{nameof(OAuthValidationOptions.Resource)} — the path must be '{RoutePrefix}', because that is where the endpoint's routes answer and it is what a client appends to the address it was given. Write the absolute https URL clients reach this endpoint at, ending in that prefix.";
         }
     }
 

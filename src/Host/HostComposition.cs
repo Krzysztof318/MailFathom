@@ -968,6 +968,10 @@ internal static class HostComposition
         // whether it has anything to say. They stay separate services because an operator turns either bound off alone.
         builder.Services.AddHostedService<TransportRequestTimeoutStartupReport>();
         builder.Services.AddHostedService<ConnectionLimitsStartupReport>();
+
+        // Beside them for the same reason, and separate from the authentication warnings because it answers the other
+        // half of the question: those say whether a caller has to identify itself, this says what one may then do.
+        builder.Services.AddHostedService<TransportGrantStartupReport>();
         // Composed from the environment rather than resolved from the container, because the value it reports is one
         // OpenSSL read while it initialized and no configuration source can influence it afterwards. Registered
         // unconditionally for the same reason the warnings above are: the condition belongs in one place.
