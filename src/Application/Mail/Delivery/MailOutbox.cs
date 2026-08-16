@@ -58,7 +58,7 @@ public sealed class MailOutbox(
         if (rawMime.IsEmpty)
         {
             throw new ArgumentException(
-                "An outgoing message is recorded with the MIME it will be transmitted as.",
+                "An outgoing email is recorded with the MIME it will be transmitted as.",
                 nameof(rawMime));
         }
 

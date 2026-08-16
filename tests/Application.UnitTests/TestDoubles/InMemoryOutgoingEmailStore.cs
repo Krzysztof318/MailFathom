@@ -101,6 +101,7 @@ internal sealed class InMemoryOutgoingEmailStore(Func<IPersistenceSession, bool>
             .. this.recordsByIdentity.Values
                 .Where(record => record.AccountId == accountId && !record.IsTerminal)
                 .OrderBy(record => record.RecordedAt)
+                .ThenBy(record => record.Id.Value)
                 .Take(limit),
         ];
 

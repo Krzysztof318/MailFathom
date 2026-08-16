@@ -10,7 +10,7 @@ using MailFathom.Infrastructure.Persistence.Entities;
 
 namespace MailFathom.Infrastructure.Persistence.Delivery;
 
-/// <summary>Rebuilds the domain record one stored outgoing message and its recipient rows describe.</summary>
+/// <summary>Rebuilds the domain record one stored outgoing email and its recipient rows describe.</summary>
 internal static class OutgoingEmailRecordMapping
 {
     /// <summary>Rebuilds the record a row and its recipients describe.</summary>
@@ -29,7 +29,7 @@ internal static class OutgoingEmailRecordMapping
         if (recipients.Length == 0)
         {
             throw new InvalidOperationException(
-                $"Outgoing message record {entity.Id} names no recipients, so nothing can be offered for it.");
+                $"Outgoing email record {entity.Id} names no recipients, so nothing can be offered for it.");
         }
 
         return new OutgoingEmailRecord
@@ -60,7 +60,7 @@ internal static class OutgoingEmailRecordMapping
         {
             // The address itself stays out of the message: it is personal data, and the ordinal names the row exactly.
             throw new InvalidOperationException(
-                $"Outgoing message record {recordId} carries a recipient at position {entity.Ordinal} whose address names no mailbox.");
+                $"Outgoing email record {recordId} carries a recipient at position {entity.Ordinal} whose address names no mailbox.");
         }
 
         return OutgoingRecipientOutcome.Create(

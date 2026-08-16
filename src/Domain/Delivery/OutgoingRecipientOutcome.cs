@@ -4,7 +4,7 @@
 
 namespace MailFathom.Domain.Delivery;
 
-/// <summary>Reports where one recipient of an outgoing message stands, and what the server last said about them.</summary>
+/// <summary>Reports where one recipient of an outgoing email stands, and what the server last said about them.</summary>
 /// <remarks>
 /// <para>
 /// A message is offered per recipient and answered per recipient, so a refusal is one person's rather than the

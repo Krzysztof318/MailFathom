@@ -78,7 +78,7 @@ internal static class PersistenceConcurrencyConflicts
     /// putting one person into the book twice.
     /// </para>
     /// <para>
-    /// The last is the outgoing message identity, and it is the mutation identity's case with the most at stake. Two
+    /// The last is the outgoing email identity, and it is the mutation identity's case with the most at stake. Two
     /// callers asking for the same send reach the database together, one is refused here, and the retry reads back the
     /// winner's record and the message already stored under it — which is how one authored request delivers once. A
     /// collision left unrecognized would surface as a provider failure and leave the caller free to enqueue again, and

@@ -196,8 +196,9 @@ The rules that govern mail content govern this path too, and three things in par
   message, including the one raised when nothing permitted remains.
 - **Every address.** A refusal is logged as the account, the reply code, the enhanced status code, and whether it was
   transient or permanent — never the recipient, the sender, or the text the server wrote beside its numbers. The
-  outgoing record holds its recipients because a send cannot be resumed without them, and a failure about one names the
-  record and the position in its recipient list rather than the address.
+  outgoing record holds its recipients because a send cannot be resumed without them, and a failure about one never
+  names the address: it names the record, and the position in the recipient list where a position exists — reading a
+  stored row back names one, while an answer about somebody the record does not name has no position to give.
 
 ## What the tests establish, and where
 

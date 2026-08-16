@@ -19,7 +19,7 @@ namespace MailFathom.Application.EmailContent.Storage;
 /// <para>
 /// Mail arriving and mail leaving are stored through the same port and are keyed differently, because they are the same
 /// kind of payload owned by two different things: a synchronized message belongs to the local row that mirrors an
-/// occurrence, and an outgoing message belongs to the record of the send it was composed for. One port is what keeps
+/// occurrence, and an outgoing email belongs to the record of the send it was composed for. One port is what keeps
 /// raw MIME behind one seam, so the move to object storage is one adapter's rather than two.
 /// </para>
 /// </remarks>
@@ -52,7 +52,7 @@ public interface IEmailContentStore
     /// </remarks>
     Task<StoredEmailContent?> FindStoredContentAsync(StoredEmailId storedEmailId, CancellationToken cancellationToken);
 
-    /// <summary>Saves the raw MIME one outgoing message will be transmitted as, once and only once.</summary>
+    /// <summary>Saves the raw MIME one outgoing email will be transmitted as, once and only once.</summary>
     /// <param name="session">The explicit persistence session this content write participates in.</param>
     /// <param name="outgoingEmailId">The record of the send this message was composed for.</param>
     /// <param name="rawMime">The composed RFC 822 bytes.</param>
@@ -80,7 +80,7 @@ public interface IEmailContentStore
         ReadOnlyMemory<byte> rawMime,
         CancellationToken cancellationToken);
 
-    /// <summary>Reads back the raw MIME stored for one outgoing message, with what was recorded about it.</summary>
+    /// <summary>Reads back the raw MIME stored for one outgoing email, with what was recorded about it.</summary>
     /// <param name="outgoingEmailId">The record of the send.</param>
     /// <param name="cancellationToken">Propagates caller cancellation.</param>
     /// <returns>The stored content, or <see langword="null" /> when no content is stored for that record.</returns>

@@ -73,13 +73,13 @@ public sealed record OutgoingEmailRequest
 
         if (recipients.Count == 0)
         {
-            throw new ArgumentException("An outgoing message names at least one recipient.", nameof(recipients));
+            throw new ArgumentException("An outgoing email names at least one recipient.", nameof(recipients));
         }
 
         if (recipients.Count > MaximumRecipientCount)
         {
             throw new ArgumentException(
-                $"An outgoing message names at most {MaximumRecipientCount} recipients.",
+                $"An outgoing email names at most {MaximumRecipientCount} recipients.",
                 nameof(recipients));
         }
 
@@ -90,7 +90,7 @@ public sealed record OutgoingEmailRequest
             // Counted rather than named: reporting which address repeated would put a recipient's address into an
             // exception message, and the caller already holds the list they passed.
             throw new ArgumentException(
-                $"An outgoing message names each recipient once, and {duplicatedAddressCount} of them repeat.",
+                $"An outgoing email names each recipient once, and {duplicatedAddressCount} of them repeat.",
                 nameof(recipients));
         }
 

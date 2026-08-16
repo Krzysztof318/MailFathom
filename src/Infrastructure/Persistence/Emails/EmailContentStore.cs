@@ -180,7 +180,7 @@ internal sealed class EmailContentStore(
         if (rawMime.IsEmpty)
         {
             throw new ArgumentException(
-                "An outgoing message is stored with the MIME it will be transmitted as.",
+                "An outgoing email is stored with the MIME it will be transmitted as.",
                 nameof(rawMime));
         }
 
@@ -190,7 +190,7 @@ internal sealed class EmailContentStore(
         // from the change tracker without a query there and falls back to the database otherwise.
         var outgoingEmail = await writeContext.OutgoingEmails.FindAsync([outgoingEmailId.Value], cancellationToken)
             ?? throw new InvalidOperationException(
-                "Raw MIME cannot be stored without the outgoing message record it belongs to.");
+                "Raw MIME cannot be stored without the outgoing email record it belongs to.");
 
         Expression<Func<OutgoingEmailContentEntity, bool>> matchesRecord =
             candidate => candidate.OutgoingEmailId == outgoingEmail.Id;
@@ -222,7 +222,7 @@ internal sealed class EmailContentStore(
 
     /// <inheritdoc />
     /// <remarks>
-    /// Projected to the three columns for the reason the incoming read is, and spanned for none: an outgoing message is
+    /// Projected to the three columns for the reason the incoming read is, and spanned for none: an outgoing email is
     /// read once per delivery attempt rather than once per request meeting a whole mailbox, and what an operator asks
     /// about a send is which stage it is at rather than how long its bytes took to leave the database.
     /// </remarks>

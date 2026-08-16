@@ -197,7 +197,7 @@ internal sealed class MailFathomDbContext : DbContext
     /// </remarks>
     internal const string ContactAddressUniqueIndexName = "ix_contact_addresses_normalized_address";
 
-    /// <summary>The constraint an outgoing message's idempotency identity is enforced by, and which a losing writer is recognized from.</summary>
+    /// <summary>The constraint an outgoing email's idempotency identity is enforced by, and which a losing writer is recognized from.</summary>
     /// <remarks>
     /// It is the mutation identity's case with the consequence raised. Two callers asking for the same send reach the
     /// database together and one of them violates this index; the retry then finds the winner's record and delivers
@@ -209,7 +209,7 @@ internal sealed class MailFathomDbContext : DbContext
     /// <summary>The index the outbox is read through, filtered to the sends that have not finished.</summary>
     internal const string OutgoingEmailOutstandingIndexName = "ix_outgoing_emails_outstanding";
 
-    /// <summary>The foreign key that removes an outgoing message's recipients with the record.</summary>
+    /// <summary>The foreign key that removes an outgoing email's recipients with the record.</summary>
     /// <remarks>
     /// Named because EF's convention composes one from both table names and PostgreSQL truncates an identifier at 63
     /// characters, which would leave a permanent constraint whose name ends in a tilde.
@@ -1224,7 +1224,7 @@ internal sealed class MailFathomDbContext : DbContext
                     + $"'{nameof(OutgoingEmailStage.Cancelled)}')");
         });
 
-    /// <summary>Declares the people one outgoing message is offered to, and what the server said about each.</summary>
+    /// <summary>Declares the people one outgoing email is offered to, and what the server said about each.</summary>
     /// <remarks>
     /// <para>
     /// A separate table rather than arrays on the record, because each recipient carries state that changes on its own:
@@ -1262,7 +1262,7 @@ internal sealed class MailFathomDbContext : DbContext
                 .OnDelete(DeleteBehavior.Cascade);
         });
 
-    /// <summary>Declares the raw MIME one outgoing message is transmitted as, stored once and read back per attempt.</summary>
+    /// <summary>Declares the raw MIME one outgoing email is transmitted as, stored once and read back per attempt.</summary>
     /// <remarks>
     /// <para>
     /// A one-to-one table whose primary key is also its foreign key, which is the arrangement the incoming content table
@@ -1272,7 +1272,7 @@ internal sealed class MailFathomDbContext : DbContext
     /// <para>
     /// The message is written once and read back rather than recomposed, because a message rebuilt between attempts
     /// carries a different <c>Message-ID</c> and would thread as a second message in every recipient's client. The
-    /// cascade is the erasure obligation: deleting the record destroys the message it points at, so an outgoing message
+    /// cascade is the erasure obligation: deleting the record destroys the message it points at, so an outgoing email
     /// cannot outlive the record that says who it was for.
     /// </para>
     /// </remarks>

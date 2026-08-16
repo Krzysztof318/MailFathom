@@ -17,15 +17,15 @@ public readonly record struct OutgoingEmailId
     /// <summary>Gets the non-empty UUID value.</summary>
     public Guid Value { get; }
 
-    /// <summary>Creates an outgoing message identifier from a non-empty UUID.</summary>
+    /// <summary>Creates an outgoing email identifier from a non-empty UUID.</summary>
     /// <param name="value">The UUID to wrap.</param>
-    /// <returns>A validated outgoing message identifier.</returns>
+    /// <returns>A validated outgoing email identifier.</returns>
     /// <exception cref="ArgumentException">Thrown when <paramref name="value" /> is empty.</exception>
     public static OutgoingEmailId Create(Guid value)
     {
         if (value == Guid.Empty)
         {
-            throw new ArgumentException("An outgoing message identifier cannot be empty.", nameof(value));
+            throw new ArgumentException("An outgoing email identifier cannot be empty.", nameof(value));
         }
 
         return new OutgoingEmailId(value);

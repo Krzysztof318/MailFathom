@@ -126,6 +126,33 @@ public sealed class OutgoingEmailRequesterTests
         Assert.Equal("revision", thrown.ParamName);
     }
 
+    /// <summary>
+    /// Two distinct rules must never compose one identity. A rule named <c>a</c> at revision <c>b@c</c> and one named
+    /// <c>a@b</c> at revision <c>c</c> would otherwise write the same key, and the unique index would read the second
+    /// rule's genuine send as a retry of the first one's — which is a message nobody is ever told was not sent.
+    /// </summary>
+    [Theory]
+    [InlineData("archive@newsletters", "3")]
+    [InlineData("archive-newsletters", "3@4")]
+    [InlineData("archive#newsletters", "3")]
+    [InlineData("archive-newsletters", "3#4")]
+    public void Rule_PartCarryingASeparatorTheIdentityIsComposedWith_IsRefused(string ruleName, string revision) =>
+        Assert.Throws<ArgumentException>(() => OutgoingEmailRequester.Rule(ruleName, revision, AnsweredEmail));
+
+    /// <summary>A stored rule identity carries both separators, so restoring one is not held to the parts' rule.</summary>
+    [Fact]
+    public void Create_ARuleIdentityReadBackFromARecord_IsRestoredUnchanged()
+    {
+        // Arrange
+        var recorded = OutgoingEmailRequester.Rule("archive-newsletters", "3", AnsweredEmail);
+
+        // Act
+        var restored = OutgoingEmailRequester.Create(OutgoingEmailOrigin.Rule, recorded.Identity);
+
+        // Assert
+        Assert.Equal(recorded, restored);
+    }
+
     [Fact]
     public void Create_OriginOutsideTheDeclaredSet_IsRefused() =>
         Assert.Throws<ArgumentOutOfRangeException>(

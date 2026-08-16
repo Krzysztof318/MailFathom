@@ -4,7 +4,7 @@
 
 namespace MailFathom.Domain.Delivery;
 
-/// <summary>States how far along its submission sequence one recorded outgoing message has durably reached.</summary>
+/// <summary>States how far along its submission sequence one recorded outgoing email has durably reached.</summary>
 /// <remarks>
 /// <para>
 /// The members are the stages an SMTP submission actually has rather than a generic queued, running, and done. That is

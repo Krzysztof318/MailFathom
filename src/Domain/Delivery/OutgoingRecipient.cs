@@ -6,7 +6,7 @@ using MailFathom.Domain.Emails;
 
 namespace MailFathom.Domain.Delivery;
 
-/// <summary>Names one person an outgoing message is addressed to, and the header they are named in.</summary>
+/// <summary>Names one person an outgoing email is addressed to, and the header they are named in.</summary>
 /// <remarks>
 /// <para>
 /// The display name a composed message writes is deliberately absent. What the envelope needs is the address, what an
@@ -41,7 +41,7 @@ public readonly record struct OutgoingRecipient
     /// <summary>Gets the header the composed message names this recipient in.</summary>
     public OutgoingRecipientRole Role { get; }
 
-    /// <summary>Names one recipient of an outgoing message.</summary>
+    /// <summary>Names one recipient of an outgoing email.</summary>
     /// <param name="address">The address the message is offered to.</param>
     /// <param name="role">The header the composed message names them in.</param>
     /// <returns>The recipient those two name.</returns>

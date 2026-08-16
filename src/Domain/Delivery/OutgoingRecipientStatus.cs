@@ -4,7 +4,7 @@
 
 namespace MailFathom.Domain.Delivery;
 
-/// <summary>States what one recipient of an outgoing message has durably settled at.</summary>
+/// <summary>States what one recipient of an outgoing email has durably settled at.</summary>
 /// <remarks>
 /// <para>
 /// The set answers one question and only that one: is this recipient offered on the next attempt. A recipient the

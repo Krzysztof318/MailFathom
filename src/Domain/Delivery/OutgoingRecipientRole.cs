@@ -4,7 +4,7 @@
 
 namespace MailFathom.Domain.Delivery;
 
-/// <summary>States which header a recipient of an outgoing message is named in.</summary>
+/// <summary>States which header a recipient of an outgoing email is named in.</summary>
 /// <remarks>
 /// The three are the whole of what an envelope is built from, which is why this is its own set rather than the header
 /// role a received message's addresses carry: that one also names an author, a sender, and a reply address, and none of

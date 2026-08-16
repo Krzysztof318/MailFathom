@@ -9,6 +9,7 @@ using MailFathom.Application.Persistence;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Delivery;
 using MailFathom.Domain.Emails;
+using MailFathom.Domain.Failures;
 using MailFathom.Infrastructure.Persistence;
 using MailFathom.IntegrationTests.Orchestration;
 using Microsoft.EntityFrameworkCore;
@@ -148,6 +149,37 @@ public sealed class OrchestratedOutgoingEmailStoreTests(MailFathomOrchestrationF
                 enqueued.Id,
                 OutgoingEmailStage.Cancelled,
                 replyCode: null,
+                token),
+            cancellationToken));
+
+        // Once the send has stopped, nothing goes on writing about it: a late reply would settle a recipient on a
+        // record nothing will offer again, and a later failure would overwrite the one an operator reads as the reason.
+        await services.CommitAsync(
+            (scope, session, token) => scope.GetRequiredService<IOutgoingEmailStore>().AdvanceAsync(
+                session,
+                enqueued.Id,
+                OutgoingEmailStage.Refused,
+                replyCode: 554,
+                token),
+            cancellationToken);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => services.CommitAsync(
+            (scope, session, token) => scope.GetRequiredService<IOutgoingEmailStore>().RecordRecipientOutcomesAsync(
+                session,
+                enqueued.Id,
+                [OutgoingRecipientOutcome.Answered(
+                    request.Recipients[0],
+                    OutgoingRecipientStatus.Accepted,
+                    replyCode: 250,
+                    DateTimeOffset.UnixEpoch)],
+                token),
+            cancellationToken));
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => services.CommitAsync(
+            (scope, session, token) => scope.GetRequiredService<IOutgoingEmailStore>().RecordFailureAsync(
+                session,
+                enqueued.Id,
+                MailFathomErrorCode.MailDeliveryUnavailable,
                 token),
             cancellationToken));
     }

@@ -158,7 +158,7 @@ internal sealed class OutgoingEmailStore(MailFathomDbContext readContext, TimePr
         if (entity.Stage != OutgoingEmailStage.Recorded)
         {
             throw new InvalidOperationException(
-                $"Outgoing message record {entity.Id} is at stage {entity.Stage}, and a transmission begins from {OutgoingEmailStage.Recorded}.");
+                $"Outgoing email record {entity.Id} is at stage {entity.Stage}, and a transmission begins from {OutgoingEmailStage.Recorded}.");
         }
 
         entity.Stage = OutgoingEmailStage.TransmissionBegun;
@@ -178,7 +178,7 @@ internal sealed class OutgoingEmailStore(MailFathomDbContext readContext, TimePr
             throw new ArgumentOutOfRangeException(
                 nameof(stage),
                 stage,
-                "An outgoing message is advanced to a terminal stage; every other stage has a transition of its own.");
+                "An outgoing email is advanced to a terminal stage; every other stage has a transition of its own.");
         }
 
         // RFC 5321 makes every reply exactly three digits, so anything else is a value assembled wrongly rather than a
@@ -217,6 +217,11 @@ internal sealed class OutgoingEmailStore(MailFathomDbContext readContext, TimePr
 
         var entity = await RequireEntityAsync(session, outgoingEmailId, cancellationToken);
 
+        // A record that has finished is answered about by nobody: a late or repeated reply reaching one would settle a
+        // recipient on a send that stopped, and on a cancelled record it would claim an answer to a transmission the
+        // stage says never began.
+        RequireNotTerminal(entity);
+
         await LoadRecipientsAsync(session, entity, cancellationToken);
 
         foreach (var outcome in outcomes)
@@ -233,6 +238,10 @@ internal sealed class OutgoingEmailStore(MailFathomDbContext readContext, TimePr
         CancellationToken cancellationToken)
     {
         var entity = await RequireEntityAsync(session, outgoingEmailId, cancellationToken);
+
+        // The failure a finished record carries is the one that finished it, so a later caller does not get to
+        // overwrite what an operator reads as the reason this send ended.
+        RequireNotTerminal(entity);
 
         entity.LastFailureCode = failure.Value;
     }
@@ -257,7 +266,7 @@ internal sealed class OutgoingEmailStore(MailFathomDbContext readContext, TimePr
         {
             // The address stays out of the message: it is personal data, and the record identifies the send exactly.
             throw new InvalidOperationException(
-                $"Outgoing message record {entity.Id} was answered about a recipient it does not name.");
+                $"Outgoing email record {entity.Id} was answered about a recipient it does not name.");
         }
 
         if (recipient.Status != OutgoingRecipientStatus.Pending)
@@ -292,7 +301,7 @@ internal sealed class OutgoingEmailStore(MailFathomDbContext readContext, TimePr
         if (!isReachable)
         {
             throw new InvalidOperationException(
-                $"Outgoing message record {entity.Id} is at stage {entity.Stage} and cannot be moved to {stage}.");
+                $"Outgoing email record {entity.Id} is at stage {entity.Stage} and cannot be moved to {stage}.");
         }
     }
 
@@ -304,7 +313,7 @@ internal sealed class OutgoingEmailStore(MailFathomDbContext readContext, TimePr
             or OutgoingEmailStage.Cancelled)
         {
             throw new InvalidOperationException(
-                $"Outgoing message record {entity.Id} is at terminal stage {entity.Stage} and is never attempted again.");
+                $"Outgoing email record {entity.Id} is at terminal stage {entity.Stage} and is never attempted again.");
         }
     }
 
@@ -368,6 +377,6 @@ internal sealed class OutgoingEmailStore(MailFathomDbContext readContext, TimePr
         // A primary-key lookup, so FindAsync already resolves an insert this session may still be holding.
         return await writeContext.OutgoingEmails.FindAsync([outgoingEmailId.Value], cancellationToken)
             ?? throw new InvalidOperationException(
-                $"No outgoing message record carries the identifier {outgoingEmailId}.");
+                $"No outgoing email record carries the identifier {outgoingEmailId}.");
     }
 }
