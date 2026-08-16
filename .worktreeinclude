@@ -13,3 +13,6 @@ CLAUDE.local.md
 # the same permissions without this line. It is listed anyway so the file is present on disk for
 # tooling that reads it directly; the main checkout stays the copy to edit.
 .claude/settings.local.json
+
+# Codex copies this ignored machine-local configuration into worktrees it creates.
+.codex/config.toml
