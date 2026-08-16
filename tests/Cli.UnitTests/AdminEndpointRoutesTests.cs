@@ -71,6 +71,30 @@ public sealed class AdminEndpointRoutesTests
     }
 
     /// <summary>
+    /// The contact-book paths, pinned for the reason every other path here is. The three composed ones are written out
+    /// rather than built from the constant, because what would break is the shape rather than the prefix: a deployment
+    /// serves one contact beneath a UUID segment, and a command composing the identity anywhere else would reach a 404
+    /// that reads exactly like an administrative endpoint nobody enabled.
+    /// </summary>
+    [Fact]
+    public void ContactPaths_AreTheRoutesTheDeploymentServesItsBookAt()
+    {
+        var contact = new Guid("11111111-2222-3333-4444-555555555555");
+
+        Assert.Equal("/api/admin/contacts", AdminEndpointRoutes.ContactsPath);
+        Assert.Equal("/api/admin/contacts/by-address", AdminEndpointRoutes.ContactByAddressPath);
+        Assert.Equal(
+            "/api/admin/contacts/11111111-2222-3333-4444-555555555555",
+            AdminEndpointRoutes.ContactPath(contact));
+        Assert.Equal(
+            "/api/admin/contacts/11111111-2222-3333-4444-555555555555/promotion",
+            AdminEndpointRoutes.ContactPromotionPath(contact));
+        Assert.Equal(
+            "/api/admin/contacts/11111111-2222-3333-4444-555555555555/export",
+            AdminEndpointRoutes.ContactExportPath(contact));
+    }
+
+    /// <summary>
     /// RFC 9728 places the document under a well-known segment with the resource's path appended, and the deployment
     /// refuses to start unless its resource path is the route prefix. Composing it here rather than reading it from a
     /// challenge is what makes a sign-in one request instead of two, and this is the assertion that keeps the

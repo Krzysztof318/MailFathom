@@ -70,9 +70,15 @@ namespace MailFathom.Host.Api;
 /// state is an operator's problem rather than anything a model reasons over.
 /// </para>
 /// <para>
-/// The last takes a folder's local mail away, which <see cref="MailFolderErasureEndpoint" /> describes. It is the only
+/// The next takes a folder's local mail away, which <see cref="MailFolderErasureEndpoint" /> describes. It is the only
 /// route that disposes of stored mail, which is why it is bounded by the same credential as everything else here and
 /// reachable from nowhere a model can write to.
+/// </para>
+/// <para>
+/// The last are the contact book, which <see cref="ContactEndpoints" /> describes: recording a person, correcting one,
+/// promoting a collected record, reading the book, and the two data-subject paths over it. They are here because the
+/// book is the most concentrated personal data this deployment holds, so what bounds administrative access is what
+/// should bound who may add to it, read it out, or erase somebody from it.
 /// </para>
 /// <para>
 /// Every one of them is mapped into one group so a route cannot be added outside the requirement the endpoint attaches
@@ -102,6 +108,7 @@ internal static class AdminApiEndpoints
         api.MapSpamClassification();
         api.MapJobDeadLetters();
         api.MapMailFolderErasure();
+        api.MapContacts();
 
         return api;
     }
