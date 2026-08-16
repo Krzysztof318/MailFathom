@@ -631,7 +631,9 @@ run already under way is refused its next advance rather than corrupting this.
 with what was discarded — the same arrangement the embedding activation uses, and for the same reason: the figure an
 operator agrees to and the figure the deployment acts on have to be one figure. `--yes` states the agreement in the
 command, which is what a scripted rewind needs; an invocation with input redirected and no flag is refused rather than
-reading an answer out of whatever was piped in.
+reading an answer out of whatever was piped in. A scope the assessment counted nothing in is asked about like any
+other: the count is the mail the deployment stores rather than what a run would fetch, and a folder whose local copies
+are all tombstoned counts nothing while its bindings still hold the progress the rewind takes away.
 
 **Nothing is erased and nothing is duplicated.** A rewind removes one row of progress per binding; the mail, its raw
 MIME, its passages, and their vectors stay where they are, and re-reading an occurrence stores over the local email

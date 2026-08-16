@@ -26,7 +26,7 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                 },
                 constraints: table =>
                 {
-                    table.PrimaryKey("PK_mail_rederivation_positions", x => new { x.MailboxAccountId, x.FolderAlias });
+                    table.PrimaryKey("pk_mail_rederivation_positions", x => new { x.MailboxAccountId, x.FolderAlias });
                 });
         }
 

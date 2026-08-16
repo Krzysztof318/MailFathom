@@ -618,7 +618,8 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                     b.Property<DateTimeOffset>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
 
-                    b.HasKey("MailboxAccountId", "FolderAlias");
+                    b.HasKey("MailboxAccountId", "FolderAlias")
+                        .HasName("pk_mail_rederivation_positions");
 
                     b.ToTable("mail_rederivation_positions", (string)null);
                 });

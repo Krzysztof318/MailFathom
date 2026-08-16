@@ -4,7 +4,6 @@
 
 using System.CommandLine;
 using MailFathom.Cli.Administration;
-using MailFathom.Cli.Administration.Mailboxes;
 
 namespace MailFathom.Cli.Commands;
 
@@ -89,7 +88,7 @@ internal static class RewindMailboxCommand
         // Reported on standard error and with a failing code, which is what every other command does when it did not
         // do what it was asked. A caller that redirected the output reads an empty result and a reason rather than a
         // sentence about nothing happening mixed into what it captured.
-        if (!Agreed(context, assessment, confirmedUpFront))
+        if (!Agreed(context, confirmedUpFront))
         {
             context.Console.WriteError("Nothing was rewound.");
 
@@ -127,13 +126,23 @@ internal static class RewindMailboxCommand
 
     /// <summary>Reports whether the person running this agreed to the fetch, refusing to guess where nobody can answer.</summary>
     /// <remarks>
+    /// <para>
     /// A redirected input has nobody to ask, and reading the answer out of whatever was piped in would turn a stray
     /// line into an agreement to pull somebody's whole mailbox again. Such an invocation is told to pass the flag
     /// instead, which is an operator stating the agreement in the command rather than a command inferring it.
+    /// </para>
+    /// <para>
+    /// A scope the assessment counted no mail in is asked about like any other. The count is what the deployment
+    /// stores, which is deliberately not what a run would fetch: mail that arrived since is fetched without ever
+    /// having been stored, and a scope whose local copies are all tombstoned counts nothing while its folders still
+    /// hold progress a rewind takes away. Both are cases where zero would have waved through the fetch this
+    /// confirmation exists for, and the second needs no race to reach. So the figure informs the question rather than
+    /// answering it, and <c>--yes</c> stays the one way to state the agreement without being asked.
+    /// </para>
     /// </remarks>
-    private static bool Agreed(CliContext context, MailboxRewindAssessment assessment, bool confirmedUpFront)
+    private static bool Agreed(CliContext context, bool confirmedUpFront)
     {
-        if (confirmedUpFront || assessment.StoredEmailCount == 0)
+        if (confirmedUpFront)
         {
             return true;
         }
@@ -141,7 +150,7 @@ internal static class RewindMailboxCommand
         if (!context.Console.CanConfirm)
         {
             throw new CliFailure(
-                $"This would have the deployment fetch {assessment.StoredEmailCount} stored emails from the mail server again, and there is nobody at the terminal to agree to it. Pass --yes to rewind without being asked.");
+                "There is nobody at the terminal to agree to this, and rewinding has the deployment read the scope from the mail server again. Pass --yes to rewind without being asked.");
         }
 
         return context.Console.Confirm("Rewind that scope? [y/N] ");

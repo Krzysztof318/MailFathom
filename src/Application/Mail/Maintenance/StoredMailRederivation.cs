@@ -59,7 +59,10 @@ public sealed class StoredMailRederivation
     /// The batch count bounds how many messages a pass reads and says nothing about how large they are, and the two are
     /// not related: a scope of one-kilobyte notifications and a scope of messages carrying a video attachment differ by
     /// three orders of magnitude for the same five hundred rows. What the caller is waiting on is one HTTP request, so
-    /// the pass ends on whichever ceiling it reaches first and the messages it left behind are the next pass's.
+    /// the pass ends on whichever ceiling it reaches first and the messages it left behind are the next pass's. It is
+    /// read against what the pass has read so far rather than against one batch, and checked before each email rather
+    /// than between batches, because a batch is fifty messages and a ceiling only a batch boundary enforces is one a
+    /// batch of large messages passes fifty times over before anything looks.
     /// </remarks>
     private const long MaximumRawBytesPerPass = 64L * 1024 * 1024;
 
@@ -132,7 +135,7 @@ public sealed class StoredMailRederivation
                     EmailsRemain: false);
             }
 
-            var outcome = await this.ReadBatchAsync(batch, cancellationToken);
+            var outcome = await this.ReadBatchAsync(batch, readByteCount, cancellationToken);
 
             await this.CommitBatchAsync(scope, outcome, cancellationToken);
 
@@ -170,9 +173,13 @@ public sealed class StoredMailRederivation
             EmailsRemain: true);
     }
 
-    /// <summary>Re-reads a batch's emails outside any transaction, stopping early once it is holding enough text.</summary>
+    /// <summary>Re-reads a batch's emails outside any transaction, stopping early once either ceiling is reached.</summary>
+    /// <param name="batch">The emails the walk offered, in the order it visits them.</param>
+    /// <param name="bytesAlreadyReadThisPass">What earlier batches of this pass read, which the byte ceiling is against.</param>
+    /// <param name="cancellationToken">Cancels between emails.</param>
     private async Task<BatchReadOutcome> ReadBatchAsync(
         IReadOnlyList<StoredMailAwaitingRederivation> batch,
+        long bytesAlreadyReadThisPass,
         CancellationToken cancellationToken)
     {
         var rederivations = new List<CompletedRederivation>(batch.Count);
@@ -185,9 +192,13 @@ public sealed class StoredMailRederivation
 
         foreach (var email in batch)
         {
-            // Checked before the read and never before the first one, so a single email larger than the whole budget
-            // still makes progress instead of stalling the walk on itself forever.
-            if (processedCount > 0 && retainedCharacterCount >= MaximumRetainedTextCharactersPerBatch)
+            // Both ceilings are checked before the read and never before the first one, so a single email larger than
+            // either still makes progress instead of stalling the walk on itself forever. The bytes are counted across
+            // the pass rather than within this batch, because a ceiling checked only where a batch ends is no ceiling
+            // on what one batch of large messages reads.
+            if (processedCount > 0
+                && (retainedCharacterCount >= MaximumRetainedTextCharactersPerBatch
+                    || bytesAlreadyReadThisPass + readByteCount >= MaximumRawBytesPerPass))
             {
                 break;
             }

@@ -26,6 +26,7 @@ public sealed class PersistenceConcurrencyConflictsTests
         MailFathomDbContext.MailRuleEvaluationRunPrimaryKeyConstraintName,
         MailFathomDbContext.EmailChunkOrdinalUniqueIndexName,
         MailFathomDbContext.EmailEmbeddingPrimaryKeyConstraintName,
+        MailFathomDbContext.MailRederivationPositionPrimaryKeyConstraintName,
     ];
 
     [Theory]

@@ -1,6 +1,6 @@
 # IMAP synchronization
 
-<!-- describes: src/Application/Synchronization/**, src/Domain/Synchronization/**, src/Domain/Folders/**, src/Application/Folders/**, src/Infrastructure/Mail/**, src/Application/Mail/Mutations/**, src/Domain/Mutations/**, src/Host/Hosting/Workers/MailSynchronizationCoordinator.cs, src/Host/Hosting/Workers/AccountSynchronizationSupervisor.cs, src/Host/Hosting/Workers/AccountPushNotificationWatch.cs -->
+<!-- describes: src/Application/Synchronization/**, src/Domain/Synchronization/**, src/Domain/Folders/**, src/Application/Folders/**, src/Infrastructure/Mail/**, src/Application/Mail/Mutations/**, src/Application/Mail/Maintenance/**, src/Domain/Mutations/**, src/Host/Hosting/Workers/MailSynchronizationCoordinator.cs, src/Host/Hosting/Workers/AccountSynchronizationSupervisor.cs, src/Host/Hosting/Workers/AccountPushNotificationWatch.cs -->
 
 MailFathom synchronizes mailboxes read-only, on a bounded schedule, and — for an account that asks for it — the moment the mail server says something changed. Both mechanisms run the same synchronization pass over the same read-only session; what differs is only what starts one.
 
@@ -1517,6 +1517,12 @@ everything the server knows is read again. That is also its cost: the whole scop
 extraction, and back into the content store. The command therefore reads how many stored emails the scope holds and
 puts that figure in front of the operator before it discards anything, in the way `mfctl embedding activate` confirms a
 figure it will spend; `--yes` states the agreement in the command for a scripted rewind.
+
+**The figure informs the question and never answers it**, including when it is zero. What the count measures is the
+mail this deployment stores, which is deliberately not what a run would fetch: mail that arrived since is fetched
+without ever having been stored, and a folder whose local copies are all tombstoned counts nothing while its bindings
+still hold the progress a rewind takes away. So every rewind is confirmed or carries `--yes`, and an invocation with
+input redirected and neither is refused rather than reading an answer out of whatever was piped in.
 
 **A rewind erases nothing and duplicates nothing.** What it removes is one row of progress per binding; the mail, its
 raw MIME, its passages, and their vectors stay exactly where they are, and re-reading an occurrence upserts the local

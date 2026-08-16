@@ -114,13 +114,17 @@ public sealed class MailboxMaintenanceCommandTests : IDisposable
         Assert.Empty(this.console.Questions);
     }
 
-    /// <summary>A scope holding nothing costs nothing, so there is no agreement worth interrupting an operator for.</summary>
+    /// <summary>
+    /// A scope the assessment counted no mail in is asked about like any other, because the count is what the
+    /// deployment stores rather than what a run would fetch: a folder whose local copies are all tombstoned counts
+    /// nothing and still holds the progress a rewind takes away.
+    /// </summary>
     [Fact]
-    public async Task Rewind_AScopeHoldingNoMail_DiscardsWithoutAsking()
+    public async Task Rewind_AScopeTheAssessmentCountedNoMailIn_StillAsks()
     {
         // Arrange
         using var deployment = FakeMaintenanceDeployment.Rewinding(storedEmailCount: 0);
-        this.console.AnswersQuestions = false;
+        this.console.AnswerToGive = true;
 
         // Act
         var exitCode = await this.RewindAsync(deployment);
@@ -128,9 +132,26 @@ public sealed class MailboxMaintenanceCommandTests : IDisposable
         // Assert
         Assert.Equal(CliExitCode.Success, exitCode);
         Assert.Equal(1, deployment.RewindRequestCount());
+        Assert.Single(this.console.Questions);
         Assert.Contains(
             this.console.Lines,
             line => line.Contains("nothing to rewind", StringComparison.Ordinal));
+    }
+
+    /// <summary>And declining it discards nothing, which is the half a zero count used to wave through.</summary>
+    [Fact]
+    public async Task Rewind_AScopeTheAssessmentCountedNoMailInAndADecliningOperator_DiscardsNothing()
+    {
+        // Arrange
+        using var deployment = FakeMaintenanceDeployment.Rewinding(storedEmailCount: 0);
+        this.console.AnswerToGive = false;
+
+        // Act
+        var exitCode = await this.RewindAsync(deployment);
+
+        // Assert
+        Assert.Equal(CliExitCode.Failure, exitCode);
+        Assert.Equal(0, deployment.RewindRequestCount());
     }
 
     /// <summary>The scope is what the deployment is asked about, in the query for the read and in the body for the write.</summary>

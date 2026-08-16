@@ -139,6 +139,15 @@ internal sealed class MailFathomDbContext : DbContext
     /// </remarks>
     internal const string SpamClassificationRunPrimaryKeyConstraintName = "pk_spam_classification_runs";
 
+    /// <summary>The key that keeps one re-derivation cursor per scope, and which a second walk of it is recognized by.</summary>
+    /// <remarks>
+    /// Named because the first batch of a scope nobody has walked is a check-then-insert over this key: two invocations
+    /// asked for at once, or one request retried, both read no row and both insert. Losing that race is the mechanism
+    /// rather than a fault — the retry reads back the position the winner wrote and moves it on from there, which is
+    /// what makes asking twice walk the scope once instead of ending the pass on a provider failure.
+    /// </remarks>
+    internal const string MailRederivationPositionPrimaryKeyConstraintName = "pk_mail_rederivation_positions";
+
     /// <summary>The constraint a mutation's idempotency identity is enforced by, and which a losing writer is recognized from.</summary>
     /// <remarks>
     /// Named because the name is how the same request arriving twice is told apart from a genuine failure. Two callers
@@ -533,7 +542,8 @@ internal sealed class MailFathomDbContext : DbContext
         modelBuilder.Entity<MailRederivationPositionEntity>(entity =>
         {
             entity.ToTable("mail_rederivation_positions");
-            entity.HasKey(position => new { position.MailboxAccountId, position.FolderAlias });
+            entity.HasKey(position => new { position.MailboxAccountId, position.FolderAlias })
+                .HasName(MailRederivationPositionPrimaryKeyConstraintName);
             entity.Property(position => position.MailboxAccountId).HasMaxLength(128);
             entity.Property(position => position.FolderAlias).HasMaxLength(128);
         });

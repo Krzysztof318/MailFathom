@@ -36,13 +36,16 @@ public sealed class StoredMailRederivationTests
     /// </remarks>
     private const int EmailsPerPass = EmailsPerBatch * 10;
 
-    /// <summary>A payload large enough that one batch of it passes the bytes a pass reads before its batches run out.</summary>
+    /// <summary>How many emails of the payload below reach the sixty-four mebibyte ceiling one pass reads.</summary>
     /// <remarks>
-    /// The ceiling is sixty-four mebibytes and it is read after a batch rather than during one, so what this has to
-    /// exceed is that figure divided by a batch. One array stands in for every email's payload, so arranging it costs
-    /// one allocation rather than a batch's worth.
+    /// Fewer than a batch, deliberately: the ceiling has to stop a batch part way through rather than only where one
+    /// ends, and a figure at or above the batch size would pass either way. One array stands in for every email's
+    /// payload, so arranging it costs one allocation rather than one per email.
     /// </remarks>
-    private const int BytesPerEmailPastTheCeilingInOneBatch = ((64 * 1024 * 1024) / EmailsPerBatch) + 1;
+    private const int EmailsReachingTheByteCeiling = 10;
+
+    /// <summary>A payload of which that many emails pass the ceiling, rounded up so the tenth is what reaches it.</summary>
+    private const int BytesPerEmail = ((64 * 1024 * 1024) / EmailsReachingTheByteCeiling) + 1;
 
     private static readonly StoredMailScope WholeAccount = new(MailAccountId.Create("work"), null);
 
@@ -124,9 +127,14 @@ public sealed class StoredMailRederivationTests
         Assert.Equal(4, store.Applied.Count);
     }
 
-    /// <summary>Two scopes are two walks, so refreshing one account never moves another's cursor.</summary>
+    /// <summary>
+    /// Two scopes are two walks, so refreshing one account never moves another's cursor — and the scope reaches the
+    /// candidate query as well as the cursor, because the real store selects the rows to read by it. Asserting the
+    /// cursor alone would pass just as happily with the wrong scope handed to the query, since the second walk's fresh
+    /// position reproduces the counts on its own.
+    /// </summary>
     [Fact]
-    public async Task RunAsync_TwoScopes_KeepTheirPositionsApart()
+    public async Task RunAsync_TwoScopes_KeepTheirPositionsApartAndSelectCandidatesByTheirOwn()
     {
         // Arrange
         var store = new FakeRederivationStore(StoredMail(EmailsPerPass + 1));
@@ -140,6 +148,7 @@ public sealed class StoredMailRederivationTests
         // Assert
         Assert.Equal(EmailsPerPass, narrowed.RederivedEmailCount);
         Assert.True(narrowed.EmailsRemain);
+        Assert.Equal([WholeAccount, otherFolder], store.CandidateScopes.Distinct());
     }
 
     /// <summary>A message nobody can parse keeps what an earlier release read from it, and the walk moves past it.</summary>
@@ -250,24 +259,27 @@ public sealed class StoredMailRederivationTests
     /// <summary>
     /// A pass is bounded by what it reads as well as by how many rows it reads, because the two are unrelated: a scope
     /// of messages carrying attachments reaches the byte ceiling long before the batch budget, and the caller is
-    /// waiting on one request either way.
+    /// waiting on one request either way. The ceiling stops the batch it is reached in, so a batch of large messages
+    /// cannot read fifty of them before anything looks, and the position committed is the last email actually read.
     /// </summary>
     [Fact]
-    public async Task RunAsync_EmailsLargerThanTheBytesOnePassReads_StopsEarlyAndReportsRemainingWork()
+    public async Task RunAsync_EmailsLargerThanTheBytesOnePassReads_StopsWithinTheBatchAndReportsRemainingWork()
     {
         // Arrange
-        var store = new FakeRederivationStore(StoredMail(EmailsPerPass));
+        var mail = StoredMail(EmailsPerPass);
+        var store = new FakeRederivationStore(mail);
         var rederivation = RederivationOver(
             store,
-            ContentStoreWithMimeOf(new byte[BytesPerEmailPastTheCeilingInOneBatch]),
+            ContentStoreWithMimeOf(new byte[BytesPerEmail]),
             ReaderThatReadsEverything());
 
         // Act
         var pass = await rederivation.RunAsync(WholeAccount, TestContext.Current.CancellationToken);
 
         // Assert
-        Assert.Equal(EmailsPerBatch, pass.RederivedEmailCount);
+        Assert.Equal(EmailsReachingTheByteCeiling, pass.RederivedEmailCount);
         Assert.True(pass.EmailsRemain);
+        Assert.Equal([mail[EmailsReachingTheByteCeiling - 1].StoredEmailId], store.SavedPositions);
     }
 
     /// <summary>An interrupted pass stops rather than finishing the batch budget it was given.</summary>
@@ -390,6 +402,9 @@ public sealed class StoredMailRederivationTests
 
         public List<StoredMailScope> Cleared { get; } = [];
 
+        /// <summary>Which scope each candidate query was asked about, which the real store selects rows by.</summary>
+        public List<StoredMailScope> CandidateScopes { get; } = [];
+
         public Task<StoredEmailId?> FindResumePositionAsync(
             StoredMailScope scope,
             CancellationToken cancellationToken) =>
@@ -401,6 +416,8 @@ public sealed class StoredMailRederivationTests
             int batchSize,
             CancellationToken cancellationToken)
         {
+            this.CandidateScopes.Add(scope);
+
             IReadOnlyList<StoredMailAwaitingRederivation> batch =
             [
                 .. mail
