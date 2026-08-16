@@ -10,6 +10,9 @@
 - name: IMAP synchronization
   href: imap-synchronization.md
   description: How a mailbox is reconciled read-only — what starts a pass, how folder identity survives a rename, and what a remote deletion does locally.
+- name: Mail delivery
+  href: mail-delivery.md
+  description: Where an account's mail would be submitted, and what opening a session against that server establishes — the transport rules it is judged by, what it reports the server will accept, and how a refusal is classified.
 - name: Mailbox queries
   href: mailbox-queries.md
   description: What a listing filters on, how a page is bounded and continued, and how it reports the freshness of the local copy it answers from.

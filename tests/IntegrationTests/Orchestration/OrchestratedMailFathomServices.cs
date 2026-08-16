@@ -186,6 +186,10 @@ internal sealed class OrchestratedMailFathomServices : IAsyncDisposable
         builder.Services.AddSecretResolution(SecretValueInterpretation.ReferenceOnly);
         builder.Services.AddOutboundResiliencePipelines(builder.Configuration.GetSection("Resilience"));
         builder.Services.AddSingleton<IImapAccountSettingsProvider>(account);
+        // Where the same mailbox's mail is submitted, registered by the composition root from the same options section.
+        // The delivery session factory resolves it, so a harness without it would fail to compose rather than behave
+        // like a deployment that configured no submission endpoint.
+        builder.Services.AddSingleton<ISmtpAccountSettingsProvider>(new SyntheticSubmissionAccount(orchestration.MailServer));
         // The port every mailbox read resolves its scope through, registered by the composition root from the same
         // options section the account above comes from. Without it a search or a listing resolves nothing rather than
         // narrowing to this account, so it belongs here with the other host-bound ports.

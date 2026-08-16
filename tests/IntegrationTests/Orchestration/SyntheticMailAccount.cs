@@ -321,6 +321,15 @@ internal sealed class SyntheticMailAccount(
         trustedCertificateAuthorityReference: null);
 
     /// <inheritdoc />
+    /// <remarks>
+    /// The same policy the reading endpoint is reached under, because the orchestrated server speaks both protocols in
+    /// plain text on container ports and its submission endpoint advertises the password mechanisms this account
+    /// permits. A deployment would ordinarily differ here, which is the whole reason the two policies are read
+    /// separately.
+    /// </remarks>
+    public MailTransportSecurityPolicy? GetDeliveryPolicy(MailAccountId accountId) => this.GetPolicy(accountId);
+
+    /// <inheritdoc />
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "Ownership of the resolved material passes to the connection attempt that requested it, which disposes it when the attempt ends.")]
     public Task<ImapAccountSettings> GetSettingsAsync(string accountId, CancellationToken cancellationToken) =>
         Task.FromResult(new ImapAccountSettings(

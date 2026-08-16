@@ -30,6 +30,7 @@ using MailFathom.Application.Jobs.DeadLetters;
 using MailFathom.Application.Jobs.Execution;
 using MailFathom.Application.Jobs.Scheduling;
 using MailFathom.Application.Mail;
+using MailFathom.Application.Mail.Delivery;
 using MailFathom.Application.Mail.Mutations;
 using MailFathom.Application.Mail.Mutations.Audit;
 using MailFathom.Application.Mail.Mutations.Convergence;
@@ -67,6 +68,7 @@ using MailFathom.Infrastructure.Folders;
 using MailFathom.Infrastructure.Mail;
 using MailFathom.Infrastructure.Mail.Attachments;
 using MailFathom.Infrastructure.Mail.MailKit;
+using MailFathom.Infrastructure.Mail.MailKit.Delivery;
 using MailFathom.Infrastructure.Mail.MailKit.Writes;
 using MailFathom.Infrastructure.Mail.Mime;
 using MailFathom.Infrastructure.Mail.OAuth;
@@ -604,6 +606,19 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IMailboxWriteSessionFactory>(provider => new MailKitImapWriteSessionFactory(
             provider.GetRequiredService<MailboxWriteConnectionPool>(),
             provider.GetRequiredService<MailboxMutationTelemetry>()));
+        // Registered beside the write session and reaching neither it nor the pool, because submission is a second
+        // protocol against a second server. Nothing is pooled: a delivery opens its own connection and closes it, so
+        // there is no shared state a scope could hold, and the factory is scoped like every other mail adapter.
+        services.AddScoped<IMailDeliverySessionFactory>(provider => new MailKitSmtpDeliverySessionFactory(
+            MailKitSmtpClientFactory.CreateWithoutProtocolLogging,
+            SubmissionSocketConnector.ConnectAsync,
+            provider.GetRequiredService<ISmtpAccountSettingsProvider>(),
+            provider.GetRequiredService<IMailAccessTokenSource>(),
+            provider.GetRequiredService<OutboundOperationExecutor>(),
+            provider.GetRequiredService<ITransientFailureClassifier>(),
+            MailDeliveryTimeouts.Default,
+            provider.GetRequiredService<TimeProvider>(),
+            provider.GetRequiredService<ILogger<MailKitSmtpConnection>>()));
         // Registered beside the write session and against the same pool, because a creation is issued over the account's
         // one write connection. It is a separate port rather than a method on the session above, so a component holding
         // one of the two can never reach the other.

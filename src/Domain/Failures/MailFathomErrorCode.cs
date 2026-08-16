@@ -125,6 +125,15 @@ public readonly record struct MailFathomErrorCode
     /// </remarks>
     public static MailFathomErrorCode RemoteFolderCreationRefused { get; } = new(26001);
 
+    /// <summary>Gets subcategory 7, delivery sessions: a submission server did not serve an operation within the resilience budget configured for it.</summary>
+    /// <remarks>
+    /// It is a subcategory of its own rather than a second <see cref="MailboxUnavailable" />, because the two name
+    /// different servers reached over different protocols with different credentials. A deployment whose mailbox reads
+    /// perfectly while its submission endpoint refuses every connection is an ordinary configuration, and one code for
+    /// both would leave an operator unable to tell that from a mail provider that is down.
+    /// </remarks>
+    public static MailFathomErrorCode MailDeliveryUnavailable { get; } = new(27001);
+
     #endregion
 
     #region Category 3 — Persistence
@@ -375,6 +384,7 @@ public readonly record struct MailFathomErrorCode
         MailboxMutationFailedUnexpectedly,
         MailboxMutationDestinationMissing,
         RemoteFolderCreationRefused,
+        MailDeliveryUnavailable,
         PersistenceConcurrencyConflict,
         DatabaseSchemaOutOfDate,
         DatabaseSchemaStateUnreadable,

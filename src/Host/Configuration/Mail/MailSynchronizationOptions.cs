@@ -427,12 +427,52 @@ internal sealed class MailSynchronizationOptions
             material);
     }
 
+    /// <summary>Builds one account's submission settings, resolving its material for the caller to own.</summary>
+    /// <param name="accountId">The local account identifier.</param>
+    /// <param name="resolver">The resolver that turns configured references into material.</param>
+    /// <param name="trustAnchorLoader">The loader that turns configured material into a trust anchor.</param>
+    /// <param name="cancellationToken">Cancels the secret resolution.</param>
+    /// <returns>The settings, whose material the caller must dispose when its operation ends.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when the account is not configured, or configures no submission endpoint.</exception>
+    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "Ownership of the resolved material passes to the caller, which erases it when its operation ends.")]
+    internal async Task<SmtpAccountSettings> ResolveDeliverySettingsAsync(
+        string accountId,
+        ISecretReferenceResolver resolver,
+        TrustAnchorLoader trustAnchorLoader,
+        CancellationToken cancellationToken)
+    {
+        var normalizedAccountId = MailAccountId.Create(accountId).Value;
+        var account = this.FindAccount(normalizedAccountId);
+
+        if (!account.Delivery.IsConfigured)
+        {
+            throw new InvalidOperationException($"Account '{normalizedAccountId}' configures no submission endpoint.");
+        }
+
+        var material = await account.ResolveDeliveryConnectionMaterialAsync(resolver, trustAnchorLoader, cancellationToken);
+
+        return new SmtpAccountSettings(
+            normalizedAccountId,
+            account.Delivery.Host.Trim(),
+            account.Delivery.Port,
+            account.Delivery.ResolveUserName(account.UserName),
+            material);
+    }
+
     /// <inheritdoc />
     public MailTransportSecurityPolicy GetPolicy(MailAccountId accountId)
     {
         var account = this.FindAccount(accountId.Value);
 
         return account.CreateTransportSecurityPolicy();
+    }
+
+    /// <inheritdoc />
+    public MailTransportSecurityPolicy? GetDeliveryPolicy(MailAccountId accountId)
+    {
+        var account = this.FindAccount(accountId.Value);
+
+        return account.Delivery.IsConfigured ? account.CreateDeliveryTransportSecurityPolicy() : null;
     }
 
     /// <inheritdoc />
@@ -921,6 +961,13 @@ internal sealed class MailSynchronizationAccountOptions : IValidatableObject
     /// <remarks>An account authenticating with a password leaves the block empty, and validation then never reads it.</remarks>
     public MailAccountOAuthOptions OAuth { get; set; } = new();
 
+    /// <summary>Gets or sets where this account's mail is submitted, which is a second server from the one it is read on.</summary>
+    /// <remarks>
+    /// An account that names no submission host in the block configures no submission endpoint, and no delivery session
+    /// can be opened for it. That is the default and an ordinary shape: reading a mailbox needs nothing here.
+    /// </remarks>
+    public MailAccountDeliveryOptions Delivery { get; set; } = new();
+
     /// <summary>Gets or sets the authserv-id of the one server whose sender-authentication results this account believes.</summary>
     /// <remarks>
     /// <para>
@@ -1205,6 +1252,11 @@ internal sealed class MailSynchronizationAccountOptions : IValidatableObject
             yield return result;
         }
 
+        foreach (var result in this.ValidateDelivery(synchronizationEnabled))
+        {
+            yield return result;
+        }
+
         if (synchronizationEnabled)
         {
             if (string.IsNullOrWhiteSpace(this.AccountId))
@@ -1390,6 +1442,119 @@ internal sealed class MailSynchronizationAccountOptions : IValidatableObject
         }
     }
 
+    /// <summary>Reports every reason this account's submission endpoint could not be reached as configured.</summary>
+    /// <param name="synchronizationEnabled">Whether the account's reading endpoint is validated by the rules above.</param>
+    /// <returns>One result per unusable delivery setting, empty when the account configures none or configures a usable one.</returns>
+    /// <remarks>
+    /// The block is validated whether or not synchronization is enabled, because submitting and reading are separate
+    /// capabilities against separate servers and an account may be configured for one without the other. What the flag
+    /// decides is only which rules have already been reported elsewhere: the credential and the user name are the
+    /// account's and are checked above when synchronization is on, so repeating them here would report one missing
+    /// setting twice.
+    /// </remarks>
+    private IEnumerable<ValidationResult> ValidateDelivery(bool synchronizationEnabled)
+    {
+        if (this.Delivery is null)
+        {
+            yield return new ValidationResult(
+                $"Account '{this.AccountId}': the delivery configuration must be a block.",
+                [nameof(this.Delivery)]);
+
+            yield break;
+        }
+
+        if (!this.Delivery.IsConfigured)
+        {
+            // A credential or a login provisioned for an endpoint that does not exist is the shape an operator reads
+            // as working, so it is refused rather than left silently unused.
+            if (this.Delivery.Secrets is not null || !string.IsNullOrWhiteSpace(this.Delivery.UserName))
+            {
+                yield return new ValidationResult(
+                    $"Account '{this.AccountId}': the delivery block names a user name or a credential and no submission host, so neither could ever be used.",
+                    [nameof(this.Delivery)]);
+            }
+
+            yield break;
+        }
+
+        if (this.Delivery.Port is < 1 or > 65535)
+        {
+            yield return new ValidationResult(
+                $"Account '{this.AccountId}': the submission port must be between 1 and 65535.",
+                [$"{nameof(this.Delivery)}.{nameof(MailAccountDeliveryOptions.Port)}"]);
+        }
+
+        foreach (var result in this.ValidateDeliveryTransportSecurity())
+        {
+            yield return result;
+        }
+
+        if (!synchronizationEnabled)
+        {
+            foreach (var result in this.ValidateDeliveryCredentials())
+            {
+                yield return result;
+            }
+        }
+    }
+
+    /// <summary>Reports every transport security rule the submission endpoint's own connection mode breaks.</summary>
+    /// <returns>One result per violated rule, empty when the mode is safe under the account's policy.</returns>
+    /// <remarks>
+    /// Only the rules the mode itself decides are reported here. The permitted mechanisms and the certificate
+    /// authority belong to the account rather than to either endpoint, so they are reported once against the account's
+    /// own block instead of a second time against this one.
+    /// </remarks>
+    private IEnumerable<ValidationResult> ValidateDeliveryTransportSecurity() => this.TransportSecurity
+        .FindConfigurationErrors(this.Delivery.ConnectionSecurity)
+        .Where(error => error.Violation is { } violation && DecidedByConnectionSecurity(violation))
+        .Select(error => new ValidationResult(
+            $"Account '{this.AccountId}' submission endpoint: {error.Description} [{error.Violation}]",
+            [$"{nameof(this.Delivery)}.{nameof(MailAccountDeliveryOptions.ConnectionSecurity)}"]));
+
+    /// <summary>Reports a submission credential the account's policy needs and nothing supplies.</summary>
+    /// <returns>One result when a password mechanism is permitted and no reference is configured, empty otherwise.</returns>
+    /// <remarks>
+    /// The delivery block's own credential is what answers this where it names one, and the account's is what answers
+    /// it otherwise, so an account that submits with the same login it reads with configures nothing extra.
+    /// </remarks>
+    private IEnumerable<ValidationResult> ValidateDeliveryCredentials()
+    {
+        MailAuthenticationPolicy authentication;
+        try
+        {
+            authentication = this.CreateDeliveryTransportSecurityPolicy().Authentication;
+        }
+        catch (MailTransportSecurityPolicyViolationException)
+        {
+            // ValidateDeliveryTransportSecurity and ValidateTransportSecurity already reported this between them, and
+            // the rules below need a policy to read.
+            yield break;
+        }
+
+        if (string.IsNullOrWhiteSpace(this.Delivery.ResolveUserName(this.UserName)))
+        {
+            yield return new ValidationResult(
+                $"Account '{this.AccountId}': a submission user name is required, on the account or on its delivery block.",
+                [nameof(this.Delivery)]);
+        }
+
+        if (authentication.PermitsPasswordAuthentication
+            && string.IsNullOrWhiteSpace(this.Delivery.ResolveSecrets(this.Secrets).Password?.SecretReference))
+        {
+            yield return new ValidationResult(
+                $"Account '{this.AccountId}' submits with a password mechanism and configures no password secret reference, on the account or on its delivery block.",
+                [nameof(this.Delivery)]);
+        }
+    }
+
+    /// <summary>Reports whether a violated rule is one the endpoint's own connection mode decides.</summary>
+    private static bool DecidedByConnectionSecurity(MailTransportSecurityViolation violation) => violation is
+        MailTransportSecurityViolation.ConnectionSecurityNotSupported
+        or MailTransportSecurityViolation.UnencryptedConnectionRequiresExplicitOptIn
+        or MailTransportSecurityViolation.OpportunisticEncryptionRequiresExplicitOptIn
+        or MailTransportSecurityViolation.ClearTextAuthenticationRequiresEncryptedConnection;
+
     /// <summary>Reports an earliest received date that lies ahead of the supplied date.</summary>
     /// <param name="today">The current date the configured bound is read against.</param>
     /// <returns>One result when the bound is in the future, none otherwise.</returns>
@@ -1499,6 +1664,17 @@ internal sealed class MailSynchronizationAccountOptions : IValidatableObject
     /// <exception cref="MailTransportSecurityPolicyViolationException">Thrown when the configured combination is unsafe.</exception>
     internal MailTransportSecurityPolicy CreateTransportSecurityPolicy() => this.TransportSecurity.CreatePolicy();
 
+    /// <summary>Builds the validated policy this account's submission endpoint is reached under.</summary>
+    /// <returns>The policy the delivery adapter must obey.</returns>
+    /// <exception cref="MailTransportSecurityPolicyViolationException">Thrown when the configured combination is unsafe.</exception>
+    /// <remarks>
+    /// It is the account's own policy with the submission endpoint's connection mode in it, so the permitted
+    /// mechanisms, the accepted weakenings, and the certificate authority are one decision and only the encryption of
+    /// the channel differs between the two servers.
+    /// </remarks>
+    internal MailTransportSecurityPolicy CreateDeliveryTransportSecurityPolicy() =>
+        this.TransportSecurity.CreatePolicy(this.Delivery.ConnectionSecurity);
+
     /// <summary>Resolves the password and trust anchor one connection attempt needs.</summary>
     /// <param name="resolver">The resolver that turns configured references into material.</param>
     /// <param name="trustAnchorLoader">The loader that turns configured material into a trust anchor.</param>
@@ -1516,13 +1692,49 @@ internal sealed class MailSynchronizationAccountOptions : IValidatableObject
     /// guessing from whether a reference happens to be present.
     /// </para>
     /// </remarks>
-    internal async Task<MailAccountConnectionMaterial> ResolveConnectionMaterialAsync(
+    internal Task<MailAccountConnectionMaterial> ResolveConnectionMaterialAsync(
+        ISecretReferenceResolver resolver,
+        TrustAnchorLoader trustAnchorLoader,
+        CancellationToken cancellationToken) =>
+        this.ResolveConnectionMaterialAsync(
+            this.CreateTransportSecurityPolicy(),
+            this.Secrets,
+            resolver,
+            trustAnchorLoader,
+            cancellationToken);
+
+    /// <summary>Resolves the password and trust anchor one submission connection attempt needs.</summary>
+    /// <param name="resolver">The resolver that turns configured references into material.</param>
+    /// <param name="trustAnchorLoader">The loader that turns configured material into a trust anchor.</param>
+    /// <param name="cancellationToken">Cancels the retrieval.</param>
+    /// <returns>The material, which the caller must dispose when its operation ends.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when configuration that passed startup validation no longer yields usable material.</exception>
+    /// <remarks>
+    /// The credential is the delivery block's where it names one and the account's otherwise, because a provider that
+    /// authenticates one login for both protocols is the ordinary case. The trust anchor is the account's either way:
+    /// it is the authority this deployment added to the system trust store rather than a property of one endpoint.
+    /// </remarks>
+    internal Task<MailAccountConnectionMaterial> ResolveDeliveryConnectionMaterialAsync(
+        ISecretReferenceResolver resolver,
+        TrustAnchorLoader trustAnchorLoader,
+        CancellationToken cancellationToken) =>
+        this.ResolveConnectionMaterialAsync(
+            this.CreateDeliveryTransportSecurityPolicy(),
+            this.Delivery.ResolveSecrets(this.Secrets),
+            resolver,
+            trustAnchorLoader,
+            cancellationToken);
+
+    /// <summary>Resolves one endpoint's credential beside the account's trust anchor, owning neither afterwards.</summary>
+    private async Task<MailAccountConnectionMaterial> ResolveConnectionMaterialAsync(
+        MailTransportSecurityPolicy transportSecurityPolicy,
+        MailAccountSecretOptions secrets,
         ISecretReferenceResolver resolver,
         TrustAnchorLoader trustAnchorLoader,
         CancellationToken cancellationToken)
     {
-        var password = this.CreateTransportSecurityPolicy().Authentication.PermitsPasswordAuthentication
-            ? await this.Secrets.ResolvePasswordAsync(resolver, cancellationToken)
+        var password = transportSecurityPolicy.Authentication.PermitsPasswordAuthentication
+            ? await secrets.ResolvePasswordAsync(resolver, cancellationToken)
             : null;
 
         try

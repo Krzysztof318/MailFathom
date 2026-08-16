@@ -9,6 +9,7 @@ using MailFathom.Application.Emails.Embeddings;
 using MailFathom.Application.Persistence;
 using MailFathom.Application.Resilience;
 using MailFathom.Infrastructure.Mail;
+using MailFathom.Infrastructure.Mail.MailKit.Delivery;
 using MailFathom.Infrastructure.Mail.OAuth;
 using MailKit;
 using MailKit.Net.Smtp;
@@ -83,9 +84,15 @@ internal sealed class TransientFailureClassifier : ITransientFailureClassifier
     /// message and that the client should try later. Everything else, including a failure that happened before the
     /// message was ever submitted, is terminal here and left to the outbox to re-drive under its own idempotency.
     /// </para>
+    /// <para>
+    /// What a reply states is read by the classifier that lives beside the delivery session rather than decided a
+    /// second time here, so the reply code and the enhanced status code beside it can never be read one way by the
+    /// session and another way by the pipeline above it.
+    /// </para>
     /// </remarks>
     private static bool IsRepeatableDeliveryFailure(Exception failure) =>
-        failure is SmtpCommandException rejection && IsTemporarySmtpRejection(rejection.StatusCode);
+        failure is SmtpCommandException rejection
+        && SmtpReplyClassifier.Classify(rejection).Disposition is SmtpRejectionDisposition.Transient;
 
     /// <summary>Classifies a PostgreSQL failure.</summary>
     /// <remarks>
@@ -135,10 +142,6 @@ internal sealed class TransientFailureClassifier : ITransientFailureClassifier
 
     private static bool IsTransientTransportFailure(Exception failure) =>
         failure is SocketException or IOException or TimeoutException;
-
-    /// <summary>Reports whether an SMTP reply is a temporary negative completion, which the RFC 5321 4yz class defines as safe to repeat.</summary>
-    private static bool IsTemporarySmtpRejection(SmtpStatusCode statusCode) =>
-        (int)statusCode is >= 400 and < 500;
 
     /// <summary>Reports whether an HTTP status invites the same request again; an absent status means the response never arrived.</summary>
     private static bool IsTransientHttpStatus(HttpStatusCode? statusCode) => statusCode switch

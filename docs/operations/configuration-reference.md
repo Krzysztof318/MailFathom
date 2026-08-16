@@ -279,6 +279,27 @@ opt-in, and unsafe combinations fail startup.
 
 Certificate validation itself cannot be disabled; a private server is supported by trusting its authority.
 
+### Submission endpoint — `…:Delivery`
+
+Where this account's mail would be submitted, which is a second server and never the one above. The whole block is
+optional: an account that names no `Host` configures no submission endpoint, and no delivery session can be opened for
+it. Naming one has the block validated at startup, so an unsafe or incomplete endpoint is refused there rather than at
+the moment something tries to send. [Mail delivery](../features/mail-delivery.md) states what a session establishes and
+what it does not.
+
+| Key | Type | Default | Constraint | Change |
+| --- | --- | --- | --- | --- |
+| `…:Delivery:Host` | string | unset | Its presence is what configures the endpoint; every other key here has a default or an inherited value | reload |
+| `…:Delivery:Port` | int | `465` | 1 – 65535; the default is the implicit-TLS submission port, agreeing with the default connection security | reload |
+| `…:Delivery:ConnectionSecurity` | enum | `TlsOnConnect` | The same five modes judged by the same rules as the reading endpoint's, against the account's own opt-ins | reload |
+| `…:Delivery:UserName` | string | unset (the account's) | An identifier, not a secret; for a relay that authenticates a different login than the mailbox does | reload |
+| `…:Delivery:Secrets:Password` | secret block | unset (the account's) | A block naming no reference reads as absent and falls back to the account's credential | reload; material per connection |
+
+The permitted mechanisms, both weakenings, and the certificate authority are **not** repeated here: they are one
+decision the account makes about itself in `TransportSecurity` above, and both endpoints are reached under it. What
+differs between the two servers is where they are and how the channel to them is encrypted, which is exactly what this
+block carries.
+
 ## `Persistence` and the connection string
 
 Where the local copy lives. The connection settings travel through the validated snapshot, so repointing them reaches
