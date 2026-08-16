@@ -113,6 +113,26 @@ public sealed class SenderDomainTests
         Assert.Equal("bücher.example", domain.Value);
     }
 
+    /// <summary>A name within the resolver limits in its own script can leave them once encoded, and is refused there.</summary>
+    /// <remarks>
+    /// This is why the bounds are applied to both forms rather than only to what a header wrote: A-labels are the
+    /// longer encoding, and they are what a column and a resolver actually have to hold. Every label here stays inside
+    /// the label limit in both forms, so what refuses the name is the whole encoded name's length and nothing else.
+    /// </remarks>
+    [Fact]
+    public void TryCreate_DomainWithinTheLimitsUntilItIsEncoded_IsRefused()
+    {
+        // Arrange
+        var written = string.Join('.', Enumerable.Repeat(string.Concat(Enumerable.Repeat("ąćęłńóśźż", 3)), 8));
+
+        // Act
+        var created = SenderDomain.TryCreate(written, out _);
+
+        // Assert
+        Assert.True(written.Length <= SenderDomain.MaximumLength);
+        Assert.False(created);
+    }
+
     /// <summary>A name no encoder can put into A-labels matches nothing, so it is refused rather than compared as it arrived.</summary>
     [Fact]
     public void TryCreate_DomainNoEncoderAccepts_IsRefused()

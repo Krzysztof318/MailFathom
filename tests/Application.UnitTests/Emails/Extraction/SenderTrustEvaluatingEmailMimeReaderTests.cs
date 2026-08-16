@@ -95,6 +95,51 @@ public sealed class SenderTrustEvaluatingEmailMimeReaderTests
         Assert.Equal(SenderTrustLevel.Unknown, extraction.Metadata?.SenderTrust.Level);
     }
 
+    /// <summary>A message can display only one author, so the first mailbox the header carried is the one judged.</summary>
+    [Fact]
+    public async Task ReadMetadataAsync_SeveralFromParticipants_JudgesTheFirstOne()
+    {
+        // Arrange
+        Assert.True(TrustedSenderEntry.TryCreateForAddress("alice@partner.example", out var entry));
+        Assert.NotNull(entry);
+        var reader = new SenderTrustEvaluatingEmailMimeReader(
+            ReaderYielding(
+                WrittenBy("partner.example"),
+                [
+                    new EmailParticipant(EmailAddressRole.From, AddressOf("alice@partner.example")),
+                    new EmailParticipant(EmailAddressRole.From, AddressOf("mallory@partner.example")),
+                ]),
+            PolicyReaderFor("primary", SenderTrustPolicy.Create([], [entry], [])));
+
+        // Act
+        var extraction = await reader.ReadMetadataAsync(Content(), TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(SenderTrustLevel.Trusted, extraction.Metadata?.SenderTrust.Level);
+    }
+
+    /// <summary>A message displaying no author at all is judged rather than refused, and recognizes nobody.</summary>
+    [Fact]
+    public async Task ReadMetadataAsync_NoFromParticipant_IsRecordedAsUnknown()
+    {
+        // Arrange
+        Assert.True(TrustedSenderEntry.TryCreateForAddress("alice@partner.example", out var entry));
+        Assert.NotNull(entry);
+        var policy = SenderTrustPolicy.Create([], [entry], []);
+        var reader = new SenderTrustEvaluatingEmailMimeReader(
+            ReaderYielding(
+                WrittenBy("partner.example"),
+                [new EmailParticipant(EmailAddressRole.To, AddressOf("owner@work.example"))]),
+            PolicyReaderFor("primary", policy));
+
+        // Act
+        var extraction = await reader.ReadMetadataAsync(Content(), TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(SenderTrustLevel.Unknown, extraction.Metadata?.SenderTrust.Level);
+        Assert.Equal(policy.Revision, extraction.Metadata?.SenderTrust.PolicyRevision);
+    }
+
     /// <summary>Content nobody could parse carries no author to judge, and the failure has to reach the caller unchanged.</summary>
     [Fact]
     public async Task ReadMetadataAsync_ContentNoReaderCouldParse_IsCarriedThroughAsTheFailureItIs()
@@ -160,7 +205,12 @@ public sealed class SenderTrustEvaluatingEmailMimeReaderTests
     private static IEmailMimeReader ReaderYielding(
         SenderAuthentication authentication,
         string from,
-        string? sender = null)
+        string? sender = null) =>
+        ReaderYielding(authentication, ParticipantsOf(from, sender));
+
+    private static IEmailMimeReader ReaderYielding(
+        SenderAuthentication authentication,
+        IReadOnlyList<EmailParticipant> participants)
     {
         var reader = Substitute.For<IEmailMimeReader>();
 
@@ -170,7 +220,7 @@ public sealed class SenderTrustEvaluatingEmailMimeReaderTests
                 Subject: "Subject",
                 SentAt: null,
                 ReceivedAt: null,
-                ParticipantsOf(from, sender),
+                participants,
                 EmailThreadReferences.None,
                 EmailAttachmentSummary.None,
                 ExtractedEmailText.FromPlainTextBody("body", "body"),
