@@ -78,11 +78,18 @@ internal static class PersistenceConcurrencyConflicts
     /// putting one person into the book twice.
     /// </para>
     /// <para>
-    /// The last is the outgoing email identity, and it is the mutation identity's case with the most at stake. Two
+    /// The next is the outgoing email identity, and it is the mutation identity's case with the most at stake. Two
     /// callers asking for the same send reach the database together, one is refused here, and the retry reads back the
     /// winner's record and the message already stored under it — which is how one authored request delivers once. A
     /// collision left unrecognized would surface as a provider failure and leave the caller free to enqueue again, and
     /// a second delivery is the one duplication in this system that cannot be withdrawn afterwards.
+    /// </para>
+    /// <para>
+    /// The last is one message identifier bound to a thread by two arrivals. Two runs storing two messages of one
+    /// conversation read that nothing binds the identifier yet, and each assembles a thread and binds it; the loser
+    /// violates the key. The retry is what converges them: it re-reads, finds the winner's thread bound to the
+    /// identifier, and joins it — so two halves of one conversation reach one thread rather than the second run
+    /// failing on a violation it could not have avoided.
     /// </para>
     /// </remarks>
     internal static bool IsConcurrencyConflict(DbUpdateException exception) =>
@@ -101,6 +108,7 @@ internal static class PersistenceConcurrencyConflicts
                 or MailFathomDbContext.EmailEmbeddingPrimaryKeyConstraintName
                 or MailFathomDbContext.MailRederivationPositionPrimaryKeyConstraintName
                 or MailFathomDbContext.ContactAddressUniqueIndexName
-                or MailFathomDbContext.OutgoingEmailIdentityUniqueIndexName,
+                or MailFathomDbContext.OutgoingEmailIdentityUniqueIndexName
+                or MailFathomDbContext.EmailThreadIdentifierPrimaryKeyConstraintName,
         };
 }

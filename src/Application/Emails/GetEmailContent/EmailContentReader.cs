@@ -12,6 +12,7 @@ using MailFathom.Application.EmailContent.Storage;
 using MailFathom.Application.Emails.Extraction;
 using MailFathom.Application.Emails.Mailboxes;
 using MailFathom.Application.Emails.Summaries;
+using MailFathom.Application.Emails.Threads;
 using MailFathom.Application.Observability;
 using MailFathom.Application.SensitiveContent.Detection;
 using MailFathom.Application.SensitiveContent.Egress;
@@ -71,6 +72,7 @@ public sealed class EmailContentReader
     private const int MaximumScannedDisplayNames = 40;
 
     private readonly IStoredEmailSummaryReader summaryReader;
+    private readonly IEmailThreadReader threadReader;
     private readonly IEmailContentStore contentStore;
     private readonly IEmailContentRenderer renderer;
     private readonly IEmailContentRepairRequestStore repairRequestStore;
@@ -83,6 +85,7 @@ public sealed class EmailContentReader
 
     /// <summary>Initializes the use case.</summary>
     /// <param name="summaryReader">Reads one stored email's summary by its identity.</param>
+    /// <param name="threadReader">Reads the messages of the conversation an email belongs to.</param>
     /// <param name="contentStore">Reads the raw MIME stored for an email, with what was recorded about it.</param>
     /// <param name="renderer">Turns stored raw MIME into headers, a body, and a description of every attachment.</param>
     /// <param name="repairRequestStore">Records durably that a local copy has to be fetched or read again.</param>
@@ -95,6 +98,7 @@ public sealed class EmailContentReader
     /// <exception cref="ArgumentNullException">Thrown when any argument is <see langword="null" />.</exception>
     public EmailContentReader(
         IStoredEmailSummaryReader summaryReader,
+        IEmailThreadReader threadReader,
         IEmailContentStore contentStore,
         IEmailContentRenderer renderer,
         IEmailContentRepairRequestStore repairRequestStore,
@@ -106,6 +110,7 @@ public sealed class EmailContentReader
         AccessAuthorization authorization)
     {
         ArgumentNullException.ThrowIfNull(summaryReader);
+        ArgumentNullException.ThrowIfNull(threadReader);
         ArgumentNullException.ThrowIfNull(contentStore);
         ArgumentNullException.ThrowIfNull(renderer);
         ArgumentNullException.ThrowIfNull(repairRequestStore);
@@ -117,6 +122,7 @@ public sealed class EmailContentReader
         ArgumentNullException.ThrowIfNull(authorization);
 
         this.summaryReader = summaryReader;
+        this.threadReader = threadReader;
         this.contentStore = contentStore;
         this.renderer = renderer;
         this.repairRequestStore = repairRequestStore;
@@ -160,14 +166,20 @@ public sealed class EmailContentReader
 
         using var read = this.readTelemetry.BeginRead(MailboxReadOperation.ReadEmailContent, cancellationToken);
 
-        var outcomes = new List<EmailContentReadOutcome>(request.StoredEmailIds.Count);
+        // One instance per read, because a call routinely names several messages of one exchange: assembling per email
+        // would read that conversation, order it, and scan its subjects once for each of them.
+        var threads = new EmailThreadContexts(this.threadReader, this.scopeResolver, this.egressGuard);
+        var selection = await this.SelectAsync(request, threads, cancellationToken);
+
+        var outcomes = new List<EmailContentReadOutcome>(selection.StoredEmailIds.Count);
         var remainingCharacters = this.readOptions.MaxCharactersPerRead;
 
-        foreach (var storedEmailId in request.StoredEmailIds)
+        foreach (var storedEmailId in selection.StoredEmailIds)
         {
             var outcome = await this.ReadOneAsync(
                 storedEmailId,
                 request,
+                threads,
                 remainingCharacters,
                 cancellationToken);
 
@@ -180,13 +192,47 @@ public sealed class EmailContentReader
         // from a stale listing, and the count of what it asked for would say nothing about that.
         read.Completed(outcomes.Count(outcome => outcome.Content is not null));
 
-        return new GetEmailContentResult(new ReadOnlyCollection<EmailContentReadOutcome>(outcomes));
+        return new GetEmailContentResult(
+            new ReadOnlyCollection<EmailContentReadOutcome>(outcomes),
+            selection.Unread);
+    }
+
+    /// <summary>Resolves what the request selected into the emails this call reads, in the order it reads them.</summary>
+    /// <remarks>
+    /// <para>
+    /// A named list is already the answer. A named conversation becomes one here, in the conversation's own order and
+    /// under the same bound a caller's list is held to, so everything after this point reads one shape whichever form
+    /// the caller used.
+    /// </para>
+    /// <para>
+    /// Nothing about a conversation this deployment does not hold is reported as a failure. It resolves to no messages,
+    /// exactly as a conversation whose messages all sit in folders withheld from tools does, because telling the two
+    /// apart would let a caller learn which conversations exist by asking about them.
+    /// </para>
+    /// </remarks>
+    private async Task<ReadSelection> SelectAsync(
+        GetEmailContentRequest request,
+        EmailThreadContexts threads,
+        CancellationToken cancellationToken)
+    {
+        if (request.ThreadId is not { } threadId)
+        {
+            return new ReadSelection(request.StoredEmailIds, []);
+        }
+
+        var assembled = await threads.AssembleAsync(threadId, cancellationToken);
+        var ordered = assembled.Messages.Select(placed => placed.Message.StoredEmailId).ToArray();
+
+        return new ReadSelection(
+            [.. ordered.Take(GetEmailContentRequest.MaximumEmails)],
+            [.. ordered.Skip(GetEmailContentRequest.MaximumEmails)]);
     }
 
     /// <summary>Reads one email, or reports why it could not be.</summary>
     private async Task<EmailContentReadOutcome> ReadOneAsync(
         StoredEmailId storedEmailId,
         GetEmailContentRequest request,
+        EmailThreadContexts threads,
         int remainingCharacters,
         CancellationToken cancellationToken)
     {
@@ -204,8 +250,11 @@ public sealed class EmailContentReader
         // neither schedules a repair. They are answered apart because only one of them is worth asking about again.
         if (BodyOfUnstoredContent(summary.ContentAvailability) is { } unstoredBody)
         {
-            return EmailContentReadOutcome.Read(
-                await this.GuardedAsync(ContentWithoutStoredMime(summary, unstoredBody), cancellationToken));
+            return await this.PublishAsync(
+                ContentWithoutStoredMime(summary, unstoredBody),
+                summary,
+                threads,
+                cancellationToken);
         }
 
         var content = await this.contentStore.FindStoredContentAsync(storedEmailId, cancellationToken);
@@ -238,8 +287,31 @@ public sealed class EmailContentReader
             request.IncludeAttachmentDownloadLinks,
             cancellationToken);
 
-        return EmailContentReadOutcome.Read(
-            await this.GuardedAsync(ContentFrom(summary, rendered, attachments), cancellationToken));
+        return await this.PublishAsync(
+            ContentFrom(summary, rendered, attachments),
+            summary,
+            threads,
+            cancellationToken);
+    }
+
+    /// <summary>Places the email in its conversation and scans what the author wrote, in that order.</summary>
+    /// <remarks>
+    /// The conversation is attached before the scan rather than after it because it arrives already scanned: its
+    /// subjects were guarded once per conversation while it was assembled, so a read naming several messages of one
+    /// exchange pays for that once instead of once per message.
+    /// </remarks>
+    private async Task<EmailContentReadOutcome> PublishAsync(
+        ReadEmailContent content,
+        EmailSummary summary,
+        EmailThreadContexts threads,
+        CancellationToken cancellationToken)
+    {
+        var placed = content with
+        {
+            Thread = await threads.ContextForAsync(summary.ThreadId, summary.StoredEmailId, cancellationToken),
+        };
+
+        return EmailContentReadOutcome.Read(await this.GuardedAsync(placed, cancellationToken));
     }
 
     /// <summary>Scans what the message's author wrote, before any of it becomes a caller's.</summary>
@@ -262,6 +334,11 @@ public sealed class EmailContentReader
     /// could report a region covering the end of one field and the start of the next. The cost is one scan per value
     /// per read, paid on every call and stored nowhere: keeping a map of where a message's credentials sit would be a
     /// new artifact pointing straight at them, which a cheaper read does not justify.
+    /// </para>
+    /// <para>
+    /// The conversation is not scanned here and does not need to be. Its subjects were guarded once, per conversation,
+    /// while it was assembled — which is what keeps a call naming ten messages of one exchange from scanning the same
+    /// fifty subjects ten times.
     /// </para>
     /// </remarks>
     private async Task<ReadEmailContent> GuardedAsync(ReadEmailContent content, CancellationToken cancellationToken)
@@ -595,4 +672,11 @@ public sealed class EmailContentReader
         EmailAddress.TryCreate(displayName, address, out var emailAddress)
             ? [new EmailParticipant(role, emailAddress)]
             : [];
+
+    /// <summary>The emails one read serves, and the ones a named conversation held that it did not.</summary>
+    /// <param name="StoredEmailIds">The emails to read, in the order they are read and the budget is spent.</param>
+    /// <param name="Unread">The named conversation's remaining messages, in its order, or empty for a named list.</param>
+    private sealed record ReadSelection(
+        IReadOnlyList<StoredEmailId> StoredEmailIds,
+        IReadOnlyList<StoredEmailId> Unread);
 }

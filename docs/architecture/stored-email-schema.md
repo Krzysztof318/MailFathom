@@ -486,6 +486,47 @@ The row is never amended. An execution states a reading that has already happene
 
 Nothing in either table is personal data. Rule names, folder aliases, mutation names, fact names, a derived revision, two identifiers, an instant, and a duration are the whole of it, and none is derived from what a message said.
 
+## The conversation a message belongs to
+
+`email_threads` holds one row per conversation, and `email_thread_identifiers` one row per message identifier that
+conversation answers to. Both are owned by exactly one mailbox account and cascade with it. On `stored_emails` two
+nullable `uuid` columns carry the result: `EmailThreadId` names the conversation the message was placed in, and
+`ParentStoredEmailId` names the stored message it answers.
+
+| Column | What it records |
+|---|---|
+| `email_threads.Id` | The conversation's identity, a version-7 identifier, and the value every tool publishes. Minted when a message reaches no existing conversation |
+| `email_threads.MailboxAccountId` | The account the conversation belongs to. Membership never spans two accounts, because a message identifier is only unique in the sense the sender's own system gave it, and one account's correspondence must not be assembled out of another's |
+| `email_threads.AssembledAt` | When the conversation was started. It is what decides a merge: a message naming two conversations folds the later one into the earlier, so which of them survives is a fact about the mailbox rather than about the order somebody re-derived it in |
+| `email_threads.MergedIntoEmailThreadId` | The conversation this one was folded into, null while it is its own. The row is kept rather than deleted, so an identifier a tool published before the merge still resolves — a read follows the chain to the survivor instead of answering that the conversation is gone |
+| `email_thread_identifiers.MailboxAccountId`, `IdentifierHash` | The primary key. The hash is the lower-case hexadecimal SHA-256 digest of the identifier as it was stored, `character varying(64)` |
+| `email_thread_identifiers.EmailThreadId` | The conversation the identifier belongs to. Repointed rather than duplicated when two conversations merge |
+
+**The identifier is stored as a digest and never as itself.** A header is bounded at the 998 octets RFC 5322 allows,
+and a B-tree entry that wide is one PostgreSQL refuses at insert time — which would fail the arrival transaction rather
+than lose a value. SHA-256 is chosen for collision resistance rather than for secrecy: nothing here is a secret and
+nothing verifies one, and what the digest has to guarantee is that two identifiers never collapse into one conversation.
+Nothing is folded, trimmed, or normalized before it is hashed, because the mail ecosystem compares an identifier octet
+for octet. Storing no raw identifier is also the narrower record: the row says that *some* message named this
+conversation without carrying the name a sender wrote.
+
+**An identifier nobody stored is a row of its own.** Membership is decided from `internet_message_id`, `in_reply_to`,
+and the thread references alone, so two replies to a message this deployment never fetched bind the same absent
+identifier and land in one conversation. That is why the identifiers are a table rather than a lookup over
+`stored_emails`: the conversation exists before, and often without, the message at its root.
+
+`ParentStoredEmailId` is what makes a conversation a tree rather than a set, and it is a self-referencing foreign key on
+`stored_emails` with `ON DELETE SET NULL` — as is the conversation column beside it. A message whose parent is erased
+becomes a root rather than taking the erasure with it. Nothing stores an order: where a message sits in its conversation
+is computed on every read, because storing it would mean rewriting every row of a conversation each time one message
+arrived. [The MCP tools](../features/mcp-tools.md#the-conversation-a-message-belongs-to) describe what a caller sees of
+all this, and [bringing stored mail up to a later
+release](../features/imap-synchronization.md#bringing-stored-mail-up-to-a-later-release) describes the one pass that
+writes these columns outside the arrival transaction.
+
+Nothing in either table is personal data as stored. An account alias, a UUID, an instant, and a digest of an identifier
+are MailFathom's own names for things.
+
 ## The contact book
 
 `contacts` holds one row per person the owner's book knows, and `contact_addresses` one row per address that person
@@ -678,6 +719,11 @@ in every recipient's client. A second enqueue of the same identity therefore lea
 | `ix_stored_emails_awaiting_content` | `(mail_folder_id, uid_validity, uid)` over the rows whose `content_availability` is `AwaitingStorageHeadroom` | The queue of occurrences stored without their payload, which every folder run reads once. The filter is what keeps the index proportionate to that queue rather than to the mailbox: on a deployment that has never reached its storage ceiling the index is empty, and the read costs nothing instead of walking a folder's whole occurrence index to discover that no row qualifies |
 | `ix_stored_emails_account_identity` | `(mailbox_account_id, id)` | The order a whole-mailbox rule run walks an account's mail in. The identity rather than the timeline, because a walk that has to resume needs a total order no later write disturbs and a position that is one column rather than a nullable timestamp paired with a tie-breaker |
 | `ix_stored_emails_awaiting_rule_evaluation` | `(mailbox_account_id, id)` over the rows whose `rules_evaluated_at` is null | The queue of mail no rule pass has evaluated, read once per account run. The filter is the point: in steady state almost every row of an account has been evaluated, so without it the read would walk the account's whole index to find the handful that qualify, on every run of every account |
+| `ix_stored_emails_thread` | `(EmailThreadId, Id)` | One conversation's messages, in the total order a read assembles them from. The identity is in the key because the order a conversation is published in is computed rather than stored, and the read needs a stable one to bound and page the raw set by |
+| `IX_stored_emails_ParentStoredEmailId` | `(ParentStoredEmailId)` | The self-referencing key back to the message a reply answers, which is what erasing a message reaches its replies by rather than scanning |
+| `pk_email_thread_identifiers` | `(MailboxAccountId, IdentifierHash)`, unique | Which conversation an identifier belongs to, which is the question every arriving message asks once per identifier it names. Uniqueness is also the race: two messages binding one identifier at once leave one writer to retry against what the other wrote |
+| `ix_email_thread_identifiers_thread` | `(EmailThreadId)` | The identifiers a merge has to repoint at the surviving conversation |
+| `IX_email_threads_MailboxAccountId` | `(MailboxAccountId)` | The key back to the owning account, which is what erasing one reaches its conversations by |
 | `ix_stored_emails_sender` | `(sender_normalized_address)` | Filtering by who sent a message |
 | `ix_stored_emails_to_addresses` | `(to_addresses)`, GIN | Containment tests over the `To` recipients |
 | `ix_stored_emails_cc_addresses` | `(cc_addresses)`, GIN | Containment tests over the `Cc` recipients |

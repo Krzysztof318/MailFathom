@@ -98,7 +98,8 @@ public sealed class GetEmailContentToolMetadataTests
     public void AddMailFathomServer_AdvertisesTheEmailIdentifiersAndTheTwoFlagsAsInputSchemaProperties()
     {
         // Arrange
-        string[] expectedProperties = ["storedEmailIds", "includeSanitizedHtml", "includeAttachmentDownloadLinks"];
+        string[] expectedProperties =
+            ["storedEmailIds", "threadId", "includeSanitizedHtml", "includeAttachmentDownloadLinks"];
 
         // Act
         var advertisedProperties = AdvertisedGetEmailContentTool()
@@ -128,16 +129,19 @@ public sealed class GetEmailContentToolMetadataTests
         Assert.All(describedProperties, property => Assert.True(property.HasDescription, $"'{property.Name}' carries no usable description."));
     }
 
-    /// <summary>The emails are named rather than defaulted, so a call that names none is refused instead of answering about some email.</summary>
+    /// <summary>
+    /// Neither way of naming what to read is required on its own, because exactly one of them has to be given: a schema
+    /// marking either one required would advertise the other as unusable, and the refusal a call carrying both or
+    /// neither earns is the tool's own rather than something a schema can state.
+    /// </summary>
     [Fact]
-    public void AddMailFathomServer_AdvertisesTheEmailIdentifiersAsRequiredAndBothFlagsAsOptional()
+    public void AddMailFathomServer_AdvertisesNeitherWayOfNamingWhatToReadAsRequired()
     {
         // Arrange, Act
         var inputSchema = AdvertisedGetEmailContentTool().InputSchema;
 
         // Assert
-        var requiredProperties = inputSchema.GetProperty("required").EnumerateArray().Select(value => value.ToString()).ToArray();
-        Assert.Equal(["storedEmailIds"], requiredProperties);
+        Assert.False(inputSchema.TryGetProperty("required", out _));
     }
 
     /// <summary>Several emails per call is the whole point of the contract, so the argument is advertised as a list.</summary>
@@ -151,8 +155,32 @@ public sealed class GetEmailContentToolMetadataTests
             .GetProperty("storedEmailIds");
 
         // Assert
-        Assert.Equal("array", storedEmailIds.GetProperty("type").GetString());
-        Assert.Equal("string", storedEmailIds.GetProperty("items").GetProperty("type").GetString());
+        Assert.Equal(["array", "null"], TypesOf(storedEmailIds));
+        Assert.Contains("string", TypesOf(storedEmailIds.GetProperty("items")), StringComparer.Ordinal);
+    }
+
+    /// <summary>The conversation is named as one identifier rather than as a list, since a read serves exactly one.</summary>
+    [Fact]
+    public void AddMailFathomServer_AdvertisesTheConversationIdentifierAsASingleString()
+    {
+        // Arrange, Act
+        var threadId = AdvertisedGetEmailContentTool()
+            .InputSchema
+            .GetProperty("properties")
+            .GetProperty("threadId");
+
+        // Assert
+        Assert.Equal(["string", "null"], TypesOf(threadId));
+    }
+
+    /// <summary>Reads the types a property admits, which an argument a caller may omit states as a list rather than as one name.</summary>
+    private static string[] TypesOf(JsonElement property)
+    {
+        var type = property.GetProperty("type");
+
+        return type.ValueKind is JsonValueKind.Array
+            ? [.. type.EnumerateArray().Select(value => value.GetString() ?? string.Empty)]
+            : [type.GetString() ?? string.Empty];
     }
 
     /// <summary>The cancellation token the tool takes is the host's concern and must never become a protocol argument.</summary>

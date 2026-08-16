@@ -1,0 +1,111 @@
+// Copyright © 2026 Krzysztof Kasprowicz
+// Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
+// Project repository: https://github.com/Krzysztof318/MailFathom
+
+using MailFathom.Application.Emails.Threads;
+using MailFathom.CodeCoverage;
+using MailFathom.Domain.Accounts;
+using MailFathom.Domain.Emails;
+using MailFathom.Domain.Folders;
+using Microsoft.EntityFrameworkCore;
+
+namespace MailFathom.Infrastructure.Persistence.Emails.Threads;
+
+/// <summary>Reads one conversation's messages out of PostgreSQL.</summary>
+/// <remarks>
+/// A projection rather than an entity load, which is the same privacy control every other mailbox read applies: the
+/// query names the columns a thread publishes, so nothing here can reach the stored raw MIME, and no row enters the
+/// change tracker on a path that only reads.
+/// </remarks>
+[RequiresIntegrationCoverage]
+internal sealed class StoredEmailThreadReader(MailFathomDbContext dbContext) : IEmailThreadReader
+{
+    /// <summary>How many merges one identifier is followed through before the chain is treated as unusable.</summary>
+    /// <remarks>
+    /// A merge points straight at the survivor, so a chain forms only when a survivor is itself merged into a thread
+    /// older still — which needs the older thread to have been unreachable until a third message named both. That is
+    /// rare and shallow. The ceiling is against a chain that reached the database some other way, where following it
+    /// forever would hang a protocol call rather than answer it.
+    /// </remarks>
+    private const int MaximumMergeChainWalk = 64;
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<EmailThreadMessage>> ReadMessagesAsync(
+        EmailThreadId threadId,
+        CancellationToken cancellationToken)
+    {
+        if (await this.SurvivingThreadAsync(threadId.Value, cancellationToken) is not { } surviving)
+        {
+            return [];
+        }
+
+        var rows = await dbContext.StoredEmails
+            .AsNoTracking()
+            .Where(email => email.EmailThreadId == surviving)
+            .Where(StoredEmailTombstone.IsNotTombstoned)
+            .OrderBy(email => email.Id)
+            .Take(IEmailThreadReader.MaximumAssembledMessages)
+            .Select(email => new
+            {
+                email.Id,
+                email.MailboxAccountId,
+                FolderAlias = email.MailFolder.Alias,
+                email.ParentStoredEmailId,
+                email.Subject,
+                email.SentAt,
+                email.SenderAddress,
+            })
+            .ToArrayAsync(cancellationToken);
+
+        return
+        [
+            .. rows.Select(row => new EmailThreadMessage
+            {
+                StoredEmailId = StoredEmailId.Create(row.Id),
+                AccountId = MailAccountId.Create(row.MailboxAccountId),
+                FolderAlias = MailFolderAlias.Create(row.FolderAlias),
+                ParentStoredEmailId = row.ParentStoredEmailId is { } parent
+                    ? StoredEmailId.Create(parent)
+                    : null,
+                Subject = row.Subject,
+                SentAt = row.SentAt,
+                SenderAddress = row.SenderAddress,
+            }),
+        ];
+    }
+
+    /// <summary>Follows a merged conversation to the one it was folded into, or reports that nothing holds it.</summary>
+    /// <remarks>
+    /// The walk is what makes an identifier a tool published before a merge keep working. Every message of a merged
+    /// thread was repointed at the survivor when the merge happened, so this is only ever needed for the identifier
+    /// itself rather than for finding the membership.
+    /// </remarks>
+    private async Task<Guid?> SurvivingThreadAsync(Guid threadId, CancellationToken cancellationToken)
+    {
+        var visited = new HashSet<Guid>();
+        var candidate = (Guid?)threadId;
+
+        for (var step = 0; step < MaximumMergeChainWalk && candidate is { } current && visited.Add(current); step++)
+        {
+            var merged = await dbContext.EmailThreads
+                .AsNoTracking()
+                .Where(thread => thread.Id == current)
+                .Select(thread => new { thread.MergedIntoEmailThreadId })
+                .SingleOrDefaultAsync(cancellationToken);
+
+            if (merged is null)
+            {
+                return null;
+            }
+
+            if (merged.MergedIntoEmailThreadId is not { } survivor)
+            {
+                return current;
+            }
+
+            candidate = survivor;
+        }
+
+        return null;
+    }
+}

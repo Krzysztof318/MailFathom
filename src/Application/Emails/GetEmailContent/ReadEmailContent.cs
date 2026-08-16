@@ -4,6 +4,7 @@
 
 using MailFathom.Application.EmailContent.Rendering;
 using MailFathom.Application.Emails.Summaries;
+using MailFathom.Application.Emails.Threads;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Folders;
@@ -99,4 +100,15 @@ public sealed record ReadEmailContent
     /// act on, and it is read from the stored columns rather than by re-reading the message's headers.
     /// </remarks>
     public required SenderAuthenticationEvidence SenderAuthenticationEvidence { get; init; }
+
+    /// <summary>
+    /// Gets the conversation this email belongs to and the other messages in it, or <see langword="null" /> when nothing
+    /// has placed the email in one.
+    /// </summary>
+    /// <remarks>
+    /// It answers the question a reader asks straight after reading a message: what else is in this exchange, and where
+    /// does what I am reading sit in it. Nothing here is body text — the other messages are named rather than
+    /// reproduced — so a conversation is recognized here and read deliberately with a second call.
+    /// </remarks>
+    public ReadEmailThread? Thread { get; init; }
 }

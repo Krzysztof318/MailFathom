@@ -232,6 +232,25 @@ internal sealed class MailFathomDbContext : DbContext
     /// <summary>The index an operator reads what has stopped through, filtered to the one state that waits for them.</summary>
     internal const string JobDeadLetterIndexName = "ix_jobs_dead_lettered";
 
+    /// <summary>The key that binds one message identifier of one account to exactly one thread.</summary>
+    /// <remarks>
+    /// Named because it is what a losing writer is recognized by. Two arrivals referring to the same identifier for the
+    /// first time both find nothing and both insert, so the second one violates this key — a race to resolve by
+    /// re-reading what the winner assembled, rather than a failure to report.
+    /// </remarks>
+    internal const string EmailThreadIdentifierPrimaryKeyConstraintName = "pk_email_thread_identifiers";
+
+    /// <summary>The index a thread's identifiers are repointed through when two threads merge.</summary>
+    internal const string EmailThreadIdentifierThreadIndexName = "ix_email_thread_identifiers_thread";
+
+    /// <summary>The index a thread's messages are read and repointed through.</summary>
+    /// <remarks>
+    /// The one index every thread read runs on: assembling an arrival resolves its parent and its already-stored
+    /// children within the thread, and publishing a thread reads its members. It carries the identity beside the thread
+    /// so the read that orders a conversation arrives already sorted on the tie-breaker the order ends with.
+    /// </remarks>
+    internal const string StoredEmailThreadIndexName = "ix_stored_emails_thread";
+
     private readonly PostgresTextSearchConfiguration textSearchConfiguration;
 
     /// <summary>Initializes a new MailFathom EF Core context.</summary>
@@ -309,6 +328,10 @@ internal sealed class MailFathomDbContext : DbContext
         this.Set<MailAnsweringAuditEntryEntity>();
 
     internal DbSet<MailRuleExecutionEntity> MailRuleExecutions => this.Set<MailRuleExecutionEntity>();
+
+    internal DbSet<EmailThreadEntity> EmailThreads => this.Set<EmailThreadEntity>();
+
+    internal DbSet<EmailThreadIdentifierEntity> EmailThreadIdentifiers => this.Set<EmailThreadIdentifierEntity>();
 
     internal DbSet<ContactEntity> Contacts => this.Set<ContactEntity>();
 
@@ -447,6 +470,19 @@ internal sealed class MailFathomDbContext : DbContext
                 .WithMany(folder => folder.StoredEmails)
                 .HasForeignKey(email => email.MailFolderId)
                 .OnDelete(DeleteBehavior.Cascade);
+
+            // Neither association takes the mail with it. A thread is an assembly of messages rather than their owner,
+            // so losing one must leave every message readable and unthreaded; and an answer must outlive the message it
+            // answers, published as a root of what remains rather than erased alongside it.
+            entity.HasOne<EmailThreadEntity>()
+                .WithMany()
+                .HasForeignKey(email => email.EmailThreadId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasOne<StoredEmailEntity>()
+                .WithMany()
+                .HasForeignKey(email => email.ParentStoredEmailId)
+                .OnDelete(DeleteBehavior.SetNull);
         });
 
         modelBuilder.Entity<EmailMessageContentEntity>(entity =>
@@ -641,9 +677,67 @@ internal sealed class MailFathomDbContext : DbContext
         ConfigureMailboxMutationAuditEntry(modelBuilder);
         ConfigureMailAnsweringAuditEntry(modelBuilder);
         ConfigureMailRuleExecution(modelBuilder);
+        ConfigureEmailThread(modelBuilder);
         ConfigureContact(modelBuilder);
         ConfigureJob(modelBuilder);
         ConfigureJobSchedule(modelBuilder);
+    }
+
+    /// <summary>Declares the conversations an account's stored mail is assembled into, and what binds mail to them.</summary>
+    /// <remarks>
+    /// <para>
+    /// The thread row holds an identity and nothing derivable from its members, so no column here can disagree with the
+    /// emails that reference it. Both tables cascade from the account, because a conversation is an assembly of that
+    /// account's mail and outlives none of it: erasing the account erases the threads with the messages.
+    /// </para>
+    /// <para>
+    /// The identifier table's key is the whole row bar the thread it points at, which is what makes assembly idempotent
+    /// without a read-then-write: an arrival that re-registers an identifier it already registered is refused by the key
+    /// rather than duplicated, and a genuine race between two first arrivals is reported as the conflict it is.
+    /// </para>
+    /// <para>
+    /// The two pointers the email itself carries are declared with the rest of that row rather than here, and both are
+    /// set to null on delete rather than cascading: erasing one message must leave its answer readable as a root of what
+    /// remains rather than take the answer with it, and removing a conversation must leave its mail in place.
+    /// </para>
+    /// </remarks>
+    private static void ConfigureEmailThread(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<EmailThreadEntity>(entity =>
+        {
+            entity.ToTable("email_threads");
+            entity.HasKey(thread => thread.Id);
+            entity.Property(thread => thread.Id).ValueGeneratedNever();
+            entity.Property(thread => thread.MailboxAccountId).HasMaxLength(128).IsRequired();
+
+            entity.HasOne<MailboxAccountEntity>()
+                .WithMany()
+                .HasForeignKey(thread => thread.MailboxAccountId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<EmailThreadIdentifierEntity>(entity =>
+        {
+            entity.ToTable("email_thread_identifiers");
+            entity.Property(identifier => identifier.MailboxAccountId).HasMaxLength(128);
+            // Bounded rather than declared fixed-length, although every value this column ever holds is exactly that
+            // long. A blank-padded PostgreSQL `character(n)` compares by its own rules and is the type every other
+            // bounded string in this model deliberately is not, and the width is already guaranteed by the digest that
+            // produces the value rather than by the column that stores it.
+            entity.Property(identifier => identifier.IdentifierHash)
+                .HasMaxLength(EmailThreadIdentifierEntity.IdentifierHashLength);
+
+            entity.HasKey(identifier => new { identifier.MailboxAccountId, identifier.IdentifierHash })
+                .HasName(EmailThreadIdentifierPrimaryKeyConstraintName);
+
+            entity.HasIndex(identifier => identifier.EmailThreadId)
+                .HasDatabaseName(EmailThreadIdentifierThreadIndexName);
+
+            entity.HasOne<EmailThreadEntity>()
+                .WithMany()
+                .HasForeignKey(identifier => identifier.EmailThreadId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
     }
 
     /// <summary>Declares the contact book: people, the addresses they use, and which of them is the default.</summary>
@@ -1604,6 +1698,13 @@ internal sealed class MailFathomDbContext : DbContext
                 StoredEmailAwaitingRuleEvaluationIndexName)
             .HasDatabaseName(StoredEmailAwaitingRuleEvaluationIndexName)
             .HasFilter($"\"{nameof(StoredEmailEntity.RulesEvaluatedAt)}\" IS NULL");
+
+        // Every read of a conversation runs on this: assembling an arrival asks its thread for the message it answers
+        // and for the messages already stored that answer it, and publishing a thread reads its whole membership. The
+        // identity is carried beside the thread because it is the last term of the one order a thread has, so the rows
+        // arrive already sorted on the tie-breaker rather than being sorted again for it.
+        entity.HasIndex(email => new { email.EmailThreadId, email.Id })
+            .HasDatabaseName(StoredEmailThreadIndexName);
 
         entity.HasIndex(email => email.SenderNormalizedAddress)
             .HasDatabaseName(StoredEmailSenderIndexName);

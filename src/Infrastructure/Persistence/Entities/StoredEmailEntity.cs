@@ -178,6 +178,36 @@ internal sealed class StoredEmailEntity
     /// <summary>Gets or sets the referenced ancestors in header order, which is the path back to the conversation root.</summary>
     public string[] ThreadReferences { get; set; } = [];
 
+    /// <summary>
+    /// Gets or sets the conversation the three identifiers above placed this email in, or <see langword="null" /> while
+    /// nothing has placed it.
+    /// </summary>
+    /// <remarks>
+    /// Nullable because its absence is a statement about this deployment rather than about the message: a row stored
+    /// before this release was assembled into nothing, and stays that way until <c>mfctl mailbox rederive</c> re-reads
+    /// it. Every arrival from this release onwards is assigned in the transaction that commits it, so the column is
+    /// absent on old mail and present on new.
+    /// </remarks>
+    public Guid? EmailThreadId { get; set; }
+
+    /// <summary>
+    /// Gets or sets the stored email this one answers, or <see langword="null" /> when it answers none this deployment
+    /// holds.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The edge <see cref="InReplyTo" /> names, resolved to a row. It is what makes a thread a tree rather than a set,
+    /// and it is stored rather than re-derived on every read because re-deriving it would mean matching identifier
+    /// strings across a thread's rows each time anybody opened one.
+    /// </para>
+    /// <para>
+    /// A message whose named ancestor is not stored here carries none and is a root of its thread, which is the honest
+    /// answer rather than a gap: nothing local knows what sits above it. A relation that would close a cycle is refused
+    /// rather than written, because an order cannot be produced from one.
+    /// </para>
+    /// </remarks>
+    public Guid? ParentStoredEmailId { get; set; }
+
     public int AttachmentCount { get; set; }
 
     public long AttachmentTotalSizeOctets { get; set; }

@@ -169,6 +169,8 @@ configured name for an account and carries nothing the caller did not already wr
 | `51004` | The call named an email with text that is no identifier this system issues | A `storedEmailIds` element that is blank, not a UUID, or the all-zero UUID, refused before anything is looked up |
 | `51005` | A content read named no emails, or more than one call serves | A `storedEmailIds` list that is empty or holds more than 10 entries, refused rather than truncated |
 | `51006` | A content read named the same email more than once | A `storedEmailIds` list carrying one identifier twice, in any spelling, refused rather than served twice or collapsed |
+| `51007` | A content read named both ways of selecting what to read, or neither | A call carrying `storedEmailIds` and `threadId` together, or omitting both, refused rather than resolved by precedence |
+| `51008` | The call named a conversation with text that is no identifier this system issues | A `threadId` that is blank, not a UUID, or the all-zero UUID, refused before anything is looked up |
 | `52001` | A continuation cursor is not one this system issued | A truncated, hand-written, or foreign cursor |
 | `52002` | A continuation cursor was issued for different filters | A cursor reused after a filter or the reading direction changed |
 | `53001` | The call named a mail account this deployment does not serve | An account identifier nobody configured, or one belonging to someone else — the two are deliberately one answer |
@@ -339,7 +341,7 @@ states whether the account's junk folder took part, and `folderFreshness` states
 covered folder is.
 
 Each summary carries the stable local identifier a content read is performed by, the account identifier and the display
-name it is published under, the folder alias, the message identifier, the subject, the sender address and display name, the sender verdict, the `To` addresses, the sent and received timestamps, the
+name it is published under, the folder alias, the message identifier, the conversation identifier, the subject, the sender address and display name, the sender verdict, the `To` addresses, the sent and received timestamps, the
 size in bytes, the attachment summary, the remote flags with the time they were observed, and whether raw content is
 available locally. It is the use case's projection published as it stands, not narrowed a second time here — a boundary
 that re-decided what a listing may carry would put the privacy rule in two places and leave the one a client reads
@@ -364,6 +366,10 @@ Four parts of it are worth reading before a caller writes against them:
   beside the total size and the encrypted, unverified-signature, and unexpanded-TNEF markers, because MailFathom's
   classification rule does not count an embedded logo or a signature part as an attachment. Without the second count a
   caller could not tell an email carrying a document from one carrying a picture in its signature block.
+- **`threadId`, or nothing.** The conversation the message belongs to, which
+  [`get_email_content`](#the-conversation-a-message-belongs-to) reads a whole exchange by. It is absent for a message no
+  pass has assembled yet, which is what a mailbox synchronized before this release holds until `mfctl mailbox rederive`
+  reaches it — never an identifier naming an empty conversation.
 - **`contentAvailability` rather than a bare flag.** An email deliberately stored without its MIME reports why, so a
   caller sees that a later content read will not succeed instead of discovering it by making the call — and sees whether
   that is permanent. `exceededSizeLimit` is an email larger than the configured per-message limit, which every later run
@@ -411,17 +417,25 @@ reaches a mailbox.
 
 Returns up to ten emails from the local mailbox copy in one call: for each one its normalized headers, the plain-text
 body, optionally a sanitized HTML body, every attachment it carries described, and — on request — a short-lived link
-that fetches each of those attachments. [Email content](email-content.md) documents the use case behind it — the
-representations, the sanitization policy, the two bounds, the attachment default, and what a link authorizes — where
+that fetches each of those attachments. Every email it returns also carries the conversation it belongs to, and a call
+may name a conversation instead of naming emails. [Email content](email-content.md) documents the use case behind it —
+the representations, the sanitization policy, the two bounds, the attachment default, and what a link authorizes — where
 they are enforced. This section describes the surface.
 
 ### Arguments
 
 | Argument | Type | Meaning |
 |---|---|---|
-| `storedEmailIds` | `string[]` | **Required.** The `storedEmailId` values a listing or a search returned, 1 to 10 of them, each named at most once. Each is a UUID; anything else is refused with `51004` |
+| `storedEmailIds` | `string[]` | The `storedEmailId` values a listing or a search returned, 1 to 10 of them, each named at most once. Each is a UUID; anything else is refused with `51004` |
+| `threadId` | `string` | The conversation to read instead of naming its messages. A UUID; anything else is refused with `51008` |
 | `includeSanitizedHtml` | `boolean` | Whether to also return the sanitized HTML body of each email. Omitted returns plain text alone |
 | `includeAttachmentDownloadLinks` | `boolean` | Whether to mint a link for fetching each attachment, rather than only describing it. Omitted still returns every attachment's file name, media type, and size |
+
+**Exactly one of `storedEmailIds` and `threadId` is given.** A call carrying both, or neither, is refused with `51007`
+rather than resolved by precedence: either reading of a call carrying both returns mail the caller did not ask for —
+honouring the list ignores a conversation somebody wanted, and honouring the conversation returns messages nobody named
+— and which was meant is the caller's to say. Neither is marked required in the advertised schema, because marking
+either one would advertise the other as unusable.
 
 Naming several emails is what the tool exists for: a call that has just listed or searched routinely wants the top few
 results, and one round trip per email spends the protocol overhead, the rate-limit budget, and a turn of the model's own
@@ -446,8 +460,10 @@ the last is worth repeating.
 
 ### Result
 
-The result is one `emails` entry per named email, in the order the call named them. Each entry names the email and
-carries exactly one of two things.
+The result is one `emails` entry per named email, in the order the call named them — or, for a call naming a
+conversation, one entry per message it served in the conversation's own order. `unreadThreadMessages` beside them names
+the conversation's remaining messages, in that same order, and is empty for a call that named its emails itself. Each
+entry names the email and carries exactly one of two things.
 
 | Field | Meaning |
 |---|---|
@@ -472,6 +488,7 @@ in it.
 | `attachments` | One entry per attachment, always: normalized file name, media type, and decoded size, plus a short-lived address to fetch it from when the call asked for one |
 | `attachmentCounts` | What the email carries besides its body, returned either way, or `null` when nothing has ever read its parts |
 | `remoteFlags` | The flags a server last showed, and when they were read |
+| `thread` | The conversation this email belongs to, or `null` when nothing has assembled one for it |
 
 Eight parts of it are worth reading before a caller writes against them:
 
@@ -539,6 +556,46 @@ Eight parts of it are worth reading before a caller writes against them:
 has ever read that message's parts — synchronization recorded what the server's envelope reported, and an envelope does
 not describe attachments — so publishing zeros would claim the email carries nothing attached, which no local state
 supports.
+
+### The conversation a message belongs to
+
+Every served email carries `thread`, which answers what a reader asks next — what else is in this exchange, and where
+does what I am reading sit in it — without returning any of it.
+
+| Field | Meaning |
+|---|---|
+| `threadId` | The conversation's identifier. Pass it back as `threadId` to read the conversation's messages |
+| `position` | The zero-based place this email holds in the conversation's order, or `null` when the conversation was longer than one read assembles and this email fell outside what was assembled |
+| `inReplyToStoredEmailId` | The `storedEmailId` of the message this one answers, or `null` when it is a root of what the caller is shown |
+| `messageCount` | How many of the conversation's messages the caller may see, this one included |
+| `otherMessages` | The conversation's other messages in its own order — each with its `storedEmailId`, `position`, `inReplyToStoredEmailId`, subject, sent timestamp, and sender address |
+| `moreMessagesNotNamed` | Whether the conversation holds messages `otherMessages` does not name |
+
+Four things about it are worth reading before a caller writes against them:
+
+- **The other messages are named, never reproduced.** No body, no attachment, and no participant list travels in
+  `otherMessages`: it is what a reader picks the next message to open from, and reading one is still a call. The list is
+  bounded and `moreMessagesNotNamed` says when it stopped short, which is when reading the conversation itself by
+  `threadId` is the call to make.
+- **A conversation is assembled from identifiers alone.** Membership follows `Message-ID`, `In-Reply-To`, and
+  `References`, and nothing else — never a subject, an address, or a timestamp. So a reply whose sender rewrote the
+  subject stays in the conversation, and two unrelated messages sharing a subject never join one.
+  [Bringing stored mail up to a later
+  release](imap-synchronization.md#bringing-stored-mail-up-to-a-later-release) is what assembles a mailbox stored before
+  this release; until it runs, `thread` is absent rather than wrong.
+- **Order is the reply relation first, and a timestamp only between siblings.** A reply is published after the message
+  it answers whatever the two clocks say, because a sender's clock is not something MailFathom can check; two replies to
+  one message are ordered by their sent timestamps, and messages that still tie are settled on their local identity. The
+  same conversation read twice comes back in the same order.
+- **Withheld mail is absent from all of it.** A message in a folder withheld from tools appears in no `otherMessages`
+  list, is in no `messageCount`, and is returned by no call naming its conversation — and a message whose parent is
+  withheld is published as a root naming no ancestor, rather than pointing at something the caller may not see. A
+  conversation whose messages are all withheld is published nowhere, so asking about its identifier returns no email
+  rather than a refusal: telling the two apart would let a caller learn which conversations exist by asking about them.
+
+A call naming `threadId` reads the conversation's messages in that order, bounded by the same ten a caller's own list is
+held to, and names the identifiers it did not carry in `unreadThreadMessages`. A second call passing those in
+`storedEmailIds` reads the rest.
 
 ### Reading changes nothing, locally or remotely
 

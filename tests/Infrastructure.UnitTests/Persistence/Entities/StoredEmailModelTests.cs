@@ -95,6 +95,42 @@ public sealed class StoredEmailModelTests
         Assert.Equal(["SenderNormalizedAddress"], index.Properties.Select(property => property.Name));
     }
 
+    /// <summary>
+    /// The order a conversation is published in is computed on every read, so the index is what a read assembles the
+    /// raw set from: the conversation, then the identity, which is the total order it bounds and pages by.
+    /// </summary>
+    [Fact]
+    public void StoredEmailModel_ThreadIndex_CoversTheConversationAndTheIdentityItIsAssembledBy()
+    {
+        // Act
+        var index = FindStoredEmailIndex(MailFathomDbContext.StoredEmailThreadIndexName);
+
+        // Assert
+        Assert.Equal(["EmailThreadId", "Id"], index.Properties.Select(property => property.Name));
+    }
+
+    /// <summary>
+    /// Erasing one message must not take a conversation or a reply with it. Both references clear the column instead,
+    /// so a message whose parent was erased becomes a root and a conversation removed leaves its mail in place.
+    /// </summary>
+    [Theory]
+    [InlineData("EmailThreadId")]
+    [InlineData("ParentStoredEmailId")]
+    public void StoredEmailModel_ThreadReference_ClearsTheColumnRatherThanErasingTheMessage(string columnName)
+    {
+        // Arrange
+        using var context = CreateContext();
+
+        // Act
+        var reference = StoredEmailEntityType(context)
+            .GetForeignKeys()
+            .FirstOrDefault(key => key.Properties.Select(property => property.Name).SequenceEqual([columnName]));
+
+        // Assert
+        Assert.NotNull(reference);
+        Assert.Equal(DeleteBehavior.SetNull, reference.DeleteBehavior);
+    }
+
     /// <summary>Raw MIME lives in its own table so that no mailbox query can pull a <c>bytea</c> value into the change tracker.</summary>
     [Fact]
     public void StoredEmailModel_MetadataTable_HoldsNoBinaryColumn()

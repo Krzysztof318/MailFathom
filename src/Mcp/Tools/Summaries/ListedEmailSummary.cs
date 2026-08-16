@@ -42,6 +42,10 @@ internal sealed record ListedEmailSummary
     [Description("The MailFathom folder alias the email was synchronized under, such as INBOX. This is MailFathom's own name for the folder rather than the path the mail server advertises.")]
     public required string FolderAlias { get; init; }
 
+    /// <summary>Gets the conversation the email belongs to, or <see langword="null" /> when nothing has placed it in one.</summary>
+    [Description("The identifier of the conversation this email belongs to, or null when it has not been assembled into one. Two emails carrying the same threadId are the same exchange; a matching subject is not. Pass it to a content read as threadId to retrieve the conversation itself.")]
+    public string? ThreadId { get; init; }
+
     /// <summary>Gets the <c>Message-ID</c> the email carried, or <see langword="null" /> when it carried none.</summary>
     [Description("The Message-ID header the email carried, or null when it carried none this reader accepted. Name the email by storedEmailId rather than by this value in a later request.")]
     public string? InternetMessageId { get; init; }
@@ -108,6 +112,7 @@ internal sealed record ListedEmailSummary
             AccountId = summary.AccountId.Value,
             AccountDisplayName = accountNames.For(summary.AccountId),
             FolderAlias = summary.FolderAlias.Value,
+            ThreadId = summary.ThreadId?.ToString(),
             InternetMessageId = summary.InternetMessageId,
             Subject = summary.Subject,
             SenderAddress = summary.SenderAddress,

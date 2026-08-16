@@ -268,6 +268,23 @@ public readonly record struct MailFathomErrorCode
     /// </remarks>
     public static MailFathomErrorCode EmailContentReadDuplicateEmail { get; } = new(51006);
 
+    /// <summary>Gets subcategory 1, request validation: a content read named both the emails and the thread to read, or neither.</summary>
+    /// <remarks>
+    /// The two are alternatives rather than filters that compose, so both together is refused instead of resolved by
+    /// precedence: either reading returns mail the caller never asked for and leaves it no way to tell. Neither is the
+    /// same finding from the other side and takes the same code, because a read that names nothing to read is a request
+    /// the caller has to fix rather than a mailbox that turned out to be empty.
+    /// </remarks>
+    public static MailFathomErrorCode EmailContentReadSelectionInvalid { get; } = new(51007);
+
+    /// <summary>Gets subcategory 1, request validation: a request named a thread by text that is not an identifier this system issues.</summary>
+    /// <remarks>
+    /// Separate from <see cref="StoredEmailIdentifierMalformed" /> so a caller reading the code knows which of the two
+    /// arguments it got wrong. A thread this deployment does not hold is not this failure: that request named a thread
+    /// and is answered with the emptiness of it, on the same terms an email nobody holds is answered.
+    /// </remarks>
+    public static MailFathomErrorCode EmailThreadIdentifierMalformed { get; } = new(51008);
+
     /// <summary>Gets subcategory 2, pagination: a continuation cursor is not one this system issued.</summary>
     public static MailFathomErrorCode MailboxQueryCursorMalformed { get; } = new(52001);
 
@@ -453,6 +470,8 @@ public readonly record struct MailFathomErrorCode
         StoredEmailIdentifierMalformed,
         EmailContentReadCountOutOfRange,
         EmailContentReadDuplicateEmail,
+        EmailContentReadSelectionInvalid,
+        EmailThreadIdentifierMalformed,
         MailboxQueryCursorMalformed,
         MailboxQueryCursorFilterMismatch,
         MailAccountNotAccessible,

@@ -37,17 +37,27 @@ public sealed record GetEmailContentRequest
 
     private GetEmailContentRequest(
         IReadOnlyList<StoredEmailId> storedEmailIds,
+        EmailThreadId? threadId,
         bool includeSanitizedHtml,
         bool includeAttachmentDownloadLinks)
     {
         this.StoredEmailIds = storedEmailIds;
+        this.ThreadId = threadId;
         this.IncludeSanitizedHtml = includeSanitizedHtml;
         this.IncludeAttachmentDownloadLinks = includeAttachmentDownloadLinks;
     }
 
-    /// <summary>Gets the emails to read, in the order the caller named them.</summary>
+    /// <summary>Gets the emails to read, in the order the caller named them, which is empty for a conversation read.</summary>
     /// <remarks>The order is the contract: results are returned in it, and the read's character budget is spent in it.</remarks>
     public IReadOnlyList<StoredEmailId> StoredEmailIds { get; }
+
+    /// <summary>Gets the conversation to read, or <see langword="null" /> when the caller named the emails itself.</summary>
+    /// <remarks>
+    /// The alternative to naming emails rather than a filter over them. What the conversation resolves to is the same
+    /// list of identities the other form carries, under the same bound and in the conversation's own order, so
+    /// everything downstream of the resolution reads one shape.
+    /// </remarks>
+    public EmailThreadId? ThreadId { get; }
 
     /// <summary>Gets whether to also return the sanitized HTML representation of each body.</summary>
     /// <remarks>
@@ -101,6 +111,57 @@ public sealed record GetEmailContentRequest
             throw new EmailContentReadDuplicateEmailException();
         }
 
-        return new GetEmailContentRequest([.. storedEmailIds], includeSanitizedHtml, includeAttachmentDownloadLinks);
+        return new GetEmailContentRequest(
+            [.. storedEmailIds],
+            threadId: null,
+            includeSanitizedHtml,
+            includeAttachmentDownloadLinks);
+    }
+
+    /// <summary>Creates a request for the messages of one conversation.</summary>
+    /// <param name="threadId">The conversation whose messages to read.</param>
+    /// <param name="includeSanitizedHtml">Whether to also produce the sanitized HTML representation of each body.</param>
+    /// <param name="includeAttachmentDownloadLinks">Whether to mint a link for each attachment rather than only describe it.</param>
+    /// <returns>The validated request.</returns>
+    /// <remarks>
+    /// Nothing is counted here, because nothing has been resolved yet: how many messages the conversation holds is what
+    /// reading it answers. The bound is the same <see cref="MaximumEmails" /> a caller's own list is held to, applied to
+    /// the conversation's order, and the identities it left out are named in the result so a second call asks for them
+    /// directly.
+    /// </remarks>
+    public static GetEmailContentRequest CreateForThread(
+        EmailThreadId threadId,
+        bool includeSanitizedHtml = false,
+        bool includeAttachmentDownloadLinks = false) =>
+        new([], threadId, includeSanitizedHtml, includeAttachmentDownloadLinks);
+
+    /// <summary>Creates a request from the two ways a caller may select what to read, refusing anything but one of them.</summary>
+    /// <param name="storedEmailIds">The emails the caller named, or <see langword="null" /> when it named none.</param>
+    /// <param name="threadId">The conversation the caller named, or <see langword="null" /> when it named none.</param>
+    /// <param name="includeSanitizedHtml">Whether to also produce the sanitized HTML representation of each body.</param>
+    /// <param name="includeAttachmentDownloadLinks">Whether to mint a link for each attachment rather than only describe it.</param>
+    /// <returns>The validated request.</returns>
+    /// <exception cref="EmailContentReadSelectionInvalidException">Thrown when both selections are given, or neither is.</exception>
+    /// <exception cref="EmailContentReadCountOutOfRangeException">Thrown when a named list holds no email, or more than <see cref="MaximumEmails" />.</exception>
+    /// <exception cref="EmailContentReadDuplicateEmailException">Thrown when a named list holds the same email more than once.</exception>
+    /// <remarks>
+    /// A call carrying both is refused rather than resolved by precedence, because either reading of it returns mail the
+    /// caller did not ask for: honouring the list ignores a conversation somebody wanted, and honouring the conversation
+    /// returns messages nobody named. Which one was meant is theirs to say.
+    /// </remarks>
+    public static GetEmailContentRequest CreateForSelection(
+        IReadOnlyList<StoredEmailId>? storedEmailIds,
+        EmailThreadId? threadId,
+        bool includeSanitizedHtml = false,
+        bool includeAttachmentDownloadLinks = false)
+    {
+        if ((storedEmailIds is null) == (threadId is null))
+        {
+            throw new EmailContentReadSelectionInvalidException();
+        }
+
+        return threadId is { } thread
+            ? CreateForThread(thread, includeSanitizedHtml, includeAttachmentDownloadLinks)
+            : Create(storedEmailIds!, includeSanitizedHtml, includeAttachmentDownloadLinks);
     }
 }

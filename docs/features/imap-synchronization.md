@@ -1509,6 +1509,16 @@ A message no reader can parse keeps whatever an earlier release read from it and
 raw MIME is no longer stored is counted apart, because only a fetch could bring that message back. Neither is a failure
 and the command reports both.
 
+**The conversation assignment is the one write this pass makes outside the row's own columns, and it is deliberate.**
+A [conversation](../architecture/stored-email-schema.md#the-conversation-a-message-belongs-to) cannot be a column: it is
+decided from this row's message identifiers and recorded as a relation other rows share, so a mailbox stored before
+threading existed becomes threaded only if re-derivation is allowed to write it. Everything the assignment touches is
+still derived from stored MIME and from nothing a mail server would have to be asked for, which is what keeps this
+command the cheap route rather than the expensive one. It is idempotent in the same sense the rest of the pass is:
+re-deriving a scope that is already assembled reaches the same conversations, starts none, and changes nothing — the
+identifiers a message names are bound to a conversation once, and a second pass finds the binding it wrote the first
+time.
+
 **`mfctl mailbox rewind --account <id> [--folder <alias>]` discards the durable progress instead.** It removes the
 `synchronization_checkpoints` row of every binding in the scope — the UID the forward pass resumes from and the
 `ReconciledThroughModSeq` beside it, which go together because they describe one UIDVALIDITY scope — so the next run

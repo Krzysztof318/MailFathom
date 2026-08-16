@@ -14,6 +14,7 @@ using MailFathom.Application.Emails.Extraction;
 using MailFathom.Application.Emails.GetEmailContent;
 using MailFathom.Application.Emails.Mailboxes;
 using MailFathom.Application.Emails.Summaries;
+using MailFathom.Application.Emails.Threads;
 using MailFathom.Application.Observability;
 using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
@@ -1120,14 +1121,174 @@ public sealed class GetEmailContentToolTests
     private static RetrievedEmailFailure FailureOf(RetrievedEmail email) =>
         email.Failure ?? throw new InvalidOperationException("The email was served rather than refused.");
 
+    /// <summary>Which of the two the caller meant is theirs to say, so a call carrying both is refused outright.</summary>
+    [Fact]
+    public async Task GetEmailContentAsync_BothEmailsAndAConversation_IsRefusedWithoutReadingAnything()
+    {
+        // Arrange
+        var summaryReader = new StubStoredEmailSummaryReader(SummaryOf());
+        var tool = ToolOver(summaryReader);
+
+        // Act
+        var failure = await Assert.ThrowsAsync<EmailContentReadSelectionInvalidException>(
+            () => tool.GetEmailContentAsync(
+                [Guid.CreateVersion7().ToString()],
+                Guid.CreateVersion7().ToString(),
+                cancellationToken: TestContext.Current.CancellationToken));
+
+        // Assert
+        Assert.Equal(MailFathomErrorCode.EmailContentReadSelectionInvalid, failure.ErrorCode);
+        Assert.Equal(0, summaryReader.ReadCount);
+    }
+
+    [Fact]
+    public async Task GetEmailContentAsync_NeitherEmailsNorAConversation_IsRefusedWithoutReadingAnything()
+    {
+        // Arrange
+        var summaryReader = new StubStoredEmailSummaryReader(SummaryOf());
+        var tool = ToolOver(summaryReader);
+
+        // Act
+        var failure = await Assert.ThrowsAsync<EmailContentReadSelectionInvalidException>(
+            () => tool.GetEmailContentAsync(cancellationToken: TestContext.Current.CancellationToken));
+
+        // Assert
+        Assert.Equal(MailFathomErrorCode.EmailContentReadSelectionInvalid, failure.ErrorCode);
+        Assert.Equal(0, summaryReader.ReadCount);
+    }
+
+    /// <summary>The refused text is the caller's own input on its way into a client-readable result, so it is not repeated back.</summary>
+    [Theory]
+    [InlineData("not-a-uuid")]
+    [InlineData("00000000-0000-0000-0000-000000000000")]
+    public async Task GetEmailContentAsync_ConversationIdentifierThisSystemNeverIssued_IsRefusedWithoutReadingAnything(
+        string threadId)
+    {
+        // Arrange
+        var summaryReader = new StubStoredEmailSummaryReader(SummaryOf());
+        var tool = ToolOver(summaryReader);
+
+        // Act
+        var failure = await Assert.ThrowsAsync<EmailThreadIdentifierMalformedException>(
+            () => tool.GetEmailContentAsync(
+                threadId: threadId,
+                cancellationToken: TestContext.Current.CancellationToken));
+
+        // Assert
+        Assert.Equal(MailFathomErrorCode.EmailThreadIdentifierMalformed, failure.ErrorCode);
+        Assert.DoesNotContain(threadId, failure.Message, StringComparison.Ordinal);
+        Assert.Equal(0, summaryReader.ReadCount);
+    }
+
+    /// <summary>A conversation longer than one read serves comes back bounded, and names what it could not carry.</summary>
+    [Fact]
+    public async Task GetEmailContentAsync_ConversationLongerThanOneRead_PublishesTheBatchAndNamesTheRest()
+    {
+        // Arrange
+        var threadId = EmailThreadId.Create(Guid.CreateVersion7());
+        var conversation = ConversationOf(GetEmailContentRequest.MaximumEmails + 2);
+        var tool = ToolOver(
+            new StubStoredEmailSummaryReader(SummaryOf() with { ThreadId = threadId }),
+            threadReader: ThreadReaderOver(threadId, conversation));
+
+        // Act
+        var result = await tool.GetEmailContentAsync(
+            threadId: threadId.ToString(),
+            cancellationToken: TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(
+            conversation.Take(GetEmailContentRequest.MaximumEmails).Select(message => message.StoredEmailId.ToString()),
+            result.Emails.Select(email => email.StoredEmailId));
+        Assert.Equal(
+            conversation.Skip(GetEmailContentRequest.MaximumEmails).Select(message => message.StoredEmailId.ToString()),
+            result.UnreadThreadMessages);
+    }
+
+    /// <summary>Every published email carries its conversation, with the other messages named rather than reproduced.</summary>
+    [Fact]
+    public async Task GetEmailContentAsync_EmailOfAConversation_PublishesThatConversationBesideIt()
+    {
+        // Arrange
+        var threadId = EmailThreadId.Create(Guid.CreateVersion7());
+        var conversation = ConversationOf(count: 2);
+        var tool = ToolOver(
+            new StubStoredEmailSummaryReader(SummaryOf() with { ThreadId = threadId }),
+            threadReader: ThreadReaderOver(threadId, conversation));
+
+        // Act
+        var result = await tool.GetEmailContentAsync(
+            [conversation[1].StoredEmailId.ToString()],
+            cancellationToken: TestContext.Current.CancellationToken);
+
+        // Assert
+        var thread = ContentOf(Assert.Single(result.Emails)).Thread;
+
+        Assert.NotNull(thread);
+        Assert.Equal(threadId.ToString(), thread.ThreadId);
+        Assert.Equal(1, thread.Position);
+        Assert.Equal(conversation[0].StoredEmailId.ToString(), thread.InReplyToStoredEmailId);
+        Assert.Equal(2, thread.MessageCount);
+        Assert.False(thread.MoreMessagesNotNamed);
+
+        var named = Assert.Single(thread.OtherMessages);
+        Assert.Equal(conversation[0].StoredEmailId.ToString(), named.StoredEmailId);
+        Assert.Equal(conversation[0].Subject, named.Subject);
+        Assert.Equal(conversation[0].SenderAddress, named.SenderAddress);
+    }
+
+    /// <summary>An email belonging to no conversation publishes nothing about one rather than an empty conversation.</summary>
+    [Fact]
+    public async Task GetEmailContentAsync_EmailInNoConversation_PublishesNothingAboutOne()
+    {
+        // Arrange
+        var tool = ToolOver();
+
+        // Act
+        var result = await tool.GetEmailContentAsync(
+            [Guid.CreateVersion7().ToString()],
+            cancellationToken: TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Null(ContentOf(Assert.Single(result.Emails)).Thread);
+        Assert.Empty(result.UnreadThreadMessages);
+    }
+
+    /// <summary>Builds a conversation as a chain, one message a minute apart, all of it in the served inbox.</summary>
+    private static EmailThreadMessage[] ConversationOf(int count) =>
+    [
+        .. Enumerable.Range(0, count).Aggregate(
+            new List<EmailThreadMessage>(count),
+            (chain, ordinal) =>
+            {
+                chain.Add(new EmailThreadMessage
+                {
+                    StoredEmailId = StoredEmailId.Create(Guid.CreateVersion7()),
+                    AccountId = MailAccountId.Create(ServedAccountId),
+                    FolderAlias = MailFolderAlias.Create("INBOX"),
+                    ParentStoredEmailId = ordinal > 0 ? chain[ordinal - 1].StoredEmailId : null,
+                    Subject = $"Quarterly invoice {ordinal}",
+                    SentAt = new DateTimeOffset(2026, 3, 1, 8, 0, 0, TimeSpan.Zero).AddMinutes(ordinal),
+                    SenderAddress = "billing@example.test",
+                });
+
+                return chain;
+            }),
+    ];
+
+    private static StubEmailThreadReader ThreadReaderOver(EmailThreadId threadId, EmailThreadMessage[] conversation) =>
+        new([.. conversation.Select(message => (threadId, message))]);
+
     private static GetEmailContentTool ToolOver(
         StubStoredEmailSummaryReader? summaryReader = null,
         StubEmailContentRenderer? renderer = null,
         StubEmailContentStore? contentStore = null,
         IEmailContentRepairRequestStore? repairRequestStore = null,
-        IAttachmentDownloadLinkIssuer? linkIssuer = null) => new(
+        IAttachmentDownloadLinkIssuer? linkIssuer = null,
+        IEmailThreadReader? threadReader = null) => new(
         new EmailContentReader(
             summaryReader ?? new StubStoredEmailSummaryReader(SummaryOf()),
+            threadReader ?? new StubEmailThreadReader(),
             contentStore ?? new StubEmailContentStore(IntactContent()),
             renderer ?? new StubEmailContentRenderer(EmailContentRenderingResult.Rendered(RenderingOf())),
             repairRequestStore ?? Substitute.For<IEmailContentRepairRequestStore>(),

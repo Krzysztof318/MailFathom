@@ -200,9 +200,14 @@ values, beside the total attachment size and the encrypted, unverified-signature
 ## What a summary carries
 
 `EmailSummary` is the bounded projection a listing returns: the stable local identifier every later request names the
-email by, its account and folder alias, the message identifier, subject, sent and received timestamps, size, the sender's
-display name and address, the sender verdict, the `To` addresses, the attachment summary, whether raw MIME is stored
-locally, and the remote flag snapshot.
+email by, its account and folder alias, the message identifier, the identifier of the
+[conversation](../architecture/stored-email-schema.md#the-conversation-a-message-belongs-to) it belongs to, subject,
+sent and received timestamps, size, the sender's display name and address, the sender verdict, the `To` addresses, the
+attachment summary, whether raw MIME is stored locally, and the remote flag snapshot.
+
+The conversation identifier is absent for a message nothing has assembled one for, which is what a mailbox stored before
+threading existed holds until `mfctl mailbox rederive` reaches it. It is MailFathom's own identifier and carries nothing
+a sender wrote, so it is published beside the identifiers rather than scanned with the text.
 
 It carries no raw MIME, no body, and no attachment bytes, and the query that produces it selects only the columns it
 publishes — a privacy control before a performance one, because it makes the stored content unreachable through this
