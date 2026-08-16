@@ -63,7 +63,7 @@ public sealed class SenderAuthenticationReadingTests
         // Assert
         Assert.Equal(SenderAuthenticationOutcome.NotEstablished, authentication.Outcome);
         Assert.Null(authentication.AuthenticatedDomain);
-        Assert.Equal(SenderDomainAlignment.NotAssessed, authentication.Alignment);
+        Assert.Equal(AuthorAuthenticationOutcome.NotEstablished, authentication.AuthorAuthentication);
     }
 
     /// <summary>A message with no such header at all is the ordinary case on a provider that publishes nothing.</summary>
@@ -96,9 +96,9 @@ public sealed class SenderAuthenticationReadingTests
         Assert.Null(authentication.AuthenticatedDomain);
     }
 
-    /// <summary>The authenticated domain is what the verdict names, whatever the displayed sender claims.</summary>
+    /// <summary>A spoofed author is a transport identity that authenticated as somebody the message does not display.</summary>
     [Fact]
-    public void Read_FromClaimsAnotherDomain_NamesTheAuthenticatedOneAndReportsTheMismatch()
+    public void Read_FromClaimsAnotherDomain_NamesTheAuthenticatedOneAndEstablishesNoAuthor()
     {
         // Arrange
         var headers = new[] { Header(TrustedIdentifier, Dkim("pass", "sender-relay.test")) };
@@ -110,12 +110,12 @@ public sealed class SenderAuthenticationReadingTests
         Assert.Equal(SenderAuthenticationOutcome.Authenticated, authentication.Outcome);
         Assert.Equal("SENDER-RELAY.TEST", authentication.AuthenticatedDomain?.NormalizedValue);
         Assert.Equal("BANK.TEST", authentication.FromDomain?.NormalizedValue);
-        Assert.Equal(SenderDomainAlignment.Misaligned, authentication.Alignment);
+        Assert.Equal(AuthorAuthenticationOutcome.NotEstablished, authentication.AuthorAuthentication);
     }
 
-    /// <summary>A domain that authenticated and is the displayed one is what alignment reports.</summary>
+    /// <summary>A signature over exactly the displayed domain establishes the author without DMARC being involved.</summary>
     [Fact]
-    public void Read_AuthenticatedDomainIsTheDisplayedOne_ReportsAlignment()
+    public void Read_DkimDomainIsTheDisplayedOne_EstablishesTheAuthor()
     {
         // Arrange
         var headers = new[] { Header(TrustedIdentifier, Dkim("pass", "Bank.Test")) };
@@ -124,7 +124,107 @@ public sealed class SenderAuthenticationReadingTests
         var authentication = SenderAuthenticationReading.Read(headers, TrustedAuthority, "Alerts@BANK.test");
 
         // Assert
-        Assert.Equal(SenderDomainAlignment.Aligned, authentication.Alignment);
+        Assert.Equal(AuthorAuthenticationOutcome.Authenticated, authentication.AuthorAuthentication);
+        Assert.Equal("BANK.TEST", authentication.AuthenticatedAuthorDomain?.NormalizedValue);
+    }
+
+    /// <summary>An SPF envelope domain equal to the displayed one establishes the author the same way.</summary>
+    [Fact]
+    public void Read_SpfDomainIsTheDisplayedOne_EstablishesTheAuthor()
+    {
+        // Arrange
+        var headers = new[] { Header(TrustedIdentifier, Spf("pass", "bounce@bank.test")) };
+
+        // Act
+        var authentication = SenderAuthenticationReading.Read(headers, TrustedAuthority, "alerts@bank.test");
+
+        // Assert
+        Assert.Equal(AuthorAuthenticationOutcome.Authenticated, authentication.AuthorAuthentication);
+        Assert.Equal("BANK.TEST", authentication.AuthenticatedAuthorDomain?.NormalizedValue);
+    }
+
+    /// <summary>A second verified signature is read as well, so the first one cannot hide the author's own.</summary>
+    /// <remarks>
+    /// This is what a message sent through a delivery provider looks like, and the provider's signature is routinely the
+    /// one the receiving server lists first. Reading only that one would leave the author unestablished on a message
+    /// whose own domain signed it.
+    /// </remarks>
+    [Fact]
+    public void Read_SeveralVerifiedSignatures_EstablishesTheAuthorFromTheMatchingOne()
+    {
+        // Arrange
+        var headers = new[]
+        {
+            Header(TrustedIdentifier, Dkim("pass", "provider.test"), Dkim("pass", "bank.test")),
+        };
+
+        // Act
+        var authentication = SenderAuthenticationReading.Read(headers, TrustedAuthority, "alerts@bank.test");
+
+        // Assert
+        Assert.Equal("PROVIDER.TEST", authentication.DkimDomain?.NormalizedValue);
+        Assert.Equal(AuthorAuthenticationOutcome.Authenticated, authentication.AuthorAuthentication);
+        Assert.Equal("BANK.TEST", authentication.AuthenticatedAuthorDomain?.NormalizedValue);
+    }
+
+    /// <summary>A DMARC failure beside a passing signature of somebody else's is an author that was refused.</summary>
+    [Fact]
+    public void Read_DmarcFailedOverAnUnrelatedPassingSignature_RefusesTheAuthor()
+    {
+        // Arrange
+        var headers = new[]
+        {
+            Header(
+                TrustedIdentifier,
+                Dkim("pass", "attacker.test"),
+                new ReportedAuthenticationMethod("dmarc", "fail", [Property("header", "from", "bank.test")])),
+        };
+
+        // Act
+        var authentication = SenderAuthenticationReading.Read(headers, TrustedAuthority, "alerts@bank.test");
+
+        // Assert
+        Assert.Equal(SenderAuthenticationOutcome.Authenticated, authentication.Outcome);
+        Assert.Equal("ATTACKER.TEST", authentication.AuthenticatedDomain?.NormalizedValue);
+        Assert.Equal(AuthorAuthenticationOutcome.Failed, authentication.AuthorAuthentication);
+        Assert.Null(authentication.AuthenticatedAuthorDomain);
+    }
+
+    /// <summary>A DMARC pass carries a signing subdomain over the exact comparison this reading would otherwise make.</summary>
+    [Fact]
+    public void Read_DmarcPassedOverASigningSubdomain_EstablishesTheDisplayedAuthor()
+    {
+        // Arrange
+        var headers = new[]
+        {
+            Header(
+                TrustedIdentifier,
+                Dkim("pass", "mail.bank.test"),
+                new ReportedAuthenticationMethod("dmarc", "pass", [Property("header", "from", "bank.test")])),
+        };
+
+        // Act
+        var authentication = SenderAuthenticationReading.Read(headers, TrustedAuthority, "alerts@bank.test");
+
+        // Assert
+        Assert.Equal(AuthorAuthenticationOutcome.Authenticated, authentication.AuthorAuthentication);
+        Assert.Equal("BANK.TEST", authentication.AuthenticatedAuthorDomain?.NormalizedValue);
+        Assert.Equal("MAIL.BANK.TEST", authentication.AuthenticatedDomain?.NormalizedValue);
+    }
+
+    /// <summary>Without a usable DMARC result, a signing subdomain leaves the author unestablished rather than refused.</summary>
+    [Fact]
+    public void Read_SigningSubdomainWithoutDmarc_EstablishesNoAuthor()
+    {
+        // Arrange
+        var headers = new[] { Header(TrustedIdentifier, Dkim("pass", "mail.bank.test")) };
+
+        // Act
+        var authentication = SenderAuthenticationReading.Read(headers, TrustedAuthority, "alerts@bank.test");
+
+        // Assert
+        Assert.Equal(AuthorAuthenticationOutcome.NotEstablished, authentication.AuthorAuthentication);
+        Assert.Null(authentication.AuthenticatedAuthorDomain);
     }
 
     /// <summary>DKIM is the authoritative identity where both checks produced one, and both are still recorded.</summary>
@@ -289,9 +389,9 @@ public sealed class SenderAuthenticationReadingTests
         Assert.Equal("BANK.TEST", authentication.AuthenticatedDomain?.NormalizedValue);
     }
 
-    /// <summary>A message that displayed no usable sender leaves alignment unassessed rather than guessing at it.</summary>
+    /// <summary>A message that displayed no usable sender has no author to establish, whatever authenticated.</summary>
     [Fact]
-    public void Read_MessageDisplayedNoUsableSender_LeavesAlignmentUnassessed()
+    public void Read_MessageDisplayedNoUsableSender_EstablishesNoAuthor()
     {
         // Arrange
         var headers = new[] { Header(TrustedIdentifier, Dkim("pass", "bank.test")) };
@@ -302,7 +402,8 @@ public sealed class SenderAuthenticationReadingTests
         // Assert
         Assert.Equal(SenderAuthenticationOutcome.Authenticated, authentication.Outcome);
         Assert.Null(authentication.FromDomain);
-        Assert.Equal(SenderDomainAlignment.NotAssessed, authentication.Alignment);
+        Assert.Equal(AuthorAuthenticationOutcome.NotEstablished, authentication.AuthorAuthentication);
+        Assert.Null(authentication.AuthenticatedAuthorDomain);
     }
 
     private static TrustedAuthenticationAuthority CreateAuthority(string identifier)

@@ -12,13 +12,21 @@ namespace MailFathom.Domain.Emails.Authentication;
 /// tell that apart from mail whose sender was checked and failed.
 /// </para>
 /// <para>
-/// MailFathom verifies nothing itself. It resolves no DNS, evaluates no SPF policy, verifies no DKIM signature, and
-/// reasons from no <c>Received</c> chain. Everything here was read back out of one header written by the one server the
-/// account trusts, which is the only party in the chain that observed the connection the message arrived on.
+/// <b>Two conclusions live here and they are not the same one.</b> <see cref="Outcome" /> answers whether an identity
+/// authenticated, which is a fact about whoever handed the message over. <see cref="AuthorAuthentication" /> answers
+/// whether the author a mail client displays authenticated, which is what an impersonation attempt exists to get wrong.
+/// A relay, a mailing list, and a delivery provider all authenticate as themselves while carrying somebody else's
+/// <c>From</c>, so the two disagreeing is an ordinary state of legitimate mail rather than a contradiction.
 /// </para>
 /// <para>
-/// Every domain here is personal data. No log line, metric, or exception message may carry one; the occurrence identity
-/// and <see cref="Outcome" /> are what those may report.
+/// MailFathom verifies nothing itself. It resolves no DNS, evaluates no SPF policy, verifies no DKIM signature, computes
+/// no organizational domain, consults no public suffix list, and reasons from no <c>Received</c> chain. Everything here
+/// was read back out of one header written by the one server the account trusts, which is the only party in the chain
+/// that observed the connection the message arrived on.
+/// </para>
+/// <para>
+/// Every domain here is personal data. No log line, metric, or exception message may carry one; the occurrence identity,
+/// <see cref="Outcome" />, and <see cref="AuthorAuthentication" /> are what those may report.
 /// </para>
 /// </remarks>
 public sealed record SenderAuthentication
@@ -31,7 +39,7 @@ public sealed record SenderAuthentication
         SenderDomain? spfDomain,
         SenderDomain? fromDomain,
         DmarcOutcome dmarc,
-        SenderDomainAlignment alignment)
+        IReadOnlyList<SenderDomain> authenticatedIdentities)
     {
         this.Outcome = outcome;
         this.AuthenticatedBy = authenticatedBy;
@@ -40,10 +48,12 @@ public sealed record SenderAuthentication
         this.SpfDomain = spfDomain;
         this.FromDomain = fromDomain;
         this.Dmarc = dmarc;
-        this.Alignment = alignment;
+
+        (this.AuthorAuthentication, this.AuthenticatedAuthorDomain) =
+            EstablishAuthor(fromDomain, dmarc, authenticatedIdentities);
     }
 
-    /// <summary>Gets what was established, which is the value everything above this reads first.</summary>
+    /// <summary>Gets what was established about the identity that handed the message over.</summary>
     public SenderAuthenticationOutcome Outcome { get; }
 
     /// <summary>Gets which check established <see cref="AuthenticatedDomain" />, or none where nothing did.</summary>
@@ -60,6 +70,11 @@ public sealed record SenderAuthentication
     public SenderDomain? AuthenticatedDomain { get; }
 
     /// <summary>Gets the domain of a DKIM signature that verified, or <see langword="null" /> where none did.</summary>
+    /// <remarks>
+    /// A message may carry several signatures and each of them may verify. This names the first, as evidence of what the
+    /// server did, and it is deliberately not what <see cref="AuthorAuthentication" /> was decided from: every verified
+    /// signature is considered there, so an unrelated one arriving first cannot hide the one that establishes the author.
+    /// </remarks>
     public SenderDomain? DkimDomain { get; }
 
     /// <summary>Gets the envelope-sender domain of an SPF check that passed, or <see langword="null" /> where none did.</summary>
@@ -67,65 +82,43 @@ public sealed record SenderAuthentication
 
     /// <summary>Gets the domain the message displays as its sender, or <see langword="null" /> when it wrote no usable one.</summary>
     /// <remarks>
-    /// Recorded and never believed. It is here so that a message authenticated as one domain while claiming to be from
-    /// another is visible as exactly that, which <see cref="Alignment" /> states directly.
+    /// Recorded and never believed. It is attacker-controlled message content, so nothing is trusted for appearing here
+    /// and no list is ever held against it; what it is for is that a message authenticated as one domain while claiming
+    /// another is visible as exactly that.
     /// </remarks>
     public SenderDomain? FromDomain { get; }
 
     /// <summary>Gets the DMARC result the trusted header reported, or that it reported none.</summary>
     public DmarcOutcome Dmarc { get; }
 
-    /// <summary>Gets whether the authenticated domain is the displayed one.</summary>
-    public SenderDomainAlignment Alignment { get; }
-
-    /// <summary>Gets the domain of the displayed author where this verdict establishes it, or <see langword="null" />.</summary>
+    /// <summary>Gets what was established about the author the message displays, which is a separate conclusion.</summary>
     /// <remarks>
     /// <para>
-    /// <see cref="AuthenticatedDomain" /> is an identity the receiving server checked; it says nothing about who the
-    /// message displays as its author. A relay, a mailing list, and a delivery provider all authenticate as themselves
-    /// while carrying somebody else's <c>From</c>, so anything deciding what to make of the <em>author</em> reads this
-    /// and never that one.
+    /// <see cref="AuthorAuthenticationOutcome.Authenticated" /> is reached two ways and neither of them believes the
+    /// <c>From</c> header on its own. A trusted <see cref="DmarcOutcome.Pass" /> is the receiving server's own statement
+    /// that the displayed domain passed under its published policy, so the displayed domain is the answer. Failing
+    /// that, an authenticated identity whose domain is exactly the displayed one is the same claim reached without
+    /// DMARC — exactly, because a differing
+    /// subdomain would need the sender's own policy to say whether relaxed alignment is permitted, and reading that
+    /// policy is not something MailFathom does.
     /// </para>
     /// <para>
-    /// Two things establish an author here, and neither of them believes the header on its own. A trusted
-    /// <see cref="DmarcOutcome.Pass" /> is the receiving server's own statement that the displayed domain passed under
-    /// its published policy, so the displayed domain is the answer. Failing that, an authenticated identity whose domain
-    /// is exactly the displayed one is the same claim reached without DMARC. Everything else establishes nothing and
-    /// answers <see langword="null" />.
-    /// </para>
-    /// <para>
-    /// <see cref="DmarcOutcome.Fail" /> ends the question rather than falling through to that second route. It is the
-    /// receiving server's statement <em>against</em> the displayed domain, reached with the domain's own published
-    /// policy in hand, so it outranks an identity comparison made here without one. The result no DMARC evaluation
-    /// produced, and the one that ran and found no policy, both leave the second route open — which is what most mail
-    /// actually arrives with.
-    /// </para>
-    /// <para>
-    /// Only the one DKIM identity this verdict names is considered, so a message carrying a second signature over the
-    /// displayed domain that the trusted header reported alongside an unrelated first one reads as establishing no
-    /// author. That is the conservative direction: it withholds an author rather than inventing one.
+    /// <see cref="AuthorAuthenticationOutcome.Failed" /> comes from <see cref="DmarcOutcome.Fail" /> alone, and it ends
+    /// the question rather than falling through to that second route: the receiving server reached it with the displayed
+    /// domain's own published policy in hand, so it outranks an identity comparison made here without one. Every other
+    /// DMARC result leaves the second route open, which is how most mail actually arrives.
     /// </para>
     /// </remarks>
-    public SenderDomain? AuthenticatedAuthorDomain
-    {
-        get
-        {
-            if (this.FromDomain is not { } displayed)
-            {
-                return null;
-            }
+    public AuthorAuthenticationOutcome AuthorAuthentication { get; }
 
-            if (this.Dmarc is DmarcOutcome.Pass or DmarcOutcome.Fail)
-            {
-                return this.Dmarc == DmarcOutcome.Pass ? displayed : null;
-            }
-
-            var authenticatedAsDisplayed = this.Outcome == SenderAuthenticationOutcome.Authenticated
-                && (this.DkimDomain == displayed || this.SpfDomain == displayed);
-
-            return authenticatedAsDisplayed ? displayed : null;
-        }
-    }
+    /// <summary>Gets the domain of the displayed author where it authenticated, or <see langword="null" />.</summary>
+    /// <remarks>
+    /// Present exactly when <see cref="AuthorAuthentication" /> is
+    /// <see cref="AuthorAuthenticationOutcome.Authenticated" />, and then always the displayed domain rather than
+    /// whichever identity established it. Anything deciding what to make of the <em>author</em> — a trust policy, a
+    /// warning a reader is shown — reads this and never <see cref="AuthenticatedDomain" />.
+    /// </remarks>
+    public SenderDomain? AuthenticatedAuthorDomain { get; }
 
     /// <summary>Records that nothing was established about a message's sender.</summary>
     /// <param name="fromDomain">The domain the message displays as its sender, where it wrote a usable one.</param>
@@ -134,7 +127,8 @@ public sealed record SenderAuthentication
     /// <remarks>
     /// The DMARC result is carried even here, because a trusted header may state one for a message neither check
     /// authenticated — and a reader shown that a domain's own policy refused the message is being shown something
-    /// stronger than silence.
+    /// stronger than silence. It reaches the author conclusion for the same reason: a trusted DMARC result is a
+    /// statement about the displayed author whether or not anything else about the message was established.
     /// </remarks>
     public static SenderAuthentication NotEstablished(
         SenderDomain? fromDomain = null,
@@ -147,7 +141,7 @@ public sealed record SenderAuthentication
             spfDomain: null,
             fromDomain,
             dmarc,
-            SenderDomainAlignment.NotAssessed);
+            authenticatedIdentities: []);
 
     /// <summary>Records that the receiving server checked an identity and it did not hold.</summary>
     /// <param name="fromDomain">The domain the message displays as its sender, where it wrote a usable one.</param>
@@ -162,52 +156,80 @@ public sealed record SenderAuthentication
             spfDomain: null,
             fromDomain,
             dmarc,
-            SenderDomainAlignment.NotAssessed);
+            authenticatedIdentities: []);
 
-    /// <summary>Records the identity the receiving server verified.</summary>
-    /// <param name="dkimDomain">The domain of a DKIM signature that verified, where one did.</param>
-    /// <param name="spfDomain">The envelope-sender domain of an SPF check that passed, where one did.</param>
+    /// <summary>Records the identities the receiving server verified.</summary>
+    /// <param name="dkimDomains">Every domain whose DKIM signature verified, in the order the header reported them.</param>
+    /// <param name="spfDomains">Every envelope-sender domain whose SPF check passed, in the same order.</param>
     /// <param name="fromDomain">The domain the message displays as its sender, where it wrote a usable one.</param>
     /// <param name="dmarc">What the trusted header reported for DMARC.</param>
-    /// <returns>The verdict, naming the DKIM domain as authoritative wherever one is present.</returns>
+    /// <returns>The verdict, naming the first DKIM domain as authoritative wherever one is present.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when either collection is <see langword="null" />.</exception>
     /// <exception cref="ArgumentException">Thrown when neither check produced a domain, which is not an authenticated message.</exception>
+    /// <remarks>
+    /// Both collections rather than one domain apiece, because one passing signature must never hide another. A message
+    /// legitimately carries a delivery provider's signature beside its author's, and taking whichever the server listed
+    /// first would leave the author unestablished on ordinary mail while establishing nothing an attacker could not also
+    /// arrange. Which one is kept as <see cref="DkimDomain" /> is evidence and stays first-in-header-order, because the
+    /// displayed author decides no part of what the verdict records about the transport.
+    /// </remarks>
     public static SenderAuthentication Authenticated(
-        SenderDomain? dkimDomain,
-        SenderDomain? spfDomain,
+        IReadOnlyList<SenderDomain> dkimDomains,
+        IReadOnlyList<SenderDomain> spfDomains,
         SenderDomain? fromDomain,
         DmarcOutcome dmarc)
     {
-        if (dkimDomain is null && spfDomain is null)
+        ArgumentNullException.ThrowIfNull(dkimDomains);
+        ArgumentNullException.ThrowIfNull(spfDomains);
+
+        if (dkimDomains.Count == 0 && spfDomains.Count == 0)
         {
             throw new ArgumentException(
                 "An authenticated verdict names the domain that authenticated, so at least one method must have produced one.",
-                nameof(dkimDomain));
+                nameof(dkimDomains));
         }
 
-        var authenticatedDomain = dkimDomain ?? spfDomain;
+        var dkimDomain = dkimDomains.Count > 0 ? dkimDomains[0] : default(SenderDomain?);
+        var spfDomain = spfDomains.Count > 0 ? spfDomains[0] : default(SenderDomain?);
 
         return new SenderAuthentication(
             SenderAuthenticationOutcome.Authenticated,
             dkimDomain is null ? SenderAuthenticationMethod.SenderPolicyFramework : SenderAuthenticationMethod.DomainKeysIdentifiedMail,
-            authenticatedDomain,
+            dkimDomain ?? spfDomain,
             dkimDomain,
             spfDomain,
             fromDomain,
             dmarc,
-            AlignmentOf(authenticatedDomain, fromDomain));
+            [.. dkimDomains, .. spfDomains]);
     }
 
-    /// <summary>Compares the authenticated domain with the displayed one, exactly.</summary>
+    /// <summary>Concludes what the trusted evidence establishes about the displayed author.</summary>
     /// <remarks>
-    /// Exact rather than organizational: <c>mail.example.test</c> and <c>example.test</c> are two names, and treating
-    /// them as one here would quietly assert an alignment the receiving server never claimed. Where a sender's published
-    /// policy does permit the relaxed form, the server's own DMARC result says so and is recorded beside this.
+    /// The order of the three questions is the rule. A DMARC failure is answered first because it is the receiving
+    /// server's statement against the displayed domain, reached under that domain's own published policy, and nothing
+    /// decided here outranks it. A message displaying no usable domain has no author to conclude anything about, which
+    /// is why it stops at not established rather than at an identity comparison against nothing — but a DMARC failure
+    /// still stands above that, since the server evaluated a displayed domain whether or not this reading could parse
+    /// one. What is left is the two routes that establish an author, and the exact comparison is over every identity
+    /// that authenticated rather than over the one kept as evidence.
     /// </remarks>
-    private static SenderDomainAlignment AlignmentOf(SenderDomain? authenticatedDomain, SenderDomain? fromDomain) =>
-        (authenticatedDomain, fromDomain) switch
+    private static (AuthorAuthenticationOutcome Outcome, SenderDomain? Domain) EstablishAuthor(
+        SenderDomain? fromDomain,
+        DmarcOutcome dmarc,
+        IReadOnlyList<SenderDomain> authenticatedIdentities)
+    {
+        if (dmarc == DmarcOutcome.Fail)
         {
-            ({ } authenticated, { } displayed) when authenticated == displayed => SenderDomainAlignment.Aligned,
-            (not null, not null) => SenderDomainAlignment.Misaligned,
-            _ => SenderDomainAlignment.NotAssessed,
-        };
+            return (AuthorAuthenticationOutcome.Failed, null);
+        }
+
+        if (fromDomain is not { } displayed)
+        {
+            return (AuthorAuthenticationOutcome.NotEstablished, null);
+        }
+
+        return dmarc == DmarcOutcome.Pass || authenticatedIdentities.Contains(displayed)
+            ? (AuthorAuthenticationOutcome.Authenticated, displayed)
+            : (AuthorAuthenticationOutcome.NotEstablished, null);
+    }
 }

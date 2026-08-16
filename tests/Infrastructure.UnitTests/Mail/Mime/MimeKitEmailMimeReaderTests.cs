@@ -815,7 +815,8 @@ public sealed class MimeKitEmailMimeReaderTests
         Assert.Equal("BANK.TEST", authentication.AuthenticatedDomain?.NormalizedValue);
         Assert.Equal("BANK.TEST", authentication.SpfDomain?.NormalizedValue);
         Assert.Equal(DmarcOutcome.Pass, authentication.Dmarc);
-        Assert.Equal(SenderDomainAlignment.Aligned, authentication.Alignment);
+        Assert.Equal(AuthorAuthenticationOutcome.Authenticated, authentication.AuthorAuthentication);
+        Assert.Equal("BANK.TEST", authentication.AuthenticatedAuthorDomain?.NormalizedValue);
     }
 
     /// <summary>An account naming no trusted server reads no header, which is what an unconfigured deployment gets.</summary>
@@ -925,7 +926,7 @@ public sealed class MimeKitEmailMimeReaderTests
         // Assert
         var authentication = AssertExtracted(result).SenderAuthentication;
         Assert.Equal(SenderAuthenticationOutcome.NotEstablished, authentication.Outcome);
-        Assert.Equal(SenderDomainAlignment.NotAssessed, authentication.Alignment);
+        Assert.Equal(AuthorAuthenticationOutcome.NotEstablished, authentication.AuthorAuthentication);
     }
 
     private static MimeKitEmailMimeReader CreateReader(string? trustedAuthorityIdentifier = null) =>

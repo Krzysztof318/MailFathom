@@ -42,11 +42,17 @@ Recipients are PostgreSQL `text[]` columns — `to_addresses`, `cc_addresses`, `
 
 ### The sender-authentication verdict
 
-Seven columns record what the receiving mail server established about who actually sent the message:
+Eight columns record what the receiving mail server established about who actually sent the message:
 `SenderAuthenticationOutcome`, `SenderAuthenticationMethod`, `AuthenticatedSenderDomain`, `DkimSignerDomain`,
-`SpfMailFromDomain`, `DmarcOutcome`, and `SenderDomainAlignment`. The four enums are text for the reason
-`content_availability` is, and the three domains are `character varying(253)` — the length a resolver accepts, which the
-domain value already refuses to exceed, so no value ever reaches a column that would reject it.
+`SpfMailFromDomain`, `DmarcOutcome`, `AuthorAuthenticationOutcome`, and `AuthenticatedAuthorDomain`. The four enums are
+text for the reason `content_availability` is, and the four domains are `character varying(253)` — the length a
+resolver accepts, which the domain value already refuses to exceed, so no value ever reaches a column that would reject
+it.
+
+The last two are a conclusion about the author the message displays, which is a different question from the six before
+them: those name the identity that handed the message over, and a relay, a mailing list, or a delivery provider
+authenticates as itself while carrying somebody else's `From`. `AuthenticatedAuthorDomain` is present exactly when the
+author authenticated, and it is the domain a reader was shown rather than whichever identity established it.
 
 They are columns on the row rather than a table hanging off it, unlike [what classification
 concluded](#what-classification-concluded-about-a-message). The rows would not be sparse: every message whose MIME was
@@ -55,8 +61,8 @@ all of its mail. What reads the verdict is the arriving message's own presentati
 so a join per row would buy a nullable association nothing is ever without.
 
 Every enum column carries a database default naming the value that establishes nothing — `NotEstablished`, `None`,
-`NotReported`, `NotAssessed` — so the migration that adds them fills every stored message in with what was true of it
-rather than with a value nothing wrote. The whole group is written together on every extraction, so re-reading a
+`NotReported`, and `NotEstablished` again for the author — so the migration that adds them fills every stored message
+in with what was true of it rather than with a value nothing wrote. The whole group is written together on every extraction, so re-reading a
 message after its account gained a trusted identifier replaces the verdict rather than leaving one column of the
 previous reading behind. The domains are stored in the upper-cased comparison form, which is what a later reader matches
 on; [sender authentication](../features/sender-authentication.md) states how the verdict is reached and which header it
@@ -64,7 +70,7 @@ is allowed to come from.
 
 ### What this deployment made of that author
 
-Three more columns record the second verdict: `SenderTrustLevel`, `SenderTrustGrantedBy`, and
+Three more columns record what this deployment made of that author: `SenderTrustLevel`, `SenderTrustGrantedBy`, and
 `SenderTrustPolicyRevision`. The two enums are text for the reason the four above are, each defaulting to the value that
 recognizes nobody — `Unknown` and `None` — so the migration that adds them fills every stored message in with what was
 true of it. The revision is `character varying(32)` and **nullable on purpose**: its absence is what separates a row no

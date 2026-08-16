@@ -97,10 +97,10 @@ public sealed class SenderTrustPolicy
     /// provider ever relays, whoever it says wrote them.
     /// </para>
     /// <para>
-    /// So a message whose author was not established — nothing authenticated, an authentication that failed, or an
-    /// identity that authenticated as somebody other than the displayed author — reaches
-    /// <see cref="SenderTrustLevel.Unknown" /> without the list being consulted at all. Which of those it was stays on
-    /// <see cref="SenderAuthentication" />, where it was recorded.
+    /// So a message whose author was not established, and one whose author authentication the receiving server refused,
+    /// both reach <see cref="SenderTrustLevel.Unknown" /> without the list being consulted at all. Which of the two it
+    /// was stays on <see cref="SenderAuthentication.AuthorAuthentication" />, where it was recorded, because this
+    /// verdict answers only about the list.
     /// </para>
     /// </remarks>
     public SenderTrust Evaluate(SenderAuthentication authentication, EmailAddress? displayedSender)

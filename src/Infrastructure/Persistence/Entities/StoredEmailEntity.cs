@@ -106,8 +106,23 @@ internal sealed class StoredEmailEntity
     /// <summary>Gets or sets the DMARC result the trusted header reported, or that it reported none.</summary>
     public DmarcOutcome DmarcOutcome { get; set; }
 
-    /// <summary>Gets or sets whether the authenticated domain is the one the message displays as its sender.</summary>
-    public SenderDomainAlignment SenderDomainAlignment { get; set; }
+    /// <summary>Gets or sets what the receiving server established about the author the message displays.</summary>
+    /// <remarks>
+    /// A separate conclusion from <see cref="SenderAuthenticationOutcome" /> rather than a reading of it, because the
+    /// identity that authenticated belongs to whoever handed the message over and is routinely not the displayed author
+    /// at all. It is what <see cref="SenderTrustLevel" /> was decided from, so a row where the two are read together
+    /// says both what was established about the author and what this deployment made of them.
+    /// </remarks>
+    public AuthorAuthenticationOutcome AuthorAuthenticationOutcome { get; set; }
+
+    /// <summary>Gets or sets the displayed author's domain where it authenticated, absent where it did not.</summary>
+    /// <remarks>
+    /// The subject of the trust verdict below, kept beside it so a stored answer names the identity it was reached
+    /// about. It is a second copy of the domain half of <see cref="SenderNormalizedAddress" /> only when the author was
+    /// established, which is what makes it worth a column: the displayed address is a claim, and this is the part of it
+    /// a trusted server stood behind.
+    /// </remarks>
+    public string? AuthenticatedAuthorDomain { get; set; }
 
     /// <summary>Gets or sets what this deployment made of the author the columns above establish.</summary>
     /// <remarks>

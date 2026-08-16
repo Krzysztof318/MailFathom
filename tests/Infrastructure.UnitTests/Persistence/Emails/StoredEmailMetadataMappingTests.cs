@@ -354,8 +354,8 @@ public sealed class StoredEmailMetadataMappingTests
             entity,
             CreateExtractedMetadata(
                 senderAuthentication: SenderAuthentication.Authenticated(
-                    dkimDomain,
-                    spfDomain,
+                    [dkimDomain],
+                    [spfDomain],
                     fromDomain,
                     DmarcOutcome.Fail)));
 
@@ -366,7 +366,33 @@ public sealed class StoredEmailMetadataMappingTests
         Assert.Equal("SIGNER.TEST", entity.DkimSignerDomain);
         Assert.Equal("RELAY.TEST", entity.SpfMailFromDomain);
         Assert.Equal(DmarcOutcome.Fail, entity.DmarcOutcome);
-        Assert.Equal(SenderDomainAlignment.Misaligned, entity.SenderDomainAlignment);
+        Assert.Equal(AuthorAuthenticationOutcome.Failed, entity.AuthorAuthenticationOutcome);
+        Assert.Null(entity.AuthenticatedAuthorDomain);
+    }
+
+    /// <summary>An established author reaches a column of its own, so a stored trust verdict names who it judged.</summary>
+    [Fact]
+    public void ApplyExtractedMetadata_EstablishedAuthor_RecordsTheAuthorBesideTheTransportIdentity()
+    {
+        // Arrange
+        var entity = CreateEntity();
+        Assert.True(SenderDomain.TryCreate("provider.test", out var dkimDomain));
+        Assert.True(SenderDomain.TryCreate("Bank.Test", out var fromDomain));
+
+        // Act
+        StoredEmailMetadataMapping.ApplyExtractedMetadata(
+            entity,
+            CreateExtractedMetadata(
+                senderAuthentication: SenderAuthentication.Authenticated(
+                    [dkimDomain],
+                    spfDomains: [],
+                    fromDomain,
+                    DmarcOutcome.Pass)));
+
+        // Assert
+        Assert.Equal("PROVIDER.TEST", entity.AuthenticatedSenderDomain);
+        Assert.Equal(AuthorAuthenticationOutcome.Authenticated, entity.AuthorAuthenticationOutcome);
+        Assert.Equal("BANK.TEST", entity.AuthenticatedAuthorDomain);
     }
 
     /// <summary>A re-derivation that establishes nothing must clear what a previous reading recorded, not leave half of it.</summary>
@@ -380,9 +406,9 @@ public sealed class StoredEmailMetadataMappingTests
             entity,
             CreateExtractedMetadata(
                 senderAuthentication: SenderAuthentication.Authenticated(
+                    [dkimDomain],
+                    spfDomains: [],
                     dkimDomain,
-                    spfDomain: null,
-                    fromDomain: null,
                     DmarcOutcome.Pass)));
 
         // Act
@@ -397,7 +423,8 @@ public sealed class StoredEmailMetadataMappingTests
         Assert.Null(entity.DkimSignerDomain);
         Assert.Null(entity.SpfMailFromDomain);
         Assert.Equal(DmarcOutcome.NotReported, entity.DmarcOutcome);
-        Assert.Equal(SenderDomainAlignment.NotAssessed, entity.SenderDomainAlignment);
+        Assert.Equal(AuthorAuthenticationOutcome.NotEstablished, entity.AuthorAuthenticationOutcome);
+        Assert.Null(entity.AuthenticatedAuthorDomain);
     }
 
     /// <summary>What this deployment made of the author reaches its own columns beside the identity it judged.</summary>

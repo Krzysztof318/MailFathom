@@ -133,8 +133,8 @@ public sealed class SenderTrustPolicyTests
         // Act
         var trust = policy.Evaluate(
             SenderAuthentication.Authenticated(
-                DomainOf("relay.example"),
-                spfDomain: null,
+                [DomainOf("relay.example")],
+                spfDomains: [],
                 DomainOf("bank.example"),
                 dmarc),
             AddressOf("security@bank.example"));
@@ -157,8 +157,8 @@ public sealed class SenderTrustPolicyTests
         // Act
         var trust = policy.Evaluate(
             SenderAuthentication.Authenticated(
-                DomainOf("provider.example"),
-                spfDomain: null,
+                [DomainOf("provider.example")],
+                spfDomains: [],
                 DomainOf("partner.example"),
                 DmarcOutcome.Pass),
             AddressOf("alice@partner.example"));
@@ -182,8 +182,8 @@ public sealed class SenderTrustPolicyTests
         // Act
         var trust = policy.Evaluate(
             SenderAuthentication.Authenticated(
-                throughDkim ? DomainOf("partner.example") : DomainOf("relay.example"),
-                throughDkim ? null : DomainOf("partner.example"),
+                throughDkim ? [DomainOf("partner.example")] : [DomainOf("relay.example")],
+                throughDkim ? [] : [DomainOf("partner.example")],
                 DomainOf("partner.example"),
                 DmarcOutcome.NotReported),
             AddressOf("alice@partner.example"));
@@ -240,8 +240,8 @@ public sealed class SenderTrustPolicyTests
         // Act
         var trust = policy.Evaluate(
             SenderAuthentication.Authenticated(
-                DomainOf("partner.example"),
-                spfDomain: null,
+                [DomainOf("partner.example")],
+                spfDomains: [],
                 fromDomain: null,
                 DmarcOutcome.Pass),
             displayedSender: null);
@@ -333,8 +333,8 @@ public sealed class SenderTrustPolicyTests
     /// <summary>Builds the verdict of a message whose displayed author the receiving server established.</summary>
     private static SenderAuthentication WrittenBy(string domain) =>
         SenderAuthentication.Authenticated(
-            DomainOf(domain),
-            spfDomain: null,
+            [DomainOf(domain)],
+            spfDomains: [],
             DomainOf(domain),
             DmarcOutcome.Pass);
 
