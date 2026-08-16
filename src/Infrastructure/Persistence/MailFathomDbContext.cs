@@ -671,6 +671,12 @@ internal sealed class MailFathomDbContext : DbContext
                 .HasMaxLength(ContactAddressEntity.MaximumAddressLength)
                 .IsRequired();
 
+            // No concurrency token of its own, which ADR 0001 asks to be justified rather than assumed. An address row
+            // is only ever written by an amendment of the contact it hangs on, in the same transaction and the same
+            // batch as that contact's own tokened update — the amendment stamps AmendedAt on every path — so the parent
+            // row is what a competing write loses on, and a token here would only repeat that decision on a row that is
+            // never reached on its own.
+
             // Unique across the book rather than within one contact, and named because a losing writer is recognized by
             // the constraint its insert violated: two callers claiming one address is a race whose retry resolves into
             // the answer naming whoever holds it, not a failure to report.

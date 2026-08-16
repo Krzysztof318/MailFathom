@@ -38,7 +38,9 @@ public sealed class ContactNoteTests
     /// <summary>The layout exception is the two line breaks and the tab, not every character that renders as nothing.</summary>
     [Theory]
     [InlineData("Owes \u2028 an answer")]
+    [InlineData("Owes \u2029 an answer")]
     [InlineData("Owes \u202e an answer")]
+    [InlineData("Owes \u2066 an answer")]
     [InlineData("Owes \u200b an answer")]
     public void Create_NoteCarryingACharacterThatRendersAsNothing_IsRefused(string written)
     {
@@ -51,13 +53,24 @@ public sealed class ContactNoteTests
     public void Create_NoteJoiningItsLettersWithAZeroWidthJoiner_IsKeptAsWritten()
     {
         // Arrange
-        const string written = "Signs their mail \u0645\u06cc\u200c\u062e\u0648\u0627\u0647\u0645.";
+        const string written = "Signs their mail \u0645\u06cc\u200c\u062e\u0648\u0627\u0647\u0645 and \u0915\u094d\u200d\u0937.";
 
         // Act
         var note = ContactNote.Create(written);
 
         // Assert
         Assert.Equal(written, note.Value);
+    }
+
+    /// <summary>A formatting character outside the Basic Multilingual Plane is a surrogate pair, and is refused as one scalar.</summary>
+    [Fact]
+    public void Create_NoteCarryingASupplementaryFormattingCharacter_IsRefused()
+    {
+        // Arrange
+        var written = string.Concat("Owes ", char.ConvertFromUtf32(0xE0001), " an answer");
+
+        // Act, Assert
+        Assert.Throws<ArgumentException>(() => ContactNote.Create(written));
     }
 
     /// <summary>A contact without a note holds none, so blank text cannot become a second way to say the same absence.</summary>

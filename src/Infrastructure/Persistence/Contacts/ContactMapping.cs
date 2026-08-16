@@ -48,9 +48,12 @@ internal static class ContactMapping
     internal static ContactAddressEntity ToAddressEntity(Contact contact, EmailAddress address) =>
         new()
         {
-            // Version 7 over the contact's own arrival rather than a random value, so a contact's address rows are
-            // clustered the way every other identifier this system mints is. Nothing reads the ordering between them.
-            Id = Guid.CreateVersion7(contact.RecordedAt),
+            // Version 7 over the instant this record was written rather than a random value, so address rows are
+            // clustered by insertion the way every other identifier this system mints is. The write time is what the
+            // amendment stamped, which for a contact being recorded is its arrival and for one gaining an address later
+            // is that later moment — taking the arrival in both cases would file today's row under a year-old key.
+            // Nothing reads the ordering between them.
+            Id = Guid.CreateVersion7(contact.AmendedAt),
             ContactId = contact.Id.Value,
             Address = address.Address,
             NormalizedAddress = address.NormalizedAddress,

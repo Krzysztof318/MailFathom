@@ -95,6 +95,27 @@ public sealed class ContactDisplayNameTests
         Assert.Equal(written, displayName.Value);
     }
 
+    /// <summary>The sort key shares the name's column width, so the bound has to hold for the upper-cased form too.</summary>
+    /// <remarks>
+    /// The characters chosen are the ones whose full case mapping would expand — <c>ß</c> to <c>SS</c> and the <c>ﬁ</c>
+    /// ligature to <c>FI</c>. Invariant upper-casing in .NET maps one scalar to one scalar, so it does not, and a name
+    /// that fits therefore always produces a key that fits.
+    /// </remarks>
+    [Theory]
+    [InlineData('ß')]
+    [InlineData('ﬁ')]
+    public void Create_NameAtTheBoundWhoseCaseMappingCouldExpand_ProducesASortKeyWithinTheSameBound(char character)
+    {
+        // Arrange
+        var atBound = new string(character, ContactDisplayName.MaximumLength);
+
+        // Act
+        var accepted = ContactDisplayName.Create(atBound);
+
+        // Assert
+        Assert.Equal(ContactDisplayName.MaximumLength, accepted.SortKey.Length);
+    }
+
     /// <summary>The bound is on the trimmed value, so surrounding whitespace never decides whether a name fits.</summary>
     [Fact]
     public void Create_NameAtTheBound_IsAcceptedAndOneCharacterLongerIsRefused()

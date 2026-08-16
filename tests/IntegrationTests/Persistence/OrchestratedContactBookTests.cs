@@ -34,10 +34,13 @@ namespace MailFathom.IntegrationTests.Persistence;
 public sealed class OrchestratedContactBookTests(MailFathomOrchestrationFixture orchestration)
 {
     /// <summary>The names the walk lists, written out of order so the order it reads them in is the book's rather than the insertion's.</summary>
+    /// <summary>The instant a directly constructed contact is stamped with, fixed so no test here reads a clock.</summary>
+    private static readonly DateTimeOffset RecordedAt = new(2026, 3, 1, 9, 0, 0, TimeSpan.Zero);
+
     private static readonly string[] WalkedNames =
     [
         "Walk Delta",
-        "Walk Alpha",
+        "walk alpha",
         "Walk Echo",
         "Walk Charlie",
         "Walk Bravo",
@@ -176,9 +179,13 @@ public sealed class OrchestratedContactBookTests(MailFathomOrchestrationFixture 
         while (cursor is not null);
 
         // Assert
-        Assert.Equal(
-            [.. WalkedNames.Order(StringComparer.Ordinal)],
-            walked.Select(contact => contact.DisplayName.Value));
+        // Expected by the comparison form rather than by the name as written, and one of the names is lower-cased so
+        // those two orders differ: a walk that ordered by the displayed value would pass against the wrong sequence
+        // otherwise, which is exactly the collation independence the stored key exists to provide.
+        string[] byComparisonForm = [.. WalkedNames.OrderBy(name => name.ToUpperInvariant(), StringComparer.Ordinal)];
+
+        Assert.NotEqual([.. WalkedNames.Order(StringComparer.Ordinal)], byComparisonForm);
+        Assert.Equal(byComparisonForm, walked.Select(contact => contact.DisplayName.Value));
         Assert.Equal(walked.Count, walked.Select(contact => contact.Id).Distinct().Count());
     }
 
@@ -241,7 +248,7 @@ public sealed class OrchestratedContactBookTests(MailFathomOrchestrationFixture 
 
     private static Contact ContactOf(string displayName, IReadOnlyList<string> addresses, ContactOrigin origin)
     {
-        var recordedAt = TimeProvider.System.GetUtcNow();
+        var recordedAt = RecordedAt;
 
         return Contact.Create(
             ContactId.Create(Guid.CreateVersion7(recordedAt)),

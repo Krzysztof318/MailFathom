@@ -142,9 +142,9 @@ public sealed class Contact
             throw new ArgumentException("A contact holds at least one address.", nameof(addresses));
         }
 
-        var preferred = WithoutDisplayName(preferredAddress);
+        var preferred = WithoutDisplayName(preferredAddress, nameof(preferredAddress));
         var held = addresses
-            .Select(WithoutDisplayName)
+            .Select(address => WithoutDisplayName(address, nameof(addresses)))
             .Distinct()
             .ToArray();
 
@@ -172,7 +172,7 @@ public sealed class Contact
     /// <summary>Answers whether this person uses the given address.</summary>
     /// <param name="address">The address to look for.</param>
     /// <returns><see langword="true" /> when the contact holds an address naming the same mailbox.</returns>
-    public bool Holds(EmailAddress address) => this.Addresses.Contains(WithoutDisplayName(address));
+    public bool Holds(EmailAddress address) => this.Addresses.Contains(WithoutDisplayName(address, nameof(address)));
 
     /// <summary>Answers whether a writer of the given origin may amend this contact.</summary>
     /// <param name="writer">The origin the writer acts under.</param>
@@ -253,18 +253,20 @@ public sealed class Contact
     /// <summary>Keeps the addr-spec alone, because the person's name is the contact's rather than one sender's spelling of it.</summary>
     /// <remarks>
     /// An address arriving with the display name a message carried would let the book hold two names for one person, one
-    /// of which nobody chose. The address itself already passed validation, so rebuilding it cannot fail.
+    /// of which nobody chose. The address itself already passed validation, so rebuilding it cannot fail. The caller
+    /// names the parameter it is checking, so a caught exception reports a parameter the public method actually declares
+    /// rather than this one's own.
     /// </remarks>
-    private static EmailAddress WithoutDisplayName(EmailAddress address)
+    private static EmailAddress WithoutDisplayName(EmailAddress address, string parameterName)
     {
         if (!EmailAddress.TryCreate(displayName: null, address.Address, out var bookAddress))
         {
-            throw new ArgumentException("A contact address must be a usable address.", nameof(address));
+            throw new ArgumentException("A contact address must be a usable address.", parameterName);
         }
 
         if (bookAddress.Address.Length > MaximumAddressLength)
         {
-            throw new ArgumentException($"A contact address cannot be longer than {MaximumAddressLength} characters.", nameof(address));
+            throw new ArgumentException($"A contact address cannot be longer than {MaximumAddressLength} characters.", parameterName);
         }
 
         return bookAddress;
