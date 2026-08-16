@@ -228,6 +228,17 @@ internal sealed class OutgoingEmailStore(MailFathomDbContext readContext, TimePr
         {
             Apply(entity, outcome);
         }
+
+        // An answer writes recipient rows and nothing on the record, so without this the record's own token would never
+        // reach a `WHERE` clause and the stage read above would be all that guards the write — which a competing run
+        // advancing the same record to a terminal stage can invalidate between that read and this commit. Marking a
+        // column of the record modified puts its `xmin` into the update the same way every other write here does; the
+        // value written is the one just read, and the loser meets the ordinary conflict instead of settling a recipient
+        // on a send that has finished.
+        EfCorePersistenceSessionAccessor.DbContextOf(session)
+            .Entry(entity)
+            .Property(outgoingEmail => outgoingEmail.StageChangedAt)
+            .IsModified = true;
     }
 
     /// <inheritdoc />

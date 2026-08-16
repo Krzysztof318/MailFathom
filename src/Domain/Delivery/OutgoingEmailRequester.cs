@@ -53,7 +53,7 @@ public sealed record OutgoingEmailRequester
     /// <param name="revision">The identity of the rule set revision the request was produced from.</param>
     /// <param name="actedOn">The local email the rule matched, which is what makes one rule's two sends two requests.</param>
     /// <returns>A requester naming that revision of that rule acting on that email.</returns>
-    /// <exception cref="ArgumentException">Thrown when <paramref name="ruleName" /> or <paramref name="revision" /> is blank, carries a control character, or is long enough that the composed identity exceeds <see cref="MaximumIdentityLength" />.</exception>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="ruleName" /> or <paramref name="revision" /> is blank, carries a control character, carries one of the <c>@</c> and <c>#</c> characters the identity is composed with, or is long enough that the composed identity exceeds <see cref="MaximumIdentityLength" />.</exception>
     /// <remarks>
     /// The email is part of the identity here and is not part of a mutation's, because the two records are keyed
     /// differently: a mutation is recorded against the occurrence it changes, so its requester never has to name one,

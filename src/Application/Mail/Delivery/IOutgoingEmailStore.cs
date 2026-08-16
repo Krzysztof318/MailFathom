@@ -141,7 +141,7 @@ public interface IOutgoingEmailStore
     /// <param name="cancellationToken">Cancels the write.</param>
     /// <returns>A task that completes when the outcomes are written.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="session" /> or <paramref name="outcomes" /> is <see langword="null" />.</exception>
-    /// <exception cref="InvalidOperationException">Thrown when no record carries <paramref name="outgoingEmailId" />, or when an outcome names an address the record does not.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when no record carries <paramref name="outgoingEmailId" />, when it has reached a terminal stage, or when an outcome names an address the record does not.</exception>
     /// <remarks>
     /// A recipient the record already settled keeps the answer it has. Nothing offers such a recipient again, so an
     /// outcome about one is an attempt reporting what it was told rather than a fact that can have changed, and taking
@@ -160,7 +160,7 @@ public interface IOutgoingEmailStore
     /// <param name="cancellationToken">Cancels the write.</param>
     /// <returns>A task that completes when the failure is written.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="session" /> is <see langword="null" />.</exception>
-    /// <exception cref="InvalidOperationException">Thrown when no record carries <paramref name="outgoingEmailId" />.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when no record carries <paramref name="outgoingEmailId" />, or when it has reached a terminal stage.</exception>
     /// <remarks>The stage stays where the attempt actually got to, which is what a later one reads; the failure says why it got no further.</remarks>
     Task RecordFailureAsync(
         IPersistenceSession session,

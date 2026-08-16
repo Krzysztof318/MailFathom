@@ -775,7 +775,8 @@ them, and why the record carries no subject, no body, and no header of its own. 
 recipient never loads it. The two cascades from `outgoing_emails` are what make erasure structural: deleting the
 record destroys the recipients and the stored message with it, so an outgoing message cannot outlive the record that
 says who it was for. Nothing in any of the three reaches a log, a metric, a trace, or an exception message — an
-exception about a recipient names the record and the position rather than the address.
+exception about a recipient names the record, and the position where the row it was reading has one, rather than the
+address.
 
 `embedding_profiles` is the exception on this page: it holds no personal data at all. It describes a model, and the credential that reaches that model is configuration rather than a column here, so nothing in this table is a secret or is derived from anybody's mail.
 
