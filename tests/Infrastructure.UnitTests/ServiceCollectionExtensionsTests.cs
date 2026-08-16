@@ -332,6 +332,7 @@ public sealed class ServiceCollectionExtensionsTests
         services.AddSingleton(TimeProvider.System);
         services.AddSingleton(new EmailMimeExtractionOptions());
         services.AddSingleton(Substitute.For<ITrustedAuthenticationAuthorityReader>());
+        services.AddSingleton(Substitute.For<ISenderTrustPolicyReader>());
         services.AddSingleton(SensitiveContentPlan.Create(
             SensitiveContentScanBounds.Default,
             [
@@ -365,6 +366,7 @@ public sealed class ServiceCollectionExtensionsTests
         services.AddSingleton(TimeProvider.System);
         services.AddSingleton(new EmailMimeExtractionOptions());
         services.AddSingleton(Substitute.For<ITrustedAuthenticationAuthorityReader>());
+        services.AddSingleton(Substitute.For<ISenderTrustPolicyReader>());
 
         // Act
         services.AddInfrastructure(
@@ -377,6 +379,34 @@ public sealed class ServiceCollectionExtensionsTests
         using var scope = provider.CreateScope();
 
         Assert.IsNotType<RedactingEmailMimeReader>(scope.ServiceProvider.GetRequiredService<IEmailMimeReader>());
+    }
+
+    /// <summary>
+    /// The trust verdict is not a deployment's choice the way redaction is: a deployment that recognizes nobody still
+    /// records that it recognized nobody, which is the answer a reader is later shown. An undecorated reader would
+    /// store the value of a reading no policy judged on mail a policy was in force for.
+    /// </summary>
+    [Fact]
+    public void AddInfrastructure_WithoutAScanner_ResolvesAMimeReaderThatJudgesTheAuthor()
+    {
+        // Arrange
+        var services = new ServiceCollection();
+        services.AddSingleton(TimeProvider.System);
+        services.AddSingleton(new EmailMimeExtractionOptions());
+        services.AddSingleton(Substitute.For<ITrustedAuthenticationAuthorityReader>());
+        services.AddSingleton(Substitute.For<ISenderTrustPolicyReader>());
+
+        // Act
+        services.AddInfrastructure(
+            _ => new PostgresConnectionSettings("Host=localhost;Database=mailfathom", null, null),
+            PostgresTextSearchConfiguration.Default,
+            MailAnsweringBudget.Default);
+
+        // Assert
+        using var provider = services.BuildServiceProvider();
+        using var scope = provider.CreateScope();
+
+        Assert.IsType<SenderTrustEvaluatingEmailMimeReader>(scope.ServiceProvider.GetRequiredService<IEmailMimeReader>());
     }
 
     /// <summary>

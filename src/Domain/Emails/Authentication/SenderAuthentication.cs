@@ -78,6 +78,49 @@ public sealed record SenderAuthentication
     /// <summary>Gets whether the authenticated domain is the displayed one.</summary>
     public SenderDomainAlignment Alignment { get; }
 
+    /// <summary>Gets the domain of the displayed author where this verdict establishes it, or <see langword="null" />.</summary>
+    /// <remarks>
+    /// <para>
+    /// <see cref="AuthenticatedDomain" /> is an identity the receiving server checked; it says nothing about who the
+    /// message displays as its author. A relay, a mailing list, and a delivery provider all authenticate as themselves
+    /// while carrying somebody else's <c>From</c>, so anything deciding what to make of the <em>author</em> reads this
+    /// and never that one.
+    /// </para>
+    /// <para>
+    /// Two things establish an author here, and neither of them believes the header on its own. A trusted
+    /// <see cref="DmarcOutcome.Pass" /> is the receiving server's own statement that the displayed domain passed under
+    /// its published policy, so the displayed domain is the answer. Failing that, an authenticated identity whose domain
+    /// is exactly the displayed one is the same claim reached without DMARC. Everything else — including
+    /// <see cref="DmarcOutcome.Fail" />, which is a statement <em>against</em> the author — establishes nothing and
+    /// answers <see langword="null" />.
+    /// </para>
+    /// <para>
+    /// Only the one DKIM identity this verdict names is considered, so a message carrying a second signature over the
+    /// displayed domain that the trusted header reported alongside an unrelated first one reads as establishing no
+    /// author. That is the conservative direction: it withholds an author rather than inventing one.
+    /// </para>
+    /// </remarks>
+    public SenderDomain? AuthenticatedAuthorDomain
+    {
+        get
+        {
+            if (this.FromDomain is not { } displayed)
+            {
+                return null;
+            }
+
+            if (this.Dmarc == DmarcOutcome.Pass)
+            {
+                return displayed;
+            }
+
+            var authenticatedAsDisplayed = this.Outcome == SenderAuthenticationOutcome.Authenticated
+                && (this.DkimDomain == displayed || this.SpfDomain == displayed);
+
+            return authenticatedAsDisplayed ? displayed : null;
+        }
+    }
+
     /// <summary>Records that nothing was established about a message's sender.</summary>
     /// <param name="fromDomain">The domain the message displays as its sender, where it wrote a usable one.</param>
     /// <param name="dmarc">What the trusted header reported for DMARC, where one was read at all.</param>

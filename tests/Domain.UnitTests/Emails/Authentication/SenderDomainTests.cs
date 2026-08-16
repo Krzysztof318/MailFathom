@@ -86,6 +86,67 @@ public sealed class SenderDomainTests
         Assert.False(created);
     }
 
+    /// <summary>One internationalized name written in two encodings is one name, which is what a list has to match on.</summary>
+    [Theory]
+    [InlineData("bücher.example")]
+    [InlineData("BÜCHER.example")]
+    [InlineData("xn--bcher-kva.example")]
+    [InlineData("XN--BCHER-KVA.EXAMPLE")]
+    public void TryCreate_InternationalizedDomainInEitherEncoding_ProducesOneComparisonForm(string written)
+    {
+        // Act
+        var created = SenderDomain.TryCreate(written, out var domain);
+
+        // Assert
+        Assert.True(created);
+        Assert.Equal("XN--BCHER-KVA.EXAMPLE", domain.NormalizedValue);
+    }
+
+    /// <summary>The written form survives the conversion, because only the comparison form is meant to be an encoding.</summary>
+    [Fact]
+    public void TryCreate_InternationalizedDomain_KeepsWhatTheSourceWrote()
+    {
+        // Act
+        SenderDomain.TryCreate("bücher.example", out var domain);
+
+        // Assert
+        Assert.Equal("bücher.example", domain.Value);
+    }
+
+    /// <summary>A name no encoder can put into A-labels matches nothing, so it is refused rather than compared as it arrived.</summary>
+    [Fact]
+    public void TryCreate_DomainNoEncoderAccepts_IsRefused()
+    {
+        // Act
+        var created = SenderDomain.TryCreate("͸.example", out _);
+
+        // Assert
+        Assert.False(created);
+    }
+
+    /// <summary>Only a strictly lower name is beneath a domain, and a shared suffix of characters is not one.</summary>
+    [Theory]
+    [InlineData("mail.example.test", "example.test", true)]
+    [InlineData("a.b.example.test", "example.test", true)]
+    [InlineData("example.test", "example.test", false)]
+    [InlineData("notexample.test", "example.test", false)]
+    [InlineData("example.test", "mail.example.test", false)]
+    public void IsSubdomainOf_NameAndCandidateAncestor_AnswersOnWholeLabels(
+        string candidate,
+        string ancestor,
+        bool expected)
+    {
+        // Arrange
+        SenderDomain.TryCreate(candidate, out var descendant);
+        SenderDomain.TryCreate(ancestor, out var parent);
+
+        // Act
+        var isBeneath = descendant.IsSubdomainOf(parent);
+
+        // Assert
+        Assert.Equal(expected, isBeneath);
+    }
+
     /// <summary>An SPF identity is written as a mailbox, and the domain is what follows the last at-sign.</summary>
     [Theory]
     [InlineData("bounce@relay.test", "RELAY.TEST")]

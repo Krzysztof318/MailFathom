@@ -400,6 +400,69 @@ public sealed class StoredEmailMetadataMappingTests
         Assert.Equal(SenderDomainAlignment.NotAssessed, entity.SenderDomainAlignment);
     }
 
+    /// <summary>What this deployment made of the author reaches its own columns beside the identity it judged.</summary>
+    [Fact]
+    public void ApplyExtractedMetadata_RecognizedAuthor_RecordsTheVerdictAndThePolicyThatReachedIt()
+    {
+        // Arrange
+        var entity = CreateEntity();
+        var revision = SenderTrustPolicyRevision.Of(["domain:PARTNER.EXAMPLE"]);
+
+        // Act
+        StoredEmailMetadataMapping.ApplyExtractedMetadata(
+            entity,
+            CreateExtractedMetadata(
+                senderTrust: SenderTrust.Trusted(
+                    SenderTrustSource.ConfiguredTrustedSender,
+                    revision)));
+
+        // Assert
+        Assert.Equal(SenderTrustLevel.Trusted, entity.SenderTrustLevel);
+        Assert.Equal(SenderTrustSource.ConfiguredTrustedSender, entity.SenderTrustGrantedBy);
+        Assert.Equal(revision.Value, entity.SenderTrustPolicyRevision);
+    }
+
+    /// <summary>A row no policy judged says so through an absent revision rather than through an empty one.</summary>
+    [Fact]
+    public void ApplyExtractedMetadata_ReadingNoPolicyJudged_LeavesTheRevisionAbsent()
+    {
+        // Arrange
+        var entity = CreateEntity();
+
+        // Act
+        StoredEmailMetadataMapping.ApplyExtractedMetadata(entity, CreateExtractedMetadata());
+
+        // Assert
+        Assert.Equal(SenderTrustLevel.Unknown, entity.SenderTrustLevel);
+        Assert.Equal(SenderTrustSource.None, entity.SenderTrustGrantedBy);
+        Assert.Null(entity.SenderTrustPolicyRevision);
+    }
+
+    /// <summary>A re-derivation under a narrower list must replace the whole verdict, not leave the half that recognized.</summary>
+    [Fact]
+    public void ApplyExtractedMetadata_UnknownAfterARecognizedReading_ReplacesTheWholeVerdict()
+    {
+        // Arrange
+        var entity = CreateEntity();
+        var narrowed = SenderTrustPolicyRevision.Of(["domain:ELSEWHERE.EXAMPLE"]);
+        StoredEmailMetadataMapping.ApplyExtractedMetadata(
+            entity,
+            CreateExtractedMetadata(
+                senderTrust: SenderTrust.Trusted(
+                    SenderTrustSource.StoredTrustedSender,
+                    SenderTrustPolicyRevision.Of(["domain:PARTNER.EXAMPLE"]))));
+
+        // Act
+        StoredEmailMetadataMapping.ApplyExtractedMetadata(
+            entity,
+            CreateExtractedMetadata(senderTrust: SenderTrust.Unknown(narrowed)));
+
+        // Assert
+        Assert.Equal(SenderTrustLevel.Unknown, entity.SenderTrustLevel);
+        Assert.Equal(SenderTrustSource.None, entity.SenderTrustGrantedBy);
+        Assert.Equal(narrowed.Value, entity.SenderTrustPolicyRevision);
+    }
+
     private static AttachmentFileName FileName(string decodedFileName)
     {
         Assert.True(AttachmentFileName.TryNormalize(decodedFileName, out var fileName));
@@ -419,7 +482,8 @@ public sealed class StoredEmailMetadataMappingTests
         EmailThreadReferences? threadReferences = null,
         EmailAttachmentSummary? attachments = null,
         ExtractedEmailText? text = null,
-        SenderAuthentication? senderAuthentication = null) =>
+        SenderAuthentication? senderAuthentication = null,
+        SenderTrust? senderTrust = null) =>
         new(
             OccurrenceId,
             "Quarterly report",
@@ -429,7 +493,10 @@ public sealed class StoredEmailMetadataMappingTests
             threadReferences ?? EmailThreadReferences.None,
             attachments ?? EmailAttachmentSummary.None,
             text ?? ExtractedEmailText.NoTextualBody,
-            senderAuthentication ?? SenderAuthentication.NotEstablished());
+            senderAuthentication ?? SenderAuthentication.NotEstablished())
+        {
+            SenderTrust = senderTrust ?? SenderTrust.NotEvaluated,
+        };
 
     private static RemoteEmailMetadata CreateRemoteMetadata(string internetMessageId) =>
         new(OccurrenceId, internetMessageId, "Quarterly report", SentAt, SizeOctets: 4096);

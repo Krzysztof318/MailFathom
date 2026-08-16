@@ -362,6 +362,23 @@ internal sealed class MailFathomDbContext : DbContext
             entity.Property(email => email.DkimSignerDomain).HasMaxLength(StoredEmailEntity.MaximumDomainLength);
             entity.Property(email => email.SpfMailFromDomain).HasMaxLength(StoredEmailEntity.MaximumDomainLength);
 
+            // What this deployment made of that verdict, stored the same way and defaulted the same way: a row written
+            // before authors were judged at all recognized nobody, which is exactly what the two defaults say. The
+            // revision is nullable rather than defaulted, because its absence is what separates a row no policy judged
+            // from one a policy judged and left unknown.
+            entity.Property(email => email.SenderTrustLevel)
+                .HasConversion<string>()
+                .HasMaxLength(64)
+                .HasDefaultValue(SenderTrustLevel.Unknown)
+                .IsRequired();
+            entity.Property(email => email.SenderTrustGrantedBy)
+                .HasConversion<string>()
+                .HasMaxLength(64)
+                .HasDefaultValue(SenderTrustSource.None)
+                .IsRequired();
+            entity.Property(email => email.SenderTrustPolicyRevision)
+                .HasMaxLength(SenderTrustPolicyRevision.Length);
+
             ConfigureStoredEmailIndexes(entity);
 
             entity.HasOne(email => email.MailFolder)

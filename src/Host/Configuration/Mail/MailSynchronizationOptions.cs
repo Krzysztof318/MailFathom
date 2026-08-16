@@ -41,6 +41,7 @@ internal sealed class MailSynchronizationOptions
         IMailAnsweringAuditSettingsReader,
         IMailAccountCatalog,
         ITrustedAuthenticationAuthorityReader,
+        ISenderTrustPolicyReader,
         IMailFolderParticipationReader,
         IJunkMailFolderCatalog,
         IMailFolderMappingReader
@@ -53,15 +54,23 @@ internal sealed class MailSynchronizationOptions
 
     private readonly Lazy<IReadOnlyDictionary<string, IReadOnlyList<MailFolderMapping>>> mappingsByAccount;
 
+    private readonly Lazy<IReadOnlyDictionary<string, SenderTrustPolicy>> senderTrustPolicies;
+
     /// <summary>Initializes the options the binder is about to write into.</summary>
     /// <remarks>
-    /// The mapping cache is deferred rather than built here, because nothing is bound yet when this runs. What forces
-    /// it is the first folder lookup, which happens long after binding and after validation, and a reload binds a new
-    /// instance rather than rewriting this one — so the built dictionary can never describe superseded configuration.
+    /// Both caches are deferred rather than built here, because nothing is bound yet when this runs. What forces them
+    /// is the first lookup, which happens long after binding and after validation, and a reload binds a new instance
+    /// rather than rewriting this one — so a built value can never describe superseded configuration. The verification
+    /// policies are cached for a second reason as well: each one derives a revision over the whole effective list, and
+    /// every arriving message asks for one.
     /// </remarks>
-    public MailSynchronizationOptions() => this.mappingsByAccount = new(
-        this.ReadMappingsByAccount,
-        LazyThreadSafetyMode.ExecutionAndPublication);
+    public MailSynchronizationOptions()
+    {
+        this.mappingsByAccount = new(this.ReadMappingsByAccount, LazyThreadSafetyMode.ExecutionAndPublication);
+        this.senderTrustPolicies = new(
+            this.ReadSenderTrustPolicies,
+            LazyThreadSafetyMode.ExecutionAndPublication);
+    }
 
     /// <summary>Gets or sets whether periodic synchronization is enabled.</summary>
     public bool Enabled { get; set; }
@@ -351,6 +360,23 @@ internal sealed class MailSynchronizationOptions
     [Range(1_000, 200_000)]
     public int MaxExtractedTextCharacters { get; set; } = 100_000;
 
+    /// <summary>Gets or sets whether an author writing from a domain one of this deployment's accounts uses is recognized.</summary>
+    /// <remarks>
+    /// <para>
+    /// The set of domains is derived from the configured accounts rather than restated here, so adding an account
+    /// extends it and removing one narrows it without a second edit. It is deployment-wide rather than per account
+    /// because an instance synchronizing a work mailbox and a personal one is synchronizing one person's
+    /// correspondence, and mail sent from the first to the second is the least suspicious mail in the mailbox.
+    /// </para>
+    /// <para>
+    /// It defaults to on because that mail is either the owner's own or somebody who has taken their mailbox, and the
+    /// first is far more common. The case for turning it off is an account on a large shared provider, where every
+    /// user of that provider writes from the same domain and the set would recognize all of them; a deployment that
+    /// turns it off names the domains it does mean on the accounts' own trusted-sender lists instead.
+    /// </para>
+    /// </remarks>
+    public bool TrustOwnAccountDomains { get; set; } = true;
+
     /// <summary>Gets or sets configured accounts and folders to synchronize.</summary>
     public List<MailSynchronizationAccountOptions> Accounts { get; set; } = [];
 
@@ -463,6 +489,70 @@ internal sealed class MailSynchronizationOptions
     /// </remarks>
     public TrustedAuthenticationAuthority GetTrustedAuthority(MailAccountId accountId) =>
         this.FindConfiguredAccount(accountId)?.CreateTrustedAuthority() ?? TrustedAuthenticationAuthority.None;
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Answered from the cache below rather than rebuilt, because every arriving message asks for one and building a
+    /// policy derives a revision over the whole effective list. An account this snapshot no longer names recognizes
+    /// nobody, for the reason the trusted authority above answers with none.
+    /// </remarks>
+    public SenderTrustPolicy GetTrustPolicy(MailAccountId accountId) =>
+        this.senderTrustPolicies.Value.TryGetValue(accountId.Value, out var policy)
+            ? policy
+            : SenderTrustPolicy.RecognizingNobody;
+
+    /// <summary>Builds every account's verification policy once, keyed by the account identifier the lookups arrive with.</summary>
+    /// <remarks>
+    /// The stored half of each list is empty here and is what <see href="https://github.com/Krzysztof318/MailFathom/issues/760">#760</see>
+    /// fills in: the matcher already takes both halves, so the store arrives as a second list rather than as a second
+    /// rule. An entry whose text is unusable is skipped rather than raised over, and two accounts configured under one
+    /// identifier keep the first, both for the reason the folder mappings do — startup validation refuses each of
+    /// those, and a reload being rejected must not make a lookup throw.
+    /// </remarks>
+    private Dictionary<string, SenderTrustPolicy> ReadSenderTrustPolicies()
+    {
+        IReadOnlyList<SenderDomain> ownAccountDomains = this.TrustOwnAccountDomains ? this.ReadOwnAccountDomains() : [];
+
+        return (this.Accounts ?? [])
+            .Select(static account => (Id: TryReadAccountId(account.AccountId), account.ConfiguredTrustedSenders))
+            .Where(static account => account.Id is not null)
+            .GroupBy(static account => account.Id!, StringComparer.Ordinal)
+            .ToDictionary(
+                static account => account.Key,
+                account => SenderTrustPolicy.Create(
+                    ownAccountDomains,
+                    account.First().ConfiguredTrustedSenders,
+                    storedTrustedSenders: []),
+                StringComparer.Ordinal);
+    }
+
+    /// <summary>Reads the domains the configured accounts themselves send and receive under.</summary>
+    /// <remarks>
+    /// Derived from each account's user name, which is the only mailbox identity an IMAP account states: a server is
+    /// reached at a host that is rarely the mail domain, and the account identifier is a key an operator invented. An
+    /// account whose user name is a bare login rather than an address therefore contributes nothing, which is the
+    /// honest answer — inventing a domain out of the host would recognize senders nobody named.
+    /// </remarks>
+    private IReadOnlyList<SenderDomain> ReadOwnAccountDomains() =>
+    [
+        .. (this.Accounts ?? [])
+            .Select(static account => TryReadOwnDomain(account.UserName))
+            .OfType<SenderDomain>()
+            .Distinct(),
+    ];
+
+    /// <summary>Reads the mail domain one account's user name states, or nothing when it states none.</summary>
+    /// <remarks>
+    /// The at-sign is what separates the two shapes an IMAP user name takes. Without one the value is a login and
+    /// naming a domain from it would be a guess; with one it is the mailbox address the account belongs to, and the
+    /// domain is what follows the last at-sign for the reason every address in this system is split there.
+    /// </remarks>
+    private static SenderDomain? TryReadOwnDomain(string? userName) =>
+        userName is not null
+        && userName.Contains('@', StringComparison.Ordinal)
+        && SenderDomain.TryCreateFromMailbox(userName, out var domain)
+            ? domain
+            : null;
 
     /// <inheritdoc />
     public bool SynchronizationEnabled => this.Enabled;
@@ -855,6 +945,35 @@ internal sealed class MailSynchronizationAccountOptions : IValidatableObject
     /// </remarks>
     public string? TrustedAuthenticationServiceIdentifier { get; set; }
 
+    /// <summary>Gets or sets the senders this account recognizes on top of the domains this deployment's own accounts use.</summary>
+    /// <remarks>
+    /// <para>
+    /// Per account rather than deployment-wide, because the accounts an instance synchronizes are different
+    /// correspondence: a work account's counterparties have nothing to do with a personal one's, and one list would
+    /// either recognize too much on one account or make an owner maintain the union of both.
+    /// </para>
+    /// <para>
+    /// This is the declared half of the list and the store holds the half somebody adds while the deployment is
+    /// running; an entry in either recognizes a sender, and a reload can no more remove a stored entry than a stored
+    /// entry can shadow one written here. An entry that names neither a domain nor an address, names both, or writes
+    /// one nothing can compare fails startup naming this account and the entry's position.
+    /// </para>
+    /// </remarks>
+    public List<TrustedSenderOptions> TrustedSenders { get; set; } = [];
+
+    /// <summary>Gets the configured entries as the values the matcher holds a sender against, dropping the unusable ones.</summary>
+    /// <remarks>
+    /// An unusable entry is skipped here rather than raised over, because startup validation refuses that configuration
+    /// and a reload being rejected must not make an arriving message throw. What that costs is one entry of one
+    /// account's list, and the cost is in the safe direction: an entry nobody could read recognizes nobody.
+    /// </remarks>
+    internal IReadOnlyList<TrustedSenderEntry> ConfiguredTrustedSenders =>
+    [
+        .. (this.TrustedSenders ?? [])
+            .Select(static configured => configured.TryCreateEntry(out var entry) ? entry : null)
+            .OfType<TrustedSenderEntry>(),
+    ];
+
     /// <summary>Gets or sets the earliest date the mail server may have received an email on for it to be synchronized.</summary>
     /// <remarks>
     /// Omitting it synchronizes every email the server still holds, which is the default. It binds as a plain date such
@@ -1011,6 +1130,11 @@ internal sealed class MailSynchronizationAccountOptions : IValidatableObject
                 [nameof(this.TrustedAuthenticationServiceIdentifier)]);
         }
 
+        foreach (var result in this.ValidateTrustedSenders())
+        {
+            yield return result;
+        }
+
         // Checked here rather than through a data annotation because nothing binds the block as an options graph of its
         // own, so an annotation on it would be read by nothing. The window decides when personal data is destroyed, so
         // a typo in it fails startup instead of quietly selecting a period nobody wrote.
@@ -1106,6 +1230,41 @@ internal sealed class MailSynchronizationAccountOptions : IValidatableObject
             foreach (var result in this.ValidateAuthenticationCredentials())
             {
                 yield return result;
+            }
+        }
+    }
+
+    /// <summary>Reports every trusted-sender entry that names no sender this system can compare against.</summary>
+    /// <returns>One result per unusable entry, empty when every entry names exactly one usable sender.</returns>
+    /// <remarks>
+    /// <para>
+    /// A typo here fails startup rather than degrading to an entry that recognizes nobody, because the two are
+    /// indistinguishable afterwards: a list nobody wrote and a list whose entries match nothing both leave every
+    /// sender unrecognized, and an operator would meet the difference as mail that never stops carrying a warning.
+    /// </para>
+    /// <para>
+    /// The message names the account and the entry's position and never the value it holds, because a domain and an
+    /// address are both personal data and a validation failure is written to a log.
+    /// </para>
+    /// </remarks>
+    private IEnumerable<ValidationResult> ValidateTrustedSenders()
+    {
+        if (this.TrustedSenders is null)
+        {
+            yield return new ValidationResult(
+                $"Account '{this.AccountId}': the trusted sender configuration must be a list.",
+                [nameof(this.TrustedSenders)]);
+
+            yield break;
+        }
+
+        foreach (var (entry, position) in this.TrustedSenders.Select(static (entry, index) => (Entry: entry, Position: index)))
+        {
+            if (entry is null || !entry.TryCreateEntry(out _))
+            {
+                yield return new ValidationResult(
+                    $"Account '{this.AccountId}': trusted sender {position} must name exactly one of a usable domain or a usable address, and may ask to include subdomains only where it names a domain.",
+                    [nameof(this.TrustedSenders)]);
             }
         }
     }

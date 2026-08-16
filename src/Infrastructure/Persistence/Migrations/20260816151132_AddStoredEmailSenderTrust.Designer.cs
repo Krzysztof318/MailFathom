@@ -3,6 +3,7 @@ using System;
 using MailFathom.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using NpgsqlTypes;
@@ -13,9 +14,11 @@ using Pgvector;
 namespace MailFathom.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(MailFathomDbContext))]
-    partial class MailFathomDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260816151132_AddStoredEmailSenderTrust")]
+    partial class AddStoredEmailSenderTrust
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -1154,10 +1157,6 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                     b.Property<DateTimeOffset?>("RemoteFlagsObservedAt")
                         .HasColumnType("timestamp with time zone");
 
-                    b.PrimitiveCollection<string[]>("RemoteKeywords")
-                        .IsRequired()
-                        .HasColumnType("text[]");
-
                     b.PrimitiveCollection<string[]>("ReplyToAddresses")
                         .IsRequired()
                         .HasColumnType("text[]");
@@ -1251,11 +1250,6 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                         .HasDatabaseName("ix_stored_emails_cc_addresses");
 
                     NpgsqlIndexBuilderExtensions.HasMethod(b.HasIndex("CcAddresses"), "GIN");
-
-                    b.HasIndex("RemoteKeywords")
-                        .HasDatabaseName("ix_stored_emails_remote_keywords");
-
-                    NpgsqlIndexBuilderExtensions.HasMethod(b.HasIndex("RemoteKeywords"), "GIN");
 
                     b.HasIndex("ReplyToAddresses")
                         .HasDatabaseName("ix_stored_emails_reply_to_addresses");

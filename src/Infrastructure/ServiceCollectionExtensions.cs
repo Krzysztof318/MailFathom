@@ -407,11 +407,17 @@ public static class ServiceCollectionExtensions
         // search document, the passages cut from it, and the vectors built from those all descend from one extraction,
         // and both writers of one reach it through here. Decided from the guard rather than from configuration this
         // project does not bind, and left unwrapped where nothing is scanned so a message is read exactly as it was.
-        services.AddScoped<IEmailMimeReader>(provider =>
+        // The sender verdict is decided at the same seam and for the same reason, and is wrapped unconditionally: a
+        // deployment that recognizes nobody still records that it recognized nobody, which is what a reader is shown.
+        // It sits directly over the parse because it reads what the parse established and touches nothing else, so the
+        // redaction above it is unaffected either way.
+        services.AddScoped(provider =>
         {
-            var reader = new MimeKitEmailMimeReader(
-                provider.GetRequiredService<EmailMimeExtractionOptions>(),
-                provider.GetRequiredService<ITrustedAuthenticationAuthorityReader>());
+            IEmailMimeReader reader = new SenderTrustEvaluatingEmailMimeReader(
+                new MimeKitEmailMimeReader(
+                    provider.GetRequiredService<EmailMimeExtractionOptions>(),
+                    provider.GetRequiredService<ITrustedAuthenticationAuthorityReader>()),
+                provider.GetRequiredService<ISenderTrustPolicyReader>());
 
             return provider.GetRequiredService<SensitiveContentDerivationGuard>() is { IsActive: true } guard
                 ? new RedactingEmailMimeReader(reader, guard)

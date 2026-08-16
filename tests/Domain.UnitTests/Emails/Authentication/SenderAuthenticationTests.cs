@@ -58,4 +58,95 @@ public sealed class SenderAuthenticationTests
         Assert.Equal("BANK.TEST", authentication.FromDomain?.NormalizedValue);
         Assert.Equal(DmarcOutcome.Fail, authentication.Dmarc);
     }
+
+    /// <summary>A trusted DMARC pass is the receiving server's own statement about the displayed author.</summary>
+    [Fact]
+    public void AuthenticatedAuthorDomain_DmarcPassOverAnUnrelatedSignature_IsTheDisplayedDomain()
+    {
+        // Arrange
+        SenderDomain.TryCreate("provider.test", out var signer);
+        SenderDomain.TryCreate("partner.test", out var displayed);
+
+        // Act
+        var authentication = SenderAuthentication.Authenticated(
+            signer,
+            spfDomain: null,
+            displayed,
+            DmarcOutcome.Pass);
+
+        // Assert
+        Assert.Equal(displayed, authentication.AuthenticatedAuthorDomain);
+    }
+
+    /// <summary>Without DMARC, an identity that authenticated as the displayed domain establishes the author.</summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void AuthenticatedAuthorDomain_IdentityEqualToTheDisplayedDomain_IsThatDomain(bool throughDkim)
+    {
+        // Arrange
+        SenderDomain.TryCreate("partner.test", out var displayed);
+        SenderDomain.TryCreate("relay.test", out var relay);
+
+        // Act
+        var authentication = SenderAuthentication.Authenticated(
+            throughDkim ? displayed : relay,
+            throughDkim ? null : displayed,
+            displayed,
+            DmarcOutcome.NotReported);
+
+        // Assert
+        Assert.Equal(displayed, authentication.AuthenticatedAuthorDomain);
+    }
+
+    /// <summary>An identity belonging to somebody other than the displayed author establishes no author at all.</summary>
+    [Theory]
+    [InlineData(DmarcOutcome.Fail)]
+    [InlineData(DmarcOutcome.NotReported)]
+    public void AuthenticatedAuthorDomain_IdentityUnrelatedToTheDisplayedDomain_IsAbsent(DmarcOutcome dmarc)
+    {
+        // Arrange
+        SenderDomain.TryCreate("relay.test", out var relay);
+        SenderDomain.TryCreate("bank.test", out var displayed);
+
+        // Act
+        var authentication = SenderAuthentication.Authenticated(relay, spfDomain: null, displayed, dmarc);
+
+        // Assert
+        Assert.Null(authentication.AuthenticatedAuthorDomain);
+    }
+
+    /// <summary>A verdict that establishes nothing, and one that refused an identity, establish no author either.</summary>
+    [Fact]
+    public void AuthenticatedAuthorDomain_NothingEstablishedOrRefused_IsAbsent()
+    {
+        // Arrange
+        SenderDomain.TryCreate("bank.test", out var displayed);
+
+        // Act
+        var unestablished = SenderAuthentication.NotEstablished(displayed);
+        var refused = SenderAuthentication.Failed(displayed, DmarcOutcome.Fail);
+
+        // Assert
+        Assert.Null(unestablished.AuthenticatedAuthorDomain);
+        Assert.Null(refused.AuthenticatedAuthorDomain);
+    }
+
+    /// <summary>A message displaying no usable domain has no author to establish, whatever authenticated.</summary>
+    [Fact]
+    public void AuthenticatedAuthorDomain_NoDisplayedDomain_IsAbsent()
+    {
+        // Arrange
+        SenderDomain.TryCreate("partner.test", out var signer);
+
+        // Act
+        var authentication = SenderAuthentication.Authenticated(
+            signer,
+            spfDomain: null,
+            fromDomain: null,
+            DmarcOutcome.Pass);
+
+        // Assert
+        Assert.Null(authentication.AuthenticatedAuthorDomain);
+    }
 }
