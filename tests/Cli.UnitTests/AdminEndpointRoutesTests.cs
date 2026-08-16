@@ -59,6 +59,18 @@ public sealed class AdminEndpointRoutesTests
         Assert.Equal("/api/admin/folders/erasure", AdminEndpointRoutes.FolderErasurePath);
 
     /// <summary>
+    /// The two routes that bring stored mail up to a newer release's properties, pinned for the reason every other path
+    /// here is. They sit beneath the mailbox segment rather than under the folder one because both act on an account
+    /// and merely narrow to a folder.
+    /// </summary>
+    [Fact]
+    public void MaintenancePaths_AreTheRoutesTheDeploymentRefreshesStoredMailAt()
+    {
+        Assert.Equal("/api/admin/mailbox/rewind", AdminEndpointRoutes.MailboxRewindPath);
+        Assert.Equal("/api/admin/mailbox/rederivation", AdminEndpointRoutes.MailboxRederivationPath);
+    }
+
+    /// <summary>
     /// RFC 9728 places the document under a well-known segment with the resource's path appended, and the deployment
     /// refuses to start unless its resource path is the route prefix. Composing it here rather than reading it from a
     /// challenge is what makes a sign-in one request instead of two, and this is the assertion that keeps the

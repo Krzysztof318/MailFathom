@@ -30,14 +30,21 @@ namespace MailFathom.Host.Api;
 /// mailbox is quiet, and telling the two apart is an operator's question rather than anything a model reasons over.
 /// </para>
 /// <para>
-/// The fourth reads one account's record of the changes MailFathom made to its mailbox, which
+/// The fourth pair brings stored mail up to the properties a newer release records, which
+/// <see cref="MailboxMaintenanceEndpoints" /> describes: discarding an account's synchronization progress so its
+/// folders are read afresh, and re-reading the raw MIME already stored. They are here because the first of them makes a
+/// deployment pull a mailbox over IMAP again, which is an operator's decision about somebody's bandwidth and storage
+/// rather than anything a model reasons over.
+/// </para>
+/// <para>
+/// The next reads one account's record of the changes MailFathom made to its mailbox, which
 /// <see cref="MailboxMutationAuditEndpoint" /> describes. It is here rather than on the MCP surface because its answer
 /// is an operator's accountability evidence rather than anything a model reasons over, and because the credential that
 /// bounds administrative access is what bounds who may read where a person's mail has been.
 /// </para>
 /// <para>
-/// The fifth reads one account's record of the questions this deployment answered from its mailbox, which
-/// <see cref="MailAnsweringAuditEndpoint" /> describes. It is here beside the fourth for the same reasons and one more:
+/// The one after it reads one account's record of the questions this deployment answered from its mailbox, which
+/// <see cref="MailAnsweringAuditEndpoint" /> describes. It is here beside the mutation trail for the same reasons and one more:
 /// the two together are what an operator answers "why is this message here" and "why did it answer that" from, and
 /// keeping them on one credential means one thing to provision and one thing to revoke.
 /// </para>
@@ -87,6 +94,7 @@ internal static class AdminApiEndpoints
         api.MapGet("/session", (ClaimsPrincipal caller) => Results.Ok(AdminSessionResponse.For(caller)));
         api.MapMailboxRefreshToken();
         api.MapMailboxSynchronizationStatus();
+        api.MapMailboxMaintenance();
         api.MapMailboxMutationAudit();
         api.MapMailAnsweringAudit();
         api.MapEmbeddingProfile();

@@ -40,10 +40,17 @@ internal static class CliRootCommand
         // accounts a deployment serves rather than about the deployment itself. "status" reads correctly at this level
         // for the same reason it does under "embedding" — the root one asks whether the stored credential still works,
         // and this one asks whether the mailbox is being kept up to date.
+        // The two refreshes sit here rather than under "folder" because both act on an account and merely narrow to a
+        // folder, and because what they are about is the mail the account holds rather than the storage one folder
+        // occupies. They are two commands rather than one switch for the reason the endpoint serves two routes: the
+        // properties have two sources, one of them costs a mailbox over IMAP and the other costs a local read, and a
+        // flag deciding which would make a typo the difference between them.
         Command mailboxCommand = new("mailbox", "Administer a configured mailbox account.")
         {
             MailboxStatusCommand.Create(context),
             AuthorizeMailboxCommand.Create(context),
+            RewindMailboxCommand.Create(context),
+            RederiveMailboxCommand.Create(context),
         };
 
         // A group of its own rather than three commands at the root, because "status" already means something here:

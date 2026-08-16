@@ -31,6 +31,7 @@ using MailFathom.Application.Jobs.Execution;
 using MailFathom.Application.Jobs.Scheduling;
 using MailFathom.Application.Mail;
 using MailFathom.Application.Mail.Delivery;
+using MailFathom.Application.Mail.Maintenance;
 using MailFathom.Application.Mail.Mutations;
 using MailFathom.Application.Mail.Mutations.Audit;
 using MailFathom.Application.Mail.Mutations.Convergence;
@@ -336,6 +337,11 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IEmailContentStore, EmailContentStore>();
         services.AddScoped<IStoredEmailContentInventory, StoredEmailContentInventory>();
         services.AddScoped<IStoredEmailExtractionBackfillStore, StoredEmailExtractionBackfillStore>();
+        // What the two maintenance commands read and write. Both are ordinary scoped stores over stored mail: the
+        // counter is what puts a figure in front of an operator before a rewind is agreed to, and the walk is the pass
+        // that re-reads what a rewind would otherwise fetch again.
+        services.AddScoped<IStoredMailCounter, StoredMailCounter>();
+        services.AddScoped<IStoredMailRederivationStore, StoredMailRederivationStore>();
         // A singleton for the reason the embedding backfill's is: the backlog it publishes is one figure about the whole
         // instance, and a gauge answering per scope would report whichever scope last ran a pass.
         services.AddSingleton<MailExtractionBackfillTelemetry>();
@@ -454,6 +460,8 @@ public static class ServiceCollectionExtensions
         services.AddScoped<MailFolderResolver>();
         services.AddScoped<MailFolderReferenceResolver>();
         services.AddScoped<UnmirroredMailFolderEraser>();
+        services.AddScoped<MailSynchronizationRewind>();
+        services.AddScoped<StoredMailRederivation>();
         services.AddScoped<MailboxSynchronizer>();
         services.AddScoped<MailboxReconciler>();
         services.AddScoped<StoredEmailExtractionBackfill>();

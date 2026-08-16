@@ -239,6 +239,9 @@ internal sealed class MailFathomDbContext : DbContext
 
     internal DbSet<BackfillPositionEntity> BackfillPositions => this.Set<BackfillPositionEntity>();
 
+    internal DbSet<MailRederivationPositionEntity> MailRederivationPositions =>
+        this.Set<MailRederivationPositionEntity>();
+
     internal DbSet<MailRuleEvaluationRunEntity> MailRuleEvaluationRuns => this.Set<MailRuleEvaluationRunEntity>();
 
     internal DbSet<SynchronizationCheckpointEntity> SynchronizationCheckpoints => this.Set<SynchronizationCheckpointEntity>();
@@ -522,6 +525,17 @@ internal sealed class MailFathomDbContext : DbContext
             entity.Property(position => position.SensitiveContentStamp)
                 .HasMaxLength(SensitiveContentDerivationStamp.Length)
                 .IsFixedLength();
+        });
+
+        // Keyed by the scope an operator named rather than by a constant, which is what keeps two accounts' walks
+        // independent. No foreign key onto the account: the row is a cursor over rows that are already keyed to one,
+        // and requiring the account row would make the walk depend on a table it never reads.
+        modelBuilder.Entity<MailRederivationPositionEntity>(entity =>
+        {
+            entity.ToTable("mail_rederivation_positions");
+            entity.HasKey(position => new { position.MailboxAccountId, position.FolderAlias });
+            entity.Property(position => position.MailboxAccountId).HasMaxLength(128);
+            entity.Property(position => position.FolderAlias).HasMaxLength(128);
         });
 
         modelBuilder.Entity<SynchronizationCheckpointEntity>(entity =>

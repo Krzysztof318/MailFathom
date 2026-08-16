@@ -95,6 +95,37 @@ internal sealed class SynchronizationCheckpointStore(MailFathomDbContext readCon
         entity.ReconciledThroughModSeq = StoredModSeqOf(checkpoint.ReconciledThroughModSeq);
     }
 
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<MailFolderAlias>> DiscardCheckpointsAsync(
+        IPersistenceSession session,
+        MailAccountId accountId,
+        MailFolderAlias? folderAlias,
+        CancellationToken cancellationToken)
+    {
+        var writeContext = EfCorePersistenceSessionAccessor.DbContextOf(session);
+        var account = accountId.Value;
+        var alias = folderAlias?.Value;
+
+        // Tracked rather than deleted in one statement, because the removal joins the caller's transaction and an
+        // ExecuteDelete would run outside the change tracker and commit on its own.
+        var checkpoints = await writeContext.SynchronizationCheckpoints
+            .Include(checkpoint => checkpoint.MailFolder)
+            .Where(checkpoint => checkpoint.MailFolder.MailboxAccountId == account
+                && (alias == null || checkpoint.MailFolder.Alias == alias))
+            .ToArrayAsync(cancellationToken);
+
+        writeContext.SynchronizationCheckpoints.RemoveRange(checkpoints);
+
+        return
+        [
+            .. checkpoints
+                .Select(checkpoint => checkpoint.MailFolder.Alias)
+                .Distinct(StringComparer.Ordinal)
+                .Order(StringComparer.Ordinal)
+                .Select(MailFolderAlias.Create),
+        ];
+    }
+
     /// <summary>Reads one stored row as the progress it records, including a row written before sequences were tracked.</summary>
     /// <remarks>
     /// A row from before this column existed reads with the sequence absent and every other value intact, which is what

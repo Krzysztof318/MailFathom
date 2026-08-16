@@ -3,6 +3,7 @@ using System;
 using MailFathom.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using NpgsqlTypes;
@@ -13,9 +14,11 @@ using Pgvector;
 namespace MailFathom.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(MailFathomDbContext))]
-    partial class MailFathomDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260816162452_AddMailRederivationPositions")]
+    partial class AddMailRederivationPositions
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -1087,20 +1090,9 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                     b.Property<long>("AttachmentTotalSizeOctets")
                         .HasColumnType("bigint");
 
-                    b.Property<string>("AuthenticatedAuthorDomain")
-                        .HasMaxLength(253)
-                        .HasColumnType("character varying(253)");
-
                     b.Property<string>("AuthenticatedSenderDomain")
                         .HasMaxLength(253)
                         .HasColumnType("character varying(253)");
-
-                    b.Property<string>("AuthorAuthenticationOutcome")
-                        .IsRequired()
-                        .ValueGeneratedOnAdd()
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)")
-                        .HasDefaultValue("NotEstablished");
 
                     b.Property<bool>("CarriesUnverifiedSignature")
                         .HasColumnType("boolean");
@@ -1218,27 +1210,16 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                     b.Property<string>("SenderDisplayName")
                         .HasColumnType("text");
 
+                    b.Property<string>("SenderDomainAlignment")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasDefaultValue("NotAssessed");
+
                     b.Property<string>("SenderNormalizedAddress")
                         .HasMaxLength(320)
                         .HasColumnType("character varying(320)");
-
-                    b.Property<string>("SenderTrustGrantedBy")
-                        .IsRequired()
-                        .ValueGeneratedOnAdd()
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)")
-                        .HasDefaultValue("None");
-
-                    b.Property<string>("SenderTrustLevel")
-                        .IsRequired()
-                        .ValueGeneratedOnAdd()
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)")
-                        .HasDefaultValue("Unknown");
-
-                    b.Property<string>("SenderTrustPolicyRevision")
-                        .HasMaxLength(32)
-                        .HasColumnType("character varying(32)");
 
                     b.Property<DateTimeOffset?>("SentAt")
                         .HasColumnType("timestamp with time zone");

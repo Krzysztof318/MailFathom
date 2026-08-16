@@ -26,6 +26,21 @@ internal static class AdminEndpointRoutes
     /// <summary>Where a deployment reports what its mail synchronization is doing, account by account and folder by folder.</summary>
     internal const string MailboxSynchronizationPath = $"{Prefix}/mailbox/synchronization";
 
+    /// <summary>Where the cost of discarding an account's synchronization progress is read, and where it is discarded.</summary>
+    /// <remarks>
+    /// One path read with <c>GET</c> and performed with <c>POST</c>, which is what keeps the figure an operator
+    /// confirms and the figure the deployment acts on the same figure rather than two counts that happen to agree.
+    /// </remarks>
+    internal const string MailboxRewindPath = $"{Prefix}/mailbox/rewind";
+
+    /// <summary>Where a deployment is asked to re-read one bounded pass of the raw MIME it already stores.</summary>
+    /// <remarks>
+    /// One pass per request, so the command repeats it until nothing is left. That is what makes a re-derivation the
+    /// operator interrupted resumable: what a batch committed stays committed, and the next invocation continues from
+    /// there rather than starting the scope over.
+    /// </remarks>
+    internal const string MailboxRederivationPath = $"{Prefix}/mailbox/rederivation";
+
     /// <summary>Where a deployment reports whether semantic search is working and how far behind it is.</summary>
     internal const string EmbeddingStatusPath = $"{Prefix}/embeddings";
 

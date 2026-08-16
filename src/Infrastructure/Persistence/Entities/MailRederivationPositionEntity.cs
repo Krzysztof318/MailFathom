@@ -1,0 +1,39 @@
+// Copyright © 2026 Krzysztof Kasprowicz
+// Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
+// Project repository: https://github.com/Krzysztof318/MailFathom
+
+using MailFathom.CodeCoverage;
+
+namespace MailFathom.Infrastructure.Persistence.Entities;
+
+/// <summary>How far one operator-asked re-derivation of a scope's stored mail has walked.</summary>
+/// <remarks>
+/// <para>
+/// A table of its own rather than a row in <see cref="BackfillPositionEntity" />, because that walk is one per
+/// deployment and named by a constant while this one is one per scope an operator names. Keying it by the scope is what
+/// lets two accounts be refreshed independently and stops one operator's cursor from stepping another's walk forward.
+/// </para>
+/// <para>
+/// A row exists only while a walk is unfinished. An invocation that reaches the end of its scope removes the row, so
+/// asking for the same scope after a later release again starts at the beginning — which is what the command exists for.
+/// </para>
+/// </remarks>
+[RequiresIntegrationCoverage]
+internal sealed class MailRederivationPositionEntity
+{
+    /// <summary>The folder value a whole-account scope is keyed by.</summary>
+    /// <remarks>
+    /// A primary key holds no null, and the scope genuinely has two shapes, so the account-wide walk needs a value of
+    /// its own. The empty string is safe as that value because a folder alias is validated non-blank everywhere one is
+    /// created, so no folder can ever be keyed by it.
+    /// </remarks>
+    internal const string WholeAccountFolder = "";
+
+    public required string MailboxAccountId { get; set; }
+
+    public required string FolderAlias { get; set; }
+
+    public Guid LastProcessedStoredEmailId { get; set; }
+
+    public DateTimeOffset UpdatedAt { get; set; }
+}

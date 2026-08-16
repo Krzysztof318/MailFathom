@@ -331,6 +331,51 @@ erasing is gone, the rest is untouched, and running the same command again conti
 have stopped mirroring](../operations/admin-endpoint.md#erasing-a-folder-you-have-stopped-mirroring) is the operator's
 reference, including what goes with the mail and what survives it.
 
+## Filling in what a newer version records
+
+An upgrade sometimes teaches MailFathom to record something new about a message — who a receiving server established
+sent it, which keywords its folder carries. New mail gets it because it arrives after the upgrade. **The mail you
+already have does not**, and nothing fills it in on its own: synchronization resumes from where it left off in each
+folder, so a message it has already stored is never looked at again.
+
+| What you want | Command |
+| --- | --- |
+| Fill in what is already in the mail you stored | `mfctl mailbox rederive --account work` |
+| Fill in what only your mail server knows | `mfctl mailbox rewind --account work` |
+| Either one, for a single folder | add `--folder archive` |
+
+**Reach for `rederive` first, because it is nearly free.** Anything the message itself carries is in the raw mail
+already on your server's disk, so filling in the column means reading that back and parsing it. Nothing is fetched,
+your mail server is not contacted at all, and nothing is marked read:
+
+```console
+$ mfctl mailbox rederive --account work
+1,043 stored emails re-read for every folder under work.
+```
+
+**`rewind` is the one to be careful with.** Some things are your mail server's answer rather than the message's — flags,
+keywords, the date it received the message — and the only way to learn them is to ask for the mail again. So `rewind`
+forgets how far synchronization has got, which makes the next runs fetch the whole mailbox over again. It tells you how
+much that is and asks before it does anything:
+
+```console
+$ mfctl mailbox rewind --account work
+Scope:    every folder under work
+Cost:     22,500 stored emails would be fetched from the mail server, re-read, and stored again.
+Rewind that scope? [y/N]
+```
+
+Say no and nothing changes. Add `--yes` if you are scripting it and there is nobody to answer.
+
+**Neither command deletes anything, and neither creates duplicates.** Your mail, its attachments, and everything built
+from it stay where they are; mail fetched again lands on the message that is already there. Neither one re-embeds
+anything either, so no refresh can run up a bill with your AI provider.
+
+Both take a while on a large mailbox and print how far they have got. Stopping `rederive` is safe — it remembers where
+it stopped, and running it again continues from there. [Bringing stored mail up to a later
+release](../operations/admin-endpoint.md#bringing-stored-mail-up-to-a-later-release) is the operator's reference for
+both.
+
 ## Background work that stopped
 
 MailFathom does most of what it does in the background: classifying a message, embedding a passage, carrying out what a
