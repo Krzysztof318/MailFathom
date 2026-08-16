@@ -293,7 +293,7 @@ public sealed class TransportAuthenticationOptionsTests
 
     /// <summary>The grant belongs to the entry, so which entry a credential sits in decides what it may do rather than only how the file was grouped.</summary>
     [Fact]
-    public void GrantsByApiKeyName_TwoEntriesGrantedDifferently_MapsEachKeyToItsOwnEntrysGrant()
+    public void GrantsByApiKeyName_TwoEntriesGrantedDifferently_MapsEachKeyToTheGrantOfItsOwnEntry()
     {
         // Arrange
         var narrowed = new TransportAuthenticationOptions { ApiKey = AnApiKey("reporting-job") };

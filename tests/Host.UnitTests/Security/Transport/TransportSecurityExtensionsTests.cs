@@ -369,7 +369,7 @@ public sealed class TransportSecurityExtensionsTests
     /// entry beside it holds, which is the failure the entry-scoped grant exists to prevent.
     /// </summary>
     [Fact]
-    public void AddTransportAuthentication_TwoKeysGrantedDifferently_GivesTheApiKeySchemeEachEntrysOwnGrant()
+    public void AddTransportAuthentication_TwoKeysGrantedDifferently_GivesTheApiKeySchemeTheGrantOfEachEntry()
     {
         // Arrange
         var services = new ServiceCollection();

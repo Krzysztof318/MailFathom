@@ -298,7 +298,7 @@ public sealed class McpEndpointOptionsBindingTests
 
     /// <summary>The grant belongs to the entry, so the read has to answer the question once per entry rather than once per section.</summary>
     [Fact]
-    public void ReadFrom_TwoEntriesGrantedDifferently_ReadsEachEntrysOwnGrant()
+    public void ReadFrom_TwoEntriesGrantedDifferently_ReadsTheGrantWrittenOnEachEntry()
     {
         // Arrange
         var configuration = ConfigurationFromJson("""
