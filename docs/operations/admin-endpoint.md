@@ -642,7 +642,8 @@ no longer exists, so its own advance is refused rather than written over the rew
 whose bindings held progress, which is what says the removal won.
 
 Both take `--account` and an optional `--folder`; without it they cover every folder the account holds mail in,
-including one whose mapping was withdrawn. Both read at most 4 KB of body, and every refusal is `400` naming what to
+including one whose mapping was withdrawn. Each write reads at most 4 KB of body — the assessment is a `GET` and names
+its scope in the query string — and every refusal is `400` naming what to
 change: an account this deployment does not configure, and text that is not a folder alias. A folder named blank is an
 omission rather than a refusal, because a caller writing a URL cannot express the difference.
 

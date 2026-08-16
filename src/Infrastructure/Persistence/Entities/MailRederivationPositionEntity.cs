@@ -36,4 +36,14 @@ internal sealed class MailRederivationPositionEntity
     public Guid LastProcessedStoredEmailId { get; set; }
 
     public DateTimeOffset UpdatedAt { get; set; }
+
+    /// <summary>The row's version, which is what stops one walk's commit from moving another's position backwards.</summary>
+    /// <remarks>
+    /// The insert of a scope's first position is a race the primary key settles. The updates after it are the same race
+    /// one row later and the key says nothing about them: two walks that both read this row commit in whatever order
+    /// they finish, and the slower one's earlier position would otherwise be written over the faster one's later one —
+    /// which costs no correctness and re-reads the difference on every pass afterwards. The token turns that into a
+    /// conflict the retry resolves from a fresh read.
+    /// </remarks>
+    public uint ConcurrencyVersion { get; set; }
 }

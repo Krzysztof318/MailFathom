@@ -14,7 +14,7 @@ using Pgvector;
 namespace MailFathom.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(MailFathomDbContext))]
-    [Migration("20260816182910_AddMailRederivationPositions")]
+    [Migration("20260816192300_AddMailRederivationPositions")]
     partial class AddMailRederivationPositions
     {
         /// <inheritdoc />
@@ -614,6 +614,12 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                     b.Property<string>("FolderAlias")
                         .HasMaxLength(128)
                         .HasColumnType("character varying(128)");
+
+                    b.Property<uint>("ConcurrencyVersion")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
 
                     b.Property<Guid>("LastProcessedStoredEmailId")
                         .HasColumnType("uuid");

@@ -138,6 +138,28 @@ public sealed class MailboxMaintenanceCommandTests : IDisposable
             line => line.Contains("nothing to rewind", StringComparison.Ordinal));
     }
 
+    /// <summary>
+    /// And a zero count is not an empty rewind. A folder whose local copies are all tombstoned is counted in no
+    /// assessment and its binding still holds progress, so the agreed rewind discards real folders and names them —
+    /// which is the case the removed shortcut would have performed without ever asking.
+    /// </summary>
+    [Fact]
+    public async Task Rewind_AZeroCountScopeWhoseFoldersHoldProgress_DiscardsThemAndNamesThem()
+    {
+        // Arrange
+        using var deployment = FakeMaintenanceDeployment.Rewinding(storedEmailCount: 0, "INBOX");
+        this.console.AnswerToGive = true;
+
+        // Act
+        var exitCode = await this.RewindAsync(deployment);
+
+        // Assert
+        Assert.Equal(CliExitCode.Success, exitCode);
+        Assert.Equal(1, deployment.RewindRequestCount());
+        Assert.Single(this.console.Questions);
+        Assert.Contains(this.console.Lines, line => line.Contains("INBOX", StringComparison.Ordinal));
+    }
+
     /// <summary>And declining it discards nothing, which is the half a zero count used to wave through.</summary>
     [Fact]
     public async Task Rewind_AScopeTheAssessmentCountedNoMailInAndADecliningOperator_DiscardsNothing()

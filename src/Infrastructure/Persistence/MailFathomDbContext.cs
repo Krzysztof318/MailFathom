@@ -546,6 +546,9 @@ internal sealed class MailFathomDbContext : DbContext
                 .HasName(MailRederivationPositionPrimaryKeyConstraintName);
             entity.Property(position => position.MailboxAccountId).HasMaxLength(128);
             entity.Property(position => position.FolderAlias).HasMaxLength(128);
+
+            // See the stored-email mapping: this is the PostgreSQL `xmin` system column, not a user-defined column.
+            entity.Property(position => position.ConcurrencyVersion).IsRowVersion();
         });
 
         modelBuilder.Entity<SynchronizationCheckpointEntity>(entity =>

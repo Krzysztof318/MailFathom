@@ -541,6 +541,7 @@ recording something the payload already carried. It is what makes an interrupted
 | `FolderAlias` | The one folder the walk was narrowed to, and the second half of the key. The empty string is the whole-account walk: a primary key holds no null, and no folder can collide with it because an alias is validated non-blank wherever one is created |
 | `LastProcessedStoredEmailId` | The last stored email a committed batch read. The walk is ordered by that identity, which is total, stable, and already indexed, so the next batch continues past this value |
 | `UpdatedAt` | When the position last moved, which is what says whether a walk somebody abandoned is worth finishing |
+| `ConcurrencyVersion` | The `xmin` token again. The insert of a scope's first position is settled by the key; the updates after it are the same race one row later, and without the token a slower walk's earlier position would be written over a faster one's later one and re-read the difference on every pass afterwards |
 
 It is a table of its own rather than a row in `backfill_positions` because that walk is one per deployment and named by
 a constant, while this one is one per scope an operator names — keying it by the scope is what lets two accounts be

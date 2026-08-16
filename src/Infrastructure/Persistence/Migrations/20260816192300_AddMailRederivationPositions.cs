@@ -22,7 +22,8 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                     MailboxAccountId = table.Column<string>(type: "character varying(128)", maxLength: 128, nullable: false),
                     FolderAlias = table.Column<string>(type: "character varying(128)", maxLength: 128, nullable: false),
                     LastProcessedStoredEmailId = table.Column<Guid>(type: "uuid", nullable: false),
-                    UpdatedAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false)
+                    UpdatedAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
+                    xmin = table.Column<uint>(type: "xid", rowVersion: true, nullable: false)
                 },
                 constraints: table =>
                 {
