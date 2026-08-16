@@ -424,7 +424,11 @@ public sealed class ServiceCollectionExtensionsTests
     public async Task AddInfrastructure_WithARedactor_ResolvesAMimeReaderThatStillJudgesTheAuthor()
     {
         // Arrange
-        var policy = SenderTrustPolicy.Create([], [], []);
+        // The policy has to recognize somebody, so that its revision is not the one a reading no policy judged carries:
+        // an empty policy digests to None, which is exactly what the undecorated reader would leave behind.
+        Assert.True(TrustedSenderEntry.TryCreateForDomain("partner.example", includeSubdomains: false, out var entry));
+        Assert.NotNull(entry);
+        var policy = SenderTrustPolicy.Create([], [entry], []);
         var policies = Substitute.For<ISenderTrustPolicyReader>();
         policies.GetTrustPolicy(Arg.Any<MailAccountId>()).Returns(policy);
 
@@ -459,6 +463,8 @@ public sealed class ServiceCollectionExtensionsTests
 
         // Assert
         Assert.Equal(EmailMimeExtractionOutcome.Extracted, extraction.Outcome);
+        Assert.True(policy.Revision.NamesAPolicy);
+        Assert.NotEqual(SenderTrust.NotEvaluated.PolicyRevision, extraction.Metadata?.SenderTrust.PolicyRevision);
         Assert.Equal(policy.Revision, extraction.Metadata?.SenderTrust.PolicyRevision);
     }
 

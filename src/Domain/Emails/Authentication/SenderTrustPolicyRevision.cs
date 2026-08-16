@@ -30,13 +30,20 @@ public readonly record struct SenderTrustPolicyRevision
     /// <summary>How many bytes of the digest are kept, which is what <see cref="Length" /> hexadecimal characters carry.</summary>
     private const int RetainedDigestBytes = Length / 2;
 
-    private SenderTrustPolicyRevision(string value) => this.Value = value;
+    private readonly string? value;
+
+    private SenderTrustPolicyRevision(string value) => this.value = value;
 
     /// <summary>Gets the revision that names no policy, which is what a verdict no policy produced carries.</summary>
     public static SenderTrustPolicyRevision None => default;
 
     /// <summary>Gets the revision as the text a column stores, or the empty string for <see cref="None" />.</summary>
-    public string Value { get; }
+    /// <remarks>
+    /// The field behind it is nullable and this is not, because <see cref="None" /> is the default instance and a
+    /// default struct never runs a constructor — so the absence has to be answered here rather than left for every
+    /// caller to meet as a <see langword="null" /> the annotation said could not happen.
+    /// </remarks>
+    public string Value => this.value ?? string.Empty;
 
     /// <summary>Gets whether this revision names a policy, which is false exactly for <see cref="None" />.</summary>
     public bool NamesAPolicy => !string.IsNullOrEmpty(this.Value);
@@ -78,5 +85,5 @@ public readonly record struct SenderTrustPolicyRevision
         string.IsNullOrWhiteSpace(stored) ? None : new SenderTrustPolicyRevision(stored.Trim());
 
     /// <inheritdoc />
-    public override string ToString() => this.Value ?? string.Empty;
+    public override string ToString() => this.Value;
 }

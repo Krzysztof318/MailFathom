@@ -78,11 +78,20 @@ public sealed class SenderAuthenticationTests
         Assert.Equal(displayed, authentication.AuthenticatedAuthorDomain);
     }
 
-    /// <summary>Without DMARC, an identity that authenticated as the displayed domain establishes the author.</summary>
+    /// <summary>Where DMARC decided nothing, an identity that authenticated as the displayed domain establishes the author.</summary>
+    /// <remarks>
+    /// Both results that decided nothing are covered, because they are different facts about the receiving server: one
+    /// evaluation never ran and the other ran and found no policy to apply. Neither is a statement about the author, so
+    /// neither may close the route that most mail actually arrives by.
+    /// </remarks>
     [Theory]
-    [InlineData(true)]
-    [InlineData(false)]
-    public void AuthenticatedAuthorDomain_IdentityEqualToTheDisplayedDomain_IsThatDomain(bool throughDkim)
+    [InlineData(true, DmarcOutcome.NotReported)]
+    [InlineData(false, DmarcOutcome.NotReported)]
+    [InlineData(true, DmarcOutcome.NoPolicyPublished)]
+    [InlineData(false, DmarcOutcome.NoPolicyPublished)]
+    public void AuthenticatedAuthorDomain_IdentityEqualToTheDisplayedDomain_IsThatDomain(
+        bool throughDkim,
+        DmarcOutcome dmarc)
     {
         // Arrange
         SenderDomain.TryCreate("partner.test", out var displayed);
@@ -93,10 +102,36 @@ public sealed class SenderAuthenticationTests
             throughDkim ? displayed : relay,
             throughDkim ? null : displayed,
             displayed,
-            DmarcOutcome.NotReported);
+            dmarc);
 
         // Assert
         Assert.Equal(displayed, authentication.AuthenticatedAuthorDomain);
+    }
+
+    /// <summary>A DMARC failure ends the question, so an identity equal to the displayed domain does not reopen it.</summary>
+    /// <remarks>
+    /// The receiving server reached that result with the displayed domain's own published policy in hand, which is more
+    /// than an identity comparison made here has. Treating the comparison as the stronger of the two would let a message
+    /// the author's own domain disowned establish that author.
+    /// </remarks>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void AuthenticatedAuthorDomain_IdentityEqualToTheDisplayedDomainButDmarcFailed_IsAbsent(bool throughDkim)
+    {
+        // Arrange
+        SenderDomain.TryCreate("partner.test", out var displayed);
+        SenderDomain.TryCreate("relay.test", out var relay);
+
+        // Act
+        var authentication = SenderAuthentication.Authenticated(
+            throughDkim ? displayed : relay,
+            throughDkim ? null : displayed,
+            displayed,
+            DmarcOutcome.Fail);
+
+        // Assert
+        Assert.Null(authentication.AuthenticatedAuthorDomain);
     }
 
     /// <summary>An identity belonging to somebody other than the displayed author establishes no author at all.</summary>

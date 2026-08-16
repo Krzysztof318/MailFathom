@@ -90,9 +90,15 @@ public sealed record SenderAuthentication
     /// Two things establish an author here, and neither of them believes the header on its own. A trusted
     /// <see cref="DmarcOutcome.Pass" /> is the receiving server's own statement that the displayed domain passed under
     /// its published policy, so the displayed domain is the answer. Failing that, an authenticated identity whose domain
-    /// is exactly the displayed one is the same claim reached without DMARC. Everything else — including
-    /// <see cref="DmarcOutcome.Fail" />, which is a statement <em>against</em> the author — establishes nothing and
+    /// is exactly the displayed one is the same claim reached without DMARC. Everything else establishes nothing and
     /// answers <see langword="null" />.
+    /// </para>
+    /// <para>
+    /// <see cref="DmarcOutcome.Fail" /> ends the question rather than falling through to that second route. It is the
+    /// receiving server's statement <em>against</em> the displayed domain, reached with the domain's own published
+    /// policy in hand, so it outranks an identity comparison made here without one. The result no DMARC evaluation
+    /// produced, and the one that ran and found no policy, both leave the second route open — which is what most mail
+    /// actually arrives with.
     /// </para>
     /// <para>
     /// Only the one DKIM identity this verdict names is considered, so a message carrying a second signature over the
@@ -109,9 +115,9 @@ public sealed record SenderAuthentication
                 return null;
             }
 
-            if (this.Dmarc == DmarcOutcome.Pass)
+            if (this.Dmarc is DmarcOutcome.Pass or DmarcOutcome.Fail)
             {
-                return displayed;
+                return this.Dmarc == DmarcOutcome.Pass ? displayed : null;
             }
 
             var authenticatedAsDisplayed = this.Outcome == SenderAuthenticationOutcome.Authenticated
