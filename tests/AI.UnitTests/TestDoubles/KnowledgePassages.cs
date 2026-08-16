@@ -19,20 +19,26 @@ internal static class KnowledgePassages
     /// <param name="accountId">The account the message belongs to.</param>
     /// <param name="folderAlias">The folder alias the message belongs to.</param>
     /// <param name="subject">The subject, or <see langword="null" /> for a message that carried none.</param>
+    /// <param name="senderVerification">
+    /// What was established about the message's author, or <see langword="null" /> for the stored default. A test about
+    /// what reaches a model states it, because the guarantee there is that the verdict reaches no provider — which a
+    /// passage carrying the default could not tell apart from one whose verdict was dropped.
+    /// </param>
     /// <returns>The passage.</returns>
     public static EmailKnowledgePassage Create(
         string text,
         Guid? storedEmailId = null,
         string accountId = "primary",
         string folderAlias = "INBOX",
-        string? subject = null) => new()
+        string? subject = null,
+        SenderVerification? senderVerification = null) => new()
         {
             StoredEmailId = StoredEmailId.Create(storedEmailId ?? Guid.CreateVersion7()),
             AccountId = MailAccountId.Create(accountId),
             FolderAlias = MailFolderAlias.Create(folderAlias),
             Subject = subject,
             ReceivedAt = null,
-            SenderVerification = SenderVerification.NotEstablished,
+            SenderVerification = senderVerification ?? SenderVerification.NotEstablished,
             Text = text,
         };
 }

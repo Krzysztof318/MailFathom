@@ -7,7 +7,9 @@ using System.Xml.Linq;
 using MailFathom.AI.Retrieval;
 using MailFathom.AI.UnitTests.TestDoubles;
 using MailFathom.Application.Emails.Search;
+using MailFathom.Application.Emails.Summaries;
 using MailFathom.Application.Retrieval;
+using MailFathom.Domain.Emails.Authentication;
 using Xunit;
 
 namespace MailFathom.AI.UnitTests.Retrieval;
@@ -42,6 +44,35 @@ public sealed class RetrievedMailContextFormatterTests
         Assert.Equal("ARCHIVE", Attribute(message, RetrievedMailContextFormatter.FolderAttributeName));
         Assert.Equal("Invoice 41", Element(message, RetrievedMailContextFormatter.SubjectElementName));
         Assert.Equal("the invoice is attached", Element(message, RetrievedMailContextFormatter.ExtractElementName));
+    }
+
+    /// <summary>The sender verdict travels to a citation and never to a provider, so the envelope must not carry it.</summary>
+    /// <remarks>
+    /// A passage holds the verdict because the citation cut from it publishes one. The envelope is the other direction —
+    /// what a model is handed — and a verdict there would put this deployment's own judgement of a correspondent into a
+    /// prompt, where it becomes something a model reasons from and an injected extract can argue with.
+    /// </remarks>
+    [Fact]
+    public void Format_APassageCarryingAVerdict_LeavesItOutOfWhatTheModelIsHanded()
+    {
+        // Arrange
+        var passage = KnowledgePassages.Create(
+            "the invoice is attached",
+            subject: "Invoice 41",
+            senderVerification: new SenderVerification
+            {
+                AuthorAuthentication = AuthorAuthenticationOutcome.Authenticated,
+                DeploymentTrust = SenderTrustLevel.Trusted,
+            });
+
+        // Act
+        var envelope = RetrievedMailContextFormatter.Format([passage], EmailSearchRetrievalMode.Hybrid, retrievalLimitReached: false);
+
+        // Assert
+        Assert.DoesNotContain("Authenticated", envelope, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("Trusted", envelope, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("verification", envelope, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("the invoice is attached", envelope, StringComparison.Ordinal);
     }
 
     /// <summary>Ranked order is what the search decided, and an answer citing the first result must find it first.</summary>

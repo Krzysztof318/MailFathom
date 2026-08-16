@@ -461,9 +461,9 @@ Eight parts of it are worth reading before a caller writes against them:
   `[redacted:<category>]`. The marker means material of that kind stood there and was withheld; it is never text the
   message contained, and the same call returns the same marker. Every participant past that fortieth name is published
   with no display name at all rather than with one nothing scanned, so on such a deployment an absent `displayName` can
-  mean either that the sender wrote none or that the bound was reached. Addresses, identifiers, sizes, and flags are
-  never redacted, nothing stored is rewritten, and a detector that cannot answer fails the call rather than returning
-  unfiltered content. [Sensitive-content
+  mean either that the sender wrote none or that the bound was reached. Addresses, identifiers, sizes, flags, and the
+  two domains `headers.senderAuthentication` publishes are never redacted, nothing stored is rewritten, and a detector
+  that cannot answer fails the call rather than returning unfiltered content. [Sensitive-content
   scanning](sensitive-content-scanning.md#reading-a-message-is-scanned-in-flight) is the whole contract.
 - **`availability` rather than an empty body.** `readable` means the text is the message, and an empty body under it
   means the message displayed nothing. `encryptedNotReadableLocally` is mail this deployment cannot decrypt,
