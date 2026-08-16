@@ -12,10 +12,10 @@ observed the connection. It saw the envelope sender and could check SPF against 
 verify a DKIM signature against a key the signing domain publishes. RFC 8601's `Authentication-Results` header is where
 it writes both down. MailFathom reads that header back and records what it said; it verifies nothing itself.
 
-Knowing what the receiving server established is half the question. The other half is whether the message's author is
-somebody this deployment recognizes, which is a decision about a list rather than a fact about the message, and the two
-are recorded separately for that reason. This page describes both: what is recorded, how the header is chosen, and what
-makes an author *trusted*.
+Knowing that *an* identity authenticated is not yet knowing that the author a reader is shown did, and knowing that is
+still not knowing whether this deployment recognizes them. Those are three answers rather than one, and they are
+recorded separately for that reason. This page describes all three: what is recorded, how the header is chosen, what
+makes the displayed author *authenticated*, and what makes them *trusted*.
 
 ## The header is only believed from one server
 
@@ -63,17 +63,46 @@ holds the columns.
 | The domain that authenticated, and which method reached it | The identity is the point; the method says how much it is worth |
 | The DKIM signing domain and the SPF envelope domain, separately | The two disagreeing is itself a fact about the message |
 | The DMARC result the server reported | It is where an authenticated domain meets the displayed one, under the sender's own published policy |
-| Whether the authenticated domain is the `From` domain | A message authenticated as one domain while claiming another is visible as exactly that |
+| Whether the displayed author authenticated, and their domain where they did | The identity a reader is shown is the one an impersonation gets wrong, and it is a different fact from the identity that handed the message over |
 
 **DKIM is the authoritative identity wherever both checks produced one.** It is cryptographic — a key the signing
 domain publishes signed these bytes — while SPF says only that a particular address was permitted to connect on behalf
 of the envelope sender, which a forwarding hop legitimately breaks and a shared relay legitimately satisfies for
 everybody using it. Both are kept, so a reader that cares about the difference still has it.
 
-**`From` is never the source of the verdict.** It is recorded beside it, and the alignment value is the comparison of
-the two. That comparison is exact: `mail.example.test` and `example.test` are two names, and treating them as one here
-would assert an alignment the receiving server never claimed. Where a sender's published policy does permit the relaxed
-form, the server's own DMARC result says so and is recorded separately.
+**`From` is never the source of the verdict.** It is attacker-controlled message content, so nothing is believed for
+appearing in it and no list is ever held against it. It is recorded beside the verdict, and what it takes part in is
+the second conclusion below rather than the identity above.
+
+### Whether the displayed author authenticated
+
+The identity a receiving server authenticates belongs to whoever handed the message over. A relay, a mailing list, and
+a delivery provider all authenticate as themselves while carrying somebody else's `From`, so a message can authenticate
+perfectly well while the author a reader is shown authenticated nothing at all — which is what every impersonation
+looks like from here. That is recorded as a conclusion of its own, with the same three values and the same meanings as
+the verdict above, beside the identity it was reached from.
+
+Two things establish the author, and neither believes the header on its own.
+
+- **A trusted `dmarc=pass`** is the receiving server's own statement that the displayed domain passed under the
+  sender's published policy. That policy may permit a signing subdomain, which is exactly why the result is read back
+  rather than reconstructed: nothing here resolves DNS, computes an organizational domain, or consults a public suffix
+  list, so this answer is not one MailFathom could reach for itself.
+- **An authenticated identity whose domain is exactly the displayed one**, where no usable DMARC result was reported.
+  Exactly, because `mail.example.test` and `example.test` are two names and only the sender's own policy says whether
+  the first may speak for the second. Every identity the trusted header reported as passing is compared, DKIM and SPF
+  alike, so a delivery provider's signature listed first cannot hide the author's own listed after it.
+
+**`dmarc=fail` is the only route to a failure**, and it ends the question rather than falling through to the second
+route: the receiving server reached it with the displayed domain's own policy in hand, which is more than a comparison
+made here without one. Everything else that establishes nothing is *not established* instead — a signing subdomain with
+no DMARC result to interpret it, an identity belonging to somebody else, a message displaying no usable domain, a
+header nothing trusted could be read from. A DKIM signature that did not verify is among them: it says nothing about
+the author, because the signature may never have been theirs.
+
+So a message may hold a passing DKIM identity, a passing SPF identity, and a failed author all at once, and it may hold
+`dmarc=pass` while the domain that signed it is not the domain it displays. Both are ordinary readings rather than
+contradictions, and both stay visible because the identity and the author are recorded separately.
 
 ### Not established is an answer
 
@@ -100,17 +129,18 @@ header fewer to read — which, where that was the only trusted header, is the n
 
 ## Whether the author is one this deployment recognizes
 
-A domain that authenticated is still a stranger until something says otherwise, so a second verdict is recorded beside
-the first: **trusted** or **unknown**. The rule is deliberately narrow. An author is trusted when their domain belongs
+An author who authenticated is still a stranger until something says otherwise, so a third answer is recorded beside
+the two above: **trusted** or **unknown**. The rule is deliberately narrow. An author is trusted when their domain belongs
 to an account this deployment synchronizes, or when an entry on the receiving account's trusted-sender list names them.
 Everything else is unknown — including most legitimate mail, and that is the intended outcome. The claim being made is
 *this deployment does not know who wrote this*, never *this is suspicious*; whether a message is wanted is [spam
 classification](spam-classification.md)'s question and is reached by other means entirely.
 
-The two verdicts are independent axes and are read together. **Authenticated and unknown** is the ordinary state of
-almost every message in a mailbox and says nothing against it, while **failed and unknown** is a message whose author
-was checked and did not hold. Which of them applies stays where it was recorded, on the authentication verdict above;
-nothing is folded into the trust value, which has exactly two values and answers only about this deployment's list.
+This and the author conclusion are independent axes and are read together. **Author authenticated and unknown** is the
+ordinary state of almost every message in a mailbox and says nothing against it, while **author failed and unknown** is
+a message whose displayed author was checked and did not hold. Which of them applies stays where it was recorded, on
+the authentication verdict above; nothing is folded into the trust value, which has exactly two values and answers only
+about this deployment's list.
 
 ### What the list is held against
 
@@ -123,15 +153,10 @@ identity happened to authenticate.** Both of the alternatives are forgeries wait
   a delivery provider all authenticate as themselves while carrying somebody else's `From`, so recognizing one of them
   would recognize every message it ever relays, whoever it says wrote them.
 
-Two things establish an author, and neither believes the header on its own. A trusted `dmarc=pass` is the receiving
-server's own statement that the displayed domain passed under its published policy, so the displayed domain is the
-answer. Failing that, an authenticated DKIM or SPF identity whose domain is exactly the displayed one is the same claim
-reached without DMARC. Everything else — nothing established, an authentication that failed, `dmarc=fail`, an identity
-belonging to somebody other than the displayed author — establishes no author, and the list is not consulted at all.
-
-Only the one DKIM identity the authentication verdict names is considered, so a message carrying a second signature over
-the displayed domain beside an unrelated first one reads as establishing no author. That withholds an author rather than
-inventing one, which is the direction a mistake here has to fall in.
+What establishes an author is [the conclusion above](#whether-the-displayed-author-authenticated), and the list is held
+against its answer and nothing else. A message whose author was not established, and one whose author authentication
+failed, both reach *unknown* without the list being consulted at all; which of the two it was stays where it was
+recorded, on the authentication verdict.
 
 ### The deployment's own domains
 
@@ -207,8 +232,9 @@ re-reads mail after an account gains a trusted authority.
 
 ## What MailFathom does not do
 
-- It resolves no DNS, verifies no DKIM signature, and evaluates no SPF or DMARC policy. Everything recorded was read
-  back out of one header.
+- It resolves no DNS, verifies no DKIM signature, and evaluates no SPF or DMARC policy. It computes no organizational
+  domain and consults no public suffix list, so it never reconstructs DMARC's relaxed alignment for itself. Everything
+  recorded was read back out of one header.
 - It does not reason from the `Received` chain beyond identifying the trusted header.
 - It never acts on either verdict. Nothing here files, flags, or hides a message, and no rule reads them yet.
 

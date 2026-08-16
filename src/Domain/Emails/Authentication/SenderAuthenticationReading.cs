@@ -18,6 +18,12 @@ namespace MailFathom.Domain.Emails.Authentication;
 /// several, the topmost is taken, since a receiving server adds its own above whatever it found and may leave a forged
 /// one below.
 /// </para>
+/// <para>
+/// What it hands the verdict is every identity the trusted header reported as passing rather than one per method, so
+/// that <see cref="SenderAuthentication.AuthorAuthentication" /> is decided against all of them. A message signed by a
+/// delivery provider as well as by its author carries two verified signatures, and which of the two a server happened
+/// to list first is not something the displayed author may depend on.
+/// </para>
 /// </remarks>
 public static class SenderAuthenticationReading
 {
@@ -81,12 +87,12 @@ public static class SenderAuthenticationReading
         }
 
         var dmarc = ReadDmarcOutcome(trustedHeader.Methods);
-        var dkimDomain = ReadVerifiedDkimDomain(trustedHeader.Methods);
-        var spfDomain = ReadPassedSpfDomain(trustedHeader.Methods);
+        var dkimDomains = ReadVerifiedDkimDomains(trustedHeader.Methods);
+        var spfDomains = ReadPassedSpfDomains(trustedHeader.Methods);
 
-        if (dkimDomain is not null || spfDomain is not null)
+        if (dkimDomains.Count > 0 || spfDomains.Count > 0)
         {
-            return SenderAuthentication.Authenticated(dkimDomain, spfDomain, fromDomain, dmarc);
+            return SenderAuthentication.Authenticated(dkimDomains, spfDomains, fromDomain, dmarc);
         }
 
         return WasIdentityAttempted(trustedHeader.Methods)
@@ -94,37 +100,40 @@ public static class SenderAuthenticationReading
             : SenderAuthentication.NotEstablished(fromDomain, dmarc);
     }
 
-    /// <summary>Reads the domain of the first DKIM signature the server verified.</summary>
+    /// <summary>Reads the domain of every DKIM signature the server verified, in header order.</summary>
     /// <remarks>
-    /// A message may carry several signatures and a server states one outcome per signature. The first that both passed
-    /// and named a domain is taken, because the header's order is the server's own and nothing here is in a position to
-    /// prefer one verified signer over another.
+    /// A message may carry several signatures and a server states one outcome per signature, so a message signed by a
+    /// delivery provider as well as by its author has two that verified. All of them are read, because the author is
+    /// established by an identity being present rather than by it being listed first: taking one and discarding the rest
+    /// would let an unrelated signature hide the one belonging to the displayed author.
     /// </remarks>
-    private static SenderDomain? ReadVerifiedDkimDomain(IReadOnlyList<ReportedAuthenticationMethod> methods) =>
-        FirstPassedDomain(methods, DkimMethod, HeaderPropertyType, DkimDomainProperty, TryReadDomain);
+    private static IReadOnlyList<SenderDomain> ReadVerifiedDkimDomains(
+        IReadOnlyList<ReportedAuthenticationMethod> methods) =>
+        PassedDomains(methods, DkimMethod, HeaderPropertyType, DkimDomainProperty, TryReadDomain);
 
-    /// <summary>Reads the envelope-sender domain of the first SPF check that passed.</summary>
-    private static SenderDomain? ReadPassedSpfDomain(IReadOnlyList<ReportedAuthenticationMethod> methods) =>
-        FirstPassedDomain(methods, SpfMethod, SmtpPropertyType, SpfMailFromProperty, TryReadMailboxDomain);
+    /// <summary>Reads the envelope-sender domain of every SPF check that passed, in header order.</summary>
+    private static IReadOnlyList<SenderDomain> ReadPassedSpfDomains(
+        IReadOnlyList<ReportedAuthenticationMethod> methods) =>
+        PassedDomains(methods, SpfMethod, SmtpPropertyType, SpfMailFromProperty, TryReadMailboxDomain);
 
-    /// <summary>Reads the first usable domain one method's passing outcomes named, in header order.</summary>
+    /// <summary>Reads every usable domain one method's passing outcomes named, in header order.</summary>
     /// <remarks>
     /// An outcome that passed while naming no usable domain contributes nothing rather than standing in for one. There
     /// is no identity to record for it, and inventing one from the displayed sender is exactly the substitution this
     /// whole reading exists to refuse.
     /// </remarks>
-    private static SenderDomain? FirstPassedDomain(
+    private static IReadOnlyList<SenderDomain> PassedDomains(
         IReadOnlyList<ReportedAuthenticationMethod> methods,
         string method,
         string propertyType,
         string propertyName,
         Func<string, SenderDomain?> readDomain) =>
-        methods
+        [.. methods
             .Where(candidate => Is(candidate.Method, method) && Is(candidate.Result, PassResult))
             .SelectMany(static candidate => candidate.Properties)
             .Where(property => Is(property.Type, propertyType) && Is(property.Name, propertyName))
             .Select(property => readDomain(property.Value))
-            .FirstOrDefault(static domain => domain is not null);
+            .OfType<SenderDomain>()];
 
     /// <summary>Reads a property written as a bare domain, which is the form a DKIM signing domain takes.</summary>
     private static SenderDomain? TryReadDomain(string value) =>
