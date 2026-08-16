@@ -3,6 +3,7 @@ using System;
 using MailFathom.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using NpgsqlTypes;
@@ -13,9 +14,11 @@ using Pgvector;
 namespace MailFathom.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(MailFathomDbContext))]
-    partial class MailFathomDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260816163525_AddContacts")]
+    partial class AddContacts
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -680,34 +683,6 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                     b.ToTable("mail_folders", (string)null);
                 });
 
-            modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.MailRederivationPositionEntity", b =>
-                {
-                    b.Property<string>("MailboxAccountId")
-                        .HasMaxLength(128)
-                        .HasColumnType("character varying(128)");
-
-                    b.Property<string>("FolderAlias")
-                        .HasMaxLength(128)
-                        .HasColumnType("character varying(128)");
-
-                    b.Property<uint>("ConcurrencyVersion")
-                        .IsConcurrencyToken()
-                        .ValueGeneratedOnAddOrUpdate()
-                        .HasColumnType("xid")
-                        .HasColumnName("xmin");
-
-                    b.Property<Guid>("LastProcessedStoredEmailId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTimeOffset>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.HasKey("MailboxAccountId", "FolderAlias")
-                        .HasName("pk_mail_rederivation_positions");
-
-                    b.ToTable("mail_rederivation_positions", (string)null);
-                });
-
             modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.MailRuleEvaluationRunEntity", b =>
                 {
                     b.Property<string>("MailboxAccountId")
@@ -1172,20 +1147,9 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                     b.Property<long>("AttachmentTotalSizeOctets")
                         .HasColumnType("bigint");
 
-                    b.Property<string>("AuthenticatedAuthorDomain")
-                        .HasMaxLength(253)
-                        .HasColumnType("character varying(253)");
-
                     b.Property<string>("AuthenticatedSenderDomain")
                         .HasMaxLength(253)
                         .HasColumnType("character varying(253)");
-
-                    b.Property<string>("AuthorAuthenticationOutcome")
-                        .IsRequired()
-                        .ValueGeneratedOnAdd()
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)")
-                        .HasDefaultValue("NotEstablished");
 
                     b.Property<bool>("CarriesUnverifiedSignature")
                         .HasColumnType("boolean");
@@ -1303,27 +1267,16 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                     b.Property<string>("SenderDisplayName")
                         .HasColumnType("text");
 
+                    b.Property<string>("SenderDomainAlignment")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasDefaultValue("NotAssessed");
+
                     b.Property<string>("SenderNormalizedAddress")
                         .HasMaxLength(320)
                         .HasColumnType("character varying(320)");
-
-                    b.Property<string>("SenderTrustGrantedBy")
-                        .IsRequired()
-                        .ValueGeneratedOnAdd()
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)")
-                        .HasDefaultValue("None");
-
-                    b.Property<string>("SenderTrustLevel")
-                        .IsRequired()
-                        .ValueGeneratedOnAdd()
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)")
-                        .HasDefaultValue("Unknown");
-
-                    b.Property<string>("SenderTrustPolicyRevision")
-                        .HasMaxLength(32)
-                        .HasColumnType("character varying(32)");
 
                     b.Property<DateTimeOffset?>("SentAt")
                         .HasColumnType("timestamp with time zone");

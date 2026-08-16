@@ -185,6 +185,17 @@ internal sealed class MailFathomDbContext : DbContext
     /// <summary>The index that answers why one message was filed, which is the history's first question.</summary>
     internal const string MailRuleExecutionEmailIndexName = "ix_mail_rule_executions_email_evaluated";
 
+    /// <summary>The order the contact book is listed and paginated in.</summary>
+    internal const string ContactListingIndexName = "ix_contacts_display_name_sort_key_id";
+
+    /// <summary>The constraint that keeps one address in one person's hands, across the whole book.</summary>
+    /// <remarks>
+    /// Named because a losing writer is recognized by the constraint its insert violated: two callers claiming one
+    /// address is a race to resolve into the answer that names its holder, not a failure to report. It is also what the
+    /// lookup from an address to a person is answered from.
+    /// </remarks>
+    internal const string ContactAddressUniqueIndexName = "ix_contact_addresses_normalized_address";
+
     /// <summary>The uniqueness a job's idempotency rests on, which spans every state a row can reach.</summary>
     internal const string JobIdentityUniqueIndexName = "ix_jobs_identity";
 
@@ -266,6 +277,10 @@ internal sealed class MailFathomDbContext : DbContext
         this.Set<MailAnsweringAuditEntryEntity>();
 
     internal DbSet<MailRuleExecutionEntity> MailRuleExecutions => this.Set<MailRuleExecutionEntity>();
+
+    internal DbSet<ContactEntity> Contacts => this.Set<ContactEntity>();
+
+    internal DbSet<ContactAddressEntity> ContactAddresses => this.Set<ContactAddressEntity>();
 
     internal DbSet<JobEntity> Jobs => this.Set<JobEntity>();
 
@@ -590,8 +605,81 @@ internal sealed class MailFathomDbContext : DbContext
         ConfigureMailboxMutationAuditEntry(modelBuilder);
         ConfigureMailAnsweringAuditEntry(modelBuilder);
         ConfigureMailRuleExecution(modelBuilder);
+        ConfigureContact(modelBuilder);
         ConfigureJob(modelBuilder);
         ConfigureJobSchedule(modelBuilder);
+    }
+
+    /// <summary>Declares the contact book: people, the addresses they use, and which of them is the default.</summary>
+    /// <remarks>
+    /// <para>
+    /// The addresses are rows rather than an array column, which is what makes both rules over them structural. One
+    /// address belongs to one person, enforced across the whole table rather than within a contact, because a book that
+    /// let two records claim one mailbox could not answer who a message is from; and erasing a person takes their
+    /// addresses with them through the foreign key rather than through a second statement somebody remembers to write.
+    /// </para>
+    /// <para>
+    /// The default address is a column on the person instead of a flag on each address. A flag would need a filtered
+    /// unique index to say that nobody has two, and that index refuses the intermediate row an update changing the choice
+    /// passes through; a column changes the choice in the same statement that records it. It carries no foreign key onto
+    /// the address row, because a key pointing back would make inserting either table first impossible.
+    /// </para>
+    /// <para>
+    /// The origin is held as its own name for the reason every bounded value beside it is, and the concurrency token is
+    /// there because a contact is amended in place — by the administration tool, by the MCP surface, and by collection —
+    /// so an amendment written from state read earlier has to fail rather than win.
+    /// </para>
+    /// </remarks>
+    private static void ConfigureContact(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<ContactEntity>(entity =>
+        {
+            entity.ToTable("contacts");
+            entity.HasKey(contact => contact.Id);
+            entity.Property(contact => contact.Id).ValueGeneratedNever();
+            entity.Property(contact => contact.DisplayName)
+                .HasMaxLength(ContactEntity.MaximumDisplayNameLength)
+                .IsRequired();
+            entity.Property(contact => contact.DisplayNameSortKey)
+                .HasMaxLength(ContactEntity.MaximumDisplayNameLength)
+                .IsRequired();
+            entity.Property(contact => contact.PreferredNormalizedAddress)
+                .HasMaxLength(ContactAddressEntity.MaximumAddressLength)
+                .IsRequired();
+            entity.Property(contact => contact.Note).HasMaxLength(ContactEntity.MaximumNoteLength);
+            entity.Property(contact => contact.Origin).HasConversion<string>().HasMaxLength(32).IsRequired();
+            entity.Property(contact => contact.ConcurrencyVersion).IsRowVersion();
+
+            // The one order the book is walked in, and the one a keyset page continues from. The identity settles two
+            // people whose names compare equal, which is what makes the order total and the walk terminate.
+            entity.HasIndex(contact => new { contact.DisplayNameSortKey, contact.Id })
+                .HasDatabaseName(ContactListingIndexName);
+        });
+
+        modelBuilder.Entity<ContactAddressEntity>(entity =>
+        {
+            entity.ToTable("contact_addresses");
+            entity.HasKey(address => address.Id);
+            entity.Property(address => address.Id).ValueGeneratedNever();
+            entity.Property(address => address.Address)
+                .HasMaxLength(ContactAddressEntity.MaximumAddressLength)
+                .IsRequired();
+            entity.Property(address => address.NormalizedAddress)
+                .HasMaxLength(ContactAddressEntity.MaximumAddressLength)
+                .IsRequired();
+
+            // Unique across the book rather than within one contact, and named because a losing writer is recognized by
+            // the constraint its insert violated: two callers claiming one address is a race whose retry resolves into
+            // the answer naming whoever holds it, not a failure to report.
+            entity.HasIndex(address => address.NormalizedAddress)
+                .IsUnique()
+                .HasDatabaseName(ContactAddressUniqueIndexName);
+
+            entity.HasOne<ContactEntity>()
+                .WithMany(contact => contact.Addresses)
+                .HasForeignKey(address => address.ContactId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
     }
 
     /// <summary>Declares the queue of durable background work, and the three questions it is asked.</summary>

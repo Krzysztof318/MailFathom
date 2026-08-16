@@ -4,6 +4,7 @@
 
 using MailFathom.Application.Accounts;
 using MailFathom.Application.AiProviders;
+using MailFathom.Application.Contacts;
 using MailFathom.Application.EmailContent.Attachments;
 using MailFathom.Application.EmailContent.Rendering;
 using MailFathom.Application.EmailContent.Repair;
@@ -78,6 +79,7 @@ using MailFathom.Infrastructure.Persistence;
 using MailFathom.Infrastructure.Persistence.Accounts;
 using MailFathom.Infrastructure.Persistence.Answering;
 using MailFathom.Infrastructure.Persistence.Connections;
+using MailFathom.Infrastructure.Persistence.Contacts;
 using MailFathom.Infrastructure.Persistence.Emails;
 using MailFathom.Infrastructure.Persistence.Embeddings;
 using MailFathom.Infrastructure.Persistence.Jobs;
@@ -665,6 +667,12 @@ public static class ServiceCollectionExtensions
             provider.GetRequiredService<IMailAccessTokenSource>(),
             provider.GetRequiredService<OutboundOperationExecutor>(),
             provider.GetRequiredService<ITransientFailureClassifier>()));
+
+        // The contact book. Registered unconditionally, because it is a store rather than a capability a deployment
+        // switches on: every surface over it is optional, and none of them can be reached without the book existing.
+        services.AddScoped<IContactStore, ContactStore>();
+        services.AddScoped<IContactDirectory, ContactDirectory>();
+        services.AddScoped<ContactBook>();
 
         return services;
     }
