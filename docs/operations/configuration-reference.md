@@ -98,6 +98,7 @@ shape the coordinator loop itself, which are read once at start and marked *rest
 | `MailSynchronization:MaxConsecutivePushFailures` | int | `3` | 1 – 100 | reload |
 | `MailSynchronization:PushDegradationPeriod` | TimeSpan | `00:15:00` | 10 s – 1 day | reload |
 | `MailSynchronization:MaxSubscribedFolders` | int | `20` | 1 – 100; how many folders one push subscription may name on a server supporting `NOTIFY`, the rest synchronizing on the account's interval | reload |
+| `MailSynchronization:TrustOwnAccountDomains` | bool | `true` | Whether an author writing from a domain one of the configured accounts uses counts as trusted on every account. The set is read from each account's `UserName` where that is an address, so it needs no list of its own | reload; the next extraction judges against it |
 
 ### One account — `MailSynchronization:Accounts:<n>`
 
@@ -122,6 +123,10 @@ shape the coordinator loop itself, which are read once at start and marked *rest
 | `…:AuditTrail:Retention` | TimeSpan | `90.00:00:00` | 1 day – 3650 days; how long this account's audit entries are kept | reload; the next account run erases against the new window |
 | `…:AnsweringAuditTrail:Enabled` | bool | `false` | Whether a finished `ask_mail` run leaves a durable entry naming the mail it read from this account | reload; governs runs from then on |
 | `…:AnsweringAuditTrail:Retention` | TimeSpan | `30.00:00:00` | 1 day – 3650 days; how long this account's answering entries are kept | reload; the next account run erases against the new window |
+| `…:TrustedSenders` | list | empty | The authors this account recognizes on top of the deployment's own domains; each entry below | reload; the next extraction judges against it |
+| `…:TrustedSenders:<n>:Domain` | string | unset | A domain this account recognizes. Exactly one of `Domain` and `Address` is written, and an entry writing neither or both fails startup naming the account and the entry's position | reload |
+| `…:TrustedSenders:<n>:Address` | string | unset | A single mailbox this account recognizes. It matches when the established author's domain is that address's own **and** the message's `From` displays exactly that address | reload |
+| `…:TrustedSenders:<n>:IncludeSubdomains` | bool | `false` | Whether a domain entry also reaches the names beneath that domain. Refused on an address entry, where it could mean nothing | reload |
 | `…:Folders` | list | inbox by role | Aliases unique; each entry below | reload |
 
 `TrustedAuthenticationServiceIdentifier` names the one server whose `Authentication-Results` headers this account
@@ -130,6 +135,16 @@ default it to, because the right value is a property of who receives this accoun
 believes no header and every message it holds records that nothing was established.
 [Sender authentication](../features/sender-authentication.md) states how the header is chosen and what the verdict
 holds.
+
+`TrustedSenders` and `TrustOwnAccountDomains` are the second half of that: they decide whether a message's author is
+somebody this deployment recognizes, which is a separate question from what the receiving server established. Both
+lists are held against an **authenticated author** — the domain the receiving server's DMARC result or a matching
+DKIM or SPF identity established for the `From` header — and never against the raw header, so naming a correspondent
+here cannot be exploited by writing their address into a message. Most legitimate mail stays unknown and that is the
+intended outcome: the claim is that this deployment does not know the author, not that the message is suspicious.
+Turning `TrustOwnAccountDomains` off is the right move for a deployment whose accounts sit on a large shared provider,
+since every user of that provider writes from the same domain; the same page states what an address entry rests on and
+what it deliberately does not establish.
 
 `RuleActions` is what a rule is judged against rather than what it is filtered by: a rule declaring an action this
 account does not permit **fails startup** naming the rule, the action, and the account, rather than running with that

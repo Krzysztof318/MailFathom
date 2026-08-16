@@ -58,4 +58,130 @@ public sealed class SenderAuthenticationTests
         Assert.Equal("BANK.TEST", authentication.FromDomain?.NormalizedValue);
         Assert.Equal(DmarcOutcome.Fail, authentication.Dmarc);
     }
+
+    /// <summary>A trusted DMARC pass is the receiving server's own statement about the displayed author.</summary>
+    [Fact]
+    public void AuthenticatedAuthorDomain_DmarcPassOverAnUnrelatedSignature_IsTheDisplayedDomain()
+    {
+        // Arrange
+        SenderDomain.TryCreate("provider.test", out var signer);
+        SenderDomain.TryCreate("partner.test", out var displayed);
+
+        // Act
+        var authentication = SenderAuthentication.Authenticated(
+            signer,
+            spfDomain: null,
+            displayed,
+            DmarcOutcome.Pass);
+
+        // Assert
+        Assert.Equal(displayed, authentication.AuthenticatedAuthorDomain);
+    }
+
+    /// <summary>Where DMARC decided nothing, an identity that authenticated as the displayed domain establishes the author.</summary>
+    /// <remarks>
+    /// Both results that decided nothing are covered, because they are different facts about the receiving server: one
+    /// evaluation never ran and the other ran and found no policy to apply. Neither is a statement about the author, so
+    /// neither may close the route that most mail actually arrives by.
+    /// </remarks>
+    [Theory]
+    [InlineData(true, DmarcOutcome.NotReported)]
+    [InlineData(false, DmarcOutcome.NotReported)]
+    [InlineData(true, DmarcOutcome.NoPolicyPublished)]
+    [InlineData(false, DmarcOutcome.NoPolicyPublished)]
+    public void AuthenticatedAuthorDomain_IdentityEqualToTheDisplayedDomain_IsThatDomain(
+        bool throughDkim,
+        DmarcOutcome dmarc)
+    {
+        // Arrange
+        SenderDomain.TryCreate("partner.test", out var displayed);
+        SenderDomain.TryCreate("relay.test", out var relay);
+
+        // Act
+        var authentication = SenderAuthentication.Authenticated(
+            throughDkim ? displayed : relay,
+            throughDkim ? null : displayed,
+            displayed,
+            dmarc);
+
+        // Assert
+        Assert.Equal(displayed, authentication.AuthenticatedAuthorDomain);
+    }
+
+    /// <summary>A DMARC failure ends the question, so an identity equal to the displayed domain does not reopen it.</summary>
+    /// <remarks>
+    /// The receiving server reached that result with the displayed domain's own published policy in hand, which is more
+    /// than an identity comparison made here has. Treating the comparison as the stronger of the two would let a message
+    /// the author's own domain disowned establish that author.
+    /// </remarks>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void AuthenticatedAuthorDomain_IdentityEqualToTheDisplayedDomainButDmarcFailed_IsAbsent(bool throughDkim)
+    {
+        // Arrange
+        SenderDomain.TryCreate("partner.test", out var displayed);
+        SenderDomain.TryCreate("relay.test", out var relay);
+
+        // Act
+        var authentication = SenderAuthentication.Authenticated(
+            throughDkim ? displayed : relay,
+            throughDkim ? null : displayed,
+            displayed,
+            DmarcOutcome.Fail);
+
+        // Assert
+        Assert.Null(authentication.AuthenticatedAuthorDomain);
+    }
+
+    /// <summary>An identity belonging to somebody other than the displayed author establishes no author at all.</summary>
+    [Theory]
+    [InlineData(DmarcOutcome.Fail)]
+    [InlineData(DmarcOutcome.NotReported)]
+    public void AuthenticatedAuthorDomain_IdentityUnrelatedToTheDisplayedDomain_IsAbsent(DmarcOutcome dmarc)
+    {
+        // Arrange
+        SenderDomain.TryCreate("relay.test", out var relay);
+        SenderDomain.TryCreate("bank.test", out var displayed);
+
+        // Act
+        var authentication = SenderAuthentication.Authenticated(relay, spfDomain: null, displayed, dmarc);
+
+        // Assert
+        Assert.Null(authentication.AuthenticatedAuthorDomain);
+    }
+
+    /// <summary>A verdict that establishes nothing, and one that refused an identity, establish no author either.</summary>
+    [Fact]
+    public void AuthenticatedAuthorDomain_NothingEstablishedOrRefused_IsAbsent()
+    {
+        // Arrange
+        SenderDomain.TryCreate("bank.test", out var displayed);
+
+        // Act
+        var unestablished = SenderAuthentication.NotEstablished(displayed);
+        var refused = SenderAuthentication.Failed(displayed, DmarcOutcome.Fail);
+
+        // Assert
+        Assert.Null(unestablished.AuthenticatedAuthorDomain);
+        Assert.Null(refused.AuthenticatedAuthorDomain);
+    }
+
+    /// <summary>A message displaying no usable domain has no author to establish, whatever authenticated.</summary>
+    [Fact]
+    public void AuthenticatedAuthorDomain_NoDisplayedDomain_IsAbsent()
+    {
+        // Arrange
+        SenderDomain.TryCreate("partner.test", out var signer);
+
+        // Act
+        var authentication = SenderAuthentication.Authenticated(
+            signer,
+            spfDomain: null,
+            fromDomain: null,
+            DmarcOutcome.Pass);
+
+        // Assert
+        Assert.Null(authentication.AuthenticatedAuthorDomain);
+    }
 }

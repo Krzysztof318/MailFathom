@@ -32,4 +32,14 @@ public sealed record ExtractedEmailMetadata(
     EmailThreadReferences ThreadReferences,
     EmailAttachmentSummary Attachments,
     ExtractedEmailText Text,
-    SenderAuthentication SenderAuthentication);
+    SenderAuthentication SenderAuthentication)
+{
+    /// <summary>Gets what this deployment made of the message's authenticated author.</summary>
+    /// <remarks>
+    /// Not a parameter of the reading, because it is not read out of the message: the parsing adapter establishes what
+    /// the receiving server said and <see cref="SenderTrustEvaluatingEmailMimeReader" /> holds the author that follows
+    /// from it against the account's trusted senders afterwards. Its default is therefore the verdict of a reading no
+    /// policy has spoken over, which is unknown and carries no policy revision to say otherwise.
+    /// </remarks>
+    public SenderTrust SenderTrust { get; init; } = SenderTrust.NotEvaluated;
+}

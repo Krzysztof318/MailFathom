@@ -2,20 +2,31 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using System.Globalization;
+using System.Text;
+
 namespace MailFathom.Domain.Emails.Authentication;
 
 /// <summary>Names the domain half of a mail identity, in the one form everything about a sender compares on.</summary>
 /// <remarks>
 /// <para>
-/// A sending domain arrives from three unrelated places — a DKIM signature's <c>d=</c> tag, an SPF check's envelope
-/// sender, and the <c>From</c> header a client displays — and the whole point of a verdict is that those three can be
-/// held against each other. A comparison form derived at each of those call sites would drift between them, so the
-/// normalization is the type's own rule and <see cref="NormalizedValue" /> is the only form anything compares.
+/// A sending domain arrives from four unrelated places — a DKIM signature's <c>d=</c> tag, an SPF check's envelope
+/// sender, the <c>From</c> header a client displays, and an entry an operator wrote on a trusted-sender list — and the
+/// whole point of a verdict is that those can be held against each other. A comparison form derived at each of those
+/// call sites would drift between them, so the normalization is the type's own rule and <see cref="NormalizedValue" />
+/// is the only form anything compares.
 /// </para>
 /// <para>
 /// The form is upper-cased for the reason <see cref="EmailAddress.NormalizedAddress" /> is: upper case round-trips in
 /// every culture, so the key means the same thing in memory, in a query, and in a database whose collation MailFathom
 /// does not control.
+/// </para>
+/// <para>
+/// It is also the ASCII form of an internationalized name. The same domain reaches this type written both ways — a
+/// header carries the A-labels a transport agreed on while an operator types the name their language spells — and
+/// comparing the two encodings against each other would answer no on names that are the same name. Everything is
+/// therefore held in A-labels, which is the encoding the wire already uses, so an ASCII value is its own normal form
+/// and costs no conversion at all.
 /// </para>
 /// <para>
 /// A domain name is personal data once it is attached to a message, so nothing here may be logged.
@@ -48,19 +59,23 @@ public readonly record struct SenderDomain
     /// <remarks>
     /// A malformed domain is refused rather than repaired, for the reason a malformed address is: guessing what an
     /// unparseable header meant would put a domain nobody wrote into a verdict a reader is later shown. What refusal
-    /// costs is one identity of one message, which the not-established verdict already has a value for.
+    /// costs is one identity of one message, which the not-established verdict already has a value for. A name whose
+    /// A-labels no encoder can produce is refused the same way, and so is one whose ASCII form outgrows the bounds
+    /// below, since it is that form a column has to hold.
     /// </remarks>
     public static bool TryCreate(string? candidate, out SenderDomain domain)
     {
         domain = default;
 
         var trimmed = candidate?.Trim() ?? string.Empty;
-        if (!IsUsableDomain(trimmed))
+        if (!IsUsableDomain(trimmed)
+            || !TryNormalize(trimmed, out var normalized)
+            || !IsUsableDomain(normalized))
         {
             return false;
         }
 
-        domain = new SenderDomain(trimmed, trimmed.ToUpperInvariant());
+        domain = new SenderDomain(trimmed, normalized);
 
         return true;
     }
@@ -82,6 +97,21 @@ public readonly record struct SenderDomain
         return TryCreate(separatorIndex < 0 ? trimmed : trimmed[(separatorIndex + 1)..], out domain);
     }
 
+    /// <summary>Answers whether this domain lies beneath another one in the naming tree.</summary>
+    /// <param name="ancestor">The domain this one may sit under.</param>
+    /// <returns><see langword="true" /> when this is a strictly lower name than <paramref name="ancestor" />.</returns>
+    /// <remarks>
+    /// The comparison is on whole labels rather than on a suffix of characters, which is what separates
+    /// <c>mail.example.test</c> from <c>notexample.test</c>: both end in <c>example.test</c> as text and only the first
+    /// is beneath it. A domain is not beneath itself, so a caller that means "this name or anything under it" says both.
+    /// </remarks>
+    public bool IsSubdomainOf(SenderDomain ancestor) =>
+        this.NormalizedValue is { Length: > 0 } descendant
+        && ancestor.NormalizedValue is { Length: > 0 } parent
+        && descendant.Length > parent.Length + 1
+        && descendant[descendant.Length - parent.Length - 1] == '.'
+        && descendant.EndsWith(parent, StringComparison.Ordinal);
+
     /// <summary>Compares two domains by the form they were normalized to.</summary>
     /// <param name="other">The domain to compare with.</param>
     /// <returns><see langword="true" /> when both name the same domain.</returns>
@@ -100,13 +130,46 @@ public readonly record struct SenderDomain
     /// </remarks>
     public override string ToString() => this.NormalizedValue ?? string.Empty;
 
+    /// <summary>Puts a name into the ASCII encoding everything compares on.</summary>
+    /// <remarks>
+    /// An all-ASCII name is already in that encoding, so it is upper-cased and nothing else — which is both the fast
+    /// path for essentially every message and the guarantee that ordinary mail is unaffected by the conversion existing.
+    /// Anything else is a name written in its own script, and the encoder is what turns it into the A-labels a DKIM
+    /// signature and an SMTP envelope carry. A name the encoder refuses is refused here rather than compared in the
+    /// encoding it arrived in, because a value nothing else can produce would match nothing and silently look like a
+    /// sender who is simply not on a list.
+    /// </remarks>
+    private static bool TryNormalize(string domain, out string normalized)
+    {
+        if (Ascii.IsValid(domain))
+        {
+            normalized = domain.ToUpperInvariant();
+
+            return true;
+        }
+
+        try
+        {
+            normalized = new IdnMapping().GetAscii(domain).ToUpperInvariant();
+
+            return true;
+        }
+        catch (ArgumentException)
+        {
+            normalized = string.Empty;
+
+            return false;
+        }
+    }
+
     /// <summary>Accepts a dot-separated name of the shape every resolver and every mail transport agrees on.</summary>
     /// <remarks>
     /// The check stays narrower than the DNS grammar and deliberately says nothing about which characters a label may
-    /// hold: an internationalized domain reaches this type in whichever encoding its header carried, and settling on one
-    /// of those encodings is a matching decision rather than a parsing one. What is refused is what would make an
-    /// unusable comparison key — an empty name, one past the length a resolver accepts, whitespace, a control character,
-    /// an at-sign that says a mailbox was handed over whole, and an empty or over-long label.
+    /// hold, because which script a name is written in is <see cref="TryNormalize" />'s question rather than this one's.
+    /// What is refused is what would make an unusable comparison key — an empty name, one past the length a resolver
+    /// accepts, whitespace, a control character, an at-sign that says a mailbox was handed over whole, and an empty or
+    /// over-long label. It is applied to both encodings of a name, since the ASCII form of an internationalized one is
+    /// the longer of the two and is what a column has to hold.
     /// </remarks>
     private static bool IsUsableDomain(string domain)
     {

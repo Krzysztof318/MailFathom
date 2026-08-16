@@ -109,6 +109,26 @@ internal sealed class StoredEmailEntity
     /// <summary>Gets or sets whether the authenticated domain is the one the message displays as its sender.</summary>
     public SenderDomainAlignment SenderDomainAlignment { get; set; }
 
+    /// <summary>Gets or sets what this deployment made of the author the columns above establish.</summary>
+    /// <remarks>
+    /// Stored rather than decided when a message is read, because the trusted-sender list it was decided against
+    /// changes: an operator adds a domain and a reader trusts a correspondent, and neither act may quietly rewrite the
+    /// answer a message was already shown with. <see cref="SenderTrustPolicyRevision" /> is what says which list
+    /// produced this row's answer.
+    /// </remarks>
+    public SenderTrustLevel SenderTrustLevel { get; set; }
+
+    /// <summary>Gets or sets which half of what this deployment knows recognized the author, or that none did.</summary>
+    public SenderTrustSource SenderTrustGrantedBy { get; set; }
+
+    /// <summary>Gets or sets the trusted-sender policy the verdict was reached under, absent where no policy reached one.</summary>
+    /// <remarks>
+    /// Nullable because its absence is a statement: a row written before this deployment judged authors at all, and one
+    /// recorded from an envelope whose payload was never stored, were judged by nothing rather than judged and left
+    /// unknown.
+    /// </remarks>
+    public string? SenderTrustPolicyRevision { get; set; }
+
     /// <summary>Gets or sets the normalized <c>To</c> addresses, which recipient filters test for containment.</summary>
     /// <remarks>
     /// Only the comparison form is kept, for the reason the per-attachment list is not kept at all: a display name is

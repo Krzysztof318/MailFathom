@@ -62,6 +62,24 @@ previous reading behind. The domains are stored in the upper-cased comparison fo
 on; [sender authentication](../features/sender-authentication.md) states how the verdict is reached and which header it
 is allowed to come from.
 
+### What this deployment made of that author
+
+Three more columns record the second verdict: `SenderTrustLevel`, `SenderTrustGrantedBy`, and
+`SenderTrustPolicyRevision`. The two enums are text for the reason the four above are, each defaulting to the value that
+recognizes nobody — `Unknown` and `None` — so the migration that adds them fills every stored message in with what was
+true of it. The revision is `character varying(32)` and **nullable on purpose**: its absence is what separates a row no
+policy ever judged, including one recorded from an envelope whose payload was never stored, from one a policy judged and
+left unknown.
+
+They are columns beside the authentication verdict rather than a group of their own because they are read together and
+written together — a re-derivation replaces both, so an answer can never sit beside an identity a different list
+judged. `SenderTrustLevel` has two values and nothing more, because the difference between an author nobody named and an
+author nothing established is the authentication columns' to state. What the revision buys is that a change to a
+trusted-sender list is legible rather than silent: a stored verdict keeps the answer it was given, and the revision says
+which list gave it.
+[Sender authentication](../features/sender-authentication.md#whether-the-author-is-one-this-deployment-recognizes)
+states the rule the verdict follows.
+
 ### Bounds on what a header may contribute
 
 Nothing between the mail server and a row bounds a header's length or how many addresses it names. The MIME reader bounds a message's *structure* — part count and nesting depth — but not the width of a single header, so the persistence mapping applies its own ceilings: 320 octets per address, 998 per message identifier, 256 addresses per recipient array, and 64 thread ancestors.

@@ -71,6 +71,7 @@ internal static class StoredEmailMetadataMapping
 
         ApplyAttachmentSummary(entity, metadata.Attachments);
         ApplySenderAuthentication(entity, metadata.SenderAuthentication);
+        ApplySenderTrust(entity, metadata.SenderTrust);
     }
 
     /// <summary>Records what the receiving mail server established about who sent the message.</summary>
@@ -88,6 +89,22 @@ internal static class StoredEmailMetadataMapping
         entity.SpfMailFromDomain = authentication.SpfDomain?.NormalizedValue;
         entity.DmarcOutcome = authentication.Dmarc;
         entity.SenderDomainAlignment = authentication.Alignment;
+    }
+
+    /// <summary>Records what this deployment made of the author the message authenticated as.</summary>
+    /// <remarks>
+    /// Written whole beside the verdict it reads, so a re-derivation after a trusted-sender list changed replaces both
+    /// halves rather than leaving an answer beside the identity a different list judged. A revision that names no
+    /// policy is stored as absent rather than as an empty string, because the column's null is what says no policy
+    /// judged this row.
+    /// </remarks>
+    private static void ApplySenderTrust(StoredEmailEntity entity, SenderTrust trust)
+    {
+        entity.SenderTrustLevel = trust.Level;
+        entity.SenderTrustGrantedBy = trust.GrantedBy;
+        entity.SenderTrustPolicyRevision = trust.PolicyRevision.NamesAPolicy
+            ? trust.PolicyRevision.Value
+            : null;
     }
 
     /// <summary>Records the one participant a timeline names as the message's sender.</summary>

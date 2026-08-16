@@ -2,6 +2,8 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using System.Text;
+using MailFathom.Application.EmailContent.Storage;
 using MailFathom.Application.Emails.Embeddings.Backfill;
 using MailFathom.Application.Emails.Embeddings.Generation;
 using MailFathom.Application.Emails.Extraction;
@@ -14,6 +16,10 @@ using MailFathom.Application.SensitiveContent;
 using MailFathom.Application.SensitiveContent.Detection;
 using MailFathom.Application.SensitiveContent.Egress;
 using MailFathom.Application.SensitiveContent.Redaction;
+using MailFathom.Domain.Accounts;
+using MailFathom.Domain.Emails;
+using MailFathom.Domain.Emails.Authentication;
+using MailFathom.Domain.Folders;
 using MailFathom.Infrastructure.Persistence;
 using MailFathom.Infrastructure.Persistence.Connections;
 using MailFathom.Infrastructure.Secrets.Resolution;
@@ -332,6 +338,7 @@ public sealed class ServiceCollectionExtensionsTests
         services.AddSingleton(TimeProvider.System);
         services.AddSingleton(new EmailMimeExtractionOptions());
         services.AddSingleton(Substitute.For<ITrustedAuthenticationAuthorityReader>());
+        services.AddSingleton(Substitute.For<ISenderTrustPolicyReader>());
         services.AddSingleton(SensitiveContentPlan.Create(
             SensitiveContentScanBounds.Default,
             [
@@ -365,6 +372,7 @@ public sealed class ServiceCollectionExtensionsTests
         services.AddSingleton(TimeProvider.System);
         services.AddSingleton(new EmailMimeExtractionOptions());
         services.AddSingleton(Substitute.For<ITrustedAuthenticationAuthorityReader>());
+        services.AddSingleton(Substitute.For<ISenderTrustPolicyReader>());
 
         // Act
         services.AddInfrastructure(
@@ -378,6 +386,101 @@ public sealed class ServiceCollectionExtensionsTests
 
         Assert.IsNotType<RedactingEmailMimeReader>(scope.ServiceProvider.GetRequiredService<IEmailMimeReader>());
     }
+
+    /// <summary>
+    /// The trust verdict is not a deployment's choice the way redaction is: a deployment that recognizes nobody still
+    /// records that it recognized nobody, which is the answer a reader is later shown. An undecorated reader would
+    /// store the value of a reading no policy judged on mail a policy was in force for.
+    /// </summary>
+    [Fact]
+    public void AddInfrastructure_WithoutAScanner_ResolvesAMimeReaderThatJudgesTheAuthor()
+    {
+        // Arrange
+        var services = new ServiceCollection();
+        services.AddSingleton(TimeProvider.System);
+        services.AddSingleton(new EmailMimeExtractionOptions());
+        services.AddSingleton(Substitute.For<ITrustedAuthenticationAuthorityReader>());
+        services.AddSingleton(Substitute.For<ISenderTrustPolicyReader>());
+
+        // Act
+        services.AddInfrastructure(
+            _ => new PostgresConnectionSettings("Host=localhost;Database=mailfathom", null, null),
+            PostgresTextSearchConfiguration.Default,
+            MailAnsweringBudget.Default);
+
+        // Assert
+        using var provider = services.BuildServiceProvider();
+        using var scope = provider.CreateScope();
+
+        Assert.IsType<SenderTrustEvaluatingEmailMimeReader>(scope.ServiceProvider.GetRequiredService<IEmailMimeReader>());
+    }
+
+    /// <summary>
+    /// The redactor wraps the judging reader rather than replacing it, and only the composed pipeline's behavior says
+    /// so: the outer type is the same either way. A deployment that configures a scanner would otherwise stop recording
+    /// trust verdicts entirely, and every existing assertion about either decorator would still pass.
+    /// </summary>
+    [Fact]
+    public async Task AddInfrastructure_WithARedactor_ResolvesAMimeReaderThatStillJudgesTheAuthor()
+    {
+        // Arrange
+        // The policy has to recognize somebody, so that its revision is not the one a reading no policy judged carries:
+        // an empty policy digests to None, which is exactly what the undecorated reader would leave behind.
+        Assert.True(TrustedSenderEntry.TryCreateForDomain("partner.example", includeSubdomains: false, out var entry));
+        Assert.NotNull(entry);
+        var policy = SenderTrustPolicy.Create([], [entry], []);
+        var policies = Substitute.For<ISenderTrustPolicyReader>();
+        policies.GetTrustPolicy(Arg.Any<MailAccountId>()).Returns(policy);
+
+        var services = new ServiceCollection();
+        services.AddSingleton(TimeProvider.System);
+        services.AddSingleton(new EmailMimeExtractionOptions());
+        services.AddSingleton(Substitute.For<ITrustedAuthenticationAuthorityReader>());
+        services.AddSingleton(policies);
+        services.AddSingleton(SensitiveContentPlan.Create(
+            SensitiveContentScanBounds.Default,
+            [
+                SensitiveContentScannerPlan.Create(
+                    SensitiveContentScannerKind.Secrets,
+                    [SensitiveContentCategory.Create("ProviderToken")],
+                    []),
+            ])!);
+        services.AddSingleton<SensitiveContentRedactor>();
+        services.AddSecretContentScanning();
+
+        services.AddInfrastructure(
+            _ => new PostgresConnectionSettings("Host=localhost;Database=mailfathom", null, null),
+            PostgresTextSearchConfiguration.Default,
+            MailAnsweringBudget.Default);
+
+        using var provider = services.BuildServiceProvider();
+        using var scope = provider.CreateScope();
+
+        // Act
+        var extraction = await scope.ServiceProvider
+            .GetRequiredService<IEmailMimeReader>()
+            .ReadMetadataAsync(OrdinaryMessage(), TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(EmailMimeExtractionOutcome.Extracted, extraction.Outcome);
+        Assert.True(policy.Revision.NamesAPolicy);
+        Assert.NotEqual(SenderTrust.NotEvaluated.PolicyRevision, extraction.Metadata?.SenderTrust.PolicyRevision);
+        Assert.Equal(policy.Revision, extraction.Metadata?.SenderTrust.PolicyRevision);
+    }
+
+    /// <summary>Builds the smallest message both decorators read end to end.</summary>
+    private static RemoteEmailContent OrdinaryMessage() => new(
+        EmailOccurrenceId.Create(
+            MailAccountId.Create("primary"),
+            new MailFolderResolutionId(MailFolderAlias.Create("inbox"), MailFolderResolutionGeneration.First),
+            ImapUidValidity.Create(5),
+            ImapUid.Create(11)),
+        Encoding.ASCII.GetBytes(
+            "From: alice@partner.example\r\n"
+            + "To: owner@work.example\r\n"
+            + "Subject: Subject\r\n"
+            + "\r\n"
+            + "body\r\n"));
 
     /// <summary>
     /// The other half of the same decision: an instance that declared a chain registers both units of work. Asserted
