@@ -73,20 +73,27 @@ public sealed class AccessAuthorizationTests
         // Arrange
         var authorization = AuthorizationOver(AuthorizedPrincipal.Process);
 
-        // Act & Assert
-        Assert.Throws<PrincipalNotAuthorizedException>(() => authorization.RequirePermission(permission));
+        // Act
+        var refusal = Assert.Throws<PrincipalNotAuthorizedException>(() =>
+            authorization.RequirePermission(permission));
+
+        // Assert
+        Assert.False(refusal.RequiredPermission.IsSpecified);
     }
 
     /// <summary>A capability is bounded to one object, so it is never a way to reach an operation published over a surface.</summary>
     [Fact]
-    public void RequirePermission_SignedCapability_Refuses()
+    public void RequirePermission_SignedCapability_RefusesNamingNoPermission()
     {
         // Arrange
         var authorization = AuthorizationOver(AuthorizedPrincipal.SignedCapability("/attachments/an-object/0"));
 
-        // Act & Assert
-        Assert.Throws<PrincipalNotAuthorizedException>(() =>
+        // Act
+        var refusal = Assert.Throws<PrincipalNotAuthorizedException>(() =>
             authorization.RequirePermission(MailFathomPermission.MailRead));
+
+        // Assert
+        Assert.False(refusal.RequiredPermission.IsSpecified);
     }
 
     [Fact]

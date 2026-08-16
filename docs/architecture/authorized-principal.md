@@ -37,8 +37,9 @@ references cannot refuse on their own.
 
 The identity is not one shape. Where an operator wrote the credential it is that entry's own name; where a token brought
 it, it is the issuer and subject the deployment authorized — a host name and that authorization server's identifier for
-a person. So a boundary that names the caller to its own readers reads the identity and decides for itself what it may
-show, and a refusal never carries it.
+a person; and where the surface configures no credential at all it is the fixed word `anonymous`, because there is
+nothing to tell one caller apart from another. So a boundary that names the caller to its own readers reads the identity
+and decides for itself what it may show, and a refusal never carries it.
 
 There are three kinds of principal, and none of them is a weaker version of another:
 
@@ -75,10 +76,13 @@ The host composes one `IAuthorizedPrincipalSource` per scope, which for a served
 configures no `Authentication` entry at all, the caller holds everything the surface publishes — there is no entry for a
 grant to hang on, which is the posture ADR 0012 settled and the startup record already states, so reporting no principal
 there would have a use case refuse every call on a deployment whose own record says it grants everything. Where the
-surface does configure a credential, such a request is none of the three, and that is what protects the download route:
-it is reached without a credential legitimately, and a principal appearing out of the transport there would be a second
-and weaker way into an attachment than the signature the route exists to check. The route's own statement overrides
-either answer once the ticket verifies.
+surface does configure a credential, such a request is none of the three.
+
+**The download route is withheld from that grant on either posture.** The MCP surface serves it beside the protocol
+route, so the paragraph above would otherwise admit it out of the transport wherever the deployment configures no MCP
+credential — a second and weaker way into an attachment than the signature the route exists to check, and one holding on
+one posture only. The adapter therefore answers no principal for a path that route serves before it asks either surface,
+and the route's own statement, made once the ticket verifies, is the only thing that authorizes it.
 
 ## What a refusal is, and what each boundary does with it
 

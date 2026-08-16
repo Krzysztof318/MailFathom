@@ -4,6 +4,7 @@
 
 using MailFathom.Application.Access;
 using MailFathom.Domain.Access;
+using MailFathom.Host.Api;
 using MailFathom.Host.Configuration.Endpoints;
 using Microsoft.Extensions.Options;
 
@@ -47,9 +48,13 @@ namespace MailFathom.Host.Security.Transport;
 /// A request that authenticated nothing is a caller only where the surface it reached configures no credential at all,
 /// and that caller holds everything the surface publishes — ADR 0012 decided that posture and the startup report states
 /// it, so a use case refusing there would refuse on a deployment whose own record says it grants everything. Where the
-/// surface does configure a credential, a request that authenticated nothing is none of the three: the difference
-/// matters at the one route reached that way legitimately, where a principal appearing out of the transport instead of
-/// out of a verified signature would be a second, weaker way in.
+/// surface does configure a credential, a request that authenticated nothing is none of the three.
+/// </para>
+/// <para>
+/// A path the attachment download route serves is withheld from that grant on both postures, before either surface is
+/// asked. It is served by the MCP surface and authorized by a signed capability alone, so the grant would otherwise
+/// admit it out of the transport instead of out of the verified ticket — a second way in, and one holding on the
+/// permissive posture only, which is the worst shape a protection can take.
 /// </para>
 /// </remarks>
 internal sealed class TransportAuthorizedPrincipalSource : IAuthorizedPrincipalSource
@@ -112,6 +117,11 @@ internal sealed class TransportAuthorizedPrincipalSource : IAuthorizedPrincipalS
     /// </remarks>
     private AuthorizedPrincipal? UnnarrowedCallerOn(PathString path)
     {
+        if (ReachedOnlyUnderACapability(path))
+        {
+            return null;
+        }
+
         if (TransportSurface.Admin.Serves(path))
         {
             return this.adminEndpointSettings.RequiresAuthentication ? null : WholeSurfaceCaller(TransportSurface.Admin);
@@ -124,6 +134,17 @@ internal sealed class TransportAuthorizedPrincipalSource : IAuthorizedPrincipalS
 
         return null;
     }
+
+    /// <summary>Reports whether a route admitting a signed capability and nothing else serves the path.</summary>
+    /// <remarks>
+    /// The MCP surface serves the attachment download route beside the protocol route, so the grant above would reach it
+    /// on a deployment configuring no MCP credential and answer a caller holding the surface's whole half. That is a
+    /// second and weaker way into the route than the signature it verifies for itself, and it would hold on one posture
+    /// only. The route states its own principal through <see cref="Assume" /> once the capability is redeemed, so the
+    /// transport answers nothing for it on either posture and the ticket remains the only thing that authorizes it.
+    /// </remarks>
+    private static bool ReachedOnlyUnderACapability(PathString path) =>
+        path.StartsWithSegments(EmailAttachmentDownloadEndpoint.RoutePrefix);
 
     private static AuthorizedPrincipal WholeSurfaceCaller(TransportSurface surface) => AuthorizedPrincipal.Caller(
         TransportCallerIdentity.AnonymousCaller,

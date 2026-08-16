@@ -63,15 +63,42 @@ public sealed class TransportAuthorizedPrincipalSourceTests
     }
 
     /// <summary>
-    /// A request nothing authenticated, on a surface that configures a credential, is none of the three kinds.
-    /// Reporting it as an anonymous caller would give the download route a principal it never verified, which is what
-    /// its capability is for.
+    /// A request nothing authenticated, on a surface that configures a credential, is none of the three kinds: what
+    /// reached the surface without presenting what the surface asks for was admitted by nothing. Both surfaces are
+    /// stated, because each reads its own settings and one arm answering for the other would go unnoticed.
     /// </summary>
-    [Fact]
-    public void Current_ARequestThatAuthenticatedNothingWhereTheSurfaceConfiguresACredential_ReportsNoPrincipal()
+    [Theory]
+    [InlineData(McpEndpointRoute.Path, true, false)]
+    [InlineData(AdminEndpointOptions.RoutePrefix + "/session", false, true)]
+    public void Current_ARequestThatAuthenticatedNothingWhereTheSurfaceConfiguresACredential_ReportsNoPrincipal(
+        string path,
+        bool mcpConfiguresACredential,
+        bool adminConfiguresACredential)
     {
         // Arrange
-        var source = SourceOver(RequestTo(McpEndpointRoute.Path), mcpConfiguresACredential: true);
+        var source = SourceOver(RequestTo(path), mcpConfiguresACredential, adminConfiguresACredential);
+
+        // Act & Assert
+        Assert.Null(source.Current);
+    }
+
+    /// <summary>
+    /// The MCP surface serves the download route beside the protocol route, so the whole-surface grant would reach it
+    /// wherever the deployment configures no MCP credential — a second and weaker way into an attachment than the
+    /// signature the route verifies for itself, and one holding on that posture alone. The transport therefore answers
+    /// nothing for it under either, and the redeemed ticket the route states for itself remains the only thing that
+    /// authorizes the download.
+    /// </summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Current_ARequestToTheDownloadRoute_ReportsNoPrincipalWhateverTheMcpSurfaceConfigures(
+        bool mcpConfiguresACredential)
+    {
+        // Arrange
+        var source = SourceOver(
+            RequestTo(EmailAttachmentDownloadEndpoint.RoutePrefix + "/a-capability-somebody-presented"),
+            mcpConfiguresACredential);
 
         // Act & Assert
         Assert.Null(source.Current);
@@ -84,7 +111,6 @@ public sealed class TransportAuthorizedPrincipalSourceTests
     /// </summary>
     [Theory]
     [InlineData(McpEndpointRoute.Path, ProtectedSurface.Mail)]
-    [InlineData(EmailAttachmentDownloadEndpoint.RoutePrefix + "/an-object", ProtectedSurface.Mail)]
     [InlineData(AdminEndpointOptions.RoutePrefix + "/session", ProtectedSurface.Administration)]
     public void Current_ARequestOnASurfaceConfiguringNoCredential_ReportsACallerHoldingThatWholeSurface(
         string path,

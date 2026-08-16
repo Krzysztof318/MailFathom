@@ -17,7 +17,6 @@ using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Folders;
 using MailFathom.Host.Api;
-using MailFathom.Host.Configuration.Access;
 using MailFathom.Host.Configuration.Endpoints;
 using MailFathom.Host.Security.Transport;
 using MailFathom.TestSupport;
@@ -45,7 +44,7 @@ public sealed class EmailAttachmentDownloadEndpointTests
     public async Task DownloadAsync_ValidCapability_WritesTheAttachmentAndStatesWhatItIs()
     {
         // Arrange
-        var context = new DefaultHttpContext();
+        var context = RequestToTheRoute();
         var principals = PrincipalsFor(context);
         using var body = new MemoryStream();
         context.Response.Body = body;
@@ -75,7 +74,7 @@ public sealed class EmailAttachmentDownloadEndpointTests
     public async Task DownloadAsync_ValidCapability_ServesTheFileAsADownloadRatherThanSomethingToRender()
     {
         // Arrange
-        var context = new DefaultHttpContext();
+        var context = RequestToTheRoute();
         var principals = PrincipalsFor(context);
         using var body = new MemoryStream();
         context.Response.Body = body;
@@ -107,7 +106,7 @@ public sealed class EmailAttachmentDownloadEndpointTests
     public async Task DownloadAsync_ValidCapability_ForbidsAnIntermediaryFromStoringTheResponse()
     {
         // Arrange
-        var context = new DefaultHttpContext();
+        var context = RequestToTheRoute();
         var principals = PrincipalsFor(context);
         using var body = new MemoryStream();
         context.Response.Body = body;
@@ -133,7 +132,7 @@ public sealed class EmailAttachmentDownloadEndpointTests
     public async Task DownloadAsync_AttachmentNamedWithHeaderSyntax_EncodesTheNameRatherThanEmittingIt()
     {
         // Arrange
-        var context = new DefaultHttpContext();
+        var context = RequestToTheRoute();
         var principals = PrincipalsFor(context);
         using var body = new MemoryStream();
         context.Response.Body = body;
@@ -167,7 +166,7 @@ public sealed class EmailAttachmentDownloadEndpointTests
         string expected)
     {
         // Arrange
-        var context = new DefaultHttpContext();
+        var context = RequestToTheRoute();
         var principals = PrincipalsFor(context);
         using var body = new MemoryStream();
         context.Response.Body = body;
@@ -190,7 +189,7 @@ public sealed class EmailAttachmentDownloadEndpointTests
     public async Task DownloadAsync_UnnamedAttachment_StatesTheDispositionWithoutAFileName()
     {
         // Arrange
-        var context = new DefaultHttpContext();
+        var context = RequestToTheRoute();
         var principals = PrincipalsFor(context);
         using var body = new MemoryStream();
         context.Response.Body = body;
@@ -218,7 +217,7 @@ public sealed class EmailAttachmentDownloadEndpointTests
     {
         // Arrange
         var ticket = new AttachmentDownloadTicket(StoredEmailId.Create(Guid.CreateVersion7()), 0);
-        var context = new DefaultHttpContext();
+        var context = RequestToTheRoute();
         var principals = PrincipalsFor(context);
         using var body = new MemoryStream();
         context.Response.Body = body;
@@ -256,7 +255,7 @@ public sealed class EmailAttachmentDownloadEndpointTests
     {
         // Arrange
         var storedEmailId = StoredEmailId.Create(Guid.CreateVersion7());
-        var context = new DefaultHttpContext();
+        var context = RequestToTheRoute();
         var principals = PrincipalsFor(context);
 
         // Act
@@ -275,6 +274,11 @@ public sealed class EmailAttachmentDownloadEndpointTests
         Assert.DoesNotContain("a-capability-somebody-presented", body, StringComparison.Ordinal);
     }
 
+    /// <summary>Composes a request to this route's own path, which is what decides the principal the scope reports.</summary>
+    /// <remarks>An empty path would leave the arrangement below deciding nothing, because a path neither surface serves is refused for that reason instead of for being this route's.</remarks>
+    private static DefaultHttpContext RequestToTheRoute() =>
+        new() { Request = { Path = EmailAttachmentDownloadEndpoint.RoutePrefix + "/a-capability-somebody-presented" } };
+
     /// <summary>The one scope a request is served in, which the route states its own principal onto.</summary>
     /// <remarks>
     /// The endpoint and the use case behind it are handed the same instance, exactly as a request scope hands them one.
@@ -286,14 +290,12 @@ public sealed class EmailAttachmentDownloadEndpointTests
         var httpContextAccessor = Substitute.For<IHttpContextAccessor>();
         httpContextAccessor.HttpContext.Returns(context);
 
-        // The MCP endpoint configures a credential here, so nothing about the transport hands this route a caller: what
-        // the use case is told is only what the route states once the ticket has verified.
-        var mcpEndpoint = new McpEndpointOptions();
-        mcpEndpoint.Authentication.Add(new TransportAuthenticationOptions());
-
+        // Neither endpoint configures a credential, which is the posture whose whole-surface grant would otherwise reach
+        // this route. Nothing about the transport hands it a caller even so, so what the use case is told is only what
+        // the route states once the ticket has verified.
         return new TransportAuthorizedPrincipalSource(
             httpContextAccessor,
-            Options.Create(mcpEndpoint),
+            Options.Create(new McpEndpointOptions()),
             Options.Create(new AdminEndpointOptions()));
     }
 

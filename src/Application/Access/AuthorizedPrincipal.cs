@@ -54,8 +54,9 @@ public sealed class AuthorizedPrincipal
     /// <remarks>
     /// <para>
     /// For a caller it is what the transport admitted it as, and that is not one shape: a configured key's own name
-    /// where the operator wrote the credential, and the issuer and subject the deployment authorized where a token
-    /// brought it. Never the credential material either way. For the process identity it is
+    /// where the operator wrote the credential, the issuer and subject the deployment authorized where a token brought
+    /// it, and the fixed word <c>anonymous</c> where the surface configures no credential for one caller to be told
+    /// apart from another. Never the credential material in any of the three. For the process identity it is
     /// <see cref="ProcessIdentityName" />, and for a signed capability it is the object the signature was bounded to.
     /// </para>
     /// <para>
