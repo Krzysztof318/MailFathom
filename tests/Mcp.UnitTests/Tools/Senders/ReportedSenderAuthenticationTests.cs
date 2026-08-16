@@ -12,11 +12,12 @@ namespace MailFathom.Mcp.UnitTests.Tools.Senders;
 /// <summary>What the boundary publishes for the evidence an email's author conclusion was reached from.</summary>
 public sealed class ReportedSenderAuthenticationTests
 {
-    /// <summary>An email that authenticated as one domain while displaying another publishes both, side by side.</summary>
+    /// <summary>An email whose authenticated domain differs from the displayed one publishes both, side by side.</summary>
     /// <remarks>
-    /// This is the case the whole verdict exists to make visible, and it is what a reader compares. The verdict beside
-    /// it says the displayed author was not established; nothing here restates that as an alignment flag. Both domains
-    /// are published in the comparison form the row holds, which is what makes the comparison exact.
+    /// Both domains are published in the comparison form the row holds, and neither is dropped for differing from the
+    /// other. Nothing here restates the difference as an alignment flag, deliberately: the authenticated domain is
+    /// whichever identity authenticated the transport, so mail a provider relayed and signed as itself differs here
+    /// while being authenticated exactly as it appears, and the verdict is what answers that question.
     /// </remarks>
     [Fact]
     public void From_AuthenticatedDomainDifferingFromTheDisplayedOne_PublishesBoth()

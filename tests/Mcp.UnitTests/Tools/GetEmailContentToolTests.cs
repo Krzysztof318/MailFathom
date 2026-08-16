@@ -123,11 +123,13 @@ public sealed class GetEmailContentToolTests
         Assert.True(content.RemoteFlags.WasObserved);
     }
 
-    /// <summary>An email that authenticated as one domain while displaying another is published as exactly that.</summary>
+    /// <summary>An email whose displayed author failed while another domain authenticated is published as exactly that.</summary>
     /// <remarks>
     /// The case the whole verdict exists for. A delivery provider's signature verified, so the transport authenticated
     /// and an unrelated domain is named; the displayed author failed under its own published policy. The read publishes
-    /// the conclusion and both domains, and the listing publishes the same conclusion for the same message.
+    /// the conclusion and both domains, and the listing publishes the same conclusion for the same message. What makes
+    /// this the spoofed case is the verdict rather than the two domains differing — the test below is the same
+    /// difference on mail that authenticated.
     /// </remarks>
     [Fact]
     public async Task GetEmailContentAsync_DisplayedAuthorFailedWhileAnotherDomainAuthenticated_PublishesBothDomainsAndTheFailedVerdict()
@@ -162,6 +164,46 @@ public sealed class GetEmailContentToolTests
         Assert.Equal(SenderAuthenticationCheck.Dkim, content.Headers.SenderAuthentication.AuthenticatedBy);
         Assert.Equal(DmarcResult.Fail, content.Headers.SenderAuthentication.Dmarc);
         Assert.Equal(ListedVerdictOf(summary), content.SenderVerification);
+    }
+
+    /// <summary>Two different domains on an authenticated email are published as they are, with the verdict unchanged.</summary>
+    /// <remarks>
+    /// The authenticated domain is whichever identity authenticated the transport, and DKIM is kept where both checks
+    /// produced one — so a provider that signs as itself while the envelope sender passes for the author's own domain
+    /// publishes two domains that differ on mail that is authenticated exactly as it appears. Nothing on the read path
+    /// compares them or lets the difference reach the verdict, which is what the published descriptions promise.
+    /// </remarks>
+    [Fact]
+    public async Task GetEmailContentAsync_AuthenticatedAuthorRelayedByAnotherDomain_PublishesBothDomainsWithoutWeakeningTheVerdict()
+    {
+        // Arrange
+        var summary = SummaryOf(
+            senderVerification: new SenderVerification
+            {
+                AuthorAuthentication = AuthorAuthenticationOutcome.Authenticated,
+                DeploymentTrust = SenderTrustLevel.Trusted,
+            },
+            senderAuthenticationEvidence: new SenderAuthenticationEvidence
+            {
+                AuthenticatedDomain = DomainOf("delivery.example.test"),
+                DisplayedAuthorDomain = DomainOf("bank.example.test"),
+                AuthenticatedBy = SenderAuthenticationMethod.DomainKeysIdentifiedMail,
+                Dmarc = DmarcOutcome.Pass,
+            });
+        var tool = ToolOver(new StubStoredEmailSummaryReader(summary));
+
+        // Act
+        var result = await tool.GetEmailContentAsync(
+            [summary.StoredEmailId.ToString()],
+            cancellationToken: TestContext.Current.CancellationToken);
+
+        // Assert
+        var content = ContentOf(Assert.Single(result.Emails));
+        Assert.Equal(AuthorAuthenticationState.Authenticated, content.SenderVerification.AuthorAuthentication);
+        Assert.Equal(DeploymentTrustState.Trusted, content.SenderVerification.DeploymentTrust);
+        Assert.Equal("DELIVERY.EXAMPLE.TEST", content.Headers.SenderAuthentication.AuthenticatedDomain);
+        Assert.Equal("BANK.EXAMPLE.TEST", content.Headers.SenderAuthentication.DisplayedAuthorDomain);
+        Assert.Equal(DmarcResult.Pass, content.Headers.SenderAuthentication.Dmarc);
     }
 
     /// <summary>An authenticated author nobody has named is published as unknown rather than as anything against it.</summary>

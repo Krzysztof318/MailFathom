@@ -16,9 +16,11 @@ namespace MailFathom.Mcp.Tools.Senders;
 /// message; this is for the message they went on to open.
 /// </para>
 /// <para>
-/// The two domains beside each other are the point. An email that authenticated as one domain while displaying another
-/// is the case the whole verdict exists to make visible, and publishing both in the same normalized form is what lets a
-/// client show it without parsing an address itself.
+/// The two domains are published beside the verdict rather than against each other. An email relayed by a provider that
+/// signs as itself, while the envelope sender passes for the author's own domain, authenticates exactly as it appears
+/// and still names two different domains here, because the authenticated one is whichever identity authenticated the
+/// transport. Publishing both in the same normalized form is what lets a client show what stood behind an email; what
+/// says its displayed author was not established is the verdict.
 /// </para>
 /// <para>
 /// Every value was read back out of one header the receiving mail server wrote, whose result was recorded when the
@@ -33,7 +35,7 @@ internal sealed record ReportedSenderAuthentication
     public string? AuthenticatedDomain { get; init; }
 
     /// <summary>Gets the domain the email displayed as its author, or <see langword="null" /> where it wrote no usable one.</summary>
-    [Description("The domain of the From header, which is what a mail client displays and what the email claims about itself. Published in the same comparison form as authenticatedDomain, so the two can be compared directly: an email that authenticated as one domain while displaying another is visible as exactly that. The conclusion drawn from that comparison is senderVerification.authorAuthentication and is not restated here. Null when the email wrote no usable From mailbox.")]
+    [Description("The domain of the From header, which is what a mail client displays and what the email claims about itself. Published in the same comparison form as authenticatedDomain. Do not read a difference between the two as impersonation: authenticatedDomain is whichever identity authenticated the transport, so an email sent through a provider that signs as itself while spf passes for the author's own domain differs here and is authenticated exactly as it appears. senderVerification.authorAuthentication is what says whether the displayed author was established. Null when the email wrote no usable From mailbox.")]
     public string? DisplayedAuthorDomain { get; init; }
 
     /// <summary>Gets which check established the authenticated domain, or that none did.</summary>

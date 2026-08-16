@@ -127,8 +127,10 @@ Eight parts of the result exist so that an agent does not misreport a message:
 - **The sender verdict comes with the evidence behind it.** `senderVerification` is the same pair a listing carries, and
   `headers.senderAuthentication` adds what it was reached from: the domain that actually authenticated, the domain the
   `From` header displayed, which check established the first (`dkim`, `spf`, or `none`), and the DMARC result your
-  server reported. Comparing the two domains is what shows a message that authenticated as one domain while displaying
-  another. Either domain can be `null`, which means nothing authenticated or the message wrote no usable `From` — an
+  server reported. The two domains differing is ordinary rather than a warning: the authenticated one is whichever
+  identity authenticated the transport, so mail sent through a provider that signs as itself differs there and is
+  authenticated exactly as it appears. `authorAuthentication` is the answer to whether the displayed author was
+  established. Either domain can be `null`, which means nothing authenticated or the message wrote no usable `From` — an
   outcome rather than missing data.
 - **Truncation is explicit, and says which limit cut.** Each body representation carries `truncatedBy` and the original
   character count, so a cut message is never summarized as a whole one. `bodyCharacterLimit` means the message is longer

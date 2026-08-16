@@ -10,10 +10,16 @@ namespace MailFathom.Application.Emails.Summaries;
 /// <remarks>
 /// <para>
 /// It is how a reader judges <see cref="SenderVerification.AuthorAuthentication" /> rather than what a reader acts on,
-/// which is why it travels apart from the pair and why only the single-email read publishes it. Comparing
-/// <see cref="AuthenticatedDomain" /> with <see cref="DisplayedAuthorDomain" /> is what makes a message that
-/// authenticated as one domain while displaying another visible as exactly that; the conclusion drawn from the
-/// comparison is the verdict's and is not restated here.
+/// which is why it travels apart from the pair and why only the single-email read publishes it. The conclusion is the
+/// verdict's and is not restated here.
+/// </para>
+/// <para>
+/// The two domains are read beside that verdict rather than against each other. <see cref="AuthenticatedDomain" /> is
+/// the identity that authenticated the transport, and where both checks produced one it is the DKIM domain — which need
+/// not be the identity that established the author, since an SPF domain matching the displayed one establishes it just
+/// as well. So a message relayed by a provider that signs as itself while SPF matches the author's own domain publishes
+/// two different domains and is authenticated exactly as it appears. What says the displayed author was not established
+/// is <see cref="SenderVerification.AuthorAuthentication" />, never a difference between these two.
 /// </para>
 /// <para>
 /// Every absent value is an ordinary outcome rather than missing data. A message nothing authenticated names no

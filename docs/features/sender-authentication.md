@@ -252,11 +252,17 @@ conclusions exist to make.
 recognize a message and already narrows `Cc` and `Reply-To` away, and the two outcomes are what a caller branches on;
 the domains, the method, and the DMARC result are how a reader judges the verdict rather than acts on it, so they sit
 with the rest of the headers, on the read of a message somebody has already found. Both domains are published in the
-comparison form the columns hold — upper-cased, and an internationalized name in its ASCII form — so comparing them is
-exact, and a message that authenticated as one domain while displaying another is visible as precisely that. A `null`
-domain is an ordinary outcome rather than missing data: nothing authenticated, or the message wrote no usable `From`
-mailbox. Nothing published restates the comparison as a flag of its own; the conclusion drawn from it is
-`authorAuthentication`.
+comparison form the columns hold — upper-cased, and an internationalized name in its ASCII form. A `null` domain is an
+ordinary outcome rather than missing data: nothing authenticated, or the message wrote no usable `From` mailbox.
+
+**The two domains differing is not by itself a spoofed author.** The authenticated one is whichever identity
+authenticated the transport, and where both checks produced an identity that is the DKIM domain — while the author is
+established by *any* authenticated identity matching the displayed domain, the SPF one included. A message relayed by a
+provider that signs as itself, whose envelope sender passes for the author's own domain, therefore publishes two
+different domains and is authenticated exactly as it appears. That is why nothing here restates the comparison as a flag
+of its own: `authorAuthentication` is the conclusion, reached against every identity that authenticated rather than
+against the one kept as evidence, and the domains say what stood behind the message rather than answering the question
+themselves.
 
 **Every published value was stored when the message was extracted.** A read evaluates nothing, resolves no DNS, re-reads
 no header, and triggers no IMAP fetch. Mail stored before the columns existed therefore reads as *not established* and

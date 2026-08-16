@@ -443,8 +443,12 @@ Eight parts of it are worth reading before a caller writes against them:
   adds is `headers.senderAuthentication`: `authenticatedDomain`, the domain that actually authenticated;
   `displayedAuthorDomain`, the domain the `From` header wrote; `authenticatedBy`, the check that established the first —
   `dkim`, `spf`, or `none`; and `dmarc`, the result the trusted server reported. Both domains are published in the
-  comparison form MailFathom stores — upper-cased, and an internationalized name in its ASCII form — so **comparing them
-  is what shows an email that authenticated as one domain while displaying another.** A `null` domain is an ordinary
+  comparison form MailFathom stores — upper-cased, and an internationalized name in its ASCII form. **A difference
+  between them is not by itself a spoofed author:** `authenticatedDomain` is whichever identity authenticated the
+  transport, and `dkim` is reported where both checks produced one, so an email sent through a provider that signs as
+  itself while `spf` passes for the author's own domain differs here and is authenticated exactly as it appears.
+  `senderVerification.authorAuthentication` is the conclusion, and it is reached against every identity that
+  authenticated rather than against the one published here. A `null` domain is an ordinary
   outcome rather than missing data: nothing authenticated, or the email wrote no usable `From` mailbox. Nothing here is
   evaluated on the read path, and an email whose raw MIME was never stored carries the same stored verdict as any other.
 - **Truncation travels inside each representation, and names the bound.** `plainText` and `sanitizedHtml` each carry

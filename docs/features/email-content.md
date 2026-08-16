@@ -110,10 +110,11 @@ stored too — the body says why there is none, and the verdict beside it is the
 
 The verdict pair is what every read tool publishes. The evidence is what only this one does, because it is how a reader
 judges a verdict rather than what a reader acts on, and a listing exists to let somebody recognize a message rather than
-to weigh one they have already found. Comparing the authenticated domain with the displayed author's domain is what
-makes a message that authenticated as one domain while displaying another visible as exactly that; each value states its
-own absence, since a message nothing authenticated names no authenticated domain and one displaying no usable `From`
-mailbox names no displayed one. [Sender authentication](sender-authentication.md#what-the-read-tools-publish) holds what
+to weigh one they have already found. The authenticated domain and the displayed author's domain are read beside the
+verdict rather than against each other: the first is whichever identity authenticated the transport, so the two differ
+on ordinary mail a provider relayed and signed as itself, and `authorAuthentication` is what says the displayed author
+was not established. Each value states its own absence, since a message nothing authenticated names no authenticated
+domain and one displaying no usable `From` mailbox names no displayed one. [Sender authentication](sender-authentication.md#what-the-read-tools-publish) holds what
 each value means and what it deliberately does not claim.
 
 ### Headers come from the message, not from the row
