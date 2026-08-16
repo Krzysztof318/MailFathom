@@ -45,7 +45,7 @@ There are three kinds of principal, and none of them is a weaker version of anot
 
 | Kind | What it is | What it holds |
 | --- | --- | --- |
-| Caller | Somebody who presented a credential a configured entry admits | Whatever that entry's grant resolved to |
+| Caller | Somebody who presented a credential a configured entry admits, or — where the surface configures no entry at all — somebody who presented nothing | Whatever that entry's grant resolved to, and everything the surface publishes where there is no entry |
 | Process identity | MailFathom itself, running work no caller requested | Nothing, by construction |
 | Signed capability | A ticket this deployment signed for one object | Nothing; the ticket is the authorization |
 

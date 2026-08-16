@@ -20,10 +20,11 @@ namespace MailFathom.Host.UnitTests.Security.Transport;
 
 /// <summary>Covers the one adapter that turns what the transport established into what the application layer reads.</summary>
 /// <remarks>
-/// Three answers are asserted, one per principal kind the application layer models, and so is the fourth case that is
-/// none of them: a request that authenticated nothing. That last one is the reason the adapter cannot simply report a
-/// caller holding nothing — the download route is reached that way legitimately, and a principal appearing out of the
-/// transport there would be a second and weaker way into an attachment.
+/// Three answers are asserted, one per principal kind the application layer models, and so is a request that
+/// authenticated nothing, which is decided by what the surface it reached configures: a caller holding everything that
+/// surface publishes where it configures no entry, and none of the three where it configures one. The download route is
+/// withheld from the permissive half of that before either surface is asked, because a principal appearing out of the
+/// transport there would be a second and weaker way into an attachment than the signature the route verifies.
 /// </remarks>
 public sealed class TransportAuthorizedPrincipalSourceTests
 {

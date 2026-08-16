@@ -71,7 +71,7 @@ public sealed class AuthorizedPrincipal
     public IReadOnlySet<MailFathomPermission> Permissions { get; }
 
     /// <summary>Describes a caller the transport admitted.</summary>
-    /// <param name="identity">What the transport admitted the caller as, in the two forms <see cref="Identity" /> describes.</param>
+    /// <param name="identity">What the transport admitted the caller as, in the forms <see cref="Identity" /> describes.</param>
     /// <param name="grantedPermissions">The permissions the entry that admitted it resolved to, empty when it granted none.</param>
     /// <returns>The principal the use cases the caller reaches are consulted with.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="identity" /> or <paramref name="grantedPermissions" /> is <see langword="null" />.</exception>
