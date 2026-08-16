@@ -387,6 +387,34 @@ public sealed class McpEndpointOptionsBindingTests
         Assert.Contains("McpEndpoint:Authentication:2:Permissions:0", reported, StringComparison.Ordinal);
     }
 
+    /// <summary>Every refusal against an entry names the key it was written under, not only the ones a grant adds — a path composed per rule would drift back to the bound position one rule at a time.</summary>
+    [Fact]
+    public void FindConfigurationErrors_EntriesNumberedWithAGap_NameTheKeyInARefusalNoGrantProduced()
+    {
+        // Arrange
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>(StringComparer.Ordinal)
+            {
+                ["McpEndpoint:Enabled"] = "true",
+                ["McpEndpoint:Authentication:0:OAuth:Resource"] = "https://mail.example.test/mcp",
+                ["McpEndpoint:Authentication:0:OAuth:AuthorizationServers:0:Name"] = "workforce",
+                ["McpEndpoint:Authentication:0:OAuth:AuthorizationServers:0:Issuer"] = "https://sso.example.test/realms/mailfathom",
+                ["McpEndpoint:Authentication:0:OAuth:AuthorizationServers:0:AuthorizedSubjects:0"] = "11111111-2222-3333-4444-555555555555",
+                ["McpEndpoint:Authentication:2:OAuth:Resource"] = "https://mail.example.test/elsewhere",
+                ["McpEndpoint:Authentication:2:OAuth:AuthorizationServers:0:Name"] = "partners",
+                ["McpEndpoint:Authentication:2:OAuth:AuthorizationServers:0:Issuer"] = "https://partners.example.test/realms/mailfathom",
+                ["McpEndpoint:Authentication:2:OAuth:AuthorizationServers:0:AuthorizedSubjects:0"] = "22222222-3333-4444-5555-666666666666",
+            })
+            .Build();
+
+        // Act
+        var errors = McpEndpointOptions.ReadFrom(configuration).FindConfigurationErrors();
+
+        // Assert
+        var reported = Assert.Single(errors);
+        Assert.Contains("McpEndpoint:Authentication:2:OAuth:Resource", reported, StringComparison.Ordinal);
+    }
+
     /// <summary>
     /// An element carrying nothing binds to an entry rather than being dropped, so the children and the bound entries
     /// stay the same length and every grant is still read off the entry that wrote it. The empty element is refused

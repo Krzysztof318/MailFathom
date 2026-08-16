@@ -255,8 +255,12 @@ origins, serving your own domain over TLS, client certificates, and the rate lim
 **A credential reaches the whole surface until its entry narrows it.** The entry above writes no `Permissions` list, so
 the key it configures may do everything the MCP surface publishes — read the local mailbox copy and ask questions of it.
 That is deliberate: nothing has to be granted before a first deployment works. Writing a `Permissions` list on the entry
-narrows it, and startup reports what every entry resolved to either way —
+states a narrower grant, and startup reports what every entry resolved to either way —
 [what a credential may do](../operations/mcp-endpoint.md#what-a-credential-may-do) has the names and the rules.
+
+Nothing enforces that grant yet: the permissions are read, validated, carried on the authenticated caller and reported at
+startup, and no tool consults them, so a narrowed entry still reaches every tool the endpoint serves. Write one to say
+what a credential is meant to reach; it starts refusing when the enforcement it describes ships.
 
 MailFathom itself serves plain HTTP unless its own TLS termination is configured, so keep the application port on
 loopback or behind a TLS-terminating proxy — the Compose deployment's default — and give the proxy the certificate. If

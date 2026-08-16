@@ -1100,7 +1100,7 @@ routing and listeners — while key and certificate material is read per request
 
 Each entry carries the block of whichever method judges it, and the block's presence is what selects that method — there
 is no separate setting naming it. As many entries may state any method as a deployment needs, and one entry may carry
-several blocks; an entry carrying none fails startup, named by its position. A grant written on an entry adds four more
+several blocks; an entry carrying none fails startup, named by its position. A grant written on an entry adds five more
 refusals and makes one combination of blocks impossible —
 [what a credential may do](#what-a-credential-may-do--permissions) is where they are stated. Both endpoints take the
 same entries; the administrative one adds a single rule, stated with it below.

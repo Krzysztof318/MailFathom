@@ -265,7 +265,7 @@ internal static class TransportAuthenticationConfiguration
 
             if (!string.Equals(resource, firstResource, StringComparison.Ordinal))
             {
-                yield return $"{sectionName}:{SettingName}:{index}:{nameof(TransportAuthenticationOptions.OAuth)}:{nameof(OAuthValidationOptions.Resource)} — every OAuth entry names the same resource, because the endpoint publishes one protected resource metadata document and publishes it at an address derived from that identifier. An earlier entry names '{firstResource}'; write that, or move this entry to an endpoint of its own.";
+                yield return $"{SettingPathOf(sectionName, method, index)}:{nameof(TransportAuthenticationOptions.OAuth)}:{nameof(OAuthValidationOptions.Resource)} — every OAuth entry names the same resource, because the endpoint publishes one protected resource metadata document and publishes it at an address derived from that identifier. An earlier entry names '{firstResource}'; write that, or move this entry to an endpoint of its own.";
             }
         }
     }
@@ -294,7 +294,7 @@ internal static class TransportAuthenticationConfiguration
             foreach (var (serverIndex, authorizationServer) in oauth.AuthorizationServers.Index())
             {
                 var settingPath =
-                    $"{sectionName}:{SettingName}:{index}:{nameof(TransportAuthenticationOptions.OAuth)}:{nameof(OAuthValidationOptions.AuthorizationServers)}:{serverIndex}";
+                    $"{SettingPathOf(sectionName, method, index)}:{nameof(TransportAuthenticationOptions.OAuth)}:{nameof(OAuthValidationOptions.AuthorizationServers)}:{serverIndex}";
 
                 if (!claimedNames.Add(authorizationServer.Name!))
                 {
