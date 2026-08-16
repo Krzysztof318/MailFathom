@@ -149,13 +149,15 @@ internal sealed partial class TransportGrantStartupReport : IHostedService
     [LoggerMessage(
         Level = LogLevel.Information,
         Message = "The {EndpointName} endpoint entry {EntrySettingPath} grants {GrantedPermissions} to every credential "
-            + "it admits.")]
+            + "it admits. Nothing consults a grant yet, so this states what those credentials are meant to reach rather "
+            + "than what they currently reach.")]
     private partial void LogEntryGrant(string endpointName, string entrySettingPath, string grantedPermissions);
 
     [LoggerMessage(
         Level = LogLevel.Information,
         Message = "The {EndpointName} endpoint entry {EntrySettingPath} grants at most {GrantedPermissions}, and each "
-            + "token holds whichever of those its own scopes carry.")]
+            + "token holds whichever of those its own scopes carry. Nothing consults a grant yet, so this states what "
+            + "those tokens are meant to reach rather than what they currently reach.")]
     private partial void LogEntryGrantNarrowedByTokenScopes(
         string endpointName,
         string entrySettingPath,
@@ -165,7 +167,8 @@ internal sealed partial class TransportGrantStartupReport : IHostedService
         Level = LogLevel.Information,
         Message = "The {EndpointName} endpoint entry {EntrySettingPath} writes down no grant, so every credential it "
             + "admits holds {GrantedPermissions} — everything this surface publishes. Write a 'Permissions' list on the "
-            + "entry to narrow it, or an empty one to grant nothing.")]
+            + "entry to narrow it, or an empty one to grant nothing — which states an intent rather than a bound, "
+            + "because nothing consults a grant yet.")]
     private partial void LogEntryGrantedWithoutBeingNarrowed(
         string endpointName,
         string entrySettingPath,
@@ -175,7 +178,8 @@ internal sealed partial class TransportGrantStartupReport : IHostedService
         Level = LogLevel.Information,
         Message = "The {EndpointName} endpoint on {EndpointPath} configures no credential entry, so every caller it "
             + "serves holds {GrantedPermissions} — everything this surface publishes. There is no entry for a grant to "
-            + "be written on until one is added under {AuthenticationSettingPath}.")]
+            + "be written on until one is added under {AuthenticationSettingPath}, and nothing consults a grant yet "
+            + "either.")]
     private partial void LogSurfaceGrantedWithoutAnyEntry(
         string endpointName,
         string endpointPath,

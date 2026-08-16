@@ -209,10 +209,13 @@ internal sealed class TransportAuthenticationOptions
 
         var claimedPermissions = new HashSet<string>(StringComparer.Ordinal);
 
-        foreach (var (index, configuredPermission) in this.Permissions.Index())
-        {
-            var permissionPath = $"{settingPath}:{nameof(this.Permissions)}:{index}";
+        // The list rather than a position inside it, because the position is where the binder appended the string and
+        // the operator may have written it under another key. Each message quotes the name, which is what they search
+        // their own file for.
+        var permissionPath = $"{settingPath}:{nameof(this.Permissions)}";
 
+        foreach (var configuredPermission in this.Permissions)
+        {
             if (!MailFathomPermission.TryParse(configuredPermission, out var permission))
             {
                 yield return $"{permissionPath} — '{configuredPermission}' is not a permission MailFathom publishes; write one of {PublishedNamesFor(surface)}.";

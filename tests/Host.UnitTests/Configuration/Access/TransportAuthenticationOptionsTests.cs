@@ -179,7 +179,7 @@ public sealed class TransportAuthenticationOptionsTests
 
         // Assert
         var reported = Assert.Single(errors);
-        Assert.Contains($"{SettingPath}:Permissions:0", reported, StringComparison.Ordinal);
+        Assert.Contains($"{SettingPath}:Permissions", reported, StringComparison.Ordinal);
         Assert.Contains("mailfathom.mail.write", reported, StringComparison.Ordinal);
         Assert.Contains(MailFathomPermission.MailRead.Name, reported, StringComparison.Ordinal);
     }
@@ -197,7 +197,7 @@ public sealed class TransportAuthenticationOptionsTests
 
         // Assert
         var reported = Assert.Single(errors);
-        Assert.Contains($"{SettingPath}:Permissions:0", reported, StringComparison.Ordinal);
+        Assert.Contains($"{SettingPath}:Permissions", reported, StringComparison.Ordinal);
         Assert.Contains(MailFathomPermission.AdminSpend.Name, reported, StringComparison.Ordinal);
     }
 
@@ -214,7 +214,7 @@ public sealed class TransportAuthenticationOptionsTests
 
         // Assert
         var reported = Assert.Single(errors);
-        Assert.Contains($"{SettingPath}:Permissions:1", reported, StringComparison.Ordinal);
+        Assert.Contains($"{SettingPath}:Permissions", reported, StringComparison.Ordinal);
     }
 
     /// <summary>An emptied grant is a posture rather than a mistake, so it is the one arrangement here that is not refused.</summary>

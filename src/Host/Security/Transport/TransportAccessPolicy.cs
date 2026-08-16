@@ -33,8 +33,9 @@ namespace MailFathom.Host.Security.Transport;
 /// <para>
 /// What an admitted caller may then <em>do</em> is a separate question and is not asked here. The permissions its
 /// credential's configuration entry granted travel on the principal this judges, written by whichever scheme
-/// authenticated it and read back through <see cref="TransportGrant" />, so admission stays one shared judgement while
-/// each surface enforces the grant in the terms its own callers are answered in.
+/// authenticated it, so that admission can stay one shared judgement while each surface comes to enforce the grant in
+/// the terms its own callers are answered in. Nothing reads them back yet: <see cref="TransportGrant" /> is how a
+/// surface will, and no route and no tool consults a permission today.
 /// </para>
 /// </remarks>
 internal static class TransportAccessPolicy

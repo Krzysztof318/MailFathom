@@ -176,7 +176,7 @@ public sealed class AdminEndpointOptionsTests
 
         // Assert
         var reported = Assert.Single(errors);
-        Assert.Contains("AdminEndpoint:Authentication:0:Permissions:0", reported, StringComparison.Ordinal);
+        Assert.Contains("AdminEndpoint:Authentication:0:Permissions", reported, StringComparison.Ordinal);
         Assert.Contains("mailfathom.mail.read", reported, StringComparison.Ordinal);
     }
 

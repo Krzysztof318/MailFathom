@@ -384,7 +384,7 @@ public sealed class McpEndpointOptionsBindingTests
 
         // Assert
         var reported = Assert.Single(errors);
-        Assert.Contains("McpEndpoint:Authentication:2:Permissions:0", reported, StringComparison.Ordinal);
+        Assert.Contains("McpEndpoint:Authentication:2:Permissions", reported, StringComparison.Ordinal);
     }
 
     /// <summary>Every refusal against an entry names the key it was written under, not only the ones a grant adds — a path composed per rule would drift back to the bound position one rule at a time.</summary>
@@ -512,7 +512,7 @@ public sealed class McpEndpointOptionsBindingTests
 
         // Assert
         var reported = Assert.Single(errors);
-        Assert.Contains("McpEndpoint:Authentication:0:Permissions:0", reported, StringComparison.Ordinal);
+        Assert.Contains("McpEndpoint:Authentication:0:Permissions", reported, StringComparison.Ordinal);
     }
 
     /// <summary>A misspelling that bound quietly would leave a security decision reading as one nobody made.</summary>

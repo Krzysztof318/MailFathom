@@ -332,7 +332,10 @@ $ curl -sS https://mail.example.com/.well-known/oauth-protected-resource/mcp | j
 Check `resource` against what you will type into the client, and `authorization_servers` against your issuer. A
 deployment configuring several authorization servers publishes them all here, and a client may use only the first —
 order them accordingly. `scopes_supported` is what a client will ask for, which is why `offline_access` appears in it
-without being required: an absence here is a client that never asks for a refresh token.
+without being required: an absence here is a client that never asks for a refresh token. An entry setting
+`PermissionsFromTokenScopes` publishes its whole ceiling here as well, so the permission names in this field are exactly
+the client scopes to create in your authorization server — the document above is from a deployment that sets none. An
+entry granting from configuration publishes none of its permissions, because no client can ask for one.
 
 **An unauthenticated request is refused, and says where to authorize:**
 

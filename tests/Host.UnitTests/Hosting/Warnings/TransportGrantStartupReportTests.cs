@@ -168,6 +168,48 @@ public sealed class TransportGrantStartupReportTests
             Assert.Contains("GrantedPermissions", record.Properties));
     }
 
+    /// <summary>
+    /// The line is what an operator goes and edits, so it names the key they wrote rather than the position the binder
+    /// appended the entry at. A source numbering its entries with a gap makes the two different numbers, and the
+    /// position then names a path their configuration does not contain.
+    /// </summary>
+    [Fact]
+    public async Task StartAsync_AnEntryWrittenUnderAKeyOfItsOwn_NamesThatKeyRatherThanTheBoundPosition()
+    {
+        // Arrange
+        using var logs = new RecordingLoggerProvider();
+        var entry = AnEntryThatStatedNoGrant();
+        entry.RecordConfigurationKey("2");
+
+        var report = ReportFor(McpEndpointWith(entry), new AdminEndpointOptions(), logs);
+
+        // Act
+        await report.StartAsync(TestContext.Current.CancellationToken);
+
+        // Assert
+        var record = Assert.Single(logs.Records);
+        Assert.Equal("McpEndpoint:Authentication:2", Assert.Contains("EntrySettingPath", record.Properties));
+    }
+
+    /// <summary>The startup record is where an operator meets the posture first, so a line that stated a grant without saying nothing reads it would be the false answer the model exists to avoid.</summary>
+    [Fact]
+    public async Task StartAsync_AnyReportedEntry_SaysNothingConsultsAGrantYet()
+    {
+        // Arrange
+        using var logs = new RecordingLoggerProvider();
+        var entry = AnApiKeyEntry();
+        entry.Permissions.Add(MailFathomPermission.MailRead.Name);
+
+        var report = ReportFor(McpEndpointWith(entry), new AdminEndpointOptions(), logs);
+
+        // Act
+        await report.StartAsync(TestContext.Current.CancellationToken);
+
+        // Assert
+        var record = Assert.Single(logs.Records);
+        Assert.Contains("Nothing consults a grant yet", record.Message, StringComparison.Ordinal);
+    }
+
     /// <summary>The two surfaces draw from disjoint halves, so an operator has to be able to read back that they narrowed the one they meant.</summary>
     [Fact]
     public async Task StartAsync_BothEndpointsEnabled_ReportsEachEntryAgainstItsOwnSurface()
