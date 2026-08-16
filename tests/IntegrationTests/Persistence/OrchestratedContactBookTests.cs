@@ -108,6 +108,50 @@ public sealed class OrchestratedContactBookTests(MailFathomOrchestrationFixture 
         Assert.Equal(ContactWriteOutcome.Written, reclaimed.Outcome);
     }
 
+    /// <summary>Promotion changes a column an amendment never touches, so only a re-read from the database proves it landed.</summary>
+    /// <remarks>
+    /// The in-memory double a unit test writes through replaces the whole record, which would report a promotion as
+    /// written whatever the adapter copied onto the tracked row. What that cannot establish is the one thing this write
+    /// is for: that the origin column moved, and that asking again therefore says there is nothing left to do.
+    /// </remarks>
+    [Fact]
+    public async Task PromoteAsync_ACollectedContact_WritesTheOriginAndAnsweredAgainSaysNothingIsLeftToDo()
+    {
+        // Arrange
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var services = await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken);
+
+        var recorded = await RecordAsync(
+            services,
+            "Promotion Subject",
+            ["anna@promotion.contacts.test"],
+            ContactOrigin.Collected,
+            cancellationToken);
+
+        var contactId = recorded.Contact!.Id;
+
+        // Act
+        var promoted = await InScopeAsync(
+            services,
+            (book, token) => book.PromoteAsync(contactId, ContactOrigin.Asserted, token),
+            cancellationToken);
+
+        var reread = await InScopeAsync(
+            services,
+            (book, token) => book.ExportAsync(contactId, token),
+            cancellationToken);
+
+        var again = await InScopeAsync(
+            services,
+            (book, token) => book.PromoteAsync(contactId, ContactOrigin.Asserted, token),
+            cancellationToken);
+
+        // Assert
+        Assert.Equal(ContactWriteOutcome.Written, promoted.Outcome);
+        Assert.Equal(ContactOrigin.Asserted, reread!.Contact.Origin);
+        Assert.Equal(ContactWriteOutcome.AlreadyAsserted, again.Outcome);
+    }
+
     /// <summary>Two writers claiming one address both read nothing, so only the index closes that window — as a conflict.</summary>
     /// <remarks>
     /// Written through the store rather than through the book, because the book reads first and would answer the second

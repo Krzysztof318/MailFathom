@@ -29,7 +29,8 @@ person and the addresses hang off them.
 
 The identity is the book's own and is never an address, because an address is a thing a person has rather than a thing
 they are: they give one up, gain another, and stay the same person. It is also the only part of a contact that may
-appear in a log line, a metric, or a failure message — everything else is personal data about a third party.
+appear in a log line, a metric, or a failure message, beside the origin, which is MailFathom's own classification of how
+a record arrived rather than anything the person supplied. Everything else is personal data about a third party.
 
 Which address is preferred is the owner's choice rather than an ordering accident. Nothing picks one, and a record
 naming a preferred address the contact does not hold is refused rather than repaired.

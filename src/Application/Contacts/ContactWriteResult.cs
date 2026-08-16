@@ -31,10 +31,18 @@ public sealed record ContactWriteResult
     /// </remarks>
     public Contact? Contact { get; }
 
-    /// <summary>Gets the contact that already holds the address, when that is what refused the write.</summary>
+    /// <summary>Gets one contact that already holds an address the write claimed, when that is what refused it.</summary>
     /// <remarks>
+    /// <para>
     /// Only the identity, because a caller resolving the clash asks the book for that contact through the ordinary read
     /// path; answering with somebody else's record here would hand a person out as a side effect of a failed write.
+    /// </para>
+    /// <para>
+    /// One holder rather than every one of them. A record may claim addresses two other people hold, and a caller that
+    /// resolves the clash this names is then refused again by the next — which is the same conversation one exchange
+    /// later rather than a different answer, and it is what keeps a refused write from listing several third parties at
+    /// once. A caller that wants them all reads the book by address before it writes.
+    /// </para>
     /// </remarks>
     public ContactId? AddressHolder { get; }
 

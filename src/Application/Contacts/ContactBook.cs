@@ -213,11 +213,13 @@ public sealed class ContactBook
         return held is null ? null : new ContactExport(held, this.timeProvider.GetUtcNow());
     }
 
-    /// <summary>Names the contact already holding one of this record's addresses, when it is a different contact.</summary>
+    /// <summary>Names one contact already holding one of this record's addresses, when it is a different contact.</summary>
     /// <remarks>
     /// The record's own identity is excluded, because an amendment keeping an address the contact already holds is not a
-    /// clash with itself. The read joins no transaction, so it can be stale by the time the insert runs — which is what
-    /// the unique constraint underneath is for, and why losing that race is retried rather than reported.
+    /// clash with itself. Where several other contacts hold addresses this record claims, one of them is named and
+    /// <see cref="ContactWriteResult.AddressHolder" /> states why. The read joins no transaction, so it can be stale by
+    /// the time the insert runs — which is what the unique constraint underneath is for, and why losing that race is
+    /// retried rather than reported.
     /// </remarks>
     private async Task<ContactId?> AddressHolderOtherThanAsync(Contact contact, CancellationToken cancellationToken)
     {

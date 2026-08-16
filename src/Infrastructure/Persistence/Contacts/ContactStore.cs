@@ -69,6 +69,11 @@ internal sealed class ContactStore : IContactStore
         held.DisplayNameSortKey = contact.DisplayName.SortKey;
         held.PreferredNormalizedAddress = contact.PreferredAddress.NormalizedAddress;
         held.Note = contact.Note?.Value;
+
+        // The origin is written here even though an amendment never changes it, because promotion is the one write that
+        // does and it reaches the row through this method like any other. Copying every column the record states rather
+        // than the ones a particular caller is expected to have moved is what keeps that true of the next such write.
+        held.Origin = contact.Origin;
         held.AmendedAt = contact.AmendedAt;
 
         ReplaceAddresses(writeContext, held, contact);
