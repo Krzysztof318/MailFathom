@@ -82,6 +82,31 @@ public sealed class ContactDisplayNameTests
         Assert.Throws<ArgumentException>(() => ContactDisplayName.Create(written));
     }
 
+    /// <summary>An unpaired surrogate is no character at all, and the walk substitutes a printable one for it.</summary>
+    [Fact]
+    public void Create_NameCarryingAnUnpairedSurrogate_IsRefused()
+    {
+        // Arrange
+        var written = string.Concat("Anna", "\ud800", "Kowalska");
+
+        // Act, Assert
+        Assert.Throws<ArgumentException>(() => ContactDisplayName.Create(written));
+    }
+
+    /// <summary>A paired surrogate is an ordinary character, so the well-formedness rule refuses nothing people write.</summary>
+    [Fact]
+    public void Create_NameCarryingASupplementaryLetter_IsKeptAsWritten()
+    {
+        // Arrange
+        var written = string.Concat("Anna ", char.ConvertFromUtf32(0x1D400));
+
+        // Act
+        var displayName = ContactDisplayName.Create(written);
+
+        // Assert
+        Assert.Equal(written, displayName.Value);
+    }
+
     /// <summary>The joiners decide how neighbouring letters are shaped, so refusing them would refuse names people write.</summary>
     [Theory]
     [InlineData("می\u200cخواهم")]

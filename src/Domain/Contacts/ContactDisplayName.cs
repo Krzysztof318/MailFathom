@@ -65,7 +65,7 @@ public readonly record struct ContactDisplayName
             throw new ArgumentException($"A contact name cannot be longer than {MaximumLength} characters.", nameof(value));
         }
 
-        if (trimmed.EnumerateRunes().Any(ContactText.IsUnprintable))
+        if (!ContactText.IsWellFormed(trimmed) || trimmed.EnumerateRunes().Any(ContactText.IsUnprintable))
         {
             throw new ArgumentException("A contact name cannot contain characters that carry no glyph of their own.", nameof(value));
         }

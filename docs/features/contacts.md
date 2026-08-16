@@ -39,7 +39,10 @@ so both refuse the characters that carry no glyph of their own: the control char
 separators, and the formatting characters, among which the bidirectional overrides are what would let one name render as
 text it does not contain. A note keeps line breaks and tabs, because a note is written to be read as somebody wrote it.
 The zero-width joiner and non-joiner are admitted in both, because Persian, Arabic, and the Indic scripts write them
-inside ordinary words and refusing them would refuse names people actually have.
+inside ordinary words and refusing them would refuse names people actually have. Text that is not well-formed at all —
+a surrogate with no partner, which is no character and has no category — is refused for a different reason: the first
+thing to reject it otherwise would be the encoder writing the row, so a value somebody typed would come back as an
+encoding failure rather than as a value that was not accepted.
 
 ## When two addresses are the same address
 

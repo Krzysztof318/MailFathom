@@ -52,7 +52,8 @@ public readonly record struct ContactNote
             throw new ArgumentException($"A contact note cannot be longer than {MaximumLength} characters.", nameof(value));
         }
 
-        if (trimmed.EnumerateRunes().Any(scalar => ContactText.IsUnprintable(scalar) && !ContactText.IsLayout(scalar)))
+        if (!ContactText.IsWellFormed(trimmed)
+            || trimmed.EnumerateRunes().Any(scalar => ContactText.IsUnprintable(scalar) && !ContactText.IsLayout(scalar)))
         {
             throw new ArgumentException("A contact note cannot contain characters that carry no glyph of their own, other than line breaks and tabs.", nameof(value));
         }

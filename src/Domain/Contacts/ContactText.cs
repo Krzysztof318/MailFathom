@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using System.Buffers;
 using System.Globalization;
 using System.Text;
 
@@ -47,6 +48,33 @@ internal static class ContactText
     /// <param name="scalar">The scalar to judge.</param>
     /// <returns><see langword="true" /> when the scalar is a line break or a tab.</returns>
     internal static bool IsLayout(Rune scalar) => scalar.Value is '\r' or '\n' or '\t';
+
+    /// <summary>Answers whether text is well-formed UTF-16, which is what makes the scalar walk above mean anything.</summary>
+    /// <param name="value">The text to judge.</param>
+    /// <returns><see langword="true" /> when every code unit takes part in a scalar.</returns>
+    /// <remarks>
+    /// An unpaired surrogate is not a character and has no category, so enumerating scalars substitutes U+FFFD for it —
+    /// which is a printable symbol and passes every rule above while the ill-formed code unit stays in the stored value.
+    /// It is refused here instead, because the first thing to reject it otherwise would be the UTF-8 encoder inside
+    /// Npgsql or the JSON writer, and a value an owner typed would come back as an encoding failure rather than as a
+    /// value that was not accepted.
+    /// </remarks>
+    internal static bool IsWellFormed(string value)
+    {
+        var remaining = value.AsSpan();
+
+        while (!remaining.IsEmpty)
+        {
+            if (Rune.DecodeFromUtf16(remaining, out _, out var consumed) is not OperationStatus.Done)
+            {
+                return false;
+            }
+
+            remaining = remaining[consumed..];
+        }
+
+        return true;
+    }
 
     /// <summary>Admits the two formatting characters that belong inside ordinary words.</summary>
     /// <remarks>

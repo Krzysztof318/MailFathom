@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using System.Buffers.Binary;
 using MailFathom.Domain.Contacts;
 using MailFathom.Domain.Emails;
 using MailFathom.Infrastructure.Persistence.Contacts;
@@ -117,6 +118,39 @@ public sealed class ContactMappingTests
 
         // Act, Assert
         Assert.Throws<ArgumentException>(() => ContactMapping.ToContact(entity));
+    }
+
+    /// <summary>An address row is filed under the write that added it, which for an amendment is years after the arrival.</summary>
+    [Fact]
+    public void ToAddressEntity_AnAddressAddedByAnAmendment_IsIdentifiedFromTheAmendmentRatherThanTheArrival()
+    {
+        // Arrange
+        var amendedAt = RecordedAt.AddYears(1);
+        var amended = ContactOf("Anna Kowalska", ["anna@example.test"]).AmendedWith(
+            ContactDisplayName.Create("Anna Kowalska"),
+            [Address("anna@example.test"), Address("anna@personal.test")],
+            Address("anna@example.test"),
+            note: null,
+            amendedAt);
+
+        // Act
+        var row = ContactMapping.ToAddressEntity(amended, Address("anna@personal.test"));
+
+        // Assert
+        Assert.Equal(amendedAt, TimestampOf(row.Id));
+        Assert.NotEqual(RecordedAt, TimestampOf(row.Id));
+    }
+
+    /// <summary>Reads back the instant a version 7 identifier was minted over, which is its leading 48 bits.</summary>
+    private static DateTimeOffset TimestampOf(Guid identifier)
+    {
+        Span<byte> bytes = stackalloc byte[16];
+        identifier.TryWriteBytes(bytes, bigEndian: true, out _);
+
+        var milliseconds = ((long)BinaryPrimitives.ReadUInt32BigEndian(bytes) << 16)
+            | BinaryPrimitives.ReadUInt16BigEndian(bytes[4..]);
+
+        return DateTimeOffset.FromUnixTimeMilliseconds(milliseconds);
     }
 
     private static Contact ContactOf(

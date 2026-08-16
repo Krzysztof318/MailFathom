@@ -257,6 +257,7 @@ public sealed class ContactTests
     [Theory]
     [InlineData(ContactOrigin.Collected, ContactOrigin.Asserted, true)]
     [InlineData(ContactOrigin.Collected, ContactOrigin.Collected, false)]
+    [InlineData(ContactOrigin.Asserted, ContactOrigin.Asserted, true)]
     [InlineData(ContactOrigin.Asserted, ContactOrigin.Collected, false)]
     public void IsPromotableBy_AWriterOfEachOrigin_AnswersForTheOwnersWriterAlone(
         ContactOrigin contactOrigin,

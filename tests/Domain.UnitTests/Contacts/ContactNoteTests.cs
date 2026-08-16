@@ -48,6 +48,17 @@ public sealed class ContactNoteTests
         Assert.Throws<ArgumentException>(() => ContactNote.Create(written));
     }
 
+    /// <summary>An unpaired surrogate is refused here for the reason a name refuses one.</summary>
+    [Fact]
+    public void Create_NoteCarryingAnUnpairedSurrogate_IsRefused()
+    {
+        // Arrange
+        var written = string.Concat("Owes ", "\udfff", " an answer");
+
+        // Act, Assert
+        Assert.Throws<ArgumentException>(() => ContactNote.Create(written));
+    }
+
     /// <summary>A note is written in whatever script the owner writes in, joiners included.</summary>
     [Fact]
     public void Create_NoteJoiningItsLettersWithAZeroWidthJoiner_IsKeptAsWritten()

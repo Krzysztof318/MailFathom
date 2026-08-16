@@ -33,10 +33,14 @@ namespace MailFathom.IntegrationTests.Persistence;
 [Collection(OrchestratedInfrastructureCollectionDefinition.Name)]
 public sealed class OrchestratedContactBookTests(MailFathomOrchestrationFixture orchestration)
 {
-    /// <summary>The names the walk lists, written out of order so the order it reads them in is the book's rather than the insertion's.</summary>
     /// <summary>The instant a directly constructed contact is stamped with, fixed so no test here reads a clock.</summary>
     private static readonly DateTimeOffset RecordedAt = new(2026, 3, 1, 9, 0, 0, TimeSpan.Zero);
 
+    /// <summary>The names the walk lists, written out of order so the order it reads them in is the book's rather than the insertion's.</summary>
+    /// <remarks>
+    /// One of them is lower-cased, so ordering by the name as written and ordering by the stored comparison form are two
+    /// different sequences and the walk's assertion can tell them apart.
+    /// </remarks>
     private static readonly string[] WalkedNames =
     [
         "Walk Delta",
@@ -121,7 +125,7 @@ public sealed class OrchestratedContactBookTests(MailFathomOrchestrationFixture 
         var losing = ContactOf("Race Loser", ["CONTESTED@race.contacts.test"], ContactOrigin.Asserted);
 
         // Act
-        var losingCommit = await services.InScopeAsync(
+        var (winningCommit, losingCommit) = await services.InScopeAsync(
             async (losingScope, token) =>
             {
                 await using var losingSession = await losingScope
@@ -130,20 +134,20 @@ public sealed class OrchestratedContactBookTests(MailFathomOrchestrationFixture 
 
                 await losingScope.GetRequiredService<IContactStore>().AddAsync(losingSession, losing, token);
 
-                var winningCommit = await services.CommitAsync(
+                var committedFirst = await services.CommitAsync(
                     (winningScope, winningSession, winningToken) => winningScope
                         .GetRequiredService<IContactStore>()
                         .AddAsync(winningSession, winning, winningToken),
                     token);
-                Assert.Equal(PersistenceCommitResult.Committed, winningCommit);
 
-                return await losingSession.CommitAsync(token);
+                return (committedFirst, await losingSession.CommitAsync(token));
             },
             cancellationToken);
 
         var held = await FindByAddressAsync(services, "contested@race.contacts.test", cancellationToken);
 
         // Assert
+        Assert.Equal(PersistenceCommitResult.Committed, winningCommit);
         Assert.Equal(PersistenceCommitResult.ConcurrencyConflict, losingCommit);
         Assert.Equal("Race Winner", held?.DisplayName.Value);
     }
