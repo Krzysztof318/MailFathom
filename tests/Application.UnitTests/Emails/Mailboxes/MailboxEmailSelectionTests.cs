@@ -99,6 +99,12 @@ public sealed class MailboxEmailSelectionTests
 
         // Assert
         Assert.Equal("keyword", failure.FilterName);
+
+        // The refusal says why, because a keyword is free text and a caller reading that their value names no known
+        // identity would go looking for a vocabulary this filter does not have.
+        Assert.Equal(
+            MailboxQueryFilterInvalidException.ContainsControlCharacter("keyword").Message,
+            failure.Message);
     }
 
     /// <summary>The bound is the one the stored keywords were kept under, so a longer filter could not match any of them.</summary>

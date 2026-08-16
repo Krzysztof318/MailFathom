@@ -251,8 +251,10 @@ public sealed record MailboxEmailSelection
             RemoteEmailKeywords.MaximumKeywordLength,
             "keyword");
 
+        // The blank and the over-long cases have both been answered above, so a value the domain type still refuses is
+        // one carrying a control character, and the caller is told that rather than that it named no known identity.
         return RemoteEmailKeywords.Normalized(keyword)
-            ?? throw MailboxQueryFilterInvalidException.NotAUsableIdentifier("keyword");
+            ?? throw MailboxQueryFilterInvalidException.ContainsControlCharacter("keyword");
     }
 
     private static string? BoundedSubjectFragment(string? subjectFragment)

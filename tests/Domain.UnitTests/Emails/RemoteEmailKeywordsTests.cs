@@ -79,13 +79,27 @@ public sealed class RemoteEmailKeywordsTests
         Assert.Equal(["$JUNK"], keywords.Values);
     }
 
+    /// <summary>The bound is the longest keyword that is kept rather than the first one dropped, which is the half a length test written only against an over-long value leaves open.</summary>
+    [Fact]
+    public void Create_AKeywordExactlyAsLongAsTheBound_KeepsIt()
+    {
+        // Arrange
+        var longestPermitted = new string('a', RemoteEmailKeywords.MaximumKeywordLength);
+
+        // Act
+        var keywords = RemoteEmailKeywords.Create([longestPermitted, "$Junk"]);
+
+        // Assert
+        Assert.Equal(["$JUNK", longestPermitted.ToUpperInvariant()], keywords.Values);
+    }
+
     /// <summary>
     /// Nothing in the protocol bounds how many keywords a server reports, and the answer is stored on the email's own
     /// row. The excess is discarded rather than refused, because a reconciliation window exists to record what the
     /// server said and failing it over a flag would stop the window recording anything.
     /// </summary>
     [Fact]
-    public void Create_MoreKeywordsThanTheBound_KeepsTheFirstOnesInOrder()
+    public void Create_MoreKeywordsThanTheBound_KeepsTheOrdinallySmallestOnes()
     {
         // Arrange
         var reported = Enumerable

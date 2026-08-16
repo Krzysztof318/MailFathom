@@ -8,6 +8,14 @@ using Microsoft.EntityFrameworkCore.Migrations;
 
 namespace MailFathom.Infrastructure.Persistence.Migrations
 {
+    // Authored against a base that did not yet carry 20260815201928_AddStoredEmailSenderAuthentication, so this
+    // identifier sorts before a migration that merged first and is never the newest one a filename sort finds. It is
+    // permanent, because a database has already written it into __EFMigrationsHistory, and the ordering costs nothing
+    // at runtime: both migrations only add columns and indexes to stored_emails, and either order leaves one schema.
+    // What it does cost is scripts/script-migration.sh with no arguments, which reads that sort and would script the
+    // other migration. Review this one's SQL by naming the pair:
+    //   scripts/script-migration.sh 20260813161625_AddMailRuleScheduleTrigger 20260815165050_AddStoredEmailRemoteKeywords
+
     /// <inheritdoc />
     public partial class AddStoredEmailRemoteKeywords : Migration
     {

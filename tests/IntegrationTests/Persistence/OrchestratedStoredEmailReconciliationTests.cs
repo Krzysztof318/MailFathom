@@ -177,16 +177,18 @@ public sealed class OrchestratedStoredEmailReconciliationTests(MailFathomOrchest
     }
 
     /// <summary>
-    /// Writes the keywords a window reported into the array column and narrows a later listing by one of them.
+    /// Writes what a window reported about keywords and about <c>\Flagged</c>, then narrows a listing by each.
     /// </summary>
     /// <remarks>
-    /// Both halves need PostgreSQL. The write crosses a <c>text[]</c> column, so a mapping that dropped an element or
-    /// reordered the set would round-trip through a substitute unnoticed; the read narrows through the containment
-    /// operator the column's GIN index serves, which no in-memory selection evaluates. The email carrying no keyword is
-    /// in the same folder deliberately — a filter that matched everything would otherwise read as a filter that worked.
+    /// One test rather than two, for the reason the test above gives: both filters are one window's outcome over one
+    /// seeded folder. Both halves need PostgreSQL. The keyword write crosses a <c>text[]</c> column, so a mapping that
+    /// dropped an element or reordered the set would round-trip through a substitute unnoticed, and the read narrows
+    /// through the containment operator the column's GIN index serves, which no in-memory selection evaluates. Each
+    /// filter is read from both sides against a folder holding mail on both sides, because a comparison inverted or
+    /// pinned to one value returns a plausible page when only one side is ever asked for.
     /// </remarks>
     [Fact]
-    public async Task ApplyReconciliationOutcomeAsync_AWindowReportingKeywords_StoresThemAndLetsAListingNarrowByOne()
+    public async Task ApplyReconciliationOutcomeAsync_AWindowReportingKeywordsAndStars_StoresBothAndNarrowsAListingByEach()
     {
         // Arrange
         var cancellationToken = TestContext.Current.CancellationToken;
@@ -194,12 +196,13 @@ public sealed class OrchestratedStoredEmailReconciliationTests(MailFathomOrchest
         var binding = await OrchestratedFolderBinding.CommitAsync(services, "reconciliation-keywords", cancellationToken);
 
         const uint LabelledUid = 500;
-        const uint UnlabelledUid = 501;
+        const uint StarredUid = 501;
+        const uint PlainUid = 502;
 
         var storedEmailIds = await StoreEmailsAsync(
             services,
             binding,
-            [LabelledUid, UnlabelledUid],
+            [LabelledUid, StarredUid, PlainUid],
             cancellationToken);
 
         // Act
@@ -210,7 +213,8 @@ public sealed class OrchestratedStoredEmailReconciliationTests(MailFathomOrchest
                     new ObservedEmailFlags(
                         storedEmailIds[LabelledUid],
                         KeywordedAt(EarlierObservation, "$Junk", "Invoices")),
-                    new ObservedEmailFlags(storedEmailIds[UnlabelledUid], SeenAt(EarlierObservation)),
+                    new ObservedEmailFlags(storedEmailIds[StarredUid], FlaggedAt(EarlierObservation)),
+                    new ObservedEmailFlags(storedEmailIds[PlainUid], SeenAt(EarlierObservation)),
                 ],
                 ConfirmedUnchanged: [],
                 Disappeared: [],
@@ -224,7 +228,8 @@ public sealed class OrchestratedStoredEmailReconciliationTests(MailFathomOrchest
 
         // Upper-cased and ordered by the domain type, so the column holds the one form a filter is compared against.
         Assert.Equal(["$JUNK", "INVOICES"], rows[LabelledUid].RemoteKeywords);
-        Assert.Empty(rows[UnlabelledUid].RemoteKeywords);
+        Assert.Empty(rows[StarredUid].RemoteKeywords);
+        Assert.Empty(rows[PlainUid].RemoteKeywords);
 
         var narrowed = await ReadTimelineAsync(services, binding, cancellationToken, keyword: "$junk");
         Assert.Equal([LabelledUid], StoredUidsOf(narrowed, rows));
@@ -233,6 +238,12 @@ public sealed class OrchestratedStoredEmailReconciliationTests(MailFathomOrchest
         // translation would do.
         var unmatched = await ReadTimelineAsync(services, binding, cancellationToken, keyword: "Receipts");
         Assert.Empty(unmatched);
+
+        var starred = await ReadTimelineAsync(services, binding, cancellationToken, isRemotelyFlagged: true);
+        Assert.Equal([StarredUid], StoredUidsOf(starred, rows));
+
+        var unstarred = await ReadTimelineAsync(services, binding, cancellationToken, isRemotelyFlagged: false);
+        Assert.Equal([LabelledUid, PlainUid], [.. StoredUidsOf(unstarred, rows).Order()]);
     }
 
     /// <summary>Erases what the account asked to erase, and refuses to erase what a fresher pass has since seen.</summary>
@@ -439,7 +450,8 @@ public sealed class OrchestratedStoredEmailReconciliationTests(MailFathomOrchest
         OrchestratedMailFathomServices services,
         MailFolderResolution binding,
         CancellationToken cancellationToken,
-        string? keyword = null) => services.InScopeAsync(
+        string? keyword = null,
+        bool? isRemotelyFlagged = null) => services.InScopeAsync(
             (scope, token) => scope.GetRequiredService<IStoredEmailTimelineReader>().ReadPageAsync(
                 EmailTimelineFilter.Create(
                     ScopeOf(scope, binding),
@@ -449,7 +461,7 @@ public sealed class OrchestratedStoredEmailReconciliationTests(MailFathomOrchest
                     receivedOnOrAfter: null,
                     receivedBefore: null,
                     isRemotelySeen: null,
-                    isRemotelyFlagged: null,
+                    isRemotelyFlagged,
                     keyword,
                     hasAttachments: null,
                     EmailTimelineDirection.NewestFirst),
