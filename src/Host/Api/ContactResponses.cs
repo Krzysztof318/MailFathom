@@ -88,7 +88,7 @@ internal sealed record ContactPageResponse(IReadOnlyList<ContactResponse> Contac
 
 /// <summary>What one write to the book produced.</summary>
 /// <param name="Outcome">How the write ended, by the name the application's own outcome carries.</param>
-/// <param name="Contact">The record as written, present exactly when the write was performed.</param>
+/// <param name="Contact">The record the caller itself stated, present exactly when that write was performed.</param>
 /// <param name="AddressHolder">The contact already holding an address the write claimed, present exactly when that is what refused it.</param>
 /// <remarks>
 /// <para>
@@ -98,19 +98,22 @@ internal sealed record ContactPageResponse(IReadOnlyList<ContactResponse> Contac
 /// write.
 /// </para>
 /// <para>
-/// A refusal carries no record for the same reason, including the two the book can only reach by reading one — a write
-/// the contact's origin refuses, and a promotion of somebody already asserted. The routes that write are published
-/// under <c>mailfathom.admin.operate</c> and reading the book is <c>mailfathom.admin.audit.read</c>, so echoing the
-/// held record back would serve a read to a grant that does not admit it, and a refused write is where that would be
-/// least visible. What the caller is told is what it has to act on: which outcome refused the write.
+/// What decides whether a record comes back is whether the caller stated one. The routes that write are published under
+/// <c>mailfathom.admin.operate</c> and reading the book is <c>mailfathom.admin.audit.read</c>, so a body carrying a
+/// record the caller never sent is a read served to a grant that does not admit one. Recording and amending state the
+/// whole record, so <see cref="For" /> hands the written form of it back; a promotion states an identity and nothing
+/// else, so <see cref="OutcomeOf" /> is what answers it. A refusal carries no record on either path, including the two
+/// the book could only reach by reading one — a write the contact's origin refuses, and a promotion of somebody already
+/// asserted — because a refused write is where that read would be least visible.
 /// </para>
 /// </remarks>
 internal sealed record ContactWriteResponse(string Outcome, ContactResponse? Contact, Guid? AddressHolder)
 {
-    /// <summary>Describes what a write to the book produced.</summary>
+    /// <summary>Describes what a write whose record the caller stated produced.</summary>
     /// <param name="result">The outcome the book answered with.</param>
     /// <returns>The response body.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="result" /> is <see langword="null" />.</exception>
+    /// <remarks>The written record is the caller's own request as the book settled it, which is what makes reading it back an answer about the request rather than about the book.</remarks>
     internal static ContactWriteResponse For(ContactWriteResult result)
     {
         ArgumentNullException.ThrowIfNull(result);
@@ -119,6 +122,23 @@ internal sealed record ContactWriteResponse(string Outcome, ContactResponse? Con
             result.Outcome.ToString(),
             result is { Outcome: ContactWriteOutcome.Written, Contact: { } written } ? ContactResponse.For(written) : null,
             result.AddressHolder?.Value);
+    }
+
+    /// <summary>Describes what a write the caller stated no record for produced, which is the outcome and nothing else.</summary>
+    /// <param name="result">The outcome the book answered with.</param>
+    /// <returns>The response body.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="result" /> is <see langword="null" />.</exception>
+    /// <remarks>
+    /// A promotion names one person and changes their origin, so a record in the answer would be the book's own
+    /// contents rather than the caller's request — the whole of what <c>mailfathom.admin.audit.read</c> publishes,
+    /// obtained under the operating grant from an identity alone. The caller learns that the promotion happened and
+    /// reads the person through the route that is published for reading them.
+    /// </remarks>
+    internal static ContactWriteResponse OutcomeOf(ContactWriteResult result)
+    {
+        ArgumentNullException.ThrowIfNull(result);
+
+        return new ContactWriteResponse(result.Outcome.ToString(), Contact: null, AddressHolder: null);
     }
 }
 

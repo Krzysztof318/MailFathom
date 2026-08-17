@@ -73,11 +73,11 @@ internal static class EmbeddingProfileEndpoints
     /// <param name="declared">What this deployment declares it embeds with, which may be nothing.</param>
     /// <param name="reader">Composes the answer from the generations, the counts, the provider, and the budget.</param>
     /// <param name="cancellationToken">Cancels the reads when the client disconnects.</param>
-    /// <returns><c>200</c> with the state, on every instance including one that declared no provider.</returns>
+    /// <returns><c>200</c> with the state on every instance including one that declared no provider, or <c>403</c> for a caller whose grant does not carry <c>mailfathom.admin.read</c>.</returns>
     /// <remarks>
-    /// It never refuses. An instance with no declaration, no activation, and no provider is a supported deployment
-    /// serving lexical search, and it is also the instance whose operator is most likely to be asking this question —
-    /// so the absence of every part is the answer rather than an error.
+    /// The grant is the only thing it refuses over. An instance with no declaration, no activation, and no provider is a
+    /// supported deployment serving lexical search, and it is also the instance whose operator is most likely to be
+    /// asking this question — so the absence of every part is the answer rather than an error.
     /// </remarks>
     internal static async Task<Ok<EmbeddingStatusResponse>> ReadStatusAsync(
         [FromServices] DeclaredEmbeddingGeometry declared,

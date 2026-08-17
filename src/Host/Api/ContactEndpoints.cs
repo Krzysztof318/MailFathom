@@ -304,7 +304,13 @@ internal static class ContactEndpoints
     /// <param name="contactId">The contact to promote.</param>
     /// <param name="book">Performs the write.</param>
     /// <param name="cancellationToken">Cancels the write when the client disconnects.</param>
-    /// <returns><c>200</c> with the outcome, including a contact that was already asserted.</returns>
+    /// <returns><c>200</c> with the outcome and no record, including for a contact that was already asserted.</returns>
+    /// <remarks>
+    /// The only route here whose caller states no record, and therefore the only one whose answer would be the book's
+    /// own contents rather than the request's. It is published under <c>mailfathom.admin.operate</c> while reading the
+    /// book is <c>mailfathom.admin.audit.read</c>, so it answers what happened and leaves reading the person to the
+    /// route that publishes reading one.
+    /// </remarks>
     internal static async Task<Results<Ok<ContactWriteResponse>, ProblemHttpResult>> PromoteAsync(
         Guid contactId,
         [FromServices] ContactBook book,
@@ -319,7 +325,7 @@ internal static class ContactEndpoints
 
         var promoted = await book.PromoteAsync(identity, AdministrativeWriter, cancellationToken);
 
-        return TypedResults.Ok(ContactWriteResponse.For(promoted));
+        return TypedResults.Ok(ContactWriteResponse.OutcomeOf(promoted));
     }
 
     /// <summary>Erases one person and everything the book derived from them.</summary>

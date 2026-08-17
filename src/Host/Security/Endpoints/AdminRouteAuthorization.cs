@@ -72,10 +72,18 @@ internal static class AdminRouteAuthorization
     /// <returns>What the route answered, or the refusal that stopped it.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="context" /> or <paramref name="next" /> is <see langword="null" />.</exception>
     /// <remarks>
+    /// <para>
     /// It runs as one filter over the whole group rather than as a filter per route, so the enforcement cannot be the
     /// half of the arrangement a new route forgets — what a route supplies is the decision, and this reads it. The
     /// grant is asked of <see cref="AccessAuthorization" /> rather than of the claims on the request, so the transport
     /// and the use case behind it cannot come to disagree about what holding a permission means.
+    /// </para>
+    /// <para>
+    /// A route is served only where it published exactly one decision. Reading the last of several would make a route
+    /// that decided twice take whichever declaration came last — which may be the one requiring nothing — so a route
+    /// deciding twice is refused for the same reason as one that decided not at all: nobody can say what reaching it
+    /// requires, and that is a defect in this repository rather than something a grant could resolve.
+    /// </para>
     /// </remarks>
     internal static async ValueTask<object?> RefuseUnpermittedAsync(
         EndpointFilterInvocationContext context,
@@ -84,7 +92,7 @@ internal static class AdminRouteAuthorization
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(next);
 
-        if (context.HttpContext.GetEndpoint()?.Metadata.GetMetadata<AdminRoutePermission>() is not { } published)
+        if (context.HttpContext.GetEndpoint()?.Metadata.GetOrderedMetadata<AdminRoutePermission>() is not [{ } published])
         {
             return Undeclared();
         }
@@ -120,12 +128,12 @@ internal static class AdminRouteAuthorization
             ? new Dictionary<string, object?>(StringComparer.Ordinal) { [PermissionExtension] = required.Name }
             : null);
 
-    /// <summary>Writes the answer a route that decided no permission is refused with.</summary>
+    /// <summary>Writes the answer a route that published no single decision is refused with.</summary>
     /// <remarks>
-    /// It names none, because there is none: nobody decided what reaching this route requires, so no grant an operator
-    /// could write would make it reachable. Refusing rather than serving is what makes a route added without a decision
-    /// a route that answers nobody instead of one that answers everybody, and it is stated plainly because the remedy is
-    /// a defect report rather than a wider grant.
+    /// It names no permission, because there is none to name: either nobody decided what reaching this route requires or
+    /// two decisions were published and neither is the route's, so no grant an operator could write would make it
+    /// reachable. Refusing rather than serving is what makes such a route one that answers nobody instead of one that
+    /// answers everybody, and it is stated plainly because the remedy is a defect report rather than a wider grant.
     /// </remarks>
     private static ProblemHttpResult Undeclared() => TypedResults.Problem(
         "This deployment publishes no permission for that operation, so no credential reaches it.",

@@ -123,4 +123,34 @@ internal static class ContactOutput
 
         return CliExitCode.Success;
     }
+
+    /// <summary>Reports what one write the command stated no record for produced, which is that it happened or why it did not.</summary>
+    /// <param name="context">What the command needs from its surroundings.</param>
+    /// <param name="answer">What the deployment answered.</param>
+    /// <param name="contactId">The person the write named, which the answer does not repeat.</param>
+    /// <param name="performed">What the command did, as a sentence's opening, such as <c>Took on</c>.</param>
+    /// <returns>The exit code the command ends with.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
+    /// <remarks>
+    /// The deployment answers such a write with the outcome alone, because the record would be its own contents rather
+    /// than anything the command sent — the grant that writes does not admit reading the book. So the identity printed
+    /// here is the one the command was given, and an operator who wants the record reads it with
+    /// <c>mfctl contact show</c>.
+    /// </remarks>
+    internal static int ReportOutcome(CliContext context, ContactWriteAnswer answer, Guid contactId, string performed)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        ArgumentNullException.ThrowIfNull(answer);
+
+        if (!answer.WasWritten())
+        {
+            context.Console.WriteError(answer.DescribeRefusal());
+
+            return CliExitCode.Failure;
+        }
+
+        context.Console.WriteLine($"{performed} contact {contactId:D}.");
+
+        return CliExitCode.Success;
+    }
 }

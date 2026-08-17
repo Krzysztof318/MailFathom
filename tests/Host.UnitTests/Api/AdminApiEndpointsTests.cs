@@ -289,6 +289,33 @@ public sealed class AdminApiEndpointsTests
             writeRoute.Metadata.GetMetadata<Microsoft.AspNetCore.Http.Metadata.IRequestSizeLimitMetadata>()!.MaxRequestBodySize);
     }
 
+    /// <summary>
+    /// The other half of the arrangement, and the one no metadata records: a route publishing its permission decides
+    /// nothing unless the group carries the filter that reads it. Deleting that one line leaves every assertion above
+    /// green while serving all 31 routes to any admitted credential, so this exercises the endpoint the mapping built —
+    /// its request delegate, filters included — rather than reading metadata off it.
+    /// </summary>
+    [Fact]
+    public async Task MapAdminApi_ARouteReachedByACallerItsPermissionDoesNotAdmit_IsRefusedByTheGroupsFilter()
+    {
+        // Arrange
+        var endpoints = BuildRouteBuilder(AccessAuthorizations.ForCallerGranted(MailFathomPermission.AdminOperate));
+        endpoints.MapAdminApi();
+
+        var statusRoute = endpoints.Materialize()
+            .OfType<RouteEndpoint>()
+            .Single(endpoint => endpoint.RoutePattern.RawText?.EndsWith(EmbeddingProfileEndpoints.StatusRoute, StringComparison.Ordinal) == true);
+
+        var request = new DefaultHttpContext { RequestServices = endpoints.ServiceProvider };
+        request.SetEndpoint(statusRoute);
+
+        // Act
+        await statusRoute.RequestDelegate!(request);
+
+        // Assert
+        Assert.Equal(StatusCodes.Status403Forbidden, request.Response.StatusCode);
+    }
+
     /// <summary>Reads back what each mapped route decided, as one line per verb and path.</summary>
     /// <remarks>
     /// Per verb rather than per path, because two verbs on one path are two operations and are deliberately published
@@ -308,16 +335,19 @@ public sealed class AdminApiEndpointsTests
             : "none";
 
     /// <summary>Builds the routing seam the mapping extends, with the routing services the group needs and nothing else.</summary>
+    /// <param name="authorization">What the group's filter asks about the caller, defaulting to the one no test issues a request under.</param>
     /// <remarks>
     /// The recorder is registered because minimal API parameter inference resolves a handler's non-primitive parameters
     /// against the container while the endpoint is built, and refuses to build one it cannot place. It is never invoked
-    /// here — no request is made — so a substitute with no behavior configured is the whole of what this needs.
+    /// by the tests that read metadata — those make no request — so a substitute with no behavior configured is the
+    /// whole of what those need; the one test that does issue a request states the grant it issues it under.
     /// </remarks>
-    private static TestEndpointRouteBuilder BuildRouteBuilder()
+    private static TestEndpointRouteBuilder BuildRouteBuilder(AccessAuthorization? authorization = null)
     {
         var services = new ServiceCollection();
         services.AddRouting();
         services.AddLogging();
+        services.AddScoped(_ => authorization ?? Authorization);
         services.AddScoped(_ => new MailboxRefreshTokenRecorder(
             Substitute.For<IMailAccountCatalog>(),
             Substitute.For<IMailboxRefreshTokenStore>(),

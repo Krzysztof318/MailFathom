@@ -1,6 +1,6 @@
 # Administering a deployment
 
-<!-- describes: src/Host/Configuration/Endpoints/AdminEndpointOptions.cs, src/Host/Api/Admin*.cs, src/Host/Api/Contact*.cs, src/Host/Api/Embedding*.cs, src/Host/Api/Job*.cs, src/Host/Api/Mail*.cs, src/Host/Api/Spam*.cs, src/Host/Hosting/Startup/SurfaceIsolation.cs, src/Host/Hosting/Warnings/AdminTransportSecurityWarning.cs, src/Host/Hosting/Warnings/TransportGrantStartupReport.cs, src/Domain/Access/MailFathomPermission.cs, src/Host/Security/Endpoints/TransportListenerBinder.cs, src/Host/Security/Transport/TransportRateLimiting.cs, src/Cli/**, scripts/install-mfctl.sh -->
+<!-- describes: src/Host/Configuration/Endpoints/AdminEndpointOptions.cs, src/Host/Api/Admin*.cs, src/Host/Api/Contact*.cs, src/Host/Api/Embedding*.cs, src/Host/Api/Job*.cs, src/Host/Api/Mail*.cs, src/Host/Api/Spam*.cs, src/Host/Hosting/Startup/SurfaceIsolation.cs, src/Host/Hosting/Warnings/AdminTransportSecurityWarning.cs, src/Host/Hosting/Warnings/TransportGrantStartupReport.cs, src/Domain/Access/MailFathomPermission.cs, src/Host/Security/Endpoints/AdminRouteAuthorization.cs, src/Host/Security/Endpoints/AdminRoutePermission.cs, src/Host/Security/Endpoints/TransportListenerBinder.cs, src/Host/Security/Transport/TransportRateLimiting.cs, src/Cli/**, scripts/install-mfctl.sh -->
 
 How the `mfctl` command reaches a running deployment, and what that deployment has to have enabled before it will
 answer.
@@ -87,14 +87,19 @@ nothing publishes fails startup, naming the entry and the position in the list, 
 read as a narrower grant than you meant; so is a name the same grant already carries. A `mailfathom.mail.*` name is
 refused for a second reason as well — it belongs to the MCP surface and would grant nothing on this one.
 
-**Three `mfctl` commands make two requests and therefore need two permissions.** The table below publishes one
-permission per route, and a command that reads before it writes reaches two routes: `mfctl contact delete` reads the
-person before erasing them, so it needs `mailfathom.admin.audit.read` beside `mailfathom.admin.erase`;
-`mfctl contact edit` reads the record it is about to amend, so it needs the same read beside
-`mailfathom.admin.operate`; and `mfctl mailbox rewind` always reads what a rewind would cost, including under `--yes`,
-so it needs `mailfathom.admin.read` beside `mailfathom.admin.operate`. A credential granted only the permission the operation is published under meets the
-refusal at the first request and nothing is done — which is the safe half of it, and still not what the operator
-intended.
+**Six `mfctl` commands make two requests and therefore need two permissions.** The table below publishes one permission
+per route, and a command that reads before it writes reaches two routes — because what it read is what it puts in front
+of you, or what it amends from:
+
+| Command | Needs |
+| --- | --- |
+| `mfctl contact update`, `mfctl contact add-address`, `mfctl contact remove-address` | `mailfathom.admin.audit.read` beside `mailfathom.admin.operate`, because each reads the record it is about to amend from |
+| `mfctl contact delete` | `mailfathom.admin.audit.read` beside `mailfathom.admin.erase`, because it shows you the person before erasing them |
+| `mfctl mailbox rewind` | `mailfathom.admin.read` beside `mailfathom.admin.operate`, because it always reads what the rewind would cost, including under `--yes` |
+| `mfctl embedding activate` | `mailfathom.admin.read` beside `mailfathom.admin.spend`, because it always reads what activating would spend before it spends it |
+
+A credential granted only the permission the operation itself is published under meets the refusal at the first request
+and nothing is done — which is the safe half of it, and still not what the operator intended.
 
 `GET /api/admin/session` sits outside the model and needs no permission. It reports the credential the caller already
 presented, the version this deployment already publishes, and the permissions that credential holds — all of which it
@@ -773,7 +778,7 @@ Amended:    2026-08-16 09:00:00Z
 | `contact update` | Corrects `--name`, `--note`, `--preferred`, or the whole `--address` set. What you do not name is kept; `--clear-note` holds no note afterwards |
 | `contact add-address` | Adds one address, keeping the rest. `--preferred` names which address to use by default afterwards |
 | `contact remove-address` | Takes one address off. `--preferred` is required when the one being removed is the default |
-| `contact promote` | Takes on a contact the deployment collected, so it becomes one you asserted |
+| `contact promote` | Takes on a contact the deployment collected, so it becomes one you asserted. It reports that the promotion happened rather than the record, because it sent none and reading the book is a permission of its own; `contact show` is how you look at the person afterwards |
 | `contact delete` | Erases the person. **This cannot be undone**; see below |
 | `contact export` | Writes everything held about the person to standard output, as JSON |
 

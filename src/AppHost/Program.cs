@@ -306,6 +306,18 @@ if (runsIntegrationTests)
         .WithEnvironment(
             "AdminEndpoint__Authentication__0__ApiKey__SecretReference",
             $"plaintext:{OrchestrationContract.AdminApiKey}")
+        // A second entry, narrowed to one permission. The entry above writes no grant and therefore reaches every
+        // administrative route, so it is the arrangement under which a route's published permission decides nothing a
+        // caller can observe; this one is what makes the enforcement visible from where an operator stands.
+        .WithEnvironment(
+            "AdminEndpoint__Authentication__1__ApiKey__Name",
+            OrchestrationContract.AdminNarrowedApiKeyName)
+        .WithEnvironment(
+            "AdminEndpoint__Authentication__1__ApiKey__SecretReference",
+            $"plaintext:{OrchestrationContract.AdminNarrowedApiKey}")
+        .WithEnvironment(
+            "AdminEndpoint__Authentication__1__Permissions__0",
+            OrchestrationContract.AdminNarrowedPermission)
         // Narrowed from the product defaults for the same reason the origins are: a burst small enough to exhaust
         // deliberately is what makes the difference between a limiter that is wired in and one that is not observable.
         // The replenishment period outlasts the run, so what a client spent stays spent and a refusal cannot depend on

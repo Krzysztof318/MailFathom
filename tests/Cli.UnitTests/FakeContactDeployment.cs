@@ -69,6 +69,14 @@ internal static class FakeContactDeployment
         string origin = "Asserted") =>
         $$"""{"outcome":"Written","contact":{{Contact(displayName, addresses, origin, note: null)}}}""";
 
+    /// <summary>Writes the body a promotion answers with, which names the outcome and carries no record.</summary>
+    /// <returns>The response body.</returns>
+    /// <remarks>
+    /// The deployment's answer to a write whose caller stated no record: writing the book and reading it are different
+    /// permissions, so a promotion is told that it happened rather than handed the person it happened to.
+    /// </remarks>
+    internal static string Promoted() => """{"outcome":"Written","contact":null,"addressHolder":null}""";
+
     /// <summary>Writes the body a write answers with when an outcome refused it.</summary>
     /// <param name="outcome">The outcome that refused the write.</param>
     /// <param name="addressHolder">The contact holding a claimed address, where that is what refused it.</param>

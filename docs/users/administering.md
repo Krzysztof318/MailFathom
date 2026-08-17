@@ -173,13 +173,13 @@ Documentation for that version: https://krzysztof318.github.io/MailFathom/v0.2.0
 ```
 
 A credential is granted a set of named permissions on the deployment, and each command needs the one its operation is
-published under — two, for the three commands that read something before they change it. Signing in
+published under — two, for the six commands that read something before they change it. Signing in
 needs none, so a key that reads `It holds no administrative permission` still signs in and is refused everywhere else —
 which is how a credential is retired without its entry being removed. When a command is refused for want of one, it
 names the permission to add and where it is written, so the answer is to widen that credential's grant rather than to
 replace the key.
 [What a credential may do](../operations/admin-endpoint.md#what-a-credential-may-do) lists the names, what each covers,
-and which permission every route is published under.
+which permission every route is published under, and which six commands need a second one.
 
 When you work against one deployment for a whole session, `MAILFATHOM_ENDPOINT` states it once for the shell.
 `--endpoint` beats it, and both beat the profile you last switched to.

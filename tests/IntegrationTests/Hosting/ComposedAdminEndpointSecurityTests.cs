@@ -164,6 +164,75 @@ public sealed class ComposedAdminEndpointSecurityTests
         Assert.Equal("Bearer", Assert.Single(protocolRefusal.Headers.WwwAuthenticate).Scheme);
     }
 
+    /// <summary>
+    /// What no unit test can reach: that the filter reading each route's published permission is attached to the group
+    /// the mapping builds, rather than merely written. An endpoint filter is not endpoint metadata, so nothing about it
+    /// is readable off a built endpoint — deleting the line that attaches it leaves every route serving any admitted
+    /// credential. Both directions are one claim and are asserted together: the same credential reaches the route its
+    /// one permission publishes and is refused the route another does.
+    /// </summary>
+    [Fact]
+    public async Task AdminEndpoint_ACredentialGrantedOneAdministrativePermission_ReachesThatRouteAndIsRefusedAnother()
+    {
+        // Arrange
+        using var client = await this.orchestration.OpenAdminEndpointClientAsync(TestContext.Current.CancellationToken);
+
+        // Act
+        using var permittedRequest = AuthenticatedGet("/api/admin/rules", OrchestrationContract.AdminNarrowedApiKey);
+        using var permitted = await client.SendAsync(permittedRequest, TestContext.Current.CancellationToken);
+
+        using var refusedRequest = AuthenticatedGet("/api/admin/contacts", OrchestrationContract.AdminNarrowedApiKey);
+        using var refused = await client.SendAsync(refusedRequest, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(HttpStatusCode.OK, permitted.StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, refused.StatusCode);
+
+        using var problem = JsonDocument.Parse(
+            await refused.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
+
+        Assert.Equal("mailfathom.admin.audit.read", problem.RootElement.GetProperty("permission").GetString());
+        Assert.False(problem.RootElement.TryGetProperty("contacts", out _));
+    }
+
+    /// <summary>
+    /// The one route published under no permission, reached by a credential the rest of the surface refuses, reporting
+    /// back exactly what that credential holds. It is what <c>mfctl status</c> prints, and the only way an operator
+    /// learns a grant without reading the deployment's own configuration.
+    /// </summary>
+    [Fact]
+    public async Task AdminEndpoint_TheSessionRoute_ReportsTheGrantTheCredentialWasAdmittedUnder()
+    {
+        // Arrange
+        using var client = await this.orchestration.OpenAdminEndpointClientAsync(TestContext.Current.CancellationToken);
+        using var request = SessionRequest(OrchestrationContract.AdminNarrowedApiKey);
+
+        // Act
+        using var response = await client.SendAsync(request, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        using var session = JsonDocument.Parse(
+            await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
+
+        Assert.Equal(
+            OrchestrationContract.AdminNarrowedApiKeyName,
+            session.RootElement.GetProperty("credential").GetString());
+        Assert.Equal(
+            [OrchestrationContract.AdminNarrowedPermission],
+            session.RootElement.GetProperty("permissions").EnumerateArray().Select(name => name.GetString()));
+    }
+
+    /// <summary>Builds a bearer-authenticated read of one administrative route.</summary>
+    private static HttpRequestMessage AuthenticatedGet(string route, string apiKey)
+    {
+        var request = new HttpRequestMessage(HttpMethod.Get, new Uri(route, UriKind.Relative));
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
+
+        return request;
+    }
+
     /// <summary>Builds a request for the session route, optionally presenting a bearer credential.</summary>
     private static HttpRequestMessage SessionRequest(string? apiKey)
     {

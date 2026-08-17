@@ -158,21 +158,64 @@ public sealed class AdminRouteAuthorizationTests
             Assert.Contains(AdminRouteAuthorization.PermissionExtension, refusal.ProblemDetails.Extensions));
     }
 
+    /// <summary>
+    /// The neighbour of the case above, and the one that would fail open rather than closed: a route stating two
+    /// decisions has no decision, and reading the last of them would let a second declaration — possibly the one
+    /// requiring nothing — quietly replace what the route was published under.
+    /// </summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task RefuseUnpermittedAsync_ARouteThatDecidedTwice_RefusesEveryCallerWhicheverCameLast(
+        bool lastRequiresNothing)
+    {
+        // Arrange
+        var reached = false;
+        var decisions = lastRequiresNothing
+            ? new object[] { AdminRoutePermission.Requiring(MailFathomPermission.AdminRead), AdminRoutePermission.None }
+            : [AdminRoutePermission.None, AdminRoutePermission.Requiring(MailFathomPermission.AdminRead)];
+
+        var context = ContextFor(
+            new EndpointMetadataCollection(decisions),
+            AccessAuthorizations.ForCallerGranted(MailFathomPermission.AdminRead));
+
+        // Act
+        var answer = await AdminRouteAuthorization.RefuseUnpermittedAsync(
+            context,
+            _ =>
+            {
+                reached = true;
+
+                return ValueTask.FromResult<object?>("served");
+            });
+
+        // Assert
+        var refusal = Assert.IsType<ProblemHttpResult>(answer);
+        Assert.Equal(StatusCodes.Status403Forbidden, refusal.StatusCode);
+        Assert.False(reached);
+        Assert.DoesNotContain(AdminRouteAuthorization.PermissionExtension, refusal.ProblemDetails.Extensions);
+    }
+
     /// <summary>Builds one request against a route carrying the decision named, or carrying none at all.</summary>
     private static EndpointFilterInvocationContext ContextFor(
         AdminRoutePermission? publishedPermission,
+        AccessAuthorization authorization) =>
+        ContextFor(
+            publishedPermission is null
+                ? EndpointMetadataCollection.Empty
+                : new EndpointMetadataCollection(publishedPermission),
+            authorization);
+
+    /// <summary>Builds one request against a route carrying exactly the metadata named.</summary>
+    private static EndpointFilterInvocationContext ContextFor(
+        EndpointMetadataCollection metadata,
         AccessAuthorization authorization)
     {
         var services = new ServiceCollection();
         services.AddSingleton(authorization);
 
         var httpContext = new DefaultHttpContext { RequestServices = services.BuildServiceProvider() };
-        httpContext.SetEndpoint(new Endpoint(
-            requestDelegate: null,
-            publishedPermission is null
-                ? EndpointMetadataCollection.Empty
-                : new EndpointMetadataCollection(publishedPermission),
-            "an administrative route"));
+        httpContext.SetEndpoint(new Endpoint(requestDelegate: null, metadata, "an administrative route"));
 
         return EndpointFilterInvocationContext.Create(httpContext);
     }

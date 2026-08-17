@@ -21,8 +21,11 @@ namespace MailFathom.Host.Api;
 /// </para>
 /// <para>
 /// It reports what the deployment knows about the caller and nothing else. There is no configuration, no account list,
-/// and no mailbox here: the response names the credential that authenticated and the product version, which is what a
-/// client needs to tell "signed in" from "reached something else that answers HTTP".
+/// and no mailbox here: the response names the credential that authenticated, the product version, and the permissions
+/// that credential's grant carries — which is what a client needs to tell "signed in" from "reached something else that
+/// answers HTTP", and what the caller needs to learn what the rest of this surface will serve it. Each of the three is
+/// something the caller brought or may ask about itself, which is why this is the one route published under no
+/// permission.
 /// </para>
 /// <para>
 /// The second is the surface's only write, and <see cref="MailboxRefreshTokenEndpoint" /> states what that costs.
