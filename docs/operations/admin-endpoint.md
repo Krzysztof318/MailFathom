@@ -1304,6 +1304,48 @@ your machine can read the key too, and on Linux nothing prevents that; the file 
 encryption answers the copy. Holding the credential in the platform's own secret service is tracked as
 [#318](https://github.com/Krzysztof318/MailFathom/issues/318).
 
+## What the command records about itself
+
+Every invocation appends one line to a log beside the credential store, and that file is the only durable record of
+what `mfctl` did. The command holds no exporter and opens no span, so once your terminal's scrollback is gone nothing
+else on the machine answers *what did I run against that deployment, when, and how did it end*.
+
+| Platform | Path |
+| --- | --- |
+| Linux | `$XDG_CONFIG_HOME/MailFathom/mfctl.log`, or `~/.config/MailFathom/mfctl.log` |
+| Windows | `%APPDATA%\MailFathom\mfctl.log` |
+
+One record per line, as JSON, so `tail`, `grep`, and `jq` each work on it without a parser that spans lines:
+
+```console
+$ tail -1 ~/.config/MailFathom/mfctl.log
+{"at":"2026-08-17T09:41:22.184+00:00","command":"mfctl contact delete","outcome":"Failed","durationMilliseconds":412,"exitCode":1,"deployment":"production","failure":"The deployment answered 404 rather than a contact."}
+```
+
+`command` is the path of names `mfctl` declares, `deployment` is your own name for the profile the command settled on,
+and `outcome` is `Completed`, `Failed`, or `Faulted` — the last meaning the invocation never reported an exit code,
+which is what a cancelled command and a defect both leave behind. A field the invocation has nothing for is left out
+rather than written as a null.
+
+**Nothing you typed is in it, and nothing the command printed is either.** The command is named from the parser rather
+than from your argument list, which is where an address, an account alias, a folder alias, a message identity and — for
+a sign-in — a credential are; and a contact, an address, or a subject a command showed you is the answer to that command
+rather than a fact about running it. This is exactly the file that gets pasted into a support conversation, so it holds
+only what is safe there.
+
+It is created readable by its owner alone, on the same terms and for the same reason the credential store is, and it is
+bounded at one mebibyte: past that the current file becomes `mfctl.log.1`, replacing whatever was there, and a new one
+starts — so the log occupies at most two mebibytes however long you administer a deployment for. There is no retention
+policy beyond that, because retention for files on your own machine is yours to decide rather than this command's.
+
+Turn it off for one invocation with `--no-log`, which is accepted after the subcommand as well, and for a shell session
+with `MAILFATHOM_LOG=off`. What you typed beats what your shell was told, and the default is on; every other value of
+the variable leaves the log on rather than failing a command over a typo in it.
+
+A record that cannot be written — a read-only home directory, a full disk, a directory that was removed — is reported as
+one line on standard error and changes nothing else. The command's exit code and its own output stay exactly what they
+would have been, because the command's job is the command.
+
 ## Troubleshooting
 
 | What you see | What it means |

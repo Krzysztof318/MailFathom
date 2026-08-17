@@ -5,6 +5,7 @@
 using MailFathom.Cli.Administration;
 using MailFathom.Cli.Authorization;
 using MailFathom.Cli.Credentials;
+using MailFathom.Cli.Diagnostics;
 using MailFathom.Cli.Transport;
 
 namespace MailFathom.Cli;
@@ -22,14 +23,24 @@ namespace MailFathom.Cli;
 /// <param name="AwaitRedirect">Binds the loopback address an authorization redirect arrives at; the caller disposes it.</param>
 /// <param name="OpenBrowser">Opens an address in this machine's browser, reporting whether the attempt was made.</param>
 /// <param name="Clock">Decides whether a stored access token is still usable, and paces a device sign-in's polling.</param>
+/// <param name="Log">Where the record of this invocation is appended, or <see langword="null" /> to keep none — which is what a test not about the log wants.</param>
 internal sealed record CliContext(
     ICliConsole Console,
     CredentialStore Store,
     Func<Uri, StoredTransportTrust, DeploymentTransport> OpenTransport,
     Func<Uri, IMailboxRedirectAwaiter> AwaitRedirect,
     Func<Uri, bool> OpenBrowser,
-    TimeProvider Clock)
+    TimeProvider Clock,
+    ICliInvocationLog? Log = null)
 {
+    /// <summary>Gets what this invocation turns out to have done, filled in by the layers that each know part of it.</summary>
+    /// <remarks>
+    /// Timed from here rather than from the runner, so what is recorded is how long the operator waited rather than how
+    /// long the parsed command took. It is the one mutable thing this record holds, which is why nothing compares two
+    /// contexts for equality.
+    /// </remarks>
+    internal CliInvocationRecord Invocation { get; } = new(Clock);
+
     /// <summary>Builds the context the command runs under in production.</summary>
     /// <returns>The context.</returns>
     internal static CliContext ForTerminal() => new(
@@ -38,11 +49,12 @@ internal sealed record CliContext(
         DeploymentTransport.Open,
         redirectUri => new LoopbackRedirectAwaiter(redirectUri),
         WebBrowserLauncher.TryOpen,
-        TimeProvider.System);
+        TimeProvider.System,
+        new FileCliInvocationLog(FileCliInvocationLog.DefaultPath()));
 
     /// <summary>Reaches the deployment a command acts on, renewing a spent access token on the way.</summary>
     /// <returns>The access seam every command that sends a request goes through.</returns>
-    internal DeploymentAccess Deployment() => new(this.Store, this.OpenTransport, this.Clock);
+    internal DeploymentAccess Deployment() => new(this.Store, this.OpenTransport, this.Clock, this.Invocation);
 
     /// <summary>Opens a transport aimed at an address no profile has accepted anything about.</summary>
     /// <param name="address">The address, which is an authorization server rather than a deployment.</param>

@@ -170,6 +170,18 @@ Every command exits `0` when it did what you asked and `1` when it did not, havi
 first. [The troubleshooting table](../operations/admin-endpoint.md#troubleshooting) reads each message back to you as
 a cause.
 
+Each invocation also leaves a line in `~/.config/MailFathom/mfctl.log` — what ran, against which of your profiles, how
+long it took, and how it ended — so a command you ran yesterday is still answerable today once the scrollback is gone:
+
+```console
+$ tail -3 ~/.config/MailFathom/mfctl.log | jq -r '"\(.at) \(.command) \(.outcome)"'
+```
+
+It records nothing you typed and nothing a command printed, it is bounded so it cannot fill a disk, and `--no-log`
+leaves it out for one invocation. [What the command records about
+itself](../operations/admin-endpoint.md#what-the-command-records-about-itself) has the path on each platform, the
+fields, and the switch that turns it off for a whole session.
+
 ## Authorizing a mailbox
 
 A mailbox at a provider that no longer accepts a password — a Google Workspace account, anything on Exchange Online —

@@ -59,6 +59,32 @@ internal static class OwnerOnlyStorage
         return new FileStream(path, options);
     }
 
+    /// <summary>Opens a file for appending, creating it readable by its owner alone when it does not exist yet.</summary>
+    /// <param name="path">The file path.</param>
+    /// <returns>The stream, which the caller disposes.</returns>
+    /// <remarks>
+    /// Shared for reading and writing, unlike <see cref="OpenForWriting" />: two invocations of the command can end at
+    /// the same moment, and a lock that made the second one fail would lose a record to protect a file that appends
+    /// rather than rewrites. The mode is applied on creation only, so a file an operator deliberately widened stays
+    /// widened rather than being tightened under them on the next command.
+    /// </remarks>
+    internal static FileStream OpenForAppending(string path)
+    {
+        var options = new FileStreamOptions
+        {
+            Mode = FileMode.Append,
+            Access = FileAccess.Write,
+            Share = FileShare.ReadWrite,
+        };
+
+        if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+        {
+            options.UnixCreateMode = OwnerOnlyFile;
+        }
+
+        return new FileStream(path, options);
+    }
+
     /// <summary>Creates the directory a file lives in, when it names one.</summary>
     /// <param name="path">The file path.</param>
     internal static void CreateDirectoryFor(string path)
