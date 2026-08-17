@@ -10,7 +10,8 @@ operates the cluster, and the chart is written so that it cannot pretend otherwi
 | --- | --- |
 | Deployment, Service, ConfigMap, ServiceAccount | Any `Secret` |
 | A PostgreSQL StatefulSet, its Service, and its initialization script, unless `database.deploy.enabled` is false | Any certificate material |
-| An optional Ingress | Any schema step |
+| A personal-data analyzer Deployment and Service, and a SpamAssassin Deployment and Service, only when the section that owns each is enabled and left to deploy its own | Any schema step |
+| An optional Ingress | |
 
 ## What you supply
 

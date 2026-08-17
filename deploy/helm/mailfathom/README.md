@@ -14,7 +14,11 @@ MailFathom synchronizes your IMAP accounts into a PostgreSQL database you run, i
 | --- | --- |
 | Deployment, Service, ConfigMap, ServiceAccount | Any `Secret` |
 | A PostgreSQL StatefulSet, its Service, and its initialization script, unless `database.deploy.enabled` is false | Any certificate material |
-| An optional Ingress | Any schema step |
+| A personal-data analyzer Deployment and Service, only when `personalDataScanning.enabled` and `.analyzer.deploy` are both true | Any schema step |
+| A SpamAssassin Deployment and Service, only when `spamScanning.enabled` and `.scanner.deploy` are both true | |
+| An optional Ingress | |
+
+Both scanners are off, and off means nothing is rendered for them: an opt-in nobody took pulls no image and holds no memory. Take either deliberately — they are the two pods in this release that receive mail content in the clear, and the spam scanner's container adds `SETUID` and `SETGID` back to the capabilities the application pod drops entirely. Neither is given a service-account token.
 
 It installs no Secret deliberately: credentials belong to whoever operates the cluster, and the chart is written so that it cannot pretend otherwise. It carries **no subchart** either — the PostgreSQL templates are MailFathom's own, so nothing puts another project's values and release cadence between this chart and the store holding every synchronized message.
 
