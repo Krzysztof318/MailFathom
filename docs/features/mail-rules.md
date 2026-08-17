@@ -6,7 +6,7 @@ A mail rule selects mail and changes it. It is a name, a condition, the accounts
 it, what a match leads to, and whether a match ends the pass, and an owner writes it in the configuration their
 deployment already carries. This
 page documents both halves: every fact a condition can read, every function and operator available to it, the limits it
-is read and run under, the order a set of rules is evaluated in, and the four changes a matching rule can ask for.
+is read and run under, the order a set of rules is evaluated in, and every change a matching rule can ask for.
 
 Rules live in configuration rather than in a table, and a condition is one expression rather than a nested structure of
 predicates. [ADR 0010](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0010-rule-authoring-in-configuration-and-ncalc-conditions.md)
@@ -222,13 +222,19 @@ A rule declares what a match leads to in an `Actions` block, one named key per c
 | `CopyTo` | a folder alias or role | A second copy of the message is placed in the named folder, and the one that matched stays where it is |
 | `Delete` | `true` | The message is removed from the folder it matched in |
 | `MarkAsRead` | `true` or `false` | The message's remote `\Seen` flag is set, or cleared |
+| `MarkAsFlagged` | `true` or `false` | The message's remote `\Flagged` flag is set, or cleared — the star a mail client draws |
+| `AddKeywords` | a list of keywords | Each named keyword is put on the message, beside the ones it already carries |
+| `RemoveKeywords` | a list of keywords | Each named keyword is taken off the message, leaving the ones the rule did not name |
+| `SetKeywords` | a list of keywords, possibly empty | The message ends up carrying exactly the named keywords and no others |
 
 **An absent key is a change the rule does not ask for**, which is why `MarkAsRead` carries a value rather than being a
 switch: `MarkAsRead: false` is a rule asking for mail to be marked *unread*, and leaving the key out is a rule that does
-not touch the flag at all. `Delete: false` says the same thing as leaving `Delete` out. One key per action rather than a
-list of action objects, because a rule declaring the same action twice is then unrepresentable rather than merely
-refused, and because a binder drops a list element whose value it cannot read — which would leave a rule quietly doing
-less than its file says.
+not touch the flag at all. `MarkAsFlagged` reads the same way. `Delete: false` says the same thing as leaving `Delete`
+out. The distinction is sharpest on `SetKeywords`: writing `[]` is a rule asking for every keyword to be cleared, which
+is the one thing the other two keyword keys cannot say however many keywords they name, while leaving the key out is a
+rule that does not touch keywords at all. One key per action rather than a list of action objects, because a rule
+declaring the same action twice is then unrepresentable rather than merely refused, and because a binder drops a list
+element whose value it cannot read — which would leave a rule quietly doing less than its file says.
 
 **A rule that declares no action is not a defect.** It selects mail and changes nothing, which is what a rule ending the
 pass with `StopWhenMatched` does to keep the mail it names away from the rules below it.
@@ -249,10 +255,34 @@ exist.
 [What a role says, beside how a folder is found](imap-synchronization.md#what-a-role-says-beside-how-a-folder-is-found)
 states what a role is and why an account has at most one folder per role.
 
+### What a keyword may be
+
+A keyword is a label a mail server stores on a message beside its flags, and mail clients show them as tags or labels.
+The text is yours to choose, and the convention worth following is the one clients already use — a leading `$`, as in
+`$Todo`, `$Invoice`, `$Waiting` — but nothing here requires it.
+
+What IMAP requires is that a keyword be a single unbroken token, so a keyword may not contain a space, a control
+character, or any of `( ) { % * " \ ]`. One that does is refused at startup, naming the rule and the key it was written
+in, because a keyword that cannot be sent is a rule that cannot do what it says. A keyword is at most 64 characters and
+a rule names at most 64 of them in one key, which are the same bounds MailFathom reads a message's keywords under.
+Keywords are compared without regard to case, so naming both `$todo` and `$Todo` is naming one keyword — and the
+spelling you wrote is the one sent to the server.
+
+`AddKeywords: []` and `RemoveKeywords: []` are refused at startup, because a list naming nothing asks the server for
+nothing and is a mistyped list far more often than an intent. `SetKeywords: []` is the one that means something.
+
+**A server may refuse to keep a keyword**, and that is the one refusal that cannot be reported at startup. A folder
+tells MailFathom which flags it keeps permanently when it is opened, so a server that keeps no arbitrary keyword — some
+do not — is discovered as the change is issued, and `AddKeywords` and `SetKeywords` then fail with
+`MailboxMutationUnsupported` naming the account and the folder alias rather than being accepted and forgotten.
+`RemoveKeywords` is never refused for that reason: taking a keyword off a message that carries one is meaningful
+whatever the folder keeps.
+
 ### Which combinations a rule may declare
 
 At most one action decides where the matched occurrence ends up — a relocation, a copy, or a deletion — and a deletion
-admits nothing beside it.
+admits nothing beside it. Beyond that, a rule may declare any mixture of flag and keyword changes, with one exception:
+`SetKeywords` states the whole set, so nothing else about the same message's keywords may be declared beside it.
 
 | Combination | Verdict | Why |
 | --- | --- | --- |
@@ -260,12 +290,20 @@ admits nothing beside it.
 | `CopyTo` alone | permitted | |
 | `Delete` alone | permitted | |
 | `MarkAsRead` alone | permitted | |
+| `MarkAsFlagged` alone | permitted | |
+| `MarkAsRead` and `MarkAsFlagged` | permitted | Two different flags, so neither decides anything about the other |
+| `AddKeywords` and `RemoveKeywords` | permitted | The removal is issued first, so a keyword named by both ends up on the message |
+| `SetKeywords` alone, including `[]` | permitted | An empty list is what clears every keyword |
 | `MoveTo` and `MarkAsRead` | permitted | The flag is written first, on the occurrence the condition matched |
 | `CopyTo` and `MarkAsRead` | permitted | The same: the flag is written before the copy is placed |
+| `MoveTo`, `MarkAsFlagged`, and `AddKeywords` | permitted | Every flag and keyword change is written before the message is filed |
 | `MoveTo` and `CopyTo` | refused | Two fates for one occurrence; whichever ran second would act on a message no longer where the rule matched it |
 | `MoveTo` and `Delete` | refused | The same, and the deletion would undo the filing |
 | `CopyTo` and `Delete` | refused | The same |
 | `Delete` and `MarkAsRead` | refused | A flag written on a message being removed is a flag nobody will ever read |
+| `Delete` and `AddKeywords` | refused | The same |
+| `SetKeywords` and `AddKeywords` | refused | Two answers about one set of keywords; which one held would come down to which ran second |
+| `SetKeywords` and `RemoveKeywords` | refused | The same |
 
 **A refused combination is refused where it is written.** Startup fails naming the rule, the key, and which action could
 not be honored beside which, rather than a run resolving it against a mailbox — no resolution invented at run time would
@@ -279,12 +317,22 @@ permitted combination acts on the occurrence the condition matched, and so that 
 on every instance:
 
 1. `MarkAsRead`
-2. `CopyTo`
-3. `MoveTo`
-4. `Delete`
+2. `MarkAsFlagged`
+3. `SetKeywords`
+4. `RemoveKeywords`
+5. `AddKeywords`
+6. `CopyTo`
+7. `MoveTo`
+8. `Delete`
 
 The same order governs the actions of two rules that both match one email, which no single rule's block could order on
 its own.
+
+Only two positions in that list decide anything observable. Every flag and keyword change comes before `CopyTo`,
+`MoveTo`, and `Delete`, so all of them act on the occurrence the condition matched rather than on one that has already
+been filed elsewhere; and `RemoveKeywords` comes before `AddKeywords`, so a keyword one rule takes off and another puts
+on ends up on the message. The rest is fixed for determinism — each of those actions writes a different flag, and the
+one pair that would contradict another is refused before it is applied.
 
 ### How a change reaches the mail server
 
@@ -318,8 +366,7 @@ states the three answers.
 
 ### What an account permits a rule to do
 
-Each account states, under `MailSynchronization:Accounts:<n>:RuleActions`, which of the four changes a rule may make to
-its mailbox:
+Each account states, under `MailSynchronization:Accounts:<n>:RuleActions`, which changes a rule may make to its mailbox:
 
 | Key | Default | What it permits |
 | --- | --- | --- |
@@ -327,9 +374,14 @@ its mailbox:
 | `Copy` | `true` | A rule may place a copy of this account's mail in another of its folders |
 | `Delete` | `false` | A rule may remove this account's mail |
 | `MarkAsRead` | `true` | A rule may set or clear this account's `\Seen` flag |
+| `MarkAsFlagged` | `true` | A rule may set or clear this account's `\Flagged` flag |
+| `WriteKeywords` | `true` | A rule may add, remove, or replace the keywords of this account's mail |
 
-**Deletion is opt-in and the other three are opt-out**, because deletion is the one action whose result cannot be
+**Deletion is opt-in and everything else is opt-out**, because deletion is the one action whose result cannot be
 undone by editing a rule afterwards.
+
+`WriteKeywords` is one switch for all three keyword actions rather than three, because permitting an addition while
+refusing a removal would leave mail accumulating labels nothing is allowed to take off again.
 
 **A rule declaring an action an account it reaches does not permit is refused when the configuration is read**, naming
 the rule, the action, and the account. It is refused rather than skipped for the reason a mistyped account identifier
@@ -828,6 +880,41 @@ Putting automated notices back in front of somebody by clearing the flag, and no
   "Condition": "contains(subject, 'alert') and isSeen",
   "Triggers": [ "Arrival" ],
   "Actions": { "MarkAsRead": false }
+}
+```
+
+Marking mail from a handful of people for attention, leaving it exactly where it arrived:
+
+```json
+{
+  "Name": "star-the-board",
+  "Condition": "senderDomain == 'board.example'",
+  "Triggers": [ "Arrival" ],
+  "Actions": { "MarkAsFlagged": true }
+}
+```
+
+Labelling mail so it can be found by tag in any mail client, without moving it out of the inbox:
+
+```json
+{
+  "Name": "label-invoices",
+  "Accounts": [ "work" ],
+  "Condition": "contains(subject, 'invoice') and attachmentCount > 0",
+  "Triggers": [ "Arrival" ],
+  "Actions": { "AddKeywords": [ "$Invoice", "$Todo" ] }
+}
+```
+
+Taking a label off once the thing it stood for is over, and stating the whole set rather than adding to it:
+
+```json
+{
+  "Name": "settle-invoices",
+  "Accounts": [ "work" ],
+  "Condition": "contains(subject, 'payment received') and ageInDays > 1",
+  "Actions": { "SetKeywords": [ "$Invoice", "$Done" ] },
+  "Triggers": []
 }
 ```
 

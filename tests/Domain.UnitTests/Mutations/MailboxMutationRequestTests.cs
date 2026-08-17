@@ -66,6 +66,8 @@ public sealed class MailboxMutationRequestTests
             Requester,
             withDestination ? Archive : null,
             withSeenState ? true : null,
+            desiredFlaggedState: null,
+            keywords: null,
             localDisposition: null));
 
         // Assert
@@ -84,6 +86,8 @@ public sealed class MailboxMutationRequestTests
             Requester,
             Archive,
             desiredSeenState: null,
+            desiredFlaggedState: null,
+            keywords: null,
             AuthoredDeleteEmailDisposition.RetainLocalCopy));
 
         // Assert
@@ -102,6 +106,8 @@ public sealed class MailboxMutationRequestTests
             Requester,
             destinationPath: null,
             desiredSeenState: null,
+            desiredFlaggedState: null,
+            keywords: null,
             localDisposition: null));
 
         // Assert
@@ -120,6 +126,8 @@ public sealed class MailboxMutationRequestTests
             Requester,
             Archive,
             desiredSeenState: null,
+            desiredFlaggedState: null,
+            keywords: null,
             AuthoredDeleteEmailDisposition.EraseLocalCopy));
 
         // Assert
@@ -180,6 +188,8 @@ public sealed class MailboxMutationRequestTests
             Requester,
             destinationPath: null,
             desiredSeenState: null,
+            desiredFlaggedState: null,
+            keywords: null,
             (AuthoredDeleteEmailDisposition)97));
 
         // Assert
@@ -198,10 +208,144 @@ public sealed class MailboxMutationRequestTests
             Requester,
             destinationPath: null,
             desiredSeenState: null,
+            desiredFlaggedState: null,
+            keywords: null,
             localDisposition: null));
 
         // Assert
         Assert.Equal("mutation", refusal.ParamName);
+    }
+
+    /// <summary>Each flag change names its own direction and nothing else, which is what keeps the two flags separate answers.</summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void SetFlagged_EitherDirection_CarriesTheFlaggedStateAndNoSeenState(bool isFlagged)
+    {
+        // Act
+        var request = MailboxMutationRequest.SetFlagged(LocalEmail, Occurrence(), Requester, isFlagged);
+
+        // Assert
+        Assert.Equal(MailboxMutation.SetFlagged, request.Mutation);
+        Assert.Equal(isFlagged, request.DesiredFlaggedState);
+        Assert.Null(request.DesiredSeenState);
+        Assert.Null(request.Keywords);
+        Assert.Null(request.DestinationPath);
+    }
+
+    /// <summary>The three keyword mutations differ in what the server is asked to do, never in what they carry.</summary>
+    [Fact]
+    public void KeywordFactories_Always_CarryTheKeywordsAndNoFlagDirection()
+    {
+        // Arrange
+        var keywords = AuthoredMailKeywords.Create(["$Todo"]);
+
+        // Act
+        var added = MailboxMutationRequest.AddKeywords(LocalEmail, Occurrence(), Requester, keywords);
+        var removed = MailboxMutationRequest.RemoveKeywords(LocalEmail, Occurrence(), Requester, keywords);
+        var replaced = MailboxMutationRequest.SetKeywords(LocalEmail, Occurrence(), Requester, keywords);
+
+        // Assert
+        Assert.Equal(
+            [MailboxMutation.AddKeywords, MailboxMutation.RemoveKeywords, MailboxMutation.SetKeywords],
+            new[] { added, removed, replaced }.Select(request => request.Mutation));
+        Assert.Equal(
+            [keywords, keywords, keywords],
+            new[] { added, removed, replaced }.Select(request => request.Keywords));
+        Assert.All(
+            new[] { added, removed, replaced },
+            request => Assert.Null(request.DesiredFlaggedState));
+    }
+
+    /// <summary>Clearing every keyword is something to ask for, and it is the one keyword mutation that can say it.</summary>
+    [Fact]
+    public void SetKeywords_NamingNone_IsTheRequestThatClearsThemAll()
+    {
+        // Act
+        var request = MailboxMutationRequest.SetKeywords(
+            LocalEmail,
+            Occurrence(),
+            Requester,
+            AuthoredMailKeywords.None);
+
+        // Assert
+        Assert.Equal(MailboxMutation.SetKeywords, request.Mutation);
+        Assert.True(request.Keywords?.IsEmpty);
+    }
+
+    /// <summary>Adding or removing nothing asks the server for nothing, which is a mistyped list rather than an intent.</summary>
+    [Fact]
+    public void AddKeywords_NamingNone_IsRefused()
+    {
+        // Act
+        var refusal = Assert.Throws<ArgumentException>(() => MailboxMutationRequest.AddKeywords(
+            LocalEmail,
+            Occurrence(),
+            Requester,
+            AuthoredMailKeywords.None));
+
+        // Assert
+        Assert.Equal("keywords", refusal.ParamName);
+    }
+
+    /// <summary>A stored row hands the parameters back loose, so a flag direction on a keyword mutation is rejected on the way in.</summary>
+    [Fact]
+    public void Create_AKeywordMutationNamingAFlagDirection_IsRefused()
+    {
+        // Act
+        var refusal = Assert.Throws<ArgumentException>(() => MailboxMutationRequest.Create(
+            LocalEmail,
+            Occurrence(),
+            MailboxMutation.AddKeywords,
+            Requester,
+            destinationPath: null,
+            desiredSeenState: null,
+            desiredFlaggedState: true,
+            AuthoredMailKeywords.Create(["$Todo"]),
+            localDisposition: null));
+
+        // Assert
+        Assert.Equal("desiredFlaggedState", refusal.ParamName);
+    }
+
+    /// <summary>A flag change names a direction and nothing else, so a stored row carrying keywords beside one is refused.</summary>
+    [Fact]
+    public void Create_AFlagChangeNamingKeywords_IsRefused()
+    {
+        // Act
+        var refusal = Assert.Throws<ArgumentException>(() => MailboxMutationRequest.Create(
+            LocalEmail,
+            Occurrence(),
+            MailboxMutation.SetFlagged,
+            Requester,
+            destinationPath: null,
+            desiredSeenState: null,
+            desiredFlaggedState: true,
+            AuthoredMailKeywords.Create(["$Todo"]),
+            localDisposition: null));
+
+        // Assert
+        Assert.Equal("keywords", refusal.ParamName);
+    }
+
+    /// <summary>A keyword mutation with no keywords at all could not be performed, so a row that carries none is refused.</summary>
+    [Fact]
+    public void Create_AKeywordMutationCarryingNoKeywordsColumn_IsRefused()
+    {
+        // Act
+        var refusal = Assert.Throws<ArgumentException>(() => MailboxMutationRequest.Create(
+            LocalEmail,
+            Occurrence(),
+            MailboxMutation.SetKeywords,
+            Requester,
+            destinationPath: null,
+            desiredSeenState: null,
+            desiredFlaggedState: null,
+            keywords: null,
+            localDisposition: null));
+
+        // Assert
+        Assert.Equal("keywords", refusal.ParamName);
     }
 
     private static EmailOccurrenceId Occurrence() => EmailOccurrenceId.Create(

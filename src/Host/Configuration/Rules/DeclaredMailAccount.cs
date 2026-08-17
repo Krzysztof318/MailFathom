@@ -14,7 +14,7 @@ namespace MailFathom.Host.Configuration.Rules;
 /// the account only maps is resolved when a change first files into it rather than by a run of its own, so filing into
 /// one is reachable in exactly the way filing into a mirrored folder is.
 /// </param>
-/// <param name="PermittedRuleActions">Which of the four changes a rule may ask for on this account.</param>
+/// <param name="PermittedRuleActions">Which changes a rule may ask for on this account.</param>
 internal sealed record DeclaredMailAccount(
     string AccountId,
     IReadOnlyCollection<DeclaredMailFolder> MappedFolders,

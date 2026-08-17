@@ -67,6 +67,80 @@ public sealed class MailboxMutationRecordMappingTests
             () => MailboxMutationRecordMapping.ToRecord(entity, entity.MailFolder));
     }
 
+    /// <summary>A stored keyword change has to come back naming the same keywords, or a resumed attempt writes another label.</summary>
+    [Fact]
+    public void ToRecord_AKeywordChange_RestoresTheKeywordsAsTheyWereStored()
+    {
+        // Arrange
+        var entity = StoredKeywordChange(MailboxMutation.AddKeywords, ["$Todo", "$Invoice"]);
+
+        // Act
+        var record = MailboxMutationRecordMapping.ToRecord(entity, entity.MailFolder);
+
+        // Assert
+        Assert.Equal(AuthoredMailKeywords.Create(["$Invoice", "$Todo"]), record.Request.Keywords);
+    }
+
+    /// <summary>
+    /// A replacement naming no keyword is a request to clear them all, so the empty array has to survive the read as
+    /// itself. Reading it as absence would turn a stored change into a mutation that names no keywords at all and
+    /// therefore cannot be performed.
+    /// </summary>
+    [Fact]
+    public void ToRecord_AReplacementNamingNoKeyword_RestoresTheEmptySetRatherThanNothing()
+    {
+        // Arrange
+        var entity = StoredKeywordChange(MailboxMutation.SetKeywords, []);
+
+        // Act
+        var record = MailboxMutationRecordMapping.ToRecord(entity, entity.MailFolder);
+
+        // Assert
+        Assert.NotNull(record.Request.Keywords);
+        Assert.True(record.Request.Keywords.IsEmpty);
+    }
+
+    /// <summary>A mutation that names no keywords carries a null column, which must not read as a replacement clearing them.</summary>
+    [Fact]
+    public void ToRecord_AMutationThatNamesNoKeywords_RestoresNoKeywordSet()
+    {
+        // Act
+        var record = MailboxMutationRecordMapping.ToRecord(StoredRelocation(), StoredRelocation().MailFolder);
+
+        // Assert
+        Assert.Null(record.Request.Keywords);
+        Assert.Null(record.Request.DesiredFlaggedState);
+    }
+
+    /// <summary>
+    /// A row can only name an unstorable keyword by having been edited outside this system, and issuing the subset that
+    /// happens to be usable would be a narrower change than the one written down. Failing visibly is what an operator
+    /// can act on.
+    /// </summary>
+    [Fact]
+    public void ToRecord_AStoredKeywordNoServerCouldStore_IsRefused()
+    {
+        // Arrange
+        var entity = StoredKeywordChange(MailboxMutation.AddKeywords, ["$Todo", "two words"]);
+
+        // Act, Assert
+        Assert.Throws<InvalidOperationException>(
+            () => MailboxMutationRecordMapping.ToRecord(entity, entity.MailFolder));
+    }
+
+    private static MailboxMutationEntity StoredKeywordChange(MailboxMutation mutation, string[] keywords)
+    {
+        var entity = StoredRelocation();
+
+        entity.Mutation = mutation.Name;
+        entity.DestinationFolderPath = null;
+        entity.DestinationHierarchyDelimiter = null;
+        entity.RequiresSourceRemoval = false;
+        entity.Keywords = keywords;
+
+        return entity;
+    }
+
     private static MailboxMutationEntity StoredRelocation()
     {
         var folder = new MailFolderEntity

@@ -18,8 +18,9 @@ namespace MailFathom.Domain.Mutations;
 /// <para>
 /// The parameters a mutation takes are part of the request rather than a payload beside it, and which ones are present
 /// is an invariant rather than a convention: a relocation and a copy name a destination folder, a delete names what
-/// becomes of the local copy and a relocation may, and a <c>\Seen</c> change names a direction. The factories are the
-/// only way to build one, so a request naming a destination for a delete cannot be constructed at all.
+/// becomes of the local copy and a relocation may, a flag change names a direction, and a keyword change names the
+/// keywords it is about. The factories are the only way to build one, so a request naming a destination for a delete
+/// cannot be constructed at all.
 /// </para>
 /// <para>
 /// Nothing here is mail content. A folder path, an account, a folder binding, a UID, and a requester identity are all
@@ -36,6 +37,8 @@ public sealed record MailboxMutationRequest
         MailboxMutationRequester requester,
         RemoteFolderPath? destinationPath,
         bool? desiredSeenState,
+        bool? desiredFlaggedState,
+        AuthoredMailKeywords? keywords,
         AuthoredDeleteEmailDisposition? localDisposition)
     {
         this.StoredEmailId = storedEmailId;
@@ -44,6 +47,8 @@ public sealed record MailboxMutationRequest
         this.Requester = requester;
         this.DestinationPath = destinationPath;
         this.DesiredSeenState = desiredSeenState;
+        this.DesiredFlaggedState = desiredFlaggedState;
+        this.Keywords = keywords;
         this.LocalDisposition = localDisposition;
     }
 
@@ -64,6 +69,18 @@ public sealed record MailboxMutationRequest
 
     /// <summary>Gets which way a <c>\Seen</c> change was asked for, and <see langword="null" /> for every other mutation.</summary>
     public bool? DesiredSeenState { get; }
+
+    /// <summary>Gets which way a <c>\Flagged</c> change was asked for, and <see langword="null" /> for every other mutation.</summary>
+    public bool? DesiredFlaggedState { get; }
+
+    /// <summary>Gets the keywords a keyword mutation names, and <see langword="null" /> for every other mutation.</summary>
+    /// <remarks>
+    /// What the set means is the mutation's to say rather than this property's: it is the keywords to put on the email,
+    /// the keywords to take off it, or the keywords it should end up carrying. An empty set is meaningful for the last
+    /// of those and refused for the other two, because clearing every keyword is something to ask for and adding none
+    /// is not.
+    /// </remarks>
+    public AuthoredMailKeywords? Keywords { get; }
 
     /// <summary>Gets what becomes of the local copy once the change has happened, and <see langword="null" /> where nothing local is disposed of.</summary>
     /// <remarks>
@@ -112,6 +129,8 @@ public sealed record MailboxMutationRequest
             requester,
             destinationPath,
             desiredSeenState: null,
+            desiredFlaggedState: null,
+            keywords: null,
             localDisposition);
 
     /// <summary>Asks for one email to be removed from the folder it is in.</summary>
@@ -138,6 +157,8 @@ public sealed record MailboxMutationRequest
             requester,
             destinationPath: null,
             desiredSeenState: null,
+            desiredFlaggedState: null,
+            keywords: null,
             localDisposition);
 
     /// <summary>Asks for the remote <c>\Seen</c> flag of one email to be set or cleared.</summary>
@@ -158,6 +179,8 @@ public sealed record MailboxMutationRequest
             requester,
             destinationPath: null,
             isSeen,
+            desiredFlaggedState: null,
+            keywords: null,
             localDisposition: null);
 
     /// <summary>Asks for a second live occurrence of one email to be put into another folder.</summary>
@@ -178,6 +201,98 @@ public sealed record MailboxMutationRequest
             requester,
             destinationPath,
             desiredSeenState: null,
+            desiredFlaggedState: null,
+            keywords: null,
+            localDisposition: null);
+
+    /// <summary>Asks for the remote <c>\Flagged</c> flag of one email to be set or cleared.</summary>
+    /// <param name="storedEmailId">The local email being flagged.</param>
+    /// <param name="occurrence">Where the email is now.</param>
+    /// <param name="requester">The authored act asking.</param>
+    /// <param name="isFlagged"><see langword="true" /> to flag the email; <see langword="false" /> to clear the flag.</param>
+    /// <returns>The request to write down.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="occurrence" /> or <paramref name="requester" /> is <see langword="null" />.</exception>
+    public static MailboxMutationRequest SetFlagged(
+        StoredEmailId storedEmailId,
+        EmailOccurrenceId occurrence,
+        MailboxMutationRequester requester,
+        bool isFlagged) => Create(
+            storedEmailId,
+            occurrence,
+            MailboxMutation.SetFlagged,
+            requester,
+            destinationPath: null,
+            desiredSeenState: null,
+            isFlagged,
+            keywords: null,
+            localDisposition: null);
+
+    /// <summary>Asks for keywords to be put on one email, beside whatever it already carries.</summary>
+    /// <param name="storedEmailId">The local email being labelled.</param>
+    /// <param name="occurrence">Where the email is now.</param>
+    /// <param name="requester">The authored act asking.</param>
+    /// <param name="keywords">The keywords to put on it, which must name at least one.</param>
+    /// <returns>The request to write down.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="keywords" /> names none.</exception>
+    public static MailboxMutationRequest AddKeywords(
+        StoredEmailId storedEmailId,
+        EmailOccurrenceId occurrence,
+        MailboxMutationRequester requester,
+        AuthoredMailKeywords keywords) => Create(
+            storedEmailId,
+            occurrence,
+            MailboxMutation.AddKeywords,
+            requester,
+            destinationPath: null,
+            desiredSeenState: null,
+            desiredFlaggedState: null,
+            keywords,
+            localDisposition: null);
+
+    /// <summary>Asks for keywords to be taken off one email, leaving the ones it is not asked about.</summary>
+    /// <param name="storedEmailId">The local email being relabelled.</param>
+    /// <param name="occurrence">Where the email is now.</param>
+    /// <param name="requester">The authored act asking.</param>
+    /// <param name="keywords">The keywords to take off it, which must name at least one.</param>
+    /// <returns>The request to write down.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="keywords" /> names none.</exception>
+    public static MailboxMutationRequest RemoveKeywords(
+        StoredEmailId storedEmailId,
+        EmailOccurrenceId occurrence,
+        MailboxMutationRequester requester,
+        AuthoredMailKeywords keywords) => Create(
+            storedEmailId,
+            occurrence,
+            MailboxMutation.RemoveKeywords,
+            requester,
+            destinationPath: null,
+            desiredSeenState: null,
+            desiredFlaggedState: null,
+            keywords,
+            localDisposition: null);
+
+    /// <summary>Asks for one email's keywords to become exactly the set that was named.</summary>
+    /// <param name="storedEmailId">The local email being relabelled.</param>
+    /// <param name="occurrence">Where the email is now.</param>
+    /// <param name="requester">The authored act asking.</param>
+    /// <param name="keywords">The keywords it should end up carrying, which may name none and then clears them all.</param>
+    /// <returns>The request to write down.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
+    public static MailboxMutationRequest SetKeywords(
+        StoredEmailId storedEmailId,
+        EmailOccurrenceId occurrence,
+        MailboxMutationRequester requester,
+        AuthoredMailKeywords keywords) => Create(
+            storedEmailId,
+            occurrence,
+            MailboxMutation.SetKeywords,
+            requester,
+            destinationPath: null,
+            desiredSeenState: null,
+            desiredFlaggedState: null,
+            keywords,
             localDisposition: null);
 
     /// <summary>Restores the request a durable record was written for.</summary>
@@ -186,7 +301,9 @@ public sealed record MailboxMutationRequest
     /// <param name="mutation">The change that was asked for.</param>
     /// <param name="requester">The authored act that asked.</param>
     /// <param name="destinationPath">The stored destination folder, where the mutation takes one.</param>
-    /// <param name="desiredSeenState">The stored flag direction, where the mutation takes one.</param>
+    /// <param name="desiredSeenState">The stored <c>\Seen</c> direction, where the mutation takes one.</param>
+    /// <param name="desiredFlaggedState">The stored <c>\Flagged</c> direction, where the mutation takes one.</param>
+    /// <param name="keywords">The stored keywords, where the mutation takes them.</param>
     /// <param name="localDisposition">The stored local disposition, where the mutation takes one.</param>
     /// <returns>The request those values name.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="occurrence" /> or <paramref name="requester" /> is <see langword="null" />.</exception>
@@ -204,6 +321,8 @@ public sealed record MailboxMutationRequest
         MailboxMutationRequester requester,
         RemoteFolderPath? destinationPath,
         bool? desiredSeenState,
+        bool? desiredFlaggedState,
+        AuthoredMailKeywords? keywords,
         AuthoredDeleteEmailDisposition? localDisposition)
     {
         ArgumentNullException.ThrowIfNull(occurrence);
@@ -214,7 +333,7 @@ public sealed record MailboxMutationRequest
             throw new ArgumentException("A mutation request must name a permitted mutation.", nameof(mutation));
         }
 
-        RequireParametersOf(mutation, destinationPath, desiredSeenState, localDisposition);
+        RequireParametersOf(mutation, destinationPath, desiredSeenState, desiredFlaggedState, keywords, localDisposition);
 
         return new MailboxMutationRequest(
             storedEmailId,
@@ -223,6 +342,8 @@ public sealed record MailboxMutationRequest
             requester,
             destinationPath,
             desiredSeenState,
+            desiredFlaggedState,
+            keywords,
             localDisposition);
     }
 
@@ -231,10 +352,16 @@ public sealed record MailboxMutationRequest
         MailboxMutation mutation,
         RemoteFolderPath? destinationPath,
         bool? desiredSeenState,
+        bool? desiredFlaggedState,
+        AuthoredMailKeywords? keywords,
         AuthoredDeleteEmailDisposition? localDisposition)
     {
         var takesDestination = mutation == MailboxMutation.Relocate || mutation == MailboxMutation.Copy;
         var takesSeenState = mutation == MailboxMutation.SetSeen;
+        var takesFlaggedState = mutation == MailboxMutation.SetFlagged;
+        var takesKeywords = mutation == MailboxMutation.AddKeywords
+            || mutation == MailboxMutation.RemoveKeywords
+            || mutation == MailboxMutation.SetKeywords;
 
         // A delete has to name one and a relocation may, which is why this is two checks rather than one equality: the
         // relocation's disposition says its destination is unmirrored, and its absence says the destination is mirrored.
@@ -255,9 +382,37 @@ public sealed record MailboxMutationRequest
         {
             throw new ArgumentException(
                 takesSeenState
-                    ? $"The {mutation.Name} mutation names a flag direction and none was supplied."
-                    : $"The {mutation.Name} mutation names no flag direction.",
+                    ? $"The {mutation.Name} mutation names a \\Seen direction and none was supplied."
+                    : $"The {mutation.Name} mutation names no \\Seen direction.",
                 nameof(desiredSeenState));
+        }
+
+        if (takesFlaggedState != desiredFlaggedState.HasValue)
+        {
+            throw new ArgumentException(
+                takesFlaggedState
+                    ? $"The {mutation.Name} mutation names a \\Flagged direction and none was supplied."
+                    : $"The {mutation.Name} mutation names no \\Flagged direction.",
+                nameof(desiredFlaggedState));
+        }
+
+        if (takesKeywords != (keywords is not null))
+        {
+            throw new ArgumentException(
+                takesKeywords
+                    ? $"The {mutation.Name} mutation names keywords and none were supplied."
+                    : $"The {mutation.Name} mutation names no keywords.",
+                nameof(keywords));
+        }
+
+        // Clearing every keyword is something to ask for and adding none is not, so the empty set is meaningful for one
+        // of the three mutations and a mistake in the other two. Refusing it here is what keeps a rule whose keyword
+        // list was mistyped away from a durable record of a change that would perform nothing.
+        if (keywords is { IsEmpty: true } && mutation != MailboxMutation.SetKeywords)
+        {
+            throw new ArgumentException(
+                $"The {mutation.Name} mutation must name at least one keyword.",
+                nameof(keywords));
         }
 
         if (requiresLocalDisposition && !localDisposition.HasValue)

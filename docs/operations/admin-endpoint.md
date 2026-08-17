@@ -229,7 +229,7 @@ instruction, so a caller names whose history they are reading rather than asking
 | Query parameter | What it does |
 | --- | --- |
 | `account` | Required. The configured identifier of the account whose trail is read. |
-| `mutation` | Narrows to one change: `relocate`, `delete`, `set-seen`, or `copy`. |
+| `mutation` | Narrows to one change: `relocate`, `delete`, `set-seen`, `copy`, `set-flagged`, `add-keywords`, `remove-keywords`, or `set-keywords`. |
 | `from`, `before` | Narrows to entries that ended within a range; `from` is inclusive and `before` is exclusive. |
 | `pageSize` | Between 1 and 200; 50 when omitted. |
 | `cursor` | The `nextCursor` the previous page returned. |

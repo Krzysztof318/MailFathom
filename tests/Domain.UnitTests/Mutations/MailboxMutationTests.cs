@@ -11,14 +11,15 @@ namespace MailFathom.Domain.UnitTests.Mutations;
 public sealed class MailboxMutationTests
 {
     /// <summary>
-    /// The set is the answer to a decision rather than a list that grows with call sites: sending, every flag other
-    /// than <c>\Seen</c>, and renaming, deleting, or unsubscribing a folder are refused, and permitting one is a
-    /// decision to reopen rather than a member to append. Creating a folder the operator configured was reopened and
-    /// permitted, and is a capability of its own rather than a member here. This test is what makes appending one a
-    /// deliberate act.
+    /// The set is the answer to a decision rather than a list that grows with call sites: sending, the
+    /// <c>\Answered</c> and <c>\Draft</c> flags, and renaming, deleting, or unsubscribing a folder are refused, and
+    /// permitting one is a decision to reopen rather than a member to append. Creating a folder the operator configured
+    /// was reopened and permitted, and is a capability of its own rather than a member here; <c>\Flagged</c> and the
+    /// keywords were reopened and permitted, and are members because each is a change to one message. This test is what
+    /// makes appending one a deliberate act.
     /// </summary>
     [Fact]
-    public void All_HoldsExactlyTheFourPermittedMutations()
+    public void All_HoldsExactlyThePermittedMutations()
     {
         // Arrange
         MailboxMutation[] expected = [
@@ -26,6 +27,10 @@ public sealed class MailboxMutationTests
             MailboxMutation.Delete,
             MailboxMutation.SetSeen,
             MailboxMutation.Copy,
+            MailboxMutation.SetFlagged,
+            MailboxMutation.AddKeywords,
+            MailboxMutation.RemoveKeywords,
+            MailboxMutation.SetKeywords,
         ];
 
         // Act
@@ -41,6 +46,10 @@ public sealed class MailboxMutationTests
     [InlineData("delete")]
     [InlineData("set-seen")]
     [InlineData("copy")]
+    [InlineData("set-flagged")]
+    [InlineData("add-keywords")]
+    [InlineData("remove-keywords")]
+    [InlineData("set-keywords")]
     public void TryParseName_AnAllocatedName_ReturnsTheMutationItNames(string name)
     {
         // Act
@@ -54,7 +63,8 @@ public sealed class MailboxMutationTests
     [Theory]
     [InlineData("send")]
     [InlineData("create-folder")]
-    [InlineData("set-flagged")]
+    [InlineData("set-answered")]
+    [InlineData("rename-folder")]
     [InlineData("")]
     [InlineData(null)]
     public void TryParseName_ANameNothingPermits_IsUnknownRatherThanReconstructed(string? name)

@@ -168,6 +168,58 @@ public sealed class MailRuleActionRecorderTests
         Assert.True(request.DesiredSeenState);
     }
 
+    /// <summary>Flagging is a change of its own, so it is written down as its own mutation with its own direction.</summary>
+    [Fact]
+    public async Task RecordAsync_ARuleFlaggingMail_WritesTheFlaggedDirectionItDeclared()
+    {
+        // Act
+        await this.RecordAsync(Planned("flag-invoices", MailRuleAction.SetFlagged(isFlagged: true)));
+
+        // Assert
+        var request = Assert.Single(this.records.OpenedRequests);
+        Assert.Equal(MailboxMutation.SetFlagged, request.Mutation);
+        Assert.True(request.DesiredFlaggedState);
+        Assert.Null(request.DesiredSeenState);
+    }
+
+    /// <summary>A keyword names a label rather than a folder, so nothing about an account has to resolve for one to be
+    /// written, and the plan's fixed order decides which request is opened first rather than the order the rules were
+    /// declared in — the removal goes first so a keyword one rule adds survives another rule's removal.</summary>
+    [Fact]
+    public async Task RecordAsync_ARuleLabellingMail_WritesEachKeywordChangeAsItsOwnMutation()
+    {
+        // Arrange
+        var planned = new[]
+        {
+            RuleNamed("label-invoices", MailRuleAction.AddKeywords(AuthoredMailKeywords.Create(["$Todo"]))),
+            RuleNamed("unlabel-invoices", MailRuleAction.RemoveKeywords(AuthoredMailKeywords.Create(["$Done"]))),
+        };
+
+        // Act
+        await this.RecordAsync(MailRuleActionPlan.Compose(planned));
+
+        // Assert
+        Assert.Equal(
+            [MailboxMutation.RemoveKeywords, MailboxMutation.AddKeywords],
+            this.records.OpenedRequests.Select(request => request.Mutation));
+        Assert.Equal(
+            [AuthoredMailKeywords.Create(["$Done"]), AuthoredMailKeywords.Create(["$Todo"])],
+            this.records.OpenedRequests.Select(request => request.Keywords));
+    }
+
+    /// <summary>Naming no keyword is how a replacement clears them all, so it reaches the record as a change rather than as nothing.</summary>
+    [Fact]
+    public async Task RecordAsync_ARuleClearingEveryKeyword_WritesAReplacementNamingNone()
+    {
+        // Act
+        await this.RecordAsync(Planned("clear-labels", MailRuleAction.SetKeywords(AuthoredMailKeywords.None)));
+
+        // Assert
+        var request = Assert.Single(this.records.OpenedRequests);
+        Assert.Equal(MailboxMutation.SetKeywords, request.Mutation);
+        Assert.True(request.Keywords?.IsEmpty);
+    }
+
     /// <summary>The disposition is the account's answer at the moment the request is written, exactly as an authored delete's is.</summary>
     [Fact]
     public async Task RecordAsync_ARuleDeletingMail_CarriesTheAccountsLocalDisposition()

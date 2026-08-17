@@ -184,6 +184,16 @@ public sealed class MailRuleActionRecorder
             return MailboxMutationRequest.SetSeen(storedEmailId, occurrence, requester, isSeen);
         }
 
+        if (action.DesiredFlaggedState is { } isFlagged)
+        {
+            return MailboxMutationRequest.SetFlagged(storedEmailId, occurrence, requester, isFlagged);
+        }
+
+        if (action.Keywords is { } keywords)
+        {
+            return BuildKeywordRequest(storedEmailId, occurrence, requester, action.Mutation, keywords);
+        }
+
         if (action.Destination is { } destination)
         {
             return this.BuildFilingRequest(
@@ -196,6 +206,30 @@ public sealed class MailRuleActionRecorder
         }
 
         return this.BuildDeleteRequest(storedEmailId, occurrence, planned, requester, failures);
+    }
+
+    /// <summary>Builds the keyword change one action asked for, which needs nothing of the account to resolve.</summary>
+    /// <remarks>
+    /// A keyword is a label rather than a reference to something the account maps, so unlike a destination folder there
+    /// is nothing here that could fail to resolve and no failure to record. The three mutations differ only in what the
+    /// server is asked to do with the set, which is why they are told apart by the action's own mutation rather than by
+    /// anything about the keywords.
+    /// </remarks>
+    private static MailboxMutationRequest BuildKeywordRequest(
+        StoredEmailId storedEmailId,
+        EmailOccurrenceId occurrence,
+        MailboxMutationRequester requester,
+        MailboxMutation mutation,
+        AuthoredMailKeywords keywords)
+    {
+        if (mutation == MailboxMutation.AddKeywords)
+        {
+            return MailboxMutationRequest.AddKeywords(storedEmailId, occurrence, requester, keywords);
+        }
+
+        return mutation == MailboxMutation.RemoveKeywords
+            ? MailboxMutationRequest.RemoveKeywords(storedEmailId, occurrence, requester, keywords)
+            : MailboxMutationRequest.SetKeywords(storedEmailId, occurrence, requester, keywords);
     }
 
     /// <summary>Builds the relocation or the copy one action asked for, against the folder its destination resolved to.</summary>

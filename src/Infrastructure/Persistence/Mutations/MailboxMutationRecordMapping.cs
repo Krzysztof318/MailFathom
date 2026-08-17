@@ -50,6 +50,8 @@ internal static class MailboxMutationRecordMapping
                 MailboxMutationRequester.Create(entity.RequesterOrigin, entity.RequesterIdentity),
                 ToDestinationPath(entity),
                 entity.DesiredSeenState,
+                entity.DesiredFlaggedState,
+                ToKeywords(entity),
                 ToLocalDisposition(entity, mutation)),
             Stage = entity.Stage,
             IsAudited = entity.AuditTrailEnabled,
@@ -91,6 +93,33 @@ internal static class MailboxMutationRecordMapping
         }
 
         return mutation == MailboxMutation.Relocate ? entity.LocalDisposition : null;
+    }
+
+    /// <summary>Restores the keywords a keyword mutation named, exactly as they were stored.</summary>
+    /// <remarks>
+    /// <para>
+    /// The null column and the empty array are kept apart, because they say different things: no keyword mutation at
+    /// all, and a replacement that clears every keyword. Reading the empty array as absence would turn the second into
+    /// the first and leave a stored request unperformable.
+    /// </para>
+    /// <para>
+    /// A row carrying a keyword no <c>STORE</c> could name fails the read rather than being filtered down to the ones
+    /// that would work. Silently issuing a narrower change than the one that was written down is the outcome this
+    /// refuses; a row can only be in that state by having been edited by hand, and a mutation that stops visibly is
+    /// what an operator can act on.
+    /// </para>
+    /// </remarks>
+    private static AuthoredMailKeywords? ToKeywords(MailboxMutationEntity entity)
+    {
+        if (entity.Keywords is not { } keywords)
+        {
+            return null;
+        }
+
+        return AuthoredMailKeywords.TryCreate(keywords, out var authored)
+            ? authored
+            : throw new InvalidOperationException(
+                $"Mailbox mutation record {entity.Id} names a keyword that no mail server can be asked to store.");
     }
 
     /// <summary>Restores the destination folder a relocation or a copy named, exactly as it was stored.</summary>

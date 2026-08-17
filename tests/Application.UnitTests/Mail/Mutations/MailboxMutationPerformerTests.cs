@@ -377,6 +377,93 @@ public sealed class MailboxMutationPerformerTests
             Arg.Any<CancellationToken>());
     }
 
+    /// <summary>The three keyword mutations differ only in what they do with the same list, so each must reach its own operation.</summary>
+    /// <remarks>
+    /// A replacement carried as an addition would leave a label the rule asked to be rid of, and an addition carried as
+    /// a replacement would strip every label the message already had. The performer decides which one is issued from the
+    /// mutation on the record rather than from the keywords, which look identical in all three.
+    /// </remarks>
+    [Fact]
+    public async Task PerformAsync_ForEachKeywordMutation_IssuesOnlyTheOperationItNames()
+    {
+        // Arrange
+        var context = new PerformerContext();
+        var occurrence = Occurrence(42U);
+        var storedEmailId = StoredEmailId.Create(Guid.CreateVersion7());
+        var requester = MailboxMutationRequester.Rule("label-invoices", "4");
+        var labels = AuthoredMailKeywords.Create(["$Todo"]);
+
+        // Act
+        await context.Performer.PerformAsync(
+            MailboxMutationRequest.AddKeywords(storedEmailId, occurrence, requester, labels),
+            InboxFolder,
+            TransportPolicy,
+            CancellationToken.None);
+        await context.Performer.PerformAsync(
+            MailboxMutationRequest.RemoveKeywords(storedEmailId, occurrence, requester, labels),
+            InboxFolder,
+            TransportPolicy,
+            CancellationToken.None);
+        await context.Performer.PerformAsync(
+            MailboxMutationRequest.SetKeywords(storedEmailId, occurrence, requester, AuthoredMailKeywords.None),
+            InboxFolder,
+            TransportPolicy,
+            CancellationToken.None);
+
+        // Assert
+        await context.WriteSession.Received(1).AddKeywordsAsync(
+            occurrence,
+            labels,
+            Arg.Any<IMailboxMutationJournal>(),
+            Arg.Any<CancellationToken>());
+        await context.WriteSession.Received(1).RemoveKeywordsAsync(
+            occurrence,
+            labels,
+            Arg.Any<IMailboxMutationJournal>(),
+            Arg.Any<CancellationToken>());
+        await context.WriteSession.Received(1).SetKeywordsAsync(
+            occurrence,
+            AuthoredMailKeywords.None,
+            Arg.Any<IMailboxMutationJournal>(),
+            Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>Both directions of the star are one authored act, and the one the operator wrote is the one issued.</summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task PerformAsync_ForAFlaggedStateChange_CarriesTheAuthoredDirectionIntoTheSession(bool isFlagged)
+    {
+        // Arrange
+        var context = new PerformerContext();
+        var occurrence = Occurrence(42U);
+        var request = MailboxMutationRequest.SetFlagged(
+            StoredEmailId.Create(Guid.CreateVersion7()),
+            occurrence,
+            MailboxMutationRequester.Rule("surface-invoices", "2"),
+            isFlagged);
+
+        // Act
+        var outcome = await context.Performer.PerformAsync(
+            request,
+            InboxFolder,
+            TransportPolicy,
+            CancellationToken.None);
+
+        // Assert
+        Assert.Equal(MailboxMutationStatus.Performed, outcome.Status);
+        await context.WriteSession.Received(1).SetFlaggedAsync(
+            occurrence,
+            isFlagged,
+            Arg.Any<IMailboxMutationJournal>(),
+            Arg.Any<CancellationToken>());
+        await context.WriteSession.DidNotReceive().SetSeenAsync(
+            Arg.Any<EmailOccurrenceId>(),
+            Arg.Any<bool>(),
+            Arg.Any<IMailboxMutationJournal>(),
+            Arg.Any<CancellationToken>());
+    }
+
     /// <summary>Clearing the flag is the same mutation as setting it, and the direction reaches the session as asked.</summary>
     /// <remarks>
     /// Both directions are one authored act about one flag, so a request that asks for mail to be marked unread must not

@@ -17,10 +17,12 @@ namespace MailFathom.Domain.Mutations;
 /// </para>
 /// <para>
 /// The set is closed because it is the answer to a decision rather than a list that grows with call sites. Sending,
-/// every flag other than <c>\Seen</c>, and renaming, deleting, or unsubscribing a folder are refused, and permitting
-/// one of them is a decision to reopen rather than a member to append. Creating a folder the operator configured was
-/// reopened and permitted, and is still not a member here: it changes the shape of a mailbox rather than a message in
-/// one, so it is a capability of its own.
+/// the <c>\Answered</c> and <c>\Draft</c> flags, and renaming, deleting, or unsubscribing a folder are refused, and
+/// permitting one of them is a decision to reopen rather than a member to append. Two reopenings have happened.
+/// Creating a folder the operator configured was permitted and is still not a member here, because it changes the shape
+/// of a mailbox rather than a message in one, so it is a capability of its own; <c>\Flagged</c> and the keywords were
+/// permitted and are members, because each is a flag on one message and therefore the same kind of act as the four
+/// before them.
 /// </para>
 /// <para>
 /// A mutation names what was asked for, never how the server was made to do it. A relocation carried by
@@ -52,9 +54,32 @@ public readonly record struct MailboxMutation
     /// <summary>Gets the mutation that puts a second live occurrence of one email into another folder.</summary>
     public static MailboxMutation Copy { get; } = new("copy");
 
+    /// <summary>Gets the mutation that sets or clears the remote <c>\Flagged</c> flag of one email.</summary>
+    /// <remarks>
+    /// It carries no meaning of its own beyond the one a mail client gives the flag, which is exactly why it is worth
+    /// writing: whatever a rule singles mail out for is then visible in the client the owner already reads their mail
+    /// in, rather than only in MailFathom.
+    /// </remarks>
+    public static MailboxMutation SetFlagged { get; } = new("set-flagged");
+
+    /// <summary>Gets the mutation that puts keywords on one email, leaving the keywords it already carries alone.</summary>
+    public static MailboxMutation AddKeywords { get; } = new("add-keywords");
+
+    /// <summary>Gets the mutation that takes keywords off one email, leaving the keywords it is not asked about alone.</summary>
+    public static MailboxMutation RemoveKeywords { get; } = new("remove-keywords");
+
+    /// <summary>Gets the mutation that makes one email's keywords exactly the set that was asked for.</summary>
+    /// <remarks>
+    /// It is the one keyword mutation that decides what an email does <em>not</em> carry, which is why it is a mutation
+    /// of its own rather than an addition with a wider reach: an empty set clears every keyword, and no combination of
+    /// the other two says that without naming every keyword a message might have.
+    /// </remarks>
+    public static MailboxMutation SetKeywords { get; } = new("set-keywords");
+
     /// <summary>Gets every permitted mutation.</summary>
     /// <remarks>Declared last so the members it lists are already initialized when this initializer runs.</remarks>
-    public static IReadOnlyList<MailboxMutation> All { get; } = [Relocate, Delete, SetSeen, Copy];
+    public static IReadOnlyList<MailboxMutation> All { get; } =
+        [Relocate, Delete, SetSeen, Copy, SetFlagged, AddKeywords, RemoveKeywords, SetKeywords];
 
     /// <summary>Gets whether this value names a permitted mutation rather than the unusable struct default.</summary>
     public bool IsSpecified => this.name is not null;

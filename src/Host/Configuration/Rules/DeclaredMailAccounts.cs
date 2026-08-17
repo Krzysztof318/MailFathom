@@ -126,7 +126,9 @@ internal static class DeclaredMailAccounts
             !IsDeclaredFalse(ruleActions[nameof(MailRuleActionPermissionOptions.Move)]),
             !IsDeclaredFalse(ruleActions[nameof(MailRuleActionPermissionOptions.Copy)]),
             IsDeclaredTrue(ruleActions[nameof(MailRuleActionPermissionOptions.Delete)]),
-            !IsDeclaredFalse(ruleActions[nameof(MailRuleActionPermissionOptions.MarkAsRead)]));
+            !IsDeclaredFalse(ruleActions[nameof(MailRuleActionPermissionOptions.MarkAsRead)]),
+            !IsDeclaredFalse(ruleActions[nameof(MailRuleActionPermissionOptions.MarkAsFlagged)]),
+            !IsDeclaredFalse(ruleActions[nameof(MailRuleActionPermissionOptions.WriteKeywords)]));
 
     /// <summary>Reads a switch an operator wrote, treating an unreadable value as unwritten.</summary>
     /// <remarks>

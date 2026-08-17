@@ -21,6 +21,329 @@ public sealed class MailKitImapWriteSessionTests
 {
     private static readonly RemoteFolderPath Archive = RemoteFolderPath.Create(ArchivePath, '/');
 
+    /// <summary>The flag this exists to write, in both directions, and nothing else on the message moves with it.</summary>
+    [Theory]
+    [InlineData(true, StoreAction.Add)]
+    [InlineData(false, StoreAction.Remove)]
+    public async Task SetFlaggedAsync_EitherDirection_StoresOnlyTheFlaggedFlag(bool isFlagged, StoreAction expected)
+    {
+        // Arrange
+        using var resilience = CreateSingleAttemptResilience();
+        var client = new FakeImapClient { Capabilities = ImapCapabilities.Move | ImapCapabilities.UidPlus };
+        var openFolder = CreateWritableFolder();
+        await using var harness = CreateHarness(resilience, client, openFolder);
+        await using var session = await harness.OpenSessionAsync();
+
+        // Act
+        await session.SetFlaggedAsync(
+            CreateOccurrenceId(42U),
+            isFlagged,
+            new RecordingMailboxMutationJournal(),
+            CancellationToken.None);
+
+        // Assert
+        await openFolder.Received(1).StoreAsync(
+            Arg.Is<IList<UniqueId>>(uids => uids != null && uids.Count == 1 && uids[0].Id == 42U),
+            Arg.Is<IStoreFlagsRequest>(request =>
+                request != null
+                && request.Action == expected
+                && request.Flags == MessageFlags.Flagged
+                && (request.Keywords == null || request.Keywords.Count == 0)),
+            Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>
+    /// The two flags are separate answers to separate questions, so writing one may never move the other — this is the
+    /// write-side counterpart of the invariant every read path is held to.
+    /// </summary>
+    [Fact]
+    public async Task SetFlaggedAsync_Always_LeavesTheSeenFlagAlone()
+    {
+        // Arrange
+        using var resilience = CreateSingleAttemptResilience();
+        var client = new FakeImapClient { Capabilities = ImapCapabilities.Move | ImapCapabilities.UidPlus };
+        var openFolder = CreateWritableFolder();
+        await using var harness = CreateHarness(resilience, client, openFolder);
+        await using var session = await harness.OpenSessionAsync();
+
+        // Act
+        await session.SetFlaggedAsync(
+            CreateOccurrenceId(42U),
+            isFlagged: true,
+            new RecordingMailboxMutationJournal(),
+            CancellationToken.None);
+
+        // Assert
+        await openFolder.DidNotReceive().StoreAsync(
+            Arg.Any<IList<UniqueId>>(),
+            Arg.Is<IStoreFlagsRequest>(request => request != null && request.Flags.HasFlag(MessageFlags.Seen)),
+            Arg.Any<CancellationToken>());
+
+        // The control: the same observation reports a `\Seen` store when one is genuinely issued.
+        await session.SetSeenAsync(
+            CreateOccurrenceId(42U),
+            isSeen: true,
+            new RecordingMailboxMutationJournal(),
+            CancellationToken.None);
+        await openFolder.Received(1).StoreAsync(
+            Arg.Any<IList<UniqueId>>(),
+            Arg.Is<IStoreFlagsRequest>(request => request != null && request.Flags.HasFlag(MessageFlags.Seen)),
+            Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>An addition asks for what it was given and reads nothing first, because the store is idempotent for one UID.</summary>
+    [Fact]
+    public async Task AddKeywordsAsync_Always_StoresTheKeywordsWithoutReadingTheMessage()
+    {
+        // Arrange
+        using var resilience = CreateSingleAttemptResilience();
+        var client = new FakeImapClient { Capabilities = ImapCapabilities.Move | ImapCapabilities.UidPlus };
+        var openFolder = CreateWritableFolder();
+        await using var harness = CreateHarness(resilience, client, openFolder);
+        await using var session = await harness.OpenSessionAsync();
+
+        // Act
+        await session.AddKeywordsAsync(
+            CreateOccurrenceId(42U),
+            AuthoredMailKeywords.Create(["$Todo", "$Waiting"]),
+            new RecordingMailboxMutationJournal(),
+            CancellationToken.None);
+
+        // Assert
+        await openFolder.Received(1).StoreAsync(
+            Arg.Is<IList<UniqueId>>(uids => uids != null && uids.Count == 1 && uids[0].Id == 42U),
+            Arg.Is<IStoreFlagsRequest>(request =>
+                request != null
+                && request.Action == StoreAction.Add
+                && request.Flags == MessageFlags.None
+                && request.Keywords != null
+                && request.Keywords.Count == 2
+                && request.Keywords.Contains("$Todo")
+                && request.Keywords.Contains("$Waiting")),
+            Arg.Any<CancellationToken>());
+        await openFolder.DidNotReceive().FetchAsync(
+            Arg.Any<IList<UniqueId>>(),
+            Arg.Any<IFetchRequest>(),
+            Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>A removal takes off what it names and leaves every other keyword where it was.</summary>
+    [Fact]
+    public async Task RemoveKeywordsAsync_Always_StoresTheRemovalOfExactlyWhatItNames()
+    {
+        // Arrange
+        using var resilience = CreateSingleAttemptResilience();
+        var client = new FakeImapClient { Capabilities = ImapCapabilities.Move | ImapCapabilities.UidPlus };
+        var openFolder = CreateWritableFolder();
+        await using var harness = CreateHarness(resilience, client, openFolder);
+        await using var session = await harness.OpenSessionAsync();
+
+        // Act
+        await session.RemoveKeywordsAsync(
+            CreateOccurrenceId(42U),
+            AuthoredMailKeywords.Create(["$Todo"]),
+            new RecordingMailboxMutationJournal(),
+            CancellationToken.None);
+
+        // Assert
+        await openFolder.Received(1).StoreAsync(
+            Arg.Any<IList<UniqueId>>(),
+            Arg.Is<IStoreFlagsRequest>(request =>
+                request != null
+                && request.Action == StoreAction.Remove
+                && request.Keywords != null
+                && request.Keywords.Count == 1
+                && request.Keywords.Contains("$Todo")),
+            Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>
+    /// A replacement is the surplus removed and the named set added, never the <c>STORE FLAGS</c> its name suggests:
+    /// that command replaces a message's whole flag set and would clear <c>\Seen</c> while writing a label.
+    /// </summary>
+    [Fact]
+    public async Task SetKeywordsAsync_AMessageCarryingOthers_RemovesTheSurplusAndAddsTheNamedSet()
+    {
+        // Arrange
+        using var resilience = CreateSingleAttemptResilience();
+        var client = new FakeImapClient { Capabilities = ImapCapabilities.Move | ImapCapabilities.UidPlus };
+        var openFolder = CreateWritableFolder();
+        AnswerWithCarriedKeywords(openFolder, "$Todo", "$Stale");
+        await using var harness = CreateHarness(resilience, client, openFolder);
+        await using var session = await harness.OpenSessionAsync();
+
+        // Act
+        await session.SetKeywordsAsync(
+            CreateOccurrenceId(42U),
+            AuthoredMailKeywords.Create(["$Todo", "$Done"]),
+            new RecordingMailboxMutationJournal(),
+            CancellationToken.None);
+
+        // Assert
+        await openFolder.Received(1).StoreAsync(
+            Arg.Any<IList<UniqueId>>(),
+            Arg.Is<IStoreFlagsRequest>(request =>
+                request != null
+                && request.Action == StoreAction.Remove
+                && request.Keywords != null
+                && request.Keywords.Count == 1
+                && request.Keywords.Contains("$Stale")),
+            Arg.Any<CancellationToken>());
+        await openFolder.Received(1).StoreAsync(
+            Arg.Any<IList<UniqueId>>(),
+            Arg.Is<IStoreFlagsRequest>(request =>
+                request != null
+                && request.Action == StoreAction.Add
+                && request.Keywords != null
+                && request.Keywords.Count == 2
+                && request.Keywords.Contains("$Done")
+                && request.Keywords.Contains("$Todo")),
+            Arg.Any<CancellationToken>());
+        await openFolder.DidNotReceive().StoreAsync(
+            Arg.Any<IList<UniqueId>>(),
+            Arg.Is<IStoreFlagsRequest>(request => request != null && request.Action == StoreAction.Set),
+            Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>Naming no keyword is how a replacement clears them all, and it still issues no addition of nothing.</summary>
+    [Fact]
+    public async Task SetKeywordsAsync_NamingNone_RemovesEveryCarriedKeywordAndAddsNothing()
+    {
+        // Arrange
+        using var resilience = CreateSingleAttemptResilience();
+        var client = new FakeImapClient { Capabilities = ImapCapabilities.Move | ImapCapabilities.UidPlus };
+        var openFolder = CreateWritableFolder();
+        AnswerWithCarriedKeywords(openFolder, "$Todo", "$Stale");
+        await using var harness = CreateHarness(resilience, client, openFolder);
+        await using var session = await harness.OpenSessionAsync();
+
+        // Act
+        await session.SetKeywordsAsync(
+            CreateOccurrenceId(42U),
+            AuthoredMailKeywords.None,
+            new RecordingMailboxMutationJournal(),
+            CancellationToken.None);
+
+        // Assert
+        await openFolder.Received(1).StoreAsync(
+            Arg.Any<IList<UniqueId>>(),
+            Arg.Is<IStoreFlagsRequest>(request =>
+                request != null
+                && request.Action == StoreAction.Remove
+                && request.Keywords != null
+                && request.Keywords.Count == 2),
+            Arg.Any<CancellationToken>());
+        await openFolder.DidNotReceive().StoreAsync(
+            Arg.Any<IList<UniqueId>>(),
+            Arg.Is<IStoreFlagsRequest>(request => request != null && request.Action == StoreAction.Add),
+            Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>A message already carrying exactly the named set needs no removal, and none is sent.</summary>
+    [Fact]
+    public async Task SetKeywordsAsync_NothingSurplus_IssuesNoRemoval()
+    {
+        // Arrange
+        using var resilience = CreateSingleAttemptResilience();
+        var client = new FakeImapClient { Capabilities = ImapCapabilities.Move | ImapCapabilities.UidPlus };
+        var openFolder = CreateWritableFolder();
+        AnswerWithCarriedKeywords(openFolder, "$todo");
+        await using var harness = CreateHarness(resilience, client, openFolder);
+        await using var session = await harness.OpenSessionAsync();
+
+        // Act
+        await session.SetKeywordsAsync(
+            CreateOccurrenceId(42U),
+            AuthoredMailKeywords.Create(["$Todo"]),
+            new RecordingMailboxMutationJournal(),
+            CancellationToken.None);
+
+        // Assert
+        await openFolder.DidNotReceive().StoreAsync(
+            Arg.Any<IList<UniqueId>>(),
+            Arg.Is<IStoreFlagsRequest>(request => request != null && request.Action == StoreAction.Remove),
+            Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>
+    /// A folder that will not keep a keyword between sessions takes the store, reports success, and loses the label —
+    /// which reaches an operator as a rule that runs and changes nothing they can find. It is refused instead.
+    /// </summary>
+    [Fact]
+    public async Task AddKeywordsAsync_AFolderThatKeepsNoNewKeyword_IsRefusedBeforeAnythingIsStored()
+    {
+        // Arrange
+        using var resilience = CreateSingleAttemptResilience();
+        var client = new FakeImapClient { Capabilities = ImapCapabilities.Move | ImapCapabilities.UidPlus };
+        var openFolder = CreateWritableFolder(keepsAnyKeyword: false, keptKeywords: "$Junk");
+        await using var harness = CreateHarness(resilience, client, openFolder);
+        await using var session = await harness.OpenSessionAsync();
+
+        // Act
+        var refusal = await Assert.ThrowsAsync<MailboxMutationUnsupportedException>(() => session.AddKeywordsAsync(
+            CreateOccurrenceId(42U),
+            AuthoredMailKeywords.Create(["$Todo"]),
+            new RecordingMailboxMutationJournal(),
+            CancellationToken.None));
+
+        // Assert
+        Assert.Equal(MailboxMutation.AddKeywords, refusal.Mutation);
+        await openFolder.DidNotReceive().StoreAsync(
+            Arg.Any<IList<UniqueId>>(),
+            Arg.Any<IStoreFlagsRequest>(),
+            Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>A folder listing the keyword by name keeps it, so naming only those it already keeps is not refused.</summary>
+    [Fact]
+    public async Task AddKeywordsAsync_AFolderKeepingTheNamedKeyword_StoresIt()
+    {
+        // Arrange
+        using var resilience = CreateSingleAttemptResilience();
+        var client = new FakeImapClient { Capabilities = ImapCapabilities.Move | ImapCapabilities.UidPlus };
+        var openFolder = CreateWritableFolder(keepsAnyKeyword: false, keptKeywords: "$Junk");
+        await using var harness = CreateHarness(resilience, client, openFolder);
+        await using var session = await harness.OpenSessionAsync();
+
+        // Act
+        await session.AddKeywordsAsync(
+            CreateOccurrenceId(42U),
+            AuthoredMailKeywords.Create(["$junk"]),
+            new RecordingMailboxMutationJournal(),
+            CancellationToken.None);
+
+        // Assert
+        await openFolder.Received(1).StoreAsync(
+            Arg.Any<IList<UniqueId>>(),
+            Arg.Is<IStoreFlagsRequest>(request => request != null && request.Action == StoreAction.Add),
+            Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>Taking a keyword off needs nothing of the folder, because removing one that is not there already succeeds.</summary>
+    [Fact]
+    public async Task RemoveKeywordsAsync_AFolderThatKeepsNoNewKeyword_IsNotRefused()
+    {
+        // Arrange
+        using var resilience = CreateSingleAttemptResilience();
+        var client = new FakeImapClient { Capabilities = ImapCapabilities.Move | ImapCapabilities.UidPlus };
+        var openFolder = CreateWritableFolder(keepsAnyKeyword: false);
+        await using var harness = CreateHarness(resilience, client, openFolder);
+        await using var session = await harness.OpenSessionAsync();
+
+        // Act
+        await session.RemoveKeywordsAsync(
+            CreateOccurrenceId(42U),
+            AuthoredMailKeywords.Create(["$Todo"]),
+            new RecordingMailboxMutationJournal(),
+            CancellationToken.None);
+
+        // Assert
+        await openFolder.Received(1).StoreAsync(
+            Arg.Any<IList<UniqueId>>(),
+            Arg.Is<IStoreFlagsRequest>(request => request != null && request.Action == StoreAction.Remove),
+            Arg.Any<CancellationToken>());
+    }
+
     /// <summary>A folder selected read-only refuses every command below, so the session is useless without this.</summary>
     [Fact]
     public async Task OpenForWritingAsync_Always_SelectsTheFolderForWriting()

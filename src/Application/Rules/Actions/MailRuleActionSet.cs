@@ -17,13 +17,15 @@ namespace MailFathom.Application.Rules.Actions;
 /// </para>
 /// <para>
 /// One rule therefore names at most one fate — relocate, copy, or delete — and a delete admits nothing beside it, since
-/// a flag written on a message being removed is a flag nobody will ever read. Everything the table below permits is a
-/// flag change beside a relocation or a copy, or a single action on its own.
+/// a flag written on a message being removed is a flag nobody will ever read. The second thing it refuses is two
+/// answers about one message's keywords: a replacement states the whole set, so an addition or a removal beside it
+/// would leave what the message carries decided by which of the two ran second. Everything else is permitted, which in
+/// practice is any combination of flag and keyword changes beside at most one fate.
 /// </para>
 /// <para>
-/// The order is MailFathom's rather than the order the actions were written in: the flag is written first and the
-/// relocation or the delete last, so every permitted combination acts on the occurrence the condition matched. It is
-/// fixed here so that it is the same on every run and on every instance.
+/// The order is MailFathom's rather than the order the actions were written in: the flags and keywords are written
+/// first and the relocation or the delete last, so every permitted combination acts on the occurrence the condition
+/// matched. It is fixed here so that it is the same on every run and on every instance.
 /// </para>
 /// <para>
 /// An empty set is permitted and is not a defect. A rule that declares no action selects mail and nothing more, which is
@@ -133,8 +135,31 @@ public sealed class MailRuleActionSet
             return "names a second fate for one occurrence; whichever ran second would act on a message that is no longer where the rule matched it.";
         }
 
+        if (ContradictsAKeywordReplacement(honored, candidate))
+        {
+            return "cannot be honored beside a replacement of the same message's keywords, which decides what it carries and what it does not.";
+        }
+
         return null;
     }
+
+    /// <summary>Reports whether one keyword action and another already being applied say two things about one set.</summary>
+    /// <remarks>
+    /// A replacement states the whole set, so an addition or a removal beside it is an operator saying the set is both
+    /// exactly this and this plus one more. Which of the two won would come down to the order they were applied in,
+    /// which is exactly the kind of answer this contract refuses to invent — so the pair is refused where the
+    /// configuration is read, and withheld where it arrives from two rules at once.
+    /// </remarks>
+    private static bool ContradictsAKeywordReplacement(
+        IReadOnlyCollection<MailRuleAction> honored,
+        MailRuleAction candidate) =>
+        (candidate.Mutation == MailboxMutation.SetKeywords && honored.Any(ChangesKeywordsIncrementally))
+        || (ChangesKeywordsIncrementally(candidate)
+            && honored.Any(action => action.Mutation == MailboxMutation.SetKeywords));
+
+    /// <summary>Reports whether an action changes some of a message's keywords rather than all of them.</summary>
+    private static bool ChangesKeywordsIncrementally(MailRuleAction action) =>
+        action.Mutation == MailboxMutation.AddKeywords || action.Mutation == MailboxMutation.RemoveKeywords;
 
     /// <summary>Walks the declared actions in order and reports each one the ones before it leave no room for.</summary>
     private static List<RefusedMailRuleAction> FindRefusedActions(IReadOnlyList<MailRuleAction> actions)
@@ -168,26 +193,55 @@ public sealed class MailRuleActionSet
     /// <returns>Its position in the order, lowest first.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="action" /> is <see langword="null" />.</exception>
     /// <remarks>
-    /// The flag first and the relocation or the delete last, so every permitted combination acts on the occurrence the
-    /// condition matched. It is published because the same order governs the actions of two rules matching one email,
-    /// which no single rule's set can order on its own. A closed enumeration's members are not compile-time constants,
-    /// so the rank is decided by comparison rather than by a switch over cases.
+    /// <para>
+    /// Every flag and keyword change first and the relocation or the delete last, so every permitted combination acts on
+    /// the occurrence the condition matched. It is published because the same order governs the actions of two rules
+    /// matching one email, which no single rule's set can order on its own. A closed enumeration's members are not
+    /// compile-time constants, so the rank is decided by comparison rather than by a switch over cases.
+    /// </para>
+    /// <para>
+    /// The order among the flag and keyword changes decides nothing observable — each writes a different flag, and the
+    /// one pair that would contradict each other is refused before it gets here — so it is fixed for determinism rather
+    /// than for meaning.
+    /// </para>
     /// </remarks>
     public static int ApplicationOrderOf(MailRuleAction action)
     {
         ArgumentNullException.ThrowIfNull(action);
 
-        if (action.Mutation == MailboxMutation.SetSeen)
+        var mutation = action.Mutation;
+
+        if (mutation == MailboxMutation.SetSeen)
         {
             return 0;
         }
 
-        if (action.Mutation == MailboxMutation.Copy)
+        if (mutation == MailboxMutation.SetFlagged)
         {
             return 1;
         }
 
-        return action.Mutation == MailboxMutation.Relocate ? 2 : 3;
+        if (mutation == MailboxMutation.SetKeywords)
+        {
+            return 2;
+        }
+
+        if (mutation == MailboxMutation.RemoveKeywords)
+        {
+            return 3;
+        }
+
+        if (mutation == MailboxMutation.AddKeywords)
+        {
+            return 4;
+        }
+
+        if (mutation == MailboxMutation.Copy)
+        {
+            return 5;
+        }
+
+        return mutation == MailboxMutation.Relocate ? 6 : 7;
     }
 
     /// <summary>Names one action the way an operator wrote it, so a refusal points at the key they edit.</summary>
@@ -195,6 +249,9 @@ public sealed class MailRuleActionSet
     {
         { Destination: { } destination } => $"'{action.Mutation.Name}' into '{destination}'",
         { DesiredSeenState: { } isSeen } => $"'{action.Mutation.Name}' to {(isSeen ? "read" : "unread")}",
+        { DesiredFlaggedState: { } isFlagged } => $"'{action.Mutation.Name}' to {(isFlagged ? "flagged" : "unflagged")}",
+        { Keywords: { IsEmpty: true } } => $"'{action.Mutation.Name}' naming none",
+        { Keywords: { } keywords } => $"'{action.Mutation.Name}' naming '{string.Join("', '", keywords.Values)}'",
         _ => $"'{action.Mutation.Name}'",
     };
 

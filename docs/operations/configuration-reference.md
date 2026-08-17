@@ -119,6 +119,8 @@ shape the coordinator loop itself, which are read once at start and marked *rest
 | `…:RuleActions:Copy` | bool | `true` | Whether a rule may place a copy of this account's mail in another of its folders | reload; the same |
 | `…:RuleActions:Delete` | bool | `false` | Whether a rule may remove this account's mail; the one action that is opt-in | reload; the same |
 | `…:RuleActions:MarkAsRead` | bool | `true` | Whether a rule may set or clear this account's remote `\Seen` flag | reload; the same |
+| `…:RuleActions:MarkAsFlagged` | bool | `true` | Whether a rule may set or clear this account's remote `\Flagged` flag | reload; the same |
+| `…:RuleActions:WriteKeywords` | bool | `true` | Whether a rule may add, remove, or replace this account's keywords; one switch for all three, since permitting an addition while refusing a removal would leave labels nothing may take off | reload; the same |
 | `…:AuditTrail:Enabled` | bool | `false` | Whether a finished change to this account's mailbox leaves a durable audit entry | reload; governs changes authored from then on |
 | `…:AuditTrail:Retention` | TimeSpan | `90.00:00:00` | 1 day – 3650 days; how long this account's audit entries are kept | reload; the next account run erases against the new window |
 | `…:AnsweringAuditTrail:Enabled` | bool | `false` | Whether a finished `ask_mail` run leaves a durable entry naming the mail it read from this account | reload; governs runs from then on |
@@ -967,11 +969,17 @@ use — every fact, every function, every operator — and this section document
 | `MailRules:Rules:0:Actions:CopyTo` | string | unset | The alias of the folder a copy of a match is placed in; the account must mirror it | reload |
 | `MailRules:Rules:0:Actions:Delete` | bool | unset | `true` removes a match from the folder it matched in; the account must permit deletion | reload |
 | `MailRules:Rules:0:Actions:MarkAsRead` | bool | unset | `true` sets the remote `\Seen` flag and `false` clears it; leaving the key out leaves the flag alone | reload |
+| `MailRules:Rules:0:Actions:MarkAsFlagged` | bool | unset | `true` sets the remote `\Flagged` flag and `false` clears it; leaving the key out leaves the flag alone | reload |
+| `MailRules:Rules:0:Actions:AddKeywords` | list | unset | The keywords put on a match beside the ones it carries; each an IMAP atom of at most 64 characters, at most 64 of them, and an empty list is refused | reload |
+| `MailRules:Rules:0:Actions:RemoveKeywords` | list | unset | The keywords taken off a match, under the same limits; an empty list is refused | reload |
+| `MailRules:Rules:0:Actions:SetKeywords` | list | unset | The keywords a match ends up carrying in place of whatever it carried; `[]` is what clears them all, and is the one empty keyword list that is accepted | reload |
 
 An absent action key is a change the rule does not ask for, which is why `MarkAsRead` carries a value rather than being
 a switch. At most one of `MoveTo`, `CopyTo`, and `Delete` may be declared by one rule, `Delete` admits nothing beside
-it, and every permitted combination is applied in MailFathom's own order — the flag first and the relocation or the
-deletion last. A rule declaring nothing here selects mail and changes nothing.
+it, `SetKeywords` admits neither `AddKeywords` nor `RemoveKeywords` beside it, and every permitted combination is
+applied in MailFathom's own order — the flags and keywords first and the relocation or the deletion last. A keyword
+carrying a space, a control character, or one of `( ) { % * " \ ]` cannot be sent as an IMAP atom and is refused at
+startup naming the rule and the key. A rule declaring nothing here selects mail and changes nothing.
 [What a matching rule does](../features/mail-rules.md#what-a-matching-rule-does) states the whole table, the order, and
 how a change reaches the mail server.
 

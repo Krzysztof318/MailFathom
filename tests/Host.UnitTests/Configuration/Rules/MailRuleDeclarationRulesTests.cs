@@ -880,6 +880,191 @@ public sealed class MailRuleDeclarationRulesTests
         Assert.Contains("cannot read", error, StringComparison.Ordinal);
     }
 
+    /// <summary>Every keyword key an operator writes is judged, so a keyword no server could store fails startup.</summary>
+    [Theory]
+    [InlineData("AddKeywords")]
+    [InlineData("RemoveKeywords")]
+    [InlineData("SetKeywords")]
+    public void FindDeclarationErrors_AKeywordNoServerCanStore_IsRefusedByItsKey(string key)
+    {
+        // Arrange
+        var candidate = new MailRulesOptions
+        {
+            Rules = [CreateRule("label-invoices", "attachmentCount > 0", actions: KeywordAction(key, ["two words"]))],
+        };
+
+        // Act
+        var errors = MailRuleDeclarationRules.FindDeclarationErrors(candidate, this.compiler, DeclaredAccounts);
+
+        // Assert
+        var error = Assert.Single(errors);
+        Assert.Contains(key, error, StringComparison.Ordinal);
+        Assert.Contains("IMAP", error, StringComparison.Ordinal);
+    }
+
+    /// <summary>A list of sixty-four keywords needs the position of the bad one, and the position is safe to print where the text is not.</summary>
+    [Fact]
+    public void FindDeclarationErrors_AnUnwritableKeywordAmongUsableOnes_NamesItsPositionRatherThanItsText()
+    {
+        // Arrange
+        var candidate = new MailRulesOptions
+        {
+            Rules =
+            [
+                CreateRule(
+                    "label-invoices",
+                    "attachmentCount > 0",
+                    actions: KeywordAction("AddKeywords", ["$Todo", "$Invoice", "bell\u0007"])),
+            ],
+        };
+
+        // Act
+        var errors = MailRuleDeclarationRules.FindDeclarationErrors(candidate, this.compiler, DeclaredAccounts);
+
+        // Assert
+        var error = Assert.Single(errors);
+        Assert.Contains("AddKeywords:2", error, StringComparison.Ordinal);
+        Assert.DoesNotContain('\u0007', error);
+    }
+
+    /// <summary>A backslash names a system flag, and none of those is a flag a rule may reach through a keyword list.</summary>
+    [Fact]
+    public void FindDeclarationErrors_ASystemFlagWrittenAsAKeyword_IsRefused()
+    {
+        // Arrange
+        var candidate = new MailRulesOptions
+        {
+            Rules = [CreateRule("answer-it", "attachmentCount > 0", actions: KeywordAction("AddKeywords", ["\\Answered"]))],
+        };
+
+        // Act
+        var errors = MailRuleDeclarationRules.FindDeclarationErrors(candidate, this.compiler, DeclaredAccounts);
+
+        // Assert
+        Assert.Contains("backslash", Assert.Single(errors), StringComparison.Ordinal);
+    }
+
+    /// <summary>Adding or removing nothing asks the server for nothing, which is a mistyped list rather than an intent.</summary>
+    [Theory]
+    [InlineData("AddKeywords")]
+    [InlineData("RemoveKeywords")]
+    public void FindDeclarationErrors_AnEmptyIncrementalKeywordList_IsRefused(string key)
+    {
+        // Arrange
+        var candidate = new MailRulesOptions
+        {
+            Rules = [CreateRule("label-invoices", "attachmentCount > 0", actions: KeywordAction(key, []))],
+        };
+
+        // Act
+        var errors = MailRuleDeclarationRules.FindDeclarationErrors(candidate, this.compiler, DeclaredAccounts);
+
+        // Assert
+        Assert.Contains("names no keyword", Assert.Single(errors), StringComparison.Ordinal);
+    }
+
+    /// <summary>Naming none is how a replacement asks for every keyword to be cleared, so it is a rule rather than a mistake.</summary>
+    [Fact]
+    public void FindDeclarationErrors_AReplacementNamingNoKeyword_IsAccepted()
+    {
+        // Arrange
+        var candidate = new MailRulesOptions
+        {
+            Rules = [CreateRule("clear-labels", "ageInDays > 365", actions: KeywordAction("SetKeywords", []))],
+        };
+
+        // Act
+        var errors = MailRuleDeclarationRules.FindDeclarationErrors(candidate, this.compiler, DeclaredAccounts);
+
+        // Assert
+        Assert.Empty(errors);
+    }
+
+    /// <summary>A replacement states the whole set, so an addition beside it would leave the outcome decided by ordering.</summary>
+    [Fact]
+    public void FindDeclarationErrors_AReplacementBesideAnAddition_IsRefused()
+    {
+        // Arrange
+        var actions = new MailRuleActionOptions { SetKeywords = ["$Done"], AddKeywords = ["$Todo"] };
+        var candidate = new MailRulesOptions
+        {
+            Rules = [CreateRule("label-invoices", "attachmentCount > 0", actions: actions)],
+        };
+
+        // Act
+        var errors = MailRuleDeclarationRules.FindDeclarationErrors(candidate, this.compiler, DeclaredAccounts);
+
+        // Assert
+        Assert.Contains("replacement", Assert.Single(errors), StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A rule that would be skipped when the mail reached it is indistinguishable from one nothing matched, so an
+    /// action an account refuses fails startup naming both.
+    /// </summary>
+    [Theory]
+    [InlineData(false, true, "set-flagged")]
+    [InlineData(true, false, "add-keywords")]
+    public void FindDeclarationErrors_AnActionTheAccountDoesNotPermit_IsRefusedNamingTheAccount(
+        bool permitsFlagging,
+        bool permitsKeywords,
+        string refusedMutation)
+    {
+        // Arrange
+        var permissions = MailRuleActionPermissions.Default with
+        {
+            PermitsSetFlagged = permitsFlagging,
+            PermitsWriteKeywords = permitsKeywords,
+        };
+        var actions = new MailRuleActionOptions { MarkAsFlagged = true, AddKeywords = ["$Todo"] };
+        var candidate = new MailRulesOptions
+        {
+            Rules = [CreateRule("label-invoices", "attachmentCount > 0", actions: actions)],
+        };
+
+        // Act
+        var errors = MailRuleDeclarationRules.FindDeclarationErrors(
+            candidate,
+            this.compiler,
+            [DeclaredAccount("primary", permissions)]);
+
+        // Assert
+        var error = Assert.Single(errors);
+        Assert.Contains(refusedMutation, error, StringComparison.Ordinal);
+        Assert.Contains("primary", error, StringComparison.Ordinal);
+    }
+
+    /// <summary>Every one of these changes is reversible from a mail client, so an account saying nothing permits them.</summary>
+    [Fact]
+    public void FindDeclarationErrors_FlaggingAndLabellingOnAnAccountThatSaysNothing_IsAccepted()
+    {
+        // Arrange
+        var actions = new MailRuleActionOptions
+        {
+            MarkAsFlagged = true,
+            AddKeywords = ["$Todo"],
+            RemoveKeywords = ["$Done"],
+        };
+        var candidate = new MailRulesOptions
+        {
+            Rules = [CreateRule("label-invoices", "attachmentCount > 0", actions: actions)],
+        };
+
+        // Act
+        var errors = MailRuleDeclarationRules.FindDeclarationErrors(candidate, this.compiler, DeclaredAccounts);
+
+        // Assert
+        Assert.Empty(errors);
+    }
+
+    /// <summary>Builds an action block writing one of the three keyword keys, so the theories name the key they judge.</summary>
+    private static MailRuleActionOptions KeywordAction(string key, string[] keywords) => key switch
+    {
+        nameof(MailRuleActionOptions.AddKeywords) => new MailRuleActionOptions { AddKeywords = keywords },
+        nameof(MailRuleActionOptions.RemoveKeywords) => new MailRuleActionOptions { RemoveKeywords = keywords },
+        _ => new MailRuleActionOptions { SetKeywords = keywords },
+    };
+
     private static MailRuleOptions CreateRule(
         string name,
         string conditionText,

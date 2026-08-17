@@ -394,8 +394,8 @@ This is a system invariant, not an option. It is scoped to reading rather than t
 - Message bodies and headers are retrieved with PEEK semantics.
 - Synchronization interfaces expose no operation that writes flags.
 - No read path can obtain a session capable of writing. The write-capable session is a separate type reached through a separate factory, and the folder access a connection selects with is fixed when the connection is created, so a reconnection cannot widen it.
-- The only code that calls a flag-writing method is the write session, and the only flags it writes are `\Seen`, for the one operation whose purpose is to write it, and the `\Deleted` that removing a message is made of.
-- Stored `\Seen` is a snapshot of remote state only. An authored change is a request made of the server, so the stored value still has exactly one writer: synchronization observing what the server reports back.
+- The only code that calls a flag-writing method is the write session, and the only flags it writes are `\Seen` and `\Flagged`, each for the one operation whose purpose is to write it, a message's keywords for the three operations that change them, and the `\Deleted` that removing a message is made of. `\Answered` and `\Draft` are never written.
+- Stored `\Seen`, `\Flagged`, and keywords are a snapshot of remote state only. An authored change is a request made of the server, so a stored value still has exactly one writer: synchronization observing what the server reports back.
 - MCP reads local data and therefore cannot affect the remote flag.
 
 ### 11.2 Initial synchronization
