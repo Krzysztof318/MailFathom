@@ -1708,13 +1708,20 @@ client that speaks Streamable HTTP can list them; `tools/list` should report `li
 `get_email_content`, and `search_emails`, each with `readOnlyHint` true, `destructiveHint` false, `idempotentHint` true,
 and `openWorldHint` false.
 
+**Verify with a credential whose entry writes no grant, or read what that entry granted first.** A listing narrows to
+the caller's grant as well as to the deployment, so a credential granted less than the whole surface is served fewer
+tools than the paragraph above describes and nothing in the answer says why. Confirm against
+[what a credential may do](#what-a-credential-may-do) before treating a short listing as a fault.
+
 `ask_mail` is the fifth, and it appears only while this deployment can answer a question: a chat endpoint declared and
-not currently refusing, and an embedding profile whose space a query can be placed in. Its absence from a listing is
-therefore a statement about the deployment rather than a fault — an instance that declared no chat endpoint never
-advertises it, and one whose chat provider refused within the last minute withholds it and offers it again afterwards, so
-a rotated credential is picked up without a restart. Read the health record for the chat role before treating the absence
-as a defect. A client that calls it anyway is refused with `56001`, whose message says whether this deployment answers no
-questions at all or answers them and currently cannot.
+not currently refusing, and an embedding profile whose space a query can be placed in. Its absence from the listing of a
+caller granted `mailfathom.mail.ask` is therefore a statement about the deployment rather than a fault — an instance
+that declared no chat endpoint never advertises it, and one whose chat provider refused within the last minute withholds
+it and offers it again afterwards, so a rotated credential is picked up without a restart. Read the health record for
+the chat role before treating that absence as a defect. Such a caller calling it anyway is refused with `56001`, whose
+message says whether this deployment answers no questions at all or answers them and currently cannot; a caller whose
+grant does not carry `mailfathom.mail.ask` receives the unknown-tool error instead, which is the grant rather than the
+deployment and is read from the configured entry rather than from the health record.
 
 A call answers from the local mailbox copy, so what it returns depends on what synchronization has stored rather than on
 whether a mail server is reachable. A deployment whose folders have never synchronized answers an empty page whose

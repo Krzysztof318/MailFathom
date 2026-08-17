@@ -12,9 +12,9 @@ namespace MailFathom.Mcp.Tools;
 /// <summary>Decides whether <c>ask_mail</c> appears in what this server advertises.</summary>
 /// <remarks>
 /// <para>
-/// Every other MailFathom tool answers from the local mailbox copy alone and is therefore always advertised. Answering a
-/// question needs two AI providers that an operator configures separately and that fail separately, so this one is
-/// offered only while both are configured and working. A client that can see a tool will call it, and a tool that exists
+/// Every other MailFathom tool answers from the local mailbox copy alone and is therefore within reach of every
+/// deployment. Answering a question needs two AI providers that an operator configures separately and that fail
+/// separately, so this one is offered only while both are configured and working. A client that can see a tool will call it, and a tool that exists
 /// only to answer "not configured" costs a round trip to learn something the tool list could have said.
 /// </para>
 /// <para>

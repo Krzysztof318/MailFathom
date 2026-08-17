@@ -284,9 +284,9 @@ from the issuer, and takes the key set address out of it.
 
 The entry writes down no grant, so every token it admits reaches everything the MCP surface publishes. To state a bound,
 add `Permissions` beside `OAuth` — and add `"PermissionsFromTokenScopes": true` as well where the scopes you created in
-step 2 should narrow the list per subject. It is a statement rather than a bound today, for the reason
-[step 2](#2-register-mailfathom-as-a-resource-in-the-provider) gives: nothing consults a grant yet, so every token this
-entry admits goes on reaching every tool whatever you write here.
+step 2 should narrow the list per subject. On this surface that is a bound rather than a statement, for the reason
+[step 2](#2-register-mailfathom-as-a-resource-in-the-provider) gives: a token admitted without a `mailfathom.mail.*`
+permission is listed fewer tools and is answered about the rest as though they did not exist.
 
 ```json
 {

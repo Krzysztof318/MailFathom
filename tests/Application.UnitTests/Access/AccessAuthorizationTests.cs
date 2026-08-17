@@ -195,12 +195,12 @@ public sealed class AccessAuthorizationTests
 
         // Act
         var reported = MailFathomPermission.All.Select(authorization.Permits).ToArray();
-        var refused = MailFathomPermission.All
+        var permitted = MailFathomPermission.All
             .Select(permission => Record.Exception(() => authorization.RequirePermission(permission)) is null)
             .ToArray();
 
         // Assert
-        Assert.Equal(refused, reported);
+        Assert.Equal(permitted, reported);
     }
 
     /// <summary>Neither of the two kinds a permission is never granted to may be reported as holding one.</summary>

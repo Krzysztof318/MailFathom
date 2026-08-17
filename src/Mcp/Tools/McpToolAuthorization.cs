@@ -92,11 +92,13 @@ internal static class McpToolAuthorization
     /// <returns>The tool's result, for a call the grant permits.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="next" /> or <paramref name="request" /> is <see langword="null" />.</exception>
     /// <exception cref="InvalidOperationException">Thrown when the call arrives without a service provider, which leaves nothing able to say whose grant to apply.</exception>
-    /// <exception cref="McpProtocolException">Thrown when the caller's grant does not permit the tool it named.</exception>
+    /// <exception cref="McpProtocolException">Thrown when the caller's grant does not permit the tool it named, and when no tool on this surface declares what reaching that name requires.</exception>
     /// <remarks>
-    /// A name this surface does not publish is passed through untouched, so the server answers it as it always has and
-    /// one unknown-tool answer is written in one place. The refusal above mirrors that answer deliberately, down to its
-    /// wording: two answers a caller could tell apart would be a disclosure whichever of them was the narrower.
+    /// The decision is the permission alone, so a name nothing declared a permission for is refused here rather than
+    /// passed on to be refused by the server: a tool registered on this surface without an entry in
+    /// <see cref="PublishedTools" /> would otherwise be withheld from every listing and then executed for any caller at
+    /// all. Both refusals are worded as the server's own answer to a name it does not publish, because two answers a
+    /// caller could tell apart would be a disclosure whichever of them was the narrower.
     /// </remarks>
     public static async Task<CallToolResult> RefuseUnauthorizedToolAsync(
         McpRequestHandler<CallToolRequestParams, CallToolResult> next,
@@ -108,8 +110,7 @@ internal static class McpToolAuthorization
 
         var requestedToolName = request.Params?.Name;
 
-        if (PublishedTools.Contains(requestedToolName)
-            && !IsPermitted(RequiredAuthorization(request), requestedToolName))
+        if (!IsPermitted(RequiredAuthorization(request), requestedToolName))
         {
             throw UnknownTool(requestedToolName);
         }

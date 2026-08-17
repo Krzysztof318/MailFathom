@@ -5,6 +5,7 @@
 using MailFathom.Domain.Access;
 using MailFathom.Mcp.Tools;
 using MailFathom.Mcp.UnitTests.TestDoubles;
+using MailFathom.TestSupport;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using ModelContextProtocol;
@@ -84,6 +85,32 @@ public sealed class McpToolSurfaceCompositionTests
     }
 
     /// <summary>Composing the two call filters must leave the reporter outermost, so a refusal is recorded exactly as an unknown tool already is.</summary>
+    /// <remarks>
+    /// Swapping the two registrations, or an SDK release that composed them the other way, would let the refusal leave
+    /// the pipeline without passing the reporter — no metric, no log line, and an operator sent to diagnose a client
+    /// from a record that never mentioned the call. Nothing else in this suite would notice, because both filters would
+    /// still produce the right answer to the caller.
+    /// </remarks>
+    [Fact]
+    public async Task AddMailFathomServer_ACallTheGrantDoesNotPermit_IsRecordedByTheReporter()
+    {
+        // Arrange
+        await using var provider = RegisteredMcpToolSurface.ComposedForCallerGranted(MailFathomPermission.MailRead);
+
+        // Act
+        await Assert.ThrowsAsync<McpProtocolException>(() => CalledAsync(provider, AskMailTool.ToolName));
+
+        // Assert
+        var recorded = provider.GetRequiredService<RecordingLoggerProvider>().Records;
+
+        Assert.Contains(
+            recorded,
+            record => record.Properties.TryGetValue("ToolName", out var toolName)
+                && Equals(toolName, AskMailTool.ToolName)
+                && record.Properties.TryGetValue("JsonRpcErrorCode", out var errorCode)
+                && Equals(errorCode, (int)McpErrorCode.InvalidParams));
+    }
+
     [Fact]
     public async Task AddMailFathomServer_ACallTheGrantPermits_ReachesTheTool()
     {

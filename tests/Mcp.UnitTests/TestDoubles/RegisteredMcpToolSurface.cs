@@ -21,6 +21,7 @@ using MailFathom.Application.Synchronization.Checkpoints;
 using MailFathom.Domain.Access;
 using MailFathom.TestSupport;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Time.Testing;
 using ModelContextProtocol.Protocol;
@@ -89,6 +90,13 @@ internal static class RegisteredMcpToolSurface
     {
         var services = new ServiceCollection();
 
+        // Registered as a service as well as a provider, and constructed by the container so it owns the disposal, so a
+        // test composing the surface can read what the pipeline wrote without holding the recorder itself: what a
+        // filter records is decided by the order the registration composed the filters in, which is what such a test
+        // exists to pin.
+        services.AddSingleton<RecordingLoggerProvider>();
+        services.AddSingleton<ILoggerProvider>(
+            container => container.GetRequiredService<RecordingLoggerProvider>());
         services.AddLogging();
 
         // The descriptors are fixed at registration and do not vary by caller, so the grant here is the whole of this

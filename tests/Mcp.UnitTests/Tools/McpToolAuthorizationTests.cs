@@ -207,23 +207,26 @@ public sealed class McpToolAuthorizationTests
         Assert.False(reached);
     }
 
-    /// <summary>One unknown-tool answer is written in one place, which is the server's own.</summary>
+    /// <summary>A tool registered without an entry declaring what reaching it requires is refused rather than served ungoverned.</summary>
     [Fact]
-    public async Task RefuseUnauthorizedToolAsync_ACallNamingNoPublishedTool_IsLeftToTheServer()
+    public async Task RefuseUnauthorizedToolAsync_ACallNamingNoPublishedTool_IsRefusedWithoutReachingTheTool()
     {
         // Arrange
-        var authorization = AccessAuthorizations.ForCallerGranted();
+        var authorization = AccessAuthorizations.ForCallerGranted(
+            [.. MailFathomPermission.PublishedFor(ProtectedSurface.Mail)]);
         var reached = false;
 
         // Act
-        await CalledAsync(
+        var refusal = await Assert.ThrowsAsync<McpProtocolException>(() => CalledAsync(
             authorization,
             UnpublishedToolName,
             ServedResult,
-            onReached: () => reached = true);
+            onReached: () => reached = true));
 
         // Assert
-        Assert.True(reached);
+        Assert.Equal($"Unknown tool: '{UnpublishedToolName}'", refusal.Message);
+        Assert.Equal(McpErrorCode.InvalidParams, refusal.ErrorCode);
+        Assert.False(reached);
     }
 
     /// <summary>Serving a call nobody could apply a grant to would reach a tool this caller was never granted.</summary>

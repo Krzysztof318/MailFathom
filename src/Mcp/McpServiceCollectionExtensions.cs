@@ -60,19 +60,18 @@ public static class McpServiceCollectionExtensions
                 .AddCallToolFilter(next => (request, cancellationToken) =>
                     new ValueTask<CallToolResult>(
                         McpToolAuthorization.RefuseUnauthorizedToolAsync(next, request, cancellationToken)))
+                // Registered before the availability filter and therefore outside it, so the deployment's own switch is
+                // evaluated first and this narrows what that switch left — the order ADR 0012 records. Which of the two
+                // takes a descriptor away changes no listing, because neither can put one back; the switch stays the
+                // authority over whether a capability exists at all, and no grant makes an absent one appear.
+                .AddListToolsFilter(next => (request, cancellationToken) =>
+                    new ValueTask<ListToolsResult>(
+                        McpToolAuthorization.WithoutUnauthorizedToolsAsync(next, request, cancellationToken)))
                 // The one tool this surface does not always advertise, decided per listing so an operator who repairs a
                 // provider needs no restart to have it offered again.
                 .AddListToolsFilter(next => (request, cancellationToken) =>
                     new ValueTask<ListToolsResult>(
-                        AskMailAdvertisement.WithoutUnavailableAnsweringAsync(next, request, cancellationToken)))
-                // Registered last, which makes it the innermost filter: both of these narrow the listing the inner
-                // pipeline produced, so this one's removal happens before the availability read above and a caller that
-                // may not ask questions never causes the answering capability to be read at all. Which of the two takes
-                // a descriptor away changes no listing, because neither can put one back — the deployment's own switch
-                // stays the authority over whether a capability exists.
-                .AddListToolsFilter(next => (request, cancellationToken) =>
-                    new ValueTask<ListToolsResult>(
-                        McpToolAuthorization.WithoutUnauthorizedToolsAsync(next, request, cancellationToken))))
+                        AskMailAdvertisement.WithoutUnavailableAnsweringAsync(next, request, cancellationToken))))
             .WithTools<ListAccountsTool>(McpToolContractSerialization.Options)
             .WithTools<ListEmailsTool>(McpToolContractSerialization.Options)
             .WithTools<GetEmailContentTool>(McpToolContractSerialization.Options)
