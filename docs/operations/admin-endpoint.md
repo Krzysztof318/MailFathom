@@ -1346,7 +1346,8 @@ answer to that command rather than a fact about running it, so none of it is off
 **Your own deployment can be named in it.** `command` carries no argument value, but the other two fields are not blind
 to where a deployment is. `deployment` is your name for the profile, and a sign-in that passed no `--name` is named
 after the deployment's own host. `failure` is the line the command already printed, and several of those quote the
-address or the alias you typed — `Not signed in to https://…` is the common one. Scrubbing both was considered and
+address or the alias you typed — `Not signed in to https://…` is the common one, and an invocation the parser refused
+outright carries whichever token it refused. Scrubbing both was considered and
 rejected: this file sits beside `credentials.json`, which records every profile's endpoint in clear, so a log naming
 none of them would be protecting an address the same directory already holds, at the cost of the field you read the log
 for. Treat the file as you treat that directory, which is to say read it before you paste it anywhere.

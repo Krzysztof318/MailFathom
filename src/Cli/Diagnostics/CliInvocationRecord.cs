@@ -48,8 +48,11 @@ internal sealed class CliInvocationRecord
     /// <summary>Notes which deployment the command settled on, once it has one.</summary>
     /// <param name="profileName">The operator's own name for the deployment.</param>
     /// <remarks>
-    /// The last one wins, which is the right answer for the one command that reaches two: a sign-in talks to an
-    /// authorization server before it talks to the deployment, and the deployment is what the invocation was about.
+    /// Two things call this and neither calls it twice. Every command that reaches a deployment goes through
+    /// <see cref="Administration.DeploymentAccess" />, which is where the option, the variable, and the stored default
+    /// are reconciled; and <c>login</c> calls it directly, because it establishes a profile rather than resolving one
+    /// and would otherwise be the command with no deployment on its record while being the command that names them.
+    /// The last one still wins, so a command that ever grew a second deployment would report the one it ended on.
     /// </remarks>
     internal void ReachedDeployment(string profileName) => this.Deployment = profileName;
 
@@ -80,7 +83,9 @@ internal sealed class CliInvocationRecord
     {
         ArgumentNullException.ThrowIfNull(fault);
 
-        return this.Entry(command, CliInvocationOutcome.Faulted) with { Fault = fault.GetType().FullName };
+        // Bounded like the failure and for the same reason: a closed generic type's full name carries every argument's
+        // name recursively, so the one field that looks too short to need a ceiling is the one that has no other.
+        return this.Entry(command, CliInvocationOutcome.Faulted) with { Fault = Bounded(fault.GetType().FullName) };
     }
 
     /// <summary>Closes the record for an invocation the operator stopped.</summary>

@@ -76,6 +76,22 @@ public sealed class CliInvocationRecordingTests : IDisposable
         Assert.NotEqual(CliExitCode.Success, exitCode);
         Assert.Equal(CliInvocationOutcome.Failed, entry.Outcome);
         Assert.Equal(exitCode, entry.ExitCode);
+        Assert.Contains("--no-such-option", entry.Failure ?? string.Empty, StringComparison.Ordinal);
+    }
+
+    /// <summary>An invocation that succeeded records no failure, which is what makes the field mean something.</summary>
+    /// <remarks>The control for the assertion above: reading the parser's errors unconditionally would put text on every record, and a refused invocation would look no different from one that worked.</remarks>
+    [Fact]
+    public async Task RunAsync_AnInvocationThatSucceeded_RecordsNoFailure()
+    {
+        // Arrange
+        var log = new RecordingCliInvocationLog();
+
+        // Act
+        _ = await CliRunner.RunAsync(ContextFor(log), ["--version"], TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Null(Assert.Single(log.Appended).Failure);
     }
 
     /// <summary>A subcommand is recorded by the path of names it was declared under, not by the one word at the end.</summary>
@@ -177,7 +193,7 @@ public sealed class CliInvocationRecordingTests : IDisposable
             (endpoint, trust) => FakeDeploymentTransport.Over(deployment, endpoint, trust),
             FakeMailboxRedirect.Silent(),
             static _ => false,
-            TimeProvider.System,
+            Stopped(),
             log,
             static _ => null);
 
@@ -189,6 +205,47 @@ public sealed class CliInvocationRecordingTests : IDisposable
 
         Assert.Equal(CliExitCode.Success, exitCode);
         Assert.Equal("production", entry.Deployment);
+    }
+
+    /// <summary>A sign-in names the profile it established, which no other command's path would have recorded for it.</summary>
+    /// <remarks>
+    /// <c>login</c> is the one command that reaches a deployment without going through the access seam the test above
+    /// covers — it establishes a profile rather than resolving one — so the field it fills is filled by a line of its
+    /// own. Removing that line would leave the command that gives every deployment its name as the only one whose own
+    /// record does not carry one, and the test above would stay green.
+    /// </remarks>
+    [Fact]
+    public async Task RunAsync_ASignIn_RecordsTheProfileItEstablished()
+    {
+        // Arrange
+        using var deployment = FakeAdminEndpoint.Accepting("workstation");
+
+        var console = new RecordingCliConsole { SecretToSupply = "not-a-real-key" };
+        var log = new RecordingCliInvocationLog();
+
+        var context = new CliContext(
+            console,
+            new CredentialStore(
+                Path.Combine(this.storeDirectory, "credentials.json"),
+                new TokenProtector(Path.Combine(this.storeDirectory, "credentials.key"))),
+            (endpoint, trust) => FakeDeploymentTransport.Over(deployment, endpoint, trust),
+            FakeMailboxRedirect.Silent(),
+            static _ => false,
+            Stopped(),
+            log,
+            static _ => null);
+
+        // Act
+        var exitCode = await CliRunner.RunAsync(
+            context,
+            ["login", "--endpoint", "https://mail.example.test:8443"],
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        var entry = Assert.Single(log.Appended);
+
+        Assert.Equal(CliExitCode.Success, exitCode);
+        Assert.Equal("mail.example.test", entry.Deployment);
     }
 
     /// <summary>A shell that turned the log off is obeyed by an invocation that ran through the whole runner.</summary>
@@ -284,6 +341,14 @@ public sealed class CliInvocationRecordingTests : IDisposable
         Assert.Equal(3000, entry.DurationMilliseconds);
     }
 
+    /// <summary>A clock that does not move, which is what a test asserting anything but a duration wants.</summary>
+    /// <remarks>
+    /// Every test here would otherwise take the wall clock, so a record's timestamp and duration would be whatever the
+    /// machine was doing while it ran. Nothing asserts either of those today, which makes the absence of a flake
+    /// incidental rather than intended — and the policy is about the dependency rather than about the flake.
+    /// </remarks>
+    private static FakeTimeProvider Stopped() => new(new DateTimeOffset(2026, 8, 17, 9, 0, 0, TimeSpan.Zero));
+
     /// <summary>Builds a context whose environment is stated rather than inherited.</summary>
     /// <remarks>
     /// Every test here drives the whole runner, which consults the shell for <see cref="CliOptions.LogVariable" />.
@@ -301,7 +366,7 @@ public sealed class CliInvocationRecordingTests : IDisposable
         static (_, _) => throw new InvalidOperationException("No command in this class opens a transport."),
         FakeMailboxRedirect.Silent(),
         static _ => false,
-        clock ?? TimeProvider.System,
+        clock ?? Stopped(),
         log,
         variables ?? (static _ => null));
 }

@@ -56,7 +56,7 @@ internal static class CliRunner
         {
             var exitCode = await parseResult.InvokeAsync(invocation, cancellationToken);
 
-            entry = context.Invocation.Ended(command, exitCode, failure: null);
+            entry = context.Invocation.Ended(command, exitCode, RefusalOf(parseResult, exitCode));
 
             return exitCode;
         }
@@ -105,11 +105,33 @@ internal static class CliRunner
             return;
         }
 
-        if (!log.TryAppend(entry))
+        if (log.TryAppend(entry))
+        {
+            return;
+        }
+
+        try
         {
             context.Console.WriteError($"This invocation could not be recorded in {log.Location}.");
         }
+        catch (IOException)
+        {
+            // The terminal this would have gone to has gone away. This method runs in the runner's finally, so raising
+            // here would replace the exit code or the exception the invocation was already reporting with a complaint
+            // about a log — which is the failure the whole seam is written to make impossible.
+        }
     }
+
+    /// <summary>Reads back why the parser refused an invocation, for the record of one that raised nothing.</summary>
+    /// <remarks>
+    /// A parse error is reported by the library and returns a code rather than raising, so it reaches neither of the
+    /// paths that carry a message. Without this a refused invocation would be recorded as a failure with nothing said
+    /// about it, which is the one shape the log's own table promises never to have.
+    /// </remarks>
+    private static string? RefusalOf(ParseResult parseResult, int exitCode) =>
+        exitCode != CliExitCode.Success && parseResult.Errors.Count > 0
+            ? string.Join(' ', parseResult.Errors.Select(error => error.Message))
+            : null;
 
     /// <summary>Names the command that was invoked, as the path of declared names from the root down.</summary>
     /// <remarks>

@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using System.Runtime.InteropServices;
 using MailFathom.Cli.Diagnostics;
 using Xunit;
 
@@ -143,6 +144,30 @@ public sealed class FileCliInvocationLogTests : IDisposable
         // Assert
         Assert.False(File.Exists(this.Location() + FileCliInvocationLog.RolledSuffix));
         Assert.True(new FileInfo(this.Location()).Length > FileCliInvocationLog.MaximumBytes - 1);
+    }
+
+    /// <summary>
+    /// The log names which deployments an operator administers and when, which is what makes it worth reading on a
+    /// shared machine, so it is created on the credential store's terms: readable by its owner and nobody else, and set
+    /// as the file is created rather than tightened afterwards. Windows carries no mode to read back, as
+    /// <see cref="CredentialStoreTests" /> says of the store itself.
+    /// </summary>
+    [Fact]
+    public void TryAppend_OnAPlatformWithFileModes_CreatesTheLogReadableByItsOwnerAlone()
+    {
+        // Arrange
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+        {
+            return;
+        }
+
+        var log = new FileCliInvocationLog(this.Location());
+
+        // Act
+        _ = log.TryAppend(Entry("mfctl status"));
+
+        // Assert
+        Assert.Equal(UnixFileMode.UserRead | UnixFileMode.UserWrite, File.GetUnixFileMode(this.Location()));
     }
 
     /// <summary>A path that cannot be written to is reported rather than raised, which is what keeps a command's own answer intact.</summary>

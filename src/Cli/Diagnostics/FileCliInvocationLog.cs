@@ -95,22 +95,41 @@ internal sealed class FileCliInvocationLog : ICliInvocationLog
     /// already performed. Anything else that stops the move leaves the file over its ceiling until the next invocation,
     /// which is a log slightly too large rather than a record thrown away.
     /// </para>
+    /// <para>
+    /// The size is read again immediately before the move, which is what stops the worse version of that race: a run
+    /// that decided to roll, was overtaken by one that rolled and appended, and would otherwise move the fresh file
+    /// over the rolled one — replacing a full history with a single record. Re-reading is not a lock and the window is
+    /// not zero; what it is worth is the ratio, since the decision is made after work that takes orders of magnitude
+    /// longer than the two calls now left between the check and the move. A lock file would close it and would put a
+    /// file this log has to create, contend for, and clean up beside one whose whole point is that it cannot fail the
+    /// command.
+    /// </para>
     /// </remarks>
     private void RollOverWhenFull()
     {
-        var current = new FileInfo(this.Location);
-
-        if (!current.Exists || current.Length < MaximumBytes)
+        if (!IsFull(this.Location))
         {
             return;
         }
 
         try
         {
+            if (!IsFull(this.Location))
+            {
+                return;
+            }
+
             File.Move(this.Location, this.Location + RolledSuffix, overwrite: true);
         }
         catch (Exception raced) when (raced is IOException or UnauthorizedAccessException)
         {
         }
+    }
+
+    private static bool IsFull(string location)
+    {
+        var current = new FileInfo(location);
+
+        return current.Exists && current.Length >= MaximumBytes;
     }
 }
