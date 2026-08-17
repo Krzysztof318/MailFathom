@@ -5203,6 +5203,142 @@ changelog_section_reading_returns_only_the_requested_release() {
   assert_excludes 'The first release.' "$output_file"
 }
 
+# The schema artifact is the one release asset an operator runs by hand, against their own database, from a command a
+# page here gives them. Nothing downstream of the build applies the published file — the integration suite generates the
+# same SQL through EF Core and applies it over ADO.NET, where a reader consumes a byte-order mark that psql would send
+# to the server — so what the file's first bytes are is asserted here or nowhere, and a marked artifact reaches whoever
+# downloads it next as a syntax error naming a character that cannot be seen.
+#
+# The fixture stands in for `aspire publish` rather than running it: what these contracts are about is the file the
+# script writes from the publish output, and a real publish would need the SDK, the tool manifest, and a minute of build
+# time to produce a fixture this one writes in three lines.
+create_schema_artifact_fixture() {
+  local fixture_root="$1"
+  local published_sql="$2"
+
+  mkdir -p "$fixture_root/scripts" "$fixture_root/stubs"
+  cp "$source_repository_root/scripts/build-schema-artifact.sh" "$fixture_root/scripts/"
+
+  git -C "$fixture_root" init --initial-branch=main --quiet
+
+  # `aspire publish` writes one SQL script under `efmigrations/`, and the guard the script asserts on is the migration
+  # history check that makes the artifact idempotent. Both are what the stub reproduces; the SQL itself is a stand-in.
+  cat > "$fixture_root/stubs/aspire" <<'STUB'
+#!/usr/bin/env bash
+set -euo pipefail
+
+output_path=''
+previous=''
+for argument in "$@"; do
+  if [[ "$previous" == '--output-path' ]]; then
+    output_path="$argument"
+  fi
+  previous="$argument"
+done
+
+if [[ "${1:-}" == '--version' ]]; then
+  printf 'stub\n'
+  exit 0
+fi
+
+mkdir -p "$output_path/efmigrations"
+cp "$PUBLISHED_SQL" "$output_path/efmigrations/mailfathom.sql"
+STUB
+
+  # The manifest-local EF Core tooling is restored before the publish, and nothing in these contracts depends on it.
+  printf '#!/usr/bin/env bash\nexit 0\n' > "$fixture_root/stubs/dotnet"
+
+  chmod +x "$fixture_root/stubs/aspire" "$fixture_root/stubs/dotnet"
+
+  cp "$published_sql" "$fixture_root/published.sql"
+}
+
+write_published_schema_script() {
+  local target_file="$1"
+  local leading_bytes="$2"
+
+  {
+    printf '%b' "$leading_bytes"
+    printf 'CREATE TABLE IF NOT EXISTS "__EFMigrationsHistory" (\n'
+    printf '    "MigrationId" character varying(150) NOT NULL\n);\n\n'
+    printf 'DO $EF$\nBEGIN\n'
+    printf '    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = %s20260101000000_First%s) THEN\n' \
+      "'" "'"
+    printf '    CREATE TABLE "Emails" ("Id" uuid NOT NULL);\n    END IF;\nEND $EF$;\n'
+  } > "$target_file"
+}
+
+build_schema_artifact() {
+  local fixture_root="$1"
+  local output_directory="$2"
+  local output_file="$3"
+
+  (
+    cd "$fixture_root"
+    PATH="$fixture_root/stubs:$PATH" PUBLISHED_SQL="$fixture_root/published.sql" \
+      bash scripts/build-schema-artifact.sh "$output_directory" '9.9.9'
+  ) > "$output_file" 2>&1
+}
+
+schema_artifact_carries_no_byte_order_mark() {
+  local fixture_root="$test_directory/schema-artifact-marked"
+  local output_directory="$fixture_root/artifacts"
+  local output_file="$test_directory/schema-artifact-marked-output"
+  local artifact_path="$output_directory/mailfathom-schema-9.9.9.sql"
+
+  write_published_schema_script "$test_directory/published-marked.sql" '\xef\xbb\xbf'
+  create_schema_artifact_fixture "$fixture_root" "$test_directory/published-marked.sql"
+
+  build_schema_artifact "$fixture_root" "$output_directory" "$output_file"
+
+  if [[ "$(head --bytes=6 "$artifact_path")" != 'CREATE' ]]; then
+    printf 'Expected the artifact to begin with CREATE, and it begins with: %s\n' \
+      "$(head --bytes=6 "$artifact_path" | od --address-radix=n --format=x1)" >&2
+    return 1
+  fi
+
+  # The mark is the only difference the script may make to the publish output, so the rest is compared byte for byte.
+  if ! tail --bytes=+4 "$test_directory/published-marked.sql" | cmp --quiet - "$artifact_path"; then
+    printf 'The artifact differs from the published script by more than its byte-order mark.\n' >&2
+    return 1
+  fi
+
+  assert_contains '20260101000000_First' "$output_file"
+}
+
+schema_artifact_checksum_covers_the_file_an_operator_applies() {
+  local fixture_root="$test_directory/schema-artifact-checksum"
+  local output_directory="$fixture_root/artifacts"
+  local output_file="$test_directory/schema-artifact-checksum-output"
+
+  write_published_schema_script "$test_directory/published-checksum.sql" '\xef\xbb\xbf'
+  create_schema_artifact_fixture "$fixture_root" "$test_directory/published-checksum.sql"
+
+  build_schema_artifact "$fixture_root" "$output_directory" "$output_file"
+
+  # Exactly what the documentation asks an operator to run before applying the file.
+  if ! (cd "$output_directory" && sha256sum --check --status 'mailfathom-schema-9.9.9.sql.sha256'); then
+    printf 'The published checksum does not identify the artifact beside it.\n' >&2
+    return 1
+  fi
+}
+
+schema_artifact_leaves_an_unmarked_publish_untouched() {
+  local fixture_root="$test_directory/schema-artifact-unmarked"
+  local output_directory="$fixture_root/artifacts"
+  local output_file="$test_directory/schema-artifact-unmarked-output"
+
+  write_published_schema_script "$test_directory/published-unmarked.sql" ''
+  create_schema_artifact_fixture "$fixture_root" "$test_directory/published-unmarked.sql"
+
+  build_schema_artifact "$fixture_root" "$output_directory" "$output_file"
+
+  if ! cmp --quiet "$test_directory/published-unmarked.sql" "$output_directory/mailfathom-schema-9.9.9.sql"; then
+    printf 'A publish that carried no byte-order mark was rewritten anyway.\n' >&2
+    return 1
+  fi
+}
+
 # The winget manifest is the one thing this repository produces whose correctness is judged in somebody else's pull
 # request, days after the release that submitted it. What is asserted here is what a Windows install actually depends
 # on: that `portable` with `Commands` is what makes the binary reachable as `mfctl` rather than under the versioned
@@ -6282,6 +6418,9 @@ run_test release_tag_assertion_accepts_a_patch_from_a_release_branch
 run_test release_tag_assertion_refuses_a_version_already_released_on_its_line
 run_test release_tag_assertion_refuses_an_empty_changelog_section
 run_test changelog_section_reading_returns_only_the_requested_release
+run_test schema_artifact_carries_no_byte_order_mark
+run_test schema_artifact_checksum_covers_the_file_an_operator_applies
+run_test schema_artifact_leaves_an_unmarked_publish_untouched
 run_test winget_manifests_name_the_release_assets_they_hash
 run_test winget_manifest_names_the_product_and_the_command
 run_test winget_manifests_refuse_a_missing_windows_binary

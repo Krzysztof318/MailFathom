@@ -97,10 +97,24 @@ mkdir --parents "$output_directory"
 artifact_path="$output_directory/mailfathom-schema-$artifact_version.sql"
 checksum_path="$artifact_path.sha256"
 
-cp "$published_script" "$artifact_path"
+# Copied without its byte-order mark, which is the one edit this makes to what the publish produced. EF Core writes the
+# script as UTF-8 with one, and psql does not skip it: the mark arrives as part of the first token, the apply stops on a
+# syntax error at the first CREATE, and nothing in that message names a character nobody can see. That command is what
+# docs/operations/database-schema.md gives an operator, so the mark makes the documented path from a downloaded release
+# to a schema fail on its first statement. Only the first line is touched, so the SQL itself is byte-identical.
+sed '1s/^\xef\xbb\xbf//' "$published_script" > "$artifact_path"
+
+# Asserted rather than trusted, because the failure it guards against is silent at this end and fatal at the operator's:
+# a build that ships a marked artifact again would look exactly like this one until somebody ran psql against it.
+if [[ "$(head --bytes=3 "$artifact_path" | od --address-radix=n --format=x1 | tr --delete ' ')" == 'efbbbf' ]]; then
+  printf 'The artifact still begins with a byte-order mark, which psql does not skip. Check that this\n' >&2
+  printf 'script strips it from %s.\n' "$published_script" >&2
+  exit 1
+fi
 
 # Written in sha256sum's own format and with the bare file name, so an operator verifies it from the directory the two
-# files were downloaded into: `sha256sum --check mailfathom-schema-<version>.sql.sha256`.
+# files were downloaded into: `sha256sum --check mailfathom-schema-<version>.sql.sha256`. It covers the file above, so
+# what an operator checksums is what they apply.
 (cd "$output_directory" && sha256sum "$(basename "$artifact_path")" > "$(basename "$checksum_path")")
 
 artifact_checksum="$(cut --delimiter=' ' --fields=1 < "$checksum_path")"
