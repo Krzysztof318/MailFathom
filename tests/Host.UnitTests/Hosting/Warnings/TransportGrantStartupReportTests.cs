@@ -191,9 +191,9 @@ public sealed class TransportGrantStartupReportTests
         Assert.Equal("McpEndpoint:Authentication:2", Assert.Contains("EntrySettingPath", record.Properties));
     }
 
-    /// <summary>The startup record is where an operator meets the posture first, so a line that stated a grant without saying nothing reads it would be the false answer the model exists to avoid.</summary>
+    /// <summary>The startup record is where an operator meets the posture first, so a line stating a grant without saying whether it bites is the false answer the report exists to avoid.</summary>
     [Fact]
-    public async Task StartAsync_AnyReportedEntry_SaysNothingConsultsAGrantYet()
+    public async Task StartAsync_AnEntryOnTheMailSurface_SaysTheGrantDecidesWhatIsServed()
     {
         // Arrange
         using var logs = new RecordingLoggerProvider();
@@ -207,7 +207,35 @@ public sealed class TransportGrantStartupReportTests
 
         // Assert
         var record = Assert.Single(logs.Records);
-        Assert.Contains("Nothing consults a grant yet", record.Message, StringComparison.Ordinal);
+        Assert.Contains(
+            "served only the tools its grant permits",
+            Assert.Contains("GrantEnforcement", record.Properties)?.ToString(),
+            StringComparison.Ordinal);
+    }
+
+    /// <summary>Saying the same of both surfaces would tell an operator narrowing an administrative entry that it bites, which it does not.</summary>
+    [Fact]
+    public async Task StartAsync_AnEntryOnTheAdministrativeSurface_SaysNoRouteConsultsAPermissionYet()
+    {
+        // Arrange
+        using var logs = new RecordingLoggerProvider();
+        var entry = AnApiKeyEntry();
+        entry.Permissions.Add(MailFathomPermission.AdminRead.Name);
+
+        var adminEndpoint = new AdminEndpointOptions { Enabled = true };
+        adminEndpoint.Authentication.Add(entry);
+
+        var report = ReportFor(new McpEndpointOptions { Enabled = false }, adminEndpoint, logs);
+
+        // Act
+        await report.StartAsync(TestContext.Current.CancellationToken);
+
+        // Assert
+        var record = Assert.Single(logs.Records);
+        Assert.Contains(
+            "No route here consults a permission yet",
+            Assert.Contains("GrantEnforcement", record.Properties)?.ToString(),
+            StringComparison.Ordinal);
     }
 
     /// <summary>The two surfaces draw from disjoint halves, so an operator has to be able to read back that they narrowed the one they meant.</summary>

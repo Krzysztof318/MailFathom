@@ -659,8 +659,14 @@ chosen what it holds:
 info: MailFathom.Host.Hosting.Warnings.TransportGrantStartupReport
       The MCP endpoint entry McpEndpoint:Authentication:0 writes down no grant, so every credential it admits holds
       mailfathom.mail.read, mailfathom.mail.ask — everything this surface publishes. Write a 'Permissions' list on the
-      entry to narrow it, or an empty one to grant nothing.
+      entry to narrow it, or an empty one to grant nothing. A caller here is served only the tools its grant permits,
+      and a call naming any other is answered as a tool that does not exist.
 ```
+
+Every line closes with what a grant on that surface does, so an operator reading back the one entry they edited learns
+whether the narrowing bites without reading the rest of the report. On this endpoint it does. The administrative
+endpoint's lines say instead that no route there consults a permission yet, which is what makes a narrowed entry there a
+statement of intent rather than a bound.
 
 An entry that narrowed its grant is reported as what it grants, an entry with `PermissionsFromTokenScopes` as what it
 grants *at most*, and an entry granted nothing as `nothing` rather than as a line that lost its argument. An endpoint
