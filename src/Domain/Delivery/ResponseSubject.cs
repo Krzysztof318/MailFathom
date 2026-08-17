@@ -17,10 +17,16 @@ namespace MailFathom.Domain.Delivery;
 /// </para>
 /// <para>
 /// So the comparison admits the prefixes actually in use rather than the one this system writes: <c>Aw</c> from German
-/// clients, <c>Sv</c> and <c>Svar</c> from Scandinavian ones, <c>Vs</c> and <c>Vl</c> from Finnish, <c>Odp</c> from
-/// Polish, <c>Res</c> from Portuguese, <c>Rif</c> from Italian, <c>Ynt</c> from Turkish, and the Chinese forms among
-/// them. What a missing entry costs is a doubled prefix rather than a broken thread, which is why the set is a
-/// judgement about what is common rather than an attempt at every locale that exists.
+/// clients, <c>Sv</c> and <c>Svar</c> from Scandinavian ones, <c>Vs</c> from Finnish, <c>Odp</c> from Polish,
+/// <c>Res</c> from Portuguese, <c>Rif</c> from Italian, <c>Ynt</c> from Turkish, and the Chinese forms among them. What
+/// a missing entry costs is a doubled prefix rather than a broken thread, which is why the set is a judgement about
+/// what is common rather than an attempt at every locale that exists.
+/// </para>
+/// <para>
+/// The two sets are read apart rather than merged, because a language's two markers mean opposite things: Finnish
+/// writes <c>Vs</c> for a reply and <c>Vl</c> for a forward, so a subject already carrying <c>Vl</c> is a forward
+/// somebody is now replying to and takes <c>Re:</c> like any other. Admitting one set's marker into the other would
+/// read that as already answered and send a reply whose subject says only that it was forwarded.
 /// </para>
 /// <para>
 /// The numbered form some clients write — <c>Re[2]:</c> — is recognized as a prefix as well, and is left exactly as it
@@ -77,7 +83,7 @@ public static partial class ResponseSubject
 
     /// <summary>Matches the reply prefixes clients in common use write.</summary>
     [GeneratedRegex(
-        @"^(?:re|aw|antw(?:ort)?|sv|svar|vs|vl|odp|res|ref|rif|ynt|回复|回覆|答复)[ \t]*(?:[\[(]\d{1,3}[\])])?[ \t]*:",
+        @"^(?:re|aw|antw(?:ort)?|sv|svar|vs|odp|res|ref|rif|ynt|回复|回覆|答复)[ \t]*(?:[\[(]\d{1,3}[\])])?[ \t]*:",
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex ReplyPrefix();
 

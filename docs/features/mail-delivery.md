@@ -243,15 +243,21 @@ back from `Sent` as a conversation of one in this deployment as well as in every
 A reply to all adds the original's `To` and `Cc` in the headers they were written in, less the address the account sends
 from — a deployment that answers a message it was copied on and mails itself has written a loop, and will then run its
 arrival rules over its own answer. That address is the whole of what configuration states an account owns, so a mailbox
-reached under a second address the `Delivery` block never names is not recognized as the account's own. One mailbox is offered once and in the more visible header, as it is for any
+reached under a second address the `Delivery` block never names is not recognized as the account's own. The exclusion
+reaches what a reply to all *adds* and nothing else: whoever asked for answers is who an answer goes to even when that
+is this account's own address, which is what a message somebody sent themselves and a shared mailbox two colleagues both
+send as both look like, and leaving it out would resolve the reply to nobody and refuse it. One mailbox is offered once and in the more visible header, as it is for any
 authored list. A forward addresses nobody of its own: the people it goes to are people the original never named, so its
 author names all of them. Which act it is, is explicit; there is no default that quietly becomes the other.
 
 **The subject takes the conventional prefix only where there is not one already.** `Re:` and `Fwd:` are what this system
 writes, and the comparison that decides whether to write one recognizes the prefixes actually in use — `Aw`, `Sv`,
-`Odp`, `Res`, `Rif`, `Ynt`, `Wg`, `Doorst` and the rest, in the numbered `Re[2]:` form as well. Recognizing only the
-English one produces the `Re: Re: Re:` a thread becomes unreadable as against every correspondent whose client is not in
-English. A prefix already there is left exactly as it was written rather than incremented.
+`Vs`, `Odp`, `Res`, `Rif` and `Ynt` for a reply, `Wg`, `Tr`, `Doorst` and `Vl` for a forward, in the numbered `Re[2]:`
+form as well. Recognizing only the English one produces the `Re: Re: Re:` a thread becomes unreadable as against every
+correspondent whose client is not in English. The two sets are read apart rather than merged, because a language's two
+markers mean opposite things: Finnish writes `Vs` for a reply and `Vl` for a forward, so a subject already carrying `Vl`
+is a forward somebody is now replying to and takes `Re:` like any other. A prefix already there is left exactly as it was
+written rather than incremented.
 
 **A forward carries the original's own files, out of the content store.** That is the whole reason it is worth beginning
 from a local copy: the alternative is a second fetch from the mail server, which a send has no business performing and

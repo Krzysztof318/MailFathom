@@ -49,6 +49,20 @@ public sealed class ResponseSubjectTests
         Assert.Equal(answeredSubject, subject);
     }
 
+    /// <summary>
+    /// A language's two markers mean opposite things, so a forward's is not a reply's. Finnish writes <c>Vl</c> for a
+    /// forward and <c>Vs</c> for a reply, and replying to a forwarded message takes the reply prefix like any other.
+    /// </summary>
+    [Fact]
+    public void ForReply_SubjectCarryingAForwardPrefix_TakesTheReplyPrefixAsWell()
+    {
+        // Act
+        var subject = ResponseSubject.ForReply("Vl: Kokousmuistio");
+
+        // Assert
+        Assert.Equal("Re: Vl: Kokousmuistio", subject);
+    }
+
     /// <summary>A forward's prefix is its own, and a reply's does not count as one.</summary>
     [Fact]
     public void ForForward_SubjectCarryingAReplyPrefix_TakesTheForwardPrefixAsWell()
@@ -67,6 +81,7 @@ public sealed class ResponseSubjectTests
     [InlineData("Wg: Quarterly report")]
     [InlineData("Doorst: Quarterly report")]
     [InlineData("Tr: Quarterly report")]
+    [InlineData("Vl: Kokousmuistio")]
     public void ForForward_SubjectAlreadyCarryingAPrefix_IsLeftAsItWasWritten(string forwardedSubject)
     {
         // Act

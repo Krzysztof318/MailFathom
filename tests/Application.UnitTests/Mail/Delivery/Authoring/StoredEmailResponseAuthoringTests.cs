@@ -139,6 +139,28 @@ public sealed class StoredEmailResponseAuthoringTests
         Assert.Empty(Addressed(response, OutgoingRecipientRole.Cc));
     }
 
+    /// <summary>
+    /// Whoever asked for answers is who an answer goes to, even where that is this account's own address — a message
+    /// somebody sent themselves and a shared mailbox two colleagues both send as both look like that. Leaving it out
+    /// would resolve the reply to nobody and refuse it, which is worse than the answer a mail client gives.
+    /// </summary>
+    [Fact]
+    public async Task AuthorAsync_ReplyToAMessageWrittenFromTheAccountsOwnAddress_StillAddressesIt()
+    {
+        // Arrange
+        var authoring = AuthoringOver(Rendering(participants:
+        [
+            Participant(EmailAddressRole.From, SendingAddress),
+            Participant(EmailAddressRole.To, "colleague@example.test"),
+        ]));
+
+        // Act
+        var response = await authoring.AuthorAsync(Request(), TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal([SendingAddress], Addressed(response, OutgoingRecipientRole.To));
+    }
+
     /// <summary>A forward goes to the people its author named and to nobody the original was between.</summary>
     [Fact]
     public async Task AuthorAsync_Forward_AddressesOnlyThePeopleItsAuthorNamed()
@@ -269,6 +291,38 @@ public sealed class StoredEmailResponseAuthoringTests
         Assert.NotNull(html);
         Assert.StartsWith("<p>Thank you.</p>", html, StringComparison.Ordinal);
         Assert.Contains("<blockquote><p>The report is attached.</p></blockquote>", html, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Each quoted representation is bounded on its own. A rendering spends the read's budget on the plain text before
+    /// it reaches the markup, so an answer that handed both the same number would quote an ordinary original in full as
+    /// text and leave the markup alternative whatever was left, which is next to nothing.
+    /// </summary>
+    [Fact]
+    public async Task AuthorAsync_ReplyWhoseAuthorWroteMarkup_LeavesTheMarkupQuotationItsWholeAllowance()
+    {
+        // Arrange
+        EmailContentRenderingBounds? asked = null;
+        var renderer = Substitute.For<IEmailContentRenderer>();
+        renderer
+            .RenderAsync(
+                Arg.Any<StoredEmailContent>(),
+                Arg.Do<EmailContentRenderingBounds>(bounds => asked = bounds),
+                Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(EmailContentRenderingResult.Rendered(Rendering(html: "<p>Attached.</p>"))));
+        var authoring = AuthoringOver(Rendering(), renderer: renderer);
+        var request = Request() with { HtmlBody = "<p>Thank you.</p>" };
+
+        // Act
+        await authoring.AuthorAsync(request, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.NotNull(asked);
+        Assert.True(asked.IncludeSanitizedHtml);
+        Assert.True(
+            asked.RemainingCharactersForRead - asked.MaxCharactersPerRepresentation
+                >= asked.MaxCharactersPerRepresentation,
+            "the markup pass keeps its whole allowance after the plain-text pass has spent all of its own");
     }
 
     /// <summary>An author who wrote plain text alone sends plain text alone, as they would for a message answering nothing.</summary>

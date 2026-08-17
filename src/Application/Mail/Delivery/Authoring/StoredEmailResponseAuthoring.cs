@@ -230,10 +230,19 @@ public sealed class StoredEmailResponseAuthoring
 
     /// <summary>States how much of the answered message may be quoted, which is what the composed body leaves room for.</summary>
     /// <remarks>
+    /// <para>
     /// The bound is computed before the message is rendered rather than applied to what came back, because the markup
     /// representation is bounded on its source and sanitized again: cutting it afterwards would hand back an element
     /// somebody else opened and this system closed nowhere. Reducing the allowance instead means the rendering returns
     /// history that already fits beneath what the author wrote.
+    /// </para>
+    /// <para>
+    /// Only the per-representation bound is set, and the read's budget is left unspent. That budget is the one a call
+    /// naming several emails divides between them, and a rendering spends it on the plain text before the markup — so
+    /// setting it to the same number as the bound beside it would leave the markup whatever an ordinary original's
+    /// plain text did not take, which is next to nothing. One answer reads one message, so there is no call to divide
+    /// anything between, and each representation is bounded on its own exactly as the two authored bodies are.
+    /// </para>
     /// </remarks>
     private EmailContentRenderingBounds QuotationBounds(AuthoredResponseRequest request)
     {
@@ -243,7 +252,7 @@ public sealed class StoredEmailResponseAuthoring
             0,
             this.bounds.MaxBodyCharacters - authoredCharacters - AnsweredEmailQuotation.QuotationOverheadReserve);
 
-        return new EmailContentRenderingBounds(request.HtmlBody is not null, allowance, allowance);
+        return new EmailContentRenderingBounds(request.HtmlBody is not null, allowance, int.MaxValue);
     }
 
     /// <summary>Refuses a forward whose files this deployment does not compose, before any octet of one is read.</summary>
