@@ -2,8 +2,9 @@
 
 <!-- describes: src/Mcp/** -->
 
-MailFathom publishes its read side as Model Context Protocol tools over the Streamable HTTP transport. This page records the
-conventions every tool follows, the contract of the tools that exist, and what a client reads when a call fails.
+MailFathom publishes Model Context Protocol tools over the Streamable HTTP transport: the mailbox read side, and the
+contact book, which is the one part of this surface a call can write to. This page records the conventions every tool
+follows, the contract of the tools that exist, and what a client reads when a call fails.
 
 The endpoint is disabled by default, and enabling it requires stating whether a client presents an API key or nothing at all.
 `docs/operations/mcp-endpoint.md` records that posture and how to enable the endpoint; this page describes the surface it
@@ -16,8 +17,9 @@ protocol arguments into the domain identities a use case is expressed in, and th
 onto the published contract. It holds no query, no persistence, and no mail-protocol code: `list_accounts` calls the
 `MailAccountDirectoryReader` use case and nothing else, `list_emails` calls the `MailboxTimelineReader` use case and
 nothing else, `get_email_content` calls the `EmailContentReader` use case and nothing else, `search_emails` calls the
-`MailboxSearchReader` use case and nothing else, and `ask_mail` calls the `MailboxQuestionReader` use case and nothing
-else.
+`MailboxSearchReader` use case and nothing else, `ask_mail` calls the `MailboxQuestionReader` use case and nothing else,
+`list_contacts` and `get_contact` call the `ContactBookReader` use case and nothing else, and `create_contact`,
+`update_contact`, and `delete_contact` call the `ContactBookWriter` use case and nothing else.
 
 It holds no AI code either, and cannot. The project references `Domain` and `Application` and no other MailFathom assembly,
 which `Mcp.UnitTests` asserts against the compiled reference list rather than against a convention — so no tool on this
@@ -42,12 +44,13 @@ configuration maps no folder reads as empty;
 [folders withheld from tools](mailbox-queries.md#folders-withheld-from-tools) states what a caller sees and why nothing
 says the folder exists.
 
-Three properties hold for every tool and are proven by test rather than asserted here:
+Four properties hold for every tool and are proven by test rather than asserted here:
 
-- A call reads the local mailbox copy only. Nothing in a tool request reaches a mail server, so a request cannot wait on
-  IMAP and cannot set the remote `\Seen` flag. `ask_mail` reaches a chat provider, which is a different thing and the
-  one exception to "a call reaches nothing outside this process": it still reads mail from the local copy alone and
-  still speaks to no mail server.
+- A call reaches no mail server. Nothing in a tool request speaks IMAP or SMTP, so a request cannot wait on a mailbox
+  and cannot set the remote `\Seen` flag, and the mailbox tools read the local copy only. `ask_mail` reaches a chat
+  provider, which is a different thing and the one exception to "a call reaches nothing outside this process": it still
+  reads mail from the local copy alone and still speaks to no mail server. The three contact writes change local state
+  and reach nothing outside the process at all.
 - No error and no log line carries a filter value, a mailbox address, a subject, body text, raw MIME, an exception type,
   a stack trace, or an internal identifier. What a boundary withholds is not lost: the detail is logged on the server,
   correlated by the trace the request already carries.
@@ -56,19 +59,20 @@ Three properties hold for every tool and are proven by test rather than asserted
   bounds of their own; `search_emails` returns bounded extracts of a body; `list_emails` returns summaries and no body
   text at all; and `ask_mail` returns prose written about mail plus the subjects of the emails it cites. Attachment
   content reaches exactly one property of one result, and no other tool publishes any.
-- Every tool bounds how much mail one call can draw out of a mailbox, in the count of items and in their volume alike:
+- Every tool bounds how much one call can draw out of the database, in the count of items and in their volume alike:
   `list_emails` pages at 100 summaries, `search_emails` windows at 50 ranked matches, `get_email_content` reads at
-  most 10 emails under a shared character budget and a shared attachment-byte budget, and `ask_mail` publishes by
+  most 10 emails under a shared character budget and a shared attachment-byte budget, `ask_mail` publishes by
   default at most 20 000 characters of
-  answer citing at most 20 emails, having read at most 20 000 characters of mail to write it. A caller can never raise
-  any of them, and the last set is the operator's to lower or raise in
+  answer citing at most 20 emails, having read at most 20 000 characters of mail to write it, and `list_contacts` pages
+  at 200 people. A caller can never raise any of them, and the `ask_mail` set is the operator's to lower or raise in
   [`MailAnswering`](../operations/configuration-reference.md#mailanswering).
 
-One property holds for four of the five and is stated where it stops. `list_accounts`, `list_emails`,
-`get_email_content`, and `search_emails` are within reach of every deployment, because local state is all they need.
-`ask_mail` needs two AI providers an operator configures separately, so it is advertised only while both are configured
-and working; the [`ask_mail`](#ask_mail) section records what decides that and what a call meets when it arrives anyway.
-Whether any of the five is offered to a particular caller is a second question, which the next section answers.
+One property holds for nine of the ten and is stated where it stops. `list_accounts`, `list_emails`,
+`get_email_content`, `search_emails`, and the five contact tools are within reach of every deployment, because local
+state is all they need. `ask_mail` needs two AI providers an operator configures separately, so it is advertised only
+while both are configured and working; the [`ask_mail`](#ask_mail) section records what decides that and what a call
+meets when it arrives anyway. Whether any of the ten is offered to a particular caller is a second question, which the
+next section answers.
 
 ## What a caller is offered
 
@@ -84,16 +88,23 @@ credential, the permission, or what a different caller would have been served.
 | `get_email_content` | `mailfathom.mail.read` |
 | `search_emails` | `mailfathom.mail.read` |
 | `ask_mail` | `mailfathom.mail.ask` |
+| `list_contacts` | `mailfathom.mail.contacts.read` |
+| `get_contact` | `mailfathom.mail.contacts.read` |
+| `create_contact` | `mailfathom.mail.contacts.write` |
+| `update_contact` | `mailfathom.mail.contacts.write` |
+| `delete_contact` | `mailfathom.mail.contacts.write` |
 
-Neither permission implies the other. `mailfathom.mail.ask` is not the weaker of the two — a cited answer returns mail
+No permission implies another. `mailfathom.mail.ask` is not the weaker of the mail pair — a cited answer returns mail
 content — and `mailfathom.mail.read` is not egress-free: where semantic retrieval is configured, `search_emails` places
 the caller's own query text with the embedding provider. What withholding `mailfathom.mail.ask` stops is mail content
-going to a *chat* provider on a caller's behalf. Which grant a credential holds is written on the entry that admits it,
-and [the MCP endpoint](../operations/mcp-endpoint.md#what-a-credential-may-do) is where that is configured; a deployment
-whose entries write no grant serves both permissions to every caller, which is what makes this invisible until an
-operator narrows something. An entry that writes no grant but sets `PermissionsFromTokenScopes` is the one exception:
-its whole surface is a ceiling rather than a grant, and each token holds only the permission names its own scopes carry
-— so a token whose client never received either is served an empty listing on an entry nobody narrowed.
+going to a *chat* provider on a caller's behalf. The contact pair splits the same way and along a sharper line: the
+reading half lets an agent resolve who somebody is, and the writing half lets it change the record and erase a person
+irreversibly, so a deployment that wants the first grants only the first. Which grant a credential holds is written on
+the entry that admits it, and [the MCP endpoint](../operations/mcp-endpoint.md#what-a-credential-may-do) is where that
+is configured; a deployment whose entries write no grant serves every permission to every caller, which is what makes
+this invisible until an operator narrows something. An entry that writes no grant but sets `PermissionsFromTokenScopes`
+is the one exception: its whole surface is a ceiling rather than a grant, and each token holds only the permission names
+its own scopes carry — so a token whose client received none is served an empty listing on an entry nobody narrowed.
 
 The protocol has no field on a tool descriptor for a required permission, and it expressly allows the returned tool set
 to vary by the authorization presented on the request — so the listing is where the decision is stated, and no extension
@@ -113,17 +124,33 @@ it calls anything:
 
 | Element | Convention |
 |---|---|
-| `name` | Snake case, as the MCP tool ecosystem spells tool names — `list_accounts`, `list_emails`, `get_email_content`, `search_emails`, `ask_mail` |
-| `title` | A human-readable label for display — `List accounts`, `List emails`, `Get email content`, `Search emails`, `Ask about mail` |
-| `description` | States what the tool reads, that it reads the local copy only, that it changes nothing, and what it bounds |
+| `name` | Snake case, as the MCP tool ecosystem spells tool names — `list_accounts`, `list_emails`, `get_email_content`, `search_emails`, `ask_mail`, `list_contacts`, `get_contact`, `create_contact`, `update_contact`, `delete_contact` |
+| `title` | A human-readable label for display — `List accounts`, `List emails`, `Get email content`, `Search emails`, `Ask about mail`, `List contacts`, `Get contact`, `Create contact`, `Update contact`, `Delete contact` |
+| `description` | States what the tool reads or changes, that it reaches no mail server, and what it bounds |
 | `inputSchema` | Every argument is a top-level property carrying its own description, unit, and absence meaning |
 | `outputSchema` | Generated from the result type, whose properties carry descriptions of their own |
-| `readOnlyHint` | `true` |
-| `destructiveHint` | `false` |
-| `idempotentHint` | `true` |
 | `openWorldHint` | `false` — every tool is confined to MailFathom-controlled local state |
 
-The four annotations are contract metadata rather than documentation, so `Mcp.UnitTests` asserts the advertised
+The remaining three annotations are what a client reads before it decides whether a call needs a human, so they differ
+per tool rather than per surface:
+
+| Tool | `readOnlyHint` | `destructiveHint` | `idempotentHint` |
+|---|---|---|---|
+| `list_accounts`, `list_emails`, `get_email_content`, `search_emails`, `ask_mail` | `true` | `false` | `true` |
+| `list_contacts`, `get_contact` | `true` | `false` | `true` |
+| `create_contact` | `false` | `false` | `false` |
+| `update_contact` | `false` | `false` | `true` |
+| `delete_contact` | `false` | `true` | `true` |
+
+Each of those three values is a fact about the tool rather than a posture. `create_contact` is not idempotent because
+the book mints the identity: calling it twice with one person records them once and then answers
+`addressHeldByAnotherContact`. `update_contact` is idempotent because an amendment states the whole record, so the
+second identical call writes what the first one already wrote. `delete_contact` is idempotent for the same reason and
+destructive all the same: erasing somebody twice leaves the state the caller asked for, and the first call removed a
+record nothing here can bring back. Nothing on this surface is `openWorld`, contact writes included, because a write
+here reaches MailFathom's own database and no third party.
+
+The annotations are contract metadata rather than documentation, so `Mcp.UnitTests` asserts the advertised
 `tools/list` output: the name, the title, the description, every input property, the descriptions on them, the output
 schema, and each annotation. A descriptor that drifts fails the build.
 
@@ -171,8 +198,12 @@ configured name for an account and carries nothing the caller did not already wr
 | `51006` | A content read named the same email more than once | A `storedEmailIds` list carrying one identifier twice, in any spelling, refused rather than served twice or collapsed |
 | `51007` | A content read named both ways of selecting what to read, or neither | A call carrying `storedEmailIds` and `threadId` together, or omitting both, refused rather than resolved by precedence |
 | `51008` | The call named a conversation with text that is no identifier this system issues | A `threadId` that is blank, not a UUID, or the all-zero UUID, refused before anything is looked up |
+| `51009` | A contact listing carries a page size, an origin, or a search the book does not serve | A `pageSize` of 0 or above 200, refused rather than clamped; an `origin` that is neither published name; a `search` over 320 characters or carrying a character that renders as nothing |
+| `51010` | The call named a contact with text that is no identifier and no usable address | A `contactId` that is blank, not a UUID, or the all-zero UUID; an `address` that is no address; or a `get_contact` call naming both or neither |
+| `51011` | A contact record breaks a rule the book holds | No name or one over 256 characters, no address or more than 32, an address that is not one, a preferred address the record does not name, or a note over 4000 characters — the message names the rule and never the value |
 | `52001` | A continuation cursor is not one this system issued | A truncated, hand-written, or foreign cursor |
 | `52002` | A continuation cursor was issued for different filters | A cursor reused after a filter or the reading direction changed |
+| `52003` | A contact listing's cursor is not one this system issued | A truncated, hand-written, or foreign `cursor`; a contact cursor is not bound to the filters, so changing `search` or `origin` mid-walk is not what produces it |
 | `53001` | The call named a mail account this deployment does not serve | An account identifier nobody configured, or one belonging to someone else — the two are deliberately one answer |
 | `53002` | The call named an email the local mailbox copy holds no row for | An email never synchronized, one expunged and collected, or one of an account this deployment stopped serving — deliberately one answer |
 | `53003` | The call named a folder by a role no folder in scope is mapped with | A `folders` element written `role:Junk` on a deployment whose accounts map no junk folder; naming the alias, or mapping the role, is what answers it |
@@ -181,7 +212,8 @@ configured name for an account and carries nothing the caller did not already wr
 | `56001` | This deployment cannot answer questions about mail, either at all or for now | `ask_mail` called on a server that declared no chat endpoint or embeds no mail, or one whose chat provider is currently refusing; the message says which |
 | `57001` | Answering would cost more than this deployment allows | `ask_mail` on a server whose current period has spent its allowance, or a run that reached what one question may spend; the message says which, and only the first becomes answerable by waiting |
 
-Codes `51001` through `53003`, `55001`, `56001`, and `57001` are the use cases' own, allocated in the MCP-boundary category because that is
+Codes `51001` through `53003`, `55001`, `56001`, and `57001` are the use cases' own, allocated in the MCP-boundary
+category because that is
 where they surface, and every one of them is written for a caller to read. That is the whole rule the boundary applies: a
 failure whose code belongs to that category is published as it stands, and a failure from any other category — a schema
 mismatch, an IMAP authentication refusal, a concurrency conflict — describes MailFathom's internals to whoever asked and
@@ -901,10 +933,193 @@ a call arrives anyway: a caller whose grant does not permit `ask_mail` is answer
 one whose grant permits it on a deployment that cannot answer reaches the use case and is refused with `56001`, whose
 message says whether this deployment answers no questions at all or answers them and currently cannot.
 
+## The contact book on this surface
+
+Five tools reach MailFathom's own contact book: `list_contacts` and `get_contact` read it, and `create_contact`,
+`update_contact`, and `delete_contact` write it. [Contacts](contacts.md) is the record and every rule a writer of it
+obeys — what identifies a person, when two addresses are the same address, who may amend what, and what an erasure
+removes. Nothing of that is restated here; what this section holds is what the tools publish and refuse.
+
+The book is why an agent can answer "who is this from" without being handed a list in a prompt, and the reason the write
+half exists rather than only the read half is that a book nobody can add to is one that stays empty. A caller writes as
+**asserted** — somebody writing a person down — so a record this deployment collected from arriving mail is not an
+agent's to amend in place.
+
+**Everything these tools return is personal data about third parties**, and a note is free text somebody typed about
+somebody else. A client passes a name, an address, and a note into a model as data, exactly as it does message content.
+Nothing on this surface logs any of it, records it as a metric dimension, or writes it into a failure message: what a
+contact failure names is the rule that refused it, and the identity, which is MailFathom's own and not the person's.
+
+### Two permissions divide the book
+
+`mailfathom.mail.contacts.read` and `mailfathom.mail.contacts.write` are held the way every other permission is, and
+[§ What a caller is offered](#what-a-caller-is-offered) is what a caller not holding one meets — the tool absent from
+`tools/list`, and a call to it answered as a call naming a tool that does not exist. What is worth reading twice is how
+this book divides: a read-only credential sees `list_contacts` and `get_contact` and no write tool, and one granted
+neither sees no contact tool at all, which is also what a deployment looks like to a credential narrowed to
+`mailfathom.mail.read`. The mailbox tools are unaffected either way; a grant over the book is not a grant over mail, and
+neither is a grant over mail a grant over the book.
+
+Both are on the mail surface, so a credential granted that surface without narrowing holds them already — including an
+entry written before this release, which gains them on upgrade because an absent `Permissions` key means the surface
+rather than the names published the day the file was written.
+
+Each contact use case asks for the same permission itself, so an entrypoint arriving another way is refused there too —
+as `54001`, since a use case does not know what a protocol calls an unknown tool.
+
+## `list_contacts`
+
+Returns a bounded page of the contact book, ordered by name, with the addresses each person uses.
+
+It is the tool for reading the book as a book — who is in it, what this deployment picked up, who matches a fragment of
+a name. Resolving one address to the person using it is `get_contact`, which is an index lookup rather than a page of
+the book.
+
+### Arguments
+
+| Argument | Meaning |
+|---|---|
+| `search` | Text a contact must carry in its name or in one of its addresses, matched anywhere in the value and without regard to case, at most 320 characters. A wildcard character matches itself. Omitted, or empty, lists the whole book |
+| `origin` | `asserted` or `collected`, narrowing the page to one half of the book. Omitted lists both |
+| `pageSize` | From 1 to 200. Omitted takes the default of 50 |
+| `cursor` | The `nextCursor` of a previous call |
+
+There is no mode that returns the whole book in one call. A page size outside the range is refused rather than clamped,
+which is the same rule every listing on this surface follows.
+
+### Result
+
+| Field | Meaning |
+|---|---|
+| `contacts` | The page, ordered by the name's comparison form and then by identity, each entry carrying `contactId`, `displayName`, `addresses`, `preferredAddress`, `note`, `origin`, `recordedAt`, and `amendedAt` |
+| `nextCursor` | The cursor of the following page, or absent when the walk is done |
+
+**A contact cursor is not bound to the filters.** The book is walked in one order whatever narrows it, so continuing a
+walk after changing `search` or `origin` is defined rather than refused — unlike a mailbox cursor, which carries the
+filters it was issued for because the ordering it continues is the filtered one. A cursor this deployment did not issue
+is `52003`.
+
+**The addresses are the ones somebody wrote**, preferred first and the rest in comparison order. What is matched is the
+comparison form; what is published is the spelling the record holds.
+
+## `get_contact`
+
+Returns one person, named either by the identifier the book gave them or by any address they use.
+
+The address form is the question the book exists to answer: a message names an address, and the caller wants the person.
+It is served from the unique index over addresses rather than from a search, so at most one contact can answer.
+
+### Arguments
+
+| Argument | Meaning |
+|---|---|
+| `contactId` | The identifier a listing or a write returned |
+| `address` | Any address the person uses, written as the address alone and matched without regard to case |
+
+**Exactly one of the two is named.** Naming neither asks nothing, and naming both can name two different people, leaving
+a caller unable to tell which of its questions was answered; either is `51010`.
+
+The address is the addr-spec alone: `anna@example.test` rather than `Anna Kowalska <anna@example.test>`. A header copied
+whole is refused rather than read leniently, because the write tools read the addresses of a record against the same
+domain rule, and one form across the five tools is what a caller learns once.
+
+### Result
+
+`contact` carries the person, in the shape `list_contacts` publishes, or is absent when the book holds nobody of that
+identity or address. Somebody this deployment has no record of is an answer rather than a failure — the same reading
+every "not found" on this surface takes when the question was well formed.
+
+## `create_contact`
+
+Records a person the book does not yet hold, and returns the record as written.
+
+### Arguments
+
+| Argument | Meaning |
+|---|---|
+| `displayName` | The name to record, at most 256 characters |
+| `addresses` | Every address this person uses, at least one and at most 32, each at most 320 characters |
+| `preferredAddress` | Which of them to use by default. Must be one of `addresses` |
+| `note` | What to record about this person, at most 4000 characters, or omitted for none |
+
+Nothing picks a preferred address for the caller, including where the record names a single address: which address is
+preferred is the owner's choice rather than an ordering accident, and a record naming one the contact does not hold is
+`51011`.
+
+### Result
+
+| Field | Meaning |
+|---|---|
+| `state` | `written`, or `addressHeldByAnotherContact` |
+| `contact` | The record as the book now holds it, present only on `written` |
+| `addressHolderContactId` | The identity of one contact already holding an address this write claimed, present only on that state |
+
+**A refusal publishes an identity and never a record.** Reading the book and writing to it are separate grants, so a
+caller holding only the writing one must not learn what this deployment holds about somebody by being refused. The
+answer names a contact; reading that contact is a `get_contact` call, which the caller makes only if it holds the
+reading grant.
+
+## `update_contact`
+
+Amends one contact to the record the caller states, and returns the record as amended.
+
+An amendment is the whole record rather than the difference from the one held — the name, every address, which one is
+preferred, and the note. An address the new record does not name is removed, and an omitted note clears the one held, so
+a caller reads the contact first and sends it back with the change rather than sending only what moved.
+
+### Arguments
+
+`contactId`, and then the same four the record is stated with: `displayName`, `addresses`, `preferredAddress`, and
+`note`.
+
+### Result
+
+The same shape `create_contact` answers with, and two more states it can carry:
+
+| State | What it means |
+|---|---|
+| `written` | The book holds the record, published in `contact` |
+| `notFound` | No contact of that identifier is in the book |
+| `addressHeldByAnotherContact` | One of the addresses belongs to somebody else, named by `addressHolderContactId` |
+| `contactWasCollected` | The record came from mail that arrived rather than from somebody writing it down |
+
+`contactWasCollected` is the origin rule rather than a failure: only the deployment's operator takes such a record on,
+through `mfctl contact promote`, and it is amendable afterwards.
+
+## `delete_contact`
+
+Erases one person from the book and removes every address recorded with them.
+
+It is the only destructive tool on this surface and the annotation says so. The record is deleted rather than marked,
+and nothing here brings it back. It removes the contact record alone: no mail is deleted, and no mail server is
+contacted.
+
+### Arguments
+
+`contactId`, and nothing else. A caller that needs to be sure who it is erasing reads them with `get_contact` first,
+because the answer afterwards carries no name, address, or note.
+
+### Result
+
+| Field | Meaning |
+|---|---|
+| `contactId` | The identity the erasure was asked for, echoed back |
+| `wasHeld` | Whether the book held that contact when the erasure ran |
+| `addressesErased` | How many of the person's addresses went with them |
+
+The counts are the point rather than a courtesy: erasure is a data-subject obligation, so whoever asked for one is
+entitled to an answer saying what was removed. Erasing somebody the book does not hold is a completed erasure with
+`wasHeld` false, not a failure — the state the caller asked for is the state the book is in, and reporting it as an
+error would only say whether somebody had already erased that person.
+
 ## Pending
 
-The five read-only tools of this release are complete. `list_accounts` publishes the accounts a caller may name,
+The five mailbox tools are complete. `list_accounts` publishes the accounts a caller may name,
 `list_emails`, `get_email_content`, and `search_emails` read the PostgreSQL read models, the lexical index, and the
 content store that landed with their use cases, and `ask_mail` answers over the retrieval and the agent composition
-above them, under the ceilings an operator sets on what one question and one period may spend. What is still pending on this surface is the run trace an operator reads afterwards,
-its own change, and any tool that writes: SMTP delivery is deliberately absent from the first public tool set.
+above them, under the ceilings an operator sets on what one question and one period may spend. The five contact tools
+are complete as well, and are the whole of what this surface writes.
+
+What is still pending is the run trace an operator reads after a question, its own change, and any tool that sends mail:
+SMTP delivery is deliberately absent from this tool set, and a contact write is not a step towards it — it changes a
+row in MailFathom's own database and reaches nothing outside the process.

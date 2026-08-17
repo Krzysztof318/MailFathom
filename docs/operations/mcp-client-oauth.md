@@ -127,7 +127,8 @@ mapper.
 [step 7](#7-write-the-mailfathom-entry) sets `PermissionsFromTokenScopes`, which is what lets your authorization server
 decide per subject what an admitted caller may do rather than the deployment granting every token the same thing. Create
 one further client scope per permission you intend a token to bring, named exactly as MailFathom publishes it —
-`mailfathom.mail.read`, `mailfathom.mail.ask`, or on the administrative endpoint one of the `mailfathom.admin.*` names
+`mailfathom.mail.read`, `mailfathom.mail.ask`, `mailfathom.mail.contacts.read`, `mailfathom.mail.contacts.write`, or on
+the administrative endpoint one of the `mailfathom.admin.*` names
 [the reference](configuration-reference.md#what-a-credential-may-do--permissions) lists. The spelling is compared byte
 for byte, so a differently cased or padded name is a different scope and grants nothing. Leave **Include in token scope**
 on, as above, and assign each to the client in [step 4](#4-register-an-application-for-the-client) — a scope the client
@@ -288,7 +289,9 @@ The entry writes down no grant, so every token it admits reaches everything the 
 add `Permissions` beside `OAuth` — and add `"PermissionsFromTokenScopes": true` as well where the scopes you created in
 step 2 should narrow the list per subject. On this surface that is a bound rather than a statement, for the reason
 [step 2](#2-register-mailfathom-as-a-resource-in-the-provider) gives: a token admitted without a `mailfathom.mail.*`
-permission is listed fewer tools and is answered about the rest as though they did not exist.
+permission is listed fewer tools and is answered about the rest as though they did not exist. The example below
+therefore withholds all five contact tools from every token this entry admits — write the contact permissions in beside
+`mailfathom.mail.read` where they should reach the book.
 
 ```json
 {

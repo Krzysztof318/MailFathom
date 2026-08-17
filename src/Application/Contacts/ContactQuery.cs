@@ -25,9 +25,10 @@ public sealed record ContactQuery
     /// </remarks>
     public const int MaximumPageSize = 200;
 
-    private ContactQuery(ContactOrigin? origin, int pageSize, ContactCursor? cursor)
+    private ContactQuery(ContactOrigin? origin, ContactSearch? search, int pageSize, ContactCursor? cursor)
     {
         this.Origin = origin;
+        this.Search = search;
         this.PageSize = pageSize;
         this.Cursor = cursor;
     }
@@ -39,6 +40,14 @@ public sealed record ContactQuery
     /// </remarks>
     public ContactOrigin? Origin { get; }
 
+    /// <summary>Gets the text a contact must carry in its name or in one of its addresses, or <see langword="null" /> for no narrowing.</summary>
+    /// <remarks>
+    /// A contained match rather than a prefix or an exact one, because the question a caller asks the book is "who is
+    /// this", written with whatever part of a name or an address they have. It narrows the page and never reorders it:
+    /// the walk stays in the order the whole book is in, so a cursor cut under one search still names a valid boundary.
+    /// </remarks>
+    public ContactSearch? Search { get; }
+
     /// <summary>Gets how many contacts the page holds at most.</summary>
     public int PageSize { get; }
 
@@ -47,11 +56,16 @@ public sealed record ContactQuery
 
     /// <summary>Builds a validated query from what a caller asked for.</summary>
     /// <param name="origin">The origin to narrow to, or <see langword="null" /> for the whole book.</param>
+    /// <param name="search">The text a contact must carry in its name or in one of its addresses, or <see langword="null" /> for no narrowing.</param>
     /// <param name="pageSize">How many contacts the page may hold, or <see langword="null" /> for <see cref="DefaultPageSize" />.</param>
     /// <param name="cursor">The boundary a continued walk reads beyond, or <see langword="null" /> for the first page.</param>
     /// <returns>The query the store reads under.</returns>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="pageSize" /> is below one or above <see cref="MaximumPageSize" />, or when <paramref name="origin" /> names no declared value.</exception>
-    public static ContactQuery Create(ContactOrigin? origin, int? pageSize, ContactCursor? cursor)
+    public static ContactQuery Create(
+        ContactOrigin? origin,
+        ContactSearch? search,
+        int? pageSize,
+        ContactCursor? cursor)
     {
         var resolvedPageSize = pageSize ?? DefaultPageSize;
 
@@ -63,6 +77,6 @@ public sealed record ContactQuery
             throw new ArgumentOutOfRangeException(nameof(origin), "A contact origin must name a declared value.");
         }
 
-        return new ContactQuery(origin, resolvedPageSize, cursor);
+        return new ContactQuery(origin, search, resolvedPageSize, cursor);
     }
 }

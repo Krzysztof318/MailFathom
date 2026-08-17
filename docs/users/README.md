@@ -8,9 +8,11 @@ repository root and [`docs/`](https://github.com/Krzysztof318/MailFathom/blob/ma
 ## What MailFathom is
 
 MailFathom is a self-hosted service that synchronizes mail from your IMAP accounts into a local PostgreSQL copy,
-indexes it for search, and serves it to AI agents as read-only tools over the
+indexes it for search, and serves it to AI agents as tools over the
 [Model Context Protocol](https://modelcontextprotocol.io/). An agent connected to it can list, read, and search your
-mail; it cannot send, delete, move, or mark anything, because no such tool exists on the surface.
+mail; it cannot send, delete, move, or mark any of it, because no tool on the surface writes to a mailbox. What it can
+write is MailFathom's own contact book — the people you or your deployment wrote down — which five tools read and
+maintain, one of them by erasing a record for good.
 
 Two properties hold everywhere and are worth knowing before anything is installed:
 
@@ -38,8 +40,8 @@ says so and names the release, rather than describing it as though you could alr
    popular mail service publishes, and what each one does differently once synchronization runs.
 4. **[Connecting the chat client you already use](mcp-clients.md)** — where the dialog is in each popular client, which
    address kind it needs, and which of them cannot present an API key at all.
-5. **[Using the tools](usage.md)** — what `list_emails`, `search_emails`, `get_email_content`, and `ask_mail` do, what
-   they deliberately bound, and how to read a failure.
+5. **[Using the tools](usage.md)** — what `list_emails`, `search_emails`, `get_email_content`, `ask_mail`, and the five
+   contact tools do, what they deliberately bound, and how to read a failure.
 6. **[Administering your deployment](administering.md)** — the `mfctl` command: what it is for, signing in to a
    deployment from your own machine, and what it cannot do yet.
 7. **[Configuration reference](../operations/configuration-reference.md)** — every user-settable option in one place,

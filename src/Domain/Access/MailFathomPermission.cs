@@ -61,6 +61,22 @@ public readonly record struct MailFathomPermission
     /// <remarks>It does not imply <see cref="MailRead" /> and is not the weaker of the two: a cited answer returns mail content, so granting it is granting access to mail.</remarks>
     public static MailFathomPermission MailAsk { get; } = new("mailfathom.mail.ask", ProtectedSurface.Mail);
 
+    /// <summary>Gets the permission covering the tools that read the contact book.</summary>
+    /// <remarks>
+    /// The book is an assembled record about identified third parties rather than mail that arrived, which is why it is
+    /// granted apart from <see cref="MailRead" /> instead of travelling with it: a deployment may want an agent able to
+    /// name the people it reads about without that following from the grant that lets it read the mailbox.
+    /// </remarks>
+    public static MailFathomPermission MailContactsRead { get; } = new("mailfathom.mail.contacts.read", ProtectedSurface.Mail);
+
+    /// <summary>Gets the permission covering the tools that record, amend, and erase a contact.</summary>
+    /// <remarks>
+    /// It does not imply <see cref="MailContactsRead" />, as no permission implies another. It is the grant that lets a
+    /// caller change what this deployment holds about a person, erasure included, so a deployment that wants the book
+    /// looked up and not edited writes the reading half alone.
+    /// </remarks>
+    public static MailFathomPermission MailContactsWrite { get; } = new("mailfathom.mail.contacts.write", ProtectedSurface.Mail);
+
     #endregion
 
     #region Administration
@@ -91,6 +107,8 @@ public readonly record struct MailFathomPermission
     [
         MailRead,
         MailAsk,
+        MailContactsRead,
+        MailContactsWrite,
         AdminRead,
         AdminAuditRead,
         AdminOperate,

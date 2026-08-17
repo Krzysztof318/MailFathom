@@ -303,11 +303,43 @@ public readonly record struct MailFathomErrorCode
     /// </remarks>
     public static MailFathomErrorCode EmailThreadIdentifierMalformed { get; } = new(51008);
 
+    /// <summary>Gets subcategory 1, request validation: a contact listing named a page size, an origin, or a search text the book does not serve.</summary>
+    /// <remarks>
+    /// One code for the three because they are one finding about the request the caller composed, and the message names
+    /// which of them it was. They are separate from the mailbox codes beside them because the contact book is a
+    /// different collection with bounds of its own: reporting a contact page size through
+    /// <see cref="MailboxQueryPageSizeOutOfRange" /> would tell a caller a limit that belongs to another query.
+    /// </remarks>
+    public static MailFathomErrorCode ContactQueryInvalid { get; } = new(51009);
+
+    /// <summary>Gets subcategory 1, request validation: a request named a contact by text that is not an identifier this system issues.</summary>
+    /// <remarks>
+    /// It is separate from an answer reporting that the book holds nobody, for the reason
+    /// <see cref="StoredEmailIdentifierMalformed" /> is separate from <see cref="StoredEmailNotFound" />: this one says
+    /// the request never named a contact at all, which no repeated read will change.
+    /// </remarks>
+    public static MailFathomErrorCode ContactIdentifierMalformed { get; } = new(51010);
+
+    /// <summary>Gets subcategory 1, request validation: a contact record a write states breaks a rule the book holds.</summary>
+    /// <remarks>
+    /// The message names the rule — a name, an address, a count, a preferred address, or a note — and never the value,
+    /// because every value a contact record carries is personal data about a third party.
+    /// </remarks>
+    public static MailFathomErrorCode ContactRecordInvalid { get; } = new(51011);
+
     /// <summary>Gets subcategory 2, pagination: a continuation cursor is not one this system issued.</summary>
     public static MailFathomErrorCode MailboxQueryCursorMalformed { get; } = new(52001);
 
     /// <summary>Gets subcategory 2, pagination: a continuation cursor was issued for a different set of filters than the request carries.</summary>
     public static MailFathomErrorCode MailboxQueryCursorFilterMismatch { get; } = new(52002);
+
+    /// <summary>Gets subcategory 2, pagination: a contact continuation cursor is not one this system issued.</summary>
+    /// <remarks>
+    /// There is no contact counterpart to <see cref="MailboxQueryCursorFilterMismatch" />, because a contact cursor is
+    /// bound to no filter: the book is walked in one total order whatever narrows the page, so a cursor cut under one
+    /// search names a valid boundary under another.
+    /// </remarks>
+    public static MailFathomErrorCode ContactCursorMalformed { get; } = new(52003);
 
     /// <summary>Gets subcategory 3, access: a request named a mail account this deployment does not serve.</summary>
     public static MailFathomErrorCode MailAccountNotAccessible { get; } = new(53001);
@@ -492,8 +524,12 @@ public readonly record struct MailFathomErrorCode
         EmailContentReadDuplicateEmail,
         EmailContentReadSelectionInvalid,
         EmailThreadIdentifierMalformed,
+        ContactQueryInvalid,
+        ContactIdentifierMalformed,
+        ContactRecordInvalid,
         MailboxQueryCursorMalformed,
         MailboxQueryCursorFilterMismatch,
+        ContactCursorMalformed,
         MailAccountNotAccessible,
         StoredEmailNotFound,
         MailFolderRoleUnmapped,

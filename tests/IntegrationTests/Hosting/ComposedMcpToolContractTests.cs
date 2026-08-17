@@ -3,8 +3,6 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.Net;
-using System.Net.Http.Headers;
-using System.Net.Http.Json;
 using System.Text.Json;
 using MailFathom.AppHost;
 using MailFathom.Application.Persistence;
@@ -78,7 +76,7 @@ public sealed class ComposedMcpToolContractTests(MailFathomOrchestrationFixture 
         // Assert
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
 
-        using var message = JsonDocument.Parse(JsonRpcMessage(body));
+        using var message = JsonDocument.Parse(McpToolCall.MessageIn(body));
         var result = message.RootElement.GetProperty("result");
 
         // A protocol-level error is reported inside a successful result rather than as a status code, so a call that
@@ -141,57 +139,18 @@ public sealed class ComposedMcpToolContractTests(MailFathomOrchestrationFixture 
         Assert.Equal(PersistenceCommitResult.Committed, commitResult);
     }
 
-    /// <summary>Builds the JSON-RPC call a client makes, carrying the credential and the origin this host serves.</summary>
+    /// <summary>Builds the JSON-RPC call a client makes.</summary>
     /// <remarks>
     /// The folder is named in the arguments so the window holds this class's own message whatever else the suite left in
     /// the database, and naming it is itself part of what the call proves: an alias arriving as a wire argument has to
     /// reach the query as the scope it narrows.
     /// </remarks>
-    private static HttpRequestMessage SearchEmailsCall()
-    {
-        var request = new HttpRequestMessage(HttpMethod.Post, new Uri("/mcp", UriKind.Relative))
+    private static HttpRequestMessage SearchEmailsCall() => McpToolCall.Of(
+        ToolName,
+        new
         {
-            Content = JsonContent.Create(new
-            {
-                jsonrpc = "2.0",
-                id = 1,
-                method = "tools/call",
-                @params = new
-                {
-                    name = ToolName,
-                    arguments = new
-                    {
-                        queryText = QueryTerm,
-                        accounts = new[] { OrchestrationContract.ServedMailAccountDisplayName },
-                        folderAliases = new[] { FolderAlias },
-                    },
-                },
-            }),
-        };
-
-        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", OrchestrationContract.McpApiKey);
-        request.Headers.Add("Origin", OrchestrationContract.McpPermittedOrigin);
-        request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
-        request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("text/event-stream"));
-
-        return request;
-    }
-
-    /// <summary>Reads the JSON-RPC message out of a body the transport may have framed as an event stream.</summary>
-    /// <remarks>
-    /// Which of its two content types the Streamable HTTP transport replies with is the transport's decision rather than
-    /// this test's, so both are read. An event stream carries the message on a <c>data:</c> line; a JSON body is the
-    /// message.
-    /// </remarks>
-    private static string JsonRpcMessage(string body)
-    {
-        const string EventStreamDataPrefix = "data:";
-
-        var dataLine = body
-            .Split('\n')
-            .Select(line => line.TrimEnd('\r'))
-            .FirstOrDefault(line => line.StartsWith(EventStreamDataPrefix, StringComparison.Ordinal));
-
-        return dataLine is null ? body : dataLine[EventStreamDataPrefix.Length..].Trim();
-    }
+            queryText = QueryTerm,
+            accounts = new[] { OrchestrationContract.ServedMailAccountDisplayName },
+            folderAliases = new[] { FolderAlias },
+        });
 }

@@ -15,7 +15,7 @@ public sealed class ContactQueryTests
     public void Create_NoPageSizeAndNoFilter_ReadsTheFirstPageOfTheWholeBook()
     {
         // Act
-        var query = ContactQuery.Create(origin: null, pageSize: null, cursor: null);
+        var query = ContactQuery.Create(origin: null, search: null, pageSize: null, cursor: null);
 
         // Assert
         Assert.Equal(ContactQuery.DefaultPageSize, query.PageSize);
@@ -31,7 +31,7 @@ public sealed class ContactQueryTests
     public void Create_APageSizeOutsideTheBound_IsRefused(int pageSize)
     {
         // Act, Assert
-        Assert.Throws<ArgumentOutOfRangeException>(() => ContactQuery.Create(origin: null, pageSize, cursor: null));
+        Assert.Throws<ArgumentOutOfRangeException>(() => ContactQuery.Create(origin: null, search: null, pageSize, cursor: null));
     }
 
     /// <summary>The greatest page a caller may ask for is served rather than reduced.</summary>
@@ -39,7 +39,7 @@ public sealed class ContactQueryTests
     public void Create_ThePageSizeAtTheBound_IsAccepted()
     {
         // Act
-        var query = ContactQuery.Create(origin: null, ContactQuery.MaximumPageSize, cursor: null);
+        var query = ContactQuery.Create(origin: null, search: null, ContactQuery.MaximumPageSize, cursor: null);
 
         // Assert
         Assert.Equal(ContactQuery.MaximumPageSize, query.PageSize);
@@ -51,7 +51,7 @@ public sealed class ContactQueryTests
     {
         // Act, Assert
         Assert.Throws<ArgumentOutOfRangeException>(
-            () => ContactQuery.Create((ContactOrigin)42, pageSize: null, cursor: null));
+            () => ContactQuery.Create((ContactOrigin)42, search: null, pageSize: null, cursor: null));
     }
 
     /// <summary>A cursor names the boundary in the order the walk is taken on, and is carried through unchanged.</summary>
@@ -64,7 +64,7 @@ public sealed class ContactQueryTests
             ContactId.Create(Guid.CreateVersion7(new DateTimeOffset(2026, 3, 1, 9, 0, 0, TimeSpan.Zero))));
 
         // Act
-        var query = ContactQuery.Create(ContactOrigin.Collected, pageSize: 10, cursor);
+        var query = ContactQuery.Create(ContactOrigin.Collected, search: null, pageSize: 10, cursor);
 
         // Assert
         Assert.Equal(ContactOrigin.Collected, query.Origin);

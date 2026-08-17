@@ -253,8 +253,9 @@ announced with a startup warning, because an unauthenticated endpoint serves you
 origins, serving your own domain over TLS, client certificates, and the rate limits that apply out of the box.
 
 **A credential reaches the whole surface until its entry narrows it.** The entry above writes no `Permissions` list, so
-the key it configures may do everything the MCP surface publishes — read the local mailbox copy and ask questions of it.
-That is deliberate: nothing has to be granted before a first deployment works. Writing a `Permissions` list on the entry
+the key it configures may do everything the MCP surface publishes — read the local mailbox copy, ask questions of it, and
+read, record, amend, and erase the deployment's own contact book. That is deliberate: nothing has to be granted before a
+first deployment works. Writing a `Permissions` list on the entry
 states a narrower grant, and startup reports what every entry resolved to either way —
 [what a credential may do](../operations/mcp-endpoint.md#what-a-credential-may-do) has the names and the rules.
 
@@ -285,8 +286,10 @@ only the setup steps;
 shapes for each one by name.
 
 A connected client's tool listing should show at least four tools — `list_accounts`, `list_emails`,
-`get_email_content`, `search_emails` — each advertising itself as read-only, non-destructive, and idempotent. A fifth,
-`ask_mail`, appears only once you have configured a chat model and an embedding model and both are working; until then
+`get_email_content`, `search_emails` — each advertising itself as read-only, non-destructive, and idempotent, and beside
+them the five contact tools over the deployment's own contact book, of which three change state and
+`delete_contact` announces itself as destructive. `ask_mail`
+appears only once you have configured a chat model and an embedding model and both are working; until then
 its absence is the deployment telling you it cannot answer questions yet rather than a fault.
 [Verifying an enabled endpoint](../operations/mcp-endpoint.md#verifying-an-enabled-endpoint) is the checklist form of
 this, including what the refusals look like when the key or the origin is wrong.

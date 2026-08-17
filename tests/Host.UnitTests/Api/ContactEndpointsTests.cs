@@ -155,6 +155,7 @@ public sealed class ContactEndpointsTests
     [InlineData("", "anna@example.test", "anna@example.test", null, "names no display name")]
     [InlineData("Anna Kowalska", "", "", null, "at least one address")]
     [InlineData("Anna Kowalska", "not an address", "not an address", null, "not a usable address")]
+    [InlineData("Anna Kowalska", "<anna@example.test>", "<anna@example.test>", null, "not a usable address")]
     [InlineData("Anna Kowalska", "anna@example.test", "other@example.test", null, "one of the addresses the contact holds")]
     [InlineData("Anna Kowalska", "anna@example.test", "", null, "names no usable preferred address")]
     [InlineData("Anna\u200BKowalska", "anna@example.test", "anna@example.test", null, "carry no glyph of their own")]
@@ -292,10 +293,17 @@ public sealed class ContactEndpointsTests
     }
 
     /// <summary>An address that is not one is refused without being written into the answer.</summary>
+    /// <remarks>
+    /// The bracketed form is the case worth naming: <c>&lt;anna@example.test&gt;</c> splits on the last at-sign into two
+    /// halves that each read as usable, so admitting it would store a comparison form no arriving mail and no contact
+    /// tool ever matches — a record unreachable through every surface but the one that wrote it.
+    /// </remarks>
     [Theory]
     [InlineData(null)]
     [InlineData("")]
     [InlineData("not an address")]
+    [InlineData("<anna@example.test>")]
+    [InlineData("Anna Kowalska <anna@example.test>")]
     public async Task FindByAddressAsync_AValueThatIsNotAnAddress_RefusesWithoutRepeatingIt(string? address)
     {
         // Act

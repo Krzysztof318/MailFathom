@@ -724,6 +724,12 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IContactDirectory, ContactDirectory>();
         services.AddScoped<ContactBook>();
 
+        // The two caller-facing use cases over it, which are what the protocol tools reach. They are separate from the
+        // book because they carry what a caller-facing act owes and the book does not: the grant the caller has to hold,
+        // and the bounds every request is checked against before the store is reached.
+        services.AddScoped<ContactBookReader>();
+        services.AddScoped<ContactBookWriter>();
+
         return services;
     }
 

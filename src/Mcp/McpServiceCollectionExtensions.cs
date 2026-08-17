@@ -6,6 +6,7 @@ using MailFathom.Common;
 using MailFathom.Mcp.Observability;
 using MailFathom.Mcp.Serialization;
 using MailFathom.Mcp.Tools;
+using MailFathom.Mcp.Tools.Contacts;
 using MailFathom.Versioning;
 using Microsoft.Extensions.DependencyInjection;
 using ModelContextProtocol.Protocol;
@@ -76,7 +77,12 @@ public static class McpServiceCollectionExtensions
             .WithTools<ListEmailsTool>(McpToolContractSerialization.Options)
             .WithTools<GetEmailContentTool>(McpToolContractSerialization.Options)
             .WithTools<SearchEmailsTool>(McpToolContractSerialization.Options)
-            .WithTools<AskMailTool>(McpToolContractSerialization.Options);
+            .WithTools<AskMailTool>(McpToolContractSerialization.Options)
+            .WithTools<ListContactsTool>(McpToolContractSerialization.Options)
+            .WithTools<GetContactTool>(McpToolContractSerialization.Options)
+            .WithTools<CreateContactTool>(McpToolContractSerialization.Options)
+            .WithTools<UpdateContactTool>(McpToolContractSerialization.Options)
+            .WithTools<DeleteContactTool>(McpToolContractSerialization.Options);
     }
 
     /// <summary>What the server reports about itself when a client initializes a session.</summary>

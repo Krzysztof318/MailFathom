@@ -53,7 +53,7 @@ public sealed class TransportGrantStartupReportTests
         Assert.Equal("MCP", Assert.Contains("EndpointName", record.Properties));
         Assert.Equal("/mcp", Assert.Contains("EndpointPath", record.Properties));
         Assert.Equal(
-            "mailfathom.mail.read, mailfathom.mail.ask",
+            WholeMailSurface,
             Assert.Contains("GrantedPermissions", record.Properties));
         Assert.Equal("McpEndpoint:Authentication", Assert.Contains("AuthenticationSettingPath", record.Properties));
     }
@@ -74,7 +74,7 @@ public sealed class TransportGrantStartupReportTests
         Assert.Contains("writes down no grant", record.Message, StringComparison.Ordinal);
         Assert.Equal("McpEndpoint:Authentication:0", Assert.Contains("EntrySettingPath", record.Properties));
         Assert.Equal(
-            "mailfathom.mail.read, mailfathom.mail.ask",
+            WholeMailSurface,
             Assert.Contains("GrantedPermissions", record.Properties));
     }
 
@@ -164,7 +164,7 @@ public sealed class TransportGrantStartupReportTests
         Assert.Contains("at most", record.Message, StringComparison.Ordinal);
         Assert.DoesNotContain("writes down no grant", record.Message, StringComparison.Ordinal);
         Assert.Equal(
-            "mailfathom.mail.read, mailfathom.mail.ask",
+            WholeMailSurface,
             Assert.Contains("GrantedPermissions", record.Properties));
     }
 
@@ -258,7 +258,7 @@ public sealed class TransportGrantStartupReportTests
             logs.Records.Select(record => Assert.Contains("EndpointName", record.Properties)));
         Assert.Equal(
             [
-                "mailfathom.mail.read, mailfathom.mail.ask",
+                WholeMailSurface,
                 string.Join(
                     ", ",
                     MailFathomPermission.PublishedFor(ProtectedSurface.Administration).Select(permission => permission.Name)),
@@ -297,6 +297,17 @@ public sealed class TransportGrantStartupReportTests
         // Assert
         Assert.Single(logs.Records);
     }
+
+    /// <summary>Every permission the MCP surface publishes, written as the report writes a grant.</summary>
+    /// <remarks>
+    /// Composed rather than spelled out, because what these tests pin is that an unnarrowed entry resolves to the whole
+    /// of its surface — not which capabilities that surface happens to publish today. Spelling it out would fail every
+    /// one of them the next time a permission is allocated, which is a fact about the vocabulary and belongs to the test
+    /// that pins the vocabulary.
+    /// </remarks>
+    private static string WholeMailSurface => string.Join(
+        ", ",
+        MailFathomPermission.PublishedFor(ProtectedSurface.Mail).Select(permission => permission.Name));
 
     private static TransportAuthenticationOptions AnApiKeyEntry() => new()
     {

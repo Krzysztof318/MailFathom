@@ -5,6 +5,7 @@
 using MailFathom.Application.Access;
 using MailFathom.Application.Accounts;
 using MailFathom.Application.AiProviders;
+using MailFathom.Application.Contacts;
 using MailFathom.Application.EmailContent.Rendering;
 using MailFathom.Application.EmailContent.Repair;
 using MailFathom.Application.EmailContent.Storage;
@@ -16,6 +17,7 @@ using MailFathom.Application.Emails.Search;
 using MailFathom.Application.Emails.SearchEmails;
 using MailFathom.Application.Emails.Summaries;
 using MailFathom.Application.Observability;
+using MailFathom.Application.Persistence;
 using MailFathom.Application.Retrieval.AskMail;
 using MailFathom.Application.Synchronization.Checkpoints;
 using MailFathom.Domain.Access;
@@ -137,6 +139,14 @@ internal static class RegisteredMcpToolSurface
                 questionAnswerer: null));
         services.AddSingleton<MailboxQuestionReader>();
         services.AddSingleton(MailAnswerBounds.Default);
+        services.AddSingleton(Substitute.For<IContactDirectory>());
+        services.AddSingleton(new PersistenceConcurrencyOptions());
+        services.AddSingleton(Substitute.For<IPersistenceSessionFactory>());
+        services.AddSingleton<OptimisticConcurrencyRetryPolicy>();
+        services.AddSingleton<ContactBook>();
+        services.AddSingleton<ContactBookReader>();
+        services.AddSingleton<ContactBookWriter>();
+        services.AddSingleton(Substitute.For<IContactStore>());
         services.AddMailFathomServer();
 
         return services.BuildServiceProvider();
