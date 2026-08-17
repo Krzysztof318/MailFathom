@@ -1363,9 +1363,10 @@ for. Treat the file as you treat that directory, which is to say read it before 
 
 It is created readable by its owner alone, on the same terms and for the same reason the credential store is, and it is
 bounded at one mebibyte: past that the current file becomes `mfctl.log.1`, replacing whatever was there, and a new one
-starts — so the log occupies at most two mebibytes however long you administer a deployment for. A recorded failure is
-bounded as well, so one record stays one line. There is no retention policy beyond that, because retention for files on
-your own machine is yours to decide rather than this command's.
+starts — so the log occupies at most two mebibytes however long you administer a deployment for. Every field of variable
+length is bounded as well — `failure`, `fault`, and the `deployment` name you chose — so one record stays one line.
+There is no retention policy beyond that, because retention for files on your own machine is yours to decide rather
+than this command's.
 
 Turn it off for one invocation with `--no-log`, which is accepted after the subcommand as well, and for a shell session
 with `MAILFATHOM_LOG=off`. What you typed beats what your shell was told, and the default is on; every other value of
