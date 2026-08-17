@@ -28,9 +28,11 @@ public static class McpServiceCollectionExtensions
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="services" /> is <see langword="null" />.</exception>
     /// <remarks>
     /// The tools resolve their dependencies per call from the request's scope, so the application ports they read
-    /// through may be registered with any lifetime the host chooses.
+    /// through may be registered with any lifetime the host chooses — which is also what lets a filter read the caller
+    /// the request was admitted under.
     /// </remarks>
     /// <seealso cref="AskMailAdvertisement" />
+    /// <seealso cref="McpToolAuthorization" />
     public static IMcpServerBuilder AddMailFathomServer(this IServiceCollection services)
     {
         ArgumentNullException.ThrowIfNull(services);
@@ -53,11 +55,24 @@ public static class McpServiceCollectionExtensions
             .WithRequestFilters(requestFilters => requestFilters
                 .AddCallToolFilter(next => (request, cancellationToken) =>
                     new ValueTask<CallToolResult>(RequiredReporter(request).ReportAsync(next, request, cancellationToken)))
+                // Inside the reporter, so a call refused for want of a grant is recorded exactly as a call naming a tool
+                // that does not exist already is, which is the whole of what the two have to look alike in.
+                .AddCallToolFilter(next => (request, cancellationToken) =>
+                    new ValueTask<CallToolResult>(
+                        McpToolAuthorization.RefuseUnauthorizedToolAsync(next, request, cancellationToken)))
                 // The one tool this surface does not always advertise, decided per listing so an operator who repairs a
                 // provider needs no restart to have it offered again.
                 .AddListToolsFilter(next => (request, cancellationToken) =>
                     new ValueTask<ListToolsResult>(
-                        AskMailAdvertisement.WithoutUnavailableAnsweringAsync(next, request, cancellationToken))))
+                        AskMailAdvertisement.WithoutUnavailableAnsweringAsync(next, request, cancellationToken)))
+                // Registered last, which makes it the innermost filter: both of these narrow the listing the inner
+                // pipeline produced, so this one's removal happens before the availability read above and a caller that
+                // may not ask questions never causes the answering capability to be read at all. Which of the two takes
+                // a descriptor away changes no listing, because neither can put one back — the deployment's own switch
+                // stays the authority over whether a capability exists.
+                .AddListToolsFilter(next => (request, cancellationToken) =>
+                    new ValueTask<ListToolsResult>(
+                        McpToolAuthorization.WithoutUnauthorizedToolsAsync(next, request, cancellationToken))))
             .WithTools<ListAccountsTool>(McpToolContractSerialization.Options)
             .WithTools<ListEmailsTool>(McpToolContractSerialization.Options)
             .WithTools<GetEmailContentTool>(McpToolContractSerialization.Options)

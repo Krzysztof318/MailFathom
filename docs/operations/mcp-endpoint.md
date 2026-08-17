@@ -668,20 +668,42 @@ with no entry at all gets one line naming the section a grant would be written u
 a public key, a token, an authorization server, or a subject: a grant is what the deployment wrote, never who presented
 something.
 
-**What varies by the grant today is nothing.** The permissions are resolved from configuration, carried on the
-authenticated caller, and recorded at startup; the tool listing and the tool calls this endpoint serves do not yet
-consult them. Writing a narrower grant is therefore a statement about what a credential is meant to reach, and it starts
-being enforced when the enforcement it describes ships.
+**What varies by the grant is the tool surface itself.** A caller is offered exactly the tools its grant permits and no
+others: `tools/list` omits the rest, so a client never plans a call that could only fail, and a call naming one of them
+is answered as a call naming a tool that does not exist. The refusal says nothing about the caller, the credential, the
+permission, or what a different caller would have been served: a message a client could tell apart would disclose the
+capability the listing just withheld. Nothing is cached either — the listing is composed per request, so one caller's
+answer never serves another.
+
+The availability rule that already decides `ask_mail` composes with this rather than being replaced by it. A tool may be
+unavailable, unauthorized, or both, and no grant makes a capability this deployment does not have appear — an endpoint
+whose chat provider is unconfigured withholds `ask_mail` from a caller granted `mailfathom.mail.ask` exactly as it does
+from one granted nothing.
+
+The grant is enforced twice. The endpoint refuses cheaply, before a use case is reached, and the use case behind each
+tool asks the same question again on its own — so a second entrypoint added to this deployment later cannot widen what a
+credential reaches by omission.
 
 ### What a credential decides, and what it does not
 
-**The endpoint asks whether this is a caller the deployment serves, and of a token also which person it names.** Beyond
-that, every tool call resolves the accounts the configured owner controls and refuses anything outside them, whichever
-credential got the caller in. Two admitted callers therefore see the same mailboxes — which is exactly why a token has to
-name an authorized subject: admitting a colleague of the same tenant would admit them to the owner's mail rather than to
-their own. `Permissions` above says what a caller may do; which of the configured mail accounts it may do it to is not
-something a credential decides, and no setting narrows it. Every admitted caller reaches every account this deployment
-configures.
+**The endpoint asks whether this is a caller the deployment serves, and of a token also which person it names.** What an
+admitted caller may then do is the grant its entry carries, and that decides one thing: which of this surface's tools it
+is offered and may call. A credential granted `mailfathom.mail.read` alone is served the four tools that read the local
+copy and is answered about `ask_mail` as though no such tool existed; one granted `mailfathom.mail.ask` alone is served
+that tool and nothing else; one granted neither is served an empty tool list and refused every call it makes.
+
+**A refused caller is told nothing.** There is no message naming the permission it lacked, no field on a descriptor
+saying one is required, and no `insufficient_scope` challenge inviting a client to acquire one — even where the grant
+came from a token's scopes and its authorization server could in principle mint it. The listing already said what this
+caller may do, and a refusal it could tell apart from an unknown tool would say that a capability exists which you chose
+not to offer it. Diagnosing a client that stopped working is therefore done from this deployment's own record rather
+than from what the client received.
+
+**Which mailboxes a caller reaches is not something a credential decides.** Every tool call resolves the accounts the
+configured owner controls and refuses anything outside them, whichever credential got the caller in, and no setting
+narrows that. Two admitted callers therefore see the same mailboxes — which is exactly why a token has to name an
+authorized subject: admitting a colleague of the same tenant would admit them to the owner's mail rather than to their
+own. `Permissions` says what a caller may do; every admitted caller does it to every account this deployment configures.
 
 A key identifies a *client*, a public key identifies a *client that can prove it holds the other half*, a token
 identifies a *person*, and the difference matters operationally. A shared bearer credential has the properties every

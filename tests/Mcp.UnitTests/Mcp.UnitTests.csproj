@@ -9,6 +9,9 @@
     <Compile Include="..\shared\AdversarialMailCorpus.cs" Link="AdversarialMailCorpus.cs" />
     <Compile Include="..\shared\AdversarialMessage.cs" Link="AdversarialMessage.cs" />
     <Compile Include="..\shared\ExceptionHierarchyAssertion.cs" Link="ExceptionHierarchyAssertion.cs" />
+    <!-- Every use case behind a protected surface takes the authorization, so the principal a test states is composed
+         the same way wherever one is arranged rather than once per suite. -->
+    <Compile Include="..\shared\AccessAuthorizations.cs" Link="AccessAuthorizations.cs" />
     <Compile Include="..\shared\RecordingLoggerProvider.cs" Link="RecordingLoggerProvider.cs" />
     <Compile Include="..\shared\StubMailFolderParticipation.cs" Link="StubMailFolderParticipation.cs" />
     <Compile Include="..\shared\StubJunkMailFolderCatalog.cs" Link="StubJunkMailFolderCatalog.cs" />

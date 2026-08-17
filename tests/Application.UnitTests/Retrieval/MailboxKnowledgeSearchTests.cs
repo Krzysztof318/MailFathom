@@ -13,6 +13,7 @@ using MailFathom.Application.Retrieval;
 using MailFathom.Application.SensitiveContent.Egress;
 using MailFathom.Application.Synchronization.Checkpoints;
 using MailFathom.Application.UnitTests.TestDoubles;
+using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails.Authentication;
 using MailFathom.Domain.Folders;
@@ -466,6 +467,30 @@ public sealed class MailboxKnowledgeSearchTests
         Assert.Empty(egress.Scanner.ScannedTexts);
     }
 
+    /// <summary>
+    /// The retrieval an answering run makes is reached under the grant that admitted the question, and no permission
+    /// implies another: requiring the mailbox-read grant here would make one a component of the other, so a credential
+    /// granted only the answering permission would stop being able to have its question answered.
+    /// </summary>
+    [Fact]
+    public async Task FindPassagesAsync_ARunAdmittedUnderTheAnsweringGrantAlone_ReadsTheMailbox()
+    {
+        // Arrange
+        var matched = SyntheticEmailSummaries.Create(FirstJuly, subject: "the invoice");
+        var index = new InMemoryEmailSearchIndex()
+            .With(matched, relevanceRank: 0.9f, matchedText: "invoice", "the invoice is attached");
+        var search = SearchOver(index);
+
+        // Act
+        var passages = (await search.FindPassagesAsync(
+            EveryAccount,
+            EmailKnowledgeQuery.ForText("invoice"),
+            TestContext.Current.CancellationToken)).Passages;
+
+        // Assert
+        Assert.Equal([matched.StoredEmailId], passages.Select(static passage => passage.StoredEmailId));
+    }
+
     private static MailboxKnowledgeSearch SearchOver(
         InMemoryEmailSearchIndex index,
         EmailKnowledgeBounds? bounds = null,
@@ -481,7 +506,10 @@ public sealed class MailboxKnowledgeSearchTests
                 StubMailFolderMappings.ResolvingNothing),
             EmailSearchSnippetBounds.Default,
             egressGuard ?? SensitiveContentEgressGuards.Inactive(),
-            new RecordingMailboxReadTelemetry()),
+            new RecordingMailboxReadTelemetry(),
+            // The retrieval an answering run makes is reached under the grant that admitted the question, which is not
+            // the mailbox-read grant: the window this walks is read through the internal method, which asks for none.
+            AccessAuthorizations.ForCallerGranted(MailFathomPermission.MailAsk)),
         bounds ?? EmailKnowledgeBounds.Default);
 
     /// <summary>Builds the semantic half of a deployment that configured no embedding provider and activated nothing.</summary>

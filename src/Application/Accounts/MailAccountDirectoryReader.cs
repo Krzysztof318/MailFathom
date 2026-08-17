@@ -2,9 +2,11 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Application.Access;
 using MailFathom.Application.Emails.Mailboxes;
 using MailFathom.Application.Observability;
 using MailFathom.Application.Synchronization.Checkpoints;
+using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 
 namespace MailFathom.Application.Accounts;
@@ -32,39 +34,52 @@ public sealed class MailAccountDirectoryReader
     private readonly ISynchronizationFreshnessReader freshnessReader;
     private readonly MailboxScopeResolver scopeResolver;
     private readonly IMailboxReadTelemetry readTelemetry;
+    private readonly AccessAuthorization authorization;
 
     /// <summary>Initializes the use case.</summary>
     /// <param name="accountCatalog">Describes the accounts this deployment serves.</param>
     /// <param name="freshnessReader">Reads how current the local copy of each folder is.</param>
     /// <param name="scopeResolver">Answers which folders of those accounts a tool may see.</param>
     /// <param name="readTelemetry">Publishes the read as the operation it is, beside the call it happened inside.</param>
+    /// <param name="authorization">Answers which principal reached this use case.</param>
     /// <exception cref="ArgumentNullException">Thrown when any argument is <see langword="null" />.</exception>
     public MailAccountDirectoryReader(
         IMailAccountCatalog accountCatalog,
         ISynchronizationFreshnessReader freshnessReader,
         MailboxScopeResolver scopeResolver,
-        IMailboxReadTelemetry readTelemetry)
+        IMailboxReadTelemetry readTelemetry,
+        AccessAuthorization authorization)
     {
         ArgumentNullException.ThrowIfNull(accountCatalog);
         ArgumentNullException.ThrowIfNull(freshnessReader);
         ArgumentNullException.ThrowIfNull(scopeResolver);
         ArgumentNullException.ThrowIfNull(readTelemetry);
+        ArgumentNullException.ThrowIfNull(authorization);
 
         this.accountCatalog = accountCatalog;
         this.freshnessReader = freshnessReader;
         this.scopeResolver = scopeResolver;
         this.readTelemetry = readTelemetry;
+        this.authorization = authorization;
     }
 
     /// <summary>Reads the served accounts and their synchronization freshness.</summary>
     /// <param name="cancellationToken">Propagates caller cancellation.</param>
     /// <returns>The served accounts with their folders, and whether the deployment refreshes them.</returns>
+    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the use case was reached by anything but a caller granted <see cref="MailFathomPermission.MailRead" />.</exception>
     /// <remarks>
     /// Nothing here writes, so the operation is safe to repeat, and it sets no remote state because it speaks to no mail
     /// server at all.
+    /// <para>
+    /// The grant is asked for before anything is read, and it is asked for here rather than only at the transport that
+    /// withholds the tool: naming the accounts a deployment serves is publishing that they exist, and an entrypoint added
+    /// later would otherwise publish them by reaching this use case without passing a filter.
+    /// </para>
     /// </remarks>
     public async Task<MailAccountDirectory> ReadAsync(CancellationToken cancellationToken)
     {
+        this.authorization.RequirePermission(MailFathomPermission.MailRead);
+
         using var read = this.readTelemetry.BeginRead(
             MailboxReadOperation.ReadAccountDirectory,
             cancellationToken);

@@ -258,9 +258,9 @@ That is deliberate: nothing has to be granted before a first deployment works. W
 states a narrower grant, and startup reports what every entry resolved to either way —
 [what a credential may do](../operations/mcp-endpoint.md#what-a-credential-may-do) has the names and the rules.
 
-Nothing enforces that grant yet: the permissions are read, validated, carried on the authenticated caller and reported at
-startup, and no tool consults them, so a narrowed entry still reaches every tool the endpoint serves. Write one to say
-what a credential is meant to reach; it starts refusing when the enforcement it describes ships.
+A narrowed entry is enforced on the tools themselves: a client connecting with that credential is listed only the tools
+its grant permits, and a call naming any other is answered as a call naming a tool that does not exist. So a grant is
+what a credential may reach rather than a note about it.
 
 MailFathom itself serves plain HTTP unless its own TLS termination is configured, so keep the application port on
 loopback or behind a TLS-terminating proxy — the Compose deployment's default — and give the proxy the certificate. If

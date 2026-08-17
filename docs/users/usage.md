@@ -8,9 +8,16 @@ what each tool answers, what every result carries, what the deliberate limits ar
 contracts — every argument, every field, every bound — live in [MCP tools](../features/mcp-tools.md) and the feature
 pages it links, and this page does not restate them.
 
-Four of the five are always there. `ask_mail` needs a chat model and an embedding model configured and working, so a
-deployment that has neither does not offer it at all; its absence from a tool listing is that deployment saying it
-cannot answer questions rather than something being broken.
+Four of the five are always within the deployment's reach. `ask_mail` needs a chat model and an embedding model
+configured and working, so a deployment that has neither does not offer it at all; its absence from a tool listing is
+that deployment saying it cannot answer questions rather than something being broken.
+
+Which of them *you* are offered is a second question, and its answer is the grant on the credential you connected with.
+A tool that grant does not permit is absent from the listing, and calling it anyway is answered as though no such tool
+existed — nothing names the permission that was missing, so a shorter tool list than this page describes is a question
+for whoever configured the deployment:
+[what a credential may do](../operations/mcp-endpoint.md#what-a-credential-may-do). A deployment that wrote no grant,
+which is the default, offers everything it has.
 
 ## The model behind every call
 

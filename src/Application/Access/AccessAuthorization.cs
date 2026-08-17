@@ -24,6 +24,12 @@ namespace MailFathom.Application.Access;
 /// Every method refuses when the work was reached under no principal, so an entrypoint that never stated what admitted
 /// it fails rather than defaulting to permitted.
 /// </para>
+/// <para>
+/// <see cref="Permits" /> is the one member that reports instead of refusing, for a boundary composing an answer per
+/// caller rather than performing an operation for one. It decides nothing of its own: it answers exactly what
+/// <see cref="RequirePermission" /> would have refused, so the transport and the use case cannot come to disagree about
+/// what holding a permission means.
+/// </para>
 /// </remarks>
 public sealed class AccessAuthorization
 {
@@ -64,6 +70,27 @@ public sealed class AccessAuthorization
             throw PrincipalNotAuthorizedException.MissingPermission(permission);
         }
     }
+
+    /// <summary>Answers the same question <see cref="RequirePermission" /> asks, for a boundary that has to decide rather than refuse.</summary>
+    /// <param name="permission">The capability being asked about.</param>
+    /// <returns><see langword="true" /> when an admitted caller holding that capability is what reached this work.</returns>
+    /// <remarks>
+    /// <para>
+    /// A transport that composes an answer per caller — a protocol listing offering only what the caller may call — needs
+    /// the verdict rather than the failure, and asking it here is what keeps one definition of what holding a permission
+    /// means. Every case <see cref="RequirePermission" /> refuses is answered <see langword="false" /> here, including
+    /// work reached under no principal and work reached under a principal that is not a caller.
+    /// </para>
+    /// <para>
+    /// An unspecified permission answers <see langword="false" /> rather than raising, because the caller of this method
+    /// is composing an answer about something it did not choose: a boundary asking about a capability nobody declared has
+    /// found an operation nobody bounded, and the safe answer to that is no.
+    /// </para>
+    /// </remarks>
+    public bool Permits(MailFathomPermission permission) =>
+        permission.IsSpecified
+        && this.principals.Current is { Kind: AuthorizedPrincipalKind.Caller } caller
+        && caller.Holds(permission);
 
     /// <summary>Requires that this use case was reached as work no caller requested.</summary>
     /// <exception cref="PrincipalNotAuthorizedException">Thrown when the work was reached under no principal, or under one that is not MailFathom's own identity.</exception>

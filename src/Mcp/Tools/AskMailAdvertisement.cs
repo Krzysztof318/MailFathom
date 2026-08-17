@@ -23,8 +23,11 @@ namespace MailFathom.Mcp.Tools;
 /// whose endpoint stops answering has it withdrawn on the next listing after that.
 /// </para>
 /// <para>
-/// Withholding a descriptor is not authorization and is not relied on as any. A client may call a tool it was never
-/// offered, and the use case behind this one refuses a question the same way whether or not the caller ever read a list.
+/// Withholding a descriptor for want of a capability is not authorization and is not relied on as any. A client may call
+/// a tool it was never offered, and the use case behind this one refuses a question the same way whether or not the
+/// caller ever read a list. Whether a caller may reach the tool at all is <see cref="McpToolAuthorization" />'s
+/// question, and the two compose: this switch is the authority over whether the capability exists, so no grant makes an
+/// absent one appear.
 /// </para>
 /// </remarks>
 internal static class AskMailAdvertisement

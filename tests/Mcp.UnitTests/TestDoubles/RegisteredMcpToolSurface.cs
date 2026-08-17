@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Application.Access;
 using MailFathom.Application.Accounts;
 using MailFathom.Application.AiProviders;
 using MailFathom.Application.EmailContent.Rendering;
@@ -17,6 +18,8 @@ using MailFathom.Application.Emails.Summaries;
 using MailFathom.Application.Observability;
 using MailFathom.Application.Retrieval.AskMail;
 using MailFathom.Application.Synchronization.Checkpoints;
+using MailFathom.Domain.Access;
+using MailFathom.TestSupport;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Time.Testing;
@@ -67,11 +70,32 @@ internal static class RegisteredMcpToolSurface
     public static Tool AdvertisedTool(string toolName) =>
         Tools().Single(tool => tool.ProtocolTool.Name == toolName).ProtocolTool;
 
-    private static ServiceProvider Compose()
+    /// <summary>Composes the surface as a host does, for a caller granted exactly the permissions named.</summary>
+    /// <param name="grantedPermissions">What the entry that admitted the caller resolved to.</param>
+    /// <returns>The provider, which the caller owns and must dispose.</returns>
+    /// <remarks>
+    /// The container is handed back rather than a listing, because what a listing carries is decided per request by
+    /// filters the registration composed. The deployment it describes answers questions, so a tool missing from what
+    /// those filters produce is missing for want of a grant rather than for want of a provider.
+    /// </remarks>
+    public static ServiceProvider ComposedForCallerGranted(params MailFathomPermission[] grantedPermissions) =>
+        Compose(
+            AccessAuthorizations.ForCallerGranted(grantedPermissions),
+            AnsweringDeployment.Capability(new StubMailQuestionAnswerer()));
+
+    private static ServiceProvider Compose(
+        AccessAuthorization? authorization = null,
+        MailAnsweringCapability? answeringCapability = null)
     {
         var services = new ServiceCollection();
 
         services.AddLogging();
+
+        // The descriptors are fixed at registration and do not vary by caller, so the grant here is the whole of this
+        // surface unless a test states a narrower one: what a narrower grant withholds is decided per request.
+        services.AddSingleton(
+            authorization
+            ?? AccessAuthorizations.ForCallerGranted([.. MailFathomPermission.PublishedFor(ProtectedSurface.Mail)]));
         services.AddSingleton(TimeProvider.System);
         services.AddSingleton<IStoredEmailTimelineReader>(new StubStoredEmailTimelineReader());
         services.AddSingleton<ISynchronizationFreshnessReader>(new StubSynchronizationFreshnessReader());
@@ -90,12 +114,14 @@ internal static class RegisteredMcpToolSurface
         services.AddSingleton<MailboxSearchReader>();
         // The answering half of a deployment that declared no chat endpoint, which is what makes the descriptors
         // observable at all: what a tool is advertised with is fixed at registration, while whether ask_mail appears in
-        // a listing is decided per request and is proved against the filter that decides it.
-        services.AddSingleton(new MailAnsweringCapability(
-            LexicalOnlySemanticSearch(),
-            Substitute.For<IAiProviderHealthReader>(),
-            new FakeTimeProvider(),
-            questionAnswerer: null));
+        // a listing is decided per request and is proved against the filters that decide it.
+        services.AddSingleton(
+            answeringCapability
+            ?? new MailAnsweringCapability(
+                LexicalOnlySemanticSearch(),
+                Substitute.For<IAiProviderHealthReader>(),
+                new FakeTimeProvider(),
+                questionAnswerer: null));
         services.AddSingleton<MailboxQuestionReader>();
         services.AddSingleton(MailAnswerBounds.Default);
         services.AddMailFathomServer();

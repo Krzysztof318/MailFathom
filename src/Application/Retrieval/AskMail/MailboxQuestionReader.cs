@@ -3,12 +3,14 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.Diagnostics.CodeAnalysis;
+using MailFathom.Application.Access;
 using MailFathom.Application.Accounts;
 using MailFathom.Application.Chat;
 using MailFathom.Application.Emails.Mailboxes;
 using MailFathom.Application.Retrieval.AskMail.Audit;
 using MailFathom.Application.SensitiveContent.Detection;
 using MailFathom.Application.SensitiveContent.Egress;
+using MailFathom.Domain.Access;
 using MailFathom.Domain.Answering.Audit;
 
 namespace MailFathom.Application.Retrieval.AskMail;
@@ -60,6 +62,7 @@ public sealed class MailboxQuestionReader
     private readonly IMailAnsweringAuditTrail auditTrail;
     private readonly TimeProvider timeProvider;
     private readonly SensitiveContentEgressGuard egressGuard;
+    private readonly AccessAuthorization authorization;
 
     /// <summary>Initializes the use case.</summary>
     /// <param name="capability">Decides whether a question may run, and hands over what runs it.</param>
@@ -70,6 +73,7 @@ public sealed class MailboxQuestionReader
     /// <param name="auditTrail">Keeps the durable record of what the run read, for the accounts that asked for one.</param>
     /// <param name="timeProvider">Stamps when the run began and when it ended.</param>
     /// <param name="egressGuard">Scans what the answer is about to publish, where this deployment scans anything.</param>
+    /// <param name="authorization">Answers which principal reached this use case.</param>
     /// <exception cref="ArgumentNullException">Thrown when any argument is <see langword="null" />.</exception>
     public MailboxQuestionReader(
         MailAnsweringCapability capability,
@@ -79,7 +83,8 @@ public sealed class MailboxQuestionReader
         IMailAnsweringRunTelemetry runTelemetry,
         IMailAnsweringAuditTrail auditTrail,
         TimeProvider timeProvider,
-        SensitiveContentEgressGuard egressGuard)
+        SensitiveContentEgressGuard egressGuard,
+        AccessAuthorization authorization)
     {
         ArgumentNullException.ThrowIfNull(capability);
         ArgumentNullException.ThrowIfNull(scopeResolver);
@@ -89,6 +94,7 @@ public sealed class MailboxQuestionReader
         ArgumentNullException.ThrowIfNull(auditTrail);
         ArgumentNullException.ThrowIfNull(timeProvider);
         ArgumentNullException.ThrowIfNull(egressGuard);
+        ArgumentNullException.ThrowIfNull(authorization);
 
         this.capability = capability;
         this.scopeResolver = scopeResolver;
@@ -98,6 +104,7 @@ public sealed class MailboxQuestionReader
         this.auditTrail = auditTrail;
         this.timeProvider = timeProvider;
         this.egressGuard = egressGuard;
+        this.authorization = authorization;
     }
 
     /// <summary>Answers one question from the mail within its scope.</summary>
@@ -111,7 +118,15 @@ public sealed class MailboxQuestionReader
     /// <exception cref="MailAnsweringBudgetExhaustedException">Thrown when the current period has spent what this deployment allows answering to cost, or when the run reached what one question may spend.</exception>
     /// <exception cref="ChatGenerationFailedException">Thrown when the run produced no answer, naming which kind of failure ended it.</exception>
     /// <exception cref="SensitiveContentScannerUnavailableException">Thrown when a switched-on scanner could not establish what the answer carries, which refuses the response rather than serving it unscanned.</exception>
+    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the use case was reached by anything but a caller granted <see cref="MailFathomPermission.MailAsk" />.</exception>
     /// <remarks>
+    /// <para>
+    /// The grant is asked for first, ahead of the question's own validation, because this is the one use case whose work
+    /// sends mail content to a model provider: what a caller granted nothing may not do here is cause an egress, and the
+    /// order that keeps that true is the one where nothing runs before the grant is read. It is asked for here rather
+    /// than only at the transport that withholds the tool, so an entrypoint added later cannot spend on a provider by
+    /// forgetting a filter.
+    /// </para>
     /// <para>
     /// The request is validated before the capability is read, so a deployment that answers questions and one that does
     /// not refuse a malformed question identically. The reverse order would let a caller learn which capabilities a
@@ -133,6 +148,8 @@ public sealed class MailboxQuestionReader
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
+
+        this.authorization.RequirePermission(MailFathomPermission.MailAsk);
 
         var questionText = MailQuestionText.Create(request.QuestionText);
         // Junk is left out with no override, unlike a listing and a search. Answering a question is exactly the path the

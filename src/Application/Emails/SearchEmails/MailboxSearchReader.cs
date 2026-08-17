@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Application.Access;
 using MailFathom.Application.Accounts;
 using MailFathom.Application.Emails.Mailboxes;
 using MailFathom.Application.Emails.Search;
@@ -9,6 +10,7 @@ using MailFathom.Application.Observability;
 using MailFathom.Application.SensitiveContent.Detection;
 using MailFathom.Application.SensitiveContent.Egress;
 using MailFathom.Application.Synchronization.Checkpoints;
+using MailFathom.Domain.Access;
 
 namespace MailFathom.Application.Emails.SearchEmails;
 
@@ -73,6 +75,7 @@ public sealed class MailboxSearchReader
     private readonly EmailSearchSnippetBounds snippetBounds;
     private readonly SensitiveContentEgressGuard egressGuard;
     private readonly IMailboxReadTelemetry readTelemetry;
+    private readonly AccessAuthorization authorization;
 
     /// <summary>Initializes the use case.</summary>
     /// <param name="searchIndexReader">Ranks mail against the query text and reads the window a ranking selected.</param>
@@ -82,6 +85,7 @@ public sealed class MailboxSearchReader
     /// <param name="snippetBounds">How much of a message's body one result may show.</param>
     /// <param name="egressGuard">Scans what the window is about to publish, where this deployment scans anything.</param>
     /// <param name="readTelemetry">Publishes the search as the operation it is, beside the call it happened inside.</param>
+    /// <param name="authorization">Answers which principal reached this use case.</param>
     /// <exception cref="ArgumentNullException">Thrown when any argument is <see langword="null" />.</exception>
     public MailboxSearchReader(
         IEmailSearchIndexReader searchIndexReader,
@@ -90,7 +94,8 @@ public sealed class MailboxSearchReader
         MailboxScopeResolver scopeResolver,
         EmailSearchSnippetBounds snippetBounds,
         SensitiveContentEgressGuard egressGuard,
-        IMailboxReadTelemetry readTelemetry)
+        IMailboxReadTelemetry readTelemetry,
+        AccessAuthorization authorization)
     {
         ArgumentNullException.ThrowIfNull(searchIndexReader);
         ArgumentNullException.ThrowIfNull(semanticSearch);
@@ -99,6 +104,7 @@ public sealed class MailboxSearchReader
         ArgumentNullException.ThrowIfNull(snippetBounds);
         ArgumentNullException.ThrowIfNull(egressGuard);
         ArgumentNullException.ThrowIfNull(readTelemetry);
+        ArgumentNullException.ThrowIfNull(authorization);
 
         this.searchIndexReader = searchIndexReader;
         this.semanticSearch = semanticSearch;
@@ -107,6 +113,7 @@ public sealed class MailboxSearchReader
         this.snippetBounds = snippetBounds;
         this.egressGuard = egressGuard;
         this.readTelemetry = readTelemetry;
+        this.authorization = authorization;
     }
 
     /// <summary>Searches for one window of ranked emails and publishes it to a caller outside this process.</summary>
@@ -118,7 +125,14 @@ public sealed class MailboxSearchReader
     /// <exception cref="MailAccountNotAccessibleException">Thrown when the request names an account this deployment does not serve.</exception>
     /// <exception cref="EmailSearchResultLimitOutOfRangeException">Thrown when the request names a result count outside the accepted range.</exception>
     /// <exception cref="SensitiveContentScannerUnavailableException">Thrown when a switched-on scanner could not establish what the window carries, which refuses the search rather than serving it unscanned.</exception>
+    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the use case was reached by anything but a caller granted <see cref="MailFathomPermission.MailRead" />.</exception>
     /// <remarks>
+    /// <para>
+    /// The grant belongs to publishing as well, and for the same reason the guard does. This is the method an MCP caller
+    /// reaches, so it asks what that caller was granted; <see cref="SearchWindowAsync" /> is reached by an answering run
+    /// already admitted under <see cref="MailFathomPermission.MailAsk" />, and asking for a mailbox-read grant there
+    /// would make one permission a component of the other, which the vocabulary deliberately does not do.
+    /// </para>
     /// <para>
     /// The guard belongs to publishing rather than to searching, which is why it is here and not in
     /// <see cref="SearchWindowAsync" />: this window becomes an MCP tool's answer, while the one that method returns is
@@ -135,6 +149,8 @@ public sealed class MailboxSearchReader
         SearchEmailsRequest request,
         CancellationToken cancellationToken)
     {
+        this.authorization.RequirePermission(MailFathomPermission.MailRead);
+
         using var read = this.readTelemetry.BeginRead(MailboxReadOperation.SearchMailbox, cancellationToken);
 
         var window = await this.SearchWindowAsync(request, cancellationToken);

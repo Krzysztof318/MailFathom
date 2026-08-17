@@ -7,6 +7,7 @@ using System.Diagnostics.CodeAnalysis;
 using MailFathom.Application.Accounts;
 using MailFathom.Application.Emails.ListEmails;
 using MailFathom.Application.Emails.Mailboxes;
+using MailFathom.Domain.Access;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Failures;
 using MailFathom.Mcp.Tools.Results;
@@ -42,6 +43,10 @@ internal sealed class ListEmailsTool(
     /// <summary>The name the tool is advertised and called under.</summary>
     /// <remarks>Snake case because it is the naming the Model Context Protocol tool ecosystem uses; the C# member naming stops at the boundary.</remarks>
     public const string ToolName = "list_emails";
+
+    /// <summary>The capability a caller must hold to be offered this tool and to reach the use case behind it.</summary>
+    /// <remarks>It reads the local mailbox copy, which is what <see cref="MailFathomPermission.MailRead" /> covers. Declaring it beside the name is what keeps <see cref="PublishedTools" /> able to answer for every tool this surface publishes.</remarks>
+    public static MailFathomPermission RequiredPermission => MailFathomPermission.MailRead;
 
     /// <summary>Lists a bounded page of summaries from the local mailbox copy.</summary>
     /// <param name="accounts">The accounts to read, named by identifier or display name, or none to read every account this deployment serves.</param>

@@ -10,6 +10,7 @@ using MailFathom.Application.Folders;
 using MailFathom.Application.Observability;
 using MailFathom.Application.SensitiveContent.Egress;
 using MailFathom.Application.Synchronization.Checkpoints;
+using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Emails.Authentication;
@@ -758,6 +759,7 @@ public sealed class ListEmailsToolTests
                 junkFolders ?? StubJunkMailFolderCatalog.None,
                 folderMappings.Resolver),
             egressGuard ?? SensitiveContentEgressGuards.Inactive(),
-            Substitute.For<IMailboxReadTelemetry>()),
+            Substitute.For<IMailboxReadTelemetry>(),
+            AccessAuthorizations.ForCallerGranted(MailFathomPermission.MailRead)),
         new StubMailAccountCatalog(ServedAccountId));
 }

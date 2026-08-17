@@ -7,6 +7,7 @@ using System.Diagnostics.CodeAnalysis;
 using MailFathom.Application.Accounts;
 using MailFathom.Application.Emails.Mailboxes;
 using MailFathom.Application.Retrieval.AskMail;
+using MailFathom.Domain.Access;
 using MailFathom.Domain.Failures;
 using MailFathom.Mcp.Tools.Results;
 using ModelContextProtocol.Server;
@@ -53,6 +54,10 @@ internal sealed class AskMailTool(
     /// <summary>The name the tool is advertised and called under.</summary>
     /// <remarks>Snake case because it is the naming the Model Context Protocol tool ecosystem uses; the C# member naming stops at the boundary.</remarks>
     public const string ToolName = "ask_mail";
+
+    /// <summary>The capability a caller must hold to be offered this tool and to reach the use case behind it.</summary>
+    /// <remarks>It is the tool that sends mail content to a model provider, which is a decision about what leaves this process rather than only about what a caller may read, so it carries a permission of its own. <see cref="MailFathomPermission.MailAsk" /> neither implies nor is implied by <see cref="MailFathomPermission.MailRead" />, and it is not the weaker of the two: a cited answer returns mail content. Declaring it beside the name is what keeps <see cref="PublishedTools" /> able to answer for every tool this surface publishes.</remarks>
+    public static MailFathomPermission RequiredPermission => MailFathomPermission.MailAsk;
 
     /// <summary>Answers one question about the local mailbox copy, citing the emails the answer was drawn from.</summary>
     /// <param name="question">What to answer.</param>

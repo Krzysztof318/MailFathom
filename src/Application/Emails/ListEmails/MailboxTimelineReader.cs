@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Application.Access;
 using MailFathom.Application.Accounts;
 using MailFathom.Application.Emails.Mailboxes;
 using MailFathom.Application.Emails.Summaries;
@@ -9,6 +10,7 @@ using MailFathom.Application.Observability;
 using MailFathom.Application.SensitiveContent.Detection;
 using MailFathom.Application.SensitiveContent.Egress;
 using MailFathom.Application.Synchronization.Checkpoints;
+using MailFathom.Domain.Access;
 using MailFathom.Domain.Emails;
 
 namespace MailFathom.Application.Emails.ListEmails;
@@ -38,6 +40,7 @@ public sealed class MailboxTimelineReader
     private readonly MailboxScopeResolver scopeResolver;
     private readonly SensitiveContentEgressGuard egressGuard;
     private readonly IMailboxReadTelemetry readTelemetry;
+    private readonly AccessAuthorization authorization;
 
     /// <summary>Initializes the use case.</summary>
     /// <param name="timelineReader">Reads bounded pages of stored email summaries.</param>
@@ -45,25 +48,29 @@ public sealed class MailboxTimelineReader
     /// <param name="scopeResolver">Decides which accounts and folders the listing runs against.</param>
     /// <param name="egressGuard">Scans what the page is about to publish, where this deployment scans anything.</param>
     /// <param name="readTelemetry">Publishes the read as the operation it is, beside the call it happened inside.</param>
+    /// <param name="authorization">Answers which principal reached this use case.</param>
     /// <exception cref="ArgumentNullException">Thrown when any argument is <see langword="null" />.</exception>
     public MailboxTimelineReader(
         IStoredEmailTimelineReader timelineReader,
         ISynchronizationFreshnessReader freshnessReader,
         MailboxScopeResolver scopeResolver,
         SensitiveContentEgressGuard egressGuard,
-        IMailboxReadTelemetry readTelemetry)
+        IMailboxReadTelemetry readTelemetry,
+        AccessAuthorization authorization)
     {
         ArgumentNullException.ThrowIfNull(timelineReader);
         ArgumentNullException.ThrowIfNull(freshnessReader);
         ArgumentNullException.ThrowIfNull(scopeResolver);
         ArgumentNullException.ThrowIfNull(egressGuard);
         ArgumentNullException.ThrowIfNull(readTelemetry);
+        ArgumentNullException.ThrowIfNull(authorization);
 
         this.timelineReader = timelineReader;
         this.freshnessReader = freshnessReader;
         this.scopeResolver = scopeResolver;
         this.egressGuard = egressGuard;
         this.readTelemetry = readTelemetry;
+        this.authorization = authorization;
     }
 
     /// <summary>Lists one page of emails.</summary>
@@ -77,13 +84,21 @@ public sealed class MailboxTimelineReader
     /// <exception cref="MailboxQueryCursorMalformedException">Thrown when the request carries a cursor this system did not issue.</exception>
     /// <exception cref="MailboxQueryCursorFilterMismatchException">Thrown when the cursor was issued for different filters than the request carries.</exception>
     /// <exception cref="SensitiveContentScannerUnavailableException">Thrown when a switched-on scanner could not establish what the page carries, which refuses the listing rather than serving it unscanned.</exception>
+    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the use case was reached by anything but a caller granted <see cref="MailFathomPermission.MailRead" />.</exception>
     /// <remarks>
     /// Nothing here writes, and the operation is therefore safe to repeat. It also never sets the remote <c>\Seen</c>
     /// flag or any other remote state, because it speaks to no mail server at all.
+    /// <para>
+    /// The grant is asked for before the request is validated, so a caller that may not read learns nothing about which
+    /// filters this deployment accepts, and it is asked for here rather than only at the transport that withholds the
+    /// tool, so an entrypoint added later cannot list mail by forgetting a filter.
+    /// </para>
     /// </remarks>
     public async Task<ListEmailsResult> ListEmailsAsync(ListEmailsRequest request, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
+
+        this.authorization.RequirePermission(MailFathomPermission.MailRead);
 
         using var read = this.readTelemetry.BeginRead(MailboxReadOperation.ListMailboxTimeline, cancellationToken);
 

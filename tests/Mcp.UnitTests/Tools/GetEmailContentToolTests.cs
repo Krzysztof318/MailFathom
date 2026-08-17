@@ -15,6 +15,7 @@ using MailFathom.Application.Emails.GetEmailContent;
 using MailFathom.Application.Emails.Mailboxes;
 using MailFathom.Application.Emails.Summaries;
 using MailFathom.Application.Observability;
+using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Emails.Authentication;
@@ -1138,7 +1139,8 @@ public sealed class GetEmailContentToolTests
             linkIssuer ?? new StubAttachmentDownloadLinkIssuer(),
             SensitiveContentEgressGuards.Inactive(),
             new EmailContentReadOptions(),
-            Substitute.For<IMailboxReadTelemetry>()));
+            Substitute.For<IMailboxReadTelemetry>(),
+            AccessAuthorizations.ForCallerGranted(MailFathomPermission.MailRead)));
 
     /// <summary>The one folder this deployment maps, which is what makes the mail these tests store readable at all.</summary>
     /// <remarks>

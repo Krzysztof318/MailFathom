@@ -11,6 +11,7 @@ using MailFathom.Application.Retrieval;
 using MailFathom.Application.Retrieval.AskMail;
 using MailFathom.Application.Retrieval.AskMail.Audit;
 using MailFathom.Application.SensitiveContent.Egress;
+using MailFathom.Domain.Access;
 using MailFathom.TestSupport;
 using Microsoft.Extensions.Time.Testing;
 using NSubstitute;
@@ -91,7 +92,8 @@ internal static class AnsweringDeployment
             Substitute.For<IMailAnsweringRunTelemetry>(),
             Substitute.For<IMailAnsweringAuditTrail>(),
             new FakeTimeProvider(Now),
-            egressGuard ?? SensitiveContentEgressGuards.Inactive());
+            egressGuard ?? SensitiveContentEgressGuards.Inactive(),
+            AccessAuthorizations.ForCallerGranted(MailFathomPermission.MailAsk));
     }
 
     /// <summary>Builds a ledger with an allowance for whatever a test asks it.</summary>
