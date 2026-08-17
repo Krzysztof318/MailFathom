@@ -46,20 +46,74 @@ public sealed class CliInvocationRecordTests
         Assert.Equal(Failure, entry.Failure);
     }
 
-    /// <summary>An invocation that never reported an exit code says so rather than borrowing one.</summary>
+    /// <summary>A failure whose ceiling falls between the halves of one character is cut before it, not through it.</summary>
+    /// <remarks>
+    /// The consequence is worse than a mangled message: an unpaired surrogate is not valid UTF-16, the JSON writer
+    /// refuses one, and the append runs in the runner's <c>finally</c> — so the exception would replace whatever the
+    /// invocation was already reporting, which is the one thing keeping a record must never do.
+    /// </remarks>
     [Fact]
-    public void Faulted_AnInvocationThatReportedNothing_RecordsNoExitCodeAndNoFailure()
+    public void Ended_AFailureWhoseCeilingFallsInsideACharacter_CutsBeforeIt()
+    {
+        // Arrange
+        var record = new CliInvocationRecord(new FakeTimeProvider());
+        var failure = new string('x', CliInvocationRecord.MaximumFailureLength - 1) + "\U0001F600 and more";
+
+        // Act
+        var entry = record.Ended("mfctl status", CliExitCode.Failure, failure);
+
+        // Assert
+        Assert.Equal(CliInvocationRecord.MaximumFailureLength - 1, entry.Failure?.Length);
+        Assert.DoesNotContain(entry.Failure!, char.IsSurrogate);
+    }
+
+    /// <summary>What the command raised is recorded as its type and as nothing else about it.</summary>
+    [Fact]
+    public void Faulted_AnInvocationThatRaised_RecordsTheTypeAndNoExitCode()
     {
         // Arrange
         var record = new CliInvocationRecord(new FakeTimeProvider());
 
         // Act
-        var entry = record.Faulted("mfctl status");
+        var entry = record.Faulted("mfctl status", new InvalidOperationException("A message written for a developer."));
 
         // Assert
         Assert.Equal(CliInvocationOutcome.Faulted, entry.Outcome);
+        Assert.Equal(typeof(InvalidOperationException).FullName, entry.Fault);
         Assert.Null(entry.ExitCode);
         Assert.Null(entry.Failure);
+    }
+
+    /// <summary>The message of what was raised is left out, because a defect's message quotes what it was working on.</summary>
+    [Fact]
+    public void Faulted_AnInvocationWhoseFailureQuotedItsWork_RecordsNoneOfThatText()
+    {
+        // Arrange
+        var record = new CliInvocationRecord(new FakeTimeProvider());
+        const string Quoted = "subject: Q3 numbers, from: someone@example.invalid";
+
+        // Act
+        var entry = record.Faulted("mfctl status", new InvalidOperationException(Quoted));
+
+        // Assert
+        Assert.DoesNotContain(Quoted, entry.Fault ?? string.Empty, StringComparison.Ordinal);
+        Assert.Null(entry.Failure);
+    }
+
+    /// <summary>An invocation the operator stopped is told apart from one that crashed.</summary>
+    [Fact]
+    public void Cancelled_AnInvocationTheOperatorStopped_IsNotRecordedAsAFault()
+    {
+        // Arrange
+        var record = new CliInvocationRecord(new FakeTimeProvider());
+
+        // Act
+        var entry = record.Cancelled("mfctl status");
+
+        // Assert
+        Assert.Equal(CliInvocationOutcome.Cancelled, entry.Outcome);
+        Assert.Null(entry.Fault);
+        Assert.Null(entry.ExitCode);
     }
 
     /// <summary>The deployment a command settled on is carried onto whatever ends the invocation.</summary>
@@ -73,6 +127,6 @@ public sealed class CliInvocationRecordTests
         record.ReachedDeployment("production");
 
         // Assert
-        Assert.Equal("production", record.Faulted("mfctl status").Deployment);
+        Assert.Equal("production", record.Faulted("mfctl status", new InvalidOperationException()).Deployment);
     }
 }

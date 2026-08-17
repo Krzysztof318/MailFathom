@@ -41,4 +41,14 @@ internal sealed record CliInvocationEntry(
 
     /// <summary>Gets the operator-readable failure the command printed, and <see langword="null" /> when it printed none.</summary>
     public string? Failure { get; init; }
+
+    /// <summary>Gets the type of what the command raised, and <see langword="null" /> when it raised nothing of that kind.</summary>
+    /// <remarks>
+    /// The type's name and neither its message nor its stack. A defect's message is written for whoever will fix it and
+    /// quotes what the code was working on, which for this command is mail; a stack is frames rather than data but ends
+    /// the one-record-per-line shape the log is read by. A type name is a class in an assembly and says what went wrong
+    /// without either — which is the whole of what a log can honestly offer about a crash whose stack the operator
+    /// already saw.
+    /// </remarks>
+    public string? Fault { get; init; }
 }

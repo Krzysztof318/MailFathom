@@ -66,18 +66,49 @@ internal sealed class CliInvocationRecord
         Failure = Bounded(failure),
     };
 
-    /// <summary>Closes the record for an invocation that never reported an exit code.</summary>
+    /// <summary>Closes the record for an invocation that raised something rather than reporting an exit code.</summary>
+    /// <param name="command">The command that ran, as the declared names from <c>mfctl</c> down.</param>
+    /// <param name="fault">What it raised, whose type is recorded and whose message and stack are not.</param>
+    /// <returns>The line to append.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="fault" /> is <see langword="null" />.</exception>
+    /// <remarks>
+    /// This is the invocation the log is most worth having for — a crash puts its stack on the terminal and nowhere
+    /// else, so once the scrollback is gone the log is all there is. <see cref="CliInvocationEntry.Fault" /> holds what
+    /// can be recorded of it safely.
+    /// </remarks>
+    internal CliInvocationEntry Faulted(string command, Exception fault)
+    {
+        ArgumentNullException.ThrowIfNull(fault);
+
+        return this.Entry(command, CliInvocationOutcome.Faulted) with { Fault = fault.GetType().FullName };
+    }
+
+    /// <summary>Closes the record for an invocation the operator stopped.</summary>
     /// <param name="command">The command that ran, as the declared names from <c>mfctl</c> down.</param>
     /// <returns>The line to append.</returns>
-    /// <remarks>
-    /// What the command raised is deliberately not read. A defect's message is written for a developer and quotes
-    /// whatever it was working on, which for this command is mail — so the fact that it faulted is recorded and the
-    /// text of it is left to the stack trace the operator already saw.
-    /// </remarks>
-    internal CliInvocationEntry Faulted(string command) => this.Entry(command, CliInvocationOutcome.Faulted);
+    /// <remarks>Its own ending rather than a fault, because Ctrl+C is the operator doing something deliberate and a log that read it as a crash would send somebody looking for one.</remarks>
+    internal CliInvocationEntry Cancelled(string command) => this.Entry(command, CliInvocationOutcome.Cancelled);
 
-    private static string? Bounded(string? failure) =>
-        failure is { Length: > MaximumFailureLength } ? failure[..MaximumFailureLength] : failure;
+    /// <summary>Cuts a failure to the ceiling without splitting a character in half.</summary>
+    /// <remarks>
+    /// A message can carry an alias or a profile name an operator chose, so a character outside the basic plane can
+    /// straddle the ceiling — and cutting between the two halves of a surrogate pair leaves a string that is not valid
+    /// UTF-16. The JSON writer refuses one outright, which would put an exception into the append that runs in the
+    /// runner's <c>finally</c> and mask whatever the invocation was already reporting.
+    /// </remarks>
+    private static string? Bounded(string? failure)
+    {
+        if (failure is not { Length: > MaximumFailureLength })
+        {
+            return failure;
+        }
+
+        var length = char.IsHighSurrogate(failure[MaximumFailureLength - 1])
+            ? MaximumFailureLength - 1
+            : MaximumFailureLength;
+
+        return failure[..length];
+    }
 
     private CliInvocationEntry Entry(string command, CliInvocationOutcome outcome) => new(
         this.startedAt,

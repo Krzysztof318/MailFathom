@@ -18,6 +18,13 @@ internal enum CliInvocationOutcome
     /// <summary>The command ran and reported a failure the operator can act on.</summary>
     Failed = 1,
 
-    /// <summary>The command did not finish: it was cancelled, or it raised something that is a defect rather than an operator's mistake.</summary>
+    /// <summary>The command raised something that is a defect rather than an operator's mistake, and never reported a code.</summary>
     Faulted = 2,
+
+    /// <summary>The operator stopped the command before it finished.</summary>
+    /// <remarks>
+    /// Told apart from <see cref="Faulted" /> rather than folded into it, because the two read identically in a log and
+    /// mean opposite things: one is somebody pressing Ctrl+C and the other is this command being wrong.
+    /// </remarks>
+    Cancelled = 3,
 }

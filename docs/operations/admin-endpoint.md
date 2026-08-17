@@ -1322,10 +1322,22 @@ $ tail -1 ~/.config/MailFathom/mfctl.log
 {"at":"2026-08-17T09:41:22.184+00:00","command":"mfctl contact delete","outcome":"Failed","durationMilliseconds":412,"exitCode":1,"deployment":"production","failure":"The deployment answered 404 rather than a contact."}
 ```
 
-`command` is the path of names `mfctl` declares, `deployment` is your own name for the profile the command settled on,
-and `outcome` is `Completed`, `Failed`, or `Faulted` — the last meaning the invocation never reported an exit code,
-which is what a cancelled command and a defect both leave behind. A field the invocation has nothing for is left out
-rather than written as a null.
+`command` is the path of names `mfctl` declares and `deployment` is your own name for the profile the command settled
+on. A field the invocation has nothing for is left out rather than written as a null.
+
+`outcome` is one of four, and the last two are what makes this file worth having when something goes wrong:
+
+| `outcome` | What happened | What else the record carries |
+| --- | --- | --- |
+| `Completed` | The command did what you asked | `exitCode` `0` |
+| `Failed` | Something you can act on, already printed to your terminal | `exitCode` `1`, and `failure` with that same line |
+| `Faulted` | The command raised something that is a defect rather than your mistake | `fault` with the type of it, and no exit code |
+| `Cancelled` | You stopped it before it finished | no exit code |
+
+`fault` is the type's name and nothing else about it — not the message, which is written for whoever will fix the
+defect and quotes what the code was working on, and not the stack, which is frames rather than data but would end the
+one-record-per-line shape. The stack itself went to your terminal, so what the log adds is that the crash happened at
+all, when, under which command, and what kind it was.
 
 **No credential and no mail is in it.** A credential never reaches a failure message in the first place, because those
 are written to be shown on your terminal; and a contact, an address, or a subject a command printed for you is the

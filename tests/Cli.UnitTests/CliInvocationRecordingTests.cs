@@ -23,8 +23,20 @@ namespace MailFathom.Cli.UnitTests;
 /// by hand would assert the shape of a type nobody had asked to write anything.
 /// </para>
 /// </remarks>
-public sealed class CliInvocationRecordingTests
+public sealed class CliInvocationRecordingTests : IDisposable
 {
+    private readonly string storeDirectory =
+        Path.Combine(Path.GetTempPath(), $"mailfathom-cli-recording-tests-{Guid.NewGuid():N}");
+
+    /// <inheritdoc />
+    public void Dispose()
+    {
+        if (Directory.Exists(this.storeDirectory))
+        {
+            Directory.Delete(this.storeDirectory, recursive: true);
+        }
+    }
+
     /// <summary>An invocation that succeeded is recorded under the command it named, with the code it reported.</summary>
     [Fact]
     public async Task RunAsync_AnInvocationThatSucceeded_RecordsTheCommandAndTheExitCode()
@@ -136,6 +148,47 @@ public sealed class CliInvocationRecordingTests
         var entry = Assert.Single(log.Appended);
 
         Assert.DoesNotContain(Address, entry.Command, StringComparison.Ordinal);
+    }
+
+    /// <summary>A command that reached a deployment names it, which is the field the whole seam through the access layer exists for.</summary>
+    /// <remarks>
+    /// Against a stored profile and a deployment that answers, because that is the only arrangement in which
+    /// <c>DeploymentAccess.ReachAsync</c> gets past resolving the profile. A test that stops at the failure — which the
+    /// two above deliberately do — never reaches the line that writes this field, so removing it would break every
+    /// successful invocation's record with nothing to say so.
+    /// </remarks>
+    [Fact]
+    public async Task RunAsync_ACommandThatReachedADeployment_RecordsTheProfileItActedThrough()
+    {
+        // Arrange
+        using var deployment = FakeAdminEndpoint.Accepting("workstation");
+
+        var store = new CredentialStore(
+            Path.Combine(this.storeDirectory, "credentials.json"),
+            new TokenProtector(Path.Combine(this.storeDirectory, "credentials.key")));
+
+        store.Save("production", new Uri("https://mail.example.test:8443"), "not-a-real-key", "workstation");
+
+        var log = new RecordingCliInvocationLog();
+
+        var context = new CliContext(
+            new RecordingCliConsole(),
+            store,
+            (endpoint, trust) => FakeDeploymentTransport.Over(deployment, endpoint, trust),
+            FakeMailboxRedirect.Silent(),
+            static _ => false,
+            TimeProvider.System,
+            log,
+            static _ => null);
+
+        // Act
+        var exitCode = await CliRunner.RunAsync(context, ["status"], TestContext.Current.CancellationToken);
+
+        // Assert
+        var entry = Assert.Single(log.Appended);
+
+        Assert.Equal(CliExitCode.Success, exitCode);
+        Assert.Equal("production", entry.Deployment);
     }
 
     /// <summary>A shell that turned the log off is obeyed by an invocation that ran through the whole runner.</summary>

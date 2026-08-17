@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using System.Diagnostics.CodeAnalysis;
 using System.Text;
 using System.Text.Json;
 using MailFathom.Cli.Credentials;
@@ -51,6 +52,10 @@ internal sealed class FileCliInvocationLog : ICliInvocationLog
     internal static string DefaultPath() => Path.Combine(OperatorDirectory.Resolve(), FileName);
 
     /// <inheritdoc />
+    [SuppressMessage(
+        "Design",
+        "CA1031:Do not catch general exception types",
+        Justification = "The append runs in the runner's finally, so anything escaping here would mask the exit code or the exception the invocation was already reporting — which is the one thing keeping a record must never do.")]
     public bool TryAppend(CliInvocationEntry entry)
     {
         ArgumentNullException.ThrowIfNull(entry);
@@ -71,7 +76,7 @@ internal sealed class FileCliInvocationLog : ICliInvocationLog
 
             return true;
         }
-        catch (Exception failure) when (failure is IOException or UnauthorizedAccessException)
+        catch (Exception)
         {
             return false;
         }

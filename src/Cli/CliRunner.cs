@@ -68,9 +68,26 @@ internal static class CliRunner
 
             return CliExitCode.Failure;
         }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            entry = context.Invocation.Cancelled(command);
+
+            throw;
+        }
+        catch (Exception fault)
+        {
+            entry = context.Invocation.Faulted(command, fault);
+
+            throw;
+        }
         finally
         {
-            Record(context, parseResult, entry ?? context.Invocation.Faulted(command));
+            // Every path above closes the record, so the guard covers only a catch block that itself raised — writing
+            // the failure line to a terminal that has gone away. Nothing left to say about that invocation is true.
+            if (entry is { } closed)
+            {
+                Record(context, parseResult, closed);
+            }
         }
     }
 
