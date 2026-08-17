@@ -114,11 +114,12 @@ public static class EmailThreadOrder
 
     /// <summary>Finds the reply cycle keeping a message from being reached, and returns the member the cut falls on.</summary>
     /// <remarks>
-    /// Every message left unemitted records a parent that is unemitted too, because emitting a message emits everything
-    /// answering it — so walking the recorded parents from any of them stays inside that set and ends where it started
-    /// going round. The first message the walk meets twice is where the cycle begins, and everything walked from there
-    /// on is the cycle itself; the cut falls on the earliest of those in the same order the roots were taken in, so a
-    /// conversation read twice cuts the same edge whichever message the walk began at.
+    /// A message left unemitted records a parent, because one recording none is a root and was emitted above, and that
+    /// parent is unemitted too, because emitting a message emits everything answering it. So walking the recorded
+    /// parents from any unemitted message stays inside that set and ends where it started going round. The first message
+    /// the walk meets twice is where the cycle begins, and everything walked from there on is the cycle itself; the cut
+    /// falls on the earliest of those in the same order the roots were taken in, so which edge is cut does not depend on
+    /// which message of the cycle's own component the walk began at.
     /// </remarks>
     private static ThreadedEmailSummary CutPointOf(
         ThreadedEmailSummary stranded,
