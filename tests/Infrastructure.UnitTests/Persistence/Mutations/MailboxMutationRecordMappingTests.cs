@@ -67,6 +67,31 @@ public sealed class MailboxMutationRecordMappingTests
             () => MailboxMutationRecordMapping.ToRecord(entity, entity.MailFolder));
     }
 
+    /// <summary>
+    /// Both directions of the star are one mutation, so a mapping that always restored the same one would turn a rule
+    /// asking for the flag to be cleared into one asking for it to be set, on a resumed attempt nobody watched.
+    /// </summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void ToRecord_AFlaggedStateChange_RestoresTheDirectionItWasStoredWith(bool isFlagged)
+    {
+        // Arrange
+        var entity = StoredRelocation();
+        entity.Mutation = MailboxMutation.SetFlagged.Name;
+        entity.DestinationFolderPath = null;
+        entity.DestinationHierarchyDelimiter = null;
+        entity.RequiresSourceRemoval = false;
+        entity.DesiredFlaggedState = isFlagged;
+
+        // Act
+        var record = MailboxMutationRecordMapping.ToRecord(entity, entity.MailFolder);
+
+        // Assert
+        Assert.Equal(isFlagged, record.Request.DesiredFlaggedState);
+        Assert.Null(record.Request.DesiredSeenState);
+    }
+
     /// <summary>A stored keyword change has to come back naming the same keywords, or a resumed attempt writes another label.</summary>
     [Fact]
     public void ToRecord_AKeywordChange_RestoresTheKeywordsAsTheyWereStored()

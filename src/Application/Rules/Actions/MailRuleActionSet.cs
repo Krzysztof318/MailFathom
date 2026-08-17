@@ -200,9 +200,12 @@ public sealed class MailRuleActionSet
     /// compile-time constants, so the rank is decided by comparison rather than by a switch over cases.
     /// </para>
     /// <para>
-    /// The order among the flag and keyword changes decides nothing observable — each writes a different flag, and the
-    /// one pair that would contradict each other is refused before it gets here — so it is fixed for determinism rather
-    /// than for meaning.
+    /// One pair among the flag and keyword changes decides something observable, and it is the reason
+    /// <see cref="MailboxMutation.RemoveKeywords" /> is ranked ahead of <see cref="MailboxMutation.AddKeywords" />: a
+    /// keyword one rule takes off and another puts on ends up on the message, rather than depending on which rule was
+    /// written first. Reordering those two ranks silently reverses that. The rest is fixed for determinism rather than
+    /// for meaning — each of them writes a different flag, and the one pair that would contradict another is refused
+    /// before it gets here.
     /// </para>
     /// </remarks>
     public static int ApplicationOrderOf(MailRuleAction action)

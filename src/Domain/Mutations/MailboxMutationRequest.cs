@@ -239,7 +239,13 @@ public sealed record MailboxMutationRequest
         StoredEmailId storedEmailId,
         EmailOccurrenceId occurrence,
         MailboxMutationRequester requester,
-        AuthoredMailKeywords keywords) => Create(
+        AuthoredMailKeywords keywords)
+    {
+        // Guarded here rather than left to the parameter check below, which reads a null keyword set as a mutation that
+        // names none and would refuse it as the wrong mutation instead of as the missing argument it is.
+        ArgumentNullException.ThrowIfNull(keywords);
+
+        return Create(
             storedEmailId,
             occurrence,
             MailboxMutation.AddKeywords,
@@ -249,6 +255,7 @@ public sealed record MailboxMutationRequest
             desiredFlaggedState: null,
             keywords,
             localDisposition: null);
+    }
 
     /// <summary>Asks for keywords to be taken off one email, leaving the ones it is not asked about.</summary>
     /// <param name="storedEmailId">The local email being relabelled.</param>
@@ -262,7 +269,13 @@ public sealed record MailboxMutationRequest
         StoredEmailId storedEmailId,
         EmailOccurrenceId occurrence,
         MailboxMutationRequester requester,
-        AuthoredMailKeywords keywords) => Create(
+        AuthoredMailKeywords keywords)
+    {
+        // Guarded here rather than left to the parameter check below, which reads a null keyword set as a mutation that
+        // names none and would refuse it as the wrong mutation instead of as the missing argument it is.
+        ArgumentNullException.ThrowIfNull(keywords);
+
+        return Create(
             storedEmailId,
             occurrence,
             MailboxMutation.RemoveKeywords,
@@ -272,6 +285,7 @@ public sealed record MailboxMutationRequest
             desiredFlaggedState: null,
             keywords,
             localDisposition: null);
+    }
 
     /// <summary>Asks for one email's keywords to become exactly the set that was named.</summary>
     /// <param name="storedEmailId">The local email being relabelled.</param>
@@ -284,7 +298,13 @@ public sealed record MailboxMutationRequest
         StoredEmailId storedEmailId,
         EmailOccurrenceId occurrence,
         MailboxMutationRequester requester,
-        AuthoredMailKeywords keywords) => Create(
+        AuthoredMailKeywords keywords)
+    {
+        // Guarded here rather than left to the parameter check below, which reads a null keyword set as a mutation that
+        // names none and would refuse it as the wrong mutation instead of as the missing argument it is.
+        ArgumentNullException.ThrowIfNull(keywords);
+
+        return Create(
             storedEmailId,
             occurrence,
             MailboxMutation.SetKeywords,
@@ -294,6 +314,7 @@ public sealed record MailboxMutationRequest
             desiredFlaggedState: null,
             keywords,
             localDisposition: null);
+    }
 
     /// <summary>Restores the request a durable record was written for.</summary>
     /// <param name="storedEmailId">The local email the change is about.</param>

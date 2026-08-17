@@ -48,6 +48,7 @@ public sealed class MailRuleActionSetTests
         { "replace and add keywords", [MailRuleAction.SetKeywords(Todo), MailRuleAction.AddKeywords(Done)] },
         { "add and replace keywords", [MailRuleAction.AddKeywords(Todo), MailRuleAction.SetKeywords(Done)] },
         { "replace and remove keywords", [MailRuleAction.SetKeywords(Todo), MailRuleAction.RemoveKeywords(Done)] },
+        { "remove and replace keywords", [MailRuleAction.RemoveKeywords(Todo), MailRuleAction.SetKeywords(Done)] },
         { "delete and label", [MailRuleAction.Delete(), MailRuleAction.AddKeywords(Todo)] },
     };
 

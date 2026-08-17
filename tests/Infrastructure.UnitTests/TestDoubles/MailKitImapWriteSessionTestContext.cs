@@ -79,9 +79,18 @@ internal static class MailKitImapWriteSessionTestContext
     /// <param name="openFolder">The selected folder the mutation runs against.</param>
     /// <param name="carried">The keywords the message currently carries, as the server would report them.</param>
     /// <remarks>
+    /// <para>
     /// The summary carries <see cref="IMessageSummary.Keywords" /> because that is where MailKit puts the keyword half
     /// of one <c>FLAGS</c> answer. A double answering through <see cref="IMessageSummary.Flags" /> instead would let a
     /// replacement reading the right property pass here and remove nothing against a real server.
+    /// </para>
+    /// <para>
+    /// The <see cref="IFetchRequest" /> overload is the one stubbed, and it is the only one there is to stub:
+    /// <see cref="IMailFolder" /> declares three <c>FetchAsync</c> members and every one of them takes an
+    /// <see cref="IFetchRequest" />. The session's call site passes a <see cref="MessageSummaryItems" /> instead, which
+    /// binds to the static extension in <c>MailKit.IMailFolderExtensions</c> — it builds the request and calls the
+    /// interface member, so a substitute can only ever intercept it here.
+    /// </para>
     /// </remarks>
     internal static void AnswerWithCarriedKeywords(IMailFolder openFolder, params string[] carried)
     {

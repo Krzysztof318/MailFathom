@@ -288,6 +288,32 @@ public sealed class MailboxMutationRequestTests
         Assert.Equal("keywords", refusal.ParamName);
     }
 
+    /// <summary>
+    /// A missing keyword set is a missing argument rather than a mutation that names none, so it fails as the first.
+    /// Without the guard it would reach the parameter check and be refused as the wrong mutation, which sends whoever
+    /// reads the message looking at the mutation instead of at the argument they did not pass.
+    /// </summary>
+    [Fact]
+    public void KeywordFactories_HandedNoKeywordSetAtAll_RefuseTheMissingArgument()
+    {
+        // Act, Assert
+        Assert.Throws<ArgumentNullException>(() => MailboxMutationRequest.AddKeywords(
+            LocalEmail,
+            Occurrence(),
+            Requester,
+            keywords: null!));
+        Assert.Throws<ArgumentNullException>(() => MailboxMutationRequest.RemoveKeywords(
+            LocalEmail,
+            Occurrence(),
+            Requester,
+            keywords: null!));
+        Assert.Throws<ArgumentNullException>(() => MailboxMutationRequest.SetKeywords(
+            LocalEmail,
+            Occurrence(),
+            Requester,
+            keywords: null!));
+    }
+
     /// <summary>A stored row hands the parameters back loose, so a flag direction on a keyword mutation is rejected on the way in.</summary>
     [Fact]
     public void Create_AKeywordMutationNamingAFlagDirection_IsRefused()
