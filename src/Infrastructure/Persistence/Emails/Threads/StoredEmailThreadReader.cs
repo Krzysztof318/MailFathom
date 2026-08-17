@@ -2,11 +2,13 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Application.Emails.Mailboxes;
 using MailFathom.Application.Emails.Threads;
 using MailFathom.CodeCoverage;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Folders;
+using MailFathom.Infrastructure.Persistence.Entities;
 using Microsoft.EntityFrameworkCore;
 
 namespace MailFathom.Infrastructure.Persistence.Emails.Threads;
@@ -32,19 +34,26 @@ internal sealed class StoredEmailThreadReader(MailFathomDbContext dbContext) : I
     /// <inheritdoc />
     public async Task<IReadOnlyList<ThreadedEmailSummary>> ReadEmailsAsync(
         EmailThreadId threadId,
+        MailboxScope scope,
         CancellationToken cancellationToken)
     {
+        ArgumentNullException.ThrowIfNull(scope);
+
         if (await this.SurvivingThreadAsync(threadId.Value, cancellationToken) is not { } surviving)
         {
             return [];
         }
 
+        var readable = Readable(
+            dbContext.StoredEmails
+                .AsNoTracking()
+                .Where(email => email.EmailThreadId == surviving)
+                .Where(StoredEmailTombstone.IsNotTombstoned),
+            scope);
+
         // One row past the bound, because the count alone cannot tell a conversation that ends at the bound from one
         // that was cut there, and the caller states which of the two it is to whoever reads the thread.
-        var rows = await dbContext.StoredEmails
-            .AsNoTracking()
-            .Where(email => email.EmailThreadId == surviving)
-            .Where(StoredEmailTombstone.IsNotTombstoned)
+        var rows = await readable
             .OrderBy(email => email.Id)
             .Take(IEmailThreadReader.MaximumAssembledEmails + 1)
             .Select(email => new
@@ -74,6 +83,25 @@ internal sealed class StoredEmailThreadReader(MailFathomDbContext dbContext) : I
                 SenderAddress = row.SenderAddress,
             }),
         ];
+    }
+
+    /// <summary>Narrows a conversation to the mail configuration admits to tools.</summary>
+    /// <remarks>
+    /// The same three narrowings every mailbox read applies, and applied here rather than after the rows arrive because
+    /// the bound is on this query: a withheld message that consumed one of the bounded rows would push a readable one
+    /// out of a conversation the caller is entitled to all of.
+    /// </remarks>
+    private static IQueryable<StoredEmailEntity> Readable(IQueryable<StoredEmailEntity> emails, MailboxScope scope)
+    {
+        if (scope.AccountIds.Count > 0)
+        {
+            var accountIds = scope.AccountIds.Select(static accountId => accountId.Value).ToArray();
+            emails = emails.Where(email => accountIds.Contains(email.MailboxAccountId));
+        }
+
+        return AccountScopedMailFolders.Excluding(
+            AccountScopedMailFolders.Admitting(emails, scope.ReadableFolders),
+            scope.WithheldJunkFolders);
     }
 
     /// <summary>Follows a merged conversation to the one it was folded into, or reports that nothing holds it.</summary>

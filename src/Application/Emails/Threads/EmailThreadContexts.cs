@@ -17,24 +17,31 @@ namespace MailFathom.Application.Emails.Threads;
 /// </para>
 /// <para>
 /// Three things happen here in one place because they have to happen in this order. Folder visibility is applied first,
-/// because a withheld message must be outside the conversation before anything is counted or ordered; the order is
-/// produced from what is left, so a message whose parent is withheld becomes a root of what the caller is shown; and the
-/// subjects are scanned last, so what leaves this read has been through the same scanner the listing and the search
+/// and it is applied in the query rather than to its answer: the read is bounded, so a withheld message left for this
+/// class to drop would have spent one of those rows and pushed a readable message out of the conversation. The order is
+/// produced from what comes back, so a message whose parent is withheld becomes a root of what the caller is shown; and
+/// the subjects are scanned last, so what leaves this read has been through the same scanner the listing and the search
 /// send theirs through.
 /// </para>
 /// </remarks>
 public sealed class EmailThreadContexts
 {
     private readonly IEmailThreadReader threadReader;
-    private readonly MailboxScopeResolver scopeResolver;
+    private readonly MailboxScope readableScope;
     private readonly SensitiveContentEgressGuard egressGuard;
     private readonly Dictionary<EmailThreadId, AssembledThread> assembled = [];
 
     /// <summary>Initializes the per-read assembly.</summary>
     /// <param name="threadReader">Reads the messages one conversation holds.</param>
-    /// <param name="scopeResolver">Answers whether a tool may see the mailbox a message was stored from.</param>
+    /// <param name="scopeResolver">Names the accounts and folders a tool may read, which every read here runs under.</param>
     /// <param name="egressGuard">Scans the subjects before any of them becomes a caller's.</param>
     /// <exception cref="ArgumentNullException">Thrown when any argument is <see langword="null" />.</exception>
+    /// <remarks>
+    /// The scope is resolved once, here, rather than per conversation: it is configuration rather than a caller's
+    /// filter, and one read of several emails must not be able to see two answers to the same question. Junk mail is
+    /// included, because a conversation is threaded across the folders it reached and a reply that landed in junk is
+    /// part of the exchange the caller is reading rather than a listing they asked for.
+    /// </remarks>
     public EmailThreadContexts(
         IEmailThreadReader threadReader,
         MailboxScopeResolver scopeResolver,
@@ -45,11 +52,11 @@ public sealed class EmailThreadContexts
         ArgumentNullException.ThrowIfNull(egressGuard);
 
         this.threadReader = threadReader;
-        this.scopeResolver = scopeResolver;
+        this.readableScope = scopeResolver.ReadableScope([], [], JunkMailInclusion.Included);
         this.egressGuard = egressGuard;
     }
 
-    /// <summary>Reads one conversation in its own order, keeping only the messages the caller may see.</summary>
+    /// <summary>Reads one conversation in its own order, out of the mail the caller may see.</summary>
     /// <param name="threadId">The conversation to assemble.</param>
     /// <param name="cancellationToken">Propagates caller cancellation.</param>
     /// <returns>The conversation's visible messages in its order, and whether more of it exists than was assembled.</returns>
@@ -60,12 +67,9 @@ public sealed class EmailThreadContexts
             return already;
         }
 
-        var read = await this.threadReader.ReadEmailsAsync(threadId, cancellationToken);
+        var read = await this.threadReader.ReadEmailsAsync(threadId, this.readableScope, cancellationToken);
         var wasCutShort = read.Count > IEmailThreadReader.MaximumAssembledEmails;
-        var visible = read
-            .Take(IEmailThreadReader.MaximumAssembledEmails)
-            .Where(email => this.scopeResolver.IsReadableByTools(email.AccountId, email.FolderAlias))
-            .ToArray();
+        var visible = read.Take(IEmailThreadReader.MaximumAssembledEmails).ToArray();
 
         var placed = EmailThreadOrder.Of(await this.GuardedAsync(visible, cancellationToken));
         var thread = new AssembledThread(placed, wasCutShort);

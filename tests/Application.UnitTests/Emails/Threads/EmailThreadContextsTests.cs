@@ -142,6 +142,33 @@ public sealed class EmailThreadContextsTests
         Assert.Equal(IEmailThreadReader.MaximumAssembledEmails, thread.Emails.Count);
     }
 
+    /// <summary>
+    /// The bound is spent on mail the caller may see. A conversation whose withheld messages fill the bound and whose
+    /// readable ones sit behind them is the case that decides it: the caller is entitled to every one of the readable
+    /// ones, so a bound applied before the withholding would lose mail nobody could tell was missing.
+    /// </summary>
+    [Fact]
+    public async Task AssembleAsync_WithheldMessagesFillingTheBoundAheadOfReadableOnes_StillAssemblesTheReadableOnes()
+    {
+        // Arrange
+        var withheld = Enumerable
+            .Range(1, IEmailThreadReader.MaximumAssembledEmails)
+            .Select(ordinal => Message(ordinal, Withheld, "2026-08-16T09:00:00Z"));
+        var readable = Enumerable
+            .Range(IEmailThreadReader.MaximumAssembledEmails + 1, 3)
+            .Select(ordinal => Message(ordinal, Inbox, "2026-08-16T10:00:00Z"));
+        var contexts = ContextsOver([.. withheld, .. readable]);
+
+        // Act
+        var thread = await contexts.AssembleAsync(Thread, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.False(thread.WasCutShort);
+        Assert.Equal(
+            readable.Select(email => email.StoredEmailId),
+            thread.Emails.Select(email => email.Email.StoredEmailId));
+    }
+
     [Fact]
     public async Task ContextForAsync_SeveralMessagesOfOneConversation_ReadsThatConversationOnce()
     {

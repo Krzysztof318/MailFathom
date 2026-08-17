@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Application.Emails.Mailboxes;
 using MailFathom.Domain.Emails;
 
 namespace MailFathom.Application.Emails.Threads;
@@ -23,8 +24,9 @@ public interface IEmailThreadReader
     /// </remarks>
     const int MaximumAssembledEmails = 500;
 
-    /// <summary>Reads the messages of one conversation, whatever folders of the account they sit in.</summary>
+    /// <summary>Reads the emails of one conversation the caller may see, whatever readable folders they sit in.</summary>
     /// <param name="threadId">The conversation to read, which may be one a merge has since folded into another.</param>
+    /// <param name="scope">The accounts and folders configuration admits to tools, which the query is narrowed by.</param>
     /// <param name="cancellationToken">Propagates caller cancellation.</param>
     /// <returns>
     /// The conversation's messages in no particular order, at most <see cref="MaximumAssembledEmails" /> plus one, and
@@ -42,12 +44,18 @@ public interface IEmailThreadReader
     /// merge still reaches the conversation it named instead of answering not-found.
     /// </para>
     /// <para>
-    /// Tombstoned messages are excluded, which is what makes a deleted message leave the thread it was in. Folder
-    /// visibility is not applied here and is the caller's: it is one decision, made in the use case that already makes
-    /// it for every other read, rather than a rule this query and that one would each have to keep.
+    /// Tombstoned messages are excluded, which is what makes a deleted message leave the thread it was in.
+    /// </para>
+    /// <para>
+    /// The scope narrows the query rather than the answer, which is what the bound above makes a correctness question
+    /// instead of a preference. A conversation is threaded across every folder it reached, withheld ones included, so a
+    /// bound applied before the withholding would spend its rows on mail the caller may never see and cut readable mail
+    /// that sits behind it. The caller decides what a tool may read and hands that decision here, so the rows counted
+    /// against the bound are the rows a caller could be shown.
     /// </para>
     /// </remarks>
     Task<IReadOnlyList<ThreadedEmailSummary>> ReadEmailsAsync(
         EmailThreadId threadId,
+        MailboxScope scope,
         CancellationToken cancellationToken);
 }
