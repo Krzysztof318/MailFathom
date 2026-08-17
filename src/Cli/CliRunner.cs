@@ -47,6 +47,15 @@ internal static class CliRunner
         // before this method sees it. What an operator should read for a refused credential is one line, and deciding
         // that is this method's job rather than the parser's.
         var invocation = new InvocationConfiguration { EnableDefaultExceptionHandler = false };
+
+        // The commands run against a terminal that remembers what they reported, because a dozen of them refuse by
+        // writing one sentence and returning a failing code rather than by raising. Copying the context keeps the
+        // record: a record's copy constructor copies the field the initializer filled instead of running it again, so
+        // the deployment a command notes is noted on the same one this method reads back.
+        var refusals = new RefusalWatchingConsole(context.Console);
+
+        context = context with { Console = refusals };
+
         var parseResult = CliRootCommand.Create(context).Parse(args);
         var command = CommandPathOf(parseResult);
 
@@ -56,7 +65,7 @@ internal static class CliRunner
         {
             var exitCode = await parseResult.InvokeAsync(invocation, cancellationToken);
 
-            entry = context.Invocation.Ended(command, exitCode, RefusalOf(parseResult, exitCode));
+            entry = context.Invocation.Ended(command, exitCode, RefusalOf(parseResult, refusals, exitCode));
 
             return exitCode;
         }
@@ -122,16 +131,27 @@ internal static class CliRunner
         }
     }
 
-    /// <summary>Reads back why the parser refused an invocation, for the record of one that raised nothing.</summary>
+    /// <summary>Reads back why an invocation failed, for the record of one that raised nothing.</summary>
     /// <remarks>
-    /// A parse error is reported by the library and returns a code rather than raising, so it reaches neither of the
-    /// paths that carry a message. Without this a refused invocation would be recorded as a failure with nothing said
-    /// about it, which is the one shape the log's own table promises never to have.
+    /// <para>
+    /// Two kinds end that way and neither reaches the paths that carry a message. A parse error is reported by the
+    /// library and returns a code; and a command whose refusal is an ordinary outcome rather than a defect — a contact
+    /// the book does not hold, a confirmation declined — writes its own sentence and returns one. Without both, those
+    /// invocations would be recorded as failures with nothing said about them, which is the one shape the log's own
+    /// table promises never to have.
+    /// </para>
+    /// <para>
+    /// The parser's answer is preferred where there is one, because it names what it refused and the command never ran
+    /// to write anything. Nothing is read at all for an invocation that succeeded, so a command that reported something
+    /// on its way to doing what it was asked cannot leave a failure on the record of it.
+    /// </para>
     /// </remarks>
-    private static string? RefusalOf(ParseResult parseResult, int exitCode) =>
-        exitCode != CliExitCode.Success && parseResult.Errors.Count > 0
-            ? string.Join(' ', parseResult.Errors.Select(error => error.Message))
-            : null;
+    private static string? RefusalOf(ParseResult parseResult, RefusalWatchingConsole refusals, int exitCode) =>
+        exitCode == CliExitCode.Success
+            ? null
+            : parseResult.Errors.Count > 0
+                ? string.Join(' ', parseResult.Errors.Select(error => error.Message))
+                : refusals.LastRefusal;
 
     /// <summary>Names the command that was invoked, as the path of declared names from the root down.</summary>
     /// <remarks>

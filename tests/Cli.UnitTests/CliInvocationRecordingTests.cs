@@ -5,6 +5,7 @@
 using MailFathom.Cli.Commands;
 using MailFathom.Cli.Credentials;
 using MailFathom.Cli.Diagnostics;
+using MailFathom.TestSupport;
 using Microsoft.Extensions.Time.Testing;
 using Xunit;
 
@@ -94,6 +95,64 @@ public sealed class CliInvocationRecordingTests : IDisposable
         Assert.Null(Assert.Single(log.Appended).Failure);
     }
 
+    /// <summary>A command that refused by printing rather than raising still records what it printed.</summary>
+    /// <remarks>
+    /// A dozen commands treat a refusal as an ordinary outcome — a contact the book does not hold, a job no longer
+    /// dead-lettered, a confirmation declined — so they write one sentence and return a failing code without raising.
+    /// Nothing about that reaches the runner on its own, and those invocations were being recorded as failures with
+    /// nothing said about them.
+    /// </remarks>
+    [Fact]
+    public async Task RunAsync_ACommandThatRefusedWithoutRaising_RecordsTheSentenceItPrinted()
+    {
+        // Arrange
+        using var deployment = FakeContactDeployment.Holding();
+
+        var log = new RecordingCliInvocationLog();
+
+        // Act
+        var exitCode = await CliRunner.RunAsync(
+            this.ContextReaching(deployment, log),
+            ["contact", "show", "--address", "nobody@example.test"],
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        var entry = Assert.Single(log.Appended);
+
+        Assert.Equal(CliExitCode.Failure, exitCode);
+        Assert.Equal(CliInvocationOutcome.Failed, entry.Outcome);
+        Assert.NotNull(entry.Failure);
+        Assert.DoesNotContain("nobody@example.test", entry.Failure, StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>What a command reported on its way to doing what it was asked is not a failure on the record of it.</summary>
+    /// <remarks>
+    /// The control for the test above: recording the last line written to standard error whatever the invocation
+    /// returned would put a failure on every record of a command that reports its progress there, and the sign-in is
+    /// the one that reports the most.
+    /// </remarks>
+    [Fact]
+    public async Task RunAsync_ACommandThatReportedOnStandardErrorAndSucceeded_RecordsNoFailure()
+    {
+        // Arrange
+        using var deployment = FakeAdminEndpoint.Accepting("workstation");
+
+        var console = new RecordingCliConsole { SecretToSupply = "not-a-real-key" };
+        var log = new RecordingCliInvocationLog();
+
+        // Act
+        var exitCode = await CliRunner.RunAsync(
+            this.ContextReaching(deployment, log, console),
+            ["login", "--endpoint", "https://mail.example.test:8443"],
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        var entry = Assert.Single(log.Appended);
+
+        Assert.Equal(CliExitCode.Success, exitCode);
+        Assert.Null(entry.Failure);
+    }
+
     /// <summary>A subcommand is recorded by the path of names it was declared under, not by the one word at the end.</summary>
     [Fact]
     public async Task RunAsync_ASubcommand_RecordsThePathOfDeclaredNames()
@@ -179,26 +238,13 @@ public sealed class CliInvocationRecordingTests : IDisposable
         // Arrange
         using var deployment = FakeAdminEndpoint.Accepting("workstation");
 
-        var store = new CredentialStore(
-            Path.Combine(this.storeDirectory, "credentials.json"),
-            new TokenProtector(Path.Combine(this.storeDirectory, "credentials.key")));
-
-        store.Save("production", new Uri("https://mail.example.test:8443"), "not-a-real-key", "workstation");
-
         var log = new RecordingCliInvocationLog();
 
-        var context = new CliContext(
-            new RecordingCliConsole(),
-            store,
-            (endpoint, trust) => FakeDeploymentTransport.Over(deployment, endpoint, trust),
-            FakeMailboxRedirect.Silent(),
-            static _ => false,
-            Stopped(),
-            log,
-            static _ => null);
-
         // Act
-        var exitCode = await CliRunner.RunAsync(context, ["status"], TestContext.Current.CancellationToken);
+        var exitCode = await CliRunner.RunAsync(
+            this.ContextReaching(deployment, log),
+            ["status"],
+            TestContext.Current.CancellationToken);
 
         // Assert
         var entry = Assert.Single(log.Appended);
@@ -223,21 +269,9 @@ public sealed class CliInvocationRecordingTests : IDisposable
         var console = new RecordingCliConsole { SecretToSupply = "not-a-real-key" };
         var log = new RecordingCliInvocationLog();
 
-        var context = new CliContext(
-            console,
-            new CredentialStore(
-                Path.Combine(this.storeDirectory, "credentials.json"),
-                new TokenProtector(Path.Combine(this.storeDirectory, "credentials.key"))),
-            (endpoint, trust) => FakeDeploymentTransport.Over(deployment, endpoint, trust),
-            FakeMailboxRedirect.Silent(),
-            static _ => false,
-            Stopped(),
-            log,
-            static _ => null);
-
         // Act
         var exitCode = await CliRunner.RunAsync(
-            context,
+            this.ContextReaching(deployment, log, console),
             ["login", "--endpoint", "https://mail.example.test:8443"],
             TestContext.Current.CancellationToken);
 
@@ -339,6 +373,34 @@ public sealed class CliInvocationRecordingTests : IDisposable
 
         Assert.Equal(new DateTimeOffset(2026, 8, 17, 9, 0, 0, TimeSpan.Zero), entry.At);
         Assert.Equal(3000, entry.DurationMilliseconds);
+    }
+
+    /// <summary>Builds a context with a stored profile and a deployment that answers, which is what a command has to reach one.</summary>
+    /// <remarks>
+    /// The profile is saved up front because <c>DeploymentAccess.ReachAsync</c> resolves one before it opens anything,
+    /// so a command driven against a bare store stops before the deployment is involved at all. <c>login</c> is given
+    /// the same arrangement and simply establishes a second profile over it.
+    /// </remarks>
+    private CliContext ContextReaching(
+        FakeHttpMessageHandler deployment,
+        RecordingCliInvocationLog log,
+        RecordingCliConsole? console = null)
+    {
+        var store = new CredentialStore(
+            Path.Combine(this.storeDirectory, "credentials.json"),
+            new TokenProtector(Path.Combine(this.storeDirectory, "credentials.key")));
+
+        store.Save("production", new Uri("https://mail.example.test:8443"), "not-a-real-key", "workstation");
+
+        return new CliContext(
+            console ?? new RecordingCliConsole(),
+            store,
+            (endpoint, trust) => FakeDeploymentTransport.Over(deployment, endpoint, trust),
+            FakeMailboxRedirect.Silent(),
+            static _ => false,
+            Stopped(),
+            log,
+            static _ => null);
     }
 
     /// <summary>A clock that does not move, which is what a test asserting anything but a duration wants.</summary>

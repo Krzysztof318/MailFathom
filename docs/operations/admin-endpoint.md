@@ -1340,8 +1340,11 @@ one-record-per-line shape. The stack itself went to your terminal, so what the l
 all, when, under which command, and what kind it was.
 
 **No credential and no mail is in it.** A credential never reaches a failure message in the first place, because those
-are written to be shown on your terminal; and a contact, an address, or a subject a command printed for you is the
-answer to that command rather than a fact about running it, so none of it is offered to the log at all.
+are written to be shown on your terminal. Mail is out by the split the command already keeps: what you asked for goes
+to standard output — a contact, an address, a subject — and only standard error is read back for `failure`, which is
+where a sentence written to be read beside a failing exit code goes. Those sentences already avoid naming a person, for
+the same reason the log exists: a refusal that named one would end up in a file wherever the command is run from a
+script.
 
 **Your own deployment can be named in it.** `command` carries no argument value, but the other two fields are not blind
 to where a deployment is. `deployment` is your name for the profile, and a sign-in that passed no `--name` is named

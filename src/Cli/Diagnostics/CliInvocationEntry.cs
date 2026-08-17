@@ -9,10 +9,10 @@ namespace MailFathom.Cli.Diagnostics;
 /// <para>
 /// <strong>No credential and no mail reaches this type.</strong> That is the line, and it holds by construction rather
 /// than by filtering: a credential is never in a <see cref="CliFailure" /> message, because the failure rules forbid it
-/// there for the terminal's sake already, and nothing a command prints <em>as its own answer</em> is offered to this
-/// type at all — a contact, an address, a subject, or a message is what was asked for rather than a fact about the
-/// asking. The one thing printed that does reach here is the failure line, which <see cref="Failure" /> carries and the
-/// paragraph below is about.
+/// there for the terminal's sake already, and what a command prints <em>as its own answer</em> — a contact, an address,
+/// a subject, or a message — goes to standard output, which nothing here reads. What <see cref="Failure" /> carries is
+/// a line from standard error, where a sentence written to be read beside a failing exit code goes, and the paragraph
+/// below is about what those can name.
 /// </para>
 /// <para>
 /// <strong>The operator's own deployment can be named here, and is.</strong> <see cref="Command" /> is the path of

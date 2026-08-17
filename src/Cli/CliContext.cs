@@ -37,11 +37,19 @@ internal sealed record CliContext(
 {
     /// <summary>Gets what this invocation turns out to have done, filled in by the layers that each know part of it.</summary>
     /// <remarks>
+    /// <para>
     /// Timed from here rather than from the runner, so what is recorded is how long the operator waited rather than how
-    /// long the parsed command took. It is the one mutable thing this record holds, and it joins the synthesized
-    /// equality like every other field — so two contexts are never equal, whatever they were built from. Nothing
-    /// compares them, and there is no way to exclude it short of not storing it: a record's <c>Equals</c> reads the
-    /// instance fields, so moving this behind a private one would change where it is written and not what is compared.
+    /// long the parsed command took. A <c>with</c> expression keeps the same one rather than starting a second: the
+    /// initializer runs in the constructor and a record's copy constructor copies the field instead of running it, which
+    /// is what lets <see cref="CliRunner" /> swap the console for one that watches it without splitting the record in
+    /// two.
+    /// </para>
+    /// <para>
+    /// It is the one mutable thing this record holds, and it joins the synthesized equality like every other field — so
+    /// two contexts are never equal, whatever they were built from. Nothing compares them, and there is no way to
+    /// exclude it short of not storing it: a record's <c>Equals</c> reads the instance fields, so moving this behind a
+    /// private one would change where it is written and not what is compared.
+    /// </para>
     /// </remarks>
     internal CliInvocationRecord Invocation { get; } = new(Clock);
 
