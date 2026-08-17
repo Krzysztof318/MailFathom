@@ -266,8 +266,9 @@ build has finished and against files the build never reads, so a page that rende
 does not are the same output as far as every gate here is concerned. **The site's appearance and its run-time
 behaviour are the parts of it verified by looking at the deployed site**, and every defect found that way so far — a
 logo at its natural size, a selector missing from the two pages served from a version's own directory, the same
-selector missing again when that directory was addressed without its trailing slash, and a selector that reached the
-header but stopped halfway across it — was invisible to a green build.
+selector missing again when that directory was addressed without its trailing slash, a selector that reached the
+header but stopped halfway across it, and a diagram whose viewer enlarged a bitmap of it rather than drawing it
+again — was invisible to a green build.
 
 What the template adds beyond that:
 
@@ -278,6 +279,13 @@ What the template adds beyond that:
   and the buttons zoom about the pointer, a drag pans, a double click resets, and <kbd>Esc</kbd> closes. Pinch-zoom
   works the same way on a touch screen. A diagram is drawn at the width of the article, which has nothing to do with
   how much detail it holds, and this is what makes the detail reachable.
+
+  **The zoom is the figure's own width, and the panning is the transform.** That split is what makes the enlargement
+  a redrawing of the diagram rather than a magnification of the picture the page had: the element a transform is
+  animated on is a compositor layer, a layer is rasterized once at the size it was given, and scaling one therefore
+  stretches that bitmap however much vector art is inside it. A width is laid out instead, so Mermaid draws its SVG
+  again at every step and an image is resampled from its own pixels. The figure opens at the size the page drew it
+  at, reduced only where that size would not fit over the page.
 
 Both are written against the DOM the `modern` template produces, which re-renders the navigation bar and every Mermaid
 diagram after the page loads. The selector is therefore re-placed by an observer whenever the navigation bar is written

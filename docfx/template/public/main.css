@@ -88,7 +88,14 @@ article pre.mermaid {
 
 .mf-viewer-stage {
   cursor: grab;
+
+  /* A figure zoomed past the viewport is panned around, so the stage keeps the width its contents ask
+     for instead of being shrunk back into the space a flex item is offered. */
+  flex: 0 0 auto;
   transform-origin: center center;
+
+  /* The transform this promotes a layer for carries the panning alone. The zoom is a width `main.js`
+     sets, which is what stops the enlargement from being a stretch of the bitmap this layer holds. */
   will-change: transform;
 }
 
@@ -96,25 +103,32 @@ article pre.mermaid {
   cursor: grabbing;
 }
 
-/* The copy the viewer shows starts at the size the page would have given it and is scaled from
-   there, so opening a diagram never reflows it into a different layout than the one being read. */
-.mf-viewer-stage > * {
-  max-width: 92vw;
-  max-height: 88vh;
-  margin: 0;
+/* The frame the figure sits in, sized to whatever the figure currently is. The padding is a constant
+   border around the drawing rather than part of it, which is why the zoom is carried by the figure
+   inside the frame and not by the frame itself. */
+.mf-viewer-frame {
+  width: fit-content;
   background: var(--bs-body-bg);
   border-radius: 0.5rem;
   padding: 1rem;
 }
 
-.mf-viewer-stage img {
-  display: block;
-  object-fit: contain;
+.mf-viewer-frame > * {
+  margin: 0;
 }
 
-.mf-viewer-stage svg {
-  max-width: 100%;
-  height: auto;
+/* The `<pre>` a Mermaid diagram arrives in carries the article's width and the article's answer to a
+   drawing wider than it. Both belong to the page rather than to the viewer, and left in place they
+   would hold the SVG at the width the reader opened the viewer to get past. */
+.mf-viewer-frame > pre {
+  width: max-content;
+  max-width: none;
+  padding: 0;
+  overflow: visible;
+}
+
+.mf-viewer-frame img {
+  display: block;
 }
 
 .mf-viewer-controls {
