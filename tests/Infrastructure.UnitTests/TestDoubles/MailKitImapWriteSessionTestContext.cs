@@ -51,20 +51,55 @@ internal static class MailKitImapWriteSessionTestContext
 
     /// <summary>Builds a folder a server answers a successful selection with, ready to answer mutation commands.</summary>
     /// <param name="uidValidity">The UIDVALIDITY the folder reports.</param>
+    /// <param name="keepsAnyKeyword">Whether the folder answers <c>PERMANENTFLAGS</c> with <c>\*</c>, which most do.</param>
+    /// <param name="keptKeywords">The keywords the folder keeps by name, for a folder that does not accept new ones.</param>
     /// <returns>The selected folder.</returns>
-    internal static IMailFolder CreateWritableFolder(uint uidValidity = 7U)
+    internal static IMailFolder CreateWritableFolder(
+        uint uidValidity = 7U,
+        bool keepsAnyKeyword = true,
+        params string[] keptKeywords)
     {
         var folder = Substitute.For<IMailFolder>();
         folder.IsOpen.Returns(true);
         folder.UidValidity.Returns(uidValidity);
+        folder.PermanentFlags.Returns(keepsAnyKeyword ? MessageFlags.UserDefined : MessageFlags.None);
+        folder.PermanentKeywords.Returns(new HashSet<string>(keptKeywords, StringComparer.OrdinalIgnoreCase));
         folder.StoreAsync(Arg.Any<IList<UniqueId>>(), Arg.Any<IStoreFlagsRequest>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<IList<UniqueId>>([]));
         folder.CopyToAsync(Arg.Any<IList<UniqueId>>(), Arg.Any<IMailFolder>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(UniqueIdMap.Empty));
         folder.MoveToAsync(Arg.Any<IList<UniqueId>>(), Arg.Any<IMailFolder>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(UniqueIdMap.Empty));
+        AnswerWithCarriedKeywords(folder);
 
         return folder;
+    }
+
+    /// <summary>Answers the flag fetch a keyword replacement reads the message's current keywords from.</summary>
+    /// <param name="openFolder">The selected folder the mutation runs against.</param>
+    /// <param name="carried">The keywords the message currently carries, as the server would report them.</param>
+    /// <remarks>
+    /// <para>
+    /// The summary carries <see cref="IMessageSummary.Keywords" /> because that is where MailKit puts the keyword half
+    /// of one <c>FLAGS</c> answer. A double answering through <see cref="IMessageSummary.Flags" /> instead would let a
+    /// replacement reading the right property pass here and remove nothing against a real server.
+    /// </para>
+    /// <para>
+    /// The <see cref="IFetchRequest" /> overload is the one stubbed, and it is the only one there is to stub:
+    /// <see cref="IMailFolder" /> declares three <c>FetchAsync</c> members and every one of them takes an
+    /// <see cref="IFetchRequest" />. The session's call site passes a <see cref="MessageSummaryItems" /> instead, which
+    /// binds to the static extension in <c>MailKit.IMailFolderExtensions</c> — it builds the request and calls the
+    /// interface member, so a substitute can only ever intercept it here.
+    /// </para>
+    /// </remarks>
+    internal static void AnswerWithCarriedKeywords(IMailFolder openFolder, params string[] carried)
+    {
+        var summary = Substitute.For<IMessageSummary>();
+        summary.Keywords.Returns(new HashSet<string>(carried, StringComparer.OrdinalIgnoreCase));
+
+        openFolder
+            .FetchAsync(Arg.Any<IList<UniqueId>>(), Arg.Any<IFetchRequest>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IList<IMessageSummary>>([summary]));
     }
 
     /// <summary>Answers the copy and the move with the identity a <c>COPYUID</c> response would have named.</summary>

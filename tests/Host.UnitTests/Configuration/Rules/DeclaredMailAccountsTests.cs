@@ -132,6 +132,8 @@ public sealed class DeclaredMailAccountsTests
             ["MailSynchronization:Accounts:0:RuleActions:Copy"] = "false",
             ["MailSynchronization:Accounts:0:RuleActions:Delete"] = "true",
             ["MailSynchronization:Accounts:0:RuleActions:MarkAsRead"] = "false",
+            ["MailSynchronization:Accounts:0:RuleActions:MarkAsFlagged"] = "false",
+            ["MailSynchronization:Accounts:0:RuleActions:WriteKeywords"] = "false",
         });
 
         // Act
@@ -143,7 +145,9 @@ public sealed class DeclaredMailAccountsTests
                 PermitsRelocate: false,
                 PermitsCopy: false,
                 PermitsDelete: true,
-                PermitsSetSeen: false),
+                PermitsSetSeen: false,
+                PermitsSetFlagged: false,
+                PermitsWriteKeywords: false),
             account.PermittedRuleActions);
     }
 

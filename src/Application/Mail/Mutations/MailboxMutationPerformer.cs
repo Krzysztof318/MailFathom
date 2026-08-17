@@ -244,7 +244,7 @@ public sealed class MailboxMutationPerformer : IMailboxMutationPerformer
             cancellationToken);
 
         // A closed enumeration's members are not compile-time constants, so the mutation is dispatched by comparison
-        // rather than by a switch over cases. The request already guarantees one of the four matches.
+        // rather than by a switch over cases. The request already guarantees one of them matches.
         if (request.Mutation == MailboxMutation.Relocate)
         {
             return await session.RelocateAsync(
@@ -270,11 +270,43 @@ public sealed class MailboxMutationPerformer : IMailboxMutationPerformer
             return RemoteEmailPlacement.NotReported();
         }
 
-        await session.SetSeenAsync(
-            request.Occurrence,
-            request.DesiredSeenState!.Value,
-            journal,
-            cancellationToken);
+        if (request.Mutation == MailboxMutation.SetSeen)
+        {
+            await session.SetSeenAsync(
+                request.Occurrence,
+                request.DesiredSeenState!.Value,
+                journal,
+                cancellationToken);
+
+            return RemoteEmailPlacement.NotReported();
+        }
+
+        if (request.Mutation == MailboxMutation.SetFlagged)
+        {
+            await session.SetFlaggedAsync(
+                request.Occurrence,
+                request.DesiredFlaggedState!.Value,
+                journal,
+                cancellationToken);
+
+            return RemoteEmailPlacement.NotReported();
+        }
+
+        if (request.Mutation == MailboxMutation.AddKeywords)
+        {
+            await session.AddKeywordsAsync(request.Occurrence, request.Keywords!, journal, cancellationToken);
+
+            return RemoteEmailPlacement.NotReported();
+        }
+
+        if (request.Mutation == MailboxMutation.RemoveKeywords)
+        {
+            await session.RemoveKeywordsAsync(request.Occurrence, request.Keywords!, journal, cancellationToken);
+
+            return RemoteEmailPlacement.NotReported();
+        }
+
+        await session.SetKeywordsAsync(request.Occurrence, request.Keywords!, journal, cancellationToken);
 
         return RemoteEmailPlacement.NotReported();
     }

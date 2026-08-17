@@ -229,7 +229,7 @@ instruction, so a caller names whose history they are reading rather than asking
 | Query parameter | What it does |
 | --- | --- |
 | `account` | Required. The configured identifier of the account whose trail is read. |
-| `mutation` | Narrows to one change: `relocate`, `delete`, `set-seen`, or `copy`. |
+| `mutation` | Narrows to one change: `relocate`, `delete`, `set-seen`, `copy`, `set-flagged`, `add-keywords`, `remove-keywords`, or `set-keywords`. |
 | `from`, `before` | Narrows to entries that ended within a range; `from` is inclusive and `before` is exclusive. |
 | `pageSize` | Between 1 and 200; 50 when omitted. |
 | `cursor` | The `nextCursor` the previous page returned. |
@@ -243,7 +243,7 @@ The response carries the entries and, while more remain, the cursor the next pag
 cursor comes back**, never by comparing a short page against the size you asked for. A cursor names a boundary within
 the filters it was issued for, so presenting one alongside different filters is refused with `400`; changing only the
 page size is not, because pacing is not a filter. Every other refusal is `400` too, with a sentence naming what to
-change: an account this deployment does not configure, a mutation name that is not one of the four, a page size outside
+change: an account this deployment does not configure, a mutation name that is not one of the eight, a page size outside
 the range, a range that ends where it begins, and a cursor this deployment did not issue.
 
 Nothing in the answer is mail. Folder paths, UIDs, the local email identifier, the requester, the two timestamps, and

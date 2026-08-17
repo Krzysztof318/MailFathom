@@ -22,7 +22,7 @@ A row is therefore an occurrence and nothing above one. Two folders holding the 
 
 **The keywords beside them.** `RemoteKeywords` is a `text[]` on the same row, holding the flags the protocol leaves to whoever set them — `$Junk`, `$Forwarded`, a label a mail client wrote — rather than the five it names. The reconciliation pass writes it with the booleans, from the same `FLAGS` answer, so an empty array means either that the server reported no keyword or that nobody has looked, and `remote_flags_observed_at` is what tells those apart here too. Flag names are compared without regard to case, so the values are held upper-cased, deduplicated, and ordered: two observations that found the same keywords write the same array whatever order the server listed them in. What one row keeps is bounded at 64 keywords of at most 64 characters each, and a server reporting more has the excess discarded rather than failing the window. The column sits here rather than in a table of its own so that every tombstone, retention, erasure, and export path already carrying this row carries the keywords with it.
 
-The five columns are an observation and never an instruction. Reading mail cannot reach any of them, because no read path holds a session able to issue a `STORE` at all. `\Seen` is the one flag MailFathom can ask a server to move, and only as a change the mailbox owner authored — that request is written to `mailbox_mutations` and issued against the server, and it writes nothing here. The column changes when the reconciliation pass next reads the folder and finds the flag standing somewhere new, which is the same way it would change had the owner moved the flag in their own mail client. So `is_remotely_seen` has exactly one writer whoever moved the flag, and a row read between the command and the next window still reports the last value the server was seen to hold. `\Answered`, `\Flagged`, and `\Draft` are never written under any instruction, and `\Deleted` is written only as a step of removing a message rather than as a flag anything asks for. [ADR 0007](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0007-remote-mailbox-mutation-boundary-and-write-session.md) records why the permitted set stops there.
+These columns are an observation and never an instruction. Reading mail cannot reach any of them, because no read path holds a session able to issue a `STORE` at all. `\Seen`, `\Flagged`, and the keywords are what MailFathom can ask a server to move, and only as a change the mailbox owner authored — that request is written to `mailbox_mutations` and issued against the server, and it writes nothing here. A column changes when the reconciliation pass next reads the folder and finds the flag standing somewhere new, which is the same way it would change had the owner moved the flag in their own mail client. So each of them has exactly one writer whoever moved the flag, and a row read between the command and the next window still reports the last value the server was seen to hold. `\Answered` and `\Draft` are never written under any instruction, and `\Deleted` is written only as a step of removing a message rather than as a flag anything asks for. [ADR 0007](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0007-remote-mailbox-mutation-boundary-and-write-session.md) records why the permitted set stops there.
 
 **The tombstone.** `remote_expunge_observed_at` records when reconciliation found the message gone from its remote folder, and is null while the server still holds it. It is a different statement from `is_remotely_deleted`, which is the server reporting the `\Deleted` flag for a message the folder still holds and still serves; conflating the two would hide mail that is merely marked for deletion. An account configured to erase local copies has no tombstone at all, because its row is removed instead — and the three tables that reference this one all cascade, so the raw MIME, the search document, and any outstanding repair request go with it. [IMAP synchronization](../features/imap-synchronization.md#reconciling-against-the-server) describes when each happens.
 
@@ -269,17 +269,24 @@ mid-flight govern the deletes authored after the change and leave one already be
 column is missing from is refused on the way back rather than read as some fallback, because every value destroys
 something a different one keeps.
 
+`DesiredSeenState`, `DesiredFlaggedState`, and `Keywords` are the other parameters, and each belongs to the mutations
+that take it: the two booleans carry the direction a flag change asked for, and `Keywords` is a `text[]` carrying the
+keywords an addition, a removal, or a replacement named. A row carries exactly the parameter its mutation takes and
+null for the rest, which is what makes a resumed attempt ask for what was originally asked for rather than for whatever
+a rule now says. The distinction between a null `Keywords` and an empty one is deliberate and load-bearing: null is a
+mutation that takes no keywords at all, while an empty array is a replacement asking for every keyword to be cleared.
+
 `Stage` is the sequence's own vocabulary rather than a generic pending and done, because it is what a retry resumes
 from:
 
 | Stage | What it says | Which mutations reach it |
 |---|---|---|
-| `Recorded` | The intent is durable and nothing has reached the server | all four |
+| `Recorded` | The intent is durable and nothing has reached the server | every mutation |
 | `PlacementIssued` | The command that would place the email has gone out and its answer was never read | relocate, copy |
 | `PlacementConfirmed` | The server acknowledged the placement, and named it where it supplied `COPYUID` | relocate, copy |
 | `SourceFlaggedDeleted` | The source carries `\Deleted` and only the expunge remains | relocate over the fallback, delete |
-| `Completed` | The change is made, and asking again performs nothing | all four |
-| `Abandoned` | Nothing will attempt it again, and `LastFailureCode` says what ended it | all four |
+| `Completed` | The change is made, and asking again performs nothing | every mutation |
+| `Abandoned` | Nothing will attempt it again, and `LastFailureCode` says what ended it | every mutation |
 
 `PlacementIssued` is the one stage a retry may not act on. A `COPY` issued twice is a second message rather than a
 repeat of the first, so a mutation found there is reported as an unknown outcome, has
@@ -287,7 +294,9 @@ repeat of the first, so a mutation found there is reported as an unknown outcome
 stuck, and is left for a person to resolve. Every other stage resumes: a relocation found at `PlacementConfirmed`
 removes its source without copying again, and a delete found at `SourceFlaggedDeleted` reissues only the expunge. A
 `\Seen` change never leaves `Recorded` until it completes — the store is idempotent on the wire, and its record exists
-for provenance rather than for retry safety.
+for provenance rather than for retry safety. A `\Flagged` change and every keyword change behave the same way, for the
+same reason: `STORE +FLAGS` and `STORE -FLAGS` say what a message should carry rather than what to do to it, so issuing
+one twice leaves the mailbox where issuing it once did.
 
 `RequiresSourceRemoval` is what makes that resumption safe, and it is written together with `PlacementIssued` rather
 than worked out later. `MOVE` removes the source as part of the same command and a copy does not, so

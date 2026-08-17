@@ -7,7 +7,9 @@ using MailFathom.Application.Jobs.Scheduling;
 using MailFathom.Application.Rules;
 using MailFathom.Application.Rules.Actions;
 using MailFathom.Application.Rules.Conditions;
+using MailFathom.Domain.Emails;
 using MailFathom.Domain.Folders;
+using MailFathom.Domain.Mutations;
 
 namespace MailFathom.Host.Configuration.Rules;
 
@@ -289,6 +291,18 @@ internal static class MailRuleDeclarationRules
             yield break;
         }
 
+        var keywordErrors = FindKeywordErrors(declared, opening).ToArray();
+
+        if (keywordErrors.Length > 0)
+        {
+            foreach (var keywordError in keywordErrors)
+            {
+                yield return keywordError;
+            }
+
+            yield break;
+        }
+
         var actions = declared.ToActions();
         var ruleName = DescribeRule(rule, position);
 
@@ -302,6 +316,54 @@ internal static class MailRuleDeclarationRules
             foreach (var refusal in FindAccountActionErrors(ruleName, actions, account))
             {
                 yield return $"{opening} — {refusal}";
+            }
+        }
+    }
+
+    /// <summary>Judges every keyword a rule writes, which no attribute reaches because the keys are plain string arrays.</summary>
+    /// <remarks>
+    /// <para>
+    /// A keyword is an IMAP atom, and one that is not reaches the server as a malformed command rather than as a label.
+    /// Refusing it here is what turns that into a line of configuration an operator can find: the reading in
+    /// <see cref="MailRuleActionOptions.ToActions" /> leaves an unusable list out, so a rule whose only action was a
+    /// mistyped keyword would otherwise pass as a rule that changes nothing.
+    /// </para>
+    /// <para>
+    /// An empty list is refused for the two keys where it asks for nothing and permitted for the replacement, where it
+    /// is how a rule says to clear every keyword. That is the one place these three keys differ, and it is stated in
+    /// <see cref="MailRuleActionOptions.RequiresAKeyword" /> rather than repeated here.
+    /// </para>
+    /// </remarks>
+    private static IEnumerable<string> FindKeywordErrors(MailRuleActionOptions declared, string opening)
+    {
+        foreach (var (key, keywords) in declared.DeclaredKeywordLists())
+        {
+            if (keywords.Length == 0 && MailRuleActionOptions.RequiresAKeyword(key))
+            {
+                yield return $"{opening}:{key} — names no keyword, so it would ask the mail server for nothing.";
+
+                continue;
+            }
+
+            var unwritable = Array.FindIndex(keywords, keyword => !AuthoredMailKeywords.IsWritable(keyword));
+
+            if (unwritable >= 0)
+            {
+                // The position rather than the text, because a keyword refused for carrying a control character would
+                // put that character into a startup message and into every log the message reaches.
+                yield return
+                    $"{opening}:{key}:{unwritable} — is not a keyword a mail server can be asked to store. A keyword is "
+                    + $"an IMAP atom of at most {RemoteEmailKeywords.MaximumKeywordLength} characters: no space, no "
+                    + "control character, none of ( ) { % * \" \\ ] and nothing above US-ASCII. A leading backslash "
+                    + "names a system flag rather than a keyword, and this system writes none that a rule can reach.";
+
+                continue;
+            }
+
+            if (!AuthoredMailKeywords.TryCreate(keywords, out _))
+            {
+                yield return
+                    $"{opening}:{key} — names more than the {RemoteEmailKeywords.MaximumKeywords} keywords one email keeps.";
             }
         }
     }

@@ -18,12 +18,13 @@ namespace MailFathom.Application.Mail.Mutations;
 /// therefore cannot give a read path the ability to write, because a read path never holds something that has it.
 /// </para>
 /// <para>
-/// The surface is closed to exactly the four mutations MailFathom is permitted to perform. There is no method that
-/// sends, replies, or forwards, none that creates, renames, deletes, or subscribes to a folder, and none that writes
-/// any flag other than the <c>\Seen</c> one operation exists for and the <c>\Deleted</c> that removing a message is
-/// made of. Permitting one of those later is a decision to reopen rather than a method to append, and the one
-/// reopening there has been is why folder creation is a port of its own instead of a fifth method here: a caller able
-/// to file a message into a folder is deliberately unable to create one, and the reverse.
+/// The surface is closed to exactly the mutations MailFathom is permitted to perform. There is no method that sends,
+/// replies, or forwards, none that creates, renames, deletes, or subscribes to a folder, and none that writes
+/// <c>\Answered</c> or <c>\Draft</c>. Permitting one of those later is a decision to reopen rather than a method to
+/// append, and this surface is what a permitted mutation arrives on — <c>\Flagged</c> and the keywords did, because
+/// each is a change to one message and therefore the same kind of act as the four that were here first. What does not
+/// arrive here is an act of a different kind: folder creation is a port of its own for exactly that reason, so a caller
+/// able to file a message into a folder is deliberately unable to create one, and the reverse.
 /// </para>
 /// <para>
 /// Every operation names what the caller asked for and never how the server was made to do it. Which protocol
@@ -131,6 +132,91 @@ public interface IMailboxWriteSession : IAsyncDisposable
     Task<RemoteEmailPlacement> CopyAsync(
         EmailOccurrenceId occurrenceId,
         RemoteFolderPath destinationPath,
+        IMailboxMutationJournal journal,
+        CancellationToken cancellationToken);
+
+    /// <summary>Sets or clears the remote <c>\Flagged</c> flag of one email in this session's folder.</summary>
+    /// <param name="occurrenceId">The occurrence to flag, which must belong to this session's account, folder, and UIDVALIDITY.</param>
+    /// <param name="isFlagged"><see langword="true" /> to flag the email; <see langword="false" /> to clear the flag.</param>
+    /// <param name="journal">The durable record of this flag change, which exists for provenance rather than for retry safety.</param>
+    /// <param name="cancellationToken">Cancels the flag write.</param>
+    /// <returns>A task that completes when the server has recorded the flag.</returns>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="occurrenceId" /> does not belong to this session.</exception>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="journal" /> is <see langword="null" />.</exception>
+    /// <exception cref="MailboxUnavailableException">Thrown when the mail server did not serve the flag write within its configured resilience budget.</exception>
+    /// <exception cref="MailboxFolderRecreatedException">Thrown when a recovered connection reselected the folder with a different UIDVALIDITY.</exception>
+    /// <remarks>
+    /// The <c>\Seen</c> flag is not part of this operation. Both write one flag and leave every other one exactly as the
+    /// server holds it, which is what keeps each of them the answer to the question it was asked.
+    /// </remarks>
+    Task SetFlaggedAsync(
+        EmailOccurrenceId occurrenceId,
+        bool isFlagged,
+        IMailboxMutationJournal journal,
+        CancellationToken cancellationToken);
+
+    /// <summary>Puts keywords on one email in this session's folder, beside the ones it already carries.</summary>
+    /// <param name="occurrenceId">The occurrence to label, which must belong to this session's account, folder, and UIDVALIDITY.</param>
+    /// <param name="keywords">The keywords to put on it.</param>
+    /// <param name="journal">The durable record of this keyword change, which exists for provenance rather than for retry safety.</param>
+    /// <param name="cancellationToken">Cancels the keyword write.</param>
+    /// <returns>A task that completes when the server has recorded the keywords.</returns>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="occurrenceId" /> does not belong to this session.</exception>
+    /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
+    /// <exception cref="MailboxMutationUnsupportedException">Thrown when the folder will not keep a keyword it was not already keeping.</exception>
+    /// <exception cref="MailboxUnavailableException">Thrown when the mail server did not serve the keyword write within its configured resilience budget.</exception>
+    /// <exception cref="MailboxFolderRecreatedException">Thrown when a recovered connection reselected the folder with a different UIDVALIDITY.</exception>
+    /// <remarks>
+    /// A keyword the email already carries is asked for again rather than filtered out, because a <c>STORE +FLAGS</c> is
+    /// idempotent for one UID and reading the message first to avoid it would buy a round trip and a race.
+    /// </remarks>
+    Task AddKeywordsAsync(
+        EmailOccurrenceId occurrenceId,
+        AuthoredMailKeywords keywords,
+        IMailboxMutationJournal journal,
+        CancellationToken cancellationToken);
+
+    /// <summary>Takes keywords off one email in this session's folder, leaving the ones it was not asked about.</summary>
+    /// <param name="occurrenceId">The occurrence to relabel, which must belong to this session's account, folder, and UIDVALIDITY.</param>
+    /// <param name="keywords">The keywords to take off it.</param>
+    /// <param name="journal">The durable record of this keyword change, which exists for provenance rather than for retry safety.</param>
+    /// <param name="cancellationToken">Cancels the keyword write.</param>
+    /// <returns>A task that completes when the server has recorded the removal.</returns>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="occurrenceId" /> does not belong to this session.</exception>
+    /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
+    /// <exception cref="MailboxUnavailableException">Thrown when the mail server did not serve the keyword write within its configured resilience budget.</exception>
+    /// <exception cref="MailboxFolderRecreatedException">Thrown when a recovered connection reselected the folder with a different UIDVALIDITY.</exception>
+    /// <remarks>
+    /// A removal needs nothing of the folder that a keyword it never kept would need, so this is the one keyword
+    /// operation that is never refused for what the folder will store: taking off a keyword that is not there is what
+    /// the server already reports as success.
+    /// </remarks>
+    Task RemoveKeywordsAsync(
+        EmailOccurrenceId occurrenceId,
+        AuthoredMailKeywords keywords,
+        IMailboxMutationJournal journal,
+        CancellationToken cancellationToken);
+
+    /// <summary>Makes one email's keywords exactly the set that was named, in this session's folder.</summary>
+    /// <param name="occurrenceId">The occurrence to relabel, which must belong to this session's account, folder, and UIDVALIDITY.</param>
+    /// <param name="keywords">The keywords it should end up carrying, which may be none and then clears them all.</param>
+    /// <param name="journal">The durable record of this keyword change, which exists for provenance rather than for retry safety.</param>
+    /// <param name="cancellationToken">Cancels the keyword write.</param>
+    /// <returns>A task that completes when the server has recorded the set.</returns>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="occurrenceId" /> does not belong to this session.</exception>
+    /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
+    /// <exception cref="MailboxMutationUnsupportedException">Thrown when the folder will not keep a keyword it was not already keeping.</exception>
+    /// <exception cref="MailboxUnavailableException">Thrown when the mail server did not serve the keyword write within its configured resilience budget.</exception>
+    /// <exception cref="MailboxFolderRecreatedException">Thrown when a recovered connection reselected the folder with a different UIDVALIDITY.</exception>
+    /// <remarks>
+    /// This never issues the <c>STORE FLAGS</c> the operation's name suggests. That command replaces a message's entire
+    /// flag set, so it would clear <c>\Seen</c>, <c>\Flagged</c>, <c>\Answered</c>, and <c>\Draft</c> as a side effect of
+    /// writing a label — flags this system either owns through one deliberate operation each or refuses to write at all.
+    /// What the implementation does instead is its own business; what this contract promises is that only keywords move.
+    /// </remarks>
+    Task SetKeywordsAsync(
+        EmailOccurrenceId occurrenceId,
+        AuthoredMailKeywords keywords,
         IMailboxMutationJournal journal,
         CancellationToken cancellationToken);
 }

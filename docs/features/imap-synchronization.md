@@ -530,19 +530,36 @@ the write session above, which nothing on the read side can open, borrow, or rea
 
 Both directions are one mutation and one authored act, because both are the same statement about the same flag. Setting
 it is what stops mail MailFathom has already handled from sitting unread in the client the owner actually opens;
-clearing it is what lets automation put something back in front of them. Neither writes any other flag: `\Flagged`,
-`\Answered`, `\Draft`, and keywords stay unwritten, and permitting one of them is a decision to reopen
+clearing it is what lets automation put something back in front of them.
+
+`\Flagged` and a message's keywords are written the same way and under the same rules — an authored change, carried by
+the write session, recorded before it is issued, and never a side effect of reading anything. `\Answered` and `\Draft`
+stay unwritten, because each states that an act was performed rather than describing the message, and permitting one of
+them is a decision to reopen
 [ADR 0007](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0007-remote-mailbox-mutation-boundary-and-write-session.md)
 rather than a gap to read as permission.
+
+**A keyword replacement reads before it writes, and reads nothing else.** Asking a server to set a message's keywords
+outright would replace its entire flag set, clearing `\Seen`, `\Flagged`, `\Answered`, and `\Draft` as a side effect of
+writing a label. So a replacement fetches the message's current flags, then removes only the keywords the rule did not
+name and adds only the ones it did. The fetch requests flags alone and sets nothing, so the read-side guarantee holds
+across it exactly as it does anywhere else.
+
+**A folder that would not keep a keyword refuses it rather than accepting it.** A folder tells MailFathom which flags it
+keeps permanently when it is opened, and one that keeps no arbitrary keyword makes an addition or a replacement fail
+with `MailboxMutationUnsupported` (25001) naming the account and the folder alias. A removal is never refused for that
+reason. The alternative — a command the server accepts and forgets — would leave the rule reading as one that never
+fired.
 
 **The stored value stays a mirror.** MailFathom does not write the local flag when it issues the command. The request is
 recorded and sent, and `is_remotely_seen` changes only when the reconciliation pass next reads that folder and finds the
 flag standing somewhere new — the same way it would change had the owner moved it in their own mail client. So a query
 run between the command and that window still reports the last value the server was seen to hold, which is a short lag
 rather than a disagreement: the column has exactly one writer, and there is never a local value to reconcile against a
-command nobody can prove landed. [Stored email schema](../architecture/stored-email-schema.md) states the columns.
+command nobody can prove landed. `is_remotely_flagged` and `RemoteKeywords` are mirrors in exactly the same sense.
+[Stored email schema](../architecture/stored-email-schema.md) states the columns.
 
-A `\Seen` change is also the one mutation that leaves the occurrence exactly where it was, which is what makes the
+A flag or keyword change also leaves the occurrence exactly where it was, which is what makes the
 suppression below unavoidable rather than tidy — and what makes asking twice mean something specific. The idempotency
 identity is the occurrence, the mutation, and who asked, so the same rule asking again about the same message is
 answered from its own record and issues nothing. That is deliberate: an owner who reverted the change by hand is not

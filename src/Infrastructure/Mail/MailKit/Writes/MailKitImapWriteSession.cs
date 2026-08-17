@@ -51,6 +51,7 @@ internal sealed class MailKitImapWriteSession : IMailboxWriteSession
     private const string NativeProtocolPath = "native";
     private const string FallbackProtocolPath = "fallback";
     private const string UidPlusCapabilityName = "UIDPLUS extension (RFC 4315)";
+    private const string PermanentKeywordsCapabilityName = "persistent keywords (RFC 9051 PERMANENTFLAGS)";
 
     private readonly MailboxWriteConnectionLease lease;
     private readonly MailFolderResolution folder;
@@ -202,7 +203,240 @@ internal sealed class MailKitImapWriteSession : IMailboxWriteSession
             cancellationToken);
     }
 
+    /// <inheritdoc />
+    public async Task SetFlaggedAsync(
+        EmailOccurrenceId occurrenceId,
+        bool isFlagged,
+        IMailboxMutationJournal journal,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(occurrenceId);
+        ArgumentNullException.ThrowIfNull(journal);
+
+        // The journal is taken and never advanced, for the reason a `\Seen` store does not advance it either: the store
+        // is idempotent for one UID, so there is no stage a resumed attempt would want to skip.
+        await this.PerformAsync(
+            MailboxMutation.SetFlagged,
+            occurrenceId,
+            async (_, openFolder, scope, attemptToken) =>
+            {
+                var action = isFlagged ? StoreAction.Add : StoreAction.Remove;
+
+                scope.CommandIssued(isFlagged ? "UID STORE +FLAGS (\\Flagged)" : "UID STORE -FLAGS (\\Flagged)");
+                await openFolder.StoreAsync(
+                    [new UniqueId(occurrenceId.Uid.Value)],
+                    new StoreFlagsRequest(action, MessageFlags.Flagged) { Silent = true },
+                    attemptToken);
+
+                return true;
+            },
+            cancellationToken);
+    }
+
+    /// <inheritdoc />
+    public async Task AddKeywordsAsync(
+        EmailOccurrenceId occurrenceId,
+        AuthoredMailKeywords keywords,
+        IMailboxMutationJournal journal,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(occurrenceId);
+        ArgumentNullException.ThrowIfNull(keywords);
+        ArgumentNullException.ThrowIfNull(journal);
+
+        await this.PerformAsync(
+            MailboxMutation.AddKeywords,
+            occurrenceId,
+            async (_, openFolder, scope, attemptToken) =>
+            {
+                this.RequireFolderKeeps(openFolder, keywords.Values, MailboxMutation.AddKeywords);
+
+                await StoreKeywordsAsync(
+                    openFolder,
+                    occurrenceId.Uid,
+                    StoreAction.Add,
+                    keywords.Values,
+                    scope,
+                    attemptToken);
+
+                return true;
+            },
+            cancellationToken);
+    }
+
+    /// <inheritdoc />
+    public async Task RemoveKeywordsAsync(
+        EmailOccurrenceId occurrenceId,
+        AuthoredMailKeywords keywords,
+        IMailboxMutationJournal journal,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(occurrenceId);
+        ArgumentNullException.ThrowIfNull(keywords);
+        ArgumentNullException.ThrowIfNull(journal);
+
+        await this.PerformAsync(
+            MailboxMutation.RemoveKeywords,
+            occurrenceId,
+            async (_, openFolder, scope, attemptToken) =>
+            {
+                await StoreKeywordsAsync(
+                    openFolder,
+                    occurrenceId.Uid,
+                    StoreAction.Remove,
+                    keywords.Values,
+                    scope,
+                    attemptToken);
+
+                return true;
+            },
+            cancellationToken);
+    }
+
+    /// <inheritdoc />
+    public async Task SetKeywordsAsync(
+        EmailOccurrenceId occurrenceId,
+        AuthoredMailKeywords keywords,
+        IMailboxMutationJournal journal,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(occurrenceId);
+        ArgumentNullException.ThrowIfNull(keywords);
+        ArgumentNullException.ThrowIfNull(journal);
+
+        await this.PerformAsync(
+            MailboxMutation.SetKeywords,
+            occurrenceId,
+            async (_, openFolder, scope, attemptToken) =>
+            {
+                this.RequireFolderKeeps(openFolder, keywords.Values, MailboxMutation.SetKeywords);
+
+                var carried = await ReadKeywordsAsync(openFolder, occurrenceId.Uid, scope, attemptToken);
+                var surplus = carried
+                    .Where(keyword => !keywords.Values.Contains(keyword, StringComparer.OrdinalIgnoreCase))
+                    .ToArray();
+
+                // The surplus goes first so that the state between the two commands is a subset of both the old set and
+                // the new one: a client reading the message mid-sequence never sees a keyword it will not end up
+                // carrying. Adding first would show the union instead. It is also the order two rules asking for the
+                // same pair are applied in, so one mutation composes the way two do.
+                await StoreKeywordsAsync(
+                    openFolder,
+                    occurrenceId.Uid,
+                    StoreAction.Remove,
+                    surplus,
+                    scope,
+                    attemptToken);
+                await StoreKeywordsAsync(
+                    openFolder,
+                    occurrenceId.Uid,
+                    StoreAction.Add,
+                    keywords.Values,
+                    scope,
+                    attemptToken);
+
+                return true;
+            },
+            cancellationToken);
+    }
+
     private MailAccountId SessionAccountId => this.lease.AccountId;
+
+    /// <summary>Issues one keyword <c>STORE</c>, and issues nothing at all when the set it was given is empty.</summary>
+    /// <remarks>
+    /// An empty set reaches here from a replacement whose message carried nothing surplus, and from one that named no
+    /// keyword at all. MailKit would send <c>STORE +FLAGS ()</c>, which is not a command RFC 9051 has, so the round trip
+    /// is skipped rather than sent and refused.
+    /// </remarks>
+    private static async Task StoreKeywordsAsync(
+        IMailFolder openFolder,
+        ImapUid uid,
+        StoreAction action,
+        IReadOnlyList<string> keywords,
+        MailboxMutationScope scope,
+        CancellationToken cancellationToken)
+    {
+        if (keywords.Count == 0)
+        {
+            return;
+        }
+
+        scope.CommandIssued(action == StoreAction.Add ? "UID STORE +FLAGS (keywords)" : "UID STORE -FLAGS (keywords)");
+        await openFolder.StoreAsync(
+            [new UniqueId(uid.Value)],
+            new StoreFlagsRequest(action, keywords) { Silent = true },
+            cancellationToken);
+    }
+
+    /// <summary>Reads the keywords one message carries now, which is what a replacement has to know to be one.</summary>
+    /// <remarks>
+    /// <para>
+    /// A replacement is issued as a removal of what is surplus followed by an addition of what was named, rather than as
+    /// the <c>STORE FLAGS</c> that would say it in one command. That command replaces a message's whole flag set, so it
+    /// would clear <c>\Seen</c>, <c>\Flagged</c>, <c>\Answered</c>, and <c>\Draft</c> while writing a label — and
+    /// preserving them would mean reading them here and writing them back, which is the same round trip plus the chance
+    /// of losing a flag another client set in between.
+    /// </para>
+    /// <para>
+    /// <c>FETCH FLAGS</c> does not set <c>\Seen</c>, so reading here leaves the invariant this system is built around
+    /// exactly where it was. Only a body fetch without <c>PEEK</c> would, and that is not what this asks for.
+    /// </para>
+    /// <para>
+    /// A message the folder no longer holds answers with nothing, and nothing is what the replacement then removes. The
+    /// <c>STORE</c> that follows is left to report the missing message, so this reading never becomes a second place
+    /// that decides what a vanished occurrence means.
+    /// </para>
+    /// </remarks>
+    private static async Task<IReadOnlyList<string>> ReadKeywordsAsync(
+        IMailFolder openFolder,
+        ImapUid uid,
+        MailboxMutationScope scope,
+        CancellationToken cancellationToken)
+    {
+        scope.CommandIssued("UID FETCH (FLAGS)");
+        var summaries = await openFolder.FetchAsync(
+            [new UniqueId(uid.Value)],
+            MessageSummaryItems.Flags,
+            cancellationToken);
+
+        return summaries is [{ Keywords: { } carried }, ..] ? [.. carried] : [];
+    }
+
+    /// <summary>Refuses a keyword write into a folder that would not keep the keyword between sessions.</summary>
+    /// <remarks>
+    /// <para>
+    /// RFC 9051 has a folder answer <c>PERMANENTFLAGS</c> with <c>\*</c> when it accepts keywords it has not seen before,
+    /// and list the ones it does keep when it does not. A folder saying neither will take the <c>STORE</c> and report
+    /// success, and the keyword will be gone the next time anybody selects the folder — which reaches an operator as a
+    /// rule that runs, says it worked, and changes nothing they can find.
+    /// </para>
+    /// <para>
+    /// The refusal names the capability and never the keyword, for the reason every exception message here names an
+    /// alias rather than a path: what an operator needs is which account and folder cannot keep labels, and the keyword
+    /// they wrote is already in front of them in the file they wrote it in.
+    /// </para>
+    /// </remarks>
+    private void RequireFolderKeeps(
+        IMailFolder openFolder,
+        IReadOnlyList<string> keywords,
+        MailboxMutation mutation)
+    {
+        if (keywords.Count == 0 || openFolder.PermanentFlags.HasFlag(MessageFlags.UserDefined))
+        {
+            return;
+        }
+
+        if (keywords.All(keyword => openFolder.PermanentKeywords.Contains(keyword, StringComparer.OrdinalIgnoreCase)))
+        {
+            return;
+        }
+
+        throw new MailboxMutationUnsupportedException(
+            this.SessionAccountId,
+            this.folder.Alias,
+            mutation,
+            PermanentKeywordsCapabilityName);
+    }
 
     /// <summary>Reads where a <c>COPYUID</c> response says the destination folder put the email.</summary>
     /// <remarks>

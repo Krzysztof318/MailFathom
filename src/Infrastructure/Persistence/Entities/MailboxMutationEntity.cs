@@ -62,6 +62,24 @@ internal sealed class MailboxMutationEntity
     /// <summary>Gets or sets which way a <c>\Seen</c> change was asked for, and <see langword="null" /> for every other mutation.</summary>
     public bool? DesiredSeenState { get; set; }
 
+    /// <summary>Gets or sets which way a <c>\Flagged</c> change was asked for, and <see langword="null" /> for every other mutation.</summary>
+    public bool? DesiredFlaggedState { get; set; }
+
+    /// <summary>Gets or sets the keywords a keyword mutation names, and <see langword="null" /> for every other mutation.</summary>
+    /// <remarks>
+    /// <para>
+    /// A null column and an empty array mean different things here, which is why the column is nullable rather than
+    /// defaulting to an empty array. Null says the mutation is not one that names keywords at all; an empty array says
+    /// a replacement was asked for and names none, which is a request to clear every keyword the message carries.
+    /// </para>
+    /// <para>
+    /// The keywords are stored as they were written rather than folded, for the reason the domain value keeps them that
+    /// way: this is what a <c>STORE</c> will put on somebody's message, and a resumed attempt has to issue the same
+    /// command the first one would have.
+    /// </para>
+    /// </remarks>
+    public string[]? Keywords { get; set; }
+
     /// <summary>Gets or sets what becomes of the local copy after a delete, and <see langword="null" /> for every other mutation.</summary>
     /// <remarks>
     /// It is written once with the row and never rewritten, which is the whole reason it is stored rather than read

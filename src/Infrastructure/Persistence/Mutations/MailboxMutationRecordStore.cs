@@ -81,6 +81,11 @@ internal sealed class MailboxMutationRecordStore(
             DestinationFolderPath = request.DestinationPath?.Value,
             DestinationHierarchyDelimiter = request.DestinationPath?.HierarchyDelimiter?.ToString(),
             DesiredSeenState = request.DesiredSeenState,
+            DesiredFlaggedState = request.DesiredFlaggedState,
+
+            // Materialized rather than shared, because the domain value publishes a read-only view over a list this row
+            // would otherwise hold a second reference to.
+            Keywords = request.Keywords is { } keywords ? [.. keywords.Values] : null,
             LocalDisposition = request.LocalDisposition,
 
             // Resolved here, with the row, so a trail switched on or off while this mutation is in flight decides

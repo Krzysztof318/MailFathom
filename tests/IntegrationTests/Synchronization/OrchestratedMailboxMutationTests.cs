@@ -7,6 +7,7 @@ using MailFathom.Application.Mail.Mutations;
 using MailFathom.Application.Resilience;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Folders;
+using MailFathom.Domain.Mutations;
 using MailFathom.Infrastructure.Mail.MailKit.Writes;
 using MailFathom.Infrastructure.Observability;
 using MailFathom.Infrastructure.Resilience;
@@ -30,9 +31,11 @@ namespace MailFathom.IntegrationTests.Synchronization;
 /// about it.
 /// </para>
 /// <para>
-/// Three tests, because there are three claims real infrastructure is needed for: the native path, the fallback path,
-/// and the scope of the expunge. Everything else about these mutations — which capability is required, what a refusal
-/// reports, which flag is written — is a rule the unit suite already exercises against a substitute.
+/// Four tests, because there are four claims real infrastructure is needed for: the native relocation path, the
+/// fallback path, the scope of the expunge, and that a real server keeps the <c>\Flagged</c> state and the keywords
+/// MailFathom wrote while leaving the flags it was not asked about alone. Everything else about these mutations —
+/// which capability is required, what a refusal reports, which command carries which flag — is a rule the unit suite
+/// already exercises against a substitute.
 /// </para>
 /// </remarks>
 [Collection(OrchestratedInfrastructureCollectionDefinition.Name)]
@@ -189,6 +192,71 @@ public sealed class OrchestratedMailboxMutationTests(MailFathomOrchestrationFixt
         Assert.Contains(inbox, email => email.Subject == neighbourSubject);
     }
 
+    /// <summary>
+    /// The flag and keyword tier against a real server, where the claim is what survives rather than what was sent. A
+    /// replacement is carried as a difference precisely so that it does not clear the flags nobody named, and only a
+    /// server that actually holds a flag set can show that it did not.
+    /// </summary>
+    /// <remarks>
+    /// The message is marked read first, by this suite's own connection rather than by MailFathom, so the
+    /// <c>\Seen</c> the replacement must leave alone is one the server was independently seen to hold. Everything after
+    /// that goes through the production write session.
+    /// </remarks>
+    [Fact]
+    [MailboxStateStep(4)]
+    public async Task SetFlaggedAndKeywords_OnARealServer_LeaveTheMessageCarryingExactlyWhatWasAsked()
+    {
+        // Arrange
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var mailbox = new OrchestratedMailbox(orchestration.MailServer);
+        var subject = $"label-target-{Guid.NewGuid():N}";
+        var occurrence = await DeliverAndLocateAsync(mailbox, subject, cancellationToken);
+        await mailbox.MarkSeenAsync(OrchestratedMailbox.InboxPath, occurrence.Uid, cancellationToken);
+
+        await using var services = await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken);
+
+        // Act
+        await services.InScopeAsync(
+            async (scope, token) =>
+            {
+                var account = SyntheticMailAccount.AccountId;
+                await using var session = await scope.GetRequiredService<IMailboxWriteSessionFactory>()
+                    .OpenForWritingAsync(
+                        account,
+                        Inbox,
+                        scope.GetRequiredService<IMailTransportSecurityPolicyReader>().GetPolicy(account),
+                        token);
+                var journal = new InMemoryMailboxMutationJournal();
+
+                await session.SetFlaggedAsync(occurrence, isFlagged: true, journal, token);
+                await session.AddKeywordsAsync(
+                    occurrence,
+                    AuthoredMailKeywords.Create(["$Todo", "$Invoice"]),
+                    journal,
+                    token);
+                await session.SetKeywordsAsync(
+                    occurrence,
+                    AuthoredMailKeywords.Create(["$Invoice", "$Done"]),
+                    journal,
+                    token);
+
+                return true;
+            },
+            cancellationToken);
+
+        // Assert
+        var inbox = await mailbox.ReadAsync(OrchestratedMailbox.InboxPath, cancellationToken);
+        var labelled = Assert.Single(inbox, email => email.Subject == subject);
+
+        Assert.True(labelled.IsFlagged);
+        Assert.Equal(
+            ["$Done", "$Invoice"],
+            labelled.Keywords.Order(StringComparer.OrdinalIgnoreCase));
+
+        // The replacement was carried as a difference rather than as STORE FLAGS, so the flag nobody named survives it.
+        Assert.True(labelled.IsSeen);
+    }
+
     /// <summary>Builds the pool over a client that hides <c>MOVE</c>, and relocates one email through it.</summary>
     /// <remarks>
     /// The pool is constructed here rather than resolved, because the capability mask is the one thing this test has to
@@ -196,7 +264,7 @@ public sealed class OrchestratedMailboxMutationTests(MailFathomOrchestrationFixt
     /// given comes out of the composed container, so what runs is the production connection, the production resilience
     /// pipelines, and the production session.
     /// </remarks>
-    private static async Task<Domain.Mutations.RemoteEmailPlacement> RelocateWithoutMoveExtensionAsync(
+    private static async Task<RemoteEmailPlacement> RelocateWithoutMoveExtensionAsync(
         IServiceProvider scope,
         EmailOccurrenceId occurrence,
         InMemoryMailboxMutationJournal journal,

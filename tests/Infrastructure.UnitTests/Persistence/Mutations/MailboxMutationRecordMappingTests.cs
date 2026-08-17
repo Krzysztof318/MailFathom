@@ -67,6 +67,131 @@ public sealed class MailboxMutationRecordMappingTests
             () => MailboxMutationRecordMapping.ToRecord(entity, entity.MailFolder));
     }
 
+    /// <summary>
+    /// Both directions of the star are one mutation, so a mapping that always restored the same one would turn a rule
+    /// asking for the flag to be cleared into one asking for it to be set, on a resumed attempt nobody watched.
+    /// </summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void ToRecord_AFlaggedStateChange_RestoresTheDirectionItWasStoredWith(bool isFlagged)
+    {
+        // Arrange
+        var entity = StoredRelocation();
+        entity.Mutation = MailboxMutation.SetFlagged.Name;
+        entity.DestinationFolderPath = null;
+        entity.DestinationHierarchyDelimiter = null;
+        entity.RequiresSourceRemoval = false;
+        entity.DesiredFlaggedState = isFlagged;
+
+        // Act
+        var record = MailboxMutationRecordMapping.ToRecord(entity, entity.MailFolder);
+
+        // Assert
+        Assert.Equal(isFlagged, record.Request.DesiredFlaggedState);
+        Assert.Null(record.Request.DesiredSeenState);
+    }
+
+    /// <summary>A stored keyword change has to come back naming the same keywords, or a resumed attempt writes another label.</summary>
+    [Fact]
+    public void ToRecord_AKeywordChange_RestoresTheKeywordsAsTheyWereStored()
+    {
+        // Arrange
+        var entity = StoredKeywordChange(MailboxMutation.AddKeywords, ["$Todo", "$Invoice"]);
+
+        // Act
+        var record = MailboxMutationRecordMapping.ToRecord(entity, entity.MailFolder);
+
+        // Assert
+        Assert.Equal(AuthoredMailKeywords.Create(["$Invoice", "$Todo"]), record.Request.Keywords);
+    }
+
+    /// <summary>
+    /// A replacement naming no keyword is a request to clear them all, so the empty array has to survive the read as
+    /// itself. Reading it as absence would turn a stored change into a mutation that names no keywords at all and
+    /// therefore cannot be performed.
+    /// </summary>
+    [Fact]
+    public void ToRecord_AReplacementNamingNoKeyword_RestoresTheEmptySetRatherThanNothing()
+    {
+        // Arrange
+        var entity = StoredKeywordChange(MailboxMutation.SetKeywords, []);
+
+        // Act
+        var record = MailboxMutationRecordMapping.ToRecord(entity, entity.MailFolder);
+
+        // Assert
+        Assert.NotNull(record.Request.Keywords);
+        Assert.True(record.Request.Keywords.IsEmpty);
+    }
+
+    /// <summary>A mutation that names no keywords carries a null column, which must not read as a replacement clearing them.</summary>
+    [Fact]
+    public void ToRecord_AMutationThatNamesNoKeywords_RestoresNoKeywordSet()
+    {
+        // Act
+        var record = MailboxMutationRecordMapping.ToRecord(StoredRelocation(), StoredRelocation().MailFolder);
+
+        // Assert
+        Assert.Null(record.Request.Keywords);
+        Assert.Null(record.Request.DesiredFlaggedState);
+    }
+
+    /// <summary>
+    /// A row can only name an unstorable keyword by having been edited outside this system, and issuing the subset that
+    /// happens to be usable would be a narrower change than the one written down. Failing visibly is what an operator
+    /// can act on.
+    /// </summary>
+    [Fact]
+    public void ToRecord_AStoredKeywordNoServerCouldStore_IsRefused()
+    {
+        // Arrange
+        var entity = StoredKeywordChange(MailboxMutation.AddKeywords, ["$Todo", "two words"]);
+
+        // Act, Assert
+        Assert.Throws<InvalidOperationException>(
+            () => MailboxMutationRecordMapping.ToRecord(entity, entity.MailFolder));
+    }
+
+    /// <summary>
+    /// The two ways a stored keyword list can be unreadable want different remedies, so the row says which it was
+    /// rather than reporting the commoner one for both. An operator told a count-bounded row names a bad keyword goes
+    /// looking for a keyword that is fine.
+    /// </summary>
+    [Fact]
+    public void ToRecord_AStoredKeywordListLongerThanOneEmailKeeps_SaysSoRatherThanBlamingAKeyword()
+    {
+        // Arrange
+        var keywords = Enumerable
+            .Range(0, RemoteEmailKeywords.MaximumKeywords + 1)
+            .Select(position => $"$Label{position}")
+            .ToArray();
+        var entity = StoredKeywordChange(MailboxMutation.AddKeywords, keywords);
+
+        // Act
+        var refusal = Assert.Throws<InvalidOperationException>(
+            () => MailboxMutationRecordMapping.ToRecord(entity, entity.MailFolder));
+
+        // Assert
+        Assert.Contains(
+            $"more than the {RemoteEmailKeywords.MaximumKeywords}",
+            refusal.Message,
+            StringComparison.Ordinal);
+    }
+
+    private static MailboxMutationEntity StoredKeywordChange(MailboxMutation mutation, string[] keywords)
+    {
+        var entity = StoredRelocation();
+
+        entity.Mutation = mutation.Name;
+        entity.DestinationFolderPath = null;
+        entity.DestinationHierarchyDelimiter = null;
+        entity.RequiresSourceRemoval = false;
+        entity.Keywords = keywords;
+
+        return entity;
+    }
+
     private static MailboxMutationEntity StoredRelocation()
     {
         var folder = new MailFolderEntity

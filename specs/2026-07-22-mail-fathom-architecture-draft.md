@@ -394,8 +394,8 @@ This is a system invariant, not an option. It is scoped to reading rather than t
 - Message bodies and headers are retrieved with PEEK semantics.
 - Synchronization interfaces expose no operation that writes flags.
 - No read path can obtain a session capable of writing. The write-capable session is a separate type reached through a separate factory, and the folder access a connection selects with is fixed when the connection is created, so a reconnection cannot widen it.
-- The only code that calls a flag-writing method is the write session, and the only flags it writes are `\Seen`, for the one operation whose purpose is to write it, and the `\Deleted` that removing a message is made of.
-- Stored `\Seen` is a snapshot of remote state only. An authored change is a request made of the server, so the stored value still has exactly one writer: synchronization observing what the server reports back.
+- The only code that calls a flag-writing method is the write session, and the only flags it writes are `\Seen` and `\Flagged`, each for the one operation whose purpose is to write it, a message's keywords for the three operations that change them, and the `\Deleted` that removing a message is made of. `\Answered` and `\Draft` are never written.
+- Stored `\Seen`, `\Flagged`, and keywords are a snapshot of remote state only. An authored change is a request made of the server, so a stored value still has exactly one writer: synchronization observing what the server reports back.
 - MCP reads local data and therefore cannot affect the remote flag.
 
 ### 11.2 Initial synchronization
@@ -758,7 +758,7 @@ Candidate actions should be introduced in increasing order of risk:
 
 1. Local-only actions: add a MailFathom label, record a classification, produce a private summary, enqueue embedding or extraction work, or route the message into a local review queue.
 2. Controlled integrations: emit a minimized webhook or create an application-owned work item after destination-specific authorization, payload filtering, timeout, and idempotency review.
-3. Remote mailbox mutations: apply a provider category, move or copy a message, or change a remote flag. These actions conflict with the initial read-only posture and require a separate design for authorization, synchronization feedback loops, and provider-specific semantics.
+3. Remote mailbox mutations: apply a provider category, move or copy a message, or change a remote flag. These actions conflict with the initial read-only posture and require a separate design for authorization, synchronization feedback loops, and provider-specific semantics. ADR 0007 is that design, and it has since built most of this tier: relocating, copying, deleting, setting `\Seen` and `\Flagged`, and writing a message's keywords are implemented, each as a change the mailbox owner authored and carried by a write session no read path can obtain. What the record still refuses within this tier is `\Answered`, `\Draft`, and every folder management act other than creating a folder a mapping named.
 4. External side effects: forward, reply, send, delete, or invoke another business system. These require explicit opt-in, approval and governance policy, durable idempotency, audit evidence, and safe compensation or operator recovery.
 
 `Application` would own provider-neutral rule, trigger, action, approval, and execution-result contracts. `Infrastructure` would lease and persist jobs in PostgreSQL, implement deterministic provider actions, and enforce bounded concurrency, timeout, retry, and dead-letter behavior. `AI` would implement only AI evaluations and transformations behind application-owned ports. The host would remain responsible only for worker registration and validated settings. A generic workflow engine, message broker, or separate scheduler is not justified until PostgreSQL-backed jobs demonstrate a concrete limitation.
