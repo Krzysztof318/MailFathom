@@ -4,6 +4,7 @@
 
 using System.Diagnostics.CodeAnalysis;
 using System.Security.Cryptography;
+using MailFathom.Application.Access;
 using MailFathom.Application.Accounts;
 using MailFathom.Application.EmailContent.Attachments;
 using MailFathom.Application.EmailContent.Repair;
@@ -16,10 +17,13 @@ using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Folders;
 using MailFathom.Host.Api;
+using MailFathom.Host.Configuration.Endpoints;
+using MailFathom.Host.Security.Transport;
 using MailFathom.TestSupport;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Options;
 using NSubstitute;
 using Xunit;
 
@@ -40,7 +44,8 @@ public sealed class EmailAttachmentDownloadEndpointTests
     public async Task DownloadAsync_ValidCapability_WritesTheAttachmentAndStatesWhatItIs()
     {
         // Arrange
-        var context = new DefaultHttpContext();
+        var context = RequestToTheRoute();
+        var principals = PrincipalsFor(context);
         using var body = new MemoryStream();
         context.Response.Body = body;
 
@@ -48,7 +53,8 @@ public sealed class EmailAttachmentDownloadEndpointTests
         var result = await EmailAttachmentDownloadEndpoint.DownloadAsync(
             "capability",
             TicketReaderRedeeming(new AttachmentDownloadTicket(StoredEmailId.Create(Guid.CreateVersion7()), 0)),
-            AttachmentOpening(new StubOpenedEmailAttachment("invoice.pdf", "application/pdf", "%PDF-1.7"u8.ToArray())),
+            AttachmentOpening(principals, new StubOpenedEmailAttachment("invoice.pdf", "application/pdf", "%PDF-1.7"u8.ToArray())),
+            principals,
             context,
             TestContext.Current.CancellationToken);
 
@@ -68,7 +74,8 @@ public sealed class EmailAttachmentDownloadEndpointTests
     public async Task DownloadAsync_ValidCapability_ServesTheFileAsADownloadRatherThanSomethingToRender()
     {
         // Arrange
-        var context = new DefaultHttpContext();
+        var context = RequestToTheRoute();
+        var principals = PrincipalsFor(context);
         using var body = new MemoryStream();
         context.Response.Body = body;
 
@@ -76,10 +83,11 @@ public sealed class EmailAttachmentDownloadEndpointTests
         await EmailAttachmentDownloadEndpoint.DownloadAsync(
             "capability",
             TicketReaderRedeeming(new AttachmentDownloadTicket(StoredEmailId.Create(Guid.CreateVersion7()), 0)),
-            AttachmentOpening(new StubOpenedEmailAttachment(
+            AttachmentOpening(principals, new StubOpenedEmailAttachment(
                 "page.html",
                 "text/html",
                 "<script>alert(1)</script>"u8.ToArray())),
+            principals,
             context,
             TestContext.Current.CancellationToken);
 
@@ -98,7 +106,8 @@ public sealed class EmailAttachmentDownloadEndpointTests
     public async Task DownloadAsync_ValidCapability_ForbidsAnIntermediaryFromStoringTheResponse()
     {
         // Arrange
-        var context = new DefaultHttpContext();
+        var context = RequestToTheRoute();
+        var principals = PrincipalsFor(context);
         using var body = new MemoryStream();
         context.Response.Body = body;
 
@@ -106,7 +115,8 @@ public sealed class EmailAttachmentDownloadEndpointTests
         await EmailAttachmentDownloadEndpoint.DownloadAsync(
             "capability",
             TicketReaderRedeeming(new AttachmentDownloadTicket(StoredEmailId.Create(Guid.CreateVersion7()), 0)),
-            AttachmentOpening(new StubOpenedEmailAttachment("invoice.pdf", "application/pdf", "%PDF-1.7"u8.ToArray())),
+            AttachmentOpening(principals, new StubOpenedEmailAttachment("invoice.pdf", "application/pdf", "%PDF-1.7"u8.ToArray())),
+            principals,
             context,
             TestContext.Current.CancellationToken);
 
@@ -122,7 +132,8 @@ public sealed class EmailAttachmentDownloadEndpointTests
     public async Task DownloadAsync_AttachmentNamedWithHeaderSyntax_EncodesTheNameRatherThanEmittingIt()
     {
         // Arrange
-        var context = new DefaultHttpContext();
+        var context = RequestToTheRoute();
+        var principals = PrincipalsFor(context);
         using var body = new MemoryStream();
         context.Response.Body = body;
 
@@ -130,10 +141,11 @@ public sealed class EmailAttachmentDownloadEndpointTests
         await EmailAttachmentDownloadEndpoint.DownloadAsync(
             "capability",
             TicketReaderRedeeming(new AttachmentDownloadTicket(StoredEmailId.Create(Guid.CreateVersion7()), 0)),
-            AttachmentOpening(new StubOpenedEmailAttachment(
+            AttachmentOpening(principals, new StubOpenedEmailAttachment(
                 "faktura \"żółć\"; x=1.pdf",
                 "application/pdf",
                 "bytes"u8.ToArray())),
+            principals,
             context,
             TestContext.Current.CancellationToken);
 
@@ -154,7 +166,8 @@ public sealed class EmailAttachmentDownloadEndpointTests
         string expected)
     {
         // Arrange
-        var context = new DefaultHttpContext();
+        var context = RequestToTheRoute();
+        var principals = PrincipalsFor(context);
         using var body = new MemoryStream();
         context.Response.Body = body;
 
@@ -162,7 +175,8 @@ public sealed class EmailAttachmentDownloadEndpointTests
         await EmailAttachmentDownloadEndpoint.DownloadAsync(
             "capability",
             TicketReaderRedeeming(new AttachmentDownloadTicket(StoredEmailId.Create(Guid.CreateVersion7()), 0)),
-            AttachmentOpening(new StubOpenedEmailAttachment("file.bin", declared, "bytes"u8.ToArray())),
+            AttachmentOpening(principals, new StubOpenedEmailAttachment("file.bin", declared, "bytes"u8.ToArray())),
+            principals,
             context,
             TestContext.Current.CancellationToken);
 
@@ -175,7 +189,8 @@ public sealed class EmailAttachmentDownloadEndpointTests
     public async Task DownloadAsync_UnnamedAttachment_StatesTheDispositionWithoutAFileName()
     {
         // Arrange
-        var context = new DefaultHttpContext();
+        var context = RequestToTheRoute();
+        var principals = PrincipalsFor(context);
         using var body = new MemoryStream();
         context.Response.Body = body;
 
@@ -183,7 +198,8 @@ public sealed class EmailAttachmentDownloadEndpointTests
         await EmailAttachmentDownloadEndpoint.DownloadAsync(
             "capability",
             TicketReaderRedeeming(new AttachmentDownloadTicket(StoredEmailId.Create(Guid.CreateVersion7()), 0)),
-            AttachmentOpening(new StubOpenedEmailAttachment(fileName: null, "image/png", "png"u8.ToArray())),
+            AttachmentOpening(principals, new StubOpenedEmailAttachment(fileName: null, "image/png", "png"u8.ToArray())),
+            principals,
             context,
             TestContext.Current.CancellationToken);
 
@@ -201,7 +217,8 @@ public sealed class EmailAttachmentDownloadEndpointTests
     {
         // Arrange
         var ticket = new AttachmentDownloadTicket(StoredEmailId.Create(Guid.CreateVersion7()), 0);
-        var context = new DefaultHttpContext();
+        var context = RequestToTheRoute();
+        var principals = PrincipalsFor(context);
         using var body = new MemoryStream();
         context.Response.Body = body;
 
@@ -209,14 +226,16 @@ public sealed class EmailAttachmentDownloadEndpointTests
         var refusedCapability = await EmailAttachmentDownloadEndpoint.DownloadAsync(
             "forged",
             TicketReaderRedeeming(null),
-            AttachmentOpening(null),
+            AttachmentOpening(principals, null),
+            principals,
             context,
             TestContext.Current.CancellationToken);
 
         var refusedMail = await EmailAttachmentDownloadEndpoint.DownloadAsync(
             "capability",
             TicketReaderRedeeming(ticket),
-            AttachmentOpening(null),
+            AttachmentOpening(principals, null),
+            principals,
             context,
             TestContext.Current.CancellationToken);
 
@@ -236,13 +255,15 @@ public sealed class EmailAttachmentDownloadEndpointTests
     {
         // Arrange
         var storedEmailId = StoredEmailId.Create(Guid.CreateVersion7());
-        var context = new DefaultHttpContext();
+        var context = RequestToTheRoute();
+        var principals = PrincipalsFor(context);
 
         // Act
         var result = await EmailAttachmentDownloadEndpoint.DownloadAsync(
             "a-capability-somebody-presented",
             TicketReaderRedeeming(new AttachmentDownloadTicket(storedEmailId, 3)),
-            AttachmentOpening(null),
+            AttachmentOpening(principals, null),
+            principals,
             context,
             TestContext.Current.CancellationToken);
 
@@ -251,6 +272,31 @@ public sealed class EmailAttachmentDownloadEndpointTests
         var body = $"{refusal.Value?.Title} {refusal.Value?.Detail}";
         Assert.DoesNotContain(storedEmailId.Value.ToString(), body, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("a-capability-somebody-presented", body, StringComparison.Ordinal);
+    }
+
+    /// <summary>Composes a request to this route's own path, which is what decides the principal the scope reports.</summary>
+    /// <remarks>An empty path would leave the arrangement below deciding nothing, because a path neither surface serves is refused for that reason instead of for being this route's.</remarks>
+    private static DefaultHttpContext RequestToTheRoute() =>
+        new() { Request = { Path = EmailAttachmentDownloadEndpoint.RoutePrefix + "/a-capability-somebody-presented" } };
+
+    /// <summary>The one scope a request is served in, which the route states its own principal onto.</summary>
+    /// <remarks>
+    /// The endpoint and the use case behind it are handed the same instance, exactly as a request scope hands them one.
+    /// That is what makes these tests about the route establishing what authorized it rather than about a value passed
+    /// along beside the call.
+    /// </remarks>
+    private static TransportAuthorizedPrincipalSource PrincipalsFor(HttpContext context)
+    {
+        var httpContextAccessor = Substitute.For<IHttpContextAccessor>();
+        httpContextAccessor.HttpContext.Returns(context);
+
+        // Neither endpoint configures a credential, which is the posture whose whole-surface grant would otherwise reach
+        // this route. Nothing about the transport hands it a caller even so, so what the use case is told is only what
+        // the route states once the ticket has verified.
+        return new TransportAuthorizedPrincipalSource(
+            httpContextAccessor,
+            Options.Create(new McpEndpointOptions()),
+            Options.Create(new AdminEndpointOptions()));
     }
 
     private static IAttachmentDownloadTicketReader TicketReaderRedeeming(AttachmentDownloadTicket? ticket)
@@ -269,7 +315,9 @@ public sealed class EmailAttachmentDownloadEndpointTests
     /// honest shape as well: what this endpoint has to get right is how an opened attachment becomes a response and how
     /// an absent one becomes a refusal, and both travel through the real reader either way.
     /// </remarks>
-    private static EmailAttachmentDownloadReader AttachmentOpening(IOpenedEmailAttachment? attachment)
+    private static EmailAttachmentDownloadReader AttachmentOpening(
+        IAuthorizedPrincipalSource principals,
+        IOpenedEmailAttachment? attachment)
     {
         var summary = SummaryOf();
 
@@ -307,7 +355,8 @@ public sealed class EmailAttachmentDownloadEndpointTests
                 StubMailFolderParticipation.Mapping(
                     new MailFolderIdentity(summary.AccountId, summary.FolderAlias)),
                 StubJunkMailFolderCatalog.None,
-                StubMailFolderMappings.ResolvingNothing));
+                StubMailFolderMappings.ResolvingNothing),
+            new AccessAuthorization(principals));
     }
 
     private static EmailSummary SummaryOf() => new()

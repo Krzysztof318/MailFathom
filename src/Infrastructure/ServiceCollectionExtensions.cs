@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Application.Access;
 using MailFathom.Application.Accounts;
 using MailFathom.Application.AiProviders;
 using MailFathom.Application.Contacts;
@@ -224,6 +225,12 @@ public static class ServiceCollectionExtensions
         ArgumentNullException.ThrowIfNull(currentConnectionSettings);
         ArgumentNullException.ThrowIfNull(textSearchConfiguration);
         ArgumentNullException.ThrowIfNull(answeringBudget);
+
+        // What a use case asks before it does the work it was reached for. The principal behind it comes from whatever
+        // admitted that work, which only a composition root knows, so IAuthorizedPrincipalSource is registered there and
+        // this line says only that the question is asked in the application layer rather than at whichever entrypoint
+        // arrived first.
+        services.AddScoped<AccessAuthorization>();
 
         // A value rather than an accessor, unlike the connection settings beside it: this one is compiled into the
         // search vector's column definition, so it is fixed for a deployment's schema and a reload cannot adopt a new

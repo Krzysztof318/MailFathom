@@ -4,8 +4,10 @@
 
 using System.Diagnostics.CodeAnalysis;
 using System.Xml.Linq;
+using MailFathom.Application.Access;
 using MailFathom.Host.Hosting;
 using MailFathom.Host.Hosting.Startup;
+using MailFathom.Host.Security.Transport;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.DataProtection.KeyManagement;
 using Microsoft.AspNetCore.DataProtection.Repositories;
@@ -307,6 +309,27 @@ public sealed class HostCompositionTests
         Assert.DoesNotContain(
             registrations,
             registration => registration.Name == PersonalDataAnalyzerHealthCheck.Name);
+    }
+
+    /// <summary>
+    /// The attachment download route states its principal on the concrete adapter and the use case behind it reads the
+    /// port, so the two have to be one object per request. Registering the port by its implementation type instead of
+    /// forwarding to the registered adapter composes cleanly and resolves everything, and then every download refuses:
+    /// the reader's port would answer what the transport says about that path, which is nothing at all.
+    /// </summary>
+    [Fact]
+    public async Task Compose_TheAuthorizedPrincipalPort_ResolvesTheOneAdapterTheRouteStatesOnto()
+    {
+        // Arrange
+        await using var provider = ComposeServices("probes only").BuildServiceProvider();
+        await using var scope = provider.CreateAsyncScope();
+
+        // Act
+        var stated = scope.ServiceProvider.GetRequiredService<TransportAuthorizedPrincipalSource>();
+        var read = scope.ServiceProvider.GetRequiredService<IAuthorizedPrincipalSource>();
+
+        // Assert
+        Assert.Same(stated, read);
     }
 
     /// <summary>Composes one shape and hands back what it registered.</summary>

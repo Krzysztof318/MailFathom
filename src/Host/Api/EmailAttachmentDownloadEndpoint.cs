@@ -2,9 +2,12 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using System.Globalization;
+using MailFathom.Application.Access;
 using MailFathom.Application.EmailContent.Attachments;
 using MailFathom.Application.Emails.DownloadAttachment;
 using MailFathom.Application.Emails.Extraction;
+using MailFathom.Host.Security.Transport;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Net.Http.Headers;
@@ -61,19 +64,28 @@ internal static class EmailAttachmentDownloadEndpoint
     /// <param name="capability">The capability the URL carried, which is entirely untrusted.</param>
     /// <param name="ticketReader">Verifies the capability against the deployment's key ring.</param>
     /// <param name="downloadReader">Opens the attachment the verified capability names.</param>
+    /// <param name="principals">Carries what authorized this request into the application layer.</param>
     /// <param name="context">The request being answered, whose response body the attachment is written to.</param>
     /// <param name="cancellationToken">Cancels the read when the reader disconnects.</param>
     /// <returns>The attachment's octets, or <c>404</c> with a body that says nothing about why.</returns>
     /// <exception cref="ArgumentNullException">Thrown when any resolved dependency is <see langword="null" />.</exception>
+    /// <remarks>
+    /// The verified ticket is what the request runs under, and it is stated onto the scope before the use case is
+    /// reached. Nothing authenticated here, so without that statement the use case would be reached under no principal
+    /// and would refuse — which is the same rule that makes an entrypoint added later say what admitted it rather than
+    /// inherit a permission from somewhere.
+    /// </remarks>
     internal static async Task<Results<EmptyHttpResult, NotFound<ProblemDetails>>> DownloadAsync(
         string capability,
         IAttachmentDownloadTicketReader ticketReader,
         EmailAttachmentDownloadReader downloadReader,
+        TransportAuthorizedPrincipalSource principals,
         HttpContext context,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(ticketReader);
         ArgumentNullException.ThrowIfNull(downloadReader);
+        ArgumentNullException.ThrowIfNull(principals);
         ArgumentNullException.ThrowIfNull(context);
 
         var ticket = await ticketReader.RedeemAsync(capability, cancellationToken);
@@ -81,6 +93,8 @@ internal static class EmailAttachmentDownloadEndpoint
         {
             return Refused();
         }
+
+        principals.Assume(AuthorizedPrincipal.SignedCapability(AuthorizedObjectOf(ticket)));
 
         await using var attachment = await downloadReader.OpenAsync(ticket, cancellationToken);
         if (attachment is null)
@@ -136,6 +150,15 @@ internal static class EmailAttachmentDownloadEndpoint
         response.Headers.XContentTypeOptions = "nosniff";
         response.Headers.CacheControl = "no-store";
     }
+
+    /// <summary>Names the one object the signature was bounded to, in MailFathom's own identifiers.</summary>
+    /// <remarks>
+    /// It is what a record of a refusal names the work by, so it carries the stored email's identity and the position
+    /// within it and nothing from the message: a file name, a media type, or a subject would be mail content.
+    /// </remarks>
+    private static string AuthorizedObjectOf(AttachmentDownloadTicket ticket) => string.Create(
+        CultureInfo.InvariantCulture,
+        $"{RoutePrefix}/{ticket.StoredEmailId.Value}/{ticket.AttachmentPosition}");
 
     private static NotFound<ProblemDetails> Refused() =>
         TypedResults.NotFound(new ProblemDetails

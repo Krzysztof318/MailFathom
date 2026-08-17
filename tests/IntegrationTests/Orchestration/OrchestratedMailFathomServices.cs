@@ -4,6 +4,7 @@
 
 using MailFathom.AI;
 using MailFathom.AI.Chat;
+using MailFathom.Application.Access;
 using MailFathom.Application.Accounts;
 using MailFathom.Application.EmailContent;
 using MailFathom.Application.EmailContent.Attachments;
@@ -294,6 +295,10 @@ internal sealed class OrchestratedMailFathomServices : IAsyncDisposable
         builder.Services.AddDeterministicTextEmbeddings(
             DeterministicEmbeddingDimension,
             DeterministicEmbeddingInputCharacterLimit);
+        // What a use case is told admitted the work. A composition root supplies it from the request being served, and
+        // this suite serves none: every class it exercises is driven directly, which is work no caller requested and is
+        // exactly what the process identity names.
+        builder.Services.AddScoped<IAuthorizedPrincipalSource>(_ => new ProcessAuthorizedPrincipalSource());
         builder.Services.AddInfrastructure(
             _ => new PostgresConnectionSettings(orchestration.DatabaseConnectionString, null, null),
             PostgresTextSearchConfiguration.Default,

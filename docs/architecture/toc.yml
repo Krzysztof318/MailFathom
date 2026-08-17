@@ -8,6 +8,9 @@
 - name: Solution structure
   href: solution-structure.md
   description: The projects, which way their dependencies point, and what belongs inside each boundary.
+- name: Who a use case is running for
+  href: authorized-principal.md
+  description: The three kinds of principal the application layer models, how each one reaches it, and why the use case checks a grant as well as the transport.
 - name: The arrival pipeline
   href: arrival-pipeline.md
   description: The order a newly arrived message passes through — classification, rules, redaction, chunking, embedding — drawn once, with what each stage waits for and what each classification outcome permits.
