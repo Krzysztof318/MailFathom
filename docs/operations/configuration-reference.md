@@ -294,11 +294,38 @@ what it does not.
 | `…:Delivery:ConnectionSecurity` | enum | `TlsOnConnect` | The same five modes judged by the same rules as the reading endpoint's, against the account's own opt-ins | reload |
 | `…:Delivery:UserName` | string | unset (the account's) | An identifier, not a secret; for a relay that authenticates a different login than the mailbox does | reload |
 | `…:Delivery:Secrets:Password` | secret block | unset (the account's) | A block naming no reference reads as absent and falls back to the account's credential | reload; material per connection |
+| `…:Delivery:FromAddress` | string | unset (the account's `UserName` when it is a mailbox address) | A mailbox address; startup refuses an endpoint that resolves to none | reload |
+| `…:Delivery:FromDisplayName` | string | unset (the address alone) | The name recipients see this mailbox sign itself with; deliberately not the account's `DisplayName` | reload |
 
 The permitted mechanisms, both weakenings, and the certificate authority are **not** repeated here: they are one
 decision the account makes about itself in `TransportSecurity` above, and both endpoints are reached under it. What
 differs between the two servers is where they are and how the channel to them is encrypted, which is exactly what this
 block carries.
+
+The two sending keys are the account's answer to *who this mailbox writes as*, and they are configuration precisely so
+that nothing else can be. No request, rule, or tool argument names a sender, so the only way to send as somebody else is
+to send through an account an operator configured that way. Most deployments write neither key: a provider that
+authenticates the mailbox by its address has already stated it as `UserName`, and the address alone is what recipients
+see.
+
+## `MailDelivery`
+
+How large a message this deployment is willing to compose. The submission endpoints above are per account because they
+are different servers; these are one answer for the whole installation, because what a mailbox may send is a policy an
+operator holds once. Every message is measured against both these numbers and whatever the submission server itself
+advertised, and the smaller of the two decides.
+
+| Key | Type | Default | Constraint | Change |
+| --- | --- | --- | --- | --- |
+| `MailDelivery:MaxRecipientCount` | int | `50` | 1 – 256, the ceiling being what one outgoing record holds | restart |
+| `MailDelivery:MaxBodyCharacters` | int | `100000` | 1 – 10000000; applies to the plain text and to the HTML alternative separately | restart |
+| `MailDelivery:MaxAttachmentCount` | int | `10` | 0 – 100; `0` attaches nothing | restart |
+| `MailDelivery:MaxAttachmentBytes` | long | `10485760` | 1 – 104857600, and never above `MaxMessageBytes` while files may be attached at all | restart |
+| `MailDelivery:MaxMessageBytes` | long | `26214400` | 1 – 209715200; measured on the composed bytes rather than summed from the parts | restart |
+
+The whole-message bound is measured on what the message became rather than on what an author supplied, because transfer
+encoding decides the difference: base64 costs roughly a third more than the octets it carries, and headers, boundaries,
+and folding are the rest of it.
 
 ## `Persistence` and the connection string
 

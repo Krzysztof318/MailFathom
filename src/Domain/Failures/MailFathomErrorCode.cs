@@ -143,6 +143,46 @@ public readonly record struct MailFathomErrorCode
     /// </remarks>
     public static MailFathomErrorCode MailDeliveryUnavailable { get; } = new(27001);
 
+    /// <summary>Gets subcategory 8, message composition: the account a message would be sent as configures no address to send from.</summary>
+    /// <remarks>
+    /// It is the composition failure that is nobody's mistake but the operator's, which is why it is separate from the
+    /// four below it: every one of those names something an author wrote, and this one names a submission endpoint
+    /// configured without the identity mail sent through it would carry.
+    /// </remarks>
+    public static MailFathomErrorCode OutgoingEmailSenderUnconfigured { get; } = new(28001);
+
+    /// <summary>Gets subcategory 8, message composition: an author-supplied field carries a line break, which would smuggle a header nobody wrote.</summary>
+    /// <remarks>
+    /// The field is refused rather than stripped. Removing the break would compose a message whose subject or file name
+    /// is not what the author wrote and not what they would be told about, and the value was assembled by something
+    /// that either did not mean it or was not the author at all.
+    /// </remarks>
+    public static MailFathomErrorCode OutgoingEmailHeaderInjected { get; } = new(28002);
+
+    /// <summary>Gets subcategory 8, message composition: an author-supplied field carries a value no message can be composed from.</summary>
+    /// <remarks>
+    /// An address that names no mailbox and a media type that is not one arrive here together, because the author's
+    /// remedy is the same for both — correct the field the refusal names — and the difference between them says nothing
+    /// an operator's runbook would act on differently.
+    /// </remarks>
+    public static MailFathomErrorCode OutgoingEmailFieldUnusable { get; } = new(28003);
+
+    /// <summary>Gets subcategory 8, message composition: an address outside ASCII was addressed to a server that advertised no internationalized-address support.</summary>
+    /// <remarks>
+    /// It is separate from an unusable address because the address is correct and the server cannot carry it. The
+    /// remedy is a different submission endpoint or a different address, and refusing here is what keeps the attempt
+    /// from spending a whole transmission to be refused at <c>RCPT TO</c>.
+    /// </remarks>
+    public static MailFathomErrorCode OutgoingEmailInternationalizationUnsupported { get; } = new(28004);
+
+    /// <summary>Gets subcategory 8, message composition: a message exceeds a bound the deployment configured or the submission server advertised.</summary>
+    /// <remarks>
+    /// One code covers every bound — recipients, body, attachments, and the whole message — because the refusal carries
+    /// which field and which number it exceeded, and a code per bound would publish five identities for one operator
+    /// action.
+    /// </remarks>
+    public static MailFathomErrorCode OutgoingEmailBoundExceeded { get; } = new(28005);
+
     #endregion
 
     #region Category 3 — Persistence
@@ -395,6 +435,11 @@ public readonly record struct MailFathomErrorCode
         MailboxMutationDestinationMissing,
         RemoteFolderCreationRefused,
         MailDeliveryUnavailable,
+        OutgoingEmailSenderUnconfigured,
+        OutgoingEmailHeaderInjected,
+        OutgoingEmailFieldUnusable,
+        OutgoingEmailInternationalizationUnsupported,
+        OutgoingEmailBoundExceeded,
         PersistenceConcurrencyConflict,
         DatabaseSchemaOutOfDate,
         DatabaseSchemaStateUnreadable,

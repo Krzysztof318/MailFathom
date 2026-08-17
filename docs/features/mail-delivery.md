@@ -1,19 +1,20 @@
 # Mail delivery
 
-<!-- describes: src/Application/Mail/Delivery/**, src/Domain/Delivery/**, src/Infrastructure/Mail/MailKit/Delivery/**, src/Infrastructure/Persistence/Delivery/**, src/Infrastructure/Mail/MailAccountDeliveryOptions.cs, src/Infrastructure/Mail/SmtpAccountSettings.cs, src/Host/Configuration/Mail/ConfiguredSmtpAccountSettingsProvider.cs -->
+<!-- describes: src/Application/Mail/Delivery/**, src/Domain/Delivery/**, src/Infrastructure/Mail/MailKit/Delivery/**, src/Infrastructure/Mail/Mime/Composition/**, src/Infrastructure/Persistence/Delivery/**, src/Infrastructure/Mail/MailAccountDeliveryOptions.cs, src/Infrastructure/Mail/SmtpAccountSettings.cs, src/Host/Configuration/Mail/ConfiguredSmtpAccountSettingsProvider.cs, src/Host/Configuration/Mail/MailDeliveryOptions.cs -->
 
 Reading a mailbox and submitting to one are two capabilities against two servers, and MailFathom holds them apart.
-What exists today is the submission half's foundation: an account may declare where its mail would be submitted, a
-**delivery session** can be opened against that server — connected, encrypted, authenticated, and asked what it will
-accept — and a send can be written down durably before anything acts on it. Nothing composes a message and nothing
-transmits one, so a deployment that configures a submission endpoint gains a validated endpoint, an openable session,
-an outbox that can hold a message, and no outbound mail.
+What exists today is the submission half up to the point of transmission: an account may declare where its mail would be
+submitted, a **delivery session** can be opened against that server — connected, encrypted, authenticated, and asked what
+it will accept — an authored message can be **composed into MIME**, and the send can be written down durably before
+anything acts on it. Nothing transmits a message, so a deployment that configures a submission endpoint gains a validated
+endpoint, an openable session, a composer, an outbox holding a message ready to go, and no outbound mail.
 
-That is deliberate rather than partial. Those two are the pieces every later step rests on: the session is the piece
-with a protocol, a credential, and a channel to get wrong, and the record is the piece that decides whether a crash
-mid-send can deliver a message twice. Both are provable on their own — the session against a real server, over each
-mode that server speaks and against the reply codes it answers with, and the record against a real database, where a
-constraint rather than any code decides a race.
+That is deliberate rather than partial. Each of those is a piece every later step rests on: the session is the piece with
+a protocol, a credential, and a channel to get wrong; the composer is the piece that decides who a message says it is
+from and what an authored field may not smuggle into a header; and the record is the piece that decides whether a crash
+mid-send can deliver a message twice. Each is provable on its own — the session against a real server, over each mode
+that server speaks and against the reply codes it answers with; the composer against the bytes it produces; and the
+record against a real database, where a constraint rather than any code decides a race.
 
 ## The session, and who may open one
 
@@ -63,6 +64,14 @@ endpoint at all — an ordinary shape, and the one every account has until someb
 `Host` is what decides whether the endpoint exists: every other setting has a usable default or an inherited value, so
 presence of a host is the whole switch. [The configuration reference](../operations/configuration-reference.md) holds
 each key of the block, its default, and its constraint.
+
+**The block also states who this account writes as**, through `FromAddress` and `FromDisplayName`. Most deployments
+write neither: a provider that authenticates the mailbox by its address has already stated it as the account's
+`UserName`, which is what the sending address falls back to, and writing the address alone is the honest default for the
+name. They exist for the account whose login is a bare name rather than an address, and for the mailbox that sends under
+an address it is not reached at. An endpoint that resolves to no address at all is refused at startup, because it would
+compose nothing — and the display name is deliberately not the account's own `DisplayName`, which is the alias an
+operator invented for their tooling rather than a name to sign somebody's mail with.
 
 **The endpoint's own choice is where it is and how it is encrypted; everything else stays the account's.** A provider
 serving implicit TLS for reading and STARTTLS for submission is the ordinary case, which is why `ConnectionSecurity`
@@ -144,11 +153,60 @@ disagree.
 A session that cannot be established — because the dependency's circuit is open, or because transient refusals used up
 the attempts — fails with `MailDeliveryUnavailableException`, error code `27001`, naming the account.
 
+## Composing the message, and the headers this system owns
+
+Between what somebody authored — these recipients, this subject, this text, these files — and the bytes a server accepts
+sit a set of decisions that are made once, in one place. `IAuthoredEmailComposer` is that place, and the MimeKit adapter
+behind it is the only code in MailFathom that assembles a message rather than parsing one. Callers hand over an
+`AuthoredEmail` and receive either the bytes and the record to write, or a refusal naming the field that stopped it. No
+MIME type crosses back.
+
+**Some of those decisions are ownership.** The `From` address is the account's own and is never an argument: the
+authored contract carries no sender at all, which is a stronger guarantee than validating one would be, and the address
+comes from the account's `Delivery` block instead. The `Message-ID` is minted here from a cryptographically secure
+random half and the account's own domain, so nothing outside this deployment can predict the identity of a message it
+has not seen and forge a reply into its thread. The `Date` comes from the injected clock, as every timestamp in this
+system does.
+
+**Some are correctness at the protocol edge.** Every author-supplied value that becomes a header — the subject, the name
+written beside each address, the name and declared media type of each file — is refused for carrying a line break rather
+than sanitized: stripping it would compose a message whose subject is not what the author wrote and not what they would
+be told about. An address outside ASCII is refused unless the submission server advertised **both** `SMTPUTF8` and
+`8BITMIME`, before anything is transmitted — such an address is written as raw UTF-8 in the header block or not at all,
+so a server offering only the first has not said it will accept one, and RFC 6531 requires it to advertise both anyway.
+The refusal happens here rather than after the whole body has crossed the network. A subject outside ASCII is not
+subject to that and never was: a header is encoded the way every mail transport has always carried one, and only an
+address has no such encoding.
+
+**Some are what the message is made of.** A plain-text body is required and an HTML alternative is optional; where both
+exist the message is a proper `multipart/alternative`, and the plain text is the author's own rather than a reading of
+the markup — a body produced by stripping tags is text nobody wrote, and every recipient whose client prefers plain text
+would read that instead of the message. Each attachment carries the media type its author declared it as, because
+deriving one from the octets would be this system asserting what somebody else's file is.
+
+**And some are bounds.** A recipient count, a body length, an attachment count, a per-file size, and a whole-message
+size are all the deployment's numbers rather than whatever a caller passed, and each is checked before a connection is
+worth opening. `MailDelivery` in [the configuration reference](../operations/configuration-reference.md#maildelivery)
+holds each of them; the submission server's own advertised `SIZE` is checked beside them rather than in place of them,
+so whichever is smaller decides. The whole-message bound is measured on the composed bytes, because transfer encoding,
+headers, and boundaries are the difference between what an author supplied and what a server is offered.
+
+**One mailbox is offered once.** Somebody an author named in two headers is placed in the more visible one — `To`, then
+`Cc`, then `Bcc` — and the later mention is dropped, because a person meant to be seen must not be hidden from the other
+recipients by an accident of ordering. A blind recipient is offered to the server exactly as any other is; what makes
+them blind is that the transmitted headers do not name them.
+
+**A refusal names the field and the limit, and never the value.** An address, a subject, and a body are personal data of
+the people a message is between, so nothing that reaches a log line, a metric, or an exception carries them. The codes
+are `28001` for an account configuring no address to send from, `28002` for an injected header, `28003` for a field no
+message can be composed from, `28004` for an internationalized address the server cannot carry, and `28005` for any
+bound.
+
 ## The record a send is written down as, before anything is sent
 
-Nothing composes a message yet, and nothing transmits one. What exists beside the session is the durable state a
-transmission would be carried out against: an **outgoing record**, written before any SMTP command could be issued, and
-the message it points at.
+Nothing transmits a message yet. What exists beside the session and the composer is the durable state a transmission
+would be carried out against: an **outgoing record**, written before any SMTP command could be issued, and the message
+it points at.
 
 The reason is that a send is not one act. The MIME is built, an intent is recorded, a connection is opened, each
 recipient is offered and accepted or refused, the body is transmitted, and the server answers — and a process can die
@@ -205,6 +263,13 @@ The rules that govern mail content govern this path too, and three things in par
 Mechanism narrowing, capability reporting, each reply-code family, the refusal of an unsafe transport choice, the per
 stage timeouts, and cancellation are unit tests against a substituted client, where every mode and every reply can be
 scripted.
+
+Composition is settled entirely in the unit suite, because it reaches nothing: the tests compose a message and read the
+bytes back with the same parser this system reads arriving mail with. What they establish is each refusal against the
+field it names, the sending address and the minted identity against an account that supplied neither, one mailbox named
+in two headers becoming one offer in the more visible one, a blind recipient appearing in the envelope and in none of
+the transmitted bytes, an eight-bit body transfer-encoded when the server takes none, and the line ending a stored
+message carries — which matters precisely because the bytes are transmitted verbatim rather than re-serialized.
 
 The integration suite opens a real session against the orchestrated GreenMail server and records what it advertises:
 `AUTH PLAIN LOGIN XOAUTH2` and `SMTPUTF8`, with neither `SIZE` nor `8BITMIME`. That is the limit of what is provable

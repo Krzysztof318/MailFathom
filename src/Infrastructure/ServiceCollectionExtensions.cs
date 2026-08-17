@@ -33,6 +33,7 @@ using MailFathom.Application.Jobs.Execution;
 using MailFathom.Application.Jobs.Scheduling;
 using MailFathom.Application.Mail;
 using MailFathom.Application.Mail.Delivery;
+using MailFathom.Application.Mail.Delivery.Composition;
 using MailFathom.Application.Mail.Maintenance;
 using MailFathom.Application.Mail.Mutations;
 using MailFathom.Application.Mail.Mutations.Audit;
@@ -74,6 +75,7 @@ using MailFathom.Infrastructure.Mail.MailKit;
 using MailFathom.Infrastructure.Mail.MailKit.Delivery;
 using MailFathom.Infrastructure.Mail.MailKit.Writes;
 using MailFathom.Infrastructure.Mail.Mime;
+using MailFathom.Infrastructure.Mail.Mime.Composition;
 using MailFathom.Infrastructure.Mail.OAuth;
 using MailFathom.Infrastructure.Observability;
 using MailFathom.Infrastructure.Persistence;
@@ -651,6 +653,12 @@ public static class ServiceCollectionExtensions
         // is what makes the record and the message it points at one write.
         services.AddScoped<IOutgoingEmailStore, OutgoingEmailStore>();
         services.AddScoped<MailOutbox>();
+        // Scoped beside the outbox and beside the sending identities it reads, which are the account snapshot's and
+        // therefore belong to one work unit. The composer itself holds nothing across a call.
+        services.AddScoped<IAuthoredEmailComposer>(provider => new MimeKitAuthoredEmailComposer(
+            provider.GetRequiredService<IOutgoingSenderIdentityReader>(),
+            provider.GetRequiredService<OutgoingEmailBounds>(),
+            provider.GetRequiredService<TimeProvider>()));
         // Read by synchronization rather than by the performer, so that a relocation coming back through an ordinary
         // run is recognized as MailFathom's own instead of being stored as a second email.
         services.AddScoped<IMailboxMutationReconciliationStore, MailboxMutationReconciliationStore>();

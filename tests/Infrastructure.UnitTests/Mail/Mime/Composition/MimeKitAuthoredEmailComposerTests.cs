@@ -1,0 +1,734 @@
+// Copyright © 2026 Krzysztof Kasprowicz
+// Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
+// Project repository: https://github.com/Krzysztof318/MailFathom
+
+using System.Text;
+using MailFathom.Application.Mail.Delivery;
+using MailFathom.Application.Mail.Delivery.Composition;
+using MailFathom.Domain.Accounts;
+using MailFathom.Domain.Delivery;
+using MailFathom.Domain.Emails;
+using MailFathom.Domain.Failures;
+using MailFathom.Infrastructure.Mail.Mime.Composition;
+using Microsoft.Extensions.Time.Testing;
+using MimeKit;
+using NSubstitute;
+using Xunit;
+
+namespace MailFathom.Infrastructure.UnitTests.Mail.Mime.Composition;
+
+/// <summary>
+/// Covers the one place an outgoing message is built: which headers this system owns rather than a caller, what an
+/// authored field may not smuggle into one, which recipients the envelope ends up offering, and every bound a message
+/// is refused for before a connection is worth opening.
+/// </summary>
+public sealed class MimeKitAuthoredEmailComposerTests
+{
+    /// <summary>A value carrying a line break, which is what every injected header begins with.</summary>
+    private const string Injection = "Quarterly report\r\nBcc: elsewhere@example.test";
+
+    private static readonly MailAccountId Account = MailAccountId.Create("primary");
+
+    private static readonly DateTimeOffset ComposedAt = new(2026, 8, 17, 9, 30, 0, TimeSpan.Zero);
+
+    /// <summary>The account's own address is what a message is written from, and there is no input path that names one.</summary>
+    [Fact]
+    public void Compose_AuthoredMessage_WritesTheSendingAccountsOwnAddressAndName()
+    {
+        // Arrange
+        var composer = CreateComposer();
+
+        // Act
+        var composition = composer.Compose(Account, Requester(), Authored(), Capabilities());
+
+        // Assert
+        var sender = Assert.IsType<MailboxAddress>(Assert.Single(Parse(composition).From));
+        Assert.Equal("mailfathom@example.test", sender.Address);
+        Assert.Equal("MailFathom", sender.Name);
+    }
+
+    /// <summary>An endpoint configured without an address to send from composes nothing, and says so as itself.</summary>
+    [Fact]
+    public void Compose_AccountConfiguringNoSendingAddress_IsRefusedNamingTheSender()
+    {
+        // Arrange
+        var senderIdentities = Substitute.For<IOutgoingSenderIdentityReader>();
+        senderIdentities.FindSenderIdentity(Account).Returns((OutgoingSenderIdentity?)null);
+        var composer = new MimeKitAuthoredEmailComposer(senderIdentities, Bounds(), new FakeTimeProvider(ComposedAt));
+
+        // Act
+        var composition = composer.Compose(Account, Requester(), Authored(), Capabilities());
+
+        // Assert
+        AssertRefused(
+            composition,
+            AuthoredEmailRefusalReason.SenderUnconfigured,
+            AuthoredEmailField.Sender,
+            MailFathomErrorCode.OutgoingEmailSenderUnconfigured);
+    }
+
+    /// <summary>The identity is minted in the sending account's domain and is what the transmitted header carries.</summary>
+    [Fact]
+    public void Compose_AuthoredMessage_MintsAMessageIdInTheSendersDomainAndWritesIt()
+    {
+        // Arrange
+        var composer = CreateComposer();
+
+        // Act
+        var composition = composer.Compose(Account, Requester(), Authored(), Capabilities());
+
+        // Assert
+        var messageId = composition.Email!.MessageId;
+        Assert.EndsWith("@example.test", messageId.Value, StringComparison.Ordinal);
+        Assert.Equal(messageId.Value, Parse(composition).MessageId);
+    }
+
+    /// <summary>
+    /// Two compositions of one authored message are two messages. That is why a send stores its own once and transmits
+    /// the stored bytes: recomposing between attempts would thread one send as two in every recipient's client.
+    /// </summary>
+    [Fact]
+    public void Compose_SameAuthoredMessageTwice_MintsADistinctIdentityEachTime()
+    {
+        // Arrange
+        var composer = CreateComposer();
+
+        // Act
+        var first = composer.Compose(Account, Requester(), Authored(), Capabilities());
+        var second = composer.Compose(Account, Requester(), Authored(), Capabilities());
+
+        // Assert
+        Assert.NotEqual(first.Email!.MessageId, second.Email!.MessageId);
+    }
+
+    /// <summary>The timestamp is the injected clock's, as every timestamp in this system is.</summary>
+    [Fact]
+    public void Compose_AuthoredMessage_DatesItFromTheInjectedClock()
+    {
+        // Arrange
+        var composer = CreateComposer();
+
+        // Act
+        var composition = composer.Compose(Account, Requester(), Authored(), Capabilities());
+
+        // Assert
+        Assert.Equal(ComposedAt, Parse(composition).Date);
+    }
+
+    /// <summary>
+    /// One mailbox is offered once. Somebody an author named both as a primary recipient and as a blind one was meant to
+    /// be seen, so the more visible header keeps them and the later mention is dropped.
+    /// </summary>
+    [Fact]
+    public void Compose_OneMailboxNamedInTwoHeaders_OffersItOnceInTheMoreVisibleOne()
+    {
+        // Arrange
+        var composer = CreateComposer();
+        var authored = Authored() with
+        {
+            Recipients =
+            [
+                new AuthoredEmailRecipient(OutgoingRecipientRole.Bcc, "Anna@example.test"),
+                new AuthoredEmailRecipient(OutgoingRecipientRole.To, "anna@example.test", "Anna"),
+            ],
+        };
+
+        // Act
+        var composition = composer.Compose(Account, Requester(), authored, Capabilities());
+
+        // Assert
+        var recipient = Assert.Single(composition.Email!.Request.Recipients);
+        Assert.Equal(OutgoingRecipientRole.To, recipient.Role);
+        var message = Parse(composition);
+        Assert.Equal("anna@example.test", Assert.IsType<MailboxAddress>(Assert.Single(message.To)).Address);
+        Assert.Empty(message.Bcc);
+    }
+
+    /// <summary>A blind recipient is offered exactly as any other is, and the transmitted headers do not name them.</summary>
+    [Fact]
+    public void Compose_BlindRecipient_IsOfferedButNeverNamedInTheTransmittedHeaders()
+    {
+        // Arrange
+        var composer = CreateComposer();
+        var authored = Authored() with
+        {
+            Recipients =
+            [
+                new AuthoredEmailRecipient(OutgoingRecipientRole.To, "anna@example.test"),
+                new AuthoredEmailRecipient(OutgoingRecipientRole.Bcc, "auditor@example.test"),
+            ],
+        };
+
+        // Act
+        var composition = composer.Compose(Account, Requester(), authored, Capabilities());
+
+        // Assert
+        Assert.Equal(2, composition.Email!.Request.Recipients.Count);
+        Assert.Contains(
+            composition.Email.Request.Recipients,
+            recipient => recipient.Role == OutgoingRecipientRole.Bcc);
+        Assert.DoesNotContain(
+            "auditor@example.test",
+            Encoding.UTF8.GetString(composition.Email.RawMime.Span),
+            StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>An address that names no mailbox is refused against the header the author wrote it in, never against the address.</summary>
+    [Theory]
+    [InlineData(OutgoingRecipientRole.To, AuthoredEmailField.To)]
+    [InlineData(OutgoingRecipientRole.Cc, AuthoredEmailField.Cc)]
+    [InlineData(OutgoingRecipientRole.Bcc, AuthoredEmailField.Bcc)]
+    public void Compose_RecipientNamingNoMailbox_IsRefusedNamingTheHeader(
+        OutgoingRecipientRole role,
+        AuthoredEmailField field)
+    {
+        // Arrange
+        var composer = CreateComposer();
+        var authored = Authored() with
+        {
+            Recipients =
+            [
+                new AuthoredEmailRecipient(OutgoingRecipientRole.To, "anna@example.test"),
+                new AuthoredEmailRecipient(role, "not-a-mailbox"),
+            ],
+        };
+
+        // Act
+        var composition = composer.Compose(Account, Requester(), authored, Capabilities());
+
+        // Assert
+        AssertRefused(
+            composition,
+            AuthoredEmailRefusalReason.FieldUnusable,
+            field,
+            MailFathomErrorCode.OutgoingEmailFieldUnusable);
+    }
+
+    /// <summary>A message addressed to nobody has nothing to compose.</summary>
+    [Fact]
+    public void Compose_MessageAddressedToNobody_IsRefused()
+    {
+        // Arrange
+        var composer = CreateComposer();
+
+        // Act
+        var composition = composer.Compose(Account, Requester(), Authored() with { Recipients = [] }, Capabilities());
+
+        // Assert
+        AssertRefused(
+            composition,
+            AuthoredEmailRefusalReason.FieldUnusable,
+            AuthoredEmailField.Recipients,
+            MailFathomErrorCode.OutgoingEmailFieldUnusable);
+    }
+
+    /// <summary>A subject is a header, so a line break in one is refused rather than stripped.</summary>
+    [Fact]
+    public void Compose_SubjectCarryingALineBreak_IsRefused()
+    {
+        // Arrange
+        var composer = CreateComposer();
+
+        // Act
+        var composition = composer.Compose(
+            Account,
+            Requester(),
+            Authored() with { Subject = Injection },
+            Capabilities());
+
+        // Assert
+        AssertRefused(
+            composition,
+            AuthoredEmailRefusalReason.HeaderInjected,
+            AuthoredEmailField.Subject,
+            MailFathomErrorCode.OutgoingEmailHeaderInjected);
+    }
+
+    /// <summary>The name written beside an address is a header too, and is refused against the header it would sit in.</summary>
+    [Fact]
+    public void Compose_RecipientDisplayNameCarryingALineBreak_IsRefusedNamingTheHeader()
+    {
+        // Arrange
+        var composer = CreateComposer();
+        var authored = Authored() with
+        {
+            Recipients = [new AuthoredEmailRecipient(OutgoingRecipientRole.Cc, "anna@example.test", Injection)],
+        };
+
+        // Act
+        var composition = composer.Compose(Account, Requester(), authored, Capabilities());
+
+        // Assert
+        AssertRefused(
+            composition,
+            AuthoredEmailRefusalReason.HeaderInjected,
+            AuthoredEmailField.Cc,
+            MailFathomErrorCode.OutgoingEmailHeaderInjected);
+    }
+
+    /// <summary>A file's name and its declared media type both become headers of the part that carries it.</summary>
+    [Fact]
+    public void Compose_AttachmentNameCarryingALineBreak_IsRefused()
+    {
+        // Arrange
+        var composer = CreateComposer();
+        var authored = Authored() with
+        {
+            Attachments = [new AuthoredEmailAttachment(Injection, "text/plain", new byte[] { 1, 2, 3 })],
+        };
+
+        // Act
+        var composition = composer.Compose(Account, Requester(), authored, Capabilities());
+
+        // Assert
+        AssertRefused(
+            composition,
+            AuthoredEmailRefusalReason.HeaderInjected,
+            AuthoredEmailField.Attachment,
+            MailFathomErrorCode.OutgoingEmailHeaderInjected);
+    }
+
+    /// <summary>An address the submission server cannot carry is refused before anything is transmitted.</summary>
+    [Fact]
+    public void Compose_InternationalizedAddressAgainstServerWithoutSupport_IsRefused()
+    {
+        // Arrange
+        var composer = CreateComposer();
+        var authored = Authored() with
+        {
+            Recipients = [new AuthoredEmailRecipient(OutgoingRecipientRole.To, "zoë@example.test")],
+        };
+
+        // Act
+        var composition = composer.Compose(
+            Account,
+            Requester(),
+            authored,
+            Capabilities(acceptsInternationalizedAddresses: false));
+
+        // Assert
+        AssertRefused(
+            composition,
+            AuthoredEmailRefusalReason.InternationalizationUnsupported,
+            AuthoredEmailField.To,
+            MailFathomErrorCode.OutgoingEmailInternationalizationUnsupported);
+    }
+
+    /// <summary>The same address is composed when the server advertised that it carries one.</summary>
+    [Fact]
+    public void Compose_InternationalizedAddressAgainstServerAdvertisingSupport_IsComposed()
+    {
+        // Arrange
+        var composer = CreateComposer();
+        var authored = Authored() with
+        {
+            Recipients = [new AuthoredEmailRecipient(OutgoingRecipientRole.To, "zoë@example.test")],
+        };
+
+        // Act
+        var composition = composer.Compose(
+            Account,
+            Requester(),
+            authored,
+            Capabilities(acceptsInternationalizedAddresses: true));
+
+        // Assert
+        Assert.True(composition.IsComposed);
+        Assert.Equal(
+            "zoë@example.test",
+            Assert.IsType<MailboxAddress>(Assert.Single(Parse(composition).To)).Address);
+    }
+
+    /// <summary>
+    /// An address is written as raw UTF-8 or not at all, so a server advertising internationalized addresses without
+    /// eight-bit content has not said it will accept one — and RFC 6531 requires it to advertise both.
+    /// </summary>
+    [Fact]
+    public void Compose_InternationalizedAddressAgainstServerWithoutEightBitContent_IsRefused()
+    {
+        // Arrange
+        var composer = CreateComposer();
+        var authored = Authored() with
+        {
+            Recipients = [new AuthoredEmailRecipient(OutgoingRecipientRole.To, "zoë@example.test")],
+        };
+
+        // Act
+        var composition = composer.Compose(
+            Account,
+            Requester(),
+            authored,
+            Capabilities(acceptsEightBitContent: false, acceptsInternationalizedAddresses: true));
+
+        // Assert
+        AssertRefused(
+            composition,
+            AuthoredEmailRefusalReason.InternationalizationUnsupported,
+            AuthoredEmailField.To,
+            MailFathomErrorCode.OutgoingEmailInternationalizationUnsupported);
+    }
+
+    /// <summary>
+    /// The account's own address is checked beside the recipients, so a deployment configured with an internationalized
+    /// mailbox that reaches a relay carrying none reads the refusal as its configuration rather than as a mistake an
+    /// author made.
+    /// </summary>
+    [Fact]
+    public void Compose_SendingAddressOutsideAsciiAgainstServerWithoutSupport_IsRefusedNamingTheSender()
+    {
+        // Arrange
+        var composer = CreateComposer(Bounds(), "zoë@example.test");
+
+        // Act
+        var composition = composer.Compose(
+            Account,
+            Requester(),
+            Authored(),
+            Capabilities(acceptsInternationalizedAddresses: false));
+
+        // Assert
+        AssertRefused(
+            composition,
+            AuthoredEmailRefusalReason.InternationalizationUnsupported,
+            AuthoredEmailField.Sender,
+            MailFathomErrorCode.OutgoingEmailInternationalizationUnsupported);
+    }
+
+    /// <summary>A subject outside ASCII needs no such support: it is encoded the way every mail transport has always carried one.</summary>
+    [Fact]
+    public void Compose_SubjectOutsideAsciiAgainstServerWithoutInternationalization_IsComposedAndReadsBack()
+    {
+        // Arrange
+        var composer = CreateComposer();
+
+        // Act
+        var composition = composer.Compose(
+            Account,
+            Requester(),
+            Authored() with { Subject = "Zażółć gęślą" },
+            Capabilities(acceptsInternationalizedAddresses: false));
+
+        // Assert
+        Assert.True(composition.IsComposed);
+        Assert.Equal("Zażółć gęślą", Parse(composition).Subject);
+    }
+
+    /// <summary>A message with one body is that body, and the author's own text is what it carries.</summary>
+    [Fact]
+    public void Compose_PlainTextOnly_ProducesAPlainTextMessage()
+    {
+        // Act
+        var composition = CreateComposer().Compose(Account, Requester(), Authored(), Capabilities());
+
+        // Assert
+        var message = Parse(composition);
+        Assert.Null(message.HtmlBody);
+        Assert.Equal("The report is attached.", message.TextBody?.Trim());
+    }
+
+    /// <summary>Where both exist the message is a proper alternative, and the plain text is the author's rather than a reading of the markup.</summary>
+    [Fact]
+    public void Compose_BothBodies_ProducesAnAlternativeCarryingTheAuthorsOwnPlainText()
+    {
+        // Arrange
+        var authored = Authored() with { HtmlBody = "<p>The <b>report</b> is attached.</p>" };
+
+        // Act
+        var composition = CreateComposer().Compose(Account, Requester(), authored, Capabilities());
+
+        // Assert
+        var message = Parse(composition);
+        Assert.IsType<MultipartAlternative>(message.Body);
+        Assert.Equal("The report is attached.", message.TextBody?.Trim());
+        Assert.Equal("<p>The <b>report</b> is attached.</p>", message.HtmlBody);
+    }
+
+    /// <summary>An attached file is carried under the name and the media type the author declared it as.</summary>
+    [Fact]
+    public void Compose_Attachment_CarriesItsNameAndDeclaredMediaType()
+    {
+        // Arrange
+        var authored = Authored() with
+        {
+            Attachments = [new AuthoredEmailAttachment("report.csv", "text/csv", "id,total\n1,2\n"u8.ToArray())],
+        };
+
+        // Act
+        var composition = CreateComposer().Compose(Account, Requester(), authored, Capabilities());
+
+        // Assert
+        var attachment = Assert.IsAssignableFrom<MimePart>(Assert.Single(Parse(composition).Attachments));
+        Assert.Equal("report.csv", attachment.FileName);
+        Assert.Equal("text/csv", attachment.ContentType.MimeType);
+    }
+
+    /// <summary>A file declared as something that is not a media type composes nothing.</summary>
+    [Fact]
+    public void Compose_AttachmentDeclaredAsNoMediaType_IsRefused()
+    {
+        // Arrange
+        var authored = Authored() with
+        {
+            Attachments = [new AuthoredEmailAttachment("report.csv", "not a media type", new byte[] { 1 })],
+        };
+
+        // Act
+        var composition = CreateComposer().Compose(Account, Requester(), authored, Capabilities());
+
+        // Assert
+        AssertRefused(
+            composition,
+            AuthoredEmailRefusalReason.FieldUnusable,
+            AuthoredEmailField.Attachment,
+            MailFathomErrorCode.OutgoingEmailFieldUnusable);
+    }
+
+    /// <summary>More people than the deployment addresses one message to is refused, and the refusal names that number.</summary>
+    [Fact]
+    public void Compose_MoreRecipientsThanConfigured_IsRefusedNamingTheBound()
+    {
+        // Arrange
+        var authored = Authored() with
+        {
+            Recipients =
+            [
+                .. Enumerable.Range(0, 4).Select(index => new AuthoredEmailRecipient(
+                    OutgoingRecipientRole.To,
+                    $"anna{index}@example.test")),
+            ],
+        };
+
+        // Act
+        var composition = CreateComposer().Compose(Account, Requester(), authored, Capabilities());
+
+        // Assert
+        AssertBoundExceeded(composition, AuthoredEmailField.Recipients, Bounds().MaxRecipientCount);
+    }
+
+    /// <summary>Each body is bounded on its own, so a long one of either kind is refused against its own field.</summary>
+    [Fact]
+    public void Compose_PlainTextBodyBeyondTheConfiguredLength_IsRefusedNamingIt()
+    {
+        // Arrange
+        var authored = Authored() with { PlainTextBody = new string('a', Bounds().MaxBodyCharacters + 1) };
+
+        // Act
+        var composition = CreateComposer().Compose(Account, Requester(), authored, Capabilities());
+
+        // Assert
+        AssertBoundExceeded(composition, AuthoredEmailField.PlainTextBody, Bounds().MaxBodyCharacters);
+    }
+
+    /// <summary>The HTML alternative is measured separately, so a long one cannot hide behind a short plain text.</summary>
+    [Fact]
+    public void Compose_HtmlBodyBeyondTheConfiguredLength_IsRefusedNamingIt()
+    {
+        // Arrange
+        var authored = Authored() with { HtmlBody = new string('a', Bounds().MaxBodyCharacters + 1) };
+
+        // Act
+        var composition = CreateComposer().Compose(Account, Requester(), authored, Capabilities());
+
+        // Assert
+        AssertBoundExceeded(composition, AuthoredEmailField.HtmlBody, Bounds().MaxBodyCharacters);
+    }
+
+    /// <summary>More files than the deployment attaches to one message is refused.</summary>
+    [Fact]
+    public void Compose_MoreAttachmentsThanConfigured_IsRefusedNamingTheBound()
+    {
+        // Arrange
+        var authored = Authored() with
+        {
+            Attachments =
+            [
+                .. Enumerable.Range(0, Bounds().MaxAttachmentCount + 1).Select(index => new AuthoredEmailAttachment(
+                    $"file{index}.bin",
+                    "application/octet-stream",
+                    new byte[] { 1 })),
+            ],
+        };
+
+        // Act
+        var composition = CreateComposer().Compose(Account, Requester(), authored, Capabilities());
+
+        // Assert
+        AssertBoundExceeded(composition, AuthoredEmailField.Attachment, Bounds().MaxAttachmentCount);
+    }
+
+    /// <summary>A file larger than the deployment attaches is refused before the message is assembled around it.</summary>
+    [Fact]
+    public void Compose_AttachmentLargerThanConfigured_IsRefusedNamingTheBound()
+    {
+        // Arrange
+        var authored = Authored() with
+        {
+            Attachments =
+            [
+                new AuthoredEmailAttachment(
+                    "file.bin",
+                    "application/octet-stream",
+                    new byte[Bounds().MaxAttachmentBytes + 1]),
+            ],
+        };
+
+        // Act
+        var composition = CreateComposer().Compose(Account, Requester(), authored, Capabilities());
+
+        // Assert
+        AssertBoundExceeded(composition, AuthoredEmailField.Attachment, Bounds().MaxAttachmentBytes);
+    }
+
+    /// <summary>
+    /// The whole message is measured on what it became rather than on what the author supplied, because transfer
+    /// encoding, headers, and boundaries are the difference between the two.
+    /// </summary>
+    [Fact]
+    public void Compose_ComposedMessageLargerThanConfigured_IsRefusedNamingTheBound()
+    {
+        // Arrange
+        var bounds = Bounds() with { MaxMessageBytes = 64 };
+        var composer = CreateComposer(bounds);
+
+        // Act
+        var composition = composer.Compose(Account, Requester(), Authored(), Capabilities());
+
+        // Assert
+        AssertBoundExceeded(composition, AuthoredEmailField.Message, 64);
+    }
+
+    /// <summary>A server that declared a smaller message than the deployment permits is the one that decides.</summary>
+    [Fact]
+    public void Compose_MessageLargerThanTheServerAdvertised_IsRefusedNamingTheServersBound()
+    {
+        // Arrange
+        var composer = CreateComposer();
+
+        // Act
+        var composition = composer.Compose(Account, Requester(), Authored(), Capabilities(maxMessageBytes: 64));
+
+        // Assert
+        AssertBoundExceeded(composition, AuthoredEmailField.Message, 64);
+    }
+
+    /// <summary>A server that takes no eight-bit content is handed a message whose octets are all seven-bit.</summary>
+    [Fact]
+    public void Compose_ServerWithoutEightBitContent_TransferEncodesTheBodyToSevenBits()
+    {
+        // Arrange
+        var composer = CreateComposer();
+        var authored = Authored() with { PlainTextBody = "Zażółć gęślą" };
+
+        // Act
+        var composition = composer.Compose(
+            Account,
+            Requester(),
+            authored,
+            Capabilities(acceptsEightBitContent: false));
+
+        // Assert
+        Assert.True(composition.IsComposed);
+        Assert.DoesNotContain(composition.Email!.RawMime.ToArray(), static octet => octet > 127);
+        Assert.Equal("Zażółć gęślą", Parse(composition).TextBody?.Trim());
+    }
+
+    /// <summary>The stored bytes are transmitted verbatim, so they carry the line ending SMTP requires.</summary>
+    [Fact]
+    public void Compose_ComposedMessage_IsWrittenWithNetworkLineEndings()
+    {
+        // Act
+        var composition = CreateComposer().Compose(Account, Requester(), Authored(), Capabilities());
+
+        // Assert
+        var text = Encoding.UTF8.GetString(composition.Email!.RawMime.Span);
+        Assert.Contains("\r\n", text, StringComparison.Ordinal);
+        Assert.DoesNotContain('\n', text.Replace("\r\n", string.Empty, StringComparison.Ordinal));
+    }
+
+    /// <summary>The record and the message describe one send, so the request names the account and the act that asked.</summary>
+    [Fact]
+    public void Compose_AuthoredMessage_RecordsTheRequestAgainstTheAskingAccountAndRequester()
+    {
+        // Arrange
+        var requester = Requester();
+
+        // Act
+        var composition = CreateComposer().Compose(Account, requester, Authored(), Capabilities());
+
+        // Assert
+        Assert.Equal(Account, composition.Email!.Request.AccountId);
+        Assert.Equal(requester, composition.Email.Request.Requester);
+    }
+
+    private static void AssertBoundExceeded(
+        AuthoredEmailComposition composition,
+        AuthoredEmailField field,
+        long bound)
+    {
+        AssertRefused(
+            composition,
+            AuthoredEmailRefusalReason.BoundExceeded,
+            field,
+            MailFathomErrorCode.OutgoingEmailBoundExceeded);
+        Assert.Equal(bound, composition.Refusal!.Bound);
+    }
+
+    private static void AssertRefused(
+        AuthoredEmailComposition composition,
+        AuthoredEmailRefusalReason reason,
+        AuthoredEmailField field,
+        MailFathomErrorCode failure)
+    {
+        Assert.False(composition.IsComposed);
+        Assert.Null(composition.Email);
+        Assert.Equal(reason, composition.Refusal!.Reason);
+        Assert.Equal(field, composition.Refusal.Field);
+        Assert.Equal(failure, composition.Refusal.Failure);
+    }
+
+    private static MimeMessage Parse(AuthoredEmailComposition composition)
+    {
+        Assert.True(composition.IsComposed);
+
+        using var stream = new MemoryStream(composition.Email!.RawMime.ToArray());
+
+        return MimeMessage.Load(stream);
+    }
+
+    private static MimeKitAuthoredEmailComposer CreateComposer() => CreateComposer(Bounds());
+
+    private static MimeKitAuthoredEmailComposer CreateComposer(
+        OutgoingEmailBounds bounds,
+        string sendingAddress = "mailfathom@example.test")
+    {
+        var senderIdentities = Substitute.For<IOutgoingSenderIdentityReader>();
+        Assert.True(EmailAddress.TryCreate("MailFathom", sendingAddress, out var address));
+        senderIdentities.FindSenderIdentity(Account).Returns(OutgoingSenderIdentity.Create(Account, address));
+
+        return new MimeKitAuthoredEmailComposer(senderIdentities, bounds, new FakeTimeProvider(ComposedAt));
+    }
+
+    private static OutgoingEmailBounds Bounds() => new()
+    {
+        MaxRecipientCount = 3,
+        MaxBodyCharacters = 64,
+        MaxAttachmentCount = 2,
+        MaxAttachmentBytes = 128,
+        MaxMessageBytes = 1024,
+    };
+
+    private static MailDeliveryCapabilities Capabilities(
+        long? maxMessageBytes = null,
+        bool acceptsEightBitContent = true,
+        bool acceptsInternationalizedAddresses = true) =>
+        new(maxMessageBytes, acceptsEightBitContent, acceptsInternationalizedAddresses);
+
+    private static OutgoingEmailRequester Requester() => OutgoingEmailRequester.Command("send-quarterly-report");
+
+    private static AuthoredEmail Authored() => new()
+    {
+        Recipients = [new AuthoredEmailRecipient(OutgoingRecipientRole.To, "anna@example.test", "Anna")],
+        Subject = "Quarterly report",
+        PlainTextBody = "The report is attached.",
+    };
+}

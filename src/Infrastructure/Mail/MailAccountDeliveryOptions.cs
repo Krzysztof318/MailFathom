@@ -51,6 +51,24 @@ public sealed class MailAccountDeliveryOptions
     /// </remarks>
     public string? UserName { get; set; }
 
+    /// <summary>Gets or sets the address this account's mail is written from, or nothing to send from its own user name.</summary>
+    /// <remarks>
+    /// Absent is the ordinary case, because a provider authenticates the mailbox by its address and the two are then
+    /// the same value. It exists for the account whose login is a bare name rather than an address, and for the mailbox
+    /// that sends under an address it is not reached at — a shared or aliased sender, which is a configuration decision
+    /// rather than anything a request may make.
+    /// </remarks>
+    public string? FromAddress { get; set; }
+
+    /// <summary>Gets or sets the name written beside the sending address, or nothing to write the address alone.</summary>
+    /// <remarks>
+    /// It is deliberately not the account's <c>DisplayName</c>, which is the alias an operator invented to name this
+    /// mailbox in their own tooling. Sending mail signed <c>work</c> because that is what the account is called locally
+    /// would put an internal name in front of every recipient, so writing the address alone is the honest default and
+    /// the name a mailbox signs itself with is stated on purpose.
+    /// </remarks>
+    public string? FromDisplayName { get; set; }
+
     /// <summary>Gets or sets the submission credential, or nothing to present the account's reading credential.</summary>
     /// <remarks>
     /// The block is nullable and defaults to absent rather than to an empty block, for the reason
@@ -69,6 +87,27 @@ public sealed class MailAccountDeliveryOptions
     /// <returns>The submission user name when this block names one; otherwise the account's own.</returns>
     public string ResolveUserName(string accountUserName) =>
         string.IsNullOrWhiteSpace(this.UserName) ? accountUserName : this.UserName.Trim();
+
+    /// <summary>Gets the address a composed message is written from.</summary>
+    /// <param name="accountUserName">The user name the account reads its mailbox with, which is a mailbox address on most providers.</param>
+    /// <returns>The configured sending address, the account's user name when it is one, or nothing when neither names a mailbox.</returns>
+    /// <remarks>
+    /// The user name is the fallback for the reason the account's own domains are read from it: it is the only mailbox
+    /// identity an account states, and a login without an at-sign states none. Inventing an address from the host would
+    /// send mail from a mailbox nobody configured.
+    /// </remarks>
+    public string? ResolveFromAddress(string accountUserName)
+    {
+        if (!string.IsNullOrWhiteSpace(this.FromAddress))
+        {
+            return this.FromAddress.Trim();
+        }
+
+        return !string.IsNullOrWhiteSpace(accountUserName)
+            && accountUserName.Contains('@', StringComparison.Ordinal)
+                ? accountUserName.Trim()
+                : null;
+    }
 
     /// <summary>Gets the secret block a submission connection resolves its password from.</summary>
     /// <param name="accountSecrets">The account's own secret block, which a rejected configuration may have left absent.</param>
