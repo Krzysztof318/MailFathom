@@ -19,10 +19,4 @@
   <ItemGroup>
     <Compile Include="..\shared\TestCertificates.cs" Link="TestCertificates.cs" />
   </ItemGroup>
-
-  <!-- The command publishes a span of its own, so its names are held against the same contract every other boundary's
-       are. The host's own suite reads the assemblies the host references, which this is deliberately not one of. -->
-  <ItemGroup>
-    <Compile Include="..\shared\TelemetryRedactionContract.cs" Link="TelemetryRedactionContract.cs" />
-  </ItemGroup>
 </Project>

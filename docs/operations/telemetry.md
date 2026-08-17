@@ -1,6 +1,6 @@
 # Telemetry and the Aspire dashboard
 
-<!-- describes: src/Application/Observability/**, src/Common/Observability/**, src/Host/Observability/**, src/Host/ServiceDefaultsExtensions.cs, src/Host/Hosting/Workers/**, src/Infrastructure/Observability/**, src/Infrastructure/Mail/MailKit/MailKitImapClientFactory.cs, src/Infrastructure/HostApplicationBuilderExtensions.cs, src/Mcp/Observability/**, src/Cli/Observability/**, src/Cli/CliRunner.cs, src/AppHost/**, src/AI/ProviderAdapters/OpenAiCompatibleClientFactory.cs -->
+<!-- describes: src/Application/Observability/**, src/Common/Observability/**, src/Host/Observability/**, src/Host/ServiceDefaultsExtensions.cs, src/Host/Hosting/Workers/**, src/Infrastructure/Observability/**, src/Infrastructure/Mail/MailKit/MailKitImapClientFactory.cs, src/Infrastructure/HostApplicationBuilderExtensions.cs, src/Mcp/Observability/**, src/AppHost/**, src/AI/ProviderAdapters/OpenAiCompatibleClientFactory.cs -->
 
 The host instruments itself with OpenTelemetry throughout — logs, metrics, and traces — and exports none of it unless
 the environment names a destination. Today exactly one environment does that out of the box: a local run under the
@@ -684,32 +684,20 @@ no detector on this path at all.
 
 ## What the administration command emits
 
-`mfctl` runs on the operator's own machine and holds no exporter, no collector address, and no telemetry configuration
-of any kind — and this section does not give it one. What it does is open one span per invocation,
-**`run_mfctl_command`**, for the length of the invocation. That span is never exported anywhere. Its whole purpose is
-that `HttpClient` sends `traceparent` with every request the command issues while it is open, so the deployment
-continues the command's trace instead of starting one per call.
+Nothing. `mfctl` runs on the operator's own machine and holds no exporter, no collector address, and no telemetry
+configuration of any kind, so a span or a measurement it produced would be built and dropped — and every request it
+issues is answered by a deployment that is already instrumented. So the trace of an administrative act is the one the
+endpoint opens when the command reaches it, and it is a root because nothing upstream of it is collected.
 
-The difference is what an operator sees on their own collector. A command that signs in, performs an action, and reads
-a status back is three requests; without the span they arrive as three unrelated traces with nothing saying they
-belonged to one act, and with it they are one trace whose spans are the deployment's own. That is the whole of the
-change: the deployment's spans are what get recorded, exactly as before, and they are now grouped.
+What that costs is worth stating rather than working around: a command that signs in, performs an action, and reads a
+status back is three requests, and they arrive as three traces with nothing saying they belonged to one invocation.
+Grouping them would mean the command sending `traceparent`, which means a span, which means an activity source and a
+listener in a binary published trimmed and self-contained for the sake of holding nothing it does not need. Three
+traces an operator correlates by time is the cheaper answer, and the deployment's own spans are the ones that carry
+what the act actually did.
 
-| Tag | What it carries |
-| --- | --- |
-| `mailfathom.cli.command` | The command that ran, as `mfctl` followed by the declared names of the subcommands beneath it |
-| `mailfathom.cli.exit_code` | The code the invocation reported, which is the whole of what the span says about how it ended |
-
-**The command name is read from the parser rather than from the argument list**, and that is a privacy decision rather
-than a convenience. An argument list is where a deployment address, an account alias, a folder alias, a message
-identity, and — for a sign-in — a credential are, so none of it is read: what reaches the span is a name this
-repository declares. The root is supplied as the constant `mfctl` rather than taken from the parser, because the parser
-names the root after the running executable.
-
-Two consequences are worth stating plainly. A collector receives server spans whose parent it never received, which is
-what a trace begun outside the collected system always looks like and which every trace store renders as a trace with
-no root. And the deployment honours the trace the command started, because its sampler is parent-based — so a command's
-requests are recorded on the same terms the deployment records everything else.
+What the command writes instead is its own output, to the terminal the operator ran it in. That is not a telemetry
+signal and is not collected anywhere; it is the answer to the command, read by the person who typed it.
 
 ## What no signal carries, and what holds every signal to it
 
