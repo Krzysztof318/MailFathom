@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.Collections.ObjectModel;
+using MailFathom.Application.Access;
 using MailFathom.Application.EmailContent;
 using MailFathom.Application.EmailContent.Attachments;
 using MailFathom.Application.EmailContent.Rendering;
@@ -14,6 +15,7 @@ using MailFathom.Application.Emails.Summaries;
 using MailFathom.Application.Observability;
 using MailFathom.Application.SensitiveContent.Detection;
 using MailFathom.Application.SensitiveContent.Egress;
+using MailFathom.Domain.Access;
 using MailFathom.Domain.Emails;
 
 namespace MailFathom.Application.Emails.GetEmailContent;
@@ -77,6 +79,7 @@ public sealed class EmailContentReader
     private readonly SensitiveContentEgressGuard egressGuard;
     private readonly EmailContentReadOptions readOptions;
     private readonly IMailboxReadTelemetry readTelemetry;
+    private readonly AccessAuthorization authorization;
 
     /// <summary>Initializes the use case.</summary>
     /// <param name="summaryReader">Reads one stored email's summary by its identity.</param>
@@ -88,6 +91,7 @@ public sealed class EmailContentReader
     /// <param name="egressGuard">Scans what the message's author wrote before a read publishes it.</param>
     /// <param name="readOptions">The bounds on how much body text one call returns.</param>
     /// <param name="readTelemetry">Publishes the read as the operation it is, beside the call it happened inside.</param>
+    /// <param name="authorization">Answers which principal reached this use case.</param>
     /// <exception cref="ArgumentNullException">Thrown when any argument is <see langword="null" />.</exception>
     public EmailContentReader(
         IStoredEmailSummaryReader summaryReader,
@@ -98,7 +102,8 @@ public sealed class EmailContentReader
         IAttachmentDownloadLinkIssuer linkIssuer,
         SensitiveContentEgressGuard egressGuard,
         EmailContentReadOptions readOptions,
-        IMailboxReadTelemetry readTelemetry)
+        IMailboxReadTelemetry readTelemetry,
+        AccessAuthorization authorization)
     {
         ArgumentNullException.ThrowIfNull(summaryReader);
         ArgumentNullException.ThrowIfNull(contentStore);
@@ -109,6 +114,7 @@ public sealed class EmailContentReader
         ArgumentNullException.ThrowIfNull(egressGuard);
         ArgumentNullException.ThrowIfNull(readOptions);
         ArgumentNullException.ThrowIfNull(readTelemetry);
+        ArgumentNullException.ThrowIfNull(authorization);
 
         this.summaryReader = summaryReader;
         this.contentStore = contentStore;
@@ -119,6 +125,7 @@ public sealed class EmailContentReader
         this.egressGuard = egressGuard;
         this.readOptions = readOptions;
         this.readTelemetry = readTelemetry;
+        this.authorization = authorization;
     }
 
     /// <summary>Reads every email the request names.</summary>
@@ -127,7 +134,12 @@ public sealed class EmailContentReader
     /// <returns>One outcome per named email, in the order they were named.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="request" /> is <see langword="null" />.</exception>
     /// <exception cref="SensitiveContentScannerUnavailableException">Thrown when a switched-on scanner could not establish what an email carries, which fails the read rather than serving it unscanned.</exception>
+    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the use case was reached by anything but a caller granted <see cref="MailFathomPermission.MailRead" />.</exception>
     /// <remarks>
+    /// <para>
+    /// The grant is asked for before an email is looked up, and it is asked for here rather than only at the transport
+    /// that withholds the tool, so an entrypoint added later cannot read mail by forgetting a filter.
+    /// </para>
     /// <para>
     /// Reading writes nothing about the emails themselves and is safe to repeat. The one write it can perform is the
     /// repair request a damaged local copy produces, which is idempotent per email for exactly that reason.
@@ -143,6 +155,8 @@ public sealed class EmailContentReader
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
+
+        this.authorization.RequirePermission(MailFathomPermission.MailRead);
 
         using var read = this.readTelemetry.BeginRead(MailboxReadOperation.ReadEmailContent, cancellationToken);
 

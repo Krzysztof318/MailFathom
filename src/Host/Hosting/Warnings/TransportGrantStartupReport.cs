@@ -107,12 +107,18 @@ internal sealed partial class TransportGrantStartupReport : IHostedService
         IReadOnlyList<TransportAuthenticationOptions> methods)
     {
         var settingPath = $"{sectionName}:{TransportAuthenticationConfiguration.SettingName}";
+        var enforcement = EnforcementOn(surface);
 
         if (methods.Count == 0)
         {
             var wholeSurface = Describe(MailFathomPermission.PublishedFor(surface));
 
-            this.LogSurfaceGrantedWithoutAnyEntry(endpointName, endpointPath, wholeSurface, settingPath);
+            this.LogSurfaceGrantedWithoutAnyEntry(
+                endpointName,
+                endpointPath,
+                wholeSurface,
+                settingPath,
+                enforcement);
 
             return;
         }
@@ -127,18 +133,36 @@ internal sealed partial class TransportGrantStartupReport : IHostedService
             // scopes rather than the whole surface the line would otherwise report.
             if (method.PermissionsFromTokenScopes)
             {
-                this.LogEntryGrantNarrowedByTokenScopes(endpointName, entryPath, grant);
+                this.LogEntryGrantNarrowedByTokenScopes(endpointName, entryPath, grant, enforcement);
             }
             else if (method.GrantsTheWholeSurface)
             {
-                this.LogEntryGrantedWithoutBeingNarrowed(endpointName, entryPath, grant);
+                this.LogEntryGrantedWithoutBeingNarrowed(endpointName, entryPath, grant, enforcement);
             }
             else
             {
-                this.LogEntryGrant(endpointName, entryPath, grant);
+                this.LogEntryGrant(endpointName, entryPath, grant, enforcement);
             }
         }
     }
+
+    /// <summary>States what a written grant does on this surface, which is not the same on both.</summary>
+    /// <remarks>
+    /// Carried on every line rather than reported once per endpoint, because these lines are read by searching for the
+    /// entry path somebody edited: a posture stated on a line of its own is one a filtered log leaves out, which costs
+    /// the operator the same thing as not stating it. The two surfaces differ because the MCP one enforces a grant and
+    /// the administrative one does not yet, so a single wording would be wrong about one of them.
+    /// </remarks>
+    private static string EnforcementOn(ProtectedSurface surface) => surface switch
+    {
+        ProtectedSurface.Mail =>
+            "A caller here is served only the tools its grant permits, and a call naming any other is answered as a "
+            + "tool that does not exist.",
+        ProtectedSurface.Administration =>
+            "No route here consults a permission yet, so a grant on this surface states what a credential is meant to "
+            + "reach rather than what it currently reaches.",
+        _ => throw new ArgumentOutOfRangeException(nameof(surface)),
+    };
 
     /// <summary>Renders a resolved grant for a log line, naming emptiness rather than printing nothing.</summary>
     /// <remarks>An empty list would otherwise read as a message that lost its argument, which is exactly the grant worth being unambiguous about: it is how a credential is retired without its entry being deleted.</remarks>
@@ -149,40 +173,43 @@ internal sealed partial class TransportGrantStartupReport : IHostedService
     [LoggerMessage(
         Level = LogLevel.Information,
         Message = "The {EndpointName} endpoint entry {EntrySettingPath} grants {GrantedPermissions} to every credential "
-            + "it admits. Nothing consults a grant yet, so this states what those credentials are meant to reach rather "
-            + "than what they currently reach.")]
-    private partial void LogEntryGrant(string endpointName, string entrySettingPath, string grantedPermissions);
+            + "it admits. {GrantEnforcement}")]
+    private partial void LogEntryGrant(
+        string endpointName,
+        string entrySettingPath,
+        string grantedPermissions,
+        string grantEnforcement);
 
     [LoggerMessage(
         Level = LogLevel.Information,
         Message = "The {EndpointName} endpoint entry {EntrySettingPath} grants at most {GrantedPermissions}, and each "
-            + "token holds whichever of those its own scopes carry. Nothing consults a grant yet, so this states what "
-            + "those tokens are meant to reach rather than what they currently reach.")]
+            + "token holds whichever of those its own scopes carry. {GrantEnforcement}")]
     private partial void LogEntryGrantNarrowedByTokenScopes(
         string endpointName,
         string entrySettingPath,
-        string grantedPermissions);
+        string grantedPermissions,
+        string grantEnforcement);
 
     [LoggerMessage(
         Level = LogLevel.Information,
         Message = "The {EndpointName} endpoint entry {EntrySettingPath} writes down no grant, so every credential it "
             + "admits holds {GrantedPermissions} — everything this surface publishes. Write a 'Permissions' list on the "
-            + "entry to narrow it, or an empty one to grant nothing — which states an intent rather than a bound, "
-            + "because nothing consults a grant yet.")]
+            + "entry to narrow it, or an empty one to grant nothing. {GrantEnforcement}")]
     private partial void LogEntryGrantedWithoutBeingNarrowed(
         string endpointName,
         string entrySettingPath,
-        string grantedPermissions);
+        string grantedPermissions,
+        string grantEnforcement);
 
     [LoggerMessage(
         Level = LogLevel.Information,
         Message = "The {EndpointName} endpoint on {EndpointPath} configures no credential entry, so every caller it "
             + "serves holds {GrantedPermissions} — everything this surface publishes. There is no entry for a grant to "
-            + "be written on until one is added under {AuthenticationSettingPath}, and nothing consults a grant yet "
-            + "either.")]
+            + "be written on until one is added under {AuthenticationSettingPath}. {GrantEnforcement}")]
     private partial void LogSurfaceGrantedWithoutAnyEntry(
         string endpointName,
         string endpointPath,
         string grantedPermissions,
-        string authenticationSettingPath);
+        string authenticationSettingPath,
+        string grantEnforcement);
 }

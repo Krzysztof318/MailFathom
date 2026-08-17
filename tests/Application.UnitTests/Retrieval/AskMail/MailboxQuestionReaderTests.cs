@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Application.Access;
 using MailFathom.Application.Accounts;
 using MailFathom.Application.AiProviders;
 using MailFathom.Application.Chat;
@@ -15,6 +16,7 @@ using MailFathom.Application.Retrieval.AskMail.Audit;
 using MailFathom.Application.SensitiveContent.Detection;
 using MailFathom.Application.SensitiveContent.Egress;
 using MailFathom.Application.UnitTests.TestDoubles;
+using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Answering.Audit;
 using MailFathom.Domain.Emails;
@@ -623,6 +625,40 @@ public sealed class MailboxQuestionReaderTests
         Assert.Equal($"they sent the key {Marker} on Tuesday", result.AnswerText);
     }
 
+    /// <summary>Whether a credential may cause mail content to leave this process is the decision this grant carries, so it is asked for with the transport absent.</summary>
+    [Fact]
+    public async Task AnswerQuestionAsync_ACallerGrantedOnlyTheMailboxReadPermission_IsRefusedWithTheTransportAbsent()
+    {
+        // Arrange
+        var answerer = new RecordingMailQuestionAnswerer().Answering("The invoice was attached.");
+        var reader = ReaderOver(
+            answerer,
+            authorization: AccessAuthorizations.ForCallerGranted(MailFathomPermission.MailRead));
+
+        // Act
+        var refusal = await Assert.ThrowsAsync<PrincipalNotAuthorizedException>(() =>
+            AnswerAsync(reader, new AskMailRequest { QuestionText = "was the invoice attached" }));
+
+        // Assert
+        Assert.Equal(MailFathomPermission.MailAsk, refusal.RequiredPermission);
+    }
+
+    /// <summary>Nothing runs before the grant is read, so a caller that may not ask causes no call to a model provider.</summary>
+    [Fact]
+    public async Task AnswerQuestionAsync_ACallerGrantedNothing_ReachesNoProvider()
+    {
+        // Arrange
+        var answerer = new RecordingMailQuestionAnswerer().Answering("The invoice was attached.");
+        var reader = ReaderOver(answerer, authorization: AccessAuthorizations.ForCallerGranted());
+
+        // Act
+        await Assert.ThrowsAsync<PrincipalNotAuthorizedException>(() =>
+            AnswerAsync(reader, new AskMailRequest { QuestionText = "was the invoice attached" }));
+
+        // Assert
+        Assert.Empty(answerer.Questions);
+    }
+
     private static Task<AskMailResult> AnswerAsync(MailboxQuestionReader reader, AskMailRequest request) =>
         reader.AnswerQuestionAsync(request, TestContext.Current.CancellationToken);
 
@@ -650,7 +686,8 @@ public sealed class MailboxQuestionReaderTests
         IMailAnsweringSpendLedger? spendLedger = null,
         IMailAnsweringRunTelemetry? runTelemetry = null,
         IMailAnsweringAuditTrail? auditTrail = null,
-        SensitiveContentEgressGuard? egressGuard = null)
+        SensitiveContentEgressGuard? egressGuard = null,
+        AccessAuthorization? authorization = null)
     {
         var healthReader = Substitute.For<IAiProviderHealthReader>();
         healthReader.Read(AiProviderRole.Embedding)
@@ -693,7 +730,8 @@ public sealed class MailboxQuestionReaderTests
             runTelemetry ?? new RecordingMailAnsweringRunTelemetry(),
             auditTrail ?? new RecordingMailAnsweringAuditTrail(),
             timeProvider,
-            egressGuard ?? SensitiveContentEgressGuards.Inactive());
+            egressGuard ?? SensitiveContentEgressGuards.Inactive(),
+            authorization ?? AccessAuthorizations.ForCallerGranted(MailFathomPermission.MailAsk));
     }
 
     /// <summary>A ledger with an allowance for whatever a test asks it.</summary>

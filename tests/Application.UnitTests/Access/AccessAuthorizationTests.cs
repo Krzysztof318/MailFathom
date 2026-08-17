@@ -185,6 +185,61 @@ public sealed class AccessAuthorizationTests
         Assert.Throws<ArgumentException>(() => authorization.RequirePermission(default));
     }
 
+    /// <summary>The boundary composing an answer per caller must agree with the one refusing an operation, or a listing would offer a tool the use case then refuses.</summary>
+    [Fact]
+    public void Permits_TheGrantAndTheRefusal_AgreeOnEveryPublishedPermission()
+    {
+        // Arrange
+        var authorization = AuthorizationOver(
+            AuthorizedPrincipal.Caller(ConfiguredCredentialName, [MailFathomPermission.MailRead]));
+
+        // Act
+        var reported = MailFathomPermission.All.Select(authorization.Permits).ToArray();
+        var permitted = MailFathomPermission.All
+            .Select(permission => Record.Exception(() => authorization.RequirePermission(permission)) is null)
+            .ToArray();
+
+        // Assert
+        Assert.Equal(permitted, reported);
+    }
+
+    /// <summary>Neither of the two kinds a permission is never granted to may be reported as holding one.</summary>
+    [Theory]
+    [MemberData(nameof(EveryPublishedPermission))]
+    public void Permits_APrincipalThatIsNotACaller_ReportsNothingHeld(MailFathomPermission permission)
+    {
+        // Arrange
+        var processIdentity = AuthorizationOver(AuthorizedPrincipal.Process);
+        var signedCapability = AuthorizationOver(AuthorizedPrincipal.SignedCapability("/attachments/an-object/0"));
+
+        // Act, Assert
+        Assert.False(processIdentity.Permits(permission));
+        Assert.False(signedCapability.Permits(permission));
+    }
+
+    /// <summary>An entrypoint that stated nothing is reported as holding nothing rather than as a question nobody answered.</summary>
+    [Fact]
+    public void Permits_ReachedUnderNoPrincipal_ReportsNothingHeld()
+    {
+        // Arrange
+        var authorization = AuthorizationOver(principal: null);
+
+        // Act, Assert
+        Assert.All(MailFathomPermission.All, permission => Assert.False(authorization.Permits(permission)));
+    }
+
+    /// <summary>A boundary asking about a capability nobody declared has found an operation nobody bounded, and the safe answer to that is no.</summary>
+    [Fact]
+    public void Permits_TheUnspecifiedPermission_ReportsNothingHeld()
+    {
+        // Arrange
+        var authorization = AuthorizationOver(
+            AuthorizedPrincipal.Caller(ConfiguredCredentialName, MailFathomPermission.All));
+
+        // Act, Assert
+        Assert.False(authorization.Permits(default));
+    }
+
     public static TheoryData<MailFathomPermission> EveryPublishedPermission() =>
         [.. MailFathomPermission.All];
 

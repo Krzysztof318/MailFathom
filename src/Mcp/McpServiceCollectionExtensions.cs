@@ -28,9 +28,11 @@ public static class McpServiceCollectionExtensions
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="services" /> is <see langword="null" />.</exception>
     /// <remarks>
     /// The tools resolve their dependencies per call from the request's scope, so the application ports they read
-    /// through may be registered with any lifetime the host chooses.
+    /// through may be registered with any lifetime the host chooses — which is also what lets a filter read the caller
+    /// the request was admitted under.
     /// </remarks>
     /// <seealso cref="AskMailAdvertisement" />
+    /// <seealso cref="McpToolAuthorization" />
     public static IMcpServerBuilder AddMailFathomServer(this IServiceCollection services)
     {
         ArgumentNullException.ThrowIfNull(services);
@@ -53,6 +55,18 @@ public static class McpServiceCollectionExtensions
             .WithRequestFilters(requestFilters => requestFilters
                 .AddCallToolFilter(next => (request, cancellationToken) =>
                     new ValueTask<CallToolResult>(RequiredReporter(request).ReportAsync(next, request, cancellationToken)))
+                // Inside the reporter, so a call refused for want of a grant is recorded exactly as a call naming a tool
+                // that does not exist already is, which is the whole of what the two have to look alike in.
+                .AddCallToolFilter(next => (request, cancellationToken) =>
+                    new ValueTask<CallToolResult>(
+                        McpToolAuthorization.RefuseUnauthorizedToolAsync(next, request, cancellationToken)))
+                // Registered before the availability filter and therefore outside it, so the deployment's own switch is
+                // evaluated first and this narrows what that switch left — the order ADR 0012 records. Which of the two
+                // takes a descriptor away changes no listing, because neither can put one back; the switch stays the
+                // authority over whether a capability exists at all, and no grant makes an absent one appear.
+                .AddListToolsFilter(next => (request, cancellationToken) =>
+                    new ValueTask<ListToolsResult>(
+                        McpToolAuthorization.WithoutUnauthorizedToolsAsync(next, request, cancellationToken)))
                 // The one tool this surface does not always advertise, decided per listing so an operator who repairs a
                 // provider needs no restart to have it offered again.
                 .AddListToolsFilter(next => (request, cancellationToken) =>

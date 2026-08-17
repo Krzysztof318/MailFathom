@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Application.Access;
 using MailFathom.Application.Accounts;
 using MailFathom.Application.AiProviders;
 using MailFathom.Application.Emails.Embeddings;
@@ -13,6 +14,7 @@ using MailFathom.Application.SensitiveContent.Detection;
 using MailFathom.Application.SensitiveContent.Egress;
 using MailFathom.Application.Synchronization.Checkpoints;
 using MailFathom.Application.UnitTests.TestDoubles;
+using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Folders;
 using MailFathom.TestSupport;
@@ -647,13 +649,31 @@ public sealed class MailboxSearchReaderTests
 
     private static SearchEmailsRequest RequestFor(string? queryText) => new() { QueryText = queryText };
 
+    /// <summary>The grant is the authority here rather than at the transport, so an entrypoint that passed no filter meets the same refusal.</summary>
+    [Fact]
+    public async Task SearchEmailsAsync_ACallerGrantedOnlyTheAnsweringPermission_IsRefusedWithTheTransportAbsent()
+    {
+        // Arrange
+        var reader = ReaderOver(
+            new InMemoryEmailSearchIndex(),
+            authorization: AccessAuthorizations.ForCallerGranted(MailFathomPermission.MailAsk));
+
+        // Act
+        var refusal = await Assert.ThrowsAsync<PrincipalNotAuthorizedException>(() =>
+            reader.SearchEmailsAsync(RequestFor("invoice"), TestContext.Current.CancellationToken));
+
+        // Assert
+        Assert.Equal(MailFathomPermission.MailRead, refusal.RequiredPermission);
+    }
+
     private static MailboxSearchReader ReaderOver(
         InMemoryEmailSearchIndex index,
         IMailAccountCatalog? accountCatalog = null,
         EmailSearchSnippetBounds? snippetBounds = null,
         SemanticEmailSearch? semanticSearch = null,
         SensitiveContentEgressGuard? egressGuard = null,
-        IMailboxReadTelemetry? readTelemetry = null) => new(
+        IMailboxReadTelemetry? readTelemetry = null,
+        AccessAuthorization? authorization = null) => new(
         index,
         semanticSearch ?? LexicalOnlySemanticSearch(),
         FreshnessReaderReturning(InboxFreshness),
@@ -664,7 +684,8 @@ public sealed class MailboxSearchReaderTests
             StubMailFolderMappings.ResolvingNothing),
         snippetBounds ?? EmailSearchSnippetBounds.Default,
         egressGuard ?? SensitiveContentEgressGuards.Inactive(),
-        readTelemetry ?? new RecordingMailboxReadTelemetry());
+        readTelemetry ?? new RecordingMailboxReadTelemetry(),
+        authorization ?? AccessAuthorizations.ForCallerGranted(MailFathomPermission.MailRead));
 
     /// <summary>Builds the semantic half of a deployment that configured no embedding provider and activated nothing.</summary>
     private static SemanticEmailSearch LexicalOnlySemanticSearch() => new(

@@ -16,8 +16,9 @@ the code that acts on it.
 ## Two checks, and why neither replaces the other
 
 **The transport refuses cheaply.** A check at the endpoint turns a request away without reaching a use case at all, and
-it is the only place a decision can be reflected in what a caller is offered rather than only in what it is told. It is
-where admission is decided today, and where a grant will be weighed as well.
+it is the only place a decision can be reflected in what a caller is offered rather than only in what it is told. The
+MCP surface uses both halves of that: admission is decided there, and the grant is weighed there too, which is what lets
+a `tools/list` carry only the tools this caller may call.
 
 **The use case is the authority.** An entrypoint added later — a rule action, a worker, a command, a second protocol —
 reaches the same code without passing that middleware, so a check that lived only there is one the new entrypoint
@@ -95,10 +96,17 @@ A use case reached under no principal at all is refused the same way. That is th
 omission — it never said what admitted the work — and refusing it is what "fails rather than defaulting to permitted"
 means in the one place the decision is taken.
 
-**No use case requires a permission yet.** What a caller may do on either surface is still decided by the credential it
-authenticated with, exactly as
-[the configuration reference](../operations/configuration-reference.md) states under `Permissions`:
-the grant is read, validated, carried, and reported, and nothing acts on it. The one requirement in force today is the
-download route's, which admits a signed capability and nothing else. So the boundary mappings a refusal will need — what
-the MCP surface tells a caller, and what the administrative surface names — do not exist yet, and neither surface can
-produce this refusal.
+**The MCP surface answers it by saying nothing.** The five use cases behind its tools each require a permission —
+`mailfathom.mail.read` for the four that read the local mailbox copy, `mailfathom.mail.ask` for the one that answers
+from it — and the endpoint asks the same question ahead of them, from the grant the caller was admitted under. A tool
+the grant does not permit is absent from `tools/list`, and a call naming one is answered as a call naming a tool that
+does not exist: the same error, the same code, and nothing about the caller, the credential, or the permission. So this
+refusal never reaches a client in a form it could read;
+[the MCP tools page](../features/mcp-tools.md#what-a-caller-is-offered) states which tool requires which permission.
+
+**The administrative surface has no mapping yet**, so no route there requires a permission and none can produce this
+refusal. The other requirement in force is the download route's, which admits a signed capability and nothing else.
+
+The transport's own reading of the grant goes through the same `AccessAuthorization` the use cases ask, which reports a
+verdict instead of raising where a boundary has to compose an answer rather than perform an operation. One definition of
+what holding a permission means is what keeps a listing from offering a tool the use case behind it would then refuse.

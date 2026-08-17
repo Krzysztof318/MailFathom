@@ -12,6 +12,7 @@ using MailFathom.Application.Emails.Summaries;
 using MailFathom.Application.Observability;
 using MailFathom.Application.SensitiveContent.Egress;
 using MailFathom.Application.Synchronization.Checkpoints;
+using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Emails.Authentication;
@@ -673,7 +674,8 @@ public sealed class SearchEmailsToolTests
                     StubMailFolderMappings.ResolvingNothing),
                 bounds,
                 egressGuard ?? SensitiveContentEgressGuards.Inactive(),
-                Substitute.For<IMailboxReadTelemetry>()),
+                Substitute.For<IMailboxReadTelemetry>(),
+                AccessAuthorizations.ForCallerGranted(MailFathomPermission.MailRead)),
             bounds,
             new StubMailAccountCatalog(ServedAccountId));
     }

@@ -4,6 +4,7 @@
 
 using System.Buffers.Text;
 using System.Text;
+using MailFathom.Application.Access;
 using MailFathom.Application.Accounts;
 using MailFathom.Application.Emails.ListEmails;
 using MailFathom.Application.Emails.Mailboxes;
@@ -13,6 +14,7 @@ using MailFathom.Application.SensitiveContent.Detection;
 using MailFathom.Application.SensitiveContent.Egress;
 using MailFathom.Application.Synchronization.Checkpoints;
 using MailFathom.Application.UnitTests.TestDoubles;
+using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Folders;
@@ -843,12 +845,45 @@ public sealed class MailboxTimelineReaderTests
         Assert.True(read.WasClosed);
     }
 
+    /// <summary>The grant is the authority here rather than at the transport, so an entrypoint that passed no filter meets the same refusal.</summary>
+    [Fact]
+    public async Task ListEmailsAsync_ACallerGrantedOnlyTheAnsweringPermission_IsRefusedWithTheTransportAbsent()
+    {
+        // Arrange
+        var reader = ReaderOver(
+            new InMemoryStoredEmailTimeline().WithAll(SyntheticEmailSummaries.CreateDailyRun(2, FirstJuly)),
+            authorization: AccessAuthorizations.ForCallerGranted(MailFathomPermission.MailAsk));
+
+        // Act
+        var refusal = await Assert.ThrowsAsync<PrincipalNotAuthorizedException>(() =>
+            reader.ListEmailsAsync(new ListEmailsRequest(), TestContext.Current.CancellationToken));
+
+        // Assert
+        Assert.Equal(MailFathomPermission.MailRead, refusal.RequiredPermission);
+    }
+
+    /// <summary>The grant is read before the request is, so a caller that may not read learns nothing about which filters are accepted.</summary>
+    [Fact]
+    public async Task ListEmailsAsync_ACallerGrantedNothingSendingAnInvalidRequest_IsRefusedForTheGrant()
+    {
+        // Arrange
+        var reader = ReaderOver(
+            new InMemoryStoredEmailTimeline(),
+            authorization: AccessAuthorizations.ForCallerGranted());
+
+        // Act, Assert
+        await Assert.ThrowsAsync<PrincipalNotAuthorizedException>(() => reader.ListEmailsAsync(
+            new ListEmailsRequest { PageSize = int.MaxValue },
+            TestContext.Current.CancellationToken));
+    }
+
     private static MailboxTimelineReader ReaderOver(
         InMemoryStoredEmailTimeline timeline,
         IMailAccountCatalog? accountCatalog = null,
         ISynchronizationFreshnessReader? freshnessReader = null,
         SensitiveContentEgressGuard? egressGuard = null,
-        IMailboxReadTelemetry? readTelemetry = null) => new(
+        IMailboxReadTelemetry? readTelemetry = null,
+        AccessAuthorization? authorization = null) => new(
         timeline,
         freshnessReader ?? FreshnessReaderReturning(InboxFreshness),
         new MailboxScopeResolver(
@@ -857,7 +892,8 @@ public sealed class MailboxTimelineReaderTests
             StubJunkMailFolderCatalog.None,
             StubMailFolderMappings.ResolvingNothing),
         egressGuard ?? SensitiveContentEgressGuards.Inactive(),
-        readTelemetry ?? new RecordingMailboxReadTelemetry());
+        readTelemetry ?? new RecordingMailboxReadTelemetry(),
+        authorization ?? AccessAuthorizations.ForCallerGranted(MailFathomPermission.MailRead));
 
     /// <summary>Builds a catalog that serves exactly the accounts named, in the order the port promises.</summary>
     private static IMailAccountCatalog CatalogServing(params MailAccountId[] servedAccountIds)

@@ -115,7 +115,7 @@ internal sealed class McpToolCallTelemetry
 
     /// <summary>Reduces the name a caller sent to one of the names this surface publishes.</summary>
     private static string MeasurableToolName(string? requestedToolName) =>
-        PublishedToolNames.Contains(requestedToolName) ? requestedToolName! : UnpublishedToolName;
+        PublishedTools.Contains(requestedToolName) ? requestedToolName! : UnpublishedToolName;
 
     private void Record(string? requestedToolName, string outcome, TimeSpan duration)
     {

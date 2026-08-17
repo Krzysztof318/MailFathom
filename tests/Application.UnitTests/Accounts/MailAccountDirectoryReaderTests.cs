@@ -2,11 +2,13 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Application.Access;
 using MailFathom.Application.Accounts;
 using MailFathom.Application.Emails.Mailboxes;
 using MailFathom.Application.Observability;
 using MailFathom.Application.Synchronization.Checkpoints;
 using MailFathom.Application.UnitTests.TestDoubles;
+using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Folders;
 using MailFathom.Domain.Synchronization;
@@ -171,6 +173,52 @@ public sealed class MailAccountDirectoryReaderTests
         Assert.Equal(0, Assert.Single(readTelemetry.Reads).ResultCount);
     }
 
+    /// <summary>Naming the accounts a deployment serves is publishing that they exist, so the grant is asked for here rather than only where a tool is withheld.</summary>
+    [Fact]
+    public async Task ReadAsync_ACallerGrantedOnlyTheAnsweringPermission_IsRefusedWithTheTransportAbsent()
+    {
+        // Arrange
+        var reader = ReaderAuthorizedBy(AccessAuthorizations.ForCallerGranted(MailFathomPermission.MailAsk));
+
+        // Act
+        var refusal = await Assert.ThrowsAsync<PrincipalNotAuthorizedException>(() =>
+            reader.ReadAsync(TestContext.Current.CancellationToken));
+
+        // Assert
+        Assert.Equal(MailFathomPermission.MailRead, refusal.RequiredPermission);
+    }
+
+    /// <summary>Work no caller requested is a distinct kind of principal rather than a caller holding everything.</summary>
+    [Fact]
+    public async Task ReadAsync_TheProcessIdentity_IsRefused()
+    {
+        // Arrange
+        var reader = ReaderAuthorizedBy(AccessAuthorizations.ForPrincipal(AuthorizedPrincipal.Process));
+
+        // Act, Assert
+        await Assert.ThrowsAsync<PrincipalNotAuthorizedException>(() =>
+            reader.ReadAsync(TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>Builds a reader whose collaborators would all answer, so a refusal can only have come from the grant.</summary>
+    private static MailAccountDirectoryReader ReaderAuthorizedBy(AccessAuthorization authorization)
+    {
+        var catalog = Substitute.For<IMailAccountCatalog>();
+        catalog.SynchronizationEnabled.Returns(true);
+        catalog.ServedAccounts.Returns([SyntheticServedAccount.Of("personal")]);
+
+        return new MailAccountDirectoryReader(
+            catalog,
+            Freshness(),
+            new MailboxScopeResolver(
+                catalog,
+                StubMailFolderParticipation.Nothing,
+                StubJunkMailFolderCatalog.None,
+                StubMailFolderMappings.ResolvingNothing),
+            new RecordingMailboxReadTelemetry(),
+            authorization);
+    }
+
     private static MailAccountDirectoryReader ReaderOver(
         ISynchronizationFreshnessReader freshnessReader,
         params ServedMailAccount[] servedAccounts) =>
@@ -200,7 +248,8 @@ public sealed class MailAccountDirectoryReaderTests
                 StubMailFolderParticipation.Nothing,
                 StubJunkMailFolderCatalog.None,
                 StubMailFolderMappings.ResolvingNothing),
-            readTelemetry);
+            readTelemetry,
+            AccessAuthorizations.ForCallerGranted(MailFathomPermission.MailRead));
     }
 
     /// <summary>Answers the folders local state knows of, in an order the reader is expected to correct.</summary>

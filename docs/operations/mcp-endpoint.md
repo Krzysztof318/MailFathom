@@ -659,8 +659,14 @@ chosen what it holds:
 info: MailFathom.Host.Hosting.Warnings.TransportGrantStartupReport
       The MCP endpoint entry McpEndpoint:Authentication:0 writes down no grant, so every credential it admits holds
       mailfathom.mail.read, mailfathom.mail.ask — everything this surface publishes. Write a 'Permissions' list on the
-      entry to narrow it, or an empty one to grant nothing.
+      entry to narrow it, or an empty one to grant nothing. A caller here is served only the tools its grant permits,
+      and a call naming any other is answered as a tool that does not exist.
 ```
+
+Every line closes with what a grant on that surface does, so an operator reading back the one entry they edited learns
+whether the narrowing bites without reading the rest of the report. On this endpoint it does. The administrative
+endpoint's lines say instead that no route there consults a permission yet, which is what makes a narrowed entry there a
+statement of intent rather than a bound.
 
 An entry that narrowed its grant is reported as what it grants, an entry with `PermissionsFromTokenScopes` as what it
 grants *at most*, and an entry granted nothing as `nothing` rather than as a line that lost its argument. An endpoint
@@ -668,20 +674,42 @@ with no entry at all gets one line naming the section a grant would be written u
 a public key, a token, an authorization server, or a subject: a grant is what the deployment wrote, never who presented
 something.
 
-**What varies by the grant today is nothing.** The permissions are resolved from configuration, carried on the
-authenticated caller, and recorded at startup; the tool listing and the tool calls this endpoint serves do not yet
-consult them. Writing a narrower grant is therefore a statement about what a credential is meant to reach, and it starts
-being enforced when the enforcement it describes ships.
+**What varies by the grant is the tool surface itself.** A caller is offered exactly the tools its grant permits and no
+others: `tools/list` omits the rest, so a client never plans a call that could only fail, and a call naming one of them
+is answered as a call naming a tool that does not exist. The refusal says nothing about the caller, the credential, the
+permission, or what a different caller would have been served: a message a client could tell apart would disclose the
+capability the listing just withheld. Nothing is cached either — the listing is composed per request, so one caller's
+answer never serves another.
+
+The availability rule that already decides `ask_mail` composes with this rather than being replaced by it. A tool may be
+unavailable, unauthorized, or both, and no grant makes a capability this deployment does not have appear — an endpoint
+whose chat provider is unconfigured withholds `ask_mail` from a caller granted `mailfathom.mail.ask` exactly as it does
+from one granted nothing.
+
+The grant is enforced twice. The endpoint refuses cheaply, before a use case is reached, and the use case behind each
+tool asks the same question again on its own — so a second entrypoint added to this deployment later cannot widen what a
+credential reaches by omission.
 
 ### What a credential decides, and what it does not
 
-**The endpoint asks whether this is a caller the deployment serves, and of a token also which person it names.** Beyond
-that, every tool call resolves the accounts the configured owner controls and refuses anything outside them, whichever
-credential got the caller in. Two admitted callers therefore see the same mailboxes — which is exactly why a token has to
-name an authorized subject: admitting a colleague of the same tenant would admit them to the owner's mail rather than to
-their own. `Permissions` above says what a caller may do; which of the configured mail accounts it may do it to is not
-something a credential decides, and no setting narrows it. Every admitted caller reaches every account this deployment
-configures.
+**The endpoint asks whether this is a caller the deployment serves, and of a token also which person it names.** What an
+admitted caller may then do is the grant its entry carries, and that decides one thing: which of this surface's tools it
+is offered and may call. A credential granted `mailfathom.mail.read` alone is served the four tools that read the local
+copy and is answered about `ask_mail` as though no such tool existed; one granted `mailfathom.mail.ask` alone is served
+that tool and nothing else; one granted neither is served an empty tool list and refused every call it makes.
+
+**A refused caller is told nothing.** There is no message naming the permission it lacked, no field on a descriptor
+saying one is required, and no `insufficient_scope` challenge inviting a client to acquire one — even where the grant
+came from a token's scopes and its authorization server could in principle mint it. The listing already said what this
+caller may do, and a refusal it could tell apart from an unknown tool would say that a capability exists which you chose
+not to offer it. Diagnosing a client that stopped working is therefore done from this deployment's own record rather
+than from what the client received.
+
+**Which mailboxes a caller reaches is not something a credential decides.** Every tool call resolves the accounts the
+configured owner controls and refuses anything outside them, whichever credential got the caller in, and no setting
+narrows that. Two admitted callers therefore see the same mailboxes — which is exactly why a token has to name an
+authorized subject: admitting a colleague of the same tenant would admit them to the owner's mail rather than to their
+own. `Permissions` says what a caller may do; every admitted caller does it to every account this deployment configures.
 
 A key identifies a *client*, a public key identifies a *client that can prove it holds the other half*, a token
 identifies a *person*, and the difference matters operationally. A shared bearer credential has the properties every
@@ -1686,13 +1714,20 @@ client that speaks Streamable HTTP can list them; `tools/list` should report `li
 `get_email_content`, and `search_emails`, each with `readOnlyHint` true, `destructiveHint` false, `idempotentHint` true,
 and `openWorldHint` false.
 
+**Verify with a credential whose entry writes no grant, or read what that entry granted first.** A listing narrows to
+the caller's grant as well as to the deployment, so a credential granted less than the whole surface is served fewer
+tools than the paragraph above describes and nothing in the answer says why. Confirm against
+[what a credential may do](#what-a-credential-may-do) before treating a short listing as a fault.
+
 `ask_mail` is the fifth, and it appears only while this deployment can answer a question: a chat endpoint declared and
-not currently refusing, and an embedding profile whose space a query can be placed in. Its absence from a listing is
-therefore a statement about the deployment rather than a fault — an instance that declared no chat endpoint never
-advertises it, and one whose chat provider refused within the last minute withholds it and offers it again afterwards, so
-a rotated credential is picked up without a restart. Read the health record for the chat role before treating the absence
-as a defect. A client that calls it anyway is refused with `56001`, whose message says whether this deployment answers no
-questions at all or answers them and currently cannot.
+not currently refusing, and an embedding profile whose space a query can be placed in. Its absence from the listing of a
+caller granted `mailfathom.mail.ask` is therefore a statement about the deployment rather than a fault — an instance
+that declared no chat endpoint never advertises it, and one whose chat provider refused within the last minute withholds
+it and offers it again afterwards, so a rotated credential is picked up without a restart. Read the health record for
+the chat role before treating that absence as a defect. Such a caller calling it anyway is refused with `56001`, whose
+message says whether this deployment answers no questions at all or answers them and currently cannot; a caller whose
+grant does not carry `mailfathom.mail.ask` receives the unknown-tool error instead, which is the grant rather than the
+deployment and is read from the configured entry rather than from the health record.
 
 A call answers from the local mailbox copy, so what it returns depends on what synchronization has stored rather than on
 whether a mail server is reachable. A deployment whose folders have never synchronized answers an empty page whose

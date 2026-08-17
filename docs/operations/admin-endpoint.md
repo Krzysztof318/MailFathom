@@ -103,11 +103,14 @@ Startup records what every entry resolved to, one line per entry, and names the 
 ```text
 info: MailFathom.Host.Hosting.Warnings.TransportGrantStartupReport
       The administrative endpoint entry AdminEndpoint:Authentication:0 grants mailfathom.admin.read,
-      mailfathom.admin.operate to every credential it admits.
+      mailfathom.admin.operate to every credential it admits. No route here consults a permission yet, so a grant on
+      this surface states what a credential is meant to reach rather than what it currently reaches.
 ```
 
-Nothing in those lines names a key, a public key, a token, an authorization server, or a subject: a grant is what the
-deployment wrote, never who presented something.
+Every line closes with what a grant on that surface does, which is not the same on both: the MCP endpoint's lines say
+that a caller is served only the tools its grant permits, because there it is enforced. Nothing in those lines names a
+key, a public key, a token, an authorization server, or a subject: a grant is what the deployment wrote, never who
+presented something.
 
 **No name covers the contact book.** The six above were allocated against the routes that existed when they were, and
 the book's own routes — reading it, writing to it, exporting a person, erasing one — fall under none of them. Nothing

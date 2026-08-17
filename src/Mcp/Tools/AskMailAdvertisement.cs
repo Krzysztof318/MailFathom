@@ -12,9 +12,9 @@ namespace MailFathom.Mcp.Tools;
 /// <summary>Decides whether <c>ask_mail</c> appears in what this server advertises.</summary>
 /// <remarks>
 /// <para>
-/// Every other MailFathom tool answers from the local mailbox copy alone and is therefore always advertised. Answering a
-/// question needs two AI providers that an operator configures separately and that fail separately, so this one is
-/// offered only while both are configured and working. A client that can see a tool will call it, and a tool that exists
+/// Every other MailFathom tool answers from the local mailbox copy alone and is therefore within reach of every
+/// deployment. Answering a question needs two AI providers that an operator configures separately and that fail
+/// separately, so this one is offered only while both are configured and working. A client that can see a tool will call it, and a tool that exists
 /// only to answer "not configured" costs a round trip to learn something the tool list could have said.
 /// </para>
 /// <para>
@@ -23,8 +23,11 @@ namespace MailFathom.Mcp.Tools;
 /// whose endpoint stops answering has it withdrawn on the next listing after that.
 /// </para>
 /// <para>
-/// Withholding a descriptor is not authorization and is not relied on as any. A client may call a tool it was never
-/// offered, and the use case behind this one refuses a question the same way whether or not the caller ever read a list.
+/// Withholding a descriptor for want of a capability is not authorization and is not relied on as any. A client may call
+/// a tool it was never offered, and the use case behind this one refuses a question the same way whether or not the
+/// caller ever read a list. Whether a caller may reach the tool at all is <see cref="McpToolAuthorization" />'s
+/// question, and the two compose: this switch is the authority over whether the capability exists, so no grant makes an
+/// absent one appear.
 /// </para>
 /// </remarks>
 internal static class AskMailAdvertisement

@@ -65,9 +65,46 @@ Three properties hold for every tool and are proven by test rather than asserted
   [`MailAnswering`](../operations/configuration-reference.md#mailanswering).
 
 One property holds for four of the five and is stated where it stops. `list_accounts`, `list_emails`,
-`get_email_content`, and `search_emails` are advertised by every deployment, because local state is all they need.
+`get_email_content`, and `search_emails` are within reach of every deployment, because local state is all they need.
 `ask_mail` needs two AI providers an operator configures separately, so it is advertised only while both are configured
 and working; the [`ask_mail`](#ask_mail) section records what decides that and what a call meets when it arrives anyway.
+Whether any of the five is offered to a particular caller is a second question, which the next section answers.
+
+## What a caller is offered
+
+**A caller is served only the tools it may call.** Each tool declares the permission required to reach it, `tools/list`
+omits every tool the caller's grant does not permit, and a call naming one of the omitted tools is answered exactly as a
+call naming a tool that does not exist: the same JSON-RPC error, the same code, and nothing about the caller, the
+credential, the permission, or what a different caller would have been served.
+
+| Tool | Permission it requires |
+|---|---|
+| `list_accounts` | `mailfathom.mail.read` |
+| `list_emails` | `mailfathom.mail.read` |
+| `get_email_content` | `mailfathom.mail.read` |
+| `search_emails` | `mailfathom.mail.read` |
+| `ask_mail` | `mailfathom.mail.ask` |
+
+Neither permission implies the other. `mailfathom.mail.ask` is not the weaker of the two — a cited answer returns mail
+content — and `mailfathom.mail.read` is not egress-free: where semantic retrieval is configured, `search_emails` places
+the caller's own query text with the embedding provider. What withholding `mailfathom.mail.ask` stops is mail content
+going to a *chat* provider on a caller's behalf. Which grant a credential holds is written on the entry that admits it,
+and [the MCP endpoint](../operations/mcp-endpoint.md#what-a-credential-may-do) is where that is configured; a deployment
+whose entries write no grant serves both permissions to every caller, which is what makes this invisible until an
+operator narrows something. An entry that writes no grant but sets `PermissionsFromTokenScopes` is the one exception:
+its whole surface is a ceiling rather than a grant, and each token holds only the permission names its own scopes carry
+— so a token whose client never received either is served an empty listing on an entry nobody narrowed.
+
+The protocol has no field on a tool descriptor for a required permission, and it expressly allows the returned tool set
+to vary by the authorization presented on the request — so the listing is where the decision is stated, and no extension
+field is invented to say it instead. Nothing caches a listing, so one caller's answer never serves another.
+
+This composes with the availability rule rather than replacing it: a tool may be unavailable, unauthorized, or both, and
+no grant makes a capability the deployment does not have appear. A caller granted `mailfathom.mail.ask` is not offered
+`ask_mail` on a deployment that answers no questions.
+
+The check runs twice. The endpoint refuses before a use case is reached, and the use case behind each tool asks for the
+same permission on its own — so an entrypoint added later reaches the same refusal without passing any of this.
 
 ## Descriptor conventions
 
@@ -768,9 +805,14 @@ only thing that reaches the chat endpoint at all, and a deployment that withheld
 was on record would withhold it forever.
 
 The decision is made per listing rather than at startup, so the transition is observable and needs no restart in either
-direction. What it is not is authorization: a client may call a tool it was never offered, and the use case behind this
-one refuses a question the same way whether or not the caller ever read a list. That refusal is `56001`, and its message
-says whether this deployment answers no questions at all or answers them and currently cannot.
+direction.
+
+What it is not is authorization, which is the second and separate reason a listing may withhold this tool. Availability
+says what this deployment can do and the grant says what this caller may ask of it; the deployment's own switch is the
+authority over the first, so no grant makes a capability it does not have appear. The two are answered differently when
+a call arrives anyway: a caller whose grant does not permit `ask_mail` is answered as though no such tool existed, while
+one whose grant permits it on a deployment that cannot answer reaches the use case and is refused with `56001`, whose
+message says whether this deployment answers no questions at all or answers them and currently cannot.
 
 ## Pending
 

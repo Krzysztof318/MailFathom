@@ -136,11 +136,14 @@ entry that narrows by token scopes publishes its whole ceiling in `scopes_suppor
 configuration publishes none of its permissions, because no client can ask for one. Skip this whole paragraph if you
 write the grant in configuration instead, which is the only form available where your server cannot mint custom scopes.
 
-**Nothing enforces a grant yet**, on either surface. What a token's scopes narrow is read, validated, carried on the
-authenticated caller and reported at startup, and no tool and no route consults it — so a scope you create here bounds
-what a credential is *meant* to reach rather than what it currently reaches, and starts refusing when the enforcement it
-describes ships. The scopes are worth creating now: an entry that narrows by them publishes them in `scopes_supported`,
-and a client that never receives one holds nothing under it the moment enforcement arrives.
+**A `mailfathom.mail.*` scope is in force on an entry that sets `PermissionsFromTokenScopes`, and narrows nothing on
+one that does not.** Where the entry opted in, a client that never received the scope is listed only the tools its
+remaining scopes permit and is answered about the rest as though they did not exist; where it did not, every token the
+entry admits holds the entry's whole grant whatever scopes it carries, because the deployment wrote that grant and the
+authorization server was never asked. A `mailfathom.admin.*` scope is in force nowhere yet: the administrative surface
+reads, validates, carries and reports the grant and no route there consults it, so such a scope states what a credential
+is *meant* to reach rather than what it currently reaches. Create those anyway — an entry that narrows by them publishes
+them in `scopes_supported`, and a client that never receives one holds nothing under it the moment enforcement arrives.
 
 **Decide here whether clients should hold a refresh token.** A client asks for one by naming `offline_access`, and it
 learns to ask by reading that scope in MailFathom's metadata document — so if you do not advertise it, a client asks
@@ -283,9 +286,9 @@ from the issuer, and takes the key set address out of it.
 
 The entry writes down no grant, so every token it admits reaches everything the MCP surface publishes. To state a bound,
 add `Permissions` beside `OAuth` — and add `"PermissionsFromTokenScopes": true` as well where the scopes you created in
-step 2 should narrow the list per subject. It is a statement rather than a bound today, for the reason
-[step 2](#2-register-mailfathom-as-a-resource-in-the-provider) gives: nothing consults a grant yet, so every token this
-entry admits goes on reaching every tool whatever you write here.
+step 2 should narrow the list per subject. On this surface that is a bound rather than a statement, for the reason
+[step 2](#2-register-mailfathom-as-a-resource-in-the-provider) gives: a token admitted without a `mailfathom.mail.*`
+permission is listed fewer tools and is answered about the rest as though they did not exist.
 
 ```json
 {

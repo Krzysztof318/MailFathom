@@ -5,6 +5,7 @@
 using System.Reflection;
 using System.Security.Cryptography;
 using System.Text;
+using MailFathom.Application.Access;
 using MailFathom.Application.Accounts;
 using MailFathom.Application.EmailContent;
 using MailFathom.Application.EmailContent.Attachments;
@@ -25,6 +26,7 @@ using MailFathom.Application.SensitiveContent.Redaction;
 using MailFathom.Application.Synchronization;
 using MailFathom.Application.Synchronization.Sessions;
 using MailFathom.Application.UnitTests.TestDoubles;
+using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Emails.Authentication;
@@ -1407,6 +1409,26 @@ public sealed class EmailContentReaderTests
     private static EmailSummary[] SummariesOf(int count) =>
         [.. Enumerable.Range(0, count).Select(_ => SyntheticEmailSummaries.Create())];
 
+    /// <summary>The grant is the authority here rather than at the transport, so an entrypoint that passed no filter meets the same refusal.</summary>
+    [Fact]
+    public async Task ReadContentAsync_ACallerGrantedOnlyTheAnsweringPermission_IsRefusedWithTheTransportAbsent()
+    {
+        // Arrange
+        var summary = SyntheticEmailSummaries.Create();
+        var reader = ReaderOver(
+            summary,
+            RendererReturning(RenderingOf(plainText: "Body as written")),
+            authorization: AccessAuthorizations.ForCallerGranted(MailFathomPermission.MailAsk));
+
+        // Act
+        var refusal = await Assert.ThrowsAsync<PrincipalNotAuthorizedException>(() => reader.ReadContentAsync(
+            RequestFor([summary.StoredEmailId]),
+            TestContext.Current.CancellationToken));
+
+        // Assert
+        Assert.Equal(MailFathomPermission.MailRead, refusal.RequiredPermission);
+    }
+
     private static StoredEmailId[] IdentitiesOf(IReadOnlyList<EmailSummary> summaries) =>
         [.. summaries.Select(summary => summary.StoredEmailId)];
 
@@ -1420,7 +1442,8 @@ public sealed class EmailContentReaderTests
         EmailContentReadOptions? readOptions = null,
         IMailFolderParticipationReader? folderParticipation = null,
         SensitiveContentEgressGuard? egressGuard = null,
-        IMailboxReadTelemetry? readTelemetry = null) => new(
+        IMailboxReadTelemetry? readTelemetry = null,
+        AccessAuthorization? authorization = null) => new(
         SummaryReaderReturning(summary),
         contentStore ?? ContentStoreReturning(IntactContent()),
         renderer,
@@ -1433,7 +1456,8 @@ public sealed class EmailContentReaderTests
         linkIssuer ?? new RecordingAttachmentDownloadLinkIssuer(),
         egressGuard ?? SensitiveContentEgressGuards.Inactive(),
         readOptions ?? new EmailContentReadOptions(),
-        readTelemetry ?? new RecordingMailboxReadTelemetry());
+        readTelemetry ?? new RecordingMailboxReadTelemetry(),
+        authorization ?? AccessAuthorizations.ForCallerGranted(MailFathomPermission.MailRead));
 
     private static EmailContentReader ReaderOver(
         IReadOnlyList<EmailSummary> summaries,
@@ -1444,7 +1468,8 @@ public sealed class EmailContentReaderTests
         IAttachmentDownloadLinkIssuer? linkIssuer = null,
         EmailContentReadOptions? readOptions = null,
         SensitiveContentEgressGuard? egressGuard = null,
-        IMailboxReadTelemetry? readTelemetry = null) => new(
+        IMailboxReadTelemetry? readTelemetry = null,
+        AccessAuthorization? authorization = null) => new(
         SummaryReaderOver(summaries),
         contentStore ?? ContentStoreReturning(IntactContent()),
         renderer,
@@ -1457,7 +1482,8 @@ public sealed class EmailContentReaderTests
         linkIssuer ?? new RecordingAttachmentDownloadLinkIssuer(),
         egressGuard ?? SensitiveContentEgressGuards.Inactive(),
         readOptions ?? new EmailContentReadOptions(),
-        readTelemetry ?? new RecordingMailboxReadTelemetry());
+        readTelemetry ?? new RecordingMailboxReadTelemetry(),
+        authorization ?? AccessAuthorizations.ForCallerGranted(MailFathomPermission.MailRead));
 
     /// <summary>Maps the folders these emails were stored from, which is what a deployment holding them has configured.</summary>
     /// <remarks>

@@ -6,6 +6,7 @@ using MailFathom.Application.Accounts;
 using MailFathom.Application.Emails.Mailboxes;
 using MailFathom.Application.Observability;
 using MailFathom.Application.Synchronization.Checkpoints;
+using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Folders;
 using MailFathom.Domain.Synchronization;
@@ -180,6 +181,7 @@ public sealed class ListAccountsToolTests
                     StubMailFolderParticipation.Nothing,
                     StubJunkMailFolderCatalog.None,
                     StubMailFolderMappings.ResolvingNothing),
-                Substitute.For<IMailboxReadTelemetry>()),
+                Substitute.For<IMailboxReadTelemetry>(),
+                AccessAuthorizations.ForCallerGranted(MailFathomPermission.MailRead)),
             catalog);
 }
