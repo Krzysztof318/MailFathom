@@ -24,8 +24,12 @@ namespace MailFathom.Mcp.Tools.Results;
 internal sealed record GetEmailContentToolResult
 {
     /// <summary>Gets one entry per named email, in the order the call named them.</summary>
-    [Description("One entry per email the call named, in the same order. An email named once appears once: the call is refused rather than served twice when an identifier is repeated.")]
+    [Description("One entry per email the call named, in the same order. An email named once appears once: the call is refused rather than served twice when an identifier is repeated. A call that named a thread is answered with that thread's messages in the thread's own order instead.")]
     public required IReadOnlyList<RetrievedEmail> Emails { get; init; }
+
+    /// <summary>Gets the messages of a named conversation this call did not carry, in the conversation's order.</summary>
+    [Description("For a call that named a thread longer than one read serves: the storedEmailIds of that thread's remaining messages, in the thread's own order. Ask for them directly in a second call. Empty for every call that named its emails itself.")]
+    public required IReadOnlyList<string> UnreadThreadMessages { get; init; }
 
     /// <summary>Publishes what a read returned.</summary>
     /// <param name="result">The result to publish.</param>
@@ -38,6 +42,7 @@ internal sealed record GetEmailContentToolResult
         return new GetEmailContentToolResult
         {
             Emails = [.. result.Emails.Select(RetrievedEmail.From)],
+            UnreadThreadMessages = [.. result.UnreadThreadEmails.Select(storedEmailId => storedEmailId.ToString())],
         };
     }
 }

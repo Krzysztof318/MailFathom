@@ -569,6 +569,39 @@ public sealed class ListEmailsToolTests
         Assert.Equal(ListedEmailContentAvailability.AwaitingStorageHeadroom, published.ContentAvailability);
     }
 
+    /// <summary>
+    /// The conversation is published beside every listed email, so a caller reading a listing can ask for the whole
+    /// exchange without first reading one of its messages to learn the identifier.
+    /// </summary>
+    [Fact]
+    public async Task ListEmailsAsync_EmailBelongingToAConversation_PublishesThatConversationIdentifier()
+    {
+        // Arrange
+        var threadId = EmailThreadId.Create(Guid.CreateVersion7());
+        var summary = SummaryReceivedAt(null) with { ThreadId = threadId };
+        var tool = ToolOver(new StubStoredEmailTimelineReader(summary));
+
+        // Act
+        var result = await tool.ListEmailsAsync(cancellationToken: TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(threadId.ToString(), Assert.Single(result.Emails).ThreadId);
+    }
+
+    /// <summary>An email nothing has assembled yet publishes no conversation rather than an identifier naming none.</summary>
+    [Fact]
+    public async Task ListEmailsAsync_EmailInNoConversation_PublishesNoConversationIdentifier()
+    {
+        // Arrange
+        var tool = ToolOver(new StubStoredEmailTimelineReader(SummaryReceivedAt(null)));
+
+        // Act
+        var result = await tool.ListEmailsAsync(cancellationToken: TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Null(Assert.Single(result.Emails).ThreadId);
+    }
+
     /// <summary>Flags nobody has read are published as such, so a caller cannot read them as a server reporting no flag set.</summary>
     [Fact]
     public async Task ListEmailsAsync_EmailWhoseFlagsWereNeverObserved_PublishesThatNobodyHasLooked()

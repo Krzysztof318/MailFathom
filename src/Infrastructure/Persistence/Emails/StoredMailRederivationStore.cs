@@ -3,12 +3,14 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.Emails.Extraction;
+using MailFathom.Application.Emails.Threads;
 using MailFathom.Application.Mail.Maintenance;
 using MailFathom.Application.Persistence;
 using MailFathom.CodeCoverage;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Folders;
+using MailFathom.Infrastructure.Persistence.Emails.Threads;
 using MailFathom.Infrastructure.Persistence.Entities;
 using MailFathom.Infrastructure.Persistence.Sessions;
 using Microsoft.EntityFrameworkCore;
@@ -22,7 +24,10 @@ namespace MailFathom.Infrastructure.Persistence.Emails;
 /// server's <c>uuid</c> ordering and never has to agree with how the CLR compares two <see cref="Guid" /> values.
 /// </remarks>
 [RequiresIntegrationCoverage]
-internal sealed class StoredMailRederivationStore(MailFathomDbContext dbContext, TimeProvider timeProvider)
+internal sealed class StoredMailRederivationStore(
+    MailFathomDbContext dbContext,
+    TimeProvider timeProvider,
+    EmailThreadAssembly threadAssembly)
     : IStoredMailRederivationStore
 {
     /// <inheritdoc />
@@ -92,6 +97,14 @@ internal sealed class StoredMailRederivationStore(MailFathomDbContext dbContext,
     /// <inheritdoc />
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="metadata" /> is <see langword="null" />.</exception>
     /// <exception cref="InvalidOperationException">Thrown when the email disappeared between the batch query and this write.</exception>
+    /// <remarks>
+    /// The thread assignment is the one write this pass makes outside the row's own columns, and it is deliberate rather
+    /// than an oversight in a contract that is otherwise "re-read the row's MIME into the row". A thread membership
+    /// cannot be a column: it is decided from this row's identifiers and recorded as a relation other rows share, so a
+    /// mailbox stored before threading existed becomes threaded only if re-derivation is allowed to write it. Everything
+    /// the assignment touches is still derived from stored MIME and from nothing a mail server would have to be asked
+    /// for.
+    /// </remarks>
     public async Task ApplyRederivedMetadataAsync(
         IPersistenceSession session,
         StoredEmailId storedEmailId,
@@ -106,6 +119,13 @@ internal sealed class StoredMailRederivationStore(MailFathomDbContext dbContext,
                 "Re-derived metadata cannot be applied to a stored email that no longer exists.");
 
         StoredEmailMetadataMapping.ApplyExtractedMetadata(storedEmail, metadata);
+
+        await threadAssembly.AssembleAsync(
+            session,
+            MailAccountId.Create(storedEmail.MailboxAccountId),
+            ThreadedEmails.Of(storedEmail),
+            storedEmail.EmailThreadId is { } currentThreadId ? EmailThreadId.Create(currentThreadId) : null,
+            cancellationToken);
     }
 
     /// <inheritdoc />

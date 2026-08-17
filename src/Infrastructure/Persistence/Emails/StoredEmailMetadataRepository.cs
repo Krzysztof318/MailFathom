@@ -3,11 +3,14 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.Emails.Extraction;
+using MailFathom.Application.Emails.Threads;
 using MailFathom.Application.Persistence;
 using MailFathom.Application.SensitiveContent.Derivation;
 using MailFathom.Application.Synchronization;
 using MailFathom.CodeCoverage;
+using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
+using MailFathom.Infrastructure.Persistence.Emails.Threads;
 using MailFathom.Infrastructure.Persistence.Entities;
 using MailFathom.Infrastructure.Persistence.Sessions;
 using MailFathom.Infrastructure.Persistence.Synchronization;
@@ -19,7 +22,8 @@ namespace MailFathom.Infrastructure.Persistence.Emails;
 [RequiresIntegrationCoverage]
 internal sealed class StoredEmailMetadataRepository(
     TimeProvider timeProvider,
-    SensitiveContentDerivationGuard derivationGuard)
+    SensitiveContentDerivationGuard derivationGuard,
+    EmailThreadAssembly threadAssembly)
     : IEmailMetadataRepository
 {
     /// <inheritdoc />
@@ -87,6 +91,17 @@ internal sealed class StoredEmailMetadataRepository(
                 derivationGuard.Stamp,
                 cancellationToken);
         }
+
+        // Placed in the transaction that commits the message, from the identifier columns written a moment ago, so no
+        // message is ever readable outside the conversation it belongs to. It runs for an occurrence whose body was
+        // never stored as well: the server's envelope still reported a Message-ID, and a message nothing can join is a
+        // conversation of one rather than a message with no conversation.
+        await threadAssembly.AssembleAsync(
+            session,
+            MailAccountId.Create(entity.MailboxAccountId),
+            ThreadedEmails.Of(entity),
+            entity.EmailThreadId is { } currentThreadId ? EmailThreadId.Create(currentThreadId) : null,
+            cancellationToken);
 
         return StoredEmailId.Create(entity.Id);
     }

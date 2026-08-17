@@ -18,13 +18,25 @@ tool that maps onto it is documented in [MCP tools](mcp-tools.md#get_email_conte
 
 ## The request contract
 
-`GetEmailContentRequest` carries three values and is built through `Create`, which enforces the two refusals below.
+`GetEmailContentRequest` carries four values and is built through `Create`, `CreateForThread`, or `CreateForSelection`,
+which enforce the refusals below.
 
 | Field | Meaning | Absent means |
 |---|---|---|
-| `StoredEmailIds` | The emails to read, named by the identities a listing returned, in the order to read them | — |
+| `StoredEmailIds` | The emails to read, named by the identities a listing returned, in the order to read them | a conversation was named instead |
+| `ThreadId` | The conversation whose messages to read, in the conversation's own order | the emails were named directly |
 | `IncludeSanitizedHtml` | Whether to also produce the sanitized HTML representation of each body | plain text only |
 | `IncludeAttachmentDownloadLinks` | Whether to mint a link for fetching each attachment, rather than only describe it | descriptions only |
+
+The first two are alternatives and exactly one of them is given. `CreateForSelection` is what a boundary offering both
+builds through, and it refuses a request carrying both or neither with `51007 EmailContentReadSelectionInvalid` rather
+than resolving it by precedence: honouring the list would ignore a conversation somebody wanted, and honouring the
+conversation would return messages nobody named. A conversation is counted where it resolves rather than where it is
+named, because how many messages it holds is what reading it answers — the same ten bound applies to the resolved order,
+and the identities beyond it come back in `UnreadThreadEmails` so a second call asks for them directly. Neither argument
+is resolved until that refusal has been decided, so a call carrying a list beside an empty one or a misspelled
+conversation identifier is told which of the two to drop rather than that the argument it will not be read by is too
+short or malformed.
 
 Both flags govern the whole call rather than one email each. A caller asking for markup or for the attached files wants
 them for what it is about to read, and a flag per identifier would make the argument list grow with the batch while
@@ -63,15 +75,18 @@ Two refusals are decided before anything is read, and both refuse rather than re
   than were named, which a caller reading results positionally cannot detect.
 
 Both are the request's own invariant, enforced in `Create`, so an entrypoint added later cannot reach the use case with a
-list nobody counted.
+list nobody counted. A conversation is not counted there, because nothing is resolved yet when the request is built; the
+same bound is applied to the order it resolves to, and what falls outside it is named rather than dropped.
 
 ## What a result carries
 
 `GetEmailContentResult` is the most sensitive projection MailFathom publishes. It is message content in full and inherits
 every classification, retention, access, and erasure constraint of the mail it was read from. Nothing in it is logged.
 
-It carries one `EmailContentReadOutcome` per named email, in the order they were named. That order is the contract twice
-over: it is how a caller pairs an outcome with what it asked for, and it is the order the character budget was spent in.
+It carries one `EmailContentReadOutcome` per named email, in the order they were named — or, for a request naming a
+conversation, one per message it served in the conversation's own order, with `UnreadThreadEmails` naming the
+identities the bound left out. That order is the contract twice over: it is how a caller pairs an outcome with what it
+asked for, and it is the order the character budget was spent in.
 
 Each outcome names the email it answers for and carries exactly one of two things.
 
@@ -98,6 +113,7 @@ fact whether it named one email or ten.
 | `AttachmentSummary` | The counts for what the message carries besides its body, absent when nobody has counted them |
 | `Attachments` | One entry per attachment, re-derived from the stored raw MIME, each carrying a link to fetch it or the reason it carries none |
 | `RemoteFlags` | The flags a server last showed, and when they were read |
+| `Thread` | The conversation this email belongs to, with the other messages named rather than reproduced, or absent when nothing has assembled one |
 | `SenderVerification` | What was established about the author the message displays, and what this deployment made of them |
 | `SenderAuthenticationEvidence` | What that conclusion was reached from: the authenticated domain, the displayed author's domain, the check that established the first, and the DMARC result |
 

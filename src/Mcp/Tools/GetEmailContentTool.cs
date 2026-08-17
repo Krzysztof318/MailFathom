@@ -59,15 +59,17 @@ internal sealed class GetEmailContentTool(EmailContentReader emailContentReader)
     /// </remarks>
     private const int MaximumIdentifierLength = 68;
 
-    /// <summary>Reads the content of the named emails from the local mailbox copy.</summary>
+    /// <summary>Reads the content of the named emails, or of one named conversation, from the local mailbox copy.</summary>
     /// <param name="storedEmailIds">The stable local identifiers a listing or a search returned for the emails.</param>
+    /// <param name="threadId">The conversation to read instead of naming its messages.</param>
     /// <param name="includeSanitizedHtml">Whether to also return the sanitized HTML representation of each body.</param>
     /// <param name="includeAttachmentDownloadLinks">Whether to mint a link for fetching each attachment rather than only describe it.</param>
     /// <param name="cancellationToken">Cancels the read when the caller disconnects or the host shuts down.</param>
-    /// <returns>One entry per named email, each carrying its content or the reason there is none.</returns>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="storedEmailIds" /> is <see langword="null" />, which the advertised schema already refuses.</exception>
-    /// <exception cref="EmailContentReadCountOutOfRangeException">Thrown when no email is named, or more than the call serves, before any identifier is parsed.</exception>
+    /// <returns>One entry per email read, each carrying its content or the reason there is none.</returns>
+    /// <exception cref="EmailContentReadSelectionInvalidException">Thrown when both selections are given, or neither is.</exception>
+    /// <exception cref="EmailContentReadCountOutOfRangeException">Thrown when a named list holds no email, or more than the call serves, before any identifier is parsed.</exception>
     /// <exception cref="StoredEmailIdentifierMalformedException">Thrown when an identifier is not one this system issues, before anything is read.</exception>
+    /// <exception cref="EmailThreadIdentifierMalformedException">Thrown when the thread identifier is not one this system issues, before anything is read.</exception>
     /// <exception cref="EmailContentReadDuplicateEmailException">Thrown when the same email is named more than once.</exception>
     /// <exception cref="MailFathomException">
     /// Raised by the use case for a request it will not serve. The call-tool filter turns every one of them into the
@@ -85,29 +87,39 @@ internal sealed class GetEmailContentTool(EmailContentReader emailContentReader)
     [Description(
         "Reads up to 10 emails already synchronized into MailFathom's local mailbox copy, in one call: for each one its "
         + "normalized headers, the plain-text body, optionally a sanitized HTML body, and every attachment it carries "
-        + "described by file name, media type, and size. Reads the local copy only: it never contacts a mail server, "
+        + "described by file name, media type, and size. Name what to read in exactly one of two ways — storedEmailIds "
+        + "for particular emails, or threadId for a whole conversation, which returns its messages in the "
+        + "conversation's own order and names any it could not carry in unreadThreadMessages. A call naming both, or "
+        + "neither, is refused. Every email returned also carries the conversation it belongs to, with the other "
+        + "messages in it named rather than reproduced. Reads the local copy only: it never contacts a mail server, "
         + "never downloads mail, and never marks mail as read. Each email is answered for separately, so one this "
         + "deployment cannot serve does not discard the others. Bodies are bounded per email and by a budget shared "
         + "across the whole call, and a scanned deployment bounds what it analyzes as well; each body says which of "
         + "those bounds cut it in truncatedBy, and only readCharacterBudget is the one that returns more when fewer "
         + "emails are named at once. No response ever carries an attachment's bytes: set includeAttachmentDownloadLinks to receive, for "
         + "each file, a short-lived URL in downloadUrl that fetches it over HTTP with no credential attached, and "
-        + "downloadState says why one was not issued when it was not. Name each email by the storedEmailId a listing "
-        + "or a search returned. Where the deployment scans mail for sensitive content, what a message's author wrote "
+        + "downloadState says why one was not issued when it was not. Where the deployment scans mail for sensitive "
+        + "content, what a message's author wrote "
         + "is scanned on every call and returned with each detection replaced by a [redacted:category] marker: the "
         + "marker means material of that kind stood there and was withheld, it is never message text, and asking again "
         + "returns the same marker. Nothing stored is rewritten by it.")]
     public async Task<GetEmailContentToolResult> GetEmailContentAsync(
-        [Description("The storedEmailIds a listing or a search returned, at most 10, each named at most once. Each is a UUID and does not change when the mail server renumbers or moves the message. Results come back in the order given, and the call is refused rather than truncated when it names more than 10.")]
-        IReadOnlyList<string> storedEmailIds,
+        [Description("The storedEmailIds a listing or a search returned, at most 10, each named at most once. Each is a UUID and does not change when the mail server renumbers or moves the message. Results come back in the order given, and the call is refused rather than truncated when it names more than 10. Omit it entirely when naming threadId instead.")]
+        IReadOnlyList<string>? storedEmailIds = null,
+        [Description("The threadId a listing, a search, or an earlier read returned, to read that whole conversation instead of naming its messages. Its messages come back in the conversation's own order, bounded to 10 per call, and unreadThreadMessages names the rest so a second call asks for them directly. Omit it entirely when naming storedEmailIds instead.")]
+        string? threadId = null,
         [Description("Whether to also return the sanitized HTML body of each email. Omit it unless the markup itself matters: the plain text is the representation to read from, HTML costs a sanitization pass, and it draws on the same character budget as the plain text. An email carrying no HTML part returns none either way.")]
         bool includeSanitizedHtml = false,
         [Description("Whether to mint a link for fetching each attachment, rather than only describing it. Omitted still returns every attachment's file name, media type, and size, which is what an ordinary read needs to decide whether a file is worth fetching. Each link is a bearer capability: it names one file, it expires within minutes, and anyone holding the URL can fetch that file without a credential — so ask for links only when the files are what you are after, and do not store or log what comes back. The response size is the same either way.")]
         bool includeAttachmentDownloadLinks = false,
         CancellationToken cancellationToken = default)
     {
-        var request = GetEmailContentRequest.Create(
-            NamedEmails(storedEmailIds),
+        // Both are handed over unresolved so the selection is settled before either is counted or parsed: a call naming
+        // a conversation and an empty list, or a list and a misspelled conversation, is one that named both, and
+        // reporting the list as too short or the conversation as malformed would answer a question nobody asked.
+        var request = GetEmailContentRequest.CreateForSelection(
+            storedEmailIds is null ? null : () => NamedEmails(storedEmailIds),
+            threadId is null ? null : () => NamedThread(threadId),
             includeSanitizedHtml,
             includeAttachmentDownloadLinks);
 
@@ -115,6 +127,22 @@ internal sealed class GetEmailContentTool(EmailContentReader emailContentReader)
 
         return GetEmailContentToolResult.From(result);
     }
+
+    /// <summary>Reads the conversation identity the caller's text names.</summary>
+    /// <remarks>
+    /// The same three checks the email identifiers get, and for the same reasons: the length before the parse because a
+    /// parse scans what it is handed, the empty UUID refused with everything else because it is what a client sends
+    /// when it holds no identifier, and the refused text absent from the failure because it is the caller's own input
+    /// on its way into a client-readable result. It is reached only once the selection has settled, so a call that also
+    /// named a list is refused as having named both rather than for how it spelled a conversation it will not be read by.
+    /// </remarks>
+    /// <exception cref="EmailThreadIdentifierMalformedException">Thrown when the text is not an identifier this system issues.</exception>
+    private static EmailThreadId NamedThread(string threadId) =>
+        threadId is { Length: <= MaximumIdentifierLength }
+        && Guid.TryParse(threadId, out var identity)
+        && identity != Guid.Empty
+            ? EmailThreadId.Create(identity)
+            : throw new EmailThreadIdentifierMalformedException();
 
     /// <summary>Reads the email identities the caller's text names.</summary>
     /// <remarks>

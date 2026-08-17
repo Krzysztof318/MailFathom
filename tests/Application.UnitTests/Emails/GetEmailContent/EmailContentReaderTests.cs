@@ -16,6 +16,7 @@ using MailFathom.Application.Emails.Extraction;
 using MailFathom.Application.Emails.GetEmailContent;
 using MailFathom.Application.Emails.Mailboxes;
 using MailFathom.Application.Emails.Summaries;
+using MailFathom.Application.Emails.Threads;
 using MailFathom.Application.Folders;
 using MailFathom.Application.Observability;
 using MailFathom.Application.SensitiveContent;
@@ -1393,6 +1394,114 @@ public sealed class EmailContentReaderTests
         Assert.Equal(1, Assert.Single(readTelemetry.Reads).ResultCount);
     }
 
+    /// <summary>
+    /// A conversation is bounded by the same count a caller's own list is held to, and what the bound left out is named
+    /// rather than dropped, so a second call asks for those messages directly instead of guessing they exist.
+    /// </summary>
+    [Fact]
+    public async Task ReadContentAsync_ConversationLongerThanOneRead_ServesTheBoundedBatchAndNamesWhatItLeft()
+    {
+        // Arrange
+        var threadId = EmailThreadId.Create(Guid.CreateVersion7());
+        var conversation = ConversationOf(threadId, GetEmailContentRequest.MaximumEmails + 3);
+        var reader = ReaderOver(
+            conversation,
+            RendererReturning(RenderingOf()),
+            threadReader: ThreadReaderOver(threadId, conversation));
+
+        // Act
+        var result = await reader.ReadContentAsync(
+            GetEmailContentRequest.CreateForThread(threadId),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(
+            IdentitiesOf(conversation).Take(GetEmailContentRequest.MaximumEmails),
+            result.Emails.Select(outcome => outcome.StoredEmailId));
+        Assert.Equal(
+            IdentitiesOf(conversation).Skip(GetEmailContentRequest.MaximumEmails),
+            result.UnreadThreadEmails);
+    }
+
+    /// <summary>Every published message carries where it sits in its conversation and which message it answers.</summary>
+    [Fact]
+    public async Task ReadContentAsync_EmailAnsweringAnotherOfItsConversation_PublishesItsPlaceAndThatAncestor()
+    {
+        // Arrange
+        var threadId = EmailThreadId.Create(Guid.CreateVersion7());
+        var conversation = ConversationOf(threadId, count: 2);
+        var reader = ReaderOver(
+            conversation,
+            RendererReturning(RenderingOf()),
+            threadReader: ThreadReaderOver(threadId, conversation, asAChain: true));
+
+        // Act
+        var result = await reader.ReadContentAsync(
+            RequestFor([conversation[1].StoredEmailId]),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        var thread = ContentOf(Assert.Single(result.Emails)).Thread;
+
+        Assert.NotNull(thread);
+        Assert.Equal(threadId, thread.ThreadId);
+        Assert.Equal(1, thread.Position);
+        Assert.Equal(conversation[0].StoredEmailId, thread.AnsweredStoredEmailId);
+        Assert.Equal(2, thread.EmailCount);
+        Assert.Equal(
+            conversation[0].StoredEmailId,
+            Assert.Single(thread.OtherEmails).Email.StoredEmailId);
+        Assert.False(thread.MoreEmailsNotNamed);
+    }
+
+    /// <summary>A conversation this deployment holds nothing of is served as nothing rather than as a refusal.</summary>
+    [Fact]
+    public async Task ReadContentAsync_ConversationNoStoredMailBelongsTo_ServesNoEmailAndNamesNone()
+    {
+        // Arrange
+        var reader = ReaderOver(SummariesOf(0), RendererReturning(RenderingOf()));
+
+        // Act
+        var result = await reader.ReadContentAsync(
+            GetEmailContentRequest.CreateForThread(EmailThreadId.Create(Guid.CreateVersion7())),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Empty(result.Emails);
+        Assert.Empty(result.UnreadThreadEmails);
+    }
+
+    /// <summary>Builds a conversation of stored mail, one message a minute apart, all of it readable by tools.</summary>
+    private static EmailSummary[] ConversationOf(EmailThreadId threadId, int count) =>
+    [
+        .. Enumerable.Range(0, count).Select(ordinal =>
+            SyntheticEmailSummaries.Create(
+                receivedAt: new DateTimeOffset(2026, 8, 16, 9, 0, 0, TimeSpan.Zero).AddMinutes(ordinal),
+                subject: $"Message {ordinal}") with
+            {
+                ThreadId = threadId,
+            }),
+    ];
+
+    /// <summary>Answers the conversation those summaries belong to, optionally as a chain each message answers.</summary>
+    private static StubEmailThreadReader ThreadReaderOver(
+        EmailThreadId threadId,
+        EmailSummary[] conversation,
+        bool asAChain = false) =>
+        new(
+        [
+            .. conversation.Select((summary, ordinal) => (threadId, new ThreadedEmailSummary
+            {
+                StoredEmailId = summary.StoredEmailId,
+                AccountId = summary.AccountId,
+                FolderAlias = summary.FolderAlias,
+                ParentStoredEmailId = asAChain && ordinal > 0 ? conversation[ordinal - 1].StoredEmailId : null,
+                Subject = summary.Subject,
+                SentAt = summary.SentAt,
+                SenderAddress = summary.SenderAddress,
+            })),
+        ]);
+
     private static GetEmailContentRequest RequestFor(
         IReadOnlyList<StoredEmailId> storedEmailIds,
         bool includeSanitizedHtml = false,
@@ -1443,8 +1552,10 @@ public sealed class EmailContentReaderTests
         IMailFolderParticipationReader? folderParticipation = null,
         SensitiveContentEgressGuard? egressGuard = null,
         IMailboxReadTelemetry? readTelemetry = null,
-        AccessAuthorization? authorization = null) => new(
+        AccessAuthorization? authorization = null,
+        IEmailThreadReader? threadReader = null) => new(
         SummaryReaderReturning(summary),
+        threadReader ?? new StubEmailThreadReader(),
         contentStore ?? ContentStoreReturning(IntactContent()),
         renderer,
         repairRequestStore ?? new RecordingEmailContentRepairRequestStore(),
@@ -1469,8 +1580,10 @@ public sealed class EmailContentReaderTests
         EmailContentReadOptions? readOptions = null,
         SensitiveContentEgressGuard? egressGuard = null,
         IMailboxReadTelemetry? readTelemetry = null,
-        AccessAuthorization? authorization = null) => new(
+        AccessAuthorization? authorization = null,
+        IEmailThreadReader? threadReader = null) => new(
         SummaryReaderOver(summaries),
+        threadReader ?? new StubEmailThreadReader(),
         contentStore ?? ContentStoreReturning(IntactContent()),
         renderer,
         repairRequestStore ?? new RecordingEmailContentRepairRequestStore(),

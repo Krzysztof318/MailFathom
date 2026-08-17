@@ -129,7 +129,12 @@ Reading the top few results of a search is therefore one call rather than one pe
 order you named them, and each carries either `content` or a `failure` saying why there is none, so one message this
 deployment cannot serve does not discard the others.
 
-Eight parts of the result exist so that an agent does not misreport a message:
+**Or name a whole conversation instead.** Pass `threadId` — the value a listing, a search, or an earlier read returned —
+and leave `storedEmailIds` out entirely: the conversation's messages come back in its own order, still at most ten, and
+`unreadThreadMessages` names the ones that did not fit so a second call asks for them directly. Give exactly one of the
+two; a call carrying both, or neither, is refused rather than guessed at.
+
+Nine parts of the result exist so that an agent does not misreport a message:
 
 - **The sender verdict comes with the evidence behind it.** `senderVerification` is the same pair a listing carries, and
   `headers.senderAuthentication` adds what it was reached from: the domain that actually authenticated, the domain the
@@ -160,7 +165,14 @@ Eight parts of the result exist so that an agent does not misreport a message:
 - **File names are sanitized.** An attachment name is untrusted text from the message; what is published is a bare,
   normalized name, with a flag saying whether it had to be rewritten.
 - **A too-long or repetitive list is refused, not trimmed.** More than ten identifiers, none at all, or the same one
-  twice ends the call with a code rather than returning part of what you asked for.
+  twice ends the call with a code rather than returning part of what you asked for — and so does a call that names both
+  `storedEmailIds` and `threadId`, or neither.
+- **`thread` says what else is in the exchange, without returning it.** Every message comes back with the conversation
+  it belongs to: its identifier, where this message sits in it, which message it answers, how many messages of it you
+  may see, and the others named by subject, sender, and sent time. Nothing of their bodies travels with it, so opening
+  one is still a call. Conversations are assembled from the message identifiers mail carries and never from subjects, so
+  a reply that renamed the subject stays in the exchange and two unrelated messages sharing one never join. `thread` is
+  absent for a message this server has not assembled a conversation for yet.
 - **A `[redacted:…]` marker is not message text.** On a server whose operator switched sensitive-content scanning on,
   the body, the subject, and the display names come back with each detected credential or piece of personal data
   replaced by `[redacted:<category>]`. Report it as material of that kind withheld rather than quoting it as words the
@@ -265,6 +277,8 @@ The codes a user meets in practice:
 | `51004` | A `storedEmailIds` entry is no identifier this system issues — blank, truncated, or invented | Pass the identifiers a listing or search actually returned; never construct or guess one |
 | `51005` | A content read named no messages, or more than the ten one call serves | Split the list into calls of at most ten |
 | `51006` | A content read named the same message twice | Remove the repeat; results are not served twice |
+| `51007` | A content read named both `storedEmailIds` and `threadId`, or neither | Name exactly one of them; which you meant is not something the server guesses |
+| `51008` | A `threadId` is no identifier this system issues — blank, truncated, or invented | Pass the `threadId` a listing, a search, or a read actually returned |
 | `52001` / `52002` | A cursor this system did not issue, or one reused after the filters changed | Restart the walk from the first page |
 | `53001` | The named account is not served here | Call `list_accounts` and use an `accountId` or `displayName` it returns |
 | `53002` | No such email in the local copy | The identifier is stale, or the mail was removed; list again |

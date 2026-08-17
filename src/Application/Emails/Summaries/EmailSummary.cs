@@ -33,6 +33,14 @@ public sealed record EmailSummary
     /// <summary>Gets the folder alias the email was read from, which is MailFathom's own name for that folder.</summary>
     public required MailFolderAlias FolderAlias { get; init; }
 
+    /// <summary>Gets the conversation the email belongs to, or <see langword="null" /> when nothing has placed it in one.</summary>
+    /// <remarks>
+    /// It is what lets a reader tell a reply from an unrelated message carrying the same subject without fetching
+    /// either, and it is what a content read names to ask for the whole conversation. It is absent on mail stored before
+    /// this deployment assembled threads at all, until <c>mfctl mailbox rederive</c> reaches that mail.
+    /// </remarks>
+    public EmailThreadId? ThreadId { get; init; }
+
     /// <summary>Gets the <c>Message-ID</c> the message carried, or <see langword="null" /> when it carried none this reader accepted.</summary>
     public string? InternetMessageId { get; init; }
 

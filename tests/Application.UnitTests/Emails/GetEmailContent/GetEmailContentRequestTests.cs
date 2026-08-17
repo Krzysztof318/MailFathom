@@ -91,6 +91,111 @@ public sealed class GetEmailContentRequestTests
         Assert.DoesNotContain(repeated.Value.ToString(), failure.Message, StringComparison.Ordinal);
     }
 
+    /// <summary>Either reading of a call carrying both returns mail the caller did not ask for, so neither is chosen for it.</summary>
+    [Fact]
+    public void CreateForSelection_BothEmailsAndAConversation_IsRefusedRatherThanResolvedByPrecedence()
+    {
+        // Arrange
+        var storedEmailIds = IdentitiesOf(1);
+        var threadId = EmailThreadId.Create(Guid.CreateVersion7());
+
+        // Act
+        var failure = Assert.Throws<EmailContentReadSelectionInvalidException>(
+            () => GetEmailContentRequest.CreateForSelection(() => storedEmailIds, () => threadId));
+
+        // Assert
+        Assert.Equal(MailFathomErrorCode.EmailContentReadSelectionInvalid, failure.ErrorCode);
+    }
+
+    /// <summary>
+    /// An empty list is a list the caller sent, so the selection is settled before anything is counted: the list stays
+    /// unresolved until the refusal has been decided, and a count would otherwise answer a question nobody asked.
+    /// </summary>
+    [Fact]
+    public void CreateForSelection_AnEmptyEmailListBesideAConversation_IsRefusedAsBothRatherThanAsTooFewEmails()
+    {
+        // Arrange
+        var threadId = EmailThreadId.Create(Guid.CreateVersion7());
+
+        // Act
+        var failure = Assert.Throws<EmailContentReadSelectionInvalidException>(
+            () => GetEmailContentRequest.CreateForSelection(() => [], () => threadId));
+
+        // Assert
+        Assert.Equal(MailFathomErrorCode.EmailContentReadSelectionInvalid, failure.ErrorCode);
+    }
+
+    /// <summary>
+    /// The conversation is resolved as late as the list is, so a call that named both is refused for naming both rather
+    /// than for how it spelled the argument it will not be read by.
+    /// </summary>
+    [Fact]
+    public void CreateForSelection_AnUnreadableConversationBesideAList_IsRefusedBeforeTheConversationIsResolved()
+    {
+        // Act
+        var failure = Assert.Throws<EmailContentReadSelectionInvalidException>(
+            () => GetEmailContentRequest.CreateForSelection(
+                () => IdentitiesOf(1),
+                () => throw new InvalidOperationException("The conversation was expected to stay unresolved.")));
+
+        // Assert
+        Assert.Equal(MailFathomErrorCode.EmailContentReadSelectionInvalid, failure.ErrorCode);
+    }
+
+    [Fact]
+    public void CreateForSelection_NeitherEmailsNorAConversation_IsRefusedRatherThanServedEmpty()
+    {
+        // Act
+        var failure = Assert.Throws<EmailContentReadSelectionInvalidException>(
+            () => GetEmailContentRequest.CreateForSelection(namedEmails: null, namedThread: null));
+
+        // Assert
+        Assert.Equal(MailFathomErrorCode.EmailContentReadSelectionInvalid, failure.ErrorCode);
+    }
+
+    [Fact]
+    public void CreateForSelection_AConversationAlone_NamesItAndCountsNoEmail()
+    {
+        // Arrange
+        var threadId = EmailThreadId.Create(Guid.CreateVersion7());
+
+        // Act
+        var request = GetEmailContentRequest.CreateForSelection(namedEmails: null, () => threadId);
+
+        // Assert
+        Assert.Equal(threadId, request.ThreadId);
+        Assert.Empty(request.StoredEmailIds);
+    }
+
+    [Fact]
+    public void CreateForSelection_EmailsAlone_NamesThemAndNoConversation()
+    {
+        // Arrange
+        var storedEmailIds = IdentitiesOf(2);
+
+        // Act
+        var request = GetEmailContentRequest.CreateForSelection(() => storedEmailIds, namedThread: null);
+
+        // Assert
+        Assert.Equal(storedEmailIds, request.StoredEmailIds);
+        Assert.Null(request.ThreadId);
+    }
+
+    /// <summary>A conversation read is bounded where it resolves, so the list a caller names is still counted as one.</summary>
+    [Fact]
+    public void CreateForSelection_MoreEmailsThanOneReadServes_IsRefusedByTheSameCountAsANamedList()
+    {
+        // Arrange
+        var storedEmailIds = IdentitiesOf(GetEmailContentRequest.MaximumEmails + 1);
+
+        // Act
+        var failure = Assert.Throws<EmailContentReadCountOutOfRangeException>(
+            () => GetEmailContentRequest.CreateForSelection(() => storedEmailIds, namedThread: null));
+
+        // Assert
+        Assert.Equal(GetEmailContentRequest.MaximumEmails, failure.MaximumEmails);
+    }
+
     /// <summary>The bound is the count half of the control on how much mail one call draws out, so it is pinned rather than inferred.</summary>
     [Fact]
     public void MaximumEmails_IsTenEmailsPerRead()

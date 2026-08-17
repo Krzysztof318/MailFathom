@@ -65,6 +65,10 @@ internal sealed record RetrievedEmailContent
     /// <summary>Gets the flags a mail server last showed for the email.</summary>
     public required ObservedRemoteFlags RemoteFlags { get; init; }
 
+    /// <summary>Gets the conversation this email belongs to, or <see langword="null" /> when it is in none.</summary>
+    [Description("The conversation this email belongs to, or null when nothing has placed it in one — which is the case for mail stored before this deployment assembled conversations at all.")]
+    public RetrievedEmailThread? Thread { get; init; }
+
     /// <summary>Publishes one email a read returned.</summary>
     /// <param name="content">The email to publish.</param>
     /// <returns>The wire representation of <paramref name="content" />.</returns>
@@ -86,6 +90,7 @@ internal sealed record RetrievedEmailContent
                 ? EmailAttachmentCounts.From(attachmentSummary)
                 : null,
             RemoteFlags = ObservedRemoteFlags.From(content.RemoteFlags),
+            Thread = content.Thread is { } thread ? RetrievedEmailThread.From(thread) : null,
         };
     }
 }

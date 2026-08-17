@@ -26,6 +26,7 @@ using MailFathom.Application.Emails.Mailboxes;
 using MailFathom.Application.Emails.Search;
 using MailFathom.Application.Emails.SearchEmails;
 using MailFathom.Application.Emails.Summaries;
+using MailFathom.Application.Emails.Threads;
 using MailFathom.Application.Folders;
 using MailFathom.Application.Jobs;
 using MailFathom.Application.Jobs.DeadLetters;
@@ -85,6 +86,7 @@ using MailFathom.Infrastructure.Persistence.Connections;
 using MailFathom.Infrastructure.Persistence.Contacts;
 using MailFathom.Infrastructure.Persistence.Delivery;
 using MailFathom.Infrastructure.Persistence.Emails;
+using MailFathom.Infrastructure.Persistence.Emails.Threads;
 using MailFathom.Infrastructure.Persistence.Embeddings;
 using MailFathom.Infrastructure.Persistence.Jobs;
 using MailFathom.Infrastructure.Persistence.Mutations;
@@ -345,6 +347,12 @@ public static class ServiceCollectionExtensions
         services.AddScoped<CountedEmbeddingActivation>();
         services.AddScoped<EmbeddingStatusReader>();
         services.AddScoped<IEmailMetadataRepository, StoredEmailMetadataRepository>();
+        // Placing a message in its conversation is part of both write paths — the arrival that commits it and the
+        // re-derivation that re-reads it — so it is registered once rather than composed into either. It holds no
+        // context of its own and writes through the caller's, which is what makes the placement part of the caller's
+        // transaction rather than a second commit beside it.
+        services.AddScoped<IEmailThreadStore, EmailThreadStore>();
+        services.AddScoped<EmailThreadAssembly>();
         services.AddScoped<IDatabaseSchemaInspector, EfCoreDatabaseSchemaInspector>();
         services.AddScoped<IEmailContentStore, EmailContentStore>();
         services.AddScoped<IStoredEmailContentInventory, StoredEmailContentInventory>();
@@ -390,6 +398,7 @@ public static class ServiceCollectionExtensions
         // write repositories rather than through one of them.
         services.AddScoped<IStoredEmailTimelineReader, StoredEmailTimelineReader>();
         services.AddScoped<IStoredEmailSummaryReader, StoredEmailSummaryReader>();
+        services.AddScoped<IEmailThreadReader, StoredEmailThreadReader>();
         services.AddScoped<IEmailSearchIndexReader, StoredEmailSearchIndexReader>();
         services.AddScoped<IEmailVectorSearchIndexReader, EmailVectorSearchIndexReader>();
         // The one read-path service built by hand, because its embedding generator is the one dependency a supported

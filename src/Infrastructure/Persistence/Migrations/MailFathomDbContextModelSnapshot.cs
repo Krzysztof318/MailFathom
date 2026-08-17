@@ -386,6 +386,59 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                     b.ToTable("email_spam_classification_signals", (string)null);
                 });
 
+            modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.EmailThreadEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("AssembledAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<uint>("ConcurrencyVersion")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.Property<string>("MailboxAccountId")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<Guid?>("MergedIntoEmailThreadId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("MailboxAccountId");
+
+                    b.HasIndex("MergedIntoEmailThreadId");
+
+                    b.ToTable("email_threads", (string)null);
+                });
+
+            modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.EmailThreadIdentifierEntity", b =>
+                {
+                    b.Property<string>("MailboxAccountId")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<string>("IdentifierHash")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<Guid>("EmailThreadId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("MailboxAccountId", "IdentifierHash")
+                        .HasName("pk_email_thread_identifiers");
+
+                    b.HasIndex("EmailThreadId")
+                        .HasDatabaseName("ix_email_thread_identifiers_thread");
+
+                    b.ToTable("email_thread_identifiers", (string)null);
+                });
+
             modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.EmbeddingProfileEntity", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1354,6 +1407,9 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(64)")
                         .HasDefaultValue("NotReported");
 
+                    b.Property<Guid?>("EmailThreadId")
+                        .HasColumnType("uuid");
+
                     b.Property<string>("InReplyTo")
                         .HasMaxLength(998)
                         .HasColumnType("character varying(998)");
@@ -1393,6 +1449,9 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                         .IsRequired()
                         .HasMaxLength(128)
                         .HasColumnType("character varying(128)");
+
+                    b.Property<Guid?>("ParentStoredEmailId")
+                        .HasColumnType("uuid");
 
                     b.Property<DateTimeOffset?>("ReceivedAt")
                         .HasColumnType("timestamp with time zone");
@@ -1494,6 +1553,8 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
 
                     NpgsqlIndexBuilderExtensions.HasMethod(b.HasIndex("CcAddresses"), "GIN");
 
+                    b.HasIndex("ParentStoredEmailId");
+
                     b.HasIndex("RemoteKeywords")
                         .HasDatabaseName("ix_stored_emails_remote_keywords");
 
@@ -1511,6 +1572,9 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                         .HasDatabaseName("ix_stored_emails_to_addresses");
 
                     NpgsqlIndexBuilderExtensions.HasMethod(b.HasIndex("ToAddresses"), "GIN");
+
+                    b.HasIndex("EmailThreadId", "Id")
+                        .HasDatabaseName("ix_stored_emails_thread");
 
                     b.HasIndex("MailboxAccountId", "Id")
                         .HasDatabaseName("ix_stored_emails_account_identity");
@@ -1672,6 +1736,29 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                     b.Navigation("Classification");
                 });
 
+            modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.EmailThreadEntity", b =>
+                {
+                    b.HasOne("MailFathom.Infrastructure.Persistence.Entities.MailboxAccountEntity", null)
+                        .WithMany()
+                        .HasForeignKey("MailboxAccountId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("MailFathom.Infrastructure.Persistence.Entities.EmailThreadEntity", null)
+                        .WithMany()
+                        .HasForeignKey("MergedIntoEmailThreadId")
+                        .OnDelete(DeleteBehavior.NoAction);
+                });
+
+            modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.EmailThreadIdentifierEntity", b =>
+                {
+                    b.HasOne("MailFathom.Infrastructure.Persistence.Entities.EmailThreadEntity", null)
+                        .WithMany()
+                        .HasForeignKey("EmailThreadId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.JobEntity", b =>
                 {
                     b.HasOne("MailFathom.Infrastructure.Persistence.Entities.MailboxAccountEntity", "MailboxAccount")
@@ -1771,11 +1858,21 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.StoredEmailEntity", b =>
                 {
+                    b.HasOne("MailFathom.Infrastructure.Persistence.Entities.EmailThreadEntity", null)
+                        .WithMany()
+                        .HasForeignKey("EmailThreadId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
                     b.HasOne("MailFathom.Infrastructure.Persistence.Entities.MailFolderEntity", "MailFolder")
                         .WithMany("StoredEmails")
                         .HasForeignKey("MailFolderId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+
+                    b.HasOne("MailFathom.Infrastructure.Persistence.Entities.StoredEmailEntity", null)
+                        .WithMany()
+                        .HasForeignKey("ParentStoredEmailId")
+                        .OnDelete(DeleteBehavior.SetNull);
 
                     b.Navigation("MailFolder");
                 });
