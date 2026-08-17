@@ -174,6 +174,74 @@ public sealed class BackgroundWorkSpanTests : IDisposable
         Assert.Equal(ActivityStatusCode.Error, span.Status);
     }
 
+    /// <summary>The attempt that gave up on a job carries what the queue classified the failure as.</summary>
+    /// <remarks>
+    /// The classification is what separates a defect somebody has to fix from a dependency that stayed broken, and the
+    /// attempt that dead-lettered the job is the one span where an operator can still read it — nothing afterwards
+    /// attempts the job again.
+    /// </remarks>
+    [Theory]
+    [InlineData(JobFailureClassification.Transient, "transient", 21)]
+    [InlineData(JobFailureClassification.Permanent, "permanent", 22)]
+    public void BeginAttempt_AnAttemptThatDeadLetteredTheJob_PublishesTheClassificationThatEndedIt(
+        JobFailureClassification classification,
+        string expected,
+        int attemptCount)
+    {
+        // Arrange
+        var telemetry = new JobQueueTelemetry();
+
+        // Act
+        using (var attempt = telemetry.BeginAttempt(JobType.ClassifyEmailSpam))
+        {
+            attempt.Ended(Attempt(
+                JobExecutionOutcome.HandlerFailed,
+                attemptCount,
+                new JobAttemptFailure(
+                    JobFailureRecord.Create(classification, "PayloadUnreadable"),
+                    JobFailureDisposition.DeadLettered)));
+        }
+
+        // Assert
+        var span = this.Published(
+            JobQueueTelemetry.AttemptSpanName,
+            JobQueueTelemetry.AttemptNumberTagName,
+            attemptCount);
+
+        Assert.Equal(expected, span.GetTagItem(JobQueueTelemetry.FailureTagName));
+    }
+
+    /// <summary>A failure the queue will attempt again carries no classification, which is what makes the tag mean something.</summary>
+    /// <remarks>
+    /// The control for the theory above: a tag written on every failed attempt would say nothing about which job the
+    /// queue has stopped working on, and an assertion that it is present would pass just as well.
+    /// </remarks>
+    [Fact]
+    public void BeginAttempt_AFailureTheQueueWillTryAgain_PublishesNoClassification()
+    {
+        // Arrange
+        var telemetry = new JobQueueTelemetry();
+
+        // Act
+        using (var attempt = telemetry.BeginAttempt(JobType.ClassifyEmailSpam))
+        {
+            attempt.Ended(Attempt(
+                JobExecutionOutcome.HandlerFailed,
+                attemptCount: 23,
+                new JobAttemptFailure(
+                    JobFailureRecord.Create(JobFailureClassification.Transient, "TransportFailure"),
+                    JobFailureDisposition.RetryScheduled)));
+        }
+
+        // Assert
+        var span = this.Published(
+            JobQueueTelemetry.AttemptSpanName,
+            JobQueueTelemetry.AttemptNumberTagName,
+            23);
+
+        Assert.Null(span.GetTagItem(JobQueueTelemetry.FailureTagName));
+    }
+
     /// <summary>One message's turn at being embedded carries how it ended and how many passages it gave a vector.</summary>
     [Fact]
     public void BeginMessage_ATurnThatEmbedded_PublishesTheOutcomeAndThePassageCount()
@@ -271,12 +339,21 @@ public sealed class BackgroundWorkSpanTests : IDisposable
         Assert.Equal("backfill_email_embeddings", EmailEmbeddingBackfillTelemetry.PassSpanName);
     }
 
-    private static JobExecutionResult Attempt(JobExecutionOutcome outcome, int attemptCount) => new(
-        JobId.Create(Guid.CreateVersion7()),
-        JobType.ClassifyEmailSpam,
-        attemptCount,
-        outcome,
-        TimeSpan.FromSeconds(1));
+    private static JobExecutionResult Attempt(
+        JobExecutionOutcome outcome,
+        int attemptCount,
+        JobAttemptFailure? failure = null)
+    {
+        return new JobExecutionResult(
+            JobId.Create(Guid.CreateVersion7()),
+            JobType.ClassifyEmailSpam,
+            attemptCount,
+            outcome,
+            TimeSpan.FromSeconds(1))
+        {
+            AttemptFailure = failure,
+        };
+    }
 
     private static StoredEmailEmbeddingBackfillResult Sweep(
         StoredEmailEmbeddingBackfillOutcome outcome,

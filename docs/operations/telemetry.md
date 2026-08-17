@@ -223,11 +223,20 @@ attributable to nothing at all.
 | `backfill_email_embeddings` | `mailfathom.embedding.backfill.chunked`, `…messages`, `…passages` | What the pass cut, brought up to date, and gave vectors to |
 | `backfill_email_embeddings` | `mailfathom.embedding.generation.switched` | Whether a generation being built became the one searches are answered from during this pass |
 
-A provider that refused is the one ending that marks either span as an error. Everything else — no active profile, a
-declaration that disagrees with what was activated, a spend ceiling that bound, a turn that spent its call budget — is
-an ordinary ending the deployment is meant to reach, and marking those as errors would make a correctly idle instance
-read as a failing one. Which message was embedded is nowhere on either span: a stored identity would open a series per
-message, so what is published is what the work did and the message stays in the queue the worker took it from.
+Of the endings that reach an outcome tag, a provider that refused is the one that marks either span as an error.
+Everything else — no active profile, a declaration that disagrees with what was activated, a spend ceiling that bound, a
+turn that spent its call budget — is an ordinary ending the deployment is meant to reach, and marking those as errors
+would make a correctly idle instance read as a failing one.
+
+A turn or a pass that reaches no outcome at all is the second way either span ends, and it is published with an error
+status and no outcome tag — the same rule [`run_job`](#durable-background-work) is held to, and for the same reason:
+every word in that dimension is a decision the work reached. Three things end a turn that way, and the worker isolates
+all three so the messages behind it are still embedded: the host cancelling mid-turn on shutdown, a concurrency conflict
+the retry policy could not resolve, and an unexpected failure. So an ordinary restart leaves the one turn and the one
+pass that were in flight marked as errors, which is what an abandoned unit of work is.
+
+Which message was embedded is nowhere on either span: a stored identity would open a series per message, so what is
+published is what the work did and the message stays in the queue the worker took it from.
 
 Three counters beside those answer what embedding is costing rather than how it is going.
 `mailfathom.embedding.budget.consumed` is the characters sent to a provider and charged against the spend ceiling,
