@@ -233,13 +233,13 @@ internal static class AuthorizeMailboxCommand
     {
         void ReportPrompt(DeviceCodePrompt prompt)
         {
-            context.Console.WriteError(string.Empty);
-            context.Console.WriteError("Open this address on any device with a browser:");
-            context.Console.WriteError($"  {prompt.VerificationUriComplete ?? prompt.VerificationUri}");
-            context.Console.WriteError(string.Empty);
-            context.Console.WriteError($"and enter the code: {prompt.UserCode}");
-            context.Console.WriteError($"The code expires at {prompt.ExpiresAt:u}. Waiting for the sign-in to complete...");
-            context.Console.WriteError(string.Empty);
+            context.Console.WriteNotice(string.Empty);
+            context.Console.WriteNotice("Open this address on any device with a browser:");
+            context.Console.WriteNotice($"  {prompt.VerificationUriComplete ?? prompt.VerificationUri}");
+            context.Console.WriteNotice(string.Empty);
+            context.Console.WriteNotice($"and enter the code: {prompt.UserCode}");
+            context.Console.WriteNotice($"The code expires at {prompt.ExpiresAt:u}. Waiting for the sign-in to complete...");
+            context.Console.WriteNotice(string.Empty);
         }
 
         return authorizer.AuthorizeWithDeviceCodeAsync(request, ReportPrompt, cancellationToken);
@@ -286,14 +286,14 @@ internal static class AuthorizeMailboxCommand
 
         var pending = authorizer.BuildAuthorization(request);
 
-        context.Console.WriteError(string.Empty);
-        context.Console.WriteError(context.OpenBrowser(pending.AuthorizationUrl)
+        context.Console.WriteNotice(string.Empty);
+        context.Console.WriteNotice(context.OpenBrowser(pending.AuthorizationUrl)
             ? "A browser has been opened for you. If it did not appear, open this address yourself:"
             : "Open this address in a browser on this machine:");
-        context.Console.WriteError(string.Empty);
-        context.Console.WriteError($"  {pending.AuthorizationUrl}");
-        context.Console.WriteError(string.Empty);
-        context.Console.WriteError($"Waiting for the sign-in to come back to {redirectUri}...");
+        context.Console.WriteNotice(string.Empty);
+        context.Console.WriteNotice($"  {pending.AuthorizationUrl}");
+        context.Console.WriteNotice(string.Empty);
+        context.Console.WriteNotice($"Waiting for the sign-in to come back to {redirectUri}...");
 
         var redirect = await awaiter.WaitForRedirectAsync(cancellationToken);
 
@@ -323,16 +323,16 @@ internal static class AuthorizeMailboxCommand
     {
         var pending = authorizer.BuildAuthorization(request);
 
-        context.Console.WriteError(string.Empty);
-        context.Console.WriteError("Open this address in a browser, on any computer:");
-        context.Console.WriteError(string.Empty);
-        context.Console.WriteError($"  {pending.AuthorizationUrl}");
-        context.Console.WriteError(string.Empty);
-        context.Console.WriteError("After you approve access the browser is redirected to the registered address and will");
-        context.Console.WriteError("most likely show a connection error. That is expected: nothing is listening there, and");
-        context.Console.WriteError("the authorization code never leaves your machine. Copy the value of the 'code' query");
-        context.Console.WriteError("parameter out of the address bar and paste it below.");
-        context.Console.WriteError(string.Empty);
+        context.Console.WriteNotice(string.Empty);
+        context.Console.WriteNotice("Open this address in a browser, on any computer:");
+        context.Console.WriteNotice(string.Empty);
+        context.Console.WriteNotice($"  {pending.AuthorizationUrl}");
+        context.Console.WriteNotice(string.Empty);
+        context.Console.WriteNotice("After you approve access the browser is redirected to the registered address and will");
+        context.Console.WriteNotice("most likely show a connection error. That is expected: nothing is listening there, and");
+        context.Console.WriteNotice("the authorization code never leaves your machine. Copy the value of the 'code' query");
+        context.Console.WriteNotice("parameter out of the address bar and paste it below.");
+        context.Console.WriteNotice(string.Empty);
 
         var returnedState = context.Console.ReadSecret("The 'state' parameter from the same address: ");
         if (!pending.MatchesReturnedState(returnedState))
@@ -357,11 +357,11 @@ internal static class AuthorizeMailboxCommand
     /// </remarks>
     private static void ReportGrant(CliContext context, MailboxAuthorizationGrant grant)
     {
-        context.Console.WriteError(string.Empty);
-        context.Console.WriteError("Authorization succeeded. The refresh token follows on standard output.");
-        context.Console.WriteError("Provision it as a secret and point the account's OAuth refresh-token reference at it;");
-        context.Console.WriteError("do not paste it into a configuration file.");
-        context.Console.WriteError(string.Empty);
+        context.Console.WriteNotice(string.Empty);
+        context.Console.WriteNotice("Authorization succeeded. The refresh token follows on standard output.");
+        context.Console.WriteNotice("Provision it as a secret and point the account's OAuth refresh-token reference at it;");
+        context.Console.WriteNotice("do not paste it into a configuration file.");
+        context.Console.WriteNotice(string.Empty);
 
         context.Console.WriteLine(grant.RefreshToken);
     }

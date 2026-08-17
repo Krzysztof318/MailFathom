@@ -4,6 +4,7 @@
 
 using System.CommandLine;
 using MailFathom.Cli.Administration;
+using MailFathom.Cli.Output;
 
 namespace MailFathom.Cli.Commands.Rules;
 
@@ -69,7 +70,10 @@ internal static class RunRulesCommand
 
         if (started.Run is { } run)
         {
-            context.Console.WriteLine($"Progress: {run.DescribeProgress()}");
+            CliDetails details = new();
+            details.Add("Progress", run.DescribeProgress());
+
+            context.Console.Write(details);
         }
 
         context.Console.WriteLine(

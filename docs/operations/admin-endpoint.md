@@ -173,23 +173,20 @@ and without a metrics stack it reaches you as a mailbox that looks empty rather 
 
 ```console
 $ mfctl mailbox status
-production (https://mail.example.test:8443)
-Synchronization: on
+Deployment:       production (https://mail.example.test:8443)
+Synchronization:  on
 
-work
-  Phase:    waiting; next run due at 2026-08-15 12:20:00Z
-  Backoff:  4 runs failed in a row, which is what the wait above was grown from
-  Last run: failed at 2026-08-15 11:55:00Z; 1 of 2 folders failed
-  Folders:
-    INBOX
-      Progress: UID 12,410 in UIDVALIDITY 3, last moved at 2026-08-15 11:55:00Z
-      Last run: synchronized at 2026-08-15 11:55:00Z; stored 0, 0 oversized, 0 unreadable, more to fetch: False
-    archive
-      Progress: UID 6,997 in UIDVALIDITY 3, last moved at 2026-08-14 09:00:00Z
-      Last run: at 2026-08-15 11:55:00Z, failed unexpectedly; the deployment's log holds what happened
+Account:   work
+Phase:     waiting; next run due at 2026-08-15 12:20:00Z
+Backoff:   4 runs failed in a row, which is what the wait above was grown from
+Last run:  failed at 2026-08-15 11:55:00Z; 1 of 2 folders failed
+
+Folder   Progress                                                         Last run
+INBOX    UID 12,410 in UIDVALIDITY 3, last moved at 2026-08-15 11:55:00Z  synchronized at 2026-08-15 11:55:00Z; stored 0, 0 oversized, 0 unreadable, more to fetch: False
+archive  UID 6,997 in UIDVALIDITY 3, last moved at 2026-08-14 09:00:00Z   at 2026-08-15 11:55:00Z, failed unexpectedly; the deployment's log holds what happened
 ```
 
-**The two folder lines only mean something together.** `Progress` is the durable checkpoint: how far the forward pass
+**The two folder columns only mean something together.** `Progress` is the durable checkpoint: how far the forward pass
 has committed, and when it last moved. `Last run` is what happened the last time a run took that folder in hand. A
 folder whose progress stopped a day ago and whose last run succeeded has nothing left to fetch; a folder whose progress
 stopped a day ago and whose runs keep ending is stuck, and only the pair distinguishes them. That is the reading this
@@ -331,13 +328,13 @@ money per unit of mail.
 
 ```console
 $ mfctl embedding status
-production (https://mail.example.test:8443)
-Declared:  openai text-embedding-3-small, 1536 dimensions, Cosine
-Serving:   openai text-embedding-3-small, 1536 dimensions, Cosine — 4,120 of 4,120 messages embedded; nothing outstanding
-Reindex:   none running.
-Next pass: due at 2026-08-08 12:14:30Z
-Provider:  Serving, as of 2026-08-08 11:59:00Z
-Spend:     1,200 of 50,000,000 characters; the period rolls over at 2026-08-09 00:00:00Z
+Deployment:  production (https://mail.example.test:8443)
+Declared:    openai text-embedding-3-small, 1536 dimensions, Cosine
+Serving:     openai text-embedding-3-small, 1536 dimensions, Cosine — 4,120 of 4,120 messages embedded; nothing outstanding
+Reindex:     none running.
+Next pass:   due at 2026-08-08 12:14:30Z
+Provider:    Serving, as of 2026-08-08 11:59:00Z
+Spend:       1,200 of 50,000,000 characters; the period rolls over at 2026-08-09 00:00:00Z
 ```
 
 **`mfctl embedding status` is the command to run when semantic search is not returning what you expected.** It answers
@@ -367,6 +364,11 @@ Estimate:  41,208 passages to send (18,700,412 characters, roughly 4,675,103 tok
 Spend:     0 of 50,000,000 characters; the period rolls over at 2026-08-09 00:00:00Z
 Embed the mailbox under that model? [y/N]
 ```
+
+The estimate is on standard output and the question is on standard error, which is the split every command here keeps:
+what a redirected invocation captures is the reading, and the person who started it still reads the question, the
+guidance, and the failures. Colour marks the last two and nothing else, and a run whose output is redirected or whose
+environment sets `NO_COLOR` is written without escape sequences at all.
 
 The prompt is the default and `--yes` is the exception, for scripted use. An invocation whose input is redirected and
 which passes no flag is refused rather than answered out of whatever was piped in. Activating what is already serving
@@ -402,18 +404,10 @@ $ mfctl rules list
 production — rule set a1b2c3d4e5f6
 Configuration: accepted. What is running is what the file says.
 
-file-invoices
-  Applies to: work
-  Runs on:    Arrival
-  A match:    relocate → archive; ends the pass
-retire-old-newsletters
-  Applies to: every account
-  Runs on:    nothing automatically; 'mfctl rules run' applies it
-  A match:    setSeen → read
-archive-old-newsletters
-  Applies to: every account
-  Runs on:    Schedule (daily:03:00:Europe/Warsaw)
-  A match:    relocate → archive
+Rule                     Applies to     Runs on                                              A match
+file-invoices            work           Arrival                                              relocate → archive; ends the pass
+retire-old-newsletters   every account  nothing automatically; 'mfctl rules run' applies it  setSeen → read
+archive-old-newsletters  every account  Schedule (daily:03:00:Europe/Warsaw)                 relocate → archive
 ```
 
 The order is the answer as much as the rules are: which rule reaches a message first is a property of the set, and a
@@ -421,7 +415,7 @@ rule above another that ends the pass is why the one below it never runs. `mfctl
 full, including the facts its condition can read. Neither prints the condition an operator wrote — a compiled rule
 carries no text, which is what keeps an address somebody typed into a condition out of every record naming the rule.
 
-`Runs on:` is the [triggers](../features/mail-rules.md#which-triggers-run-a-rule) the rule declares, and the second
+`Runs on` is the [triggers](../features/mail-rules.md#which-triggers-run-a-rule) the rule declares, and the second
 rule above is what a rule naming none reads as — whether it writes `"Triggers": []` or leaves the key out, which say
 the same thing. Such a rule is bound, validated, and applied by a whole-mailbox run like any other, and no arriving
 message reaches it — so the wording says what does run it rather than reporting an empty list, because a rule nothing
@@ -437,7 +431,7 @@ asking once, and the command says which of the two happened:
 ```console
 $ mfctl rules run --account work
 A rule run over work has been asked for.
-Progress: 0 evaluated, 0 matched, 0 skipped
+Progress:  0 evaluated, 0 matched, 0 skipped
 The run is carried by the account's synchronization runs. Watch it with 'mfctl rules run-status --account work'.
 ```
 
@@ -456,14 +450,11 @@ and never matches; narrowing to a message with `--email` answers "why is this me
 
 ```console
 $ mfctl rules history --account work --rule file-invoices
-2026-08-08 11:59:00Z  file-invoices — Matched
-  Message:  0199c3d0-0000-7000-8000-000000000002
-  Rule set: a1b2c3d4e5f6 (RequestedRun, 4.0 ms)
-  Read:     senderDomain, attachmentCount
-  Asked:    relocate → archive: Requested
+Evaluated             Rule           Outcome  Message                               Rule set                             Read                           Asked
+2026-08-08 11:59:00Z  file-invoices  Matched  0199c3d0-0000-7000-8000-000000000002  a1b2c3d4e5f6 (RequestedRun, 4.0 ms)  senderDomain, attachmentCount  relocate → archive: Requested
 ```
 
-Each line is one rule's conclusion about one message. A rule that was reached and answered no is recorded as
+Each row is one rule's conclusion about one message. A rule that was reached and answered no is recorded as
 `NotMatched`, a rule that could not answer at all is `Failed` with its
 [reason](../features/mail-rules.md#when-a-condition-cannot-answer) beside it, and a rule the pass never reached leaves
 nothing at all — which is what tells "never matches" from "never asked". A change the rule asked for is `Requested`
@@ -504,9 +495,9 @@ this terminal is not what keeps it alive and closing it cannot cancel one:
 ```console
 $ mfctl spam run --account work
 A classification run over work has been asked for.
-Folders:  INBOX
-Acting:   no — this is a dry run; it records verdicts and leaves the mailbox alone. Add --apply to carry out what the switches ask for.
-Progress: 0 scored, 0 already decided, 0 unreadable
+Folders:   INBOX
+Acting:    no — this is a dry run; it records verdicts and leaves the mailbox alone. Add --apply to carry out what the switches ask for.
+Progress:  0 scored, 0 already decided, 0 unreadable
 The run is carried by the account's synchronization runs. Watch it with 'mfctl spam run-status --account work'.
 ```
 
@@ -523,17 +514,17 @@ is read:
 
 ```console
 $ mfctl spam run-status --account work
-work — Completed at 2026-08-12 11:30:00Z
-Requested: 2026-08-12 11:00:00Z
-Folders:   INBOX
-Acting:    no — dry run
-Rescoring: no
-Profile:   a1b2c3d4e5f6
-Progress:  1240 scored, 0 already decided, 3 unreadable
-Found:     37 junk, 4 undetermined, 37 would be acted on
+Account:    work — Completed at 2026-08-12 11:30:00Z
+Requested:  2026-08-12 11:00:00Z
+Folders:    INBOX
+Acting:     no — dry run
+Rescoring:  no
+Profile:    a1b2c3d4e5f6
+Progress:   1240 scored, 0 already decided, 3 unreadable
+Found:      37 junk, 4 undetermined, 37 would be acted on
 ```
 
-`Found:` is what an operator is deciding on: the junk the run reached, and how much of it the switches would act on.
+`Found` is what an operator is deciding on: the junk the run reached, and how much of it the switches would act on.
 An account nobody has ever asked for a run is an answer rather than an error, and a run that ended an hour ago is still
 reported — *it completed* and *you never asked* are different answers. `Superseded` is a run the settings moved under,
 and `Disabled` one that was switched off under it.
@@ -544,16 +535,13 @@ answers "why is this in junk"; narrowing with `--verdict` answers "what would th
 
 ```console
 $ mfctl spam classifications --account work --verdict Spam
-2026-08-12 11:04:11Z  Spam (Scanner 15.2/5)
-  Message: 0199c3d0-0000-7000-8000-000000000002 in INBOX
-  Under:   a1b2c3d4e5f6, scanner corpus spamassassin.4.0.2+20260801
-  Signals: X-Spam-Status, BAYES_99
-  Asked:   relocate (0199c3d0-0000-7000-8000-000000000009)
+Evaluated             Verdict                Message                               Folder  Under                                                     Signals                  Asked
+2026-08-12 11:04:11Z  Spam (Scanner 15.2/5)  0199c3d0-0000-7000-8000-000000000002  INBOX   a1b2c3d4e5f6, scanner corpus spamassassin.4.0.2+20260801  X-Spam-Status, BAYES_99  relocate (0199c3d0-0000-7000-8000-000000000009)
 ```
 
 **The signals are names and never values.** `X-Spam-Status` says the verdict rests on that header; what the header said
-is not recorded here, and neither is a subject, an address, or a sending domain. `Under:` is the profile the verdict was
-reached under, which is what a run compares before scoring a message again. `Asked:` names the change and the mutation
+is not recorded here, and neither is a subject, an address, or a sending domain. `Under` is the profile the verdict was
+reached under, which is what a run compares before scoring a message again. `Asked` names the change and the mutation
 record carrying it rather than restating what happened on the server, which [the mutation
 trail](../features/imap-synchronization.md#an-account-can-keep-a-record-of-what-was-done-to-it-and-none-does-by-default)
 answers.
@@ -582,10 +570,8 @@ rather than one per configured mailbox. It serves one bounded, keyset-paginated 
 
 ```console
 $ mfctl jobs dead-letters
-2026-08-13 09:30:00Z  classify-email-spam 0199c3d0-0000-7000-8000-000000000002
-  Failed:  Permanent PayloadUnreadable after 5 attempt(s)
-  Work:    account:work|email:0199c3d0-0000-7000-8000-000000000001 for work
-  Queued:  2026-08-13 09:00:00Z
+Stopped               Job                                   Kind                 Failed                                          Work                                                              Queued
+2026-08-13 09:30:00Z  0199c3d0-0000-7000-8000-000000000002  classify-email-spam  Permanent PayloadUnreadable after 5 attempt(s)  account:work|email:0199c3d0-0000-7000-8000-000000000001 for work  2026-08-13 09:00:00Z
 
 Run one again with 'mfctl jobs retry --job <id>', or write it off with 'mfctl jobs drop --job <id>'.
 ```
@@ -676,12 +662,11 @@ the next runs read them from the first UID inside the account's window and every
 
 ```console
 $ mfctl mailbox rewind --account work
-Scope:    every folder under work
-Cost:     22,500 stored emails would be fetched from the mail server, re-read, and stored again.
+Scope:  every folder under work
+Cost:   22,500 stored emails would be fetched from the mail server, re-read, and stored again.
 Rewind that scope? [y/N] y
-Rewound:
-  ARCHIVE
-  INBOX
+Rewound:  ARCHIVE
+          INBOX
 Each reads from the first UID inside the account's synchronization window on its next run. Nothing was erased, and a
 run already under way is refused its next advance rather than corrupting this.
 ```
@@ -719,13 +704,13 @@ who may change what — are that page's; this is the command group over them.
 ```console
 $ mfctl contact create --name "Anna Kowalska" --address anna@example.test --note "Met at the conference."
 Recorded contact 018f2b1c-9b3a-7c41-8f7d-2c6a5e9d10ab.
-Contact:   018f2b1c-9b3a-7c41-8f7d-2c6a5e9d10ab
-Name:      Anna Kowalska
-Origin:    Asserted
-Addresses: anna@example.test  (preferred)
-Note:      Met at the conference.
-Recorded:  2026-08-16 09:00:00Z
-Amended:   2026-08-16 09:00:00Z
+Contact:    018f2b1c-9b3a-7c41-8f7d-2c6a5e9d10ab
+Name:       Anna Kowalska
+Origin:     Asserted
+Addresses:  anna@example.test  (preferred)
+Note:       Met at the conference.
+Recorded:   2026-08-16 09:00:00Z
+Amended:    2026-08-16 09:00:00Z
 ```
 
 | Command | What it does |
@@ -1233,8 +1218,9 @@ Every profile is a deployment you are signed in to, and one of them is the one c
 
 ```console
 $ mfctl profiles
-* production  https://mail.example.test:8443  workstation
-  staging     https://staging.example.test:8443  workstation
+In use  Profile     Endpoint                           Credential
+*       production  https://mail.example.test:8443     workstation
+        staging     https://staging.example.test:8443  workstation
 
 $ mfctl switch staging
 Now acting on 'staging' (https://staging.example.test:8443) as 'workstation'.

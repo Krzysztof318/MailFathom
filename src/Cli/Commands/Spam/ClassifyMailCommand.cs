@@ -5,6 +5,7 @@
 using System.CommandLine;
 using MailFathom.Cli.Administration;
 using MailFathom.Cli.Administration.Spam;
+using MailFathom.Cli.Output;
 
 namespace MailFathom.Cli.Commands.Spam;
 
@@ -96,9 +97,12 @@ internal static class ClassifyMailCommand
 
         if (started.Run is { } run)
         {
-            context.Console.WriteLine($"Folders:  {string.Join(", ", run.Folders)}");
-            context.Console.WriteLine($"Acting:   {DescribePosture(run)}");
-            context.Console.WriteLine($"Progress: {run.DescribeProgress()}");
+            CliDetails details = new();
+            details.Add("Folders", string.Join(", ", run.Folders));
+            details.Add("Acting", DescribePosture(run));
+            details.Add("Progress", run.DescribeProgress());
+
+            context.Console.Write(details);
         }
 
         context.Console.WriteLine(

@@ -52,11 +52,11 @@ internal static class ClearTextDecision
                 $"{address.GetLeftPart(UriPartial.Authority)} is reached over HTTP, so the credential and every later request would cross the network unprotected, and there is no terminal to ask on. Sign in to an https:// address instead, or pass {AllowanceOption} to accept an unprotected connection to this deployment.");
         }
 
-        console.WriteError(string.Empty);
-        console.WriteError($"{address.GetLeftPart(UriPartial.Authority)} is an HTTP address, so nothing protects this connection.");
-        console.WriteError("The credential you are about to present, and every later request from this profile, cross the network in clear text.");
-        console.WriteError("A redirect the deployment might send to an https:// address would not change that: the credential is already on the wire by then.");
-        console.WriteError(string.Empty);
+        console.WriteWarning(string.Empty);
+        console.WriteWarning($"{address.GetLeftPart(UriPartial.Authority)} is an HTTP address, so nothing protects this connection.");
+        console.WriteWarning("The credential you are about to present, and every later request from this profile, cross the network in clear text.");
+        console.WriteWarning("A redirect the deployment might send to an https:// address would not change that: the credential is already on the wire by then.");
+        console.WriteWarning(string.Empty);
 
         return console.Confirm("Sign in over an unprotected connection anyway? [y/N]: ")
             ? true

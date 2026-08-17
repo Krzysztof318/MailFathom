@@ -23,6 +23,13 @@ restart.
 > a setting, and none of it survives as one — [configuration sources](../operations/configuration-sources.md) stays the
 > only place a deployment's behaviour is decided.
 
+**What it prints is meant to be read and safe to capture.** A command that answers with a list of records lays them out
+as a table with column headings, one that answers about a single thing sets its values beside the labels naming them,
+and colour marks failures and cautions and nothing else — so a failure does not read as a result. The result goes to
+standard output and everything else, including the questions and the guidance, to standard error, so redirecting a
+command captures the answer alone. A redirected run, and any run whose environment sets `NO_COLOR`, is written with no
+escape sequences at all.
+
 ## Before it can answer
 
 The administrative endpoint is off unless a deployment turns it on, and it has credentials of its own. An API key that
@@ -211,16 +218,16 @@ $ mfctl mailbox status
 It reports, for every account your deployment configures and every folder it maps, what the deployment is doing right
 now, how its last run ended, how far each folder has actually got, and when that last moved.
 
-The reading worth learning is the pair of lines under each folder. **Progress** is how far the deployment has durably
-got and when it last got there; **Last run** is what happened the last time it tried. A folder whose progress stopped
-yesterday and whose last run succeeded has nothing left to fetch. A folder whose progress stopped yesterday and whose
-runs keep ending has stopped making headway, and the outcome beside it says why — an alias naming no folder your server
-advertises, a server that stopped answering, or a failure to look up in the log. Without both lines the two are
-indistinguishable, which is exactly the situation this command exists to end.
+The reading worth learning is the pair of columns in each account's folder table. **Progress** is how far the deployment
+has durably got and when it last got there; **Last run** is what happened the last time it tried. A folder whose
+progress stopped yesterday and whose last run succeeded has nothing left to fetch. A folder whose progress stopped
+yesterday and whose runs keep ending has stopped making headway, and the outcome beside it says why — an alias naming no
+folder your server advertises, a server that stopped answering, or a failure to look up in the log. Without both columns
+the two are indistinguishable, which is exactly the situation this command exists to end.
 
-The account lines above them say whether a run is happening now, queued behind other accounts, or waiting; and, when
-runs have been failing, how many in a row — which is what a wait far longer than your configured interval is explained
-by. [Administering a deployment](../operations/admin-endpoint.md#reading-what-synchronization-is-doing) reads every
+The account's own readings above that table say whether a run is happening now, queued behind other accounts, or
+waiting; and, when runs have been failing, how many in a row — which is what a wait far longer than your configured
+interval is explained by. [Administering a deployment](../operations/admin-endpoint.md#reading-what-synchronization-is-doing) reads every
 line of the output back to you.
 
 ## Turning semantic search on
@@ -268,10 +275,10 @@ gave the rule asks on your behalf. That asking is a command, and so is finding o
 
 `mfctl rules list` is the one to run after editing a rule file. A deployment refuses a reload whose rules do not
 validate and goes on running the previous set, which it reports to its log and nowhere else — so this is where you find
-out whether your edit took effect, rather than from mail that kept being filed the old way. Each rule it prints says
-what runs it, on a `Runs on:` line, which is how a rule naming [no
+out whether your edit took effect, rather than from mail that kept being filed the old way. It prints one row per rule,
+and the `Runs on` column says what runs each of them, which is how a rule naming [no
 trigger](../features/mail-rules.md#which-triggers-run-a-rule) is told apart from one that simply never matched: nothing
-fires such a rule by itself, and `mfctl rules run` is how it is run. A rule with a schedule says so on that same line,
+fires such a rule by itself, and `mfctl rules run` is how it is run. A rule with a schedule says so in that same column,
 with the occasions it declares beside the trigger. It is also where a rule you meant to run over arriving mail shows
 that it never says `Arrival`.
 
@@ -358,8 +365,8 @@ much that is and asks before it does anything:
 
 ```console
 $ mfctl mailbox rewind --account work
-Scope:    every folder under work
-Cost:     22,500 stored emails would be fetched from the mail server, re-read, and stored again.
+Scope:  every folder under work
+Cost:   22,500 stored emails would be fetched from the mail server, re-read, and stored again.
 Rewind that scope? [y/N]
 ```
 
@@ -390,15 +397,13 @@ tells you it is there:
 
 ```console
 $ mfctl jobs dead-letters
-2026-08-13 09:30:00Z  classify-email-spam 0199c3d0-0000-7000-8000-000000000002
-  Failed:  Permanent PayloadUnreadable after 5 attempt(s)
-  Work:    account:work|email:0199c3d0-0000-7000-8000-000000000001 for work
-  Queued:  2026-08-13 09:00:00Z
+Stopped               Job                                   Kind                 Failed                                          Work                                                              Queued
+2026-08-13 09:30:00Z  0199c3d0-0000-7000-8000-000000000002  classify-email-spam  Permanent PayloadUnreadable after 5 attempt(s)  account:work|email:0199c3d0-0000-7000-8000-000000000001 for work  2026-08-13 09:00:00Z
 
 Run one again with 'mfctl jobs retry --job <id>', or write it off with 'mfctl jobs drop --job <id>'.
 ```
 
-**`Failed:` is what decides which of the two commands is right.** `Permanent` names something that will fail the same
+**`Failed` is what decides which of the two commands is right.** `Permanent` names something that will fail the same
 way every time — a credential, a setting, a message the deployment cannot read — so retrying before you have changed
 something achieves nothing. `Transient` names a dependency that stayed broken for longer than the queue was willing to
 wait, which is the case `retry` exists for: fix it, or wait for it to come back, and ask again.

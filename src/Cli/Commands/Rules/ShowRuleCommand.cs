@@ -5,6 +5,7 @@
 using System.CommandLine;
 using MailFathom.Cli.Administration;
 using MailFathom.Cli.Administration.Rules;
+using MailFathom.Cli.Output;
 
 namespace MailFathom.Cli.Commands.Rules;
 
@@ -84,12 +85,15 @@ internal static class ShowRuleCommand
 
     private static void WriteRule(CliContext context, LoadedRuleSet ruleSet, LoadedRule rule)
     {
-        context.Console.WriteLine($"{rule.Name}");
-        context.Console.WriteLine($"Rule set:    {ruleSet.Revision ?? "unreported"}");
-        context.Console.WriteLine($"Applies to:  {rule.DescribeScope()}");
-        context.Console.WriteLine($"Runs on:     {rule.DescribeTriggers()}");
-        context.Console.WriteLine($"Reads facts: {DescribeReadableFacts(rule)}");
-        context.Console.WriteLine($"A match:     {rule.DescribeActions()}");
+        CliDetails details = new();
+        details.Add("Rule", rule.Name ?? "an unnamed rule");
+        details.Add("Rule set", ruleSet.Revision ?? "unreported");
+        details.Add("Applies to", rule.DescribeScope());
+        details.Add("Runs on", rule.DescribeTriggers());
+        details.Add("Reads facts", DescribeReadableFacts(rule));
+        details.Add("A match", rule.DescribeActions());
+
+        context.Console.Write(details);
         context.Console.WriteLine(
             $"The condition is in this deployment's configuration under '{MailRuleConfigurationLocation.SectionName}', which is the only place a rule is written or changed.");
     }

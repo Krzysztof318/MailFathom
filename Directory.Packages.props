@@ -18,6 +18,11 @@
          chain is composed explicitly rather than through DefaultAzureCredential, which would reach a developer tool. -->
     <PackageVersion Include="Azure.Identity" Version="1.21.0" />
     <PackageVersion Include="System.CommandLine" Version="2.0.10" />
+    <!-- What draws the command's output: the tables its listings are laid out in, and the colour that tells a failure
+         from a result. Referenced by Cli alone. It brings Spectre.Console.Ansi with it, which is the same project under
+         the same licence, so both carry a row in THIRD_PARTY_LICENSES.md. Both are trimmable and the trimmed publish is
+         what proves it, since nothing a pull request runs reaches one. -->
+    <PackageVersion Include="Spectre.Console" Version="0.57.2" />
     <!-- DPAPI, which the base class library does not carry: it ships as this package rather than in the shared
          framework, because it exists on one platform. The command uses it to bind its credential key to the current
          Windows user, and guards the call with a runtime platform check, so a Linux build carries it and never enters

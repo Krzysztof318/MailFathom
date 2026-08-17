@@ -5,6 +5,7 @@
 using System.CommandLine;
 using MailFathom.Cli.Administration;
 using MailFathom.Cli.Administration.Rules;
+using MailFathom.Cli.Output;
 
 namespace MailFathom.Cli.Commands.Rules;
 
@@ -97,14 +98,21 @@ internal static class RuleHistoryCommand
             return CliExitCode.Success;
         }
 
+        CliTable listing = new("Evaluated", "Rule", "Outcome", "Message", "Rule set", "Read", "Asked");
+
         foreach (var execution in executions)
         {
-            context.Console.WriteLine($"{execution.EvaluatedAt:u}  {execution.Rule} — {execution.DescribeOutcome()}");
-            context.Console.WriteLine($"  Message:  {execution.Email}");
-            context.Console.WriteLine($"  Rule set: {execution.Revision} ({execution.Trigger}, {execution.DescribeDuration()})");
-            context.Console.WriteLine($"  Read:     {execution.DescribeReadFacts()}");
-            context.Console.WriteLine($"  Asked:    {execution.DescribeActions()}");
+            listing.AddRow(
+                $"{execution.EvaluatedAt:u}",
+                execution.Rule ?? "an unnamed rule",
+                execution.DescribeOutcome(),
+                $"{execution.Email}",
+                $"{execution.Revision} ({execution.Trigger}, {execution.DescribeDuration()})",
+                execution.DescribeReadFacts(),
+                execution.DescribeActions());
         }
+
+        context.Console.Write(listing);
 
         if (page.NextCursor is { Length: > 0 } cursor)
         {

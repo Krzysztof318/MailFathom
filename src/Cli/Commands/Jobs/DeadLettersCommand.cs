@@ -5,6 +5,7 @@
 using System.CommandLine;
 using MailFathom.Cli.Administration;
 using MailFathom.Cli.Administration.Jobs;
+using MailFathom.Cli.Output;
 
 namespace MailFathom.Cli.Commands.Jobs;
 
@@ -100,14 +101,20 @@ internal static class DeadLettersCommand
             return CliExitCode.Success;
         }
 
+        CliTable listing = new("Stopped", "Job", "Kind", "Failed", "Work", "Queued");
+
         foreach (var job in jobs)
         {
-            context.Console.WriteLine($"{job.DeadLetteredAt:u}  {job.Type} {job.Job:D}");
-            context.Console.WriteLine($"  Failed:  {job.DescribeFailure()}");
-            context.Console.WriteLine($"  Work:    {job.Key ?? "unnamed"}{DescribeAccount(job)}");
-            context.Console.WriteLine($"  Queued:  {job.EnqueuedAt:u}");
+            listing.AddRow(
+                $"{job.DeadLetteredAt:u}",
+                $"{job.Job:D}",
+                job.Type ?? "an unnamed kind",
+                job.DescribeFailure(),
+                $"{job.Key ?? "unnamed"}{DescribeAccount(job)}",
+                $"{job.EnqueuedAt:u}");
         }
 
+        context.Console.Write(listing);
         context.Console.WriteLine(string.Empty);
         context.Console.WriteLine(
             $"Run one again with '{CliRootCommand.CommandName} jobs retry --job <id>', or write it off with '{CliRootCommand.CommandName} jobs drop --job <id>'.");

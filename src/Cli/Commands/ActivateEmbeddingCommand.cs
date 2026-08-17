@@ -6,6 +6,7 @@ using System.CommandLine;
 using System.Globalization;
 using MailFathom.Cli.Administration;
 using MailFathom.Cli.Administration.Embeddings;
+using MailFathom.Cli.Output;
 
 namespace MailFathom.Cli.Commands;
 
@@ -98,20 +99,25 @@ internal static class ActivateEmbeddingCommand
     /// <remarks>Written before anything is asked and before anything is refused, so the estimate is on the screen whichever of the three follows.</remarks>
     private static void Report(CliContext context, EmbeddingActivationAssessment assessment)
     {
-        context.Console.WriteLine($"Declared:  {assessment.Declared?.Describe() ?? "nothing"}");
-        context.Console.WriteLine($"Forecast:  {assessment.DescribeForecast()}");
+        CliDetails details = new();
+        details.Add("Declared", assessment.Declared?.Describe() ?? "nothing");
+        details.Add("Forecast", assessment.DescribeForecast());
 
         if (assessment.Estimate is { } estimate)
         {
-            context.Console.WriteLine(string.Create(
-                CultureInfo.InvariantCulture,
-                $"Estimate:  {estimate.OutstandingPassageCount:N0} passages to send ({estimate.DescribeCost()})."));
+            details.Add(
+                "Estimate",
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"{estimate.OutstandingPassageCount:N0} passages to send ({estimate.DescribeCost()})."));
         }
 
         if (assessment.Spend is { } spend)
         {
-            context.Console.WriteLine($"Spend:     {spend.Describe()}");
+            details.Add("Spend", spend.Describe());
         }
+
+        context.Console.Write(details);
     }
 
     /// <summary>Reports whether the person running this agreed to the cost, refusing to guess where nobody can answer.</summary>

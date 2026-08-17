@@ -76,8 +76,10 @@ public sealed class RuleCommandTests : IDisposable
         Assert.Equal(CliExitCode.Success, exitCode);
         Assert.Equal(
             ["file-invoices", "mark-newsletters"],
-            this.console.Lines.Where(line => line.StartsWith("file-", StringComparison.Ordinal)
-                || line.StartsWith("mark-", StringComparison.Ordinal)));
+            this.console.Lines
+                .Where(line => line.StartsWith("file-", StringComparison.Ordinal)
+                    || line.StartsWith("mark-", StringComparison.Ordinal))
+                .Select(row => row.Split(' ')[0]));
         Assert.Contains(this.console.Lines, line => line.Contains("relocate → archive", StringComparison.Ordinal));
         Assert.Contains(this.console.Lines, line => line.Contains("ends the pass", StringComparison.Ordinal));
     }
@@ -97,9 +99,14 @@ public sealed class RuleCommandTests : IDisposable
 
         // Assert
         Assert.Equal(CliExitCode.Success, exitCode);
-        Assert.Equal(
-            ["  Runs on:    Arrival", "  Runs on:    nothing automatically; 'mfctl rules run' applies it"],
-            this.console.Lines.Where(line => line.Contains("Runs on:", StringComparison.Ordinal)));
+        Assert.Contains(
+            this.console.Lines,
+            row => row.StartsWith("mark-newsletters", StringComparison.Ordinal)
+                && row.Contains("nothing automatically; 'mfctl rules run' applies it", StringComparison.Ordinal));
+        Assert.Contains(
+            this.console.Lines,
+            row => row.StartsWith("file-invoices", StringComparison.Ordinal)
+                && row.Contains("Arrival", StringComparison.Ordinal));
     }
 
     /// <summary>Naming the trigger without the occasions would leave an operator asking the one thing they came to ask.</summary>
@@ -131,9 +138,10 @@ public sealed class RuleCommandTests : IDisposable
 
         // Assert
         Assert.Equal(CliExitCode.Success, exitCode);
-        Assert.Equal(
-            ["  Runs on:    Schedule (daily:03:00:Europe/Warsaw)"],
-            this.console.Lines.Where(line => line.Contains("Runs on:", StringComparison.Ordinal)));
+        Assert.Contains(
+            this.console.Lines,
+            row => row.StartsWith("archive-old-newsletters", StringComparison.Ordinal)
+                && row.Contains("Schedule (daily:03:00:Europe/Warsaw)", StringComparison.Ordinal));
     }
 
     /// <summary>
@@ -189,7 +197,10 @@ public sealed class RuleCommandTests : IDisposable
         // Assert
         Assert.Equal(CliExitCode.Success, exitCode);
         Assert.Contains(this.console.Lines, line => line.Contains("senderDomain, subject", StringComparison.Ordinal));
-        Assert.Contains(this.console.Lines, line => line.Contains("Runs on:     Arrival", StringComparison.Ordinal));
+        Assert.Contains(
+            this.console.Lines,
+            line => line.StartsWith("Runs on:", StringComparison.Ordinal)
+                && line.Contains("Arrival", StringComparison.Ordinal));
         Assert.Contains(this.console.Lines, line => line.Contains("MailRules", StringComparison.Ordinal));
     }
 

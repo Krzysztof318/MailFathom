@@ -5,6 +5,7 @@
 using System.CommandLine;
 using MailFathom.Cli.Administration;
 using MailFathom.Cli.Administration.Spam;
+using MailFathom.Cli.Output;
 
 namespace MailFathom.Cli.Commands.Spam;
 
@@ -100,14 +101,21 @@ internal static class ClassificationsCommand
             return CliExitCode.Success;
         }
 
+        CliTable listing = new("Evaluated", "Verdict", "Message", "Folder", "Under", "Signals", "Asked");
+
         foreach (var classification in classifications)
         {
-            context.Console.WriteLine($"{classification.EvaluatedAt:u}  {classification.DescribeVerdict()}");
-            context.Console.WriteLine($"  Message: {classification.Email} in {classification.Folder}");
-            context.Console.WriteLine($"  Under:   {classification.Profile ?? "no profile"}{DescribeCorpus(classification)}");
-            context.Console.WriteLine($"  Signals: {DescribeSignals(classification)}");
-            context.Console.WriteLine($"  Asked:   {classification.DescribeRequestedMutations()}");
+            listing.AddRow(
+                $"{classification.EvaluatedAt:u}",
+                classification.DescribeVerdict(),
+                $"{classification.Email}",
+                classification.Folder ?? "an unnamed folder",
+                $"{classification.Profile ?? "no profile"}{DescribeCorpus(classification)}",
+                DescribeSignals(classification),
+                classification.DescribeRequestedMutations());
         }
+
+        context.Console.Write(listing);
 
         if (page.NextCursor is { Length: > 0 } cursor)
         {

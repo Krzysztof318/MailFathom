@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.CommandLine;
+using MailFathom.Cli.Output;
 
 namespace MailFathom.Cli.Commands;
 
@@ -35,13 +36,20 @@ internal static class ProfilesCommand
                 return CliExitCode.Success;
             }
 
+            CliTable listing = new("In use", "Profile", "Endpoint", "Credential");
+
             foreach (var profile in stored.Profiles.OrderBy(entry => entry.Key, StringComparer.OrdinalIgnoreCase))
             {
                 var inUse = string.Equals(profile.Key, stored.Default, StringComparison.OrdinalIgnoreCase);
 
-                context.Console.WriteLine(
-                    $"{(inUse ? "*" : " ")} {profile.Key}  {profile.Value.Endpoint}  {profile.Value.Credential}");
+                listing.AddRow(
+                    inUse ? "*" : string.Empty,
+                    profile.Key,
+                    $"{profile.Value.Endpoint}",
+                    profile.Value.Credential);
             }
+
+            context.Console.Write(listing);
 
             return CliExitCode.Success;
         });

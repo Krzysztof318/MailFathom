@@ -87,10 +87,7 @@ internal static class ListContactsCommand
             return CliExitCode.Success;
         }
 
-        foreach (var contact in contacts)
-        {
-            ContactOutput.WriteSummary(context.Console, contact);
-        }
+        ContactOutput.WriteListing(context.Console, contacts);
 
         if (page.NextCursor is { Length: > 0 } continuation)
         {

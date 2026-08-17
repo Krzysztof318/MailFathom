@@ -186,13 +186,13 @@ internal static class LoginCommand
 
         if (session is not null)
         {
-            context.Console.WriteError(
+            context.Console.WriteNotice(
                 "The access token is renewed for you until the refresh token expires or is revoked, and the sign-in ends when it does.");
         }
 
         if (keyPair is not null)
         {
-            context.Console.WriteError(
+            context.Console.WriteNotice(
                 $"No credential was stored. Every command signs a short-lived assertion with the key at {keyPair.PrivateKeyPath}, so keep that file readable by this account alone and the sign-in lasts as long as the deployment accepts its public half.");
         }
 
@@ -338,14 +338,14 @@ internal static class LoginCommand
 
         var pending = DeploymentAuthorizer.BuildAuthorization(authorization, clientId, redirectUri);
 
-        context.Console.WriteError(string.Empty);
-        context.Console.WriteError(context.OpenBrowser(pending.AuthorizationUrl)
+        context.Console.WriteNotice(string.Empty);
+        context.Console.WriteNotice(context.OpenBrowser(pending.AuthorizationUrl)
             ? "A browser has been opened for you. If it did not appear, open this address yourself:"
             : "Open this address in a browser on this machine:");
-        context.Console.WriteError(string.Empty);
-        context.Console.WriteError($"  {pending.AuthorizationUrl}");
-        context.Console.WriteError(string.Empty);
-        context.Console.WriteError($"Waiting for the sign-in to come back to {redirectUri}...");
+        context.Console.WriteNotice(string.Empty);
+        context.Console.WriteNotice($"  {pending.AuthorizationUrl}");
+        context.Console.WriteNotice(string.Empty);
+        context.Console.WriteNotice($"Waiting for the sign-in to come back to {redirectUri}...");
 
         var redirect = await awaiter.WaitForRedirectAsync(cancellationToken);
 
@@ -384,13 +384,13 @@ internal static class LoginCommand
     {
         void ReportPrompt(DeviceCodePrompt prompt)
         {
-            context.Console.WriteError(string.Empty);
-            context.Console.WriteError("Open this address on any device with a browser:");
-            context.Console.WriteError($"  {prompt.VerificationUriComplete ?? prompt.VerificationUri}");
-            context.Console.WriteError(string.Empty);
-            context.Console.WriteError($"and enter the code: {prompt.UserCode}");
-            context.Console.WriteError($"The code expires at {prompt.ExpiresAt:u}. Waiting for the sign-in to complete...");
-            context.Console.WriteError(string.Empty);
+            context.Console.WriteNotice(string.Empty);
+            context.Console.WriteNotice("Open this address on any device with a browser:");
+            context.Console.WriteNotice($"  {prompt.VerificationUriComplete ?? prompt.VerificationUri}");
+            context.Console.WriteNotice(string.Empty);
+            context.Console.WriteNotice($"and enter the code: {prompt.UserCode}");
+            context.Console.WriteNotice($"The code expires at {prompt.ExpiresAt:u}. Waiting for the sign-in to complete...");
+            context.Console.WriteNotice(string.Empty);
         }
 
         return authorizer.AuthorizeWithDeviceCodeAsync(authorization, clientId, ReportPrompt, cancellationToken);

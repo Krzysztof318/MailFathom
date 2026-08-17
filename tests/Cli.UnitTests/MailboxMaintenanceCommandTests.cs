@@ -48,7 +48,10 @@ public sealed class MailboxMaintenanceCommandTests : IDisposable
         Assert.Contains(
             this.console.Lines,
             line => line.Contains("22,500 stored emails would be fetched", StringComparison.Ordinal));
-        Assert.Contains("INBOX", this.console.Lines.Select(line => line.Trim()));
+        Assert.Contains(
+            this.console.Lines,
+            line => line.StartsWith("Rewound:", StringComparison.Ordinal)
+                && line.EndsWith("INBOX", StringComparison.Ordinal));
         Assert.Contains("ARCHIVE", this.console.Lines.Select(line => line.Trim()));
     }
 

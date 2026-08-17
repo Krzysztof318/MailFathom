@@ -5,6 +5,7 @@
 using System.CommandLine;
 using MailFathom.Cli.Administration;
 using MailFathom.Cli.Administration.Embeddings;
+using MailFathom.Cli.Output;
 
 namespace MailFathom.Cli.Commands;
 
@@ -50,13 +51,16 @@ internal static class EmbeddingStatusCommand
         using var transport = context.OpenTransport(profile.Endpoint, profile.Trust);
         var status = await new AdminApiClient(transport, context.Console).ReadEmbeddingStatusAsync(profile.Token, cancellationToken);
 
-        context.Console.WriteLine($"{profile.Name} ({profile.Endpoint.GetLeftPart(UriPartial.Authority)})");
-        context.Console.WriteLine($"Declared:  {DescribeDeclaration(status)}");
-        context.Console.WriteLine($"Serving:   {DescribeServing(status.Serving)}");
-        context.Console.WriteLine($"Reindex:   {DescribeReindex(status.Building)}");
-        context.Console.WriteLine($"Next pass: {DescribeNextPass(status.NextBackfillPassDueAt)}");
-        context.Console.WriteLine($"Provider:  {DescribeProvider(status.Provider)}");
-        context.Console.WriteLine($"Spend:     {status.Spend?.Describe() ?? "not reported"}");
+        CliDetails details = new();
+        details.Add("Deployment", $"{profile.Name} ({profile.Endpoint.GetLeftPart(UriPartial.Authority)})");
+        details.Add("Declared", DescribeDeclaration(status));
+        details.Add("Serving", DescribeServing(status.Serving));
+        details.Add("Reindex", DescribeReindex(status.Building));
+        details.Add("Next pass", DescribeNextPass(status.NextBackfillPassDueAt));
+        details.Add("Provider", DescribeProvider(status.Provider));
+        details.Add("Spend", status.Spend?.Describe() ?? "not reported");
+
+        context.Console.Write(details);
 
         return CliExitCode.Success;
     }

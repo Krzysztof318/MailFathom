@@ -4,6 +4,7 @@
 
 using System.CommandLine;
 using MailFathom.Cli.Administration;
+using MailFathom.Cli.Output;
 
 namespace MailFathom.Cli.Commands.Spam;
 
@@ -62,14 +63,17 @@ internal static class ClassificationRunStatusCommand
             return CliExitCode.Success;
         }
 
-        context.Console.WriteLine($"{account} — {run.DescribeState()}");
-        context.Console.WriteLine($"Requested: {run.RequestedAt:u}");
-        context.Console.WriteLine($"Folders:   {string.Join(", ", run.Folders)}");
-        context.Console.WriteLine($"Acting:    {(run.IsDryRun ? "no — dry run" : "yes")}");
-        context.Console.WriteLine($"Rescoring: {(run.Rescores ? "yes" : "no")}");
-        context.Console.WriteLine($"Profile:   {run.Profile ?? "not yet bound; no pass has picked the run up"}");
-        context.Console.WriteLine($"Progress:  {run.DescribeProgress()}");
-        context.Console.WriteLine($"Found:     {run.DescribeOutcome()}");
+        CliDetails details = new();
+        details.Add("Account", $"{account} — {run.DescribeState()}");
+        details.Add("Requested", $"{run.RequestedAt:u}");
+        details.Add("Folders", string.Join(", ", run.Folders));
+        details.Add("Acting", run.IsDryRun ? "no — dry run" : "yes");
+        details.Add("Rescoring", run.Rescores ? "yes" : "no");
+        details.Add("Profile", run.Profile ?? "not yet bound; no pass has picked the run up");
+        details.Add("Progress", run.DescribeProgress());
+        details.Add("Found", run.DescribeOutcome());
+
+        context.Console.Write(details);
 
         if (run.IsDryRun && run.ActedEmailCount > 0)
         {

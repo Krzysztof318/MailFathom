@@ -473,8 +473,12 @@ public sealed class LoginCommandTests : IDisposable
         // Assert
         Assert.Equal(0, exitCode);
         Assert.Empty(handler.RecordedRequests);
-        Assert.Contains(this.console.Lines, line => line.StartsWith("  production", StringComparison.Ordinal));
-        Assert.Contains(this.console.Lines, line => line.StartsWith("* staging", StringComparison.Ordinal));
+        Assert.Contains(
+            this.console.Lines,
+            row => !row.StartsWith('*') && row.Contains("production", StringComparison.Ordinal));
+        Assert.Contains(
+            this.console.Lines,
+            row => row.StartsWith('*') && row.Contains("staging", StringComparison.Ordinal));
     }
 
     [Fact]

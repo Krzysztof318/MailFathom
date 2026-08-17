@@ -4,6 +4,7 @@
 
 using System.CommandLine;
 using MailFathom.Cli.Administration;
+using MailFathom.Cli.Output;
 
 namespace MailFathom.Cli.Commands;
 
@@ -82,8 +83,11 @@ internal static class RewindMailboxCommand
 
         var assessment = await deployment.ReadMailboxRewindAsync(profile.Token, account, folder, cancellationToken);
 
-        context.Console.WriteLine($"Scope:    {Describe(account, folder)}");
-        context.Console.WriteLine($"Cost:     {assessment.DescribeCost()}");
+        CliDetails scope = new();
+        scope.Add("Scope", Describe(account, folder));
+        scope.Add("Cost", assessment.DescribeCost());
+
+        context.Console.Write(scope);
 
         // Reported on standard error and with a failing code, which is what every other command does when it did not
         // do what it was asked. A caller that redirected the output reads an empty result and a reason rather than a
@@ -106,12 +110,10 @@ internal static class RewindMailboxCommand
             return CliExitCode.Success;
         }
 
-        context.Console.WriteLine("Rewound:");
+        CliDetails rewound = new();
+        rewound.Add("Rewound", folders);
 
-        foreach (var rewoundFolder in folders)
-        {
-            context.Console.WriteLine($"  {rewoundFolder}");
-        }
+        context.Console.Write(rewound);
 
         context.Console.WriteLine(
             "Each reads from the first UID inside the account's synchronization window on its next run. Nothing was erased, and a run already under way is refused its next advance rather than corrupting this.");

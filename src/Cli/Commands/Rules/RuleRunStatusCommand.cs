@@ -4,6 +4,7 @@
 
 using System.CommandLine;
 using MailFathom.Cli.Administration;
+using MailFathom.Cli.Output;
 
 namespace MailFathom.Cli.Commands.Rules;
 
@@ -61,10 +62,13 @@ internal static class RuleRunStatusCommand
             return CliExitCode.Success;
         }
 
-        context.Console.WriteLine($"{account} — {run.DescribeState()}");
-        context.Console.WriteLine($"Requested: {run.RequestedAt:u}");
-        context.Console.WriteLine($"Rule set:  {run.Revision ?? "not yet bound; no pass has picked the run up"}");
-        context.Console.WriteLine($"Progress:  {run.DescribeProgress()}");
+        CliDetails details = new();
+        details.Add("Account", $"{account} — {run.DescribeState()}");
+        details.Add("Requested", $"{run.RequestedAt:u}");
+        details.Add("Rule set", run.Revision ?? "not yet bound; no pass has picked the run up");
+        details.Add("Progress", run.DescribeProgress());
+
+        context.Console.Write(details);
 
         return CliExitCode.Success;
     }
