@@ -11,8 +11,8 @@ namespace MailFathom.Cli.Diagnostics;
 /// than by filtering: a credential is never in a <see cref="CliFailure" /> message, because the failure rules forbid it
 /// there for the terminal's sake already, and what a command prints <em>as its own answer</em> — a contact, an address,
 /// a subject, or a message — goes to standard output, which nothing here reads. What <see cref="Failure" /> carries is
-/// a line from standard error, where a sentence written to be read beside a failing exit code goes, and the paragraph
-/// below is about what those can name.
+/// a line the command reported as a failure, which is narrower still than the stream that carries it: guidance and a
+/// caution are their own kinds and are passed over. The paragraph below is about what a failure line can name.
 /// </para>
 /// <para>
 /// <strong>The operator's own deployment can be named here, and is.</strong> <see cref="Command" /> is the path of

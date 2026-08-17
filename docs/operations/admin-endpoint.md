@@ -1347,10 +1347,10 @@ stopped it and not what it had done by then.
 
 **No credential and no mail is in it.** A credential never reaches a failure message in the first place, because those
 are written to be shown on your terminal. Mail is out by the split the command already keeps: what you asked for goes
-to standard output — a contact, an address, a subject — and only standard error is read back for `failure`, which is
-where a sentence written to be read beside a failing exit code goes. Those sentences already avoid naming a person, for
-the same reason the log exists: a refusal that named one would end up in a file wherever the command is run from a
-script.
+to standard output — a contact, an address, a subject — and `failure` is read back from the failure lines alone, which
+is narrower still than the stream carrying them: the guidance a command writes while it works and the cautions it
+raises are their own kinds and are passed over. Those failure sentences already avoid naming a person, for the same
+reason the log exists: a refusal that named one would end up in a file wherever the command is run from a script.
 
 **Your own deployment can be named in it.** `command` carries no argument value, but the other two fields are not blind
 to where a deployment is. `deployment` is your name for the profile, and a sign-in that passed no `--name` is named

@@ -126,16 +126,17 @@ public sealed class CliInvocationRecordingTests : IDisposable
         Assert.DoesNotContain("nobody@example.test", entry.Failure, StringComparison.OrdinalIgnoreCase);
     }
 
-    /// <summary>What a command reported on its way to doing what it was asked is not a failure on the record of it.</summary>
+    /// <summary>A caution a command raised on its way to doing what it was asked is not a failure on the record of it.</summary>
     /// <remarks>
-    /// The control for the test above: recording the last line written to standard error whatever the invocation
-    /// returned would put a failure on every record of a command that reports something there and then succeeds. A
-    /// deployment on another build of this release line is that arrangement — the version agreement permits the command
-    /// and warns about it — and the first assertion is what makes the second one mean something, since a test whose
-    /// terminal stayed silent would pass with the exit-code guard removed.
+    /// The control for the test above, and it holds twice over: reading every line standard error carried would put a
+    /// failure on the record of a command that only warned, and reading the failure lines whatever the invocation
+    /// returned would put one there too. A deployment on another build of this release line is the arrangement for both
+    /// — the version agreement permits the command and cautions about it — and the assertion on the terminal is what
+    /// makes the assertion on the record mean something, since a test whose terminal stayed silent would pass either
+    /// way.
     /// </remarks>
     [Fact]
-    public async Task RunAsync_ACommandThatReportedOnStandardErrorAndSucceeded_RecordsNoFailure()
+    public async Task RunAsync_ACommandThatCautionedAndSucceeded_RecordsNoFailure()
     {
         // Arrange
         using var deployment = FakeAdminEndpoint.Accepting("workstation", FakeAdminEndpoint.AnotherBuildOfThisLine);
@@ -152,9 +153,40 @@ public sealed class CliInvocationRecordingTests : IDisposable
         // Assert
         var entry = Assert.Single(log.Appended);
 
-        Assert.NotEmpty(console.Errors);
+        Assert.NotEmpty(console.Warnings);
         Assert.Equal(CliExitCode.Success, exitCode);
         Assert.Null(entry.Failure);
+    }
+
+    /// <summary>A caution raised before a refusal does not displace it, because only a failure line is a refusal.</summary>
+    /// <remarks>
+    /// Standard error carries three kinds of line and the last one written is not always the refusal: every command
+    /// settles the two versions before its own operation, so a deployment on another build cautions first and the
+    /// command refuses after. Reading the stream rather than the kind would record the caution and lose what actually
+    /// stopped the command.
+    /// </remarks>
+    [Fact]
+    public async Task RunAsync_ACommandThatCautionedAndThenRefused_RecordsTheRefusal()
+    {
+        // Arrange
+        using var deployment = FakeContactDeployment.Holding(version: FakeAdminEndpoint.AnotherBuildOfThisLine);
+
+        var console = new RecordingCliConsole();
+        var log = new RecordingCliInvocationLog();
+
+        // Act
+        var exitCode = await CliRunner.RunAsync(
+            this.ContextReaching(deployment, log, console),
+            ["contact", "show", "--address", "nobody@example.test"],
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        var entry = Assert.Single(log.Appended);
+
+        Assert.Equal(CliExitCode.Failure, exitCode);
+        Assert.NotEmpty(console.Warnings);
+        Assert.Equal(console.Failures[^1], entry.Failure);
+        Assert.DoesNotContain(entry.Failure!, console.Warnings);
     }
 
     /// <summary>An invocation that raised something the command did not expect is recorded as a fault, by its type.</summary>
