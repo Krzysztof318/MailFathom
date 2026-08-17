@@ -82,11 +82,33 @@ public sealed class EmailThreadModelTests
         using var context = CreateContext();
 
         // Act
-        var reference = Assert.Single(EntityTypeOf<EmailThreadEntity>(context).GetForeignKeys());
+        var reference = Assert.Single(
+            EntityTypeOf<EmailThreadEntity>(context).GetForeignKeys(),
+            candidate => candidate.Properties.Any(property => property.Name == "MailboxAccountId"));
 
         // Assert
         Assert.Equal(["MailboxAccountId"], reference.Properties.Select(property => property.Name));
         Assert.Equal(DeleteBehavior.Cascade, reference.DeleteBehavior);
+    }
+
+    /// <summary>
+    /// A merged conversation is still reached by the identifier a tool published before the merge, and the walk that
+    /// resolves it ends at whatever this column names — so the column is constrained rather than trusted.
+    /// </summary>
+    [Fact]
+    public void EmailThreadModel_Survivor_PointsAtAConversationTheTableHolds()
+    {
+        // Arrange
+        using var context = CreateContext();
+
+        // Act
+        var reference = Assert.Single(
+            EntityTypeOf<EmailThreadEntity>(context).GetForeignKeys(),
+            candidate => candidate.Properties.Any(property => property.Name == "MergedIntoEmailThreadId"));
+
+        // Assert
+        Assert.Equal(typeof(EmailThreadEntity), reference.PrincipalEntityType.ClrType);
+        Assert.Equal(DeleteBehavior.NoAction, reference.DeleteBehavior);
     }
 
     /// <summary>

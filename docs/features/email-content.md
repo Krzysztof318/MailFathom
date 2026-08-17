@@ -33,7 +33,10 @@ builds through, and it refuses a request carrying both or neither with `51007 Em
 than resolving it by precedence: honouring the list would ignore a conversation somebody wanted, and honouring the
 conversation would return messages nobody named. A conversation is counted where it resolves rather than where it is
 named, because how many messages it holds is what reading it answers — the same ten bound applies to the resolved order,
-and the identities beyond it come back in `UnreadThreadMessages` so a second call asks for them directly.
+and the identities beyond it come back in `UnreadThreadEmails` so a second call asks for them directly. Neither argument
+is resolved until that refusal has been decided, so a call carrying a list beside an empty one or a misspelled
+conversation identifier is told which of the two to drop rather than that the argument it will not be read by is too
+short or malformed.
 
 Both flags govern the whole call rather than one email each. A caller asking for markup or for the attached files wants
 them for what it is about to read, and a flag per identifier would make the argument list grow with the batch while
@@ -81,7 +84,7 @@ same bound is applied to the order it resolves to, and what falls outside it is 
 every classification, retention, access, and erasure constraint of the mail it was read from. Nothing in it is logged.
 
 It carries one `EmailContentReadOutcome` per named email, in the order they were named — or, for a request naming a
-conversation, one per message it served in the conversation's own order, with `UnreadThreadMessages` naming the
+conversation, one per message it served in the conversation's own order, with `UnreadThreadEmails` naming the
 identities the bound left out. That order is the contract twice over: it is how a caller pairs an outcome with what it
 asked for, and it is the order the character budget was spent in.
 

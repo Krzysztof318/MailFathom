@@ -700,6 +700,12 @@ internal sealed class MailFathomDbContext : DbContext
     /// set to null on delete rather than cascading: erasing one message must leave its answer readable as a root of what
     /// remains rather than take the answer with it, and removing a conversation must leave its mail in place.
     /// </para>
+    /// <para>
+    /// The survivor pointer is the third of them and is a constraint like the others, because a merged conversation is
+    /// still reachable by the identifier a tool published before the merge and resolving it is a walk this column
+    /// decides. It differs only in doing nothing on delete, since both ends of it are one account's and are erased in
+    /// the same statement.
+    /// </para>
     /// </remarks>
     private static void ConfigureEmailThread(ModelBuilder modelBuilder)
     {
@@ -715,6 +721,15 @@ internal sealed class MailFathomDbContext : DbContext
                 .WithMany()
                 .HasForeignKey(thread => thread.MailboxAccountId)
                 .OnDelete(DeleteBehavior.Cascade);
+
+            // The survivor a merge points at is a row of this same table, and it is constrained rather than trusted: a
+            // pointer at a conversation nothing holds would end the walk that resolves a published identifier at a row
+            // that is nobody's survivor. Nothing is done on delete because nothing deletes one of these rows on its
+            // own — both sides belong to one account and go together, in the statement that erases it.
+            entity.HasOne<EmailThreadEntity>()
+                .WithMany()
+                .HasForeignKey(thread => thread.MergedIntoEmailThreadId)
+                .OnDelete(DeleteBehavior.NoAction);
         });
 
         modelBuilder.Entity<EmailThreadIdentifierEntity>(entity =>

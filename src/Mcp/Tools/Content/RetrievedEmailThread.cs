@@ -28,8 +28,8 @@ internal sealed record RetrievedEmailThread
     [Description("The storedEmailId of the message this email answers, or null when it is a root of what you are shown. Null does not mean this email opened the conversation: a message whose parent is not held here, or sits in a folder withheld from tools, is published as a root.")]
     public string? InReplyToStoredEmailId { get; init; }
 
-    /// <summary>Gets how many messages of the conversation the caller may see, this email included.</summary>
-    [Description("How many messages of the conversation are readable here, this email included. Messages in folders withheld from tools are in neither this count nor the list below.")]
+    /// <summary>Gets how many messages of the conversation this read assembled, this email included where it was.</summary>
+    [Description("How many messages of the conversation are readable here, this email included where the read reached it. Messages in folders withheld from tools are in neither this count nor the list below, and a conversation longer than one read assembles is counted as far as the read reached — which is what moreMessagesNotNamed says.")]
     public required int MessageCount { get; init; }
 
     /// <summary>Gets the conversation's other messages, in its own order.</summary>

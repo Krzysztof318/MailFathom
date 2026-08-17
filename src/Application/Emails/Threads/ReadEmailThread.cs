@@ -46,7 +46,13 @@ public sealed record ReadEmailThread
     /// <summary>Gets the message this email answers, or <see langword="null" /> when it is a root of what is shown.</summary>
     public StoredEmailId? AnsweredStoredEmailId { get; init; }
 
-    /// <summary>Gets how many emails of the conversation the caller may see, this one included.</summary>
+    /// <summary>Gets how many emails of the conversation one read assembled, this one included where it was assembled.</summary>
+    /// <remarks>
+    /// It counts what the caller may see rather than what the conversation holds, so a message in a folder withheld from
+    /// tools is outside it. The same carve-out <see cref="Position" /> states applies here: a conversation longer than
+    /// one read assembles is counted as far as the read reached, and where the email being read fell outside that, it is
+    /// not among the counted — which is exactly when <see cref="MoreEmailsNotNamed" /> is set.
+    /// </remarks>
     public required int EmailCount { get; init; }
 
     /// <summary>Gets the conversation's other emails in its own order, bounded by <see cref="MaximumNamedEmails" />.</summary>

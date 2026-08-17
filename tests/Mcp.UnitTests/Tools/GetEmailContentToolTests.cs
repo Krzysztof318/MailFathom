@@ -1164,6 +1164,29 @@ public sealed class GetEmailContentToolTests
         Assert.Equal(0, summaryReader.ReadCount);
     }
 
+    /// <summary>
+    /// A conversation identifier is parsed only once the selection has settled, so a call carrying a list beside a
+    /// misspelled one is answered about the two arguments rather than about the spelling of the unused one.
+    /// </summary>
+    [Fact]
+    public async Task GetEmailContentAsync_AMalformedConversationBesideAValidList_IsRefusedAsBothRatherThanAsMalformed()
+    {
+        // Arrange
+        var summaryReader = new StubStoredEmailSummaryReader(SummaryOf());
+        var tool = ToolOver(summaryReader);
+
+        // Act
+        var failure = await Assert.ThrowsAsync<EmailContentReadSelectionInvalidException>(
+            () => tool.GetEmailContentAsync(
+                [Guid.CreateVersion7().ToString()],
+                "not-a-uuid",
+                cancellationToken: TestContext.Current.CancellationToken));
+
+        // Assert
+        Assert.Equal(MailFathomErrorCode.EmailContentReadSelectionInvalid, failure.ErrorCode);
+        Assert.Equal(0, summaryReader.ReadCount);
+    }
+
     [Fact]
     public async Task GetEmailContentAsync_NeitherEmailsNorAConversation_IsRefusedWithoutReadingAnything()
     {

@@ -347,7 +347,7 @@ available locally. It is the use case's projection published as it stands, not n
 that re-decided what a listing may carry would put the privacy rule in two places and leave the one a client reads
 untested. [Mailbox queries](mailbox-queries.md#what-a-summary-carries) records what it carries and why.
 
-Four parts of it are worth reading before a caller writes against them:
+Five parts of it are worth reading before a caller writes against them:
 
 - **`senderVerification` is two answers, never one.** `senderAddress` beside it is a claim the email wrote about itself,
   and nothing on the way to a listing verified it. `authorAuthentication` is what the receiving mail server established
@@ -449,9 +449,9 @@ because a parse scans whatever it is handed and a caller nobody vouches for deci
 many there are. No refusal repeats the text or says which position carried it, because that is caller input on its way
 into a client-readable result and the log line beside it — and the caller holds the list it sent.
 
-Three refusals end the call rather than one entry, because none of them leaves an email to report an outcome against: a
-list of more than ten or of none at all is `51005`, a repeated identifier is `51006`, and text that names no email is
-`51004`. A list is refused rather than truncated or de-duplicated, so a caller never has to compare what came back
+Five refusals end the call rather than one entry, because none of them leaves an email to report an outcome against: a
+list of more than ten or of none at all is `51005`, a repeated identifier is `51006`, text that names no email is
+`51004`, a call naming both selections or neither is `51007`, and text that names no conversation is `51008`. A list is refused rather than truncated or de-duplicated, so a caller never has to compare what came back
 against what it asked for to find out what it did not receive.
 
 `51004` and `53002` are therefore deliberately distinct, as are `53002` and `55001`: the first pair separates "you named

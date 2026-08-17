@@ -114,12 +114,12 @@ internal sealed class GetEmailContentTool(EmailContentReader emailContentReader)
         bool includeAttachmentDownloadLinks = false,
         CancellationToken cancellationToken = default)
     {
-        // The list is handed over unresolved so the selection is settled before it is counted or parsed: a call naming
-        // a conversation and an empty list is one that named both, and reporting the list as too short would answer a
-        // question the caller never asked.
+        // Both are handed over unresolved so the selection is settled before either is counted or parsed: a call naming
+        // a conversation and an empty list, or a list and a misspelled conversation, is one that named both, and
+        // reporting the list as too short or the conversation as malformed would answer a question nobody asked.
         var request = GetEmailContentRequest.CreateForSelection(
             storedEmailIds is null ? null : () => NamedEmails(storedEmailIds),
-            NamedThread(threadId),
+            threadId is null ? null : () => NamedThread(threadId),
             includeSanitizedHtml,
             includeAttachmentDownloadLinks);
 
@@ -128,22 +128,21 @@ internal sealed class GetEmailContentTool(EmailContentReader emailContentReader)
         return GetEmailContentToolResult.From(result);
     }
 
-    /// <summary>Reads the conversation identity the caller's text names, or nothing when it named none.</summary>
+    /// <summary>Reads the conversation identity the caller's text names.</summary>
     /// <remarks>
     /// The same three checks the email identifiers get, and for the same reasons: the length before the parse because a
     /// parse scans what it is handed, the empty UUID refused with everything else because it is what a client sends
     /// when it holds no identifier, and the refused text absent from the failure because it is the caller's own input
-    /// on its way into a client-readable result.
+    /// on its way into a client-readable result. It is reached only once the selection has settled, so a call that also
+    /// named a list is refused as having named both rather than for how it spelled a conversation it will not be read by.
     /// </remarks>
     /// <exception cref="EmailThreadIdentifierMalformedException">Thrown when the text is not an identifier this system issues.</exception>
-    private static EmailThreadId? NamedThread(string? threadId) =>
-        threadId is null
-            ? null
-            : threadId is { Length: <= MaximumIdentifierLength }
-              && Guid.TryParse(threadId, out var identity)
-              && identity != Guid.Empty
-                ? EmailThreadId.Create(identity)
-                : throw new EmailThreadIdentifierMalformedException();
+    private static EmailThreadId NamedThread(string threadId) =>
+        threadId is { Length: <= MaximumIdentifierLength }
+        && Guid.TryParse(threadId, out var identity)
+        && identity != Guid.Empty
+            ? EmailThreadId.Create(identity)
+            : throw new EmailThreadIdentifierMalformedException();
 
     /// <summary>Reads the email identities the caller's text names.</summary>
     /// <remarks>

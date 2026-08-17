@@ -101,7 +101,7 @@ public sealed class GetEmailContentRequestTests
 
         // Act
         var failure = Assert.Throws<EmailContentReadSelectionInvalidException>(
-            () => GetEmailContentRequest.CreateForSelection(() => storedEmailIds, threadId));
+            () => GetEmailContentRequest.CreateForSelection(() => storedEmailIds, () => threadId));
 
         // Assert
         Assert.Equal(MailFathomErrorCode.EmailContentReadSelectionInvalid, failure.ErrorCode);
@@ -119,7 +119,24 @@ public sealed class GetEmailContentRequestTests
 
         // Act
         var failure = Assert.Throws<EmailContentReadSelectionInvalidException>(
-            () => GetEmailContentRequest.CreateForSelection(() => [], threadId));
+            () => GetEmailContentRequest.CreateForSelection(() => [], () => threadId));
+
+        // Assert
+        Assert.Equal(MailFathomErrorCode.EmailContentReadSelectionInvalid, failure.ErrorCode);
+    }
+
+    /// <summary>
+    /// The conversation is resolved as late as the list is, so a call that named both is refused for naming both rather
+    /// than for how it spelled the argument it will not be read by.
+    /// </summary>
+    [Fact]
+    public void CreateForSelection_AnUnreadableConversationBesideAList_IsRefusedBeforeTheConversationIsResolved()
+    {
+        // Act
+        var failure = Assert.Throws<EmailContentReadSelectionInvalidException>(
+            () => GetEmailContentRequest.CreateForSelection(
+                () => IdentitiesOf(1),
+                () => throw new InvalidOperationException("The conversation was expected to stay unresolved.")));
 
         // Assert
         Assert.Equal(MailFathomErrorCode.EmailContentReadSelectionInvalid, failure.ErrorCode);
@@ -130,7 +147,7 @@ public sealed class GetEmailContentRequestTests
     {
         // Act
         var failure = Assert.Throws<EmailContentReadSelectionInvalidException>(
-            () => GetEmailContentRequest.CreateForSelection(namedEmails: null, threadId: null));
+            () => GetEmailContentRequest.CreateForSelection(namedEmails: null, namedThread: null));
 
         // Assert
         Assert.Equal(MailFathomErrorCode.EmailContentReadSelectionInvalid, failure.ErrorCode);
@@ -143,7 +160,7 @@ public sealed class GetEmailContentRequestTests
         var threadId = EmailThreadId.Create(Guid.CreateVersion7());
 
         // Act
-        var request = GetEmailContentRequest.CreateForSelection(namedEmails: null, threadId);
+        var request = GetEmailContentRequest.CreateForSelection(namedEmails: null, () => threadId);
 
         // Assert
         Assert.Equal(threadId, request.ThreadId);
@@ -157,7 +174,7 @@ public sealed class GetEmailContentRequestTests
         var storedEmailIds = IdentitiesOf(2);
 
         // Act
-        var request = GetEmailContentRequest.CreateForSelection(() => storedEmailIds, threadId: null);
+        var request = GetEmailContentRequest.CreateForSelection(() => storedEmailIds, namedThread: null);
 
         // Assert
         Assert.Equal(storedEmailIds, request.StoredEmailIds);
@@ -173,7 +190,7 @@ public sealed class GetEmailContentRequestTests
 
         // Act
         var failure = Assert.Throws<EmailContentReadCountOutOfRangeException>(
-            () => GetEmailContentRequest.CreateForSelection(() => storedEmailIds, threadId: null));
+            () => GetEmailContentRequest.CreateForSelection(() => storedEmailIds, namedThread: null));
 
         // Assert
         Assert.Equal(GetEmailContentRequest.MaximumEmails, failure.MaximumEmails);

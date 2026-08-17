@@ -134,7 +134,7 @@ and leave `storedEmailIds` out entirely: the conversation's messages come back i
 `unreadThreadMessages` names the ones that did not fit so a second call asks for them directly. Give exactly one of the
 two; a call carrying both, or neither, is refused rather than guessed at.
 
-Eight parts of the result exist so that an agent does not misreport a message:
+Nine parts of the result exist so that an agent does not misreport a message:
 
 - **The sender verdict comes with the evidence behind it.** `senderVerification` is the same pair a listing carries, and
   `headers.senderAuthentication` adds what it was reached from: the domain that actually authenticated, the domain the

@@ -137,7 +137,7 @@ public sealed record GetEmailContentRequest
 
     /// <summary>Creates a request from the two ways a caller may select what to read, refusing anything but one of them.</summary>
     /// <param name="namedEmails">Resolves the emails the caller named, or <see langword="null" /> when it named none.</param>
-    /// <param name="threadId">The conversation the caller named, or <see langword="null" /> when it named none.</param>
+    /// <param name="namedThread">Resolves the conversation the caller named, or <see langword="null" /> when it named none.</param>
     /// <param name="includeSanitizedHtml">Whether to also produce the sanitized HTML representation of each body.</param>
     /// <param name="includeAttachmentDownloadLinks">Whether to mint a link for each attachment rather than only describe it.</param>
     /// <returns>The validated request.</returns>
@@ -151,26 +151,27 @@ public sealed record GetEmailContentRequest
     /// returns messages nobody named. Which one was meant is theirs to say.
     /// </para>
     /// <para>
-    /// The emails arrive unresolved, which is what puts that refusal in front of everything a list is checked for.
-    /// Whether the caller named them is knowable from the selection alone, while what they named costs a boundary a
-    /// parse over text it did not choose the length of — so a call this method refuses pays for none of it, and a caller
-    /// sending an empty list beside a conversation is told which of the two arguments to drop rather than that the list
-    /// it never meant to use is too short.
+    /// Both arrive unresolved, which is what puts that refusal in front of everything either of them is checked for.
+    /// Whether the caller named one is knowable from the selection alone, while what they named costs a boundary a parse
+    /// over text it did not choose the length of — so a call this method refuses pays for neither parse, and a caller
+    /// sending both is told which of the two arguments to drop rather than that the one it never meant to use is too
+    /// short or misspelled. Resolving either eagerly would put its own failure in front of the refusal, which is the
+    /// same defect on whichever side it is left.
     /// </para>
     /// </remarks>
     public static GetEmailContentRequest CreateForSelection(
         Func<IReadOnlyList<StoredEmailId>>? namedEmails,
-        EmailThreadId? threadId,
+        Func<EmailThreadId>? namedThread,
         bool includeSanitizedHtml = false,
         bool includeAttachmentDownloadLinks = false)
     {
-        if ((namedEmails is null) == (threadId is null))
+        if ((namedEmails is null) == (namedThread is null))
         {
             throw new EmailContentReadSelectionInvalidException();
         }
 
-        return threadId is { } thread
-            ? CreateForThread(thread, includeSanitizedHtml, includeAttachmentDownloadLinks)
+        return namedThread is not null
+            ? CreateForThread(namedThread(), includeSanitizedHtml, includeAttachmentDownloadLinks)
             : Create(namedEmails!(), includeSanitizedHtml, includeAttachmentDownloadLinks);
     }
 }
