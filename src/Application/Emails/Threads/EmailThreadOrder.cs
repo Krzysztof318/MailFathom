@@ -33,8 +33,9 @@ public static class EmailThreadOrder
     /// <remarks>
     /// A message whose recorded parent is not among the ones shown becomes a root of what is shown, which is both the
     /// answer for a withheld parent and the answer for an ancestor this deployment never stored. Every message given is
-    /// returned exactly once, including one caught in a reply cycle no walk could reach the end of: such a message is
-    /// emitted as a root, so a conversation is never published with a message silently missing from it.
+    /// returned exactly once, including the ones behind a reply cycle no walk could reach the end of: one member of the
+    /// cycle is emitted as a root and everything else keeps the message it answers, so a conversation is never published
+    /// with a message silently missing from it and never loses a reply relation the cycle did not close.
     /// </remarks>
     public static IReadOnlyList<PlacedThreadedEmail> Of(IReadOnlyList<ThreadedEmailSummary> visibleEmails)
     {
@@ -60,17 +61,22 @@ public static class EmailThreadOrder
             Emit(root, answers, answered, emitted, placed);
         }
 
-        // Anything still unemitted sits in a reply cycle, which no walk from a root reaches. The relation cannot order
-        // it, so the fallback is the one the relation leaves: each such message becomes a root in the same total order
-        // the roots above were taken in, and becomes one in full — the parent it recorded is dropped along with its
-        // place, because publishing the edge that closes the loop would hand a reader the cycle this order exists to
-        // never contain. Nothing here can produce one: the assembler refuses to write it, so this exists for a chain
-        // that reached the database by some other route.
-        foreach (var stranded in Sorted(visibleEmails.Where(email => !emitted.Contains(email.StoredEmailId))))
+        // Anything still unemitted sits in a reply cycle or answers a message that does, and no walk from a root reaches
+        // either. Only the cycle is unorderable, so only the cycle is cut: one member of it becomes a root, losing the
+        // parent it recorded along with its place, because publishing the edge that closes the loop would hand a reader
+        // the cycle this order exists to never contain. Everything hanging off that cycle keeps the parent it recorded
+        // and is published under it, because an edge that closes nothing is an edge the relation can still order by. One
+        // cut frees a whole component, so the loop runs once per component rather than once per message. Nothing here
+        // can produce a cycle: the assembler refuses to write one, so this exists for a chain that reached the database
+        // by some other route.
+        while (emitted.Count < visibleEmails.Count)
         {
-            answered[stranded.StoredEmailId] = null;
+            var stranded = Sorted(visibleEmails.Where(email => !emitted.Contains(email.StoredEmailId)));
+            var cut = CutPointOf(stranded[0], shown, answered);
 
-            Emit(stranded, answers, answered, emitted, placed);
+            answered[cut.StoredEmailId] = null;
+
+            Emit(cut, answers, answered, emitted, placed);
         }
 
         return placed;
@@ -104,6 +110,33 @@ public static class EmailThreadOrder
         {
             Emit(child, answers, answered, emitted, placed);
         }
+    }
+
+    /// <summary>Finds the reply cycle keeping a message from being reached, and returns the member the cut falls on.</summary>
+    /// <remarks>
+    /// Every message left unemitted records a parent that is unemitted too, because emitting a message emits everything
+    /// answering it — so walking the recorded parents from any of them stays inside that set and ends where it started
+    /// going round. The first message the walk meets twice is where the cycle begins, and everything walked from there
+    /// on is the cycle itself; the cut falls on the earliest of those in the same order the roots were taken in, so a
+    /// conversation read twice cuts the same edge whichever message the walk began at.
+    /// </remarks>
+    private static ThreadedEmailSummary CutPointOf(
+        ThreadedEmailSummary stranded,
+        Dictionary<StoredEmailId, ThreadedEmailSummary> shown,
+        Dictionary<StoredEmailId, StoredEmailId?> answered)
+    {
+        var walked = new List<ThreadedEmailSummary>();
+        var passed = new Dictionary<StoredEmailId, int>();
+        var current = stranded;
+
+        while (passed.TryAdd(current.StoredEmailId, walked.Count))
+        {
+            walked.Add(current);
+
+            current = shown[answered[current.StoredEmailId]!.Value];
+        }
+
+        return Sorted(walked.Skip(passed[current.StoredEmailId]))[0];
     }
 
     /// <summary>Orders messages the reply relation leaves side by side.</summary>

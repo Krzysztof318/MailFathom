@@ -46,9 +46,11 @@ internal sealed class EmailThreadEntity
     /// </summary>
     /// <remarks>
     /// The row outlives the merge for one reason: a tool may already have published this identifier, and a caller coming
-    /// back with it must reach the conversation it named rather than be told no such thread exists. Nothing else reads
-    /// it — every email of a merged thread is repointed at the survivor in the same transaction, so a membership query
-    /// never has to follow this.
+    /// back with it must reach the conversation it named rather than be told no such thread exists. That read is the one
+    /// that follows this column: <c>StoredEmailThreadReader</c> walks the chain from the identifier it was given to the
+    /// conversation that survived, and reads the mail from there. Nothing else has to, because every email of a merged
+    /// thread is repointed at the survivor in the same transaction, so a membership query matches on the row's own
+    /// column instead.
     /// </remarks>
     public Guid? MergedIntoEmailThreadId { get; set; }
 

@@ -10,7 +10,9 @@ namespace MailFathom.Application.Emails.GetEmailContent;
 /// <param name="Emails">One outcome per named email, in the order the request named them.</param>
 /// <param name="UnreadThreadEmails">
 /// The emails of a named conversation this call did not carry, in the conversation's own order, and empty for every
-/// read that named its emails itself.
+/// read that named its emails itself. It names what one assembly of the conversation held past the read's own bound,
+/// which is at most <see cref="Threads.IEmailThreadReader.MaximumAssembledEmails" /> emails: a conversation longer than
+/// that is assembled as far as the bound reaches, so the identities past it are named here no more than they were read.
 /// </param>
 /// <remarks>
 /// <para>

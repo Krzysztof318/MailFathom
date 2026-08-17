@@ -51,7 +51,8 @@ public sealed record ReadEmailThread
     /// It counts what the caller may see rather than what the conversation holds, so a message in a folder withheld from
     /// tools is outside it. The same carve-out <see cref="Position" /> states applies here: a conversation longer than
     /// one read assembles is counted as far as the read reached, and where the email being read fell outside that, it is
-    /// not among the counted — which is exactly when <see cref="MoreEmailsNotNamed" /> is set.
+    /// not among the counted. <see cref="MoreEmailsNotNamed" /> is set whenever that happened, and is set by the bound on
+    /// how many emails one read names as well, so it does not say which of the two stopped the count.
     /// </remarks>
     public required int EmailCount { get; init; }
 

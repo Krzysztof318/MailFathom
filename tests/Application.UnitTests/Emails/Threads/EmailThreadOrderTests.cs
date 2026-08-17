@@ -164,6 +164,35 @@ public sealed class EmailThreadOrderTests
             message => Assert.NotEqual(message.Email.StoredEmailId, message.AnsweredStoredEmailId));
     }
 
+    /// <summary>
+    /// A reply to a message caught in a loop is not itself in one, and its own edge closes nothing — so it is published
+    /// under the message it answers rather than promoted beside it, however early it sorts. Cutting it too would report
+    /// two conversations opening where one did, and would drop a reply relation the sender genuinely stated.
+    /// </summary>
+    [Fact]
+    public void Of_AReplyToAMessageCaughtInAReplyCycle_KeepsItsPlaceUnderTheMessageItAnswers()
+    {
+        // Arrange
+        var caught = Message(3, "2026-08-16T11:00:00Z");
+        var closing = Message(4, "2026-08-16T12:00:00Z", answers: caught);
+        var looping = caught with { ParentStoredEmailId = closing.StoredEmailId };
+        var answering = Message(1, "2026-08-16T09:00:00Z", answers: looping);
+
+        // Act
+        var placed = EmailThreadOrder.Of([answering, looping, closing]);
+
+        // Assert
+        var root = Assert.Single(placed, message => message.AnsweredStoredEmailId is null);
+        Assert.Equal(looping.StoredEmailId, root.Email.StoredEmailId);
+        Assert.Equal(
+            [looping.StoredEmailId, answering.StoredEmailId, closing.StoredEmailId],
+            placed.Select(message => message.Email.StoredEmailId));
+        Assert.Equal(
+            looping.StoredEmailId,
+            Assert.Single(placed, message => message.Email.StoredEmailId == answering.StoredEmailId)
+                .AnsweredStoredEmailId);
+    }
+
     [Fact]
     public void Of_AConversationOfSeveralBranches_WritesEachBranchOutBeforeTheNextSiblingBegins()
     {

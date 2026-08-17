@@ -29,7 +29,7 @@ internal sealed record RetrievedEmailThread
     public string? InReplyToStoredEmailId { get; init; }
 
     /// <summary>Gets how many messages of the conversation this read assembled, this email included where it was.</summary>
-    [Description("How many messages of the conversation are readable here, this email included where the read reached it. Messages in folders withheld from tools are in neither this count nor the list below, and a conversation longer than one read assembles is counted as far as the read reached — which is what moreMessagesNotNamed says.")]
+    [Description("How many messages of the conversation are readable here, this email included where the read reached it. Messages in folders withheld from tools are in neither this count nor the list below, and a conversation longer than one read assembles is counted as far as the read reached, and moreMessagesNotNamed is true whenever it was.")]
     public required int MessageCount { get; init; }
 
     /// <summary>Gets the conversation's other messages, in its own order.</summary>

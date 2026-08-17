@@ -225,6 +225,30 @@ public sealed class EmailThreadContextsTests
         Assert.DoesNotContain("secret-value", named.Email.Subject, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// A merge folds one conversation into another and keeps the folded row, so an identifier a tool published before it
+    /// still names a conversation. Assembling by that identifier reaches the mail of the conversation that survived,
+    /// which is the whole reason the folded row is kept rather than deleted.
+    /// </summary>
+    [Fact]
+    public async Task AssembleAsync_AnIdentifierPublishedBeforeAMerge_AssemblesTheConversationThatSurvivedIt()
+    {
+        // Arrange
+        var folded = EmailThreadId.Create(new Guid("22222222-2222-2222-2222-222222222222"));
+        var opening = Message(1, Inbox, "2026-08-16T09:00:00Z");
+        var reply = Message(2, Inbox, "2026-08-16T10:00:00Z", answers: opening);
+        var contexts = ContextsOver(
+            new StubEmailThreadReader((Thread, opening), (Thread, reply)).MergedInto(folded, Thread));
+
+        // Act
+        var thread = await contexts.AssembleAsync(folded, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(
+            [opening.StoredEmailId, reply.StoredEmailId],
+            thread.Emails.Select(email => email.Email.StoredEmailId));
+    }
+
     private static ThreadedEmailSummary[] Conversation(int length) =>
     [
         .. Enumerable

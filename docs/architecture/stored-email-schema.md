@@ -725,6 +725,7 @@ in every recipient's client. A second enqueue of the same identity therefore lea
 | `pk_email_thread_identifiers` | `(MailboxAccountId, IdentifierHash)`, unique | Which conversation an identifier belongs to, which is the question every arriving message asks once per identifier it names. Uniqueness is also the race: two messages binding one identifier at once leave one writer to retry against what the other wrote |
 | `ix_email_thread_identifiers_thread` | `(EmailThreadId)` | The identifiers a merge has to repoint at the surviving conversation |
 | `IX_email_threads_MailboxAccountId` | `(MailboxAccountId)` | The key back to the owning account, which is what erasing one reaches its conversations by |
+| `IX_email_threads_MergedIntoEmailThreadId` | `(MergedIntoEmailThreadId)` | The foreign key from a folded conversation to its survivor. EF Core indexes it because the constraint is checked from the other side too: erasing an account cascades to its conversations, and each delete asks whether any row still names the one going |
 | `ix_stored_emails_sender` | `(sender_normalized_address)` | Filtering by who sent a message |
 | `ix_stored_emails_to_addresses` | `(to_addresses)`, GIN | Containment tests over the `To` recipients |
 | `ix_stored_emails_cc_addresses` | `(cc_addresses)`, GIN | Containment tests over the `Cc` recipients |
