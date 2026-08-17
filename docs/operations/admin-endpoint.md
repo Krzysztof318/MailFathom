@@ -1327,24 +1327,32 @@ and `outcome` is `Completed`, `Failed`, or `Faulted` — the last meaning the in
 which is what a cancelled command and a defect both leave behind. A field the invocation has nothing for is left out
 rather than written as a null.
 
-**Nothing you typed is in it, and nothing the command printed is either.** The command is named from the parser rather
-than from your argument list, which is where an address, an account alias, a folder alias, a message identity and — for
-a sign-in — a credential are; and a contact, an address, or a subject a command showed you is the answer to that command
-rather than a fact about running it. This is exactly the file that gets pasted into a support conversation, so it holds
-only what is safe there.
+**No credential and no mail is in it.** A credential never reaches a failure message in the first place, because those
+are written to be shown on your terminal; and a contact, an address, or a subject a command printed for you is the
+answer to that command rather than a fact about running it, so none of it is offered to the log at all.
+
+**Your own deployment can be named in it.** `command` carries no argument value, but the other two fields are not blind
+to where a deployment is. `deployment` is your name for the profile, and a sign-in that passed no `--name` is named
+after the deployment's own host. `failure` is the line the command already printed, and several of those quote the
+address or the alias you typed — `Not signed in to https://…` is the common one. Scrubbing both was considered and
+rejected: this file sits beside `credentials.json`, which records every profile's endpoint in clear, so a log naming
+none of them would be protecting an address the same directory already holds, at the cost of the field you read the log
+for. Treat the file as you treat that directory, which is to say read it before you paste it anywhere.
 
 It is created readable by its owner alone, on the same terms and for the same reason the credential store is, and it is
 bounded at one mebibyte: past that the current file becomes `mfctl.log.1`, replacing whatever was there, and a new one
-starts — so the log occupies at most two mebibytes however long you administer a deployment for. There is no retention
-policy beyond that, because retention for files on your own machine is yours to decide rather than this command's.
+starts — so the log occupies at most two mebibytes however long you administer a deployment for. A recorded failure is
+bounded as well, so one record stays one line. There is no retention policy beyond that, because retention for files on
+your own machine is yours to decide rather than this command's.
 
 Turn it off for one invocation with `--no-log`, which is accepted after the subcommand as well, and for a shell session
 with `MAILFATHOM_LOG=off`. What you typed beats what your shell was told, and the default is on; every other value of
 the variable leaves the log on rather than failing a command over a typo in it.
 
-A record that cannot be written — a read-only home directory, a full disk, a directory that was removed — is reported as
-one line on standard error and changes nothing else. The command's exit code and its own output stay exactly what they
-would have been, because the command's job is the command.
+A record that cannot be written — a read-only home directory, a full disk — is reported as one line on standard error
+and changes nothing else. The command's exit code and its own output stay exactly what they would have been, because
+the command's job is the command. Deleting the directory is not one of those cases: every append recreates it, so
+removing the log is a way to start a new one rather than a way to turn it off.
 
 ## Troubleshooting
 

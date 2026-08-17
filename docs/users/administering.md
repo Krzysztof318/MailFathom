@@ -177,10 +177,11 @@ long it took, and how it ended — so a command you ran yesterday is still answe
 $ tail -3 ~/.config/MailFathom/mfctl.log | jq -r '"\(.at) \(.command) \(.outcome)"'
 ```
 
-It records nothing you typed and nothing a command printed, it is bounded so it cannot fill a disk, and `--no-log`
-leaves it out for one invocation. [What the command records about
-itself](../operations/admin-endpoint.md#what-the-command-records-about-itself) has the path on each platform, the
-fields, and the switch that turns it off for a whole session.
+No credential and no mail goes into it, it is bounded so it cannot fill a disk, and `--no-log` leaves one invocation
+out. What it does name is your own deployment — the profile, and the address where a failure message quoted the one you
+typed — so read it before you paste it anywhere, the way you would the credentials file beside it. [What the command
+records about itself](../operations/admin-endpoint.md#what-the-command-records-about-itself) has the path on each
+platform, every field, and the switch that turns it off for a whole session.
 
 ## Authorizing a mailbox
 

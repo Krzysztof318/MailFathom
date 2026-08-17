@@ -7,16 +7,20 @@ namespace MailFathom.Cli.Diagnostics;
 /// <summary>One line of the invocation log: what was run, against which deployment, and how it ended.</summary>
 /// <remarks>
 /// <para>
-/// <strong>Nothing the operator typed beyond a declared command name is here.</strong> An argument list is where a
-/// deployment address, an account alias, a folder alias, a message identity and — for a sign-in — a credential are, so
-/// <see cref="Command" /> is the path of names <c>mfctl</c> itself declares and no argument value reaches this type at
-/// all. Neither does any row the command printed: a contact, an address, a subject, or a message is the answer to the
-/// command rather than a fact about running it, and this file is exactly the one that gets pasted into a support
-/// conversation.
+/// <strong>No credential and no mail reaches this type.</strong> That is the line, and it holds by construction rather
+/// than by filtering: a credential is never in a <see cref="CliFailure" /> message, because the failure rules forbid it
+/// there for the terminal's sake already, and nothing a command printed is offered to this type at all — a contact, an
+/// address, a subject, or a message is the answer to the command rather than a fact about running it.
 /// </para>
 /// <para>
-/// <see cref="Deployment" /> is the operator's own name for a profile rather than the address behind it, which is what
-/// distinguishes two deployments to the person reading the log and says nothing about where either one is.
+/// <strong>The operator's own deployment can be named here, and is.</strong> <see cref="Command" /> is the path of
+/// names <c>mfctl</c> declares and carries no argument value, but the other two fields are not blind to where a
+/// deployment is: <see cref="Deployment" /> is the operator's name for a profile, which for a sign-in that passed no
+/// <c>--name</c> is the deployment's own host; and <see cref="Failure" /> is the line the command already printed to
+/// the terminal, which for several failures quotes the address or the alias that was typed. Scrubbing them was
+/// considered and rejected — the file sits beside a credential store that records every profile's endpoint in clear, so
+/// a log that named none of them would be protecting an address the directory it lives in already holds, at the cost of
+/// the field an operator reads the log for.
 /// </para>
 /// </remarks>
 /// <param name="At">When the invocation started.</param>

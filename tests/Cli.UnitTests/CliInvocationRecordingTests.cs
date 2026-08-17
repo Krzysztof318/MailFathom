@@ -85,36 +85,74 @@ public sealed class CliInvocationRecordingTests
         Assert.Equal($"{CliRootCommand.CommandName} contact list", entry.Command);
     }
 
-    /// <summary>Nothing the operator typed beyond a declared command name reaches the record.</summary>
+    /// <summary>A command that reached the deployment seam records the failure it printed, and names no command argument.</summary>
     /// <remarks>
-    /// The assertion is over every value the record holds rather than over the command alone, because a field added
-    /// later would otherwise carry an argument unasserted. Both strings are this test's own, so a value that reached
-    /// the file could only have come from the argument list.
+    /// Driven through <c>status</c> against an empty store, which is the shortest route to the one path that both
+    /// resolves a deployment and raises a <see cref="CliFailure" /> — a run that stops at the parser reaches neither,
+    /// so it would satisfy an assertion about what they write without ever having written anything.
     /// </remarks>
     [Fact]
-    public async Task RunAsync_AnInvocationCarryingAnAddressAndASecret_RecordsNeither()
+    public async Task RunAsync_ACommandThatFailedAgainstADeployment_RecordsTheLineItPrinted()
     {
         // Arrange
+        var console = new RecordingCliConsole();
         var log = new RecordingCliInvocationLog();
         const string Address = "https://mail.example.invalid:8443";
-        const string Secret = "sk-not-a-real-credential";
 
         // Act
-        _ = await CliRunner.RunAsync(
-            ContextFor(log),
-            ["--endpoint", Address, "--token", Secret],
+        var exitCode = await CliRunner.RunAsync(
+            ContextFor(log, console),
+            ["status", "--endpoint", Address],
             TestContext.Current.CancellationToken);
 
         // Assert
         var entry = Assert.Single(log.Appended);
 
-        var written = new[] { entry.Command, entry.Deployment, entry.Failure }
-            .Where(value => value is not null)
-            .ToArray();
+        Assert.Equal(CliExitCode.Failure, exitCode);
+        Assert.Equal($"{CliRootCommand.CommandName} status", entry.Command);
+        Assert.Equal(Assert.Single(console.Errors), entry.Failure);
+    }
 
-        Assert.NotEmpty(written);
-        Assert.DoesNotContain(written, value => value!.Contains(Address, StringComparison.Ordinal));
-        Assert.DoesNotContain(written, value => value!.Contains(Secret, StringComparison.Ordinal));
+    /// <summary>The command a record names is the declared one, whatever the operator typed after it.</summary>
+    /// <remarks>
+    /// The address is deliberately allowed to reach <see cref="CliInvocationEntry.Failure" /> and is asserted against
+    /// the command alone for that reason — what this holds is that the field naming the operation is derived from the
+    /// parser rather than from the argument list, which is where a credential would be.
+    /// </remarks>
+    [Fact]
+    public async Task RunAsync_AnInvocationCarryingAnAddress_NamesTheCommandWithoutIt()
+    {
+        // Arrange
+        var log = new RecordingCliInvocationLog();
+        const string Address = "https://mail.example.invalid:8443";
+
+        // Act
+        _ = await CliRunner.RunAsync(
+            ContextFor(log),
+            ["status", "--endpoint", Address],
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        var entry = Assert.Single(log.Appended);
+
+        Assert.DoesNotContain(Address, entry.Command, StringComparison.Ordinal);
+    }
+
+    /// <summary>A shell that turned the log off is obeyed by an invocation that ran through the whole runner.</summary>
+    [Fact]
+    public async Task RunAsync_AShellThatTurnedTheLogOff_AppendsNothing()
+    {
+        // Arrange
+        var log = new RecordingCliInvocationLog();
+
+        // Act
+        _ = await CliRunner.RunAsync(
+            ContextFor(log, variables: name => name == CliOptions.LogVariable ? CliOptions.LogOff : null),
+            ["--version"],
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Empty(log.Appended);
     }
 
     /// <summary>An invocation that asked for no record leaves none.</summary>
@@ -193,15 +231,24 @@ public sealed class CliInvocationRecordingTests
         Assert.Equal(3000, entry.DurationMilliseconds);
     }
 
+    /// <summary>Builds a context whose environment is stated rather than inherited.</summary>
+    /// <remarks>
+    /// Every test here drives the whole runner, which consults the shell for <see cref="CliOptions.LogVariable" />.
+    /// Reading the process's own environment would make each of these depend on whether whoever started the test run
+    /// had turned the log off — which the documentation tells operators to do — so the reader is supplied and answers
+    /// for nothing by default.
+    /// </remarks>
     private static CliContext ContextFor(
         RecordingCliInvocationLog? log,
         RecordingCliConsole? console = null,
-        TimeProvider? clock = null) => new(
+        TimeProvider? clock = null,
+        Func<string, string?>? variables = null) => new(
         console ?? new RecordingCliConsole(),
         new CredentialStore("credentials.json", new TokenProtector("credentials.key")),
         static (_, _) => throw new InvalidOperationException("No command in this class opens a transport."),
         FakeMailboxRedirect.Silent(),
         static _ => false,
         clock ?? TimeProvider.System,
-        log);
+        log,
+        variables ?? (static _ => null));
 }

@@ -24,6 +24,7 @@ namespace MailFathom.Cli;
 /// <param name="OpenBrowser">Opens an address in this machine's browser, reporting whether the attempt was made.</param>
 /// <param name="Clock">Decides whether a stored access token is still usable, and paces a device sign-in's polling.</param>
 /// <param name="Log">Where the record of this invocation is appended, or <see langword="null" /> to keep none — which is what a test not about the log wants.</param>
+/// <param name="ReadEnvironmentVariable">Reads a variable of the shell the command was run from, or <see langword="null" /> for the process's own environment.</param>
 internal sealed record CliContext(
     ICliConsole Console,
     CredentialStore Store,
@@ -31,7 +32,8 @@ internal sealed record CliContext(
     Func<Uri, IMailboxRedirectAwaiter> AwaitRedirect,
     Func<Uri, bool> OpenBrowser,
     TimeProvider Clock,
-    ICliInvocationLog? Log = null)
+    ICliInvocationLog? Log = null,
+    Func<string, string?>? ReadEnvironmentVariable = null)
 {
     /// <summary>Gets what this invocation turns out to have done, filled in by the layers that each know part of it.</summary>
     /// <remarks>
@@ -40,6 +42,22 @@ internal sealed record CliContext(
     /// contexts for equality.
     /// </remarks>
     internal CliInvocationRecord Invocation { get; } = new(Clock);
+
+    /// <summary>Reads a variable of the shell this invocation was run from.</summary>
+    /// <param name="name">The variable's name.</param>
+    /// <returns>Its value, or <see langword="null" /> when it is unset.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="name" /> is <see langword="null" />.</exception>
+    /// <remarks>
+    /// A seam rather than a direct read, because the process environment is shared by every test in an assembly that
+    /// runs them in parallel: a test asserting what an invocation recorded would otherwise depend on whether the shell
+    /// that started the run had turned the log off — which is a thing the documentation tells operators to do.
+    /// </remarks>
+    internal string? Variable(string name)
+    {
+        ArgumentNullException.ThrowIfNull(name);
+
+        return this.ReadEnvironmentVariable is { } read ? read(name) : Environment.GetEnvironmentVariable(name);
+    }
 
     /// <summary>Builds the context the command runs under in production.</summary>
     /// <returns>The context.</returns>

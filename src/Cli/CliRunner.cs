@@ -82,7 +82,8 @@ internal static class CliRunner
     /// </remarks>
     private static void Record(CliContext context, ParseResult parseResult, CliInvocationEntry entry)
     {
-        if (context.Log is not { } log || !CliOptions.RecordsInvocation(parseResult))
+        if (context.Log is not { } log
+            || !CliOptions.RecordsInvocation(parseResult, context.Variable(CliOptions.LogVariable)))
         {
             return;
         }

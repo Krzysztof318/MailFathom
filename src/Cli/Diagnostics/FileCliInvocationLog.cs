@@ -79,9 +79,17 @@ internal sealed class FileCliInvocationLog : ICliInvocationLog
 
     /// <summary>Moves the current file aside once it has reached its ceiling, so the next append starts a new one.</summary>
     /// <remarks>
+    /// <para>
     /// Measured before the append rather than after it, so the ceiling is what the file is allowed to reach rather than
-    /// what it is allowed to exceed by one record. A file that vanished between the two steps is not a failure: the
-    /// append that follows creates it.
+    /// what it is allowed to exceed by one record.
+    /// </para>
+    /// <para>
+    /// A move that fails is swallowed rather than reported, for the reason the append is shared rather than locked: two
+    /// invocations can end at the same moment, and both can see a full file. The one that loses the race finds nothing
+    /// left to move, and treating that as a failure would drop its record to protect a rollover the other run has
+    /// already performed. Anything else that stops the move leaves the file over its ceiling until the next invocation,
+    /// which is a log slightly too large rather than a record thrown away.
+    /// </para>
     /// </remarks>
     private void RollOverWhenFull()
     {
@@ -92,6 +100,12 @@ internal sealed class FileCliInvocationLog : ICliInvocationLog
             return;
         }
 
-        File.Move(this.Location, this.Location + RolledSuffix, overwrite: true);
+        try
+        {
+            File.Move(this.Location, this.Location + RolledSuffix, overwrite: true);
+        }
+        catch (Exception raced) when (raced is IOException or UnauthorizedAccessException)
+        {
+        }
     }
 }

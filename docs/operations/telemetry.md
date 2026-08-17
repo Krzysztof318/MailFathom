@@ -701,8 +701,14 @@ to a file beside its credential store. Neither is a telemetry signal and neither
 answer to the command, read by the person who typed it, and the second is the only durable record that the command ran
 at all, which is what an operator has left once the scrollback is gone. [What the command records about
 itself](admin-endpoint.md#what-the-command-records-about-itself) states the path, the fields, and the two ways to turn
-it off. It is held to the rule below as strictly as an exported signal is, for a reason that has nothing to do with a
-collector: that file is exactly the one that gets pasted into a support conversation.
+it off.
+
+That file is held to the half of the rule below that is about disclosure and not to the half that is about a collector,
+and the difference is worth being exact about. No credential and no mail reaches it, exactly as here. A deployment's own
+address does — through the operator's name for a profile, and through a failure line quoting what they typed — which
+this page forbids in every signal above. What makes that sound there and not here is the boundary each one crosses: an
+exported signal leaves the machine for a store somebody else may read, and this file stays in the operator's own
+directory beside a credential store that already records every profile's endpoint in clear.
 
 ## What no signal carries, and what holds every signal to it
 

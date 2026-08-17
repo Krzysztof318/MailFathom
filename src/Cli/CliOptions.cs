@@ -50,20 +50,13 @@ internal static class CliOptions
 
     /// <summary>Decides whether this invocation is recorded in the local log.</summary>
     /// <param name="parseResult">What the operator typed, parsed.</param>
-    /// <returns><see langword="true" /> when the invocation is recorded.</returns>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="parseResult" /> is <see langword="null" />.</exception>
-    internal static bool RecordsInvocation(ParseResult parseResult) =>
-        RecordsInvocation(parseResult, Environment.GetEnvironmentVariable(LogVariable));
-
-    /// <summary>Decides whether this invocation is recorded, against a stated value of the variable.</summary>
-    /// <param name="parseResult">What the operator typed, parsed.</param>
     /// <param name="logVariable">What <see cref="LogVariable" /> holds, or <see langword="null" /> when it is unset.</param>
     /// <returns><see langword="true" /> when the invocation is recorded.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="parseResult" /> is <see langword="null" />.</exception>
     /// <remarks>
     /// The same order every other input here follows: what an operator typed beats what their shell was told, and the
-    /// default is on. The variable is a parameter rather than read here so that the order can be asserted without a
-    /// test writing to the process environment, which every other test in the suite shares.
+    /// default is on. The variable is a parameter rather than read here, so that neither this nor a test driving a whole
+    /// invocation depends on the process environment every test in an assembly shares.
     /// </remarks>
     internal static bool RecordsInvocation(ParseResult parseResult, string? logVariable)
     {
