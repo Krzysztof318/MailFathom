@@ -339,7 +339,9 @@ image's `org.opencontainers.image.source` label and needs nothing pushed to it.
 That page exists rather than the root README being pushed, because the two are read by different people. Somebody on
 Docker Hub already has an image reference and wants to run a container: the tags, what the image needs before it starts,
 how it runs, and how to verify it. Somebody on the repository is deciding whether to adopt the project at all. The chart
-listing still renders the root README, because an Artifact Hub page is read by the second reader rather than the first.
+listing has a page of its own for the same reason and a third reader again — somebody who has already chosen Kubernetes
+and Helm — which is `deploy/helm/mailfathom/README.md`, packaged with the chart rather than pushed anywhere.
+[Deploying to Kubernetes](deployment-kubernetes.md#installing) records what else that listing renders.
 
 Docker Hub's two limits are checked before that write rather than left to the action performing it, which truncates
 over-long content and reports success: a release fails if the overview exceeds 25000 bytes or if the description label

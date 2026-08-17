@@ -183,6 +183,13 @@ unavailable:
    "no versioned artifact exists yet", "a release will attach it" — because that kind of sentence goes stale at the
    moment of the tag and no search for the version number would ever find it. Each hit is read and either corrected in
    this same pull request or left alone; the sweep reports and never gates.
+
+   The same pull request reads the two committed pages a registry renders — `deploy/docker/README.md`, pushed onto the
+   Docker Hub repository page, and `deploy/helm/mailfathom/README.md`, packaged into the chart — against what this
+   release actually publishes. Neither is on the list above and neither joins it, because neither asserts which release
+   is current: one names no version at all and the other writes the placeholder. They are read here anyway because the
+   tagged tree is what each listing renders, so a claim that went stale during the cycle would be published as this
+   release's own description of the artifact.
 2. **Push the annotated tag `v<x.y.z>` on that merge commit.** This is what makes the release real and what triggers
    the release workflow — which starts only for a version-shaped tag, so a tag that is not one starts nothing at all
    rather than a run that fails. **Read a pushed tag that produced no run as a malformed tag**, and check its spelling

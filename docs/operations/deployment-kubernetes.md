@@ -10,7 +10,8 @@ operates the cluster, and the chart is written so that it cannot pretend otherwi
 | --- | --- |
 | Deployment, Service, ConfigMap, ServiceAccount | Any `Secret` |
 | A PostgreSQL StatefulSet, its Service, and its initialization script, unless `database.deploy.enabled` is false | Any certificate material |
-| An optional Ingress | Any schema step |
+| A personal-data analyzer Deployment and Service, and a SpamAssassin Deployment and Service, only when the section that owns each is enabled and left to deploy its own | Any schema step |
+| An optional Ingress | |
 
 ## What you supply
 
@@ -181,8 +182,10 @@ protocol last; Artifact Hub imposes no length there. Its `keywords` are what a s
 an operator would search for and to capabilities this release implements — a keyword is a claim about the artifact it
 is attached to, so the roadmap's terms are absent from it. `artifacthub.io/category` is stated rather than omitted,
 because Artifact Hub otherwise predicts a category from those keywords with a machine-learning model. The overview
-below all of it is the repository's root `README.md`, copied into the package at release time so there is one overview
-rather than two that drift.
+below all of it is `deploy/helm/mailfathom/README.md`, a committed page written for the reader a chart listing has —
+somebody who has already chosen Kubernetes and Helm — rather than for the reader deciding whether to adopt the project,
+which is what the root README is for. Nothing is substituted at package time, so a listing renders the page reviewed in
+the diff that changed it, and it is the same page an operator browsing the chart directory reads.
 
 Installing the chart directory out of a checkout is the development path and stays available:
 

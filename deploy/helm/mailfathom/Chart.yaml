@@ -85,8 +85,10 @@ maintainers:
 # and a database. `ai-machine-learning` is one of the eight values Artifact Hub accepts and is the one this belongs
 # under: what the chart deploys exists to put mail in front of an agent.
 #
-# The overview beside them is not an annotation: Artifact Hub renders the `README.md` inside the package, and the
-# release run copies the repository's root README in at package time so there is one overview rather than two.
+# The overview beside them is not an annotation: Artifact Hub renders the `README.md` inside the package, which is the
+# committed `README.md` in this directory. It is written for the reader a chart listing has — somebody who has already
+# chosen Kubernetes and Helm — rather than for the reader deciding whether to adopt the project, which is what the root
+# README is for and what this listing used to be handed.
 annotations:
   artifacthub.io/category: ai-machine-learning
   artifacthub.io/license: Apache-2.0

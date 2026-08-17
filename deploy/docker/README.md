@@ -6,7 +6,7 @@
 
 ![A chat client asked to show the latest mail, answered with a table of the ten most recent messages, their receipt times, and the moment the local copy was last synchronized](https://raw.githubusercontent.com/Krzysztof318/MailFathom/main/assets/mcp-tools/list-recent-emails.png)
 
-*One question, answered from the local copy in an ordinary chat client. The `***` were blacked out by hand before the file entered a public repository — MailFathom redacts nothing on its way to a client.*
+*One question, answered from the local copy in an ordinary chat client. The `***` were blacked out by hand before the file entered a public repository — until you turn `SensitiveContent` on, MailFathom redacts nothing on its way to a client.*
 
 This page describes the container image. **[github.com/Krzysztof318/MailFathom](https://github.com/Krzysztof318/MailFathom) is the project**, and [the documentation site](https://krzysztof318.github.io/MailFathom/) is where everything below is stated in full.
 
@@ -60,6 +60,10 @@ git clone https://github.com/Krzysztof318/MailFathom.git
 cd MailFathom/deploy/compose
 
 cp .env.example .env
+# Then set both of these in .env, in one edit. Left at their defaults they name mailfathom:local and build the
+# checkout, which is deliberate — nothing is ever pulled by accident — so this is the step that runs this image.
+#   MAILFATHOM_IMAGE=docker.io/krzysztof318/mailfathom:<version>   # an immutable tag, never latest and never a nightly
+#   MAILFATHOM_PULL_POLICY=missing
 
 mkdir -p secrets/mailfathom
 chmod 700 secrets                # not mounted anywhere; this is what keeps other host users out
@@ -84,10 +88,10 @@ docker compose up -d
 
 | Property | Value |
 | --- | --- |
-| Base | `mcr.microsoft.com/dotnet/aspnet:10.0.10-noble-chiseled-extra`, pinned to an exact patch version |
+| Base | `mcr.microsoft.com/dotnet/aspnet:10.0.11-noble-chiseled-extra`, pinned to an exact patch version |
 | Platforms | `linux/amd64` and `linux/arm64` |
 | User | `1654`, the unprivileged `app` account — never root |
-| Ports | `8080` for `/mcp`, which `McpEndpoint:Port` moves; `8081` for the probes, on a listener of its own |
+| Ports | `8080` for `/mcp`, which `McpEndpoint:Port` moves; `8081` for the probes, on a listener of its own, which `HealthEndpoints:Port` moves |
 | Writable paths | `/tmp` only, which a deployment supplies as a tmpfs or an `emptyDir` |
 | Entrypoint | `dotnet /app/MailFathom.Host.dll` |
 | Health check | None in the image. Startup, readiness, and liveness probes answer on `8081`. |
@@ -101,7 +105,7 @@ docker compose up -d
 Every published image carries a signed build provenance statement tying the digest to the commit and the workflow that produced it:
 
 ```bash
-gh attestation verify oci://ghcr.io/krzysztof318/mailfathom:latest --owner Krzysztof318
+gh attestation verify oci://ghcr.io/krzysztof318/mailfathom:latest --repo Krzysztof318/MailFathom
 ```
 
 Before a release is pushed it is built, unit-tested, format-checked, proven against its migrations, run through the integration suite, started and required to report the version and revision its labels claim, and scanned by Trivy — which refuses to publish a release carrying a fixable `HIGH` or `CRITICAL` finding. [Verification](https://krzysztof318.github.io/MailFathom/operations/container-image.html#verification) records the whole order.

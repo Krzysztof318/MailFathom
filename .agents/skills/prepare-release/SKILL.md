@@ -285,7 +285,8 @@ On a branch off the release branch, and touching nothing else:
 - update the link references at the foot of the file so the new section resolves;
 - leave `VersionPrefix` alone. It already reads `x.y.z`, which is what makes the tagged tree self-consistent;
 - **bring the Registry metadata and the files that name a version in prose onto `x.y.z`**, per the list below;
-- **sweep the tree for prose that describes the release state**, per the pass after it.
+- **read the two registry overviews against what this release publishes**, per the subsection after it;
+- **sweep the tree for prose that describes the release state**, per the pass after that.
 
 Nothing else belongs in this diff. **This is the pull request whose merge commit is tagged and published**, so it is
 both the last point at which the release's contents are read as a whole and the thing the published artifact is built
@@ -325,6 +326,33 @@ Nothing gates this, deliberately: no check can tell prose describing the release
 example, and one that tried would be satisfied by a search-and-replace through `docs/`. The list above is short and
 fixed instead, and a file joining it is an edit to this table — but a file that can take a placeholder instead should
 take one, and never join it at all.
+
+#### The two registry overviews
+
+Two committed pages are rendered by a registry rather than by this repository, and this release publishes both from the
+tree being tagged: `deploy/docker/README.md`, which the image publication pushes onto the Docker Hub repository page,
+and `deploy/helm/mailfathom/README.md`, which is packaged into the chart and is what Artifact Hub and every other chart
+listing renders. Root `AGENTS.md` records which reader each is written for and what belongs on it.
+
+**Neither is on the table above, and that is a decision recorded here rather than re-taken every release.** Neither
+page asserts which release is current: the Docker Hub one describes the tag *scheme*, the image contract, and a Compose
+deployment without naming a version at all, and the chart one writes `<x.y.z>` in every command a reader substitutes
+into. That is the table's own rule — a page quoting a version because a reader substitutes one takes the placeholder
+and stays off the list — so a release touches neither for a number. If either ever starts asserting which release is
+current, it joins the table in the same change that makes it do so.
+
+**Read both anyway, here, beside the changelog.** They describe what an operator receives from a registry at the tag
+about to be published, and the tagged tree is what each listing renders, so a claim that went stale during the cycle is
+published as this release's own description of the artifact. The reading is proportionate to that rather than a full
+audit against the code: confirm each page still describes what this release actually publishes — the registries and the
+tag scheme, the base image pin and the runtime contract on the Docker Hub page; what the chart renders, refuses to
+render, and requires an operator to supply on the chart page — and correct what moved. It belongs in this pull request
+for the same reason the four files above do: its merge commit is what gets tagged, and a page corrected afterwards was
+wrong in the tree every registry rendered.
+
+The release-state sweep below already reaches both. Its only exclusions are `CHANGELOG.md`, `docs/decisions/`, and this
+skill's own directory, so every tracked file under `deploy/` is in its file set and neither page needs a pattern of its
+own.
 
 #### The release-state sweep
 
