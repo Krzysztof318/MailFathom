@@ -221,11 +221,26 @@ public sealed class MailRuleActionSetTests
     }
 
     /// <summary>Adding or removing nothing asks the server for nothing, so an action that says it cannot be built.</summary>
+    /// <remarks>
+    /// One guard refuses both, and it is written as a rule about the two rather than about the addition, so a
+    /// regression that narrowed it would leave a removal naming nothing constructible here.
+    /// </remarks>
     [Fact]
     public void AddKeywords_NamingNone_IsRefused()
     {
         // Act
         var refusal = Assert.Throws<ArgumentException>(() => MailRuleAction.AddKeywords(AuthoredMailKeywords.None));
+
+        // Assert
+        Assert.Equal("keywords", refusal.ParamName);
+    }
+
+    /// <inheritdoc cref="AddKeywords_NamingNone_IsRefused" />
+    [Fact]
+    public void RemoveKeywords_NamingNone_IsRefused()
+    {
+        // Act
+        var refusal = Assert.Throws<ArgumentException>(() => MailRuleAction.RemoveKeywords(AuthoredMailKeywords.None));
 
         // Assert
         Assert.Equal("keywords", refusal.ParamName);

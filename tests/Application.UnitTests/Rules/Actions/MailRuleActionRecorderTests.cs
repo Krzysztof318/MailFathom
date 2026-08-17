@@ -358,6 +358,48 @@ public sealed class MailRuleActionRecorderTests
         Assert.Equal(MailRuleActionFailureReason.ActionNoLongerPermitted, failure.Reason);
     }
 
+    /// <summary>
+    /// The recorder judges each action against the account's permissions again as it writes, which is a separate check
+    /// from the one startup ran over the rule set. A revoked switch therefore has to reach it, and the two switches this
+    /// tier added are the ones a re-check narrowed back to the original actions would silently let through.
+    /// </summary>
+    [Theory]
+    [InlineData("flag-invoices", false, true)]
+    [InlineData("label-invoices", true, false)]
+    [InlineData("unlabel-invoices", true, false)]
+    [InlineData("relabel-invoices", true, false)]
+    public async Task RecordAsync_ANewActionTheAccountHasStoppedPermitting_WritesNothingAndSaysWhy(
+        string ruleName,
+        bool permitsSetFlagged,
+        bool permitsWriteKeywords)
+    {
+        // Arrange
+        this.permissions
+            .GetRuleActionPermissions(Arg.Any<MailAccountId>())
+            .Returns(MailRuleActionPermissions.Default with
+            {
+                PermitsSetFlagged = permitsSetFlagged,
+                PermitsWriteKeywords = permitsWriteKeywords,
+            });
+        var labels = AuthoredMailKeywords.Create(["$Todo"]);
+        MailRuleAction action = ruleName switch
+        {
+            "flag-invoices" => MailRuleAction.SetFlagged(isFlagged: true),
+            "label-invoices" => MailRuleAction.AddKeywords(labels),
+            "unlabel-invoices" => MailRuleAction.RemoveKeywords(labels),
+            _ => MailRuleAction.SetKeywords(labels),
+        };
+
+        // Act
+        var recording = await this.RecordAsync(Planned(ruleName, action));
+
+        // Assert
+        Assert.Equal(0, this.records.OpenedRecordCount);
+        var failure = Assert.Single(recording.Failures);
+        Assert.Equal(ruleName, failure.RuleName);
+        Assert.Equal(MailRuleActionFailureReason.ActionNoLongerPermitted, failure.Reason);
+    }
+
     /// <summary>Revoking one action leaves the others alone, which is what makes the four switches four decisions.</summary>
     [Fact]
     public async Task RecordAsync_AFlagBesideARevokedRelocation_StillWritesTheFlag()

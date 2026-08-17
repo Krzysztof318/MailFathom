@@ -262,7 +262,8 @@ The text is yours to choose, and the convention worth following is the one clien
 `$Todo`, `$Invoice`, `$Waiting` — but nothing here requires it.
 
 What IMAP requires is that a keyword be a single unbroken token, so a keyword may not contain a space, a control
-character, or any of `( ) { % * " \ ]`. One that does is refused at startup, naming the rule and the key it was written
+character, any of `( ) { % * " \ ]`, or anything above US-ASCII — `café` is refused for that last reason and `cafe` is
+not. One that does is refused at startup, naming the rule and the key it was written
 in, because a keyword that cannot be sent is a rule that cannot do what it says. A keyword is at most 64 characters and
 a rule names at most 64 of them in one key, which are the same bounds MailFathom reads a message's keywords under.
 Keywords are compared without regard to case, so naming both `$todo` and `$Todo` is naming one keyword — and the

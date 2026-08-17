@@ -153,6 +153,32 @@ public sealed class MailboxMutationRecordMappingTests
             () => MailboxMutationRecordMapping.ToRecord(entity, entity.MailFolder));
     }
 
+    /// <summary>
+    /// The two ways a stored keyword list can be unreadable want different remedies, so the row says which it was
+    /// rather than reporting the commoner one for both. An operator told a count-bounded row names a bad keyword goes
+    /// looking for a keyword that is fine.
+    /// </summary>
+    [Fact]
+    public void ToRecord_AStoredKeywordListLongerThanOneEmailKeeps_SaysSoRatherThanBlamingAKeyword()
+    {
+        // Arrange
+        var keywords = Enumerable
+            .Range(0, RemoteEmailKeywords.MaximumKeywords + 1)
+            .Select(position => $"$Label{position}")
+            .ToArray();
+        var entity = StoredKeywordChange(MailboxMutation.AddKeywords, keywords);
+
+        // Act
+        var refusal = Assert.Throws<InvalidOperationException>(
+            () => MailboxMutationRecordMapping.ToRecord(entity, entity.MailFolder));
+
+        // Assert
+        Assert.Contains(
+            $"more than the {RemoteEmailKeywords.MaximumKeywords}",
+            refusal.Message,
+            StringComparison.Ordinal);
+    }
+
     private static MailboxMutationEntity StoredKeywordChange(MailboxMutation mutation, string[] keywords)
     {
         var entity = StoredRelocation();

@@ -116,10 +116,18 @@ internal static class MailboxMutationRecordMapping
             return null;
         }
 
-        return AuthoredMailKeywords.TryCreate(keywords, out var authored)
-            ? authored
-            : throw new InvalidOperationException(
-                $"Mailbox mutation record {entity.Id} names a keyword that no mail server can be asked to store.");
+        if (AuthoredMailKeywords.TryCreate(keywords, out var authored))
+        {
+            return authored;
+        }
+
+        // Which of the two failed decides what an operator does about the row, so the message says which rather than
+        // reporting the commoner one for both.
+        var cause = keywords.Any(keyword => !AuthoredMailKeywords.IsWritable(keyword))
+            ? "names a keyword that no mail server can be asked to store"
+            : $"names more than the {RemoteEmailKeywords.MaximumKeywords} keywords one email keeps";
+
+        throw new InvalidOperationException($"Mailbox mutation record {entity.Id} {cause}.");
     }
 
     /// <summary>Restores the destination folder a relocation or a copy named, exactly as it was stored.</summary>

@@ -294,6 +294,40 @@ public sealed class MailKitImapWriteSessionTests
             Arg.Any<CancellationToken>());
     }
 
+    /// <summary>
+    /// A replacement names keywords the message is to end up carrying, so the same folder that cannot keep an addition
+    /// cannot keep one of these either. It is refused before the flag fetch as well as before the store, because a
+    /// refusal that had already read the message would have spent a round trip to reach the same answer.
+    /// </summary>
+    [Fact]
+    public async Task SetKeywordsAsync_AFolderThatKeepsNoNewKeyword_IsRefusedBeforeAnythingIsRead()
+    {
+        // Arrange
+        using var resilience = CreateSingleAttemptResilience();
+        var client = new FakeImapClient { Capabilities = ImapCapabilities.Move | ImapCapabilities.UidPlus };
+        var openFolder = CreateWritableFolder(keepsAnyKeyword: false, keptKeywords: "$Junk");
+        await using var harness = CreateHarness(resilience, client, openFolder);
+        await using var session = await harness.OpenSessionAsync();
+
+        // Act
+        var refusal = await Assert.ThrowsAsync<MailboxMutationUnsupportedException>(() => session.SetKeywordsAsync(
+            CreateOccurrenceId(42U),
+            AuthoredMailKeywords.Create(["$Todo"]),
+            new RecordingMailboxMutationJournal(),
+            CancellationToken.None));
+
+        // Assert
+        Assert.Equal(MailboxMutation.SetKeywords, refusal.Mutation);
+        await openFolder.DidNotReceive().FetchAsync(
+            Arg.Any<IList<UniqueId>>(),
+            Arg.Any<IFetchRequest>(),
+            Arg.Any<CancellationToken>());
+        await openFolder.DidNotReceive().StoreAsync(
+            Arg.Any<IList<UniqueId>>(),
+            Arg.Any<IStoreFlagsRequest>(),
+            Arg.Any<CancellationToken>());
+    }
+
     /// <summary>A folder listing the keyword by name keeps it, so naming only those it already keeps is not refused.</summary>
     [Fact]
     public async Task AddKeywordsAsync_AFolderKeepingTheNamedKeyword_StoresIt()

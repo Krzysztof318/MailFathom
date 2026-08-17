@@ -274,11 +274,31 @@ public sealed class MailboxMutationRequestTests
     }
 
     /// <summary>Adding or removing nothing asks the server for nothing, which is a mistyped list rather than an intent.</summary>
+    /// <remarks>
+    /// Both are here rather than only the addition, because one condition refuses them together — it names the
+    /// replacement as the exception rather than naming the two it applies to. A regression narrowing it to the addition
+    /// would leave an empty removal reaching a mail server, and nothing else in this suite would say so.
+    /// </remarks>
     [Fact]
     public void AddKeywords_NamingNone_IsRefused()
     {
         // Act
         var refusal = Assert.Throws<ArgumentException>(() => MailboxMutationRequest.AddKeywords(
+            LocalEmail,
+            Occurrence(),
+            Requester,
+            AuthoredMailKeywords.None));
+
+        // Assert
+        Assert.Equal("keywords", refusal.ParamName);
+    }
+
+    /// <inheritdoc cref="AddKeywords_NamingNone_IsRefused" />
+    [Fact]
+    public void RemoveKeywords_NamingNone_IsRefused()
+    {
+        // Act
+        var refusal = Assert.Throws<ArgumentException>(() => MailboxMutationRequest.RemoveKeywords(
             LocalEmail,
             Occurrence(),
             Requester,
