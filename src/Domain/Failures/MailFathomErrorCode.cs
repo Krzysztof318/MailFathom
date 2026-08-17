@@ -183,6 +183,24 @@ public readonly record struct MailFathomErrorCode
     /// </remarks>
     public static MailFathomErrorCode OutgoingEmailBoundExceeded { get; } = new(28005);
 
+    /// <summary>Gets subcategory 8, message composition: there is no such stored email to answer, as far as the caller may be told.</summary>
+    /// <remarks>
+    /// It is the same answer a read of that email gives, and deliberately one code for three situations: no such
+    /// identity, an account this deployment stopped serving, and a folder an operator withheld from tools. Separating
+    /// them would let whoever holds an identifier learn which mail exists by trying to reply to it, and an email
+    /// nothing may read is an email nothing may forward.
+    /// </remarks>
+    public static MailFathomErrorCode AnsweredEmailNotFound { get; } = new(28006);
+
+    /// <summary>Gets subcategory 8, message composition: the email being answered has no content this deployment can read.</summary>
+    /// <remarks>
+    /// It is separate from an email that cannot be found because the two differ in what an operator does about them:
+    /// this one names mail that exists and whose local copy is missing, damaged, unparseable, deliberately unstored, or
+    /// encrypted, and a repair or a re-synchronization is what changes the answer. Composing anyway would produce a
+    /// reply quoting nothing, which reads to its recipient as an answer to an empty message.
+    /// </remarks>
+    public static MailFathomErrorCode AnsweredEmailContentUnavailable { get; } = new(28007);
+
     #endregion
 
     #region Category 3 — Persistence
@@ -457,6 +475,8 @@ public readonly record struct MailFathomErrorCode
         OutgoingEmailFieldUnusable,
         OutgoingEmailInternationalizationUnsupported,
         OutgoingEmailBoundExceeded,
+        AnsweredEmailNotFound,
+        AnsweredEmailContentUnavailable,
         PersistenceConcurrencyConflict,
         DatabaseSchemaOutOfDate,
         DatabaseSchemaStateUnreadable,

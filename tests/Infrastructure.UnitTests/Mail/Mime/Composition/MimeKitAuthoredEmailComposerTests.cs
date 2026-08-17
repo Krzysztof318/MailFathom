@@ -780,6 +780,42 @@ public sealed class MimeKitAuthoredEmailComposerTests
         Assert.Equal(requester, composition.Email.Request.Requester);
     }
 
+    /// <summary>
+    /// A message answering another carries the two headers every client threads by, written by the one place that
+    /// assembles a message. The answered identifier is last in the path, which is where a client looks for the parent.
+    /// </summary>
+    [Fact]
+    public void Compose_MessageAnsweringAnother_WritesBothHeadersEveryClientThreadsBy()
+    {
+        // Arrange
+        var answered = EmailThreadReferences.Create(
+            "<parent@example.test>",
+            inReplyTo: "<root@example.test>",
+            references: ["<root@example.test>"]);
+        var authored = Authored() with { Threading = OutgoingThreadPlacement.Answering(answered) };
+
+        // Act
+        var composition = CreateComposer().Compose(Account, Requester(), authored, Capabilities());
+
+        // Assert
+        var message = Parse(composition);
+        Assert.Equal("parent@example.test", message.InReplyTo);
+        Assert.Equal(["root@example.test", "parent@example.test"], message.References.ToArray());
+    }
+
+    /// <summary>A message answering nothing writes neither header, which is what a parser reads as a first message.</summary>
+    [Fact]
+    public void Compose_MessageAnsweringNothing_WritesNeitherThreadingHeader()
+    {
+        // Act
+        var composition = CreateComposer().Compose(Account, Requester(), Authored(), Capabilities());
+
+        // Assert
+        var message = Parse(composition);
+        Assert.Null(message.InReplyTo);
+        Assert.Empty(message.References);
+    }
+
     private static void AssertBoundExceeded(
         AuthoredEmailComposition composition,
         AuthoredEmailField field,

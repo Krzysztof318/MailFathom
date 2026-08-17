@@ -5,9 +5,10 @@
 Reading a mailbox and submitting to one are two capabilities against two servers, and MailFathom holds them apart.
 What exists today is the submission half up to the point of transmission: an account may declare where its mail would be
 submitted, a **delivery session** can be opened against that server — connected, encrypted, authenticated, and asked what
-it will accept — an authored message can be **composed into MIME**, and the send can be written down durably before
-anything acts on it. Nothing transmits a message, so a deployment that configures a submission endpoint gains a validated
-endpoint, an openable session, a composer, an outbox holding a message ready to go, and no outbound mail.
+it will accept — an authored message can be **composed into MIME**, a **reply or a forward can be authored** from mail
+this deployment already holds, and the send can be written down durably before anything acts on it. Nothing transmits a
+message, so a deployment that configures a submission endpoint gains a validated endpoint, an openable session, a
+composer, an outbox holding a message ready to go, and no outbound mail.
 
 That is deliberate rather than partial. Each of those is a piece every later step rests on: the session is the piece with
 a protocol, a credential, and a channel to get wrong; the composer is the piece that decides who a message says it is
@@ -168,6 +169,12 @@ random half and the account's own domain, so nothing outside this deployment can
 has not seen and forge a reply into its thread. The `Date` comes from the injected clock, as every timestamp in this
 system does.
 
+**The threading headers are owned here too.** `In-Reply-To` and `References` are what every mail client threads by and are
+the whole of what it threads by, so a message answering another carries both or neither. Nothing above the composer
+writes either one: an authored message states which conversation it answers and the composer writes the headers, which is
+what keeps a second path from appending its own answer to a question this one settles. The identifiers themselves are
+never a caller's — the section below is where they come from.
+
 **Some are correctness at the protocol edge.** Every author-supplied value that becomes a header — the subject, the name
 written beside each address, the name and declared media type of each file — is refused for carrying a line break rather
 than sanitized: stripping it would compose a message whose subject is not what the author wrote and not what they would
@@ -209,6 +216,68 @@ the people a message is between, so nothing that reaches a log line, a metric, o
 are `28001` for an account configuring no address to send from, `28002` for an injected header, `28003` for a field no
 message can be composed from, `28004` for an internationalized address the server cannot carry, and `28005` for any
 bound.
+
+## Replying and forwarding from mail this deployment already holds
+
+A reply and a forward are the two sends that begin from a message rather than from a blank one, and everything that makes
+them correct is read out of the stored copy. `StoredEmailResponseAuthoring` is where that reading happens. What it takes
+is the stable identity of the email being answered, which of the three acts it is, and what the author wrote; what it
+produces is an ordinary `AuthoredEmail` that the composer above turns into MIME under the same bounds as any other. There
+is no reply-shaped path below it and no second way into the composition.
+
+**The identity of the answered message is the only thing a caller states.** Every value that decides whether the answer
+is correct — the threading identifiers, the addresses, the subject, the quoted text, the files — comes out of the stored
+copy that identity resolves to, so none of them can be supplied and none of them can be supplied wrongly.
+
+**Threading is the first of those and has no partial credit.** `In-Reply-To` is the answered message's own `Message-ID`
+and `References` is the path it carried with that identifier appended last, which is where a client looks for the
+immediate parent. A message that carried no identity of its own can be answered and cannot be pointed at, so the answer
+inherits its path and names no parent — naming an ancestor instead would attach the reply to the wrong message in the
+same conversation. The path is bounded at 32 identifiers, far below the 256 a parse keeps, and gives up its middle: the
+root names the conversation and the recent end is what a client walks. That cost is paid twice, because
+[the conversation a message belongs to](../architecture/stored-email-schema.md#the-conversation-a-message-belongs-to) is
+assembled from those same three identifiers — a reply whose headers are wrong comes
+back from `Sent` as a conversation of one in this deployment as well as in every recipient's mailbox.
+
+**Recipients are a decision, not a copy.** A reply goes to `Reply-To` where the sender wrote one and to `From` otherwise.
+A reply to all adds the original's `To` and `Cc` in the headers they were written in, less the address the account sends
+from — a deployment that answers a message it was copied on and mails itself has written a loop, and will then run its
+arrival rules over its own answer. That address is the whole of what configuration states an account owns, so a mailbox
+reached under a second address the `Delivery` block never names is not recognized as the account's own. One mailbox is offered once and in the more visible header, as it is for any
+authored list. A forward addresses nobody of its own: the people it goes to are people the original never named, so its
+author names all of them. Which act it is, is explicit; there is no default that quietly becomes the other.
+
+**The subject takes the conventional prefix only where there is not one already.** `Re:` and `Fwd:` are what this system
+writes, and the comparison that decides whether to write one recognizes the prefixes actually in use — `Aw`, `Sv`,
+`Odp`, `Res`, `Rif`, `Ynt`, `Wg`, `Doorst` and the rest, in the numbered `Re[2]:` form as well. Recognizing only the
+English one produces the `Re: Re: Re:` a thread becomes unreadable as against every correspondent whose client is not in
+English. A prefix already there is left exactly as it was written rather than incremented.
+
+**A forward carries the original's own files, out of the content store.** That is the whole reason it is worth beginning
+from a local copy: the alternative is a second fetch from the mail server, which a send has no business performing and
+which would set the remote `\Seen` flag on somebody's mail, or rebuilding files from what was recorded about them, which
+cannot be done. The files are held to the same `MailDelivery` bounds any attachment set is, measured from what the
+message's own parse reported and checked before an octet of one is read, and a forward past one of them is refused naming
+the limit. A part the sender left unnamed is named after its position in the composed message, because refusing to
+forward a message over somebody else's omission is the worse answer of the two.
+
+**The quotation is produced from that same reading.** An attribution line naming who wrote the message and when sits
+above the quoted text in the plain-text body, and in the HTML alternative where the author wrote one — a message that
+carried no markup of its own is quoted as encoded text there rather than inserted. The author's own words are never cut:
+where the two together exceed what this deployment composes, the quotation is what gives way, and an author who writes
+past the bound on their own is refused by the composition rather than silently trimmed.
+
+**The stored email is a permission boundary as well as a source.** An email nothing may read is an email nothing may
+forward, so an account this deployment no longer serves and a folder mapped `VisibleToTools: false` are both refused with
+`28006` — the same not-found answer a read of that email gives, because telling them apart would let a caller learn which
+mail exists by trying to reply to it. An email whose content this deployment cannot read is refused with `28007` instead:
+content synchronization deliberately left unstored, a local copy that has gone missing or is damaged, bytes that no
+longer parse, and a body inside a cryptographic envelope all arrive there, because an answer quoting nothing reads to its
+recipient as an answer to an empty message. A damaged copy records a repair request on the way out, exactly as reading
+the message's content does.
+
+Nothing is written down and nothing is sent by any of this, and no log line, metric, or refusal carries an address, a
+subject, or a line of quoted text.
 
 ## The record a send is written down as, before anything is sent
 
@@ -276,8 +345,16 @@ Composition is settled entirely in the unit suite, because it reaches nothing: t
 bytes back with the same parser this system reads arriving mail with. What they establish is each refusal against the
 field it names, the sending address and the minted identity against an account that supplied neither, one mailbox named
 in two headers becoming one offer in the more visible one, a blind recipient appearing in the envelope and in none of
-the transmitted bytes, an eight-bit body transfer-encoded when the server takes none, and the line ending a stored
-message carries — which matters precisely because the bytes are transmitted verbatim rather than re-serialized.
+the transmitted bytes, an eight-bit body transfer-encoded when the server takes none, the two threading headers written
+together or not at all, and the line ending a stored message carries — which matters precisely because the bytes are
+transmitted verbatim rather than re-serialized.
+
+Authoring a reply or a forward is settled in the unit suite for the same reason, since it reaches no server either. What
+the tests establish there is the threading of an answer to a message with and without a `References` header and to one
+carrying no identity of its own, a reply to all against a message naming the answering account in both `To` and `Cc`, the
+subject-prefix comparison across the spellings clients write, the forward of a message whose files exceed each of the
+three bounds in turn, the refusal of an email withheld from tools and of one whose content this deployment cannot read,
+and the repair request a damaged copy leaves behind on the way out.
 
 The integration suite opens a real session against the orchestrated GreenMail server and records what it advertises:
 `AUTH PLAIN LOGIN XOAUTH2` and `SMTPUTF8`, with neither `SIZE` nor `8BITMIME`. That is the limit of what is provable
