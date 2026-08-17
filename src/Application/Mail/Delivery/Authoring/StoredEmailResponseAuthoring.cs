@@ -219,7 +219,8 @@ public sealed class StoredEmailResponseAuthoring
                     htmlBody,
                     attribution,
                     rendering.SanitizedHtmlBody?.Text,
-                    rendering.PlainTextBody.Text)
+                    rendering.PlainTextBody.Text,
+                    this.bounds.MaxBodyCharacters)
                 : null,
             Attachments = attachments,
             Threading = OutgoingThreadPlacement.Answering(rendering.Headers.ThreadReferences),

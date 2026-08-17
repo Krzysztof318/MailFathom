@@ -528,13 +528,20 @@ public sealed class StoredEmailResponseAuthoringTests
     /// <summary>
     /// A display name is whatever a sender wrote, so an attribution built from one is untrusted input. Both bodies stay
     /// within what this deployment composes regardless, which is what keeps one message's sender from deciding whether
-    /// somebody else's answer can be composed at all.
+    /// somebody else's answer can be composed at all. A name written out of the characters the markup alternative
+    /// encodes is the same input several times its own length once it is markup, so it is bounded by what it costs
+    /// there rather than by how the sender wrote it.
     /// </summary>
-    [Fact]
-    public async Task AuthorAsync_ReplyToAMessageWhoseSenderWroteAnEnormousName_StaysWithinTheBodyBound()
+    [Theory]
+    [InlineData('n')]
+    [InlineData('&')]
+    [InlineData('<')]
+    [InlineData('"')]
+    public async Task AuthorAsync_ReplyToAMessageWhoseSenderWroteAnEnormousName_StaysWithinTheBodyBound(
+        char nameCharacter)
     {
         // Arrange
-        Assert.True(EmailAddress.TryCreate(new string('n', 4000), "author@example.test", out var address));
+        Assert.True(EmailAddress.TryCreate(new string(nameCharacter, 4000), "author@example.test", out var address));
         var authoring = AuthoringOver(
             Rendering(participants: [new EmailParticipant(EmailAddressRole.From, address)]),
             bounds: Bounds(maxBodyCharacters: 512));
@@ -546,6 +553,28 @@ public sealed class StoredEmailResponseAuthoringTests
         // Assert
         Assert.True(response.Email!.PlainTextBody.Length <= 512);
         Assert.True(response.Email.HtmlBody!.Length <= 512);
+    }
+
+    /// <summary>
+    /// A message carrying no markup of its own is quoted as its text, encoded so that nothing a sender wrote decides
+    /// the structure of somebody else's reply. The encoding is an expansion, and the text it expands is the answered
+    /// message's, so the quotation is cut by what the encoding produces rather than by what the rendering handed over.
+    /// </summary>
+    [Fact]
+    public async Task AuthorAsync_ReplyToAMessageWrittenOutOfMarkupCharacters_StaysWithinTheBodyBound()
+    {
+        // Arrange
+        var authoring = AuthoringOver(
+            Rendering(plainText: new string('&', 4000)),
+            bounds: Bounds(maxBodyCharacters: 512));
+        var request = Request() with { HtmlBody = "<p>Thank you.</p>" };
+
+        // Act
+        var response = await authoring.AuthorAsync(request, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.True(response.Email!.HtmlBody!.Length <= 512);
+        Assert.Contains("&amp;", response.Email.HtmlBody, StringComparison.Ordinal);
     }
 
     /// <summary>A stored copy that is not what was written down for it is damaged rather than absent, and is recorded as such.</summary>

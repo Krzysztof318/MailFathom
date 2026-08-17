@@ -273,6 +273,13 @@ carried no markup of its own is quoted as encoded text there rather than inserte
 where the two together exceed what this deployment composes, the quotation is what gives way, and an author who writes
 past the bound on their own is refused by the composition rather than silently trimmed.
 
+Everything quoted from the answered message is bounded by what it costs in the body it is written into, which for the
+HTML alternative is what the encoding produces rather than what the sender wrote. An ampersand becomes five characters
+there and a quotation mark six, so a sender's display name and a message written out of those characters are both
+several times their own length once they are markup — and a bound measured before that expansion would let one
+correspondent's name decide whether somebody else's answer can be composed at all. The attribution line is bounded the
+same way in both bodies, so the sender's name is what gives way rather than the sentence saying whose message this is.
+
 **The stored email is a permission boundary as well as a source.** An email nothing may read is an email nothing may
 forward, so an account this deployment no longer serves and a folder mapped `VisibleToTools: false` are both refused with
 `28006` — the same not-found answer a read of that email gives, because telling them apart would let a caller learn which
