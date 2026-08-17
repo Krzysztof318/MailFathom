@@ -107,6 +107,24 @@ public sealed class GetEmailContentRequestTests
         Assert.Equal(MailFathomErrorCode.EmailContentReadSelectionInvalid, failure.ErrorCode);
     }
 
+    /// <summary>
+    /// An empty list is a list the caller sent, so the selection is settled before anything is counted: the list stays
+    /// unresolved until the refusal has been decided, and a count would otherwise answer a question nobody asked.
+    /// </summary>
+    [Fact]
+    public void CreateForSelection_AnEmptyEmailListBesideAConversation_IsRefusedAsBothRatherThanAsTooFewEmails()
+    {
+        // Arrange
+        var threadId = EmailThreadId.Create(Guid.CreateVersion7());
+
+        // Act
+        var failure = Assert.Throws<EmailContentReadSelectionInvalidException>(
+            () => GetEmailContentRequest.CreateForSelection(() => [], threadId));
+
+        // Assert
+        Assert.Equal(MailFathomErrorCode.EmailContentReadSelectionInvalid, failure.ErrorCode);
+    }
+
     [Fact]
     public void CreateForSelection_NeitherEmailsNorAConversation_IsRefusedRatherThanServedEmpty()
     {

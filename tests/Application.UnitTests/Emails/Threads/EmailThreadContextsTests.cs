@@ -40,10 +40,10 @@ public sealed class EmailThreadContextsTests
 
         // Assert
         Assert.NotNull(thread);
-        Assert.Equal(2, thread.MessageCount);
+        Assert.Equal(2, thread.EmailCount);
         Assert.Equal(
             [visibleReply.StoredEmailId],
-            thread.OtherMessages.Select(message => message.Message.StoredEmailId));
+            thread.OtherEmails.Select(message => message.Email.StoredEmailId));
     }
 
     [Fact]
@@ -64,7 +64,7 @@ public sealed class EmailThreadContextsTests
         Assert.NotNull(thread);
         Assert.Null(thread.AnsweredStoredEmailId);
         Assert.Equal(0, thread.Position);
-        Assert.Equal(1, thread.MessageCount);
+        Assert.Equal(1, thread.EmailCount);
     }
 
     [Fact]
@@ -72,7 +72,7 @@ public sealed class EmailThreadContextsTests
     {
         // Arrange
         var messages = Enumerable
-            .Range(1, ReadEmailThread.MaximumNamedMessages + 5)
+            .Range(1, ReadEmailThread.MaximumNamedEmails + 5)
             .Select(ordinal => Message(ordinal, Inbox, $"2026-08-16T{(ordinal % 24):D2}:00:00Z"))
             .ToArray();
         var contexts = ContextsOver(messages);
@@ -85,9 +85,9 @@ public sealed class EmailThreadContextsTests
 
         // Assert
         Assert.NotNull(thread);
-        Assert.Equal(messages.Length, thread.MessageCount);
-        Assert.Equal(ReadEmailThread.MaximumNamedMessages, thread.OtherMessages.Count);
-        Assert.True(thread.MoreMessagesNotNamed);
+        Assert.Equal(messages.Length, thread.EmailCount);
+        Assert.Equal(ReadEmailThread.MaximumNamedEmails, thread.OtherEmails.Count);
+        Assert.True(thread.MoreEmailsNotNamed);
     }
 
     [Fact]
@@ -106,8 +106,40 @@ public sealed class EmailThreadContextsTests
 
         // Assert
         Assert.NotNull(thread);
-        Assert.False(thread.MoreMessagesNotNamed);
-        Assert.Equal(reply.StoredEmailId, Assert.Single(thread.OtherMessages).Message.StoredEmailId);
+        Assert.False(thread.MoreEmailsNotNamed);
+        Assert.Equal(reply.StoredEmailId, Assert.Single(thread.OtherEmails).Email.StoredEmailId);
+    }
+
+    /// <summary>
+    /// A conversation ending exactly at the bound was not cut, so the read that assembled all of it says so. The reader
+    /// answers with one row past the bound when there is more, which is the only way the two cases tell each other apart.
+    /// </summary>
+    [Fact]
+    public async Task AssembleAsync_ConversationOfExactlyTheAssembledBound_IsNotReportedAsCutShort()
+    {
+        // Arrange
+        var contexts = ContextsOver(Conversation(IEmailThreadReader.MaximumAssembledEmails));
+
+        // Act
+        var thread = await contexts.AssembleAsync(Thread, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.False(thread.WasCutShort);
+        Assert.Equal(IEmailThreadReader.MaximumAssembledEmails, thread.Emails.Count);
+    }
+
+    [Fact]
+    public async Task AssembleAsync_ConversationRunningPastTheAssembledBound_IsCutShortAndDropsTheRowThatSaidSo()
+    {
+        // Arrange
+        var contexts = ContextsOver(Conversation(IEmailThreadReader.MaximumAssembledEmails + 1));
+
+        // Act
+        var thread = await contexts.AssembleAsync(Thread, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.True(thread.WasCutShort);
+        Assert.Equal(IEmailThreadReader.MaximumAssembledEmails, thread.Emails.Count);
     }
 
     [Fact]
@@ -162,9 +194,16 @@ public sealed class EmailThreadContextsTests
 
         // Assert
         Assert.NotNull(thread);
-        var named = Assert.Single(thread.OtherMessages);
-        Assert.DoesNotContain("secret-value", named.Message.Subject, StringComparison.Ordinal);
+        var named = Assert.Single(thread.OtherEmails);
+        Assert.DoesNotContain("secret-value", named.Email.Subject, StringComparison.Ordinal);
     }
+
+    private static ThreadedEmailSummary[] Conversation(int length) =>
+    [
+        .. Enumerable
+            .Range(1, length)
+            .Select(ordinal => Message(ordinal, Inbox, $"2026-08-16T{ordinal % 24:D2}:00:00Z")),
+    ];
 
     private static EmailThreadContexts ContextsOver(IReadOnlyList<ThreadedEmailSummary> messages) =>
         ContextsOver(new StubEmailThreadReader([.. messages.Select(message => (Thread, message))]));

@@ -27,35 +27,35 @@ namespace MailFathom.Application.Emails.Threads;
 public static class EmailThreadOrder
 {
     /// <summary>Orders the messages a caller is shown, and places each one against the message it answers.</summary>
-    /// <param name="visibleMessages">The conversation's messages the caller may see, in any order.</param>
+    /// <param name="visibleEmails">The conversation's messages the caller may see, in any order.</param>
     /// <returns>The messages in the conversation's order, each carrying its position and the message it answers.</returns>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="visibleMessages" /> is <see langword="null" />.</exception>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="visibleEmails" /> is <see langword="null" />.</exception>
     /// <remarks>
     /// A message whose recorded parent is not among the ones shown becomes a root of what is shown, which is both the
     /// answer for a withheld parent and the answer for an ancestor this deployment never stored. Every message given is
     /// returned exactly once, including one caught in a reply cycle no walk could reach the end of: such a message is
     /// emitted as a root, so a conversation is never published with a message silently missing from it.
     /// </remarks>
-    public static IReadOnlyList<PlacedThreadedEmail> Of(IReadOnlyList<ThreadedEmailSummary> visibleMessages)
+    public static IReadOnlyList<PlacedThreadedEmail> Of(IReadOnlyList<ThreadedEmailSummary> visibleEmails)
     {
-        ArgumentNullException.ThrowIfNull(visibleMessages);
+        ArgumentNullException.ThrowIfNull(visibleEmails);
 
-        var shown = visibleMessages.ToDictionary(message => message.StoredEmailId);
-        var answered = visibleMessages.ToDictionary(
-            message => message.StoredEmailId,
-            message => message.ParentStoredEmailId is { } parent && shown.ContainsKey(parent)
+        var shown = visibleEmails.ToDictionary(email => email.StoredEmailId);
+        var answered = visibleEmails.ToDictionary(
+            email => email.StoredEmailId,
+            email => email.ParentStoredEmailId is { } parent && shown.ContainsKey(parent)
                 ? parent
                 : (StoredEmailId?)null);
 
-        var answers = visibleMessages
-            .Where(message => answered[message.StoredEmailId] is not null)
-            .GroupBy(message => answered[message.StoredEmailId]!.Value)
+        var answers = visibleEmails
+            .Where(email => answered[email.StoredEmailId] is not null)
+            .GroupBy(email => answered[email.StoredEmailId]!.Value)
             .ToDictionary(group => group.Key, group => Sorted(group));
 
-        var placed = new List<PlacedThreadedEmail>(visibleMessages.Count);
+        var placed = new List<PlacedThreadedEmail>(visibleEmails.Count);
         var emitted = new HashSet<StoredEmailId>();
 
-        foreach (var root in Sorted(visibleMessages.Where(message => answered[message.StoredEmailId] is null)))
+        foreach (var root in Sorted(visibleEmails.Where(email => answered[email.StoredEmailId] is null)))
         {
             Emit(root, answers, answered, emitted, placed);
         }
@@ -66,7 +66,7 @@ public static class EmailThreadOrder
         // place, because publishing the edge that closes the loop would hand a reader the cycle this order exists to
         // never contain. Nothing here can produce one: the assembler refuses to write it, so this exists for a chain
         // that reached the database by some other route.
-        foreach (var stranded in Sorted(visibleMessages.Where(message => !emitted.Contains(message.StoredEmailId))))
+        foreach (var stranded in Sorted(visibleEmails.Where(email => !emitted.Contains(email.StoredEmailId))))
         {
             answered[stranded.StoredEmailId] = null;
 
@@ -82,20 +82,20 @@ public static class EmailThreadOrder
     /// belongs directly under what it answers, and the branch it starts is read out before the next sibling begins.
     /// </remarks>
     private static void Emit(
-        ThreadedEmailSummary message,
+        ThreadedEmailSummary email,
         IReadOnlyDictionary<StoredEmailId, IReadOnlyList<ThreadedEmailSummary>> answers,
         IReadOnlyDictionary<StoredEmailId, StoredEmailId?> answered,
         HashSet<StoredEmailId> emitted,
         List<PlacedThreadedEmail> placed)
     {
-        if (!emitted.Add(message.StoredEmailId))
+        if (!emitted.Add(email.StoredEmailId))
         {
             return;
         }
 
-        placed.Add(new PlacedThreadedEmail(message, placed.Count, answered[message.StoredEmailId]));
+        placed.Add(new PlacedThreadedEmail(email, placed.Count, answered[email.StoredEmailId]));
 
-        if (!answers.TryGetValue(message.StoredEmailId, out var children))
+        if (!answers.TryGetValue(email.StoredEmailId, out var children))
         {
             return;
         }
@@ -112,11 +112,11 @@ public static class EmailThreadOrder
     /// mailbox timeline gives an undated message. The identity then settles two messages a sender stamped identically,
     /// which is what makes the comparison total rather than merely usually decisive.
     /// </remarks>
-    private static IReadOnlyList<ThreadedEmailSummary> Sorted(IEnumerable<ThreadedEmailSummary> messages) =>
+    private static IReadOnlyList<ThreadedEmailSummary> Sorted(IEnumerable<ThreadedEmailSummary> emails) =>
     [
-        .. messages
-            .OrderBy(message => message.SentAt is null)
-            .ThenBy(message => message.SentAt)
-            .ThenBy(message => message.StoredEmailId.Value),
+        .. emails
+            .OrderBy(email => email.SentAt is null)
+            .ThenBy(email => email.SentAt)
+            .ThenBy(email => email.StoredEmailId.Value),
     ];
 }

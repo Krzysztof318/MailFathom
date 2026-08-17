@@ -89,6 +89,26 @@ public sealed class EmailThreadModelTests
         Assert.Equal(DeleteBehavior.Cascade, reference.DeleteBehavior);
     }
 
+    /// <summary>
+    /// A merge amends the row in place, and two arrivals reach it at once, so the row's version is what stops one of
+    /// them writing a survivor the other had already folded into a third. It is the `xmin` system column rather than one
+    /// of the row's own, which is why the assertion is on the token rather than on a column that was added.
+    /// </summary>
+    [Fact]
+    public void EmailThreadModel_Version_IsTheRowVersionAMergeIsSettledBy()
+    {
+        // Arrange
+        using var context = CreateContext();
+
+        // Act
+        var version = EntityTypeOf<EmailThreadEntity>(context).FindProperty("ConcurrencyVersion");
+
+        // Assert
+        Assert.NotNull(version);
+        Assert.True(version.IsConcurrencyToken);
+        Assert.Equal(ValueGenerated.OnAddOrUpdate, version.ValueGenerated);
+    }
+
     /// <summary>An identifier means nothing without the conversation it names, so it goes when that conversation does.</summary>
     [Fact]
     public void EmailThreadIdentifierModel_Conversation_ErasesItsIdentifiersWithIt()

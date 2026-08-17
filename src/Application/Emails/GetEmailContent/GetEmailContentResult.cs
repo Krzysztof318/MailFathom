@@ -8,8 +8,8 @@ namespace MailFathom.Application.Emails.GetEmailContent;
 
 /// <summary>What one content read produced for every email it named.</summary>
 /// <param name="Emails">One outcome per named email, in the order the request named them.</param>
-/// <param name="UnreadThreadMessages">
-/// The messages of a named conversation this call did not carry, in the conversation's own order, and empty for every
+/// <param name="UnreadThreadEmails">
+/// The emails of a named conversation this call did not carry, in the conversation's own order, and empty for every
 /// read that named its emails itself.
 /// </param>
 /// <remarks>
@@ -32,4 +32,4 @@ namespace MailFathom.Application.Emails.GetEmailContent;
 /// </remarks>
 public sealed record GetEmailContentResult(
     IReadOnlyList<EmailContentReadOutcome> Emails,
-    IReadOnlyList<StoredEmailId> UnreadThreadMessages);
+    IReadOnlyList<StoredEmailId> UnreadThreadEmails);

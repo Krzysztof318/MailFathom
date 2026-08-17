@@ -1420,7 +1420,7 @@ public sealed class EmailContentReaderTests
             result.Emails.Select(outcome => outcome.StoredEmailId));
         Assert.Equal(
             IdentitiesOf(conversation).Skip(GetEmailContentRequest.MaximumEmails),
-            result.UnreadThreadMessages);
+            result.UnreadThreadEmails);
     }
 
     /// <summary>Every published message carries where it sits in its conversation and which message it answers.</summary>
@@ -1447,11 +1447,11 @@ public sealed class EmailContentReaderTests
         Assert.Equal(threadId, thread.ThreadId);
         Assert.Equal(1, thread.Position);
         Assert.Equal(conversation[0].StoredEmailId, thread.AnsweredStoredEmailId);
-        Assert.Equal(2, thread.MessageCount);
+        Assert.Equal(2, thread.EmailCount);
         Assert.Equal(
             conversation[0].StoredEmailId,
-            Assert.Single(thread.OtherMessages).Message.StoredEmailId);
-        Assert.False(thread.MoreMessagesNotNamed);
+            Assert.Single(thread.OtherEmails).Email.StoredEmailId);
+        Assert.False(thread.MoreEmailsNotNamed);
     }
 
     /// <summary>A conversation this deployment holds nothing of is served as nothing rather than as a refusal.</summary>
@@ -1468,7 +1468,7 @@ public sealed class EmailContentReaderTests
 
         // Assert
         Assert.Empty(result.Emails);
-        Assert.Empty(result.UnreadThreadMessages);
+        Assert.Empty(result.UnreadThreadEmails);
     }
 
     /// <summary>Builds a conversation of stored mail, one message a minute apart, all of it readable by tools.</summary>

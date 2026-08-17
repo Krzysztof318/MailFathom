@@ -39,12 +39,14 @@ internal sealed class StoredEmailThreadReader(MailFathomDbContext dbContext) : I
             return [];
         }
 
+        // One row past the bound, because the count alone cannot tell a conversation that ends at the bound from one
+        // that was cut there, and the caller states which of the two it is to whoever reads the thread.
         var rows = await dbContext.StoredEmails
             .AsNoTracking()
             .Where(email => email.EmailThreadId == surviving)
             .Where(StoredEmailTombstone.IsNotTombstoned)
             .OrderBy(email => email.Id)
-            .Take(IEmailThreadReader.MaximumAssembledMessages)
+            .Take(IEmailThreadReader.MaximumAssembledEmails + 1)
             .Select(email => new
             {
                 email.Id,

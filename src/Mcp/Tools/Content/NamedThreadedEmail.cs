@@ -50,12 +50,12 @@ internal sealed record NamedThreadedEmail
 
         return new NamedThreadedEmail
         {
-            StoredEmailId = placed.Message.StoredEmailId.ToString(),
+            StoredEmailId = placed.Email.StoredEmailId.ToString(),
             Position = placed.Position,
             InReplyToStoredEmailId = placed.AnsweredStoredEmailId?.ToString(),
-            Subject = placed.Message.Subject,
-            SentAt = placed.Message.SentAt,
-            SenderAddress = placed.Message.SenderAddress,
+            Subject = placed.Email.Subject,
+            SentAt = placed.Email.SentAt,
+            SenderAddress = placed.Email.SenderAddress,
         };
     }
 }

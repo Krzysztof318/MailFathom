@@ -60,13 +60,15 @@ public sealed class EmailThreadContexts
             return already;
         }
 
-        var messages = await this.threadReader.ReadEmailsAsync(threadId, cancellationToken);
-        var visible = messages
-            .Where(message => this.scopeResolver.IsReadableByTools(message.AccountId, message.FolderAlias))
+        var read = await this.threadReader.ReadEmailsAsync(threadId, cancellationToken);
+        var wasCutShort = read.Count > IEmailThreadReader.MaximumAssembledEmails;
+        var visible = read
+            .Take(IEmailThreadReader.MaximumAssembledEmails)
+            .Where(email => this.scopeResolver.IsReadableByTools(email.AccountId, email.FolderAlias))
             .ToArray();
 
         var placed = EmailThreadOrder.Of(await this.GuardedAsync(visible, cancellationToken));
-        var thread = new AssembledThread(placed, messages.Count >= IEmailThreadReader.MaximumAssembledMessages);
+        var thread = new AssembledThread(placed, wasCutShort);
 
         this.assembled[threadId] = thread;
 
@@ -89,10 +91,10 @@ public sealed class EmailThreadContexts
         }
 
         var thread = await this.AssembleAsync(conversation, cancellationToken);
-        var placed = thread.Messages.SingleOrDefault(message => message.Message.StoredEmailId == storedEmailId);
-        var others = thread.Messages
-            .Where(message => message.Message.StoredEmailId != storedEmailId)
-            .Take(ReadEmailThread.MaximumNamedMessages)
+        var placed = thread.Emails.SingleOrDefault(email => email.Email.StoredEmailId == storedEmailId);
+        var others = thread.Emails
+            .Where(email => email.Email.StoredEmailId != storedEmailId)
+            .Take(ReadEmailThread.MaximumNamedEmails)
             .ToArray();
 
         return new ReadEmailThread
@@ -100,9 +102,9 @@ public sealed class EmailThreadContexts
             ThreadId = conversation,
             Position = placed?.Position,
             AnsweredStoredEmailId = placed?.AnsweredStoredEmailId,
-            MessageCount = thread.Messages.Count,
-            OtherMessages = others,
-            MoreMessagesNotNamed = thread.WasCutShort || others.Length < thread.Messages.Count - 1,
+            EmailCount = thread.Emails.Count,
+            OtherEmails = others,
+            MoreEmailsNotNamed = thread.WasCutShort || others.Length < thread.Emails.Count - 1,
         };
     }
 
@@ -121,23 +123,23 @@ public sealed class EmailThreadContexts
     /// </para>
     /// </remarks>
     private async Task<IReadOnlyList<ThreadedEmailSummary>> GuardedAsync(
-        ThreadedEmailSummary[] messages,
+        ThreadedEmailSummary[] emails,
         CancellationToken cancellationToken)
     {
         if (!this.egressGuard.IsActive)
         {
-            return messages;
+            return emails;
         }
 
-        var guarded = new List<ThreadedEmailSummary>(messages.Length);
+        var guarded = new List<ThreadedEmailSummary>(emails.Length);
 
-        foreach (var message in messages)
+        foreach (var email in emails)
         {
-            guarded.Add(message with
+            guarded.Add(email with
             {
                 Subject = await this.egressGuard.GuardOptionalAsync(
                     SensitiveContentEgressPoint.McpEmailContent,
-                    message.Subject,
+                    email.Subject,
                     cancellationToken),
             });
         }
@@ -146,7 +148,7 @@ public sealed class EmailThreadContexts
     }
 
     /// <summary>One conversation as a read sees it: its visible messages in order, and whether more of it exists.</summary>
-    /// <param name="Messages">The visible messages in the conversation's own order.</param>
+    /// <param name="Emails">The visible messages in the conversation's own order.</param>
     /// <param name="WasCutShort">Whether the conversation holds more messages than one read assembles.</param>
-    public sealed record AssembledThread(IReadOnlyList<PlacedThreadedEmail> Messages, bool WasCutShort);
+    public sealed record AssembledThread(IReadOnlyList<PlacedThreadedEmail> Emails, bool WasCutShort);
 }

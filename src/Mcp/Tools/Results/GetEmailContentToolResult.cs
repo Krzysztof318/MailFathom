@@ -42,7 +42,7 @@ internal sealed record GetEmailContentToolResult
         return new GetEmailContentToolResult
         {
             Emails = [.. result.Emails.Select(RetrievedEmail.From)],
-            UnreadThreadMessages = [.. result.UnreadThreadMessages.Select(storedEmailId => storedEmailId.ToString())],
+            UnreadThreadMessages = [.. result.UnreadThreadEmails.Select(storedEmailId => storedEmailId.ToString())],
         };
     }
 }

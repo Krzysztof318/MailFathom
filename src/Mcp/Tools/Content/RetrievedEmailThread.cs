@@ -53,9 +53,9 @@ internal sealed record RetrievedEmailThread
             ThreadId = thread.ThreadId.ToString(),
             Position = thread.Position,
             InReplyToStoredEmailId = thread.AnsweredStoredEmailId?.ToString(),
-            MessageCount = thread.MessageCount,
-            OtherMessages = [.. thread.OtherMessages.Select(NamedThreadedEmail.From)],
-            MoreMessagesNotNamed = thread.MoreMessagesNotNamed,
+            MessageCount = thread.EmailCount,
+            OtherMessages = [.. thread.OtherEmails.Select(NamedThreadedEmail.From)],
+            MoreMessagesNotNamed = thread.MoreEmailsNotNamed,
         };
     }
 }

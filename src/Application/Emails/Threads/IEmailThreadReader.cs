@@ -9,7 +9,7 @@ namespace MailFathom.Application.Emails.Threads;
 /// <summary>Reads the messages one conversation holds, from the local mailbox copy.</summary>
 public interface IEmailThreadReader
 {
-    /// <summary>The greatest number of messages one read assembles out of a conversation.</summary>
+    /// <summary>The greatest number of emails one read assembles out of a conversation.</summary>
     /// <remarks>
     /// <para>
     /// The bound on the query rather than on what a tool publishes, and the two are different numbers on purpose. This
@@ -21,16 +21,22 @@ public interface IEmailThreadReader
     /// than at whichever rows the database happened to return.
     /// </para>
     /// </remarks>
-    const int MaximumAssembledMessages = 500;
+    const int MaximumAssembledEmails = 500;
 
     /// <summary>Reads the messages of one conversation, whatever folders of the account they sit in.</summary>
     /// <param name="threadId">The conversation to read, which may be one a merge has since folded into another.</param>
     /// <param name="cancellationToken">Propagates caller cancellation.</param>
     /// <returns>
-    /// The conversation's messages in no particular order, bounded by <see cref="MaximumAssembledMessages" />, and empty
-    /// when the identifier names no conversation this deployment holds.
+    /// The conversation's messages in no particular order, at most <see cref="MaximumAssembledEmails" /> plus one, and
+    /// empty when the identifier names no conversation this deployment holds.
     /// </returns>
     /// <remarks>
+    /// <para>
+    /// The one row past the bound is what tells the caller the conversation runs further, and it is read rather than
+    /// inferred: a conversation holding exactly <see cref="MaximumAssembledEmails" /> messages is complete, and a reader
+    /// that stopped at the bound could not tell it from one that was cut. The extra row is a signal rather than content,
+    /// so the caller drops it before anything is ordered, counted, or published.
+    /// </para>
     /// <para>
     /// A merged conversation resolves to the one it was merged into, so a thread identifier a tool published before a
     /// merge still reaches the conversation it named instead of answering not-found.

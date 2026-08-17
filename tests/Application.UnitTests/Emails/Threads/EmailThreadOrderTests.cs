@@ -28,7 +28,7 @@ public sealed class EmailThreadOrderTests
         // Assert
         Assert.Equal(
             [opening.StoredEmailId, reply.StoredEmailId],
-            placed.Select(message => message.Message.StoredEmailId));
+            placed.Select(message => message.Email.StoredEmailId));
         Assert.Equal([0, 1], placed.Select(message => message.Position));
     }
 
@@ -46,7 +46,7 @@ public sealed class EmailThreadOrderTests
         // Assert
         Assert.Equal(
             [opening.StoredEmailId, earlier.StoredEmailId, later.StoredEmailId],
-            placed.Select(message => message.Message.StoredEmailId));
+            placed.Select(message => message.Email.StoredEmailId));
     }
 
     [Fact]
@@ -61,7 +61,7 @@ public sealed class EmailThreadOrderTests
 
         // Assert
         var only = Assert.Single(placed);
-        Assert.Equal(shown.StoredEmailId, only.Message.StoredEmailId);
+        Assert.Equal(shown.StoredEmailId, only.Email.StoredEmailId);
         Assert.Null(only.AnsweredStoredEmailId);
         Assert.Equal(0, only.Position);
     }
@@ -79,7 +79,7 @@ public sealed class EmailThreadOrderTests
         // Assert
         Assert.Equal(
             [dated.StoredEmailId, undated.StoredEmailId],
-            placed.Select(message => message.Message.StoredEmailId));
+            placed.Select(message => message.Email.StoredEmailId));
     }
 
     [Fact]
@@ -95,7 +95,7 @@ public sealed class EmailThreadOrderTests
         // Assert
         Assert.Equal(
             [earlier.StoredEmailId, later.StoredEmailId],
-            placed.Select(message => message.Message.StoredEmailId));
+            placed.Select(message => message.Email.StoredEmailId));
     }
 
     [Fact]
@@ -112,8 +112,8 @@ public sealed class EmailThreadOrderTests
 
         // Assert
         Assert.Equal(
-            read.Select(message => message.Message.StoredEmailId),
-            readAgain.Select(message => message.Message.StoredEmailId));
+            read.Select(message => message.Email.StoredEmailId),
+            readAgain.Select(message => message.Email.StoredEmailId));
     }
 
     /// <summary>
@@ -134,11 +134,11 @@ public sealed class EmailThreadOrderTests
         // Assert
         Assert.Equal(
             [looping.StoredEmailId.Value, other.StoredEmailId.Value],
-            placed.Select(message => message.Message.StoredEmailId.Value).Order());
+            placed.Select(message => message.Email.StoredEmailId.Value).Order());
         Assert.Equal([0, 1], placed.Select(message => message.Position));
 
         var root = placed[0];
-        Assert.Equal(looping.StoredEmailId, root.Message.StoredEmailId);
+        Assert.Equal(looping.StoredEmailId, root.Email.StoredEmailId);
         Assert.Null(root.AnsweredStoredEmailId);
         Assert.Equal(looping.StoredEmailId, placed[1].AnsweredStoredEmailId);
     }
@@ -161,7 +161,7 @@ public sealed class EmailThreadOrderTests
         Assert.Single(placed, message => message.AnsweredStoredEmailId is null);
         Assert.All(
             placed,
-            message => Assert.NotEqual(message.Message.StoredEmailId, message.AnsweredStoredEmailId));
+            message => Assert.NotEqual(message.Email.StoredEmailId, message.AnsweredStoredEmailId));
     }
 
     [Fact]
@@ -184,7 +184,7 @@ public sealed class EmailThreadOrderTests
                 withinFirstBranch.StoredEmailId,
                 secondBranch.StoredEmailId,
             ],
-            placed.Select(message => message.Message.StoredEmailId));
+            placed.Select(message => message.Email.StoredEmailId));
     }
 
     private static ThreadedEmailSummary Message(int ordinal, string? sentAt, ThreadedEmailSummary? answers = null) => new()

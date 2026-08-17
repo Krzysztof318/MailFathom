@@ -21,14 +21,14 @@ namespace MailFathom.Application.Emails.Threads;
 /// </remarks>
 public sealed record ReadEmailThread
 {
-    /// <summary>The greatest number of other messages one read names beside the email it returns.</summary>
+    /// <summary>The greatest number of other emails one read names beside the email it returns.</summary>
     /// <remarks>
     /// Set where naming a conversation stops and reproducing a mailbox begins. Correspondence a person follows runs to a
     /// few dozen messages; past that the list is a mailing list's archive, which a reader asks for by the thread rather
     /// than receives inside every message of it. The result says when the bound cut the list, so a caller that wants the
     /// rest asks for the thread itself.
     /// </remarks>
-    public const int MaximumNamedMessages = 50;
+    public const int MaximumNamedEmails = 50;
 
     /// <summary>Gets the conversation's identifier, which a content read may be repeated with to fetch the whole of it.</summary>
     public required EmailThreadId ThreadId { get; init; }
@@ -46,17 +46,17 @@ public sealed record ReadEmailThread
     /// <summary>Gets the message this email answers, or <see langword="null" /> when it is a root of what is shown.</summary>
     public StoredEmailId? AnsweredStoredEmailId { get; init; }
 
-    /// <summary>Gets how many messages of the conversation the caller may see, this email included.</summary>
-    public required int MessageCount { get; init; }
+    /// <summary>Gets how many emails of the conversation the caller may see, this one included.</summary>
+    public required int EmailCount { get; init; }
 
-    /// <summary>Gets the conversation's other messages in its own order, bounded by <see cref="MaximumNamedMessages" />.</summary>
-    public required IReadOnlyList<PlacedThreadedEmail> OtherMessages { get; init; }
+    /// <summary>Gets the conversation's other emails in its own order, bounded by <see cref="MaximumNamedEmails" />.</summary>
+    public required IReadOnlyList<PlacedThreadedEmail> OtherEmails { get; init; }
 
-    /// <summary>Gets whether the conversation holds messages this list does not name.</summary>
+    /// <summary>Gets whether the conversation holds emails this list does not name.</summary>
     /// <remarks>
     /// Stated rather than derived from the count, because two different bounds can cut the list — the one on what a read
     /// names and the one on how much of a conversation a query assembles at all — and a caller comparing lengths could
     /// not tell either from a conversation that simply ends there.
     /// </remarks>
-    public required bool MoreMessagesNotNamed { get; init; }
+    public required bool MoreEmailsNotNamed { get; init; }
 }

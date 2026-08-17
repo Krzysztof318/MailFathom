@@ -7,7 +7,7 @@ using MailFathom.Domain.Emails;
 namespace MailFathom.Application.Emails.Threads;
 
 /// <summary>One message of a conversation, with where it sits in the one order that conversation has.</summary>
-/// <param name="Message">The message itself.</param>
+/// <param name="Email">The message itself.</param>
 /// <param name="Position">The zero-based place the message holds in the conversation's order.</param>
 /// <param name="AnsweredStoredEmailId">
 /// The message this one answers among the messages the caller is shown, or <see langword="null" /> when it is a root of
@@ -19,6 +19,6 @@ namespace MailFathom.Application.Emails.Threads;
 /// by the gap it would otherwise leave.
 /// </remarks>
 public sealed record PlacedThreadedEmail(
-    ThreadedEmailSummary Message,
+    ThreadedEmailSummary Email,
     int Position,
     StoredEmailId? AnsweredStoredEmailId);

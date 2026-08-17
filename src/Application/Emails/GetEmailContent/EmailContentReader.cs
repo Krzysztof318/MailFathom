@@ -221,7 +221,7 @@ public sealed class EmailContentReader
         }
 
         var assembled = await threads.AssembleAsync(threadId, cancellationToken);
-        var ordered = assembled.Messages.Select(placed => placed.Message.StoredEmailId).ToArray();
+        var ordered = assembled.Emails.Select(placed => placed.Email.StoredEmailId).ToArray();
 
         return new ReadSelection(
             [.. ordered.Take(GetEmailContentRequest.MaximumEmails)],
