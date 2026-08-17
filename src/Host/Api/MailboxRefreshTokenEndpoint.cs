@@ -3,7 +3,9 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.Accounts;
+using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
+using MailFathom.Host.Security.Endpoints;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Mvc;
 
@@ -18,11 +20,11 @@ namespace MailFathom.Host.Api;
 /// authentication method turned on accepts it from anybody who can reach the address.
 /// </para>
 /// <para>
-/// <strong>Every authenticated caller may perform every administrative operation.</strong> The endpoint has no
-/// permission model, so a credential that could previously read a session can now write a mailbox credential. That is
-/// accepted for this route rather than overlooked: the alternative is a permission model invented for one route, and
-/// the credential is already the thing that bounds administrative access. It is stated in the operations documentation
-/// beside the warnings, because it is a fact an operator provisions keys against.
+/// <strong>The route is published under <c>mailfathom.admin.credentials.write</c>, and nothing else on this surface
+/// is.</strong> Placing a mailbox owner's long-lived credential is nothing like reading the deployment's state or
+/// retrying a job, so an operator who provisioned a credential for either of those has not thereby provisioned one that
+/// can do this. A caller whose grant omits the permission is refused with it named, and a caller whose entry narrows
+/// nothing holds it like every other permission the surface publishes.
 /// </para>
 /// <para>
 /// Answered with no body at all. There is nothing to report that the caller did not send, and a response echoing any
@@ -55,7 +57,8 @@ internal static class MailboxRefreshTokenEndpoint
         // reads and applies to the request body feature, so the bound holds on a minimal API route with no MVC in the
         // process. A body over the limit is answered 413 before the handler is reached.
         api.MapPost(Route, StoreAsync)
-            .WithMetadata(new RequestSizeLimitAttribute(MaxRequestBytes));
+            .WithMetadata(new RequestSizeLimitAttribute(MaxRequestBytes))
+            .RequirePermission(MailFathomPermission.AdminCredentialsWrite);
     }
 
     /// <summary>Stores one account's refresh token, or reports why it was not stored.</summary>

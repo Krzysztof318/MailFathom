@@ -664,9 +664,9 @@ info: MailFathom.Host.Hosting.Warnings.TransportGrantStartupReport
 ```
 
 Every line closes with what a grant on that surface does, so an operator reading back the one entry they edited learns
-whether the narrowing bites without reading the rest of the report. On this endpoint it does. The administrative
-endpoint's lines say instead that no route there consults a permission yet, which is what makes a narrowed entry there a
-statement of intent rather than a bound.
+what the narrowing costs a caller without reading the rest of the report. The two surfaces differ in the refusal rather
+than in whether the grant bites: here a tool the grant omits is one that does not exist, and the administrative
+endpoint's lines say instead that a refused caller is told the permission that would have sufficed.
 
 An entry that narrowed its grant is reported as what it grants, an entry with `PermissionsFromTokenScopes` as what it
 grants *at most*, and an entry granted nothing as `nothing` rather than as a line that lost its argument. An endpoint

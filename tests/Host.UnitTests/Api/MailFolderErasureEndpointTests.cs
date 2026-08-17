@@ -224,7 +224,8 @@ public sealed class MailFolderErasureEndpointTests
                 sessionFactory,
                 new PersistenceConcurrencyOptions(),
                 new FakeTimeProvider()),
-            new MailboxSynchronizationOptions());
+            new MailboxSynchronizationOptions(),
+            AdministrativeGrant.WholeSurface);
     }
 
     private static IMailAccountCatalog CatalogServing(params MailAccountId[] accounts)

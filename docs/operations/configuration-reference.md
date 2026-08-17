@@ -1174,12 +1174,12 @@ disjoint halves, and the name says which half it belongs to.
 | --- | --- | --- |
 | `mailfathom.mail.read` | MCP | The tools that read the local mailbox copy: `list_accounts`, `list_emails`, `get_email_content`, `search_emails`. Where semantic retrieval is configured, searching places the caller's own query text with the embedding provider, so this is not an egress-free grant |
 | `mailfathom.mail.ask` | MCP | `ask_mail`, which answers from mail content by sending it to a model provider. It does not imply `mailfathom.mail.read`, and granting it is granting access to mail |
-| `mailfathom.admin.read` | administrative | The reads reporting the deployment's own state and no mail: what synchronization is doing, embedding status and the activation preview, the loaded rules, a run's progress, the stopped-job list |
-| `mailfathom.admin.audit.read` | administrative | The per-account records derived from mail: the mailbox-mutation audit, the answering audit, the rules history, the spam classifications |
-| `mailfathom.admin.operate` | administrative | Asking the deployment to do work it can already do: running rules, classifying an account, retrying or dropping a stopped job, cancelling a reindex |
+| `mailfathom.admin.read` | administrative | The reads reporting the deployment's own state and no mail: what synchronization is doing, embedding status and the activation preview, the loaded rules, a run's progress, what a rewind would cost, the stopped-job list |
+| `mailfathom.admin.audit.read` | administrative | Everything derived from somebody's mail: the mailbox-mutation audit, the answering audit, the rules history, the spam classifications, and reading the contact book |
+| `mailfathom.admin.operate` | administrative | Asking the deployment to do work it can already do: running rules, classifying an account, retrying or dropping a stopped job, cancelling a reindex, rewinding synchronization, re-deriving stored mail, writing to the contact book |
 | `mailfathom.admin.credentials.write` | administrative | Storing a mailbox refresh token |
 | `mailfathom.admin.spend` | administrative | Activating the declared embedding model, which is the one operation that starts a provider bill |
-| `mailfathom.admin.erase` | administrative | Erasing the mail stored for a folder an account no longer mirrors |
+| `mailfathom.admin.erase` | administrative | Disposing of what the deployment holds: the mail stored for a folder an account no longer mirrors, and one person and everything the contact book derived from them |
 
 No permission implies another, so a credential that needs two is granted two.
 
@@ -1187,21 +1187,21 @@ No permission implies another, so a credential that needs two is granted two.
 block at once, and `Permissions` on it applies to every credential it admits. Two credentials to be granted differently
 are therefore two entries — which is what turns grouping, until now only a matter of tidiness, into a decision.
 
-**The two surfaces enforce a grant differently today.** On the MCP endpoint it is in force: a caller is listed only the
-tools its grant permits and a call naming any other is answered as a call naming a tool that does not exist, with
-nothing said about the permission that was missing — [MCP tools](../features/mcp-tools.md#what-a-caller-is-offered) has
-the tool-to-permission mapping. On the administrative endpoint the permissions are read, validated, carried on the
-authenticated caller and reported at startup, and no route consults them, so every admitted caller still reaches every
-administrative operation. Read a `mailfathom.admin.*` sentence below as what the setting says rather than as what it
-currently stops.
+**Both surfaces enforce a grant, and they refuse differently.** On the MCP endpoint a caller is listed only the tools
+its grant permits and a call naming any other is answered as a call naming a tool that does not exist, with nothing said
+about the permission that was missing — [MCP tools](../features/mcp-tools.md#what-a-caller-is-offered) has the
+tool-to-permission mapping. On the administrative endpoint a caller the grant does not admit is answered `403` naming
+the one permission that would have sufficed and nothing else, because the caller there is an operator at their own
+terminal — [what the endpoint serves](admin-endpoint.md#what-the-endpoint-serves) names the permission every route is
+published under.
 
 **An absent `Permissions` key and an empty list are opposites.** Writing no key at all leaves the entry holding
 everything its surface publishes, which is what makes a first deployment work before it is governed and what leaves an
-existing deployment unchanged on upgrade. Writing `Permissions: []` grants nothing, which is how a credential will be
-retired without deleting its entry: it still authenticates, and on the administrative surface it will still read
-`GET /api/admin/session`, which needs no permission because it reports only what the caller already presented. On the
-MCP endpoint that retirement is in force — an emptied grant is served an empty tool list — and on the administrative one
-it retires nothing yet, because no route there consults a permission.
+existing deployment unchanged on upgrade. Writing `Permissions: []` grants nothing, which is how a credential is retired
+without deleting its entry: it still authenticates, and on the administrative surface it still reads
+`GET /api/admin/session`, which needs no permission because it reports only what the caller already presented — and
+which is where an operator reads that the credential now holds nothing. Everything else is refused: an emptied grant is
+served an empty tool list on the MCP endpoint and reaches no administrative route at all.
 
 **A surface with no `Authentication` entry at all grants that surface's whole half**, because there is no entry for a
 grant to be written on. That is the unauthenticated posture the startup warning already reports.

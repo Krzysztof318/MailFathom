@@ -2,13 +2,16 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Application.Access;
 using MailFathom.Application.Mail.Maintenance;
 using MailFathom.Application.Persistence;
 using MailFathom.Application.Synchronization.Checkpoints;
+using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Folders;
 using MailFathom.Domain.Synchronization;
+using MailFathom.TestSupport;
 using Microsoft.Extensions.Time.Testing;
 using NSubstitute;
 using Xunit;
@@ -142,9 +145,48 @@ public sealed class MailSynchronizationRewindTests
             TestContext.Current.CancellationToken));
     }
 
+    /// <summary>Reading what a rewind would cost is the administrative read, and a caller granted only the operating permission does not hold it.</summary>
+    [Fact]
+    public async Task AssessAsync_ACallerGrantedOnlyTheAdministrativeOperate_IsRefusedWithTheTransportAbsent()
+    {
+        // Arrange
+        var rewind = RewindOver(
+            new RecordingCheckpointStore([Inbox]),
+            new RecordingCounter(storedEmailCount: 4),
+            AccessAuthorizations.ForCallerGranted(MailFathomPermission.AdminOperate));
+
+        // Act
+        var refusal = await Assert.ThrowsAsync<PrincipalNotAuthorizedException>(() =>
+            rewind.AssessAsync(new StoredMailScope(Account, null), TestContext.Current.CancellationToken));
+
+        // Assert
+        Assert.Equal(MailFathomPermission.AdminRead, refusal.RequiredPermission);
+    }
+
+    /// <summary>The one route that makes a deployment pull a mailbox again asks to operate, which the administrative read does not carry.</summary>
+    [Fact]
+    public async Task RewindAsync_ACallerGrantedOnlyTheAdministrativeRead_IsRefusedWithTheTransportAbsent()
+    {
+        // Arrange
+        var checkpoints = new RecordingCheckpointStore([Inbox]);
+        var rewind = RewindOver(
+            checkpoints,
+            new RecordingCounter(storedEmailCount: 4),
+            AccessAuthorizations.ForCallerGranted(MailFathomPermission.AdminRead));
+
+        // Act
+        var refusal = await Assert.ThrowsAsync<PrincipalNotAuthorizedException>(() =>
+            rewind.RewindAsync(new StoredMailScope(Account, null), TestContext.Current.CancellationToken));
+
+        // Assert
+        Assert.Equal(MailFathomPermission.AdminOperate, refusal.RequiredPermission);
+        Assert.Empty(checkpoints.Discards);
+    }
+
     private static MailSynchronizationRewind RewindOver(
         ISynchronizationCheckpointStore checkpoints,
-        IStoredMailCounter counter)
+        IStoredMailCounter counter,
+        AccessAuthorization? authorization = null)
     {
         var sessionFactory = Substitute.For<IPersistenceSessionFactory>();
         sessionFactory.BeginSessionAsync(Arg.Any<CancellationToken>()).Returns(_ => new CommittingSession());
@@ -155,7 +197,10 @@ public sealed class MailSynchronizationRewindTests
             new OptimisticConcurrencyRetryPolicy(
                 sessionFactory,
                 new PersistenceConcurrencyOptions(),
-                new FakeTimeProvider()));
+                new FakeTimeProvider()),
+            authorization ?? AccessAuthorizations.ForCallerGranted(
+                MailFathomPermission.AdminRead,
+                MailFathomPermission.AdminOperate));
     }
 
     /// <summary>Records which scopes were counted, and answers with the figure the test arranged.</summary>

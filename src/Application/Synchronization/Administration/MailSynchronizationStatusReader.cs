@@ -2,8 +2,10 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Application.Access;
 using MailFathom.Application.Accounts;
 using MailFathom.Application.Folders;
+using MailFathom.Domain.Access;
 using MailFathom.Domain.Folders;
 
 namespace MailFathom.Application.Synchronization.Administration;
@@ -30,40 +32,50 @@ public sealed class MailSynchronizationStatusReader
     private readonly IMailFolderParticipationReader folders;
     private readonly MailSynchronizationRunLedger runLedger;
     private readonly IMailFolderSynchronizationProgressReader progressReader;
+    private readonly AccessAuthorization authorization;
 
     /// <summary>Initializes a reader over the four sources one status answer is composed from.</summary>
     /// <param name="accounts">Names the accounts this deployment serves, and whether it synchronizes at all.</param>
     /// <param name="folders">Names the folders configuration maps, and which of them are mirrored.</param>
     /// <param name="runLedger">Reports what the running process's supervisors are doing.</param>
     /// <param name="progressReader">Reports how far each folder's durable progress has come.</param>
+    /// <param name="authorization">Answers which principal reached this use case.</param>
     /// <exception cref="ArgumentNullException">Thrown when any argument is <see langword="null" />.</exception>
     public MailSynchronizationStatusReader(
         IMailAccountCatalog accounts,
         IMailFolderParticipationReader folders,
         MailSynchronizationRunLedger runLedger,
-        IMailFolderSynchronizationProgressReader progressReader)
+        IMailFolderSynchronizationProgressReader progressReader,
+        AccessAuthorization authorization)
     {
         ArgumentNullException.ThrowIfNull(accounts);
         ArgumentNullException.ThrowIfNull(folders);
         ArgumentNullException.ThrowIfNull(runLedger);
         ArgumentNullException.ThrowIfNull(progressReader);
+        ArgumentNullException.ThrowIfNull(authorization);
 
         this.accounts = accounts;
         this.folders = folders;
         this.runLedger = runLedger;
         this.progressReader = progressReader;
+        this.authorization = authorization;
     }
 
     /// <summary>Reads what synchronization is doing across every configured account.</summary>
     /// <param name="cancellationToken">Cancels the durable read.</param>
     /// <returns>The status.</returns>
+    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the use case was reached by anything but a caller granted <see cref="MailFathomPermission.AdminRead" />.</exception>
     /// <exception cref="OperationCanceledException">Thrown when the caller cancels.</exception>
     /// <remarks>
-    /// It never refuses. A deployment that configures no account, one that switched synchronization off, and one whose
-    /// process has only just started are all supported states an operator reads here rather than failures to report on.
+    /// It refuses nothing about the deployment's own state. A deployment that configures no account, one that switched
+    /// synchronization off, and one whose process has only just started are all supported states an operator reads here
+    /// rather than failures to report on — what it does refuse is a caller whose grant does not carry the permission
+    /// this report is published under.
     /// </remarks>
     public async Task<MailSynchronizationStatus> ReadAsync(CancellationToken cancellationToken)
     {
+        this.authorization.RequirePermission(MailFathomPermission.AdminRead);
+
         var progress = await this.progressReader.ReadAsync(cancellationToken);
         var progressByFolder = progress.ToDictionary(entry => entry.Folder);
         var mirrored = this.folders.FoldersSynchronized.ToHashSet();

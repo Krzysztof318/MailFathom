@@ -61,6 +61,8 @@ internal static class StatusCommand
         context.Console.WriteLine(
             $"'{profile.Name}' ({profile.Endpoint.GetLeftPart(UriPartial.Authority)}) accepts the stored credential as '{session.Credential}' (MailFathom {session.Version}).");
 
+        context.Console.WriteLine(DescribeGrant(session.Permissions));
+
         if (DocumentationAddress.ForVersion(session.Version) is { } documentation)
         {
             context.Console.WriteLine($"Documentation for that version: {documentation}");
@@ -68,4 +70,17 @@ internal static class StatusCommand
 
         return CliExitCode.Success;
     }
+
+    /// <summary>States what the credential may do, which is what decides whether any other command will work.</summary>
+    /// <remarks>
+    /// Reported here rather than left to be discovered one refusal at a time: an operator who has just signed in wants
+    /// to know which commands are theirs before they run one. A credential granted nothing is the case worth stating
+    /// plainly, because it is how one is retired without its entry being deleted and its sign-in still succeeds.
+    /// </remarks>
+    private static string DescribeGrant(IReadOnlyList<string>? permissions) => permissions switch
+    {
+        null => "The deployment did not state what the credential may do.",
+        { Count: 0 } => "It holds no administrative permission, so every operation but this one is refused.",
+        _ => $"It holds {string.Join(", ", permissions)}.",
+    };
 }

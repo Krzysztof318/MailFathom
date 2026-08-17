@@ -4,8 +4,10 @@
 
 using MailFathom.Application.Accounts;
 using MailFathom.Application.Mail.Maintenance;
+using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Folders;
+using MailFathom.Host.Security.Endpoints;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Mvc;
 
@@ -40,9 +42,10 @@ namespace MailFathom.Host.Api;
 /// </para>
 /// <para>
 /// Both are here rather than on the MCP surface for the reason every administrative route is: re-reading a mailbox is
-/// not something a model reasons over, and what bounds administrative access is what should bound it.
-/// <strong>Every authenticated caller may perform every administrative operation</strong>, which
-/// <see cref="MailboxRefreshTokenEndpoint" /> states in full.
+/// not something a model reasons over, and what bounds administrative access is what should bound it. These routes
+/// postdate ADR 0012's table and are allocated under its rule: assessing a rewind reports what the deployment holds and
+/// is <c>mailfathom.admin.read</c>, while performing either of them asks the deployment to do work it can already do and
+/// is <c>mailfathom.admin.operate</c>.
 /// </para>
 /// </remarks>
 internal static class MailboxMaintenanceEndpoints
@@ -69,16 +72,19 @@ internal static class MailboxMaintenanceEndpoints
     {
         ArgumentNullException.ThrowIfNull(api);
 
-        api.MapGet(RewindRoute, AssessRewindAsync);
+        api.MapGet(RewindRoute, AssessRewindAsync)
+            .RequirePermission(MailFathomPermission.AdminRead);
 
         // The attribute is reached for its metadata rather than as an MVC filter, exactly as the erasure route reaches
         // it: it implements IRequestSizeLimitMetadata, which the routing pipeline applies to the request body feature,
         // so a body over the bound is answered 413 before the handler is reached.
         api.MapPost(RewindRoute, RewindAsync)
-            .WithMetadata(new RequestSizeLimitAttribute(MaxMaintenanceRequestBytes));
+            .WithMetadata(new RequestSizeLimitAttribute(MaxMaintenanceRequestBytes))
+            .RequirePermission(MailFathomPermission.AdminOperate);
 
         api.MapPost(RederivationRoute, RederiveAsync)
-            .WithMetadata(new RequestSizeLimitAttribute(MaxMaintenanceRequestBytes));
+            .WithMetadata(new RequestSizeLimitAttribute(MaxMaintenanceRequestBytes))
+            .RequirePermission(MailFathomPermission.AdminOperate);
     }
 
     /// <summary>Reports what a rewind of one scope would have the next runs read again, without discarding anything.</summary>

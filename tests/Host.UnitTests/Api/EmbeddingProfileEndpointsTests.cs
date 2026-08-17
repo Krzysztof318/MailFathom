@@ -12,6 +12,7 @@ using MailFathom.Application.Emails.Embeddings.Limits;
 using MailFathom.Application.Persistence;
 using MailFathom.Host.Api;
 using MailFathom.Host.Configuration.Embeddings;
+using MailFathom.Host.UnitTests.TestDoubles;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.Extensions.Time.Testing;
@@ -291,9 +292,21 @@ public sealed class EmbeddingProfileEndpointsTests
                 generationStore,
                 workloadReader,
                 spendGate,
-                new EmbeddingProfileActivation(generationStore, vectorIndex, retryPolicy, backfillSchedule)),
-            new EmbeddingStatusReader(generationStore, workloadReader, spendGate, providerHealth, backfillSchedule),
-            new EmbeddingReindexCancellation(generationStore, vectorIndex, retryPolicy, backfillSchedule));
+                new EmbeddingProfileActivation(generationStore, vectorIndex, retryPolicy, backfillSchedule),
+                AdministrativeGrant.WholeSurface),
+            new EmbeddingStatusReader(
+                generationStore,
+                workloadReader,
+                spendGate,
+                providerHealth,
+                backfillSchedule,
+                AdministrativeGrant.WholeSurface),
+            new EmbeddingReindexCancellation(
+                generationStore,
+                vectorIndex,
+                retryPolicy,
+                backfillSchedule,
+                AdministrativeGrant.WholeSurface));
     }
 
     /// <summary>The ports one request runs against, and the three services the routes resolve.</summary>

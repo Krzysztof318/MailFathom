@@ -270,7 +270,7 @@ public sealed class MailRuleEndpointsTests
         var result = await MailRuleEndpoints.ReadRunAsync(
             Account.Value,
             CatalogServing(Account),
-            this.runs,
+            new MailRuleEvaluationRunReader(this.runs, AdministrativeGrant.WholeSurface),
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -300,7 +300,7 @@ public sealed class MailRuleEndpointsTests
         var result = await MailRuleEndpoints.ReadRunAsync(
             Account.Value,
             CatalogServing(Account),
-            this.runs,
+            new MailRuleEvaluationRunReader(this.runs, AdministrativeGrant.WholeSurface),
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -316,7 +316,7 @@ public sealed class MailRuleEndpointsTests
         var result = await MailRuleEndpoints.ReadRunAsync(
             "nowhere",
             CatalogServing(Account),
-            this.runs,
+            new MailRuleEvaluationRunReader(this.runs, AdministrativeGrant.WholeSurface),
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -519,12 +519,12 @@ public sealed class MailRuleEndpointsTests
         return catalog;
     }
 
-    private static IMailRuleSetSource SourceOf(MailRuleSet ruleSet)
+    private static MailRuleSetReader SourceOf(MailRuleSet ruleSet)
     {
         var source = Substitute.For<IMailRuleSetSource>();
         source.Current.Returns(ruleSet);
 
-        return source;
+        return new MailRuleSetReader(source, AdministrativeGrant.WholeSurface);
     }
 
     private static MailRuleSet RuleSetOf(params MailRule[] rules) => MailRuleSet.Create(
@@ -575,7 +575,8 @@ public sealed class MailRuleEndpointsTests
                     sessionFactory,
                     new PersistenceConcurrencyOptions(),
                     this.timeProvider),
-                this.timeProvider),
+                this.timeProvider,
+                AdministrativeGrant.WholeSurface),
             TestContext.Current.CancellationToken);
     }
 
@@ -596,7 +597,7 @@ public sealed class MailRuleEndpointsTests
             pageSize,
             cursor,
             CatalogServing(Account),
-            this.history,
+            new MailRuleHistory(this.history, AdministrativeGrant.WholeSurface),
             TestContext.Current.CancellationToken);
 
     private sealed class CommittingSession : IPersistenceSession

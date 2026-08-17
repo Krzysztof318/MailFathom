@@ -3,8 +3,10 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.Contacts;
+using MailFathom.Domain.Access;
 using MailFathom.Domain.Contacts;
 using MailFathom.Domain.Emails;
+using MailFathom.Host.Security.Endpoints;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Mvc;
 
@@ -22,6 +24,15 @@ namespace MailFathom.Host.Api;
 /// They are here rather than on the MCP surface because the book is the most concentrated personal data this system
 /// holds, and what bounds administrative access is what should bound who may add to it, correct it, read it out, or
 /// erase somebody from it. The MCP tools over the book are a separate surface with separate reasoning.
+/// </para>
+/// <para>
+/// These routes postdate ADR 0012's table and are allocated under its rule, which separates reading what was derived
+/// from mail, causing work, and destroying. <strong>Reading the book — the listing, both lookups, and the export — is
+/// <c>mailfathom.admin.audit.read</c></strong>, because a collected contact is a person this deployment learned about
+/// from somebody's correspondence rather than a report of its own state, and the export is what a data-subject request
+/// is answered from. Writing one is <c>mailfathom.admin.operate</c>, and erasing somebody is
+/// <c>mailfathom.admin.erase</c> beside the mail erasure, because both destroy what this deployment holds about a
+/// person and an operator granting one is granting the other.
 /// </para>
 /// <para>
 /// <strong>Nothing a contact carries reaches a refusal.</strong> A name, an address, and a note travel in a request and
@@ -80,30 +91,41 @@ internal static class ContactEndpoints
     {
         ArgumentNullException.ThrowIfNull(api);
 
-        api.MapGet(ContactsRoute, ListAsync);
+        api.MapGet(ContactsRoute, ListAsync)
+            .RequirePermission(MailFathomPermission.AdminAuditRead);
 
         // The attribute is reached for its metadata rather than as an MVC filter: it implements
         // IRequestSizeLimitMetadata, which the routing pipeline applies to the request body feature, so a body over the
         // bound is answered 413 before the handler is reached.
         api.MapPost(ContactsRoute, RecordAsync)
-            .WithMetadata(new RequestSizeLimitAttribute(MaxRecordRequestBytes));
+            .WithMetadata(new RequestSizeLimitAttribute(MaxRecordRequestBytes))
+            .RequirePermission(MailFathomPermission.AdminOperate);
 
-        api.MapGet(ContactByAddressRoute, FindByAddressAsync);
-        api.MapGet(ContactRoute, FindAsync);
+        api.MapGet(ContactByAddressRoute, FindByAddressAsync)
+            .RequirePermission(MailFathomPermission.AdminAuditRead);
+
+        api.MapGet(ContactRoute, FindAsync)
+            .RequirePermission(MailFathomPermission.AdminAuditRead);
 
         api.MapPut(ContactRoute, AmendAsync)
-            .WithMetadata(new RequestSizeLimitAttribute(MaxRecordRequestBytes));
+            .WithMetadata(new RequestSizeLimitAttribute(MaxRecordRequestBytes))
+            .RequirePermission(MailFathomPermission.AdminOperate);
 
-        api.MapDelete(ContactRoute, EraseAsync);
-        api.MapPost(ContactPromotionRoute, PromoteAsync);
-        api.MapGet(ContactExportRoute, ExportAsync);
+        api.MapDelete(ContactRoute, EraseAsync)
+            .RequirePermission(MailFathomPermission.AdminErase);
+
+        api.MapPost(ContactPromotionRoute, PromoteAsync)
+            .RequirePermission(MailFathomPermission.AdminOperate);
+
+        api.MapGet(ContactExportRoute, ExportAsync)
+            .RequirePermission(MailFathomPermission.AdminAuditRead);
     }
 
     /// <summary>Serves one bounded page of the book, or reports what was wrong with the request.</summary>
     /// <param name="origin">The origin to narrow to, or <see langword="null" /> for the whole book.</param>
     /// <param name="pageSize">How many contacts the page may hold, or <see langword="null" /> for the default.</param>
     /// <param name="cursor">The cursor the previous page returned, or <see langword="null" /> for the first page.</param>
-    /// <param name="directory">Reads the page.</param>
+    /// <param name="book">Reads the page, for a caller the book's own grant admits.</param>
     /// <param name="cancellationToken">Cancels the read when the client disconnects.</param>
     /// <returns><c>200</c> with the page, or <c>400</c> naming what was wrong with the request.</returns>
     /// <remarks>
@@ -115,10 +137,10 @@ internal static class ContactEndpoints
         [FromQuery] string? origin,
         [FromQuery] int? pageSize,
         [FromQuery] string? cursor,
-        [FromServices] IContactDirectory directory,
+        [FromServices] ContactBook book,
         CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(directory);
+        ArgumentNullException.ThrowIfNull(book);
 
         if (!TryReadOrigin(origin, out var narrowedOrigin))
         {
@@ -143,7 +165,7 @@ internal static class ContactEndpoints
             return Refused($"A contact page holds between 1 and {ContactQuery.MaximumPageSize} contacts.");
         }
 
-        var page = await directory.ReadPageAsync(query, cancellationToken);
+        var page = await book.ReadPageAsync(query, cancellationToken);
 
         return TypedResults.Ok(new ContactPageResponse(
             [.. page.Contacts.Select(ContactResponse.For)],
@@ -185,29 +207,29 @@ internal static class ContactEndpoints
 
     /// <summary>Reads one contact by the identity the book gave it.</summary>
     /// <param name="contactId">The contact to read.</param>
-    /// <param name="directory">Answers what the book holds.</param>
+    /// <param name="book">Answers what the book holds, for a caller the book's own grant admits.</param>
     /// <param name="cancellationToken">Cancels the read when the client disconnects.</param>
     /// <returns><c>200</c> with the contact, or <c>200</c> with none where the book holds no such person.</returns>
     internal static async Task<Results<Ok<ContactLookupResponse>, ProblemHttpResult>> FindAsync(
         Guid contactId,
-        [FromServices] IContactDirectory directory,
+        [FromServices] ContactBook book,
         CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(directory);
+        ArgumentNullException.ThrowIfNull(book);
 
         if (!TryReadContactId(contactId, out var identity))
         {
             return EmptyIdentity();
         }
 
-        var held = await directory.FindAsync(identity, cancellationToken);
+        var held = await book.FindAsync(identity, cancellationToken);
 
         return TypedResults.Ok(new ContactLookupResponse(held is null ? null : ContactResponse.For(held)));
     }
 
     /// <summary>Reads the person who uses one address.</summary>
     /// <param name="address">The address to resolve.</param>
-    /// <param name="directory">Answers what the book holds.</param>
+    /// <param name="book">Answers what the book holds, for a caller the book's own grant admits.</param>
     /// <param name="cancellationToken">Cancels the read when the client disconnects.</param>
     /// <returns><c>200</c> with the contact, <c>200</c> with none where nobody holds it, or <c>400</c> where the address is not one.</returns>
     /// <remarks>
@@ -217,17 +239,17 @@ internal static class ContactEndpoints
     /// </remarks>
     internal static async Task<Results<Ok<ContactLookupResponse>, ProblemHttpResult>> FindByAddressAsync(
         [FromQuery] string? address,
-        [FromServices] IContactDirectory directory,
+        [FromServices] ContactBook book,
         CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(directory);
+        ArgumentNullException.ThrowIfNull(book);
 
         if (!TryReadAddress(address, out var resolved))
         {
             return Refused("The lookup names no usable address.");
         }
 
-        var held = await directory.FindByAddressAsync(resolved, cancellationToken);
+        var held = await book.FindByAddressAsync(resolved, cancellationToken);
 
         return TypedResults.Ok(new ContactLookupResponse(held is null ? null : ContactResponse.For(held)));
     }

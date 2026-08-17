@@ -8,6 +8,7 @@ using MailFathom.Application.Rules.Evaluation;
 using MailFathom.Application.Rules.History;
 using MailFathom.Application.UnitTests.TestDoubles;
 using MailFathom.Domain.Accounts;
+using MailFathom.TestSupport;
 using Microsoft.Extensions.Time.Testing;
 using NSubstitute;
 using Xunit;
@@ -88,7 +89,10 @@ public sealed class ScheduledMailRuleRunHandlerTests
         return new ScheduledMailRuleRunHandler(new MailRuleEvaluationRunRequests(
             this.runStore,
             new OptimisticConcurrencyRetryPolicy(sessionFactory, new PersistenceConcurrencyOptions(), timeProvider),
-            timeProvider));
+            timeProvider,
+            // The occasion runs under the process rather than a caller, which is the arrangement the scheduled path is
+            // written for: it asks for no permission, so a principal that holds none still reaches it.
+            AccessAuthorizations.ForPrincipal(principal: null)));
     }
 
     private sealed class CommittingSession : IPersistenceSession

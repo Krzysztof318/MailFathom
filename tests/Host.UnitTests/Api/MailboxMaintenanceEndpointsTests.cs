@@ -258,7 +258,7 @@ public sealed class MailboxMaintenanceEndpointsTests
     private static MailSynchronizationRewind RewindOver(
         ISynchronizationCheckpointStore checkpoints,
         int storedEmailCount) =>
-        new(checkpoints, new FixedCounter(storedEmailCount), RetryPolicy());
+        new(checkpoints, new FixedCounter(storedEmailCount), RetryPolicy(), AdministrativeGrant.WholeSurface);
 
     private static StoredMailRederivation RederivationOver(IStoredMailRederivationStore store)
     {
@@ -282,7 +282,7 @@ public sealed class MailboxMaintenanceEndpointsTests
                 ExtractedEmailText.FromPlainTextBody("Body", "Body"),
                 SenderAuthentication.NotEstablished()))));
 
-        return new StoredMailRederivation(store, contentStore, mimeReader, RetryPolicy());
+        return new StoredMailRederivation(store, contentStore, mimeReader, RetryPolicy(), AdministrativeGrant.WholeSurface);
     }
 
     private static OptimisticConcurrencyRetryPolicy RetryPolicy()

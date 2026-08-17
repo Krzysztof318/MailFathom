@@ -3,6 +3,8 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.Synchronization.Administration;
+using MailFathom.Domain.Access;
+using MailFathom.Host.Security.Endpoints;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Mvc;
 
@@ -19,9 +21,10 @@ namespace MailFathom.Host.Api;
 /// <para>
 /// It is here rather than on the MCP surface for the reason every administrative route is: what it reports is the state
 /// of the service rather than anything a model reasons over, and the credential that bounds administrative access is
-/// what should bound reading how a deployment's workers are faring.
-/// <strong>Every authenticated caller may perform every administrative operation</strong>, which
-/// <see cref="MailboxRefreshTokenEndpoint" /> states in full.
+/// what should bound reading how a deployment's workers are faring. It is published under
+/// <c>mailfathom.admin.read</c>, which is the grant for what a deployment reports about itself: this route postdates
+/// ADR 0012's table and is allocated there by that rule, because what it answers with is the deployment's own state and
+/// no mail.
 /// </para>
 /// <para>
 /// Nothing it answers with is mail. Configured account identifiers and folder aliases, a phase, counts, UIDs, and
@@ -40,7 +43,8 @@ internal static class MailboxSynchronizationStatusEndpoint
     {
         ArgumentNullException.ThrowIfNull(api);
 
-        api.MapGet(StatusRoute, ReadStatusAsync);
+        api.MapGet(StatusRoute, ReadStatusAsync)
+            .RequirePermission(MailFathomPermission.AdminRead);
     }
 
     /// <summary>Reports where each configured account's synchronization stands.</summary>

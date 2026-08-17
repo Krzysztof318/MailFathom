@@ -2,7 +2,9 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Application.Access;
 using MailFathom.Application.Persistence;
+using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 
 namespace MailFathom.Application.Spam.Runs;
@@ -26,24 +28,29 @@ public sealed class SpamClassificationRunRequests
     private readonly ISpamClassificationRunStore runStore;
     private readonly OptimisticConcurrencyRetryPolicy commitPolicy;
     private readonly TimeProvider timeProvider;
+    private readonly AccessAuthorization authorization;
 
     /// <summary>Initializes the request intake.</summary>
     /// <param name="runStore">Reads whether a run is outstanding and records the one this request asks for.</param>
     /// <param name="commitPolicy">Makes the read and the write one decision, and resolves a race with a competing request.</param>
     /// <param name="timeProvider">Stamps the request.</param>
+    /// <param name="authorization">Answers which principal reached this use case.</param>
     /// <exception cref="ArgumentNullException">Thrown when a collaborator is <see langword="null" />.</exception>
     public SpamClassificationRunRequests(
         ISpamClassificationRunStore runStore,
         OptimisticConcurrencyRetryPolicy commitPolicy,
-        TimeProvider timeProvider)
+        TimeProvider timeProvider,
+        AccessAuthorization authorization)
     {
         ArgumentNullException.ThrowIfNull(runStore);
         ArgumentNullException.ThrowIfNull(commitPolicy);
         ArgumentNullException.ThrowIfNull(timeProvider);
+        ArgumentNullException.ThrowIfNull(authorization);
 
         this.runStore = runStore;
         this.commitPolicy = commitPolicy;
         this.timeProvider = timeProvider;
+        this.authorization = authorization;
     }
 
     /// <summary>Asks for every message stored for the account to be classified on the terms given.</summary>
@@ -53,11 +60,16 @@ public sealed class SpamClassificationRunRequests
     /// <returns>The run the account now has outstanding, and whether this request is what put it there.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="terms" /> is <see langword="null" />.</exception>
     /// <exception cref="PersistenceConcurrencyConflictException">Thrown when two requests raced past the bounded retries.</exception>
+    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the use case was reached by anything but a caller granted <see cref="MailFathomPermission.AdminOperate" />.</exception>
     /// <exception cref="OperationCanceledException">Thrown when the caller cancels.</exception>
     /// <remarks>
     /// The read and the write are one committed decision rather than a check followed by an insert, because two requests
     /// arriving together must resolve to one run. The loser of that race meets the account's own key, is retried from a
     /// fresh read, and is answered with the run the winner asked for.
+    /// <para>
+    /// A run asked to act moves mail on somebody's server, so the grant it asks for is the one covering work the
+    /// deployment performs on request — reading what a run concluded is a different grant and neither implies the other.
+    /// </para>
     /// </remarks>
     public Task<SpamClassificationRunRequest> SubmitAsync(
         MailAccountId accountId,
@@ -65,6 +77,8 @@ public sealed class SpamClassificationRunRequests
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(terms);
+
+        this.authorization.RequirePermission(MailFathomPermission.AdminOperate);
 
         return this.commitPolicy.CommitAsync(
             async (session, attemptCancellationToken) =>

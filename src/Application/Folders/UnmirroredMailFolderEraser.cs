@@ -2,8 +2,10 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Application.Access;
 using MailFathom.Application.Persistence;
 using MailFathom.Application.Synchronization;
+using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Folders;
 
@@ -29,24 +31,29 @@ public sealed class UnmirroredMailFolderEraser
     private readonly IStoredMailFolderMirrorStore mirrorStore;
     private readonly OptimisticConcurrencyRetryPolicy concurrencyRetryPolicy;
     private readonly MailboxSynchronizationOptions options;
+    private readonly AccessAuthorization authorization;
 
     /// <summary>Initializes the eraser.</summary>
     /// <param name="mirrorStore">Removes the stored mail of one folder and clears its checkpoint.</param>
     /// <param name="concurrencyRetryPolicy">Commits one pass, retrying a conflict with a competing writer.</param>
     /// <param name="options">Bounds one pass, reusing the bound the backward pass over stored mail already carries.</param>
+    /// <param name="authorization">Answers which principal reached this use case.</param>
     /// <exception cref="ArgumentNullException">Thrown when any argument is <see langword="null" />.</exception>
     public UnmirroredMailFolderEraser(
         IStoredMailFolderMirrorStore mirrorStore,
         OptimisticConcurrencyRetryPolicy concurrencyRetryPolicy,
-        MailboxSynchronizationOptions options)
+        MailboxSynchronizationOptions options,
+        AccessAuthorization authorization)
     {
         ArgumentNullException.ThrowIfNull(mirrorStore);
         ArgumentNullException.ThrowIfNull(concurrencyRetryPolicy);
         ArgumentNullException.ThrowIfNull(options);
+        ArgumentNullException.ThrowIfNull(authorization);
 
         this.mirrorStore = mirrorStore;
         this.concurrencyRetryPolicy = concurrencyRetryPolicy;
         this.options = options;
+        this.authorization = authorization;
     }
 
     /// <summary>Erases one bounded pass of what is stored for a folder nothing mirrors any more.</summary>
@@ -55,11 +62,19 @@ public sealed class UnmirroredMailFolderEraser
     /// <param name="cancellationToken">Cancels the pass before or during its single transaction.</param>
     /// <returns>What this pass erased, and whether the folder still holds stored mail.</returns>
     /// <exception cref="PersistenceConcurrencyConflictException">Thrown when a competing writer wins a race the bounded retries could not resolve.</exception>
+    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the use case was reached by anything but a caller granted <see cref="MailFathomPermission.AdminErase" />.</exception>
+    /// <remarks>
+    /// This is the one operation that disposes of stored mail, so it asks for the grant allocated to exactly that and
+    /// nothing wider reaches it. The check is here rather than only at the route because an erasure is irreversible and
+    /// an entrypoint added later must not be able to perform one by omission.
+    /// </remarks>
     public async Task<MailFolderMirrorErasure> EraseAsync(
         MailAccountId accountId,
         MailFolderAlias folderAlias,
         CancellationToken cancellationToken)
     {
+        this.authorization.RequirePermission(MailFathomPermission.AdminErase);
+
         var erasure = MailFolderMirrorErasure.Nothing;
 
         await this.concurrencyRetryPolicy.CommitAsync(

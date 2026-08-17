@@ -3,7 +3,10 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.Security.Claims;
+using MailFathom.Application.Access;
+using MailFathom.Domain.Access;
 using MailFathom.Host.Configuration.Endpoints;
+using MailFathom.Host.Security.Endpoints;
 using MailFathom.Host.Security.Transport;
 using MailFathom.Versioning;
 
@@ -82,11 +85,22 @@ namespace MailFathom.Host.Api;
 /// </para>
 /// <para>
 /// Every one of them is mapped into one group so a route cannot be added outside the requirement the endpoint attaches
-/// to it.
+/// to it, and so the one filter that reads each route's published permission covers every route the group holds.
 /// </para>
 /// </remarks>
 internal static class AdminApiEndpoints
 {
+    /// <summary>The route reporting what the deployment knows about the caller, relative to the administrative prefix.</summary>
+    /// <remarks>
+    /// The one administrative route published under no permission. It discloses nothing a caller did not bring — the
+    /// credential it presented, the version this deployment already publishes, and what its own grant carries — and it
+    /// is what every command reads first, <c>mfctl login</c> included. Putting it behind a permission would make that
+    /// permission a component of every administrative grant, so a credential granted only the spend permission could not
+    /// sign in to use it. A credential granted nothing therefore still answers here and nowhere else; an operator who
+    /// wants nothing answered at all removes the entry.
+    /// </remarks>
+    internal const string SessionRoute = "/session";
+
     /// <summary>Maps the administrative routes beneath the endpoint's route prefix.</summary>
     /// <param name="endpoints">The route builder.</param>
     /// <returns>The mapped group, so the caller can attach the requirement the endpoint carries.</returns>
@@ -97,7 +111,16 @@ internal static class AdminApiEndpoints
 
         var api = endpoints.MapGroup(AdminEndpointOptions.RoutePrefix);
 
-        api.MapGet("/session", (ClaimsPrincipal caller) => Results.Ok(AdminSessionResponse.For(caller)));
+        // On the group rather than on each route, because what a route supplies is its decision and what this supplies
+        // is the enforcement: a route mapped without stating a permission is refused by this rather than served, which
+        // is what makes forgetting to decide fail closed. Group filters reach every route the group holds, whenever it
+        // was added, so nothing here depends on this line staying first.
+        api.AddEndpointFilter(AdminRouteAuthorization.RefuseUnpermittedAsync);
+
+        api.MapGet(SessionRoute, (ClaimsPrincipal caller, IAuthorizedPrincipalSource principals) =>
+                Results.Ok(AdminSessionResponse.For(caller, principals.Current)))
+            .RequireNoPermission();
+
         api.MapMailboxRefreshToken();
         api.MapMailboxSynchronizationStatus();
         api.MapMailboxMaintenance();
@@ -118,26 +141,52 @@ internal static class AdminApiEndpoints
 /// <param name="Service">The product this is, so a client can tell it reached MailFathom rather than something else answering the port.</param>
 /// <param name="Version">The running version, which is what an operator checks before reporting behavior.</param>
 /// <param name="Credential">The name of the credential that authenticated, or <c>anonymous</c> where the endpoint requires none.</param>
+/// <param name="Permissions">The published names of what this caller's grant carries, in the order this repository publishes them, and empty for a credential granted nothing.</param>
 /// <remarks>
+/// <para>
 /// The credential's *name* is MailFathom's own configured identity for it — never the material, and never a claim an
 /// authorization server supplied beyond the subject the deployment already authorized. A response that echoed more
 /// would be a way to read a token's contents back out of the service.
+/// </para>
+/// <para>
+/// The grant is reported for the same reason the route requires none: it is the caller asking what it may do, which is
+/// the one question a caller may always ask about itself. It is also what an operator reads instead of their own
+/// configuration file — a grant nobody narrowed reaches the whole surface, and reading that back is how they meet the
+/// posture rather than infer it from what a credential turned out to be able to do.
+/// </para>
 /// </remarks>
-internal sealed record AdminSessionResponse(string Service, string Version, string Credential)
+internal sealed record AdminSessionResponse(
+    string Service,
+    string Version,
+    string Credential,
+    IReadOnlyList<string> Permissions)
 {
-    /// <summary>Describes the caller a validated credential produced.</summary>
+    /// <summary>Describes the caller a validated credential produced, and what it was granted.</summary>
     /// <param name="caller">The principal the authentication scheme produced.</param>
+    /// <param name="principal">What the application layer was told admitted this request, or nothing where the transport established none.</param>
     /// <returns>The response body.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="caller" /> is <see langword="null" />.</exception>
-    internal static AdminSessionResponse For(ClaimsPrincipal caller)
+    /// <remarks>
+    /// A request that established no principal reports an empty grant rather than failing. This route requires no
+    /// permission, so it answers a caller the rest of the surface refuses, and saying "nothing" is the accurate answer
+    /// to what such a caller may do.
+    /// </remarks>
+    internal static AdminSessionResponse For(ClaimsPrincipal caller, AuthorizedPrincipal? principal)
     {
         ArgumentNullException.ThrowIfNull(caller);
 
         return new AdminSessionResponse(
             "MailFathom",
             StampedAssemblyVersion.ReadFrom(typeof(AdminSessionResponse).Assembly).Version,
-            NameOf(caller));
+            NameOf(caller),
+            GrantOf(principal));
     }
+
+    /// <summary>Names what the caller holds, in the order this repository publishes the set.</summary>
+    /// <remarks>The published order rather than the grant's own, so two credentials granted the same permissions are reported identically whichever order an operator wrote them in.</remarks>
+    private static IReadOnlyList<string> GrantOf(AuthorizedPrincipal? principal) => principal is null
+        ? []
+        : [.. MailFathomPermission.All.Where(principal.Holds).Select(permission => permission.Name)];
 
     /// <summary>Reports the configured name of whatever authenticated, or that nothing did.</summary>
     /// <remarks>The naming rule is the transport's own, shared with what the application layer is told the work is running for, so this response and a record of a refusal cannot call one caller two things.</remarks>

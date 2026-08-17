@@ -2,11 +2,14 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Application.Access;
 using MailFathom.Application.Folders;
 using MailFathom.Application.Persistence;
 using MailFathom.Application.Synchronization;
+using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Folders;
+using MailFathom.TestSupport;
 using Microsoft.Extensions.Time.Testing;
 using NSubstitute;
 using Xunit;
@@ -82,7 +85,30 @@ public sealed class UnmirroredMailFolderEraserTests
         Assert.Equal([(Account, Junk, 25)], store.Passes);
     }
 
-    private static UnmirroredMailFolderEraser EraserOver(IStoredMailFolderMirrorStore store, int maxEmailsPerPass)
+    /// <summary>The grant is the authority here rather than at the transport, so an entrypoint that passed no filter meets the same refusal.</summary>
+    [Fact]
+    public async Task EraseAsync_ACallerGrantedOnlyTheAdministrativeOperate_IsRefusedWithTheTransportAbsent()
+    {
+        // Arrange
+        var store = new RecordingMirrorStore(new MailFolderMirrorErasure(ErasedEmailCount: 0, EmailsRemain: false));
+        var eraser = EraserOver(
+            store,
+            maxEmailsPerPass: 500,
+            AccessAuthorizations.ForCallerGranted(MailFathomPermission.AdminOperate));
+
+        // Act
+        var refusal = await Assert.ThrowsAsync<PrincipalNotAuthorizedException>(() =>
+            eraser.EraseAsync(Account, Junk, TestContext.Current.CancellationToken));
+
+        // Assert
+        Assert.Equal(MailFathomPermission.AdminErase, refusal.RequiredPermission);
+        Assert.Empty(store.Passes);
+    }
+
+    private static UnmirroredMailFolderEraser EraserOver(
+        IStoredMailFolderMirrorStore store,
+        int maxEmailsPerPass,
+        AccessAuthorization? authorization = null)
     {
         var clock = new FakeTimeProvider();
         var sessionFactory = Substitute.For<IPersistenceSessionFactory>();
@@ -91,7 +117,8 @@ public sealed class UnmirroredMailFolderEraserTests
         return new UnmirroredMailFolderEraser(
             store,
             new OptimisticConcurrencyRetryPolicy(sessionFactory, new PersistenceConcurrencyOptions(), clock),
-            new MailboxSynchronizationOptions { MaxReconciledEmailsPerRun = maxEmailsPerPass });
+            new MailboxSynchronizationOptions { MaxReconciledEmailsPerRun = maxEmailsPerPass },
+            authorization ?? AccessAuthorizations.ForCallerGranted(MailFathomPermission.AdminErase));
     }
 
     /// <summary>Records what each pass was asked to erase, and answers with the erasure the test arranged.</summary>

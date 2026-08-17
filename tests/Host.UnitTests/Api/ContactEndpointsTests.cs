@@ -7,6 +7,7 @@ using MailFathom.Application.Persistence;
 using MailFathom.Domain.Contacts;
 using MailFathom.Domain.Emails;
 using MailFathom.Host.Api;
+using MailFathom.Host.UnitTests.TestDoubles;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.Extensions.Time.Testing;
@@ -221,7 +222,7 @@ public sealed class ContactEndpointsTests
         // Act
         var result = await ContactEndpoints.FindAsync(
             Identity,
-            this.directory,
+            this.Book(),
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -236,7 +237,7 @@ public sealed class ContactEndpointsTests
         // Act
         var result = await ContactEndpoints.FindAsync(
             Guid.Empty,
-            this.directory,
+            this.Book(),
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -256,7 +257,7 @@ public sealed class ContactEndpointsTests
         // Act
         var result = await ContactEndpoints.FindByAddressAsync(
             address,
-            this.directory,
+            this.Book(),
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -280,7 +281,7 @@ public sealed class ContactEndpointsTests
             origin: null,
             pageSize: null,
             cursor: null,
-            this.directory,
+            this.Book(),
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -302,7 +303,7 @@ public sealed class ContactEndpointsTests
             "collected",
             pageSize: null,
             cursor: null,
-            this.directory,
+            this.Book(),
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -328,7 +329,7 @@ public sealed class ContactEndpointsTests
             origin,
             pageSize,
             cursor,
-            this.directory,
+            this.Book(),
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -466,7 +467,8 @@ public sealed class ContactEndpointsTests
             this.store,
             this.directory,
             new OptimisticConcurrencyRetryPolicy(sessionFactory, new PersistenceConcurrencyOptions(), this.clock),
-            this.clock);
+            this.clock,
+            AdministrativeGrant.WholeSurface);
     }
 
     /// <summary>A session that commits whatever was staged in it, which is what a write's ordinary path needs.</summary>

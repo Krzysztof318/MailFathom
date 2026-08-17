@@ -2,9 +2,11 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Application.Access;
 using MailFathom.Application.EmailContent.Storage;
 using MailFathom.Application.Emails.Extraction;
 using MailFathom.Application.Persistence;
+using MailFathom.Domain.Access;
 using MailFathom.Domain.Emails;
 
 namespace MailFathom.Application.Mail.Maintenance;
@@ -70,28 +72,33 @@ public sealed class StoredMailRederivation
     private readonly IEmailContentStore contentStore;
     private readonly IEmailMimeReader mimeReader;
     private readonly OptimisticConcurrencyRetryPolicy concurrencyRetryPolicy;
+    private readonly AccessAuthorization authorization;
 
     /// <summary>Initializes the re-derivation.</summary>
     /// <param name="rederivationStore">Reads what the walk has left and writes what one email's re-reading produced.</param>
     /// <param name="contentStore">Reads back the raw MIME an earlier run stored.</param>
     /// <param name="mimeReader">Turns that raw MIME into normalized metadata.</param>
     /// <param name="concurrencyRetryPolicy">Commits a batch, retrying a conflict with a competing writer.</param>
+    /// <param name="authorization">Answers which principal reached this use case.</param>
     /// <exception cref="ArgumentNullException">Thrown when any argument is <see langword="null" />.</exception>
     public StoredMailRederivation(
         IStoredMailRederivationStore rederivationStore,
         IEmailContentStore contentStore,
         IEmailMimeReader mimeReader,
-        OptimisticConcurrencyRetryPolicy concurrencyRetryPolicy)
+        OptimisticConcurrencyRetryPolicy concurrencyRetryPolicy,
+        AccessAuthorization authorization)
     {
         ArgumentNullException.ThrowIfNull(rederivationStore);
         ArgumentNullException.ThrowIfNull(contentStore);
         ArgumentNullException.ThrowIfNull(mimeReader);
         ArgumentNullException.ThrowIfNull(concurrencyRetryPolicy);
+        ArgumentNullException.ThrowIfNull(authorization);
 
         this.rederivationStore = rederivationStore;
         this.contentStore = contentStore;
         this.mimeReader = mimeReader;
         this.concurrencyRetryPolicy = concurrencyRetryPolicy;
+        this.authorization = authorization;
     }
 
     /// <summary>Runs one bounded pass over the scope's stored mail.</summary>
@@ -103,12 +110,16 @@ public sealed class StoredMailRederivation
     /// Thrown when a competing writer wins a race that the bounded retries could not resolve. Batches already committed
     /// stay durable, and the next pass resumes from the committed position.
     /// </exception>
+    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the use case was reached by anything but a caller granted <see cref="MailFathomPermission.AdminOperate" />.</exception>
     /// <exception cref="OperationCanceledException">Thrown when the caller cancels. Committed batches stay durable.</exception>
+    /// <remarks>A pass is work the deployment performs on the operator's asking, which is the grant it asks for.</remarks>
     public async Task<StoredMailRederivationPass> RunAsync(
         StoredMailScope scope,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(scope);
+
+        this.authorization.RequirePermission(MailFathomPermission.AdminOperate);
 
         var position = await this.rederivationStore.FindResumePositionAsync(scope, cancellationToken);
         var rederivedCount = 0;

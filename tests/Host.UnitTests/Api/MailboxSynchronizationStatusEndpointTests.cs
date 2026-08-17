@@ -8,6 +8,7 @@ using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Folders;
 using MailFathom.Host.Api;
+using MailFathom.Host.UnitTests.TestDoubles;
 using MailFathom.TestSupport;
 using Microsoft.Extensions.Time.Testing;
 using NSubstitute;
@@ -124,6 +125,7 @@ public sealed class MailboxSynchronizationStatusEndpointTests
             accounts,
             StubMailFolderParticipation.Mapping(Inbox),
             ledger,
-            progressReader);
+            progressReader,
+            AdministrativeGrant.WholeSurface);
     }
 }

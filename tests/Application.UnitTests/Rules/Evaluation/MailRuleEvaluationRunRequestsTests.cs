@@ -2,11 +2,14 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Application.Access;
 using MailFathom.Application.Persistence;
 using MailFathom.Application.Rules.Evaluation;
 using MailFathom.Application.Rules.History;
 using MailFathom.Application.UnitTests.TestDoubles;
+using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
+using MailFathom.TestSupport;
 using Microsoft.Extensions.Time.Testing;
 using NSubstitute;
 using Xunit;
@@ -181,7 +184,37 @@ public sealed class MailRuleEvaluationRunRequestsTests
         Assert.Empty(this.runStore.Saves);
     }
 
-    private MailRuleEvaluationRunRequests CreateRequests()
+    /// <summary>The grant is the authority here rather than at the transport, so an entrypoint that passed no filter meets the same refusal.</summary>
+    [Fact]
+    public async Task SubmitAsync_ACallerGrantedOnlyTheAdministrativeRead_IsRefusedWithTheTransportAbsent()
+    {
+        // Arrange
+        var requests = this.CreateRequests(AccessAuthorizations.ForCallerGranted(MailFathomPermission.AdminRead));
+
+        // Act
+        var refusal = await Assert.ThrowsAsync<PrincipalNotAuthorizedException>(() =>
+            requests.SubmitAsync(Account, TestContext.Current.CancellationToken));
+
+        // Assert
+        Assert.Equal(MailFathomPermission.AdminOperate, refusal.RequiredPermission);
+        Assert.Null(this.runStore.Find(Account));
+    }
+
+    /// <summary>The scheduled path is the process's own dispatch rather than a caller's request, so it asks for no grant and holds none.</summary>
+    [Fact]
+    public async Task SubmitScheduledAsync_TheProcessItself_RecordsARunWithoutHoldingAnyPermission()
+    {
+        // Arrange
+        var requests = this.CreateRequests(AccessAuthorizations.ForPrincipal(principal: null));
+
+        // Act
+        var request = await requests.SubmitScheduledAsync(Account, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.True(request.Accepted);
+    }
+
+    private MailRuleEvaluationRunRequests CreateRequests(AccessAuthorization? authorization = null)
     {
         var sessionFactory = Substitute.For<IPersistenceSessionFactory>();
         sessionFactory.BeginSessionAsync(Arg.Any<CancellationToken>()).Returns(_ => new CommittingSession());
@@ -192,7 +225,8 @@ public sealed class MailRuleEvaluationRunRequestsTests
                 sessionFactory,
                 new PersistenceConcurrencyOptions(),
                 this.timeProvider),
-            this.timeProvider);
+            this.timeProvider,
+            authorization ?? AccessAuthorizations.ForCallerGranted(MailFathomPermission.AdminOperate));
     }
 
     private sealed class CommittingSession : IPersistenceSession

@@ -6,6 +6,7 @@ using System.Text.Json;
 using MailFathom.Application.Accounts;
 using MailFathom.Domain.Accounts;
 using MailFathom.Host.Api;
+using MailFathom.Host.UnitTests.TestDoubles;
 using MailFathom.TestSupport;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.HttpResults;
@@ -180,6 +181,6 @@ public sealed class MailboxRefreshTokenEndpointTests
         var catalog = Substitute.For<IMailAccountCatalog>();
         catalog.ServedAccounts.Returns([.. servedAccountIds.Select(SyntheticServedAccount.Of)]);
 
-        return new MailboxRefreshTokenRecorder(catalog, this.store);
+        return new MailboxRefreshTokenRecorder(catalog, this.store, AdministrativeGrant.WholeSurface);
     }
 }

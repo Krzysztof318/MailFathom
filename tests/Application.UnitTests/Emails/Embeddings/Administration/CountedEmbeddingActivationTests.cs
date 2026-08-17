@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Application.Access;
 using MailFathom.Application.Emails.Embeddings;
 using MailFathom.Application.Emails.Embeddings.Administration;
 using MailFathom.Application.Emails.Embeddings.Backfill;
@@ -10,6 +11,8 @@ using MailFathom.Application.Emails.Embeddings.Indexing;
 using MailFathom.Application.Emails.Embeddings.Limits;
 using MailFathom.Application.Persistence;
 using MailFathom.Application.UnitTests.TestDoubles;
+using MailFathom.Domain.Access;
+using MailFathom.TestSupport;
 using Microsoft.Extensions.Time.Testing;
 using NSubstitute;
 using Xunit;
@@ -210,7 +213,55 @@ public sealed class CountedEmbeddingActivationTests
             EmbeddingDistanceMetric.Cosine,
             EmbeddingInputPreparation.Create(2_000, passageInstruction: null, normalizesVector: true));
 
-    private static ActivationWorld CreateWorld(long maxInputCharactersPerPeriod = 1_000_000)
+    /// <summary>The grant is the authority here rather than at the transport, so an entrypoint that passed no filter meets the same refusal.</summary>
+    [Fact]
+    public async Task AssessAsync_ACallerGrantedOnlyTheSpend_IsRefusedWithTheTransportAbsent()
+    {
+        // Arrange
+        var world = CreateWorld(authorization: AccessAuthorizations.ForCallerGranted(MailFathomPermission.AdminSpend));
+
+        // Act
+        var refusal = await Assert.ThrowsAsync<PrincipalNotAuthorizedException>(() =>
+            world.Activation.AssessAsync(CreateIdentity("a-model"), TestContext.Current.CancellationToken));
+
+        // Assert
+        Assert.Equal(MailFathomPermission.AdminRead, refusal.RequiredPermission);
+    }
+
+    /// <summary>The read in front of the activation is the activating caller's own, so holding the spend alone is enough to activate.</summary>
+    [Fact]
+    public async Task ActivateAsync_ACallerGrantedOnlyTheSpend_ActivatesWithoutAlsoHoldingTheRead()
+    {
+        // Arrange
+        var world = CreateWorld(authorization: AccessAuthorizations.ForCallerGranted(MailFathomPermission.AdminSpend));
+        var declared = CreateIdentity("a-model");
+
+        // Act
+        var result = await world.Activation.ActivateAsync(declared, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.False(result.RefusedBySpendCeiling);
+        Assert.Equal(EmbeddingProfileActivationOutcome.ReindexStarted, result.Activation?.Outcome);
+    }
+
+    /// <summary>Starting a provider bill asks for the one permission allocated to spending, and the administrative read does not carry it.</summary>
+    [Fact]
+    public async Task ActivateAsync_ACallerGrantedOnlyTheRead_IsRefusedWithTheTransportAbsent()
+    {
+        // Arrange
+        var world = CreateWorld(authorization: AccessAuthorizations.ForCallerGranted(MailFathomPermission.AdminRead));
+
+        // Act
+        var refusal = await Assert.ThrowsAsync<PrincipalNotAuthorizedException>(() =>
+            world.Activation.ActivateAsync(CreateIdentity("a-model"), TestContext.Current.CancellationToken));
+
+        // Assert
+        Assert.Equal(MailFathomPermission.AdminSpend, refusal.RequiredPermission);
+    }
+
+    private static ActivationWorld CreateWorld(
+        long maxInputCharactersPerPeriod = 1_000_000,
+        AccessAuthorization? authorization = null)
     {
         var generationStore = new InMemoryEmbeddingGenerationStore(new InMemoryEmailEmbeddingStore());
         var workloadReader = new InMemoryEmbeddingWorkloadReader();
@@ -235,7 +286,10 @@ public sealed class CountedEmbeddingActivationTests
                     sessionFactory,
                     new PersistenceConcurrencyOptions(),
                     timeProvider),
-                new EmbeddingBackfillSchedule(timeProvider)));
+                new EmbeddingBackfillSchedule(timeProvider)),
+            authorization ?? AccessAuthorizations.ForCallerGranted(
+                MailFathomPermission.AdminRead,
+                MailFathomPermission.AdminSpend));
 
         return new ActivationWorld(generationStore, workloadReader, ledger, activation);
     }

@@ -5,7 +5,9 @@
 using MailFathom.Application.Accounts;
 using MailFathom.Application.Jobs;
 using MailFathom.Application.Jobs.DeadLetters;
+using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
+using MailFathom.Host.Security.Endpoints;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Mvc;
 
@@ -21,8 +23,8 @@ namespace MailFathom.Host.Api;
 /// <para>
 /// They are here rather than on the MCP surface because none of them is anything a model reasons over, and because
 /// re-running work that changes somebody's mailbox should be bounded by the credential that bounds everything else
-/// administrative. <strong>Every authenticated caller may perform every administrative operation</strong>, which
-/// <see cref="MailboxRefreshTokenEndpoint" /> states in full.
+/// administrative. Reading what stopped is <c>mailfathom.admin.read</c> and both decisions are
+/// <c>mailfathom.admin.operate</c>, so a monitoring credential can report a queue it cannot act on.
 /// </para>
 /// <para>
 /// Nothing any of them answers with is mail. A job type's name, an idempotency key composed of MailFathom's own
@@ -57,16 +59,19 @@ internal static class JobDeadLetterEndpoints
     {
         ArgumentNullException.ThrowIfNull(api);
 
-        api.MapGet(DeadLettersRoute, ReadDeadLettersAsync);
+        api.MapGet(DeadLettersRoute, ReadDeadLettersAsync)
+            .RequirePermission(MailFathomPermission.AdminRead);
 
         // The attribute is reached for its metadata rather than as an MVC filter, exactly as the erasure route reaches
         // it: it implements IRequestSizeLimitMetadata, which the routing pipeline applies to the request body feature,
         // so a body over the bound is answered 413 before the handler is reached.
         api.MapPost(RetryRoute, RetryAsync)
-            .WithMetadata(new RequestSizeLimitAttribute(MaxDecisionRequestBytes));
+            .WithMetadata(new RequestSizeLimitAttribute(MaxDecisionRequestBytes))
+            .RequirePermission(MailFathomPermission.AdminOperate);
 
         api.MapPost(DropRoute, DropAsync)
-            .WithMetadata(new RequestSizeLimitAttribute(MaxDecisionRequestBytes));
+            .WithMetadata(new RequestSizeLimitAttribute(MaxDecisionRequestBytes))
+            .RequirePermission(MailFathomPermission.AdminOperate);
     }
 
     /// <summary>Serves one page of the jobs nothing will attempt again, newest first.</summary>
@@ -89,7 +94,7 @@ internal static class JobDeadLetterEndpoints
         [FromQuery] int? pageSize,
         [FromQuery] string? cursor,
         [FromServices] IMailAccountCatalog accounts,
-        [FromServices] IDeadLetteredJobStore deadLetters,
+        [FromServices] DeadLetteredJobs deadLetters,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(accounts);
@@ -162,7 +167,7 @@ internal static class JobDeadLetterEndpoints
     /// </remarks>
     internal static async Task<Results<Ok<JobRecoveryResponse>, ProblemHttpResult>> RetryAsync(
         [FromBody] JobRecoveryRequest? request,
-        [FromServices] IDeadLetteredJobStore deadLetters,
+        [FromServices] DeadLetteredJobs deadLetters,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(deadLetters);
@@ -185,7 +190,7 @@ internal static class JobDeadLetterEndpoints
     /// <remarks>The record is kept rather than removed, for the reason <see cref="JobState.Dropped" /> gives: what an operator decided about a job is itself worth keeping.</remarks>
     internal static async Task<Results<Ok<JobRecoveryResponse>, ProblemHttpResult>> DropAsync(
         [FromBody] JobRecoveryRequest? request,
-        [FromServices] IDeadLetteredJobStore deadLetters,
+        [FromServices] DeadLetteredJobs deadLetters,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(deadLetters);

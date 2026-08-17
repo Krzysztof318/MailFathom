@@ -201,9 +201,11 @@ the same way it does for every other command. [Administering a deployment](admin
 the write needs the administrative endpoint enabled; a deployment without one still takes a token you provision
 yourself.
 
-> **The route this uses is behind the endpoint's authentication, and behind nothing else.** Every authenticated caller
-> may perform every administrative operation, so an administrative credential that can read a session can write a
-> mailbox credential. Provision one per client and treat it as what it now is.
+> **The route this uses requires `mailfathom.admin.credentials.write`, and being authenticated is not enough.** A
+> credential whose entry narrows its grant to anything else is refused and told which permission it lacked, and an entry
+> that writes no grant at all reaches this route like every other. Provision one per client, grant it that permission
+> and no more, and treat it as what it now is — [what a credential may
+> do](admin-endpoint.md#what-a-credential-may-do) is where the grant is written.
 
 Sending a grant does **not** change the account's configuration. `OAuth:RefreshToken` stays a secret reference and is
 still what an account is served from until something is stored for it; what changes is that something now is. The

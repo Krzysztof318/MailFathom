@@ -258,7 +258,7 @@ public sealed class SpamClassificationEndpointsTests
         var result = await SpamClassificationEndpoints.ReadRunAsync(
             Account.Value,
             CatalogServing(Account),
-            this.runs,
+            new SpamClassificationRunReader(this.runs, AdministrativeGrant.WholeSurface),
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -289,7 +289,7 @@ public sealed class SpamClassificationEndpointsTests
         var result = await SpamClassificationEndpoints.ReadRunAsync(
             Account.Value,
             CatalogServing(Account),
-            this.runs,
+            new SpamClassificationRunReader(this.runs, AdministrativeGrant.WholeSurface),
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -310,7 +310,7 @@ public sealed class SpamClassificationEndpointsTests
         var result = await SpamClassificationEndpoints.ReadRunAsync(
             "nowhere",
             CatalogServing(Account),
-            this.runs,
+            new SpamClassificationRunReader(this.runs, AdministrativeGrant.WholeSurface),
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -461,7 +461,8 @@ public sealed class SpamClassificationEndpointsTests
                     sessionFactory,
                     new PersistenceConcurrencyOptions(),
                     this.timeProvider),
-                this.timeProvider),
+                this.timeProvider,
+                AdministrativeGrant.WholeSurface),
             TestContext.Current.CancellationToken);
     }
 
@@ -482,7 +483,7 @@ public sealed class SpamClassificationEndpointsTests
             pageSize,
             cursor,
             CatalogServing(Account),
-            this.classifications,
+            new SpamClassificationHistory(this.classifications, AdministrativeGrant.WholeSurface),
             TestContext.Current.CancellationToken);
 
     private sealed class CommittingSession : IPersistenceSession

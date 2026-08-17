@@ -7,10 +7,12 @@ using MailFathom.Application.Spam;
 using MailFathom.Application.Spam.Actions;
 using MailFathom.Application.Spam.History;
 using MailFathom.Application.Spam.Runs;
+using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Folders;
 using MailFathom.Domain.Spam;
+using MailFathom.Host.Security.Endpoints;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Mvc;
 
@@ -27,8 +29,9 @@ namespace MailFathom.Host.Api;
 /// <para>
 /// They are here rather than on the MCP surface because neither is anything a model reasons over, and because what bounds
 /// administrative access is what should bound the ability to start a pass over a whole mailbox — and, with acting asked
-/// for, to move a thousand messages. <strong>Every authenticated caller may perform every administrative
-/// operation</strong>, which <see cref="MailboxRefreshTokenEndpoint" /> states in full.
+/// for, to move a thousand messages. Asking for a run is therefore <c>mailfathom.admin.operate</c> and reading where one
+/// got to is <c>mailfathom.admin.read</c>, while the classifications themselves are <c>mailfathom.admin.audit.read</c>:
+/// a verdict about a message is derived from that message rather than a report of the deployment's own state.
 /// </para>
 /// <para>
 /// Nothing either of them answers with is mail. Counts, verdicts, scores, signal names, folder aliases, mutation names,
@@ -69,11 +72,14 @@ internal static class SpamClassificationEndpoints
         // implements IRequestSizeLimitMetadata, which the routing pipeline applies to the request body feature, so a body
         // over the bound is answered 413 before the handler is reached.
         api.MapPost(RunsRoute, StartRunAsync)
-            .WithMetadata(new RequestSizeLimitAttribute(MaxRunRequestBytes));
+            .WithMetadata(new RequestSizeLimitAttribute(MaxRunRequestBytes))
+            .RequirePermission(MailFathomPermission.AdminOperate);
 
-        api.MapGet(RunsRoute, ReadRunAsync);
+        api.MapGet(RunsRoute, ReadRunAsync)
+            .RequirePermission(MailFathomPermission.AdminRead);
 
-        api.MapGet(ClassificationsRoute, ReadClassificationsAsync);
+        api.MapGet(ClassificationsRoute, ReadClassificationsAsync)
+            .RequirePermission(MailFathomPermission.AdminAuditRead);
     }
 
     /// <summary>Asks for every message stored for one account to be classified on the terms the caller named.</summary>
@@ -133,7 +139,7 @@ internal static class SpamClassificationEndpoints
     /// <summary>Reports where one account's whole-mailbox classification run has got to, or how the last one ended.</summary>
     /// <param name="account">The configured identifier of the account whose run is read.</param>
     /// <param name="accounts">Reports whether this deployment serves the named account.</param>
-    /// <param name="runs">Holds the one run an account may have outstanding, and the ending of the last one.</param>
+    /// <param name="runs">Reads the one run an account may have outstanding, for a caller the read's own grant admits.</param>
     /// <param name="cancellationToken">Cancels the read when the client disconnects.</param>
     /// <returns><c>200</c> with the run, <c>200</c> with none where the account has never been asked for one, or <c>400</c>.</returns>
     /// <remarks>
@@ -144,7 +150,7 @@ internal static class SpamClassificationEndpoints
     internal static async Task<Results<Ok<SpamClassificationRunStateResponse>, ProblemHttpResult>> ReadRunAsync(
         [FromQuery] string? account,
         [FromServices] IMailAccountCatalog accounts,
-        [FromServices] ISpamClassificationRunStore runs,
+        [FromServices] SpamClassificationRunReader runs,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(accounts);
@@ -171,7 +177,7 @@ internal static class SpamClassificationEndpoints
     /// <param name="pageSize">How many classifications the page may hold, or <see langword="null" /> for the default.</param>
     /// <param name="cursor">The cursor the previous page returned, or <see langword="null" /> for the first page.</param>
     /// <param name="accounts">Reports whether this deployment serves the named account.</param>
-    /// <param name="classifications">Reads the page.</param>
+    /// <param name="classifications">Reads the page, for a caller the record's own grant admits.</param>
     /// <param name="cancellationToken">Cancels the read when the client disconnects.</param>
     /// <returns><c>200</c> with the page, or <c>400</c> naming what was wrong with the request.</returns>
     /// <remarks>
@@ -189,7 +195,7 @@ internal static class SpamClassificationEndpoints
         [FromQuery] int? pageSize,
         [FromQuery] string? cursor,
         [FromServices] IMailAccountCatalog accounts,
-        [FromServices] ISpamClassificationHistoryReader classifications,
+        [FromServices] SpamClassificationHistory classifications,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(accounts);

@@ -213,9 +213,9 @@ public sealed class TransportGrantStartupReportTests
             StringComparison.Ordinal);
     }
 
-    /// <summary>Saying the same of both surfaces would tell an operator narrowing an administrative entry that it bites, which it does not.</summary>
+    /// <summary>The two surfaces refuse differently, so a line that said the same of both would be wrong about one of them.</summary>
     [Fact]
-    public async Task StartAsync_AnEntryOnTheAdministrativeSurface_SaysNoRouteConsultsAPermissionYet()
+    public async Task StartAsync_AnEntryOnTheAdministrativeSurface_SaysARefusalNamesThePermissionThatWouldSuffice()
     {
         // Arrange
         using var logs = new RecordingLoggerProvider();
@@ -233,7 +233,7 @@ public sealed class TransportGrantStartupReportTests
         // Assert
         var record = Assert.Single(logs.Records);
         Assert.Contains(
-            "No route here consults a permission yet",
+            "refused with that permission named",
             Assert.Contains("GrantEnforcement", record.Properties)?.ToString(),
             StringComparison.Ordinal);
     }

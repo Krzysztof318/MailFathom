@@ -49,13 +49,46 @@ internal static class FakeAdminEndpoint
         HttpStatusCode.OK,
         SessionBody(credentialName, version));
 
-    /// <summary>Builds the body the session route answers with.</summary>
+    /// <summary>Builds an endpoint that accepts the credential and reports the grant it holds.</summary>
+    /// <param name="credentialName">The name it reports for the credential.</param>
+    /// <param name="permissions">The permissions it reports the credential holding, which is empty for one granted nothing.</param>
+    /// <returns>The endpoint.</returns>
+    internal static FakeHttpMessageHandler AcceptingWithGrant(
+        string credentialName,
+        params string[] permissions) =>
+        AnsweringBody(HttpStatusCode.OK, SessionBody(credentialName, CommandVersion, permissions));
+
+    /// <summary>Builds the body the session route answers with, stating no grant.</summary>
     /// <param name="credentialName">The name it reports for the credential.</param>
     /// <param name="version">The version it reports.</param>
     /// <returns>The JSON body.</returns>
-    /// <remarks>Shared with the doubles that route by path, so every one of them reports a session the same way and a change to that shape lands in one place.</remarks>
+    /// <remarks>
+    /// Shared with the doubles that route by path, so every one of them reports a session the same way and a change to
+    /// that shape lands in one place. The grant is left out rather than stated, because most of these scenarios are
+    /// about something else and a body carrying one would put a permission list into every assertion about output; a
+    /// test whose subject is the grant states it with <see cref="AcceptingWithGrant" />.
+    /// </remarks>
     internal static string SessionBody(string credentialName, string version) =>
         $$"""{"service":"MailFathom","version":"{{version}}","credential":"{{credentialName}}"}""";
+
+    /// <summary>Builds the body the session route answers with, stating the grant the credential holds.</summary>
+    /// <param name="credentialName">The name it reports for the credential.</param>
+    /// <param name="version">The version it reports.</param>
+    /// <param name="permissions">The permissions it reports, which is empty for a credential granted nothing.</param>
+    /// <returns>The JSON body.</returns>
+    internal static string SessionBody(
+        string credentialName,
+        string version,
+        IReadOnlyList<string> permissions)
+    {
+        ArgumentNullException.ThrowIfNull(permissions);
+
+        var stated = string.Join(',', permissions.Select(permission => $"\"{permission}\""));
+
+        return $$"""
+            {"service":"MailFathom","version":"{{version}}","credential":"{{credentialName}}","permissions":[{{stated}}]}
+            """;
+    }
 
     /// <summary>Builds an endpoint that answers with a status and no usable body.</summary>
     /// <param name="status">The status it answers with.</param>
