@@ -3751,18 +3751,23 @@ every_published_documentation_page_is_in_a_table_of_contents() {
   (( failures == 0 ))
 }
 
-# Two documents are rendered outside the repository, and `AGENTS.md` splits the links in both of them in two: a page the
-# site publishes is linked on the site, at the address that names no version, and everything else is linked in the
+# Three documents are rendered outside the repository, and `AGENTS.md` splits the links in all of them in two: a page
+# the site publishes is linked on the site, at the address that names no version, and everything else is linked in the
 # repository. Each half fails in a way nobody would notice from the file — a site address that names no page is a 404
 # only a reader meets, and a repository link to a published page silently sends somebody to a Markdown file in a tree
 # instead of to the readable form.
 documentation_site_address='https://krzysztof318.github.io/MailFathom/'
 repository_blob_address='https://github.com/Krzysztof318/MailFathom/blob/main/'
 
-# The root README is the chart listing's overview and the page a reader deciding whether to adopt the project meets;
-# `deploy/docker/README.md` is the Docker Hub repository overview. Both are copied out of the repository, so both carry
-# absolute links and both are read here.
-readonly externally_rendered_readmes=('README.md' 'deploy/docker/README.md')
+# The root README is the page a reader deciding whether to adopt the project meets; `deploy/docker/README.md` is the
+# Docker Hub repository overview; `deploy/helm/mailfathom/README.md` is packaged into the chart and is what Artifact Hub
+# and every other chart listing renders. All three are read outside the repository, so all three carry absolute links
+# and all three are read here.
+#
+# Only the Docker Hub one takes a length assertion, below. Artifact Hub imposes no limit on a chart's overview and
+# Docker Hub's 25000 is what a release already failed on, so the assertion exists where a number does — adding one to
+# the chart page would be a limit this repository invented for itself.
+readonly externally_rendered_readmes=('README.md' 'deploy/docker/README.md' 'deploy/helm/mailfathom/README.md')
 
 # The two documentation paths a README is allowed to link in the repository, because the site publishes neither.
 readonly unpublished_documentation_links='^docs/README\.md$|^docs/decisions/'

@@ -197,9 +197,10 @@ allowed to touch. The same rule reaches the XML documentation comments, where a 
 ADR is an absolute URL for a second reason — a relative path from a source file resolves to nothing in an editor
 either.
 
-The repository-root `README.md` is a separate case with a stricter rule, recorded in `AGENTS.md`: every link in it is
-absolute, because it is rendered outside the repository as well, and a link to a published page goes to the site
-rather than to the Markdown file behind it.
+Three files are a separate case with a stricter rule, recorded in `AGENTS.md`: the repository-root `README.md`,
+`deploy/docker/README.md`, and `deploy/helm/mailfathom/README.md`. Every link in each is absolute, because each is
+rendered outside the repository as well, and a link to a published page goes to the site rather than to the Markdown
+file behind it.
 
 ### The addresses that outlive a release
 

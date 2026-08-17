@@ -115,18 +115,19 @@ jobs:
       # from the tag rather than from a file somebody remembered to bump. `Chart.yaml` therefore declares neither: see
       # ADR 0004 and docs/operations/release-procedure.md for why exactly one place in this repository writes a version.
       #
-      # The overview a chart listing renders is the `README.md` inside the package, and the canonical overview is the
-      # root one — the same file Docker Hub's repository page receives, and the file `AGENTS.md` already requires to
-      # carry absolute links because it is read outside this repository. It is copied in at package time rather than
-      # committed under `deploy/helm/mailfathom/`, so there is one overview to keep true instead of two that drift.
+      # The overview a chart listing renders is the `README.md` inside the package, and that file is committed under
+      # `deploy/helm/mailfathom/` rather than copied in here. Nothing is substituted at package time, so what Artifact
+      # Hub renders is what an operator browsing the chart directory reads, and it is reviewable in the diff that
+      # changes it. It is written for somebody who has already chosen Kubernetes and Helm; the root README is written
+      # for somebody deciding whether to adopt the project at all, which is a different reader and used to be the one
+      # this step served. `AGENTS.md` requires its links to be absolute, as it does for every overview rendered outside
+      # this repository.
       - name: Package the chart at the released version
         id: package
         env:
           VERSION: ${{ inputs.version }}
         run: |
           set -euo pipefail
-
-          cp README.md deploy/helm/mailfathom/README.md
 
           mkdir -p artifacts/chart
           helm package deploy/helm/mailfathom \

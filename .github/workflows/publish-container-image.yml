@@ -564,8 +564,9 @@ jobs:
       # image needs before it starts, how it runs, and how to verify it. Somebody on GitHub is deciding whether to adopt
       # the project. The root README is written for the second and is far longer than the first needs — long enough that
       # it outgrew Docker Hub's 25000 and failed a release here, which is the concrete cost of one file serving two
-      # audiences. The chart listing still renders the root README, because an Artifact Hub page is read by the second
-      # reader rather than the first. Both files carry absolute links for the same reason, which `AGENTS.md` states.
+      # audiences. The chart listing has a page of its own for the same reason and a third reader again, which is the
+      # committed `deploy/helm/mailfathom/README.md` the packaging step ships inside the chart. All three carry absolute
+      # links for the same reason, which `AGENTS.md` states.
       #
       # Both limits are asserted rather than left to the action, which truncates over-long content and carries on. A
       # truncated overview is visibly broken; a truncated short description is not — it is a sentence cut mid-word, and
