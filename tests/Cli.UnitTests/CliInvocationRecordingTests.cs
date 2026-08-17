@@ -5,6 +5,7 @@
 using MailFathom.Cli.Commands;
 using MailFathom.Cli.Credentials;
 using MailFathom.Cli.Diagnostics;
+using MailFathom.Cli.Transport;
 using MailFathom.TestSupport;
 using Microsoft.Extensions.Time.Testing;
 using Xunit;
@@ -128,29 +129,97 @@ public sealed class CliInvocationRecordingTests : IDisposable
     /// <summary>What a command reported on its way to doing what it was asked is not a failure on the record of it.</summary>
     /// <remarks>
     /// The control for the test above: recording the last line written to standard error whatever the invocation
-    /// returned would put a failure on every record of a command that reports its progress there, and the sign-in is
-    /// the one that reports the most.
+    /// returned would put a failure on every record of a command that reports something there and then succeeds. A
+    /// deployment on another build of this release line is that arrangement — the version agreement permits the command
+    /// and warns about it — and the first assertion is what makes the second one mean something, since a test whose
+    /// terminal stayed silent would pass with the exit-code guard removed.
     /// </remarks>
     [Fact]
     public async Task RunAsync_ACommandThatReportedOnStandardErrorAndSucceeded_RecordsNoFailure()
     {
         // Arrange
-        using var deployment = FakeAdminEndpoint.Accepting("workstation");
+        using var deployment = FakeAdminEndpoint.Accepting("workstation", FakeAdminEndpoint.AnotherBuildOfThisLine);
 
-        var console = new RecordingCliConsole { SecretToSupply = "not-a-real-key" };
+        var console = new RecordingCliConsole();
         var log = new RecordingCliInvocationLog();
 
         // Act
         var exitCode = await CliRunner.RunAsync(
             this.ContextReaching(deployment, log, console),
-            ["login", "--endpoint", "https://mail.example.test:8443"],
+            ["status"],
             TestContext.Current.CancellationToken);
 
         // Assert
         var entry = Assert.Single(log.Appended);
 
+        Assert.NotEmpty(console.Errors);
         Assert.Equal(CliExitCode.Success, exitCode);
         Assert.Null(entry.Failure);
+    }
+
+    /// <summary>An invocation that raised something the command did not expect is recorded as a fault, by its type.</summary>
+    /// <remarks>
+    /// Driven through the runner rather than against the record, because what is under test is the <c>catch</c> that
+    /// reaches for <c>Faulted</c> and the <c>finally</c> that appends what it built. A crash puts its stack on the
+    /// terminal and nowhere else, so a change that reordered those blocks or broke the guard between them would leave
+    /// the invocation the log is most worth having for unrecorded.
+    /// </remarks>
+    [Fact]
+    public async Task RunAsync_AnInvocationThatRaisedADefect_RecordsItAsAFaultOfThatType()
+    {
+        // Arrange
+        var log = new RecordingCliInvocationLog();
+
+        var context = this.ContextOpening(
+            static (_, _) => throw new InvalidOperationException("A defect rather than a refusal."),
+            log);
+
+        // Act
+        var fault = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => CliRunner.RunAsync(context, ["status"], TestContext.Current.CancellationToken));
+
+        // Assert
+        var entry = Assert.Single(log.Appended);
+
+        Assert.Equal("A defect rather than a refusal.", fault.Message);
+        Assert.Equal(CliInvocationOutcome.Faulted, entry.Outcome);
+        Assert.Equal(typeof(InvalidOperationException).FullName, entry.Fault);
+        Assert.Null(entry.ExitCode);
+    }
+
+    /// <summary>An invocation the operator stopped is recorded as its own ending rather than as a fault.</summary>
+    /// <remarks>
+    /// The companion to the test above and the reason the two catch blocks are separate: a stopped command and a broken
+    /// one otherwise read identically in the log and mean opposite things. The cancellation is raised where a command's
+    /// own work would raise it, against the token the runner was given, because that is what the runner's guard reads.
+    /// </remarks>
+    [Fact]
+    public async Task RunAsync_AnInvocationTheOperatorStopped_RecordsItAsCancelled()
+    {
+        // Arrange
+        using var stopping = new CancellationTokenSource();
+
+        var log = new RecordingCliInvocationLog();
+
+        var context = this.ContextOpening(
+            (_, _) =>
+            {
+                stopping.Cancel();
+
+                throw new OperationCanceledException(stopping.Token);
+            },
+            log);
+
+        // Act
+        _ = await Assert.ThrowsAnyAsync<OperationCanceledException>(
+            () => CliRunner.RunAsync(context, ["status"], stopping.Token));
+
+        // Assert
+        var entry = Assert.Single(log.Appended);
+
+        Assert.Equal(CliInvocationOutcome.Cancelled, entry.Outcome);
+        Assert.Null(entry.ExitCode);
+        Assert.Null(entry.Fault);
     }
 
     /// <summary>A subcommand is recorded by the path of names it was declared under, not by the one word at the end.</summary>
@@ -384,6 +453,20 @@ public sealed class CliInvocationRecordingTests : IDisposable
     private CliContext ContextReaching(
         FakeHttpMessageHandler deployment,
         RecordingCliInvocationLog log,
+        RecordingCliConsole? console = null) =>
+        this.ContextOpening(
+            (endpoint, trust) => FakeDeploymentTransport.Over(deployment, endpoint, trust),
+            log,
+            console);
+
+    /// <summary>Builds the same context over a transport that is opened however the test says.</summary>
+    /// <remarks>
+    /// What a command does when opening one raises is the runner's business rather than the deployment's, so the two
+    /// tests about a fault and a cancellation say it here instead of arranging a deployment that answers strangely.
+    /// </remarks>
+    private CliContext ContextOpening(
+        Func<Uri, StoredTransportTrust, DeploymentTransport> openTransport,
+        RecordingCliInvocationLog log,
         RecordingCliConsole? console = null)
     {
         var store = new CredentialStore(
@@ -395,7 +478,7 @@ public sealed class CliInvocationRecordingTests : IDisposable
         return new CliContext(
             console ?? new RecordingCliConsole(),
             store,
-            (endpoint, trust) => FakeDeploymentTransport.Over(deployment, endpoint, trust),
+            openTransport,
             FakeMailboxRedirect.Silent(),
             static _ => false,
             Stopped(),

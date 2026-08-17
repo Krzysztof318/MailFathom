@@ -1332,12 +1332,18 @@ on. A field the invocation has nothing for is left out rather than written as a 
 | `Completed` | The command did what you asked | `exitCode` `0` |
 | `Failed` | Something you can act on, already printed to your terminal | `exitCode` `1`, and `failure` with that same line |
 | `Faulted` | The command raised something that is a defect rather than your mistake | `fault` with the type of it, and no exit code |
-| `Cancelled` | You stopped it before it finished | no exit code |
+| `Cancelled` | You stopped it before it finished, and it stopped where it was | no exit code |
 
 `fault` is the type's name and nothing else about it — not the message, which is written for whoever will fix the
 defect and quotes what the code was working on, and not the stack, which is frames rather than data but would end the
 one-record-per-line shape. The stack itself went to your terminal, so what the log adds is that the crash happened at
 all, when, under which command, and what kind it was.
+
+`folder erase` and `mailbox rederive` are the exception to the last row, and deliberately. Both work through a mailbox
+in passes, so an interruption leaves a partial result rather than nothing: each catches the interruption itself, tells
+you how much it got through and that running it again continues from there, and reports that as a failure. Their
+records read `Failed` with that sentence, which is the more useful of the two answers — `Cancelled` would say you
+stopped it and not what it had done by then.
 
 **No credential and no mail is in it.** A credential never reaches a failure message in the first place, because those
 are written to be shown on your terminal. Mail is out by the split the command already keeps: what you asked for goes

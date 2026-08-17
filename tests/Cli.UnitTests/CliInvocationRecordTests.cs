@@ -67,6 +67,43 @@ public sealed class CliInvocationRecordTests
         Assert.DoesNotContain(entry.Failure!, char.IsSurrogate);
     }
 
+    /// <summary>A profile name longer than the ceiling is cut to it, on the same terms as everything else recorded.</summary>
+    /// <remarks>
+    /// The one recorded value the operator writes rather than the command, and the one nothing else bounds: a profile
+    /// name is refused for being blank and for parsing as an address, and for nothing about its length. A sign-in that
+    /// passed a long <c>--name</c> would otherwise put the whole of it on every later invocation's record.
+    /// </remarks>
+    [Fact]
+    public void ReachedDeployment_ANameLongerThanTheCeiling_RecordsExactlyTheCeiling()
+    {
+        // Arrange
+        var record = new CliInvocationRecord(new FakeTimeProvider());
+
+        // Act
+        record.ReachedDeployment(new string('x', CliInvocationRecord.MaximumFailureLength + 100));
+
+        var entry = record.Ended("mfctl status", CliExitCode.Success, failure: null);
+
+        // Assert
+        Assert.Equal(CliInvocationRecord.MaximumFailureLength, entry.Deployment?.Length);
+    }
+
+    /// <summary>A profile name the ceiling does not reach is recorded whole, which is every name anybody chooses.</summary>
+    [Fact]
+    public void ReachedDeployment_AnOrdinaryName_RecordsAllOfIt()
+    {
+        // Arrange
+        var record = new CliInvocationRecord(new FakeTimeProvider());
+
+        // Act
+        record.ReachedDeployment("production");
+
+        var entry = record.Ended("mfctl status", CliExitCode.Success, failure: null);
+
+        // Assert
+        Assert.Equal("production", entry.Deployment);
+    }
+
     /// <summary>What the command raised is recorded as its type and as nothing else about it.</summary>
     [Fact]
     public void Faulted_AnInvocationThatRaised_RecordsTheTypeAndNoExitCode()
