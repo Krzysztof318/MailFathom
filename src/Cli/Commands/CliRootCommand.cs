@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.CommandLine;
+using MailFathom.Cli.Commands.Contacts;
 using MailFathom.Cli.Commands.Folders;
 using MailFathom.Cli.Commands.Jobs;
 using MailFathom.Cli.Commands.Rules;
@@ -104,6 +105,22 @@ internal static class CliRootCommand
             EraseFolderCommand.Create(context),
         };
 
+        // The one group that writes something a person, rather than a mail server, put there. It is also the only place
+        // outside "folder erase" where a command disposes of data for good: "delete" is the contact book's data-subject
+        // erasure path and says so, and "export" is its access path, both commands rather than seams nothing invokes.
+        Command contactCommand = new("contact", "Administer the deployment's contact book.")
+        {
+            CreateContactCommand.Create(context),
+            ShowContactCommand.Create(context),
+            ListContactsCommand.Create(context),
+            UpdateContactCommand.Create(context),
+            AddContactAddressCommand.Create(context),
+            RemoveContactAddressCommand.Create(context),
+            PromoteContactCommand.Create(context),
+            DeleteContactCommand.Create(context),
+            ExportContactCommand.Create(context),
+        };
+
         return new RootCommand($"MailFathom administration tool ({version.Version}).")
         {
             LoginCommand.Create(context),
@@ -117,6 +134,7 @@ internal static class CliRootCommand
             spamCommand,
             jobsCommand,
             folderCommand,
+            contactCommand,
         };
     }
 }

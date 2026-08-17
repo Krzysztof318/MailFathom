@@ -1,6 +1,6 @@
 # Administering a deployment
 
-<!-- describes: src/Host/Configuration/Endpoints/AdminEndpointOptions.cs, src/Host/Api/Admin*.cs, src/Host/Api/Embedding*.cs, src/Host/Api/Job*.cs, src/Host/Api/Mail*.cs, src/Host/Api/Spam*.cs, src/Host/Hosting/Startup/SurfaceIsolation.cs, src/Host/Hosting/Warnings/AdminTransportSecurityWarning.cs, src/Host/Hosting/Warnings/TransportGrantStartupReport.cs, src/Domain/Access/MailFathomPermission.cs, src/Host/Security/Endpoints/TransportListenerBinder.cs, src/Host/Security/Transport/TransportRateLimiting.cs, src/Cli/**, scripts/install-mfctl.sh -->
+<!-- describes: src/Host/Configuration/Endpoints/AdminEndpointOptions.cs, src/Host/Api/Admin*.cs, src/Host/Api/Contact*.cs, src/Host/Api/Embedding*.cs, src/Host/Api/Job*.cs, src/Host/Api/Mail*.cs, src/Host/Api/Spam*.cs, src/Host/Hosting/Startup/SurfaceIsolation.cs, src/Host/Hosting/Warnings/AdminTransportSecurityWarning.cs, src/Host/Hosting/Warnings/TransportGrantStartupReport.cs, src/Domain/Access/MailFathomPermission.cs, src/Host/Security/Endpoints/TransportListenerBinder.cs, src/Host/Security/Transport/TransportRateLimiting.cs, src/Cli/**, scripts/install-mfctl.sh -->
 
 How the `mfctl` command reaches a running deployment, and what that deployment has to have enabled before it will
 answer.
@@ -109,6 +109,12 @@ info: MailFathom.Host.Hosting.Warnings.TransportGrantStartupReport
 Nothing in those lines names a key, a public key, a token, an authorization server, or a subject: a grant is what the
 deployment wrote, never who presented something.
 
+**No name covers the contact book.** The six above were allocated against the routes that existed when they were, and
+the book's own routes — reading it, writing to it, exporting a person, erasing one — fall under none of them. Nothing
+follows from that today, because of the paragraph below; what it means is that a grant narrowing this surface does not
+narrow the book, and allocating names for it is a decision about the published permission set rather than about these
+routes.
+
 **Nothing on this surface varies by the grant today.** The permissions are read, validated, carried on the authenticated
 caller, and reported at startup; every route still serves any authenticated caller, which is what the note above says.
 
@@ -139,6 +145,14 @@ caller, and reported at startup; every route still serves any authenticated call
 | `POST /api/admin/jobs/dead-letters/retry` | Returns one stopped job to the queue under the identity it was enqueued with. |
 | `POST /api/admin/jobs/dead-letters/drop` | Decides one stopped job will never run, keeping the record of it. |
 | `POST /api/admin/folders/erasure` | Erases one bounded pass of the mail stored for a folder the account no longer mirrors. **This is the one route that disposes of mail.** |
+| `GET /api/admin/contacts` | Reads one bounded, keyset-paginated page of the [contact book](../features/contacts.md), optionally narrowed to one origin. |
+| `POST /api/admin/contacts` | Records a person the book does not yet hold, as a contact this deployment's owner asserted. |
+| `GET /api/admin/contacts/by-address` | Reads whoever uses one address, in whichever casing the book recorded it. |
+| `GET /api/admin/contacts/{id}` | Reads one contact by the identity the book gave it. |
+| `PUT /api/admin/contacts/{id}` | Amends one contact to the whole record the body states. |
+| `POST /api/admin/contacts/{id}/promotion` | Takes on a contact the deployment collected, so it becomes one the owner asserted. |
+| `DELETE /api/admin/contacts/{id}` | Erases one person and everything the book derived from them. **This is the one route that disposes of a contact, and it cannot be undone.** |
+| `GET /api/admin/contacts/{id}/export` | Produces everything the book holds about one person, as of the instant it was taken. |
 
 The write route's body carries a long-lived credential for a named mailbox owner, which is what makes the clear-text
 warning below matter more here than it does for a session probe. It refuses, with `400` and a sentence naming what was
@@ -695,6 +709,65 @@ omission rather than a refusal, because a caller writing a URL cannot express th
 **Neither route touches embeddings, and neither re-runs classification for a verdict already recorded.** Chunks and
 vectors stay the [embedding profile's](embedding-profiles.md) business, so a refresh cannot quietly spend the provider
 budget an operator has not asked to spend.
+
+### Administering the contact book
+
+`mfctl contact` is where the [contact book](../features/contacts.md) is maintained: people, the addresses they use, and
+what you recorded about them. The book's own rules — what identifies a person, when two addresses are the same address,
+who may change what — are that page's; this is the command group over them.
+
+```console
+$ mfctl contact create --name "Anna Kowalska" --address anna@example.test --note "Met at the conference."
+Recorded contact 018f2b1c-9b3a-7c41-8f7d-2c6a5e9d10ab.
+Contact:   018f2b1c-9b3a-7c41-8f7d-2c6a5e9d10ab
+Name:      Anna Kowalska
+Origin:    Asserted
+Addresses: anna@example.test  (preferred)
+Note:      Met at the conference.
+Recorded:  2026-08-16 09:00:00Z
+Amended:   2026-08-16 09:00:00Z
+```
+
+| Command | What it does |
+| --- | --- |
+| `contact create` | Records a person. `--address` is repeated for each address they use, and `--preferred` says which to use by default — required as soon as there is more than one, because that is your choice rather than an ordering accident |
+| `contact show` | Shows one person, by `--id` or by `--address`. Naming both, or neither, is refused |
+| `contact list` | Reads one page, optionally narrowed with `--origin`. `--page-size` bounds it and `--cursor` continues it |
+| `contact update` | Corrects `--name`, `--note`, `--preferred`, or the whole `--address` set. What you do not name is kept; `--clear-note` holds no note afterwards |
+| `contact add-address` | Adds one address, keeping the rest. `--preferred` names which address to use by default afterwards |
+| `contact remove-address` | Takes one address off. `--preferred` is required when the one being removed is the default |
+| `contact promote` | Takes on a contact the deployment collected, so it becomes one you asserted |
+| `contact delete` | Erases the person. **This cannot be undone**; see below |
+| `contact export` | Writes everything held about the person to standard output, as JSON |
+
+**Amendments state the whole record.** The book replaces what it is given rather than merging a difference, so
+`update`, `add-address`, and `remove-address` each read the contact first and send back what it is to become. Two
+operators editing one contact at once are therefore last-writer-wins; an edit racing an erasure is not, and is answered
+as a contact the book does not hold rather than putting the person back.
+
+**A contact the deployment collected is not amended in place.** Collection writes into its own origin and an owner does
+not edit those records directly — `contact promote` is the act of taking one on, after which every other command here
+works on it. Amending one without promoting it is refused, and the refusal says so.
+
+**`mfctl contact delete` is the contact book's erasure path.** It removes the person and their addresses from the
+database rather than marking them, and nothing in MailFathom can put the record back. The command shows the record and
+then asks, and `--yes` is how a scripted erasure states the agreement instead; an invocation with nobody at the terminal
+and no flag is refused rather than having an agreement read out of whatever was piped in. It answers with what went —
+the identity and how many addresses — and never with the person. Erasing somebody the book does not hold succeeds
+having removed nothing, because that is the state you asked for.
+
+**`mfctl contact export` is the access path**, and it writes one JSON document on standard output so it redirects into
+a file you can hand to the person who asked. It carries the complete record and the instant the export was taken;
+everything else the command prints goes to standard error.
+
+**The listing is bounded and there is no command that prints the whole book.** A page holds 50 contacts unless you ask
+for fewer and never more than 200, ordered by the name's comparison form and then by identity. That order is total, so
+walking a page at a time serves every contact exactly once. A page that has more behind it prints the cursor the next
+one is asked with.
+
+Every refusal names the rule rather than the value: a malformed address is reported as an address that is not usable and
+never echoed, and no name, address, or note reaches a log line, a problem document, a trace, or a failing command's
+output. What a failure names is the contact's identifier, which is the one part of the record that is not personal data.
 
 ## Rate limiting
 

@@ -96,6 +96,36 @@ internal static class AdminEndpointRoutes
     /// </remarks>
     internal const string FolderErasurePath = $"{Prefix}/folders/erasure";
 
+    /// <summary>Where a deployment's contact book is listed and where a person is recorded in it.</summary>
+    internal const string ContactsPath = $"{Prefix}/contacts";
+
+    /// <summary>Where the person behind one address is read.</summary>
+    /// <remarks>
+    /// A path of its own rather than a filter on the listing, because it answers with one person rather than a page. The
+    /// segment is not a UUID, so nothing can confuse it with the path one contact is read at.
+    /// </remarks>
+    internal const string ContactByAddressPath = $"{ContactsPath}/by-address";
+
+    /// <summary>Where one contact is read, amended, and erased.</summary>
+    /// <param name="contactId">The contact the path names.</param>
+    /// <returns>The path, with the identity written the way a deployment's route constraint reads one.</returns>
+    internal static string ContactPath(Guid contactId) => $"{ContactsPath}/{contactId:D}";
+
+    /// <summary>Where a collected contact is promoted to one the owner has taken responsibility for.</summary>
+    /// <param name="contactId">The contact the path names.</param>
+    /// <returns>The path.</returns>
+    /// <remarks>
+    /// A path of its own rather than a field on the amendment, because promotion is the one act that changes an origin
+    /// and a body carrying which act was meant would make a mistyped value the difference between correcting a record
+    /// and taking it on.
+    /// </remarks>
+    internal static string ContactPromotionPath(Guid contactId) => $"{ContactPath(contactId)}/promotion";
+
+    /// <summary>Where everything the deployment holds about one person is exported from.</summary>
+    /// <param name="contactId">The contact the path names.</param>
+    /// <returns>The path.</returns>
+    internal static string ContactExportPath(Guid contactId) => $"{ContactPath(contactId)}/export";
+
     /// <summary>Where a deployment publishes the document naming its authorization servers, resource, and required scopes.</summary>
     /// <remarks>
     /// Composed rather than discovered from a challenge, because a client that knows which routes it is about to call

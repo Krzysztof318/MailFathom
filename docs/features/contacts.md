@@ -1,15 +1,16 @@
 # Contacts
 
-<!-- describes: src/Domain/Contacts/**, src/Application/Contacts/**, src/Infrastructure/Persistence/Contacts/**, src/Infrastructure/Persistence/Entities/ContactEntity.cs, src/Infrastructure/Persistence/Entities/ContactAddressEntity.cs -->
+<!-- describes: src/Domain/Contacts/**, src/Application/Contacts/**, src/Infrastructure/Persistence/Contacts/**, src/Infrastructure/Persistence/Entities/ContactEntity.cs, src/Infrastructure/Persistence/Entities/ContactAddressEntity.cs, src/Host/Api/Contact*.cs, src/Cli/Commands/Contacts/**, src/Cli/Administration/Contacts/** -->
 
 MailFathom holds a contact book of its own: people, the addresses they use, and what an owner recorded about them, in
 the same PostgreSQL database the mail is in. This page describes the record and the rules every writer of it obeys —
 what identifies a person, when two addresses are the same address, who may change what, and what erasing somebody
 removes.
 
-**No surface publishes it yet.** The store, its rules, and the two data-subject paths are what exists today; the
-administration commands, the MCP tools, and collection from arriving mail are separate changes. Nothing writes to the
-book automatically, so an instance that nobody has written to holds no contacts at all.
+**`mfctl contact` is where the book is maintained**, over the deployment's administrative endpoint; [administering a
+deployment](../operations/admin-endpoint.md#administering-the-contact-book) holds the command group in full. The MCP
+tools over the book and collection from arriving mail are separate changes, so nothing writes to the book on its own and
+an instance nobody has written to holds no contacts at all.
 
 ## A contact is a person, not an address
 
@@ -134,6 +135,11 @@ a failure: the state the owner asked for is the state the book is in.
 **Exporting a contact produces everything held about them** as of the instant it was taken: the name, every address,
 which is preferred, the note, the origin, and both timestamps. What an owner reads is left to the surface that asks for
 it, so no surface can choose which parts of a person to hand back.
+
+Both are commands rather than seams something else is expected to reach: `mfctl contact delete` erases and
+`mfctl contact export` writes the document, because a data-subject path nothing invokes is one that will not work on the
+day somebody asks for it. The erasure asks before it runs and answers with what went — the identity and how many
+addresses — and never with the person.
 
 ## What the book is held under
 

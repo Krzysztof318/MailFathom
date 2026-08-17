@@ -18,12 +18,10 @@ in [configuration sources](../operations/configuration-sources.md); the command 
 database, and never touches the secret store. Nothing you do with it changes what the service will do on its next
 restart.
 
-> **One thing it does changes a running deployment: it can place a mailbox credential.** Everything else below verifies
-> who you are and keeps several deployments straight. Operational commands — inspecting synchronization, triggering
-> work, reading accounts — are not there yet.
->
-> The exception is [authorizing a mailbox](#authorizing-a-mailbox), which signs you in to a *mail provider* and can then
-> hand the resulting credential to your deployment to keep.
+> **What it does change is the deployment's own state rather than its configuration**: it can place a mailbox
+> credential, ask for work to be run, dispose of a folder's stored mail, and maintain the contact book. None of that is
+> a setting, and none of it survives as one — [configuration sources](../operations/configuration-sources.md) stays the
+> only place a deployment's behaviour is decided.
 
 ## Before it can answer
 
@@ -416,9 +414,36 @@ it](../operations/admin-endpoint.md#reading-the-background-work-that-stopped-and
 operator's reference, and [durable background work](../operations/telemetry.md#durable-background-work) is what your
 monitoring can watch instead of you reading this by hand.
 
+## Keeping your contact book
+
+MailFathom holds a contact book of its own — people, the addresses each of them uses, and what you wrote about them —
+and `mfctl contact` is where you keep it:
+
+```console
+$ mfctl contact create --name "Anna Kowalska" --address anna@example.test
+$ mfctl contact add-address --id 018f2b1c-9b3a-7c41-8f7d-2c6a5e9d10ab --address a.kowalska@work.example
+$ mfctl contact show --address a.kowalska@work.example
+```
+
+A contact is a *person* rather than an address, which is why the third command answers with Anna rather than with a
+match: one person uses a work address, a personal one, and an old one they still receive on, and the book knows those
+are the same person. [Contacts](../features/contacts.md) is what the record holds and every rule it obeys.
+
+Two of the commands are not conveniences. **`mfctl contact delete` erases somebody** — the record and their addresses go
+from the database and nothing can put them back, so the command shows you the record and asks first. **`mfctl contact
+export` writes everything held about a person** as JSON on standard output, which is what you redirect into a file and
+hand to somebody who asked what you have about them. Those are the two things you will need on a day when somebody asks,
+and they are commands so that you are not assembling either by hand on that day.
+
+Listing is paged on purpose: your contact book is other people's personal data, so there is no command that prints all
+of it in one go. `mfctl contact list` reads a page and prints the cursor for the next one. [Administering the contact
+book](../operations/admin-endpoint.md#administering-the-contact-book) is the operator's reference for every command,
+option, and refusal.
+
 ## Where to go next
 
 - [Administering a deployment](../operations/admin-endpoint.md) — the operator's reference for everything above
+- [Contacts](../features/contacts.md) — what the contact book holds, and every rule a writer of it obeys
 - [Mail rules](../features/mail-rules.md) — every fact, operator, and action a rule can use
 - [Mailbox OAuth](../operations/mailbox-oauth.md) — registering the application, and every mode of the sign-in above
 - [Changing the embedding model](../operations/embedding-profiles.md) — what activating, switching, and rolling back cost

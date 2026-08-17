@@ -4,6 +4,7 @@
 
 using System.Text.Json.Serialization;
 using MailFathom.Cli.Administration;
+using MailFathom.Cli.Administration.Contacts;
 using MailFathom.Cli.Administration.Embeddings;
 using MailFathom.Cli.Administration.Folders;
 using MailFathom.Cli.Administration.Jobs;
@@ -60,6 +61,12 @@ namespace MailFathom.Cli;
 [JsonSerializable(typeof(JobRecovery))]
 [JsonSerializable(typeof(MailFolderErasureRequest))]
 [JsonSerializable(typeof(MailFolderErasure))]
+[JsonSerializable(typeof(ContactRecordRequest))]
+[JsonSerializable(typeof(ContactLookup))]
+[JsonSerializable(typeof(ContactPage))]
+[JsonSerializable(typeof(ContactWriteAnswer))]
+[JsonSerializable(typeof(ContactErasure))]
+[JsonSerializable(typeof(ContactExport))]
 [JsonSerializable(typeof(StoredCredentials))]
 [JsonSerializable(typeof(ProtectedResourceMetadata))]
 [JsonSerializable(typeof(AuthorizationServerMetadata))]

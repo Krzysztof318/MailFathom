@@ -4,6 +4,7 @@
 
 using MailFathom.Application.Accounts;
 using MailFathom.Application.AiProviders;
+using MailFathom.Application.Contacts;
 using MailFathom.Application.Emails.Embeddings.Administration;
 using MailFathom.Application.Emails.Embeddings.Backfill;
 using MailFathom.Application.Emails.Embeddings.Generations;
@@ -105,9 +106,19 @@ public sealed class AdminApiEndpointsTests
 
         // The activation path, the rule-run path, the classification-run path, and the rewind path each appear twice,
         // because each is one resource read with a get and performed with a post, and both verbs are mapped separately.
+        // The contact-book paths appear twice and three times for the same reason: the book is listed and written to at
+        // one path, and one contact is read, amended, and erased at another.
         Assert.Equal(
             [
                 $"{AdminEndpointOptions.RoutePrefix}{MailAnsweringAuditEndpoint.Route}",
+                $"{AdminEndpointOptions.RoutePrefix}{ContactEndpoints.ContactsRoute}",
+                $"{AdminEndpointOptions.RoutePrefix}{ContactEndpoints.ContactsRoute}",
+                $"{AdminEndpointOptions.RoutePrefix}{ContactEndpoints.ContactByAddressRoute}",
+                $"{AdminEndpointOptions.RoutePrefix}{ContactEndpoints.ContactRoute}",
+                $"{AdminEndpointOptions.RoutePrefix}{ContactEndpoints.ContactRoute}",
+                $"{AdminEndpointOptions.RoutePrefix}{ContactEndpoints.ContactRoute}",
+                $"{AdminEndpointOptions.RoutePrefix}{ContactEndpoints.ContactExportRoute}",
+                $"{AdminEndpointOptions.RoutePrefix}{ContactEndpoints.ContactPromotionRoute}",
                 $"{AdminEndpointOptions.RoutePrefix}{EmbeddingProfileEndpoints.StatusRoute}",
                 $"{AdminEndpointOptions.RoutePrefix}{EmbeddingProfileEndpoints.ActivationRoute}",
                 $"{AdminEndpointOptions.RoutePrefix}{EmbeddingProfileEndpoints.ActivationRoute}",
@@ -191,6 +202,7 @@ public sealed class AdminApiEndpointsTests
         services.AddScoped(_ => Substitute.For<IMailAccountCatalog>());
         services.AddScoped(_ => Substitute.For<IMailboxMutationAuditEntryStore>());
         RegisterEmbeddingAdministration(services);
+        RegisterContactBook(services);
 
         return new TestEndpointRouteBuilder(services.BuildServiceProvider());
     }
@@ -235,5 +247,27 @@ public sealed class AdminApiEndpointsTests
             vectorIndex,
             retryPolicy,
             backfillSchedule));
+    }
+
+    /// <summary>Places what the contact routes resolve, for the reason the embedding registrations exist.</summary>
+    /// <remarks>
+    /// The book is a sealed class over application ports, so it is constructed here rather than substituted; the
+    /// directory is a port and is. Neither is invoked, because no request is made — what this exists for is that a route
+    /// whose parameters cannot be placed is refused at build time and would disappear from the assertions above.
+    /// </remarks>
+    private static void RegisterContactBook(IServiceCollection services)
+    {
+        var directory = Substitute.For<IContactDirectory>();
+        var timeProvider = new FakeTimeProvider();
+
+        services.AddScoped(_ => directory);
+        services.AddScoped(_ => new ContactBook(
+            Substitute.For<IContactStore>(),
+            directory,
+            new OptimisticConcurrencyRetryPolicy(
+                Substitute.For<IPersistenceSessionFactory>(),
+                new PersistenceConcurrencyOptions(),
+                timeProvider),
+            timeProvider));
     }
 }
