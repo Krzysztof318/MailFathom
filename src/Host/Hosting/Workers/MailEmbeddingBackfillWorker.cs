@@ -105,6 +105,10 @@ internal sealed partial class MailEmbeddingBackfillWorker : BackgroundService
     [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "The hosted worker isolates an unexpected failure so a later interval can resume from the committed position.")]
     private async Task<TimeSpan> RunOnceAsync(CancellationToken cancellationToken)
     {
+        // Opened around the whole pass, so the provider calls it makes and the commands it issues are this span's
+        // children rather than parentless work an interval caused and nothing in a trace explains.
+        using var pass = this.telemetry.BeginPass();
+
         try
         {
             using var scope = this.scopeFactory.CreateScope();
@@ -112,6 +116,7 @@ internal sealed partial class MailEmbeddingBackfillWorker : BackgroundService
             var upkeep = scope.ServiceProvider.GetRequiredService<EmbeddingGenerationUpkeep>();
             var result = await upkeep.RunAsync(cancellationToken);
 
+            pass.Ended(result);
             this.telemetry.RecordPass(result);
             this.Report(result);
 

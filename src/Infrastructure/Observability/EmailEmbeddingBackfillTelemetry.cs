@@ -31,10 +31,30 @@ namespace MailFathom.Infrastructure.Observability;
 /// </remarks>
 public sealed class EmailEmbeddingBackfillTelemetry
 {
+    /// <summary>The name one bounded upkeep pass opens its span under.</summary>
+    /// <remarks>
+    /// The counterpart of <c>backfill_email_extraction</c>, and it exists for the same reason: a pass is caused by an
+    /// interval rather than by a request, so without a span of its own its provider calls and its database commands are
+    /// parentless work competing with the requests around them. Named after what the pass does rather than after the
+    /// worker that drives it.
+    /// <para>
+    /// Published for the same reason <see cref="EmailEmbeddingTelemetry.MessageSpanName" /> is: the boundary the span
+    /// is opened around is the worker's, so what asserts that the pass really runs inside it lives with the worker.
+    /// </para>
+    /// </remarks>
+    public const string PassSpanName = "backfill_email_embeddings";
+
     // The same two tag keys the live worker publishes, because the instruments are already named apart and a dashboard
     // that splits embedding work by outcome should split both families on one dimension rather than on two.
-    private const string OutcomeTagName = "mailfathom.embedding.outcome";
-    private const string FailureTagName = "mailfathom.embedding.failure";
+    internal const string OutcomeTagName = "mailfathom.embedding.outcome";
+    internal const string FailureTagName = "mailfathom.embedding.failure";
+
+    internal const string ChunkedEmailCountTagName = "mailfathom.embedding.backfill.chunked";
+    internal const string EmbeddedEmailCountTagName = "mailfathom.embedding.backfill.messages";
+    internal const string PassageCountTagName = "mailfathom.embedding.backfill.passages";
+
+    /// <summary>Whether a generation being built became the one searches are answered from during this pass.</summary>
+    internal const string GenerationSwitchedTagName = "mailfathom.embedding.generation.switched";
 
     private readonly Counter<long> runCount;
     private readonly Counter<long> chunkedEmailCount;
@@ -82,6 +102,10 @@ public sealed class EmailEmbeddingBackfillTelemetry
             unit: "{message}",
             description: "Messages awaiting embedding when the current sweep began.");
     }
+
+    /// <summary>Opens the span one bounded upkeep pass is reported as, and returns the scope that ends it.</summary>
+    /// <returns>The scope, which the caller must dispose; a scope disposed without <see cref="PassScope.Ended" /> reports a pass that produced no result.</returns>
+    public PassScope BeginPass() => new(Telemetry.ActivitySource.StartActivity(PassSpanName));
 
     /// <summary>Records one bounded upkeep pass: its sweep, its switch, and what it removed.</summary>
     /// <param name="result">What the pass produced.</param>
@@ -172,4 +196,55 @@ public sealed class EmailEmbeddingBackfillTelemetry
         EmbeddingGenerationFailure.VectorShapeUnexpected => "vector_shape_unexpected",
         _ => "none",
     };
+
+    /// <summary>Carries one bounded upkeep pass from the span that opens it to the result that ends it.</summary>
+    /// <remarks>
+    /// A pass that reached no result is published with an error status and no outcome, which is what an unresolved
+    /// concurrency conflict and an unexpected failure both produce. Neither has a word among the outcomes, because
+    /// every one of those is a state the sweep itself reached.
+    /// </remarks>
+    public sealed class PassScope : IDisposable
+    {
+        private readonly Activity? activity;
+
+        private bool reported;
+
+        internal PassScope(Activity? activity) => this.activity = activity;
+
+        /// <summary>Records how the pass ended and what it moved.</summary>
+        /// <param name="result">What the pass produced.</param>
+        /// <exception cref="ArgumentNullException">Thrown when <paramref name="result" /> is <see langword="null" />.</exception>
+        public void Ended(EmbeddingGenerationUpkeepResult result)
+        {
+            ArgumentNullException.ThrowIfNull(result);
+
+            this.reported = true;
+
+            var sweep = result.Sweep;
+
+            this.activity?.SetTag(OutcomeTagName, OutcomeTagOf(sweep.Outcome));
+            this.activity?.SetTag(FailureTagName, FailureTagOf(sweep.Failure));
+            this.activity?.SetTag(ChunkedEmailCountTagName, sweep.ChunkedEmailCount);
+            this.activity?.SetTag(EmbeddedEmailCountTagName, sweep.EmbeddedEmailCount);
+            this.activity?.SetTag(PassageCountTagName, sweep.EmbeddedChunkCount);
+            this.activity?.SetTag(
+                GenerationSwitchedTagName,
+                result.Transition == EmbeddingGenerationTransition.Switched);
+            this.activity?.SetStatus(
+                sweep.Outcome is StoredEmailEmbeddingBackfillOutcome.ProviderFailed
+                    ? ActivityStatusCode.Error
+                    : ActivityStatusCode.Ok);
+        }
+
+        /// <inheritdoc />
+        public void Dispose()
+        {
+            if (!this.reported)
+            {
+                this.activity?.SetStatus(ActivityStatusCode.Error);
+            }
+
+            this.activity?.Dispose();
+        }
+    }
 }

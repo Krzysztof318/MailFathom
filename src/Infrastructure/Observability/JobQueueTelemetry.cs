@@ -47,9 +47,31 @@ namespace MailFathom.Infrastructure.Observability;
 /// </remarks>
 public sealed class JobQueueTelemetry
 {
-    private const string JobTypeTagName = "mailfathom.job.type";
-    private const string OutcomeTagName = "mailfathom.job.outcome";
-    private const string FailureTagName = "mailfathom.job.failure";
+    /// <summary>The name one attempt at a durable job opens its span under.</summary>
+    /// <remarks>
+    /// A job is dispatched by an interval rather than by a request, so without a span of its own everything an attempt
+    /// does — its database commands above all — reaches a trace store parentless, competing with whatever else the
+    /// process was doing at that moment. Named after what the attempt does rather than after the worker that dispatches
+    /// it, so it stays right if a job is ever run from somewhere else.
+    /// <para>
+    /// Published rather than kept inside this assembly, because the span is opened around a boundary the composition
+    /// root draws — one attempt, one scope — and what asserts that nesting therefore lives with the host rather than
+    /// here. A second copy of the word would be a second place for it to drift.
+    /// </para>
+    /// </remarks>
+    public const string AttemptSpanName = "run_job";
+
+    internal const string JobTypeTagName = "mailfathom.job.type";
+    internal const string OutcomeTagName = "mailfathom.job.outcome";
+    internal const string FailureTagName = "mailfathom.job.failure";
+
+    /// <summary>Which attempt at the job this was, counting from one.</summary>
+    /// <remarks>
+    /// The one thing a span carries that the instruments do not. An attempt's number says whether a trace is the first
+    /// try or the fifth, which is what separates a slow job from a job that has been failing all day — and it is bounded
+    /// by the retry policy rather than by anything a caller or a message decides.
+    /// </remarks>
+    internal const string AttemptNumberTagName = "mailfathom.job.attempt";
 
     private readonly ConcurrentDictionary<string, int> waitingByJobType = new(StringComparer.Ordinal);
     private readonly Counter<long> attemptCount;
@@ -91,6 +113,23 @@ public sealed class JobQueueTelemetry
             this.ObserveWaitingCounts,
             unit: "{job}",
             description: "Jobs of each type waiting to be claimed, as the worker last measured it.");
+    }
+
+    /// <summary>Opens the span one attempt at a job is reported as, and returns the scope that ends it.</summary>
+    /// <param name="jobType">The kind of work being attempted, which is the only thing about the job the span names.</param>
+    /// <returns>The scope, which the caller must dispose; a scope disposed without <see cref="JobAttemptScope.Ended" /> reports an attempt that produced no result.</returns>
+    /// <remarks>
+    /// The span is opened around the attempt rather than around the pass that dispatched it, so a pass running several
+    /// jobs at once produces one span each instead of one span covering all of them. Nothing about the job itself
+    /// reaches it beyond the type: not the job's identifier, not the account, and above all not the idempotency key,
+    /// which is composed of folder aliases and message occurrences.
+    /// </remarks>
+    public JobAttemptScope BeginAttempt(JobType jobType)
+    {
+        var activity = Telemetry.ActivitySource.StartActivity(AttemptSpanName);
+        activity?.SetTag(JobTypeTagName, jobType.Name);
+
+        return new JobAttemptScope(activity);
     }
 
     /// <summary>Records one attempt: that it happened, how long it took, and what became of the job.</summary>
@@ -218,10 +257,74 @@ public sealed class JobQueueTelemetry
         _ => "unknown",
     };
 
+    /// <summary>Decides whether an ending is a failure of the work or an ordinary way for an attempt to stop.</summary>
+    /// <remarks>
+    /// A host that is stopping and a lease that has already moved on both end an attempt without finishing it, and
+    /// neither says anything went wrong — the same reading <see cref="RecordAttempt" /> counts them under. Marking them
+    /// as errors would make every rolling deployment arrive as a wave of failed job traces indistinguishable from a
+    /// handler that is genuinely broken. Which of the six endings it was stays on the outcome tag either way.
+    /// </remarks>
+    private static ActivityStatusCode StatusOf(JobExecutionOutcome outcome) => outcome switch
+    {
+        JobExecutionOutcome.Succeeded
+            or JobExecutionOutcome.ReleasedForShutdown
+            or JobExecutionOutcome.LeaseLost => ActivityStatusCode.Ok,
+        JobExecutionOutcome.HandlerFailed
+            or JobExecutionOutcome.HandlerMissing
+            or JobExecutionOutcome.TimedOut => ActivityStatusCode.Error,
+        _ => ActivityStatusCode.Error,
+    };
+
     private static string FailureTagOf(JobFailureClassification classification) => classification switch
     {
         JobFailureClassification.Transient => "transient",
         JobFailureClassification.Permanent => "permanent",
         _ => "unknown",
     };
+
+    /// <summary>Carries one attempt at a job from the span that opens it to the result that ends it.</summary>
+    /// <remarks>
+    /// An attempt that reached no result is published with an error status and no outcome, because there is no word for
+    /// it: every outcome this queue publishes is one the executor decided, and inventing one here would report a
+    /// decision nothing made. That happens where the attempt could not be dispatched at all, which is a defect in the
+    /// composition rather than a state of the work.
+    /// </remarks>
+    public sealed class JobAttemptScope : IDisposable
+    {
+        private readonly Activity? activity;
+
+        private bool reported;
+
+        internal JobAttemptScope(Activity? activity) => this.activity = activity;
+
+        /// <summary>Records what the attempt turned out to have done.</summary>
+        /// <param name="result">What the attempt did.</param>
+        /// <exception cref="ArgumentNullException">Thrown when <paramref name="result" /> is <see langword="null" />.</exception>
+        public void Ended(JobExecutionResult result)
+        {
+            ArgumentNullException.ThrowIfNull(result);
+
+            this.reported = true;
+
+            this.activity?.SetTag(AttemptNumberTagName, result.AttemptCount);
+            this.activity?.SetTag(OutcomeTagName, OutcomeTagOf(result.Outcome));
+            this.activity?.SetStatus(StatusOf(result.Outcome));
+
+            if (result.AttemptFailure is { Disposition: JobFailureDisposition.DeadLettered } deadLettered)
+            {
+                this.activity?.SetTag(FailureTagName, FailureTagOf(deadLettered.Record.Classification));
+            }
+        }
+
+        /// <inheritdoc />
+        public void Dispose()
+        {
+            if (!this.reported)
+            {
+                this.activity?.SetStatus(ActivityStatusCode.Error);
+            }
+
+            this.activity?.Dispose();
+        }
+    }
 }

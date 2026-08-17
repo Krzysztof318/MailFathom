@@ -107,12 +107,17 @@ internal sealed partial class MailEmbeddingWorker : BackgroundService
     {
         var startingTimestamp = this.timeProvider.GetTimestamp();
 
+        // Opened around the whole turn, so the provider call the AI decorators publish and the commands that store the
+        // vectors are this span's children rather than parentless work beside whatever else the process was doing.
+        using var turn = this.telemetry.BeginMessage();
+
         try
         {
             using var scope = this.scopeFactory.CreateScope();
 
             var run = await EmbedIntoServingGenerationAsync(scope.ServiceProvider, storedEmailId, cancellationToken);
 
+            turn.Ended(run);
             this.telemetry.RecordEmbeddedMessage(run, this.timeProvider.GetElapsedTime(startingTimestamp));
             this.Report(run);
 
