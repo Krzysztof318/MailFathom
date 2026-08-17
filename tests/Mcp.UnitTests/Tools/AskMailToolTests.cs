@@ -10,6 +10,7 @@ using MailFathom.Application.Retrieval.AskMail;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Emails.Authentication;
+using MailFathom.Domain.Emails.Authorship;
 using MailFathom.Domain.Folders;
 using MailFathom.Mcp.Tools;
 using MailFathom.Mcp.Tools.Senders;
@@ -150,6 +151,39 @@ public sealed class AskMailToolTests
             [
                 .. result.Citations.Select(static citation =>
                     (citation.SenderVerification.AuthorAuthentication, citation.SenderVerification.DeploymentTrust)),
+            ]);
+    }
+
+    /// <summary>Each citation carries the authorship reading of the message it names, beside that message's verdict.</summary>
+    /// <remarks>
+    /// It reaches the citation from the passage the run retrieved rather than from a second read, which is what keeps
+    /// an answer's citations consistent with the listing the same mail appears in.
+    /// </remarks>
+    [Fact]
+    public async Task AskMailAsync_ARunThatRetrievedAssessedMail_PublishesTheAuthorshipReadingOfEachCitedEmail()
+    {
+        // Arrange
+        var answerer = new StubMailQuestionAnswerer().Answering(
+            "They agreed to pay 400.",
+            PassageOf(
+                1,
+                machineAuthorship: MachineAuthorshipAssessment.Assessed(
+                    MachineAuthorshipBand.Likely,
+                    likelihood: 0.9,
+                    MachineAuthorshipSignals.TagCharacters,
+                    MachineAuthorshipProfile.Standard.Revision)),
+            PassageOf(2));
+        var tool = ToolOver(answerer);
+
+        // Act
+        var result = await tool.AskMailAsync(Question, cancellationToken: TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(
+            [("Likely", 0.9), ("NotAssessed", 0)],
+            [
+                .. result.Citations.Select(static citation =>
+                    (citation.MachineAuthorship.State.ToString(), citation.MachineAuthorship.Likelihood)),
             ]);
     }
 
@@ -341,16 +375,20 @@ public sealed class AskMailToolTests
             AnsweringDeployment.AccountCatalog());
     }
 
-    private static EmailKnowledgePassage PassageOf(int position, SenderVerification? senderVerification = null) => new()
-    {
-        StoredEmailId = StoredEmailId.Create(EmailIdentityAt(position)),
-        AccountId = MailAccountId.Create(AnsweringDeployment.ServedAccountId),
-        FolderAlias = MailFolderAlias.Create("INBOX"),
-        Subject = "Quarterly invoice",
-        ReceivedAt = Now,
-        SenderVerification = senderVerification ?? SenderVerification.NotEstablished,
-        Text = "an extract",
-    };
+    private static EmailKnowledgePassage PassageOf(
+        int position,
+        SenderVerification? senderVerification = null,
+        MachineAuthorshipAssessment? machineAuthorship = null) => new()
+        {
+            StoredEmailId = StoredEmailId.Create(EmailIdentityAt(position)),
+            AccountId = MailAccountId.Create(AnsweringDeployment.ServedAccountId),
+            FolderAlias = MailFolderAlias.Create("INBOX"),
+            Subject = "Quarterly invoice",
+            ReceivedAt = Now,
+            SenderVerification = senderVerification ?? SenderVerification.NotEstablished,
+            MachineAuthorship = machineAuthorship ?? MachineAuthorshipAssessment.NotAssessed,
+            Text = "an extract",
+        };
 
     /// <summary>Names one email by its position, so the same run of a test always uses the same identifiers.</summary>
     private static Guid EmailIdentityAt(int position) => new($"00000000-0000-0000-0000-{position:D12}");

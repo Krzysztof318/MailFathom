@@ -12,6 +12,7 @@ using MailFathom.CodeCoverage;
 using MailFathom.Domain.Delivery;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Emails.Authentication;
+using MailFathom.Domain.Emails.Authorship;
 using MailFathom.Domain.Mutations;
 using MailFathom.Infrastructure.Persistence.Connections;
 using MailFathom.Infrastructure.Persistence.Entities;
@@ -463,6 +464,27 @@ internal sealed class MailFathomDbContext : DbContext
                 .IsRequired();
             entity.Property(email => email.SenderTrustPolicyRevision)
                 .HasMaxLength(SenderTrustPolicyRevision.Length);
+
+            // How much the message's own text read as machine written. The band is stored as text like every other
+            // enum here and defaults to the value that claims nothing, which is what a row written before the
+            // assessment existed holds and what a deployment that turned it off writes on all of its mail. The signal
+            // set is the one enum stored numerically, for the reason its property states: a flag set written as text
+            // is a formatted list no query can ask a member of. The revision is nullable rather than defaulted,
+            // because its absence is what says nothing assessed this row at all.
+            entity.Property(email => email.MachineAuthorshipBand)
+                .HasConversion<string>()
+                .HasMaxLength(64)
+                .HasDefaultValue(MachineAuthorshipBand.NotAssessed)
+                .IsRequired();
+            entity.Property(email => email.MachineAuthorshipLikelihood)
+                .HasDefaultValue(0d)
+                .IsRequired();
+            entity.Property(email => email.MachineAuthorshipSignals)
+                .HasConversion<int>()
+                .HasDefaultValue(MachineAuthorshipSignals.None)
+                .IsRequired();
+            entity.Property(email => email.MachineAuthorshipProfileRevision)
+                .HasMaxLength(MachineAuthorshipProfileRevision.Length);
 
             ConfigureStoredEmailIndexes(entity);
 

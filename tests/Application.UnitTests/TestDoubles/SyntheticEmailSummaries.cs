@@ -5,6 +5,7 @@
 using MailFathom.Application.Emails.Summaries;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
+using MailFathom.Domain.Emails.Authorship;
 using MailFathom.Domain.Folders;
 
 namespace MailFathom.Application.UnitTests.TestDoubles;
@@ -37,6 +38,7 @@ internal static class SyntheticEmailSummaries
     /// <param name="inlineResourceCount">How many inline resources the classification counted.</param>
     /// <param name="senderVerification">What was established about the displayed author, or the stored default.</param>
     /// <param name="senderAuthenticationEvidence">What that conclusion was reached from, or the stored default.</param>
+    /// <param name="machineAuthorship">How much the message's own text read as machine written, or the stored default.</param>
     /// <returns>The summary.</returns>
     public static EmailSummary Create(
         DateTimeOffset? receivedAt = null,
@@ -51,7 +53,8 @@ internal static class SyntheticEmailSummaries
         int attachmentCount = 0,
         int inlineResourceCount = 0,
         SenderVerification? senderVerification = null,
-        SenderAuthenticationEvidence? senderAuthenticationEvidence = null) => new()
+        SenderAuthenticationEvidence? senderAuthenticationEvidence = null,
+        MachineAuthorshipAssessment? machineAuthorship = null) => new()
         {
             StoredEmailId = StoredEmailId.Create(storedEmailId ?? Guid.CreateVersion7()),
             AccountId = MailAccountId.Create(accountId),
@@ -81,6 +84,7 @@ internal static class SyntheticEmailSummaries
                 IsDeleted: false,
                 Keywords: RemoteEmailKeywords.None),
             SenderVerification = senderVerification ?? SenderVerification.NotEstablished,
+            MachineAuthorship = machineAuthorship ?? MachineAuthorshipAssessment.NotAssessed,
             SenderAuthenticationEvidence = senderAuthenticationEvidence ?? SenderAuthenticationEvidence.None,
         };
 

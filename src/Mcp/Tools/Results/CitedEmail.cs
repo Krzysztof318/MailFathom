@@ -4,6 +4,7 @@
 
 using System.ComponentModel;
 using MailFathom.Application.Retrieval.AskMail;
+using MailFathom.Mcp.Tools.Authorship;
 using MailFathom.Mcp.Tools.Senders;
 
 namespace MailFathom.Mcp.Tools.Results;
@@ -48,6 +49,13 @@ internal sealed record CitedEmail
     /// </remarks>
     public required ReportedSenderVerification SenderVerification { get; init; }
 
+    /// <summary>Gets how much the cited email's own text read as machine written.</summary>
+    /// <remarks>
+    /// The same shape a listing publishes, so a reader weighs a cited message exactly as they would a listed one. The
+    /// signals behind it stay with the single-email read the citation points at.
+    /// </remarks>
+    public required ReportedMachineAuthorship MachineAuthorship { get; init; }
+
     /// <summary>Publishes one citation the use case produced.</summary>
     /// <param name="citation">The citation to publish.</param>
     /// <param name="accountNames">Reads the name the citation's account is published under.</param>
@@ -67,6 +75,7 @@ internal sealed record CitedEmail
             Subject = citation.Subject,
             ReceivedAt = citation.ReceivedAt,
             SenderVerification = ReportedSenderVerification.From(citation.SenderVerification),
+            MachineAuthorship = ReportedMachineAuthorship.From(citation.MachineAuthorship),
         };
     }
 }

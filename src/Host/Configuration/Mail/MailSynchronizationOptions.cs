@@ -19,6 +19,7 @@ using MailFathom.Application.Synchronization.Reconciliation;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Emails.Authentication;
+using MailFathom.Domain.Emails.Authorship;
 using MailFathom.Domain.Folders;
 using MailFathom.Domain.Synchronization;
 using MailFathom.Domain.Transport;
@@ -378,6 +379,34 @@ internal sealed class MailSynchronizationOptions
     /// </para>
     /// </remarks>
     public bool TrustOwnAccountDomains { get; set; } = true;
+
+    /// <summary>Gets or sets whether extraction assesses how much each message's own text reads as machine written.</summary>
+    /// <remarks>
+    /// <para>
+    /// It defaults to on because the assessment costs one pass over text the extraction has already produced — no
+    /// network, no model, no DNS, and nothing an operator has to configure for it to mean something — and because the
+    /// strongest thing it reports is a message carrying characters no mail client renders, which is worth knowing on a
+    /// first run rather than after somebody has thought to look for it.
+    /// </para>
+    /// <para>
+    /// The case for turning it off is a deployment that does not want the reading published at all: it is an
+    /// observation about how a message was written, and an operator may reasonably decide their readers should not be
+    /// handed one. A deployment that turns it off records the not-assessed state, which is what a message with no
+    /// readable body carries and what mail stored before this deployment assessed anything carries — so nothing about
+    /// the column says the operator turned it off.
+    /// </para>
+    /// </remarks>
+    public bool AssessMachineAuthorship { get; set; } = true;
+
+    /// <summary>Gets the weighting extraction assesses by, which is the one that reads nothing where the setting is off.</summary>
+    /// <remarks>
+    /// The weighting itself is the project's and is deliberately not configurable, so what the setting decides is which
+    /// of two profiles extraction is handed rather than what either of them contains. Resolving it here rather than in
+    /// the composition root keeps the decision beside the setting it follows from and testable without a container.
+    /// </remarks>
+    public MachineAuthorshipProfile MachineAuthorshipProfile => this.AssessMachineAuthorship
+        ? MachineAuthorshipProfile.Standard
+        : MachineAuthorshipProfile.Disabled;
 
     /// <summary>Gets or sets configured accounts and folders to synchronize.</summary>
     public List<MailSynchronizationAccountOptions> Accounts { get; set; } = [];

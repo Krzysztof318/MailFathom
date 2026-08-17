@@ -7,6 +7,7 @@ using MailFathom.Application.Retrieval;
 using MailFathom.Application.Retrieval.AskMail;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
+using MailFathom.Domain.Emails.Authorship;
 using MailFathom.Domain.Folders;
 using MailFathom.Mcp.Tools;
 using MailFathom.Mcp.UnitTests.TestDoubles;
@@ -188,6 +189,7 @@ public sealed class AskMailInjectionResistanceTests
         Subject = "Quarterly invoice",
         ReceivedAt = Now,
         SenderVerification = SenderVerification.NotEstablished,
+        MachineAuthorship = MachineAuthorshipAssessment.NotAssessed,
         Text = "an extract",
     };
 

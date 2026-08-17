@@ -343,6 +343,7 @@ Each passage is a bounded extract plus the identity an answer is traced through:
 - the account and the folder alias it was read from;
 - the subject and the received time, where the message carried them;
 - what was established about the author the message displays, and what this deployment made of them;
+- how much the message's own text read as machine written;
 - the extract itself, already cut to the bound above.
 
 Nothing else travels. The participants, the size, the flags, and the attachment summary that a listing publishes are
@@ -350,7 +351,9 @@ dropped before a provider is reached, because an answer does not need them.
 
 The sender verdict rides with the passage so a citation can state it without reading the message a second time, and a
 provider never sees it: the envelope a passage is formatted into names the message, the account, the folder, the
-received time, and the subject, and carries the extract. The verdict reaches the caller instead, on the citation.
+received time, and the subject, and carries the extract. The verdict reaches the caller instead, on the citation. The
+[machine-authorship reading](machine-authorship.md) travels on exactly those terms and is put to the same use — nothing
+in the retrieval path selects, ranks, or drops a passage by it, and no model is shown it.
 
 A message whose body yielded no text — encrypted mail, or mail whose content lives entirely in an attachment — can match
 on its subject or its participants and still produce no extract. Such a match is dropped rather than sent as an
@@ -495,6 +498,11 @@ Each citation does carry the sender verdict, in the shape a listing publishes it
 An answer is worth what the mail behind it is worth, so a reader deciding whether to act on a claim is told whether the
 message it came from had an author anybody established and whether this deployment recognizes that author. What the
 verdict is reached from stays with the single-email read the citation resolves through.
+
+It carries the [machine-authorship reading](machine-authorship.md) beside it, in the shape a listing publishes that in,
+and for a narrower reason: it is one more thing a reader may want to know about a message an answer rests on, and it
+says nothing about whether the message is safe or true. The signals behind the number stay with the single-email read
+as well.
 
 ## When a deployment answers questions at all
 

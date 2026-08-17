@@ -589,6 +589,7 @@ public sealed class EmailContentReader
             RemoteFlags = summary.RemoteFlags,
             SenderVerification = summary.SenderVerification,
             SenderAuthenticationEvidence = summary.SenderAuthenticationEvidence,
+            MachineAuthorship = summary.MachineAuthorship,
         };
     }
 
@@ -641,6 +642,7 @@ public sealed class EmailContentReader
             RemoteFlags = summary.RemoteFlags,
             SenderVerification = summary.SenderVerification,
             SenderAuthenticationEvidence = summary.SenderAuthenticationEvidence,
+            MachineAuthorship = summary.MachineAuthorship,
         };
     }
 

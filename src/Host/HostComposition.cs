@@ -521,6 +521,11 @@ internal static class HostComposition
         builder.Services.AddScoped<IMailAccountCatalog>(provider => provider.GetRequiredService<MailSynchronizationOptions>());
         builder.Services.AddScoped<ITrustedAuthenticationAuthorityReader>(provider => provider.GetRequiredService<MailSynchronizationOptions>());
         builder.Services.AddScoped<ISenderTrustPolicyReader>(provider => provider.GetRequiredService<MailSynchronizationOptions>());
+        // Resolved from the same snapshot as the verdicts above, so one work unit reads mail under one reload. Which of
+        // the two profiles it is follows the setting, and the disabled one records the same not-assessed state a
+        // message with no readable body reaches — so a stored row never says which of the two reasons produced it.
+        builder.Services.AddScoped(provider =>
+            provider.GetRequiredService<MailSynchronizationOptions>().MachineAuthorshipProfile);
         builder.Services.AddScoped<IOutgoingSenderIdentityReader>(provider => provider.GetRequiredService<MailSynchronizationOptions>());
         builder.Services.AddScoped<IMailFolderParticipationReader>(provider => provider.GetRequiredService<MailSynchronizationOptions>());
         builder.Services.AddScoped<IJunkMailFolderCatalog>(provider => provider.GetRequiredService<MailSynchronizationOptions>());

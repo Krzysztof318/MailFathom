@@ -239,7 +239,9 @@ never one**: `authorAuthentication`, which is [the conclusion about the displaye
 author](#whether-the-displayed-author-authenticated) with its three values intact, and `deploymentTrust`, which is
 [whether this deployment recognizes them](#whether-the-author-is-one-this-deployment-recognizes) with its two. Neither
 is derived from the other and no published field merges them, because a single value would lose the distinction the two
-conclusions exist to make.
+conclusions exist to make. A third value travels beside them and belongs to neither: `machineAuthorship` is about how a
+message's text was *written* rather than about who sent it, and [machine authorship](machine-authorship.md) is where it
+is described.
 
 | Tool | What it publishes |
 | --- | --- |

@@ -14,6 +14,7 @@ using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Emails.Authentication;
+using MailFathom.Domain.Emails.Authorship;
 using MailFathom.Domain.Failures;
 using MailFathom.Domain.Folders;
 using MailFathom.Mcp.Tools;
@@ -462,6 +463,7 @@ public sealed class ListEmailsToolTests
                 DeploymentTrust = SenderTrustLevel.Trusted,
             },
             SenderAuthenticationEvidence = SenderAuthenticationEvidence.None,
+            MachineAuthorship = MachineAuthorshipAssessment.NotAssessed,
         };
         var tool = ToolOver(new StubStoredEmailTimelineReader(summary));
 
@@ -526,6 +528,47 @@ public sealed class ListEmailsToolTests
         var published = Assert.Single(result.Emails);
         Assert.Equal(AuthorAuthenticationState.Authenticated, published.SenderVerification.AuthorAuthentication);
         Assert.Equal(DeploymentTrustState.Unknown, published.SenderVerification.DeploymentTrust);
+    }
+
+    /// <summary>The authorship reading is published beside the verdict, which is the whole point of storing it.</summary>
+    [Fact]
+    public async Task ListEmailsAsync_AnAssessedEmail_PublishesTheAuthorshipReadingBesideTheVerdict()
+    {
+        // Arrange
+        var summary = SummaryReceivedAt(new DateTimeOffset(2026, 3, 1, 8, 0, 0, TimeSpan.Zero)) with
+        {
+            MachineAuthorship = MachineAuthorshipAssessment.Assessed(
+                MachineAuthorshipBand.Likely,
+                likelihood: 0.9,
+                MachineAuthorshipSignals.TagCharacters,
+                MachineAuthorshipProfile.Standard.Revision),
+        };
+        var tool = ToolOver(new StubStoredEmailTimelineReader(summary));
+
+        // Act
+        var result = await tool.ListEmailsAsync(cancellationToken: TestContext.Current.CancellationToken);
+
+        // Assert
+        var published = Assert.Single(result.Emails);
+        Assert.Equal("Likely", published.MachineAuthorship.State.ToString());
+        Assert.Equal(0.9, published.MachineAuthorship.Likelihood);
+    }
+
+    /// <summary>A listing carries the reading without the signals behind it, for the reason it carries no evidence.</summary>
+    [Fact]
+    public async Task ListEmailsAsync_AnEmailNothingAssessed_PublishesThatNothingReadIt()
+    {
+        // Arrange
+        var tool = ToolOver(new StubStoredEmailTimelineReader(
+            SummaryReceivedAt(new DateTimeOffset(2026, 3, 1, 8, 0, 0, TimeSpan.Zero))));
+
+        // Act
+        var result = await tool.ListEmailsAsync(cancellationToken: TestContext.Current.CancellationToken);
+
+        // Assert
+        var published = Assert.Single(result.Emails);
+        Assert.Equal("NotAssessed", published.MachineAuthorship.State.ToString());
+        Assert.Equal(0, published.MachineAuthorship.Likelihood);
     }
 
     /// <summary>A listed email stored before the verdict was recorded is published as its row holds it.</summary>
@@ -767,6 +810,7 @@ public sealed class ListEmailsToolTests
         ContentAvailability = StoredEmailContentAvailability.Available,
         RemoteFlags = RemoteEmailFlagSnapshot.NeverObserved,
         SenderVerification = SenderVerification.NotEstablished,
+        MachineAuthorship = MachineAuthorshipAssessment.NotAssessed,
         SenderAuthenticationEvidence = SenderAuthenticationEvidence.None,
     };
 

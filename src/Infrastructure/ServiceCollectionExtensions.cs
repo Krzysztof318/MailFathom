@@ -67,6 +67,7 @@ using MailFathom.Application.Synchronization.Checkpoints;
 using MailFathom.Application.Synchronization.Reconciliation;
 using MailFathom.Application.Synchronization.Sessions;
 using MailFathom.CodeCoverage;
+using MailFathom.Domain.Emails.Authorship;
 using MailFathom.Infrastructure.Certificates;
 using MailFathom.Infrastructure.DataEncryption;
 using MailFathom.Infrastructure.Embeddings;
@@ -448,13 +449,19 @@ public static class ServiceCollectionExtensions
         // deployment that recognizes nobody still records that it recognized nobody, which is what a reader is shown.
         // It sits directly over the parse because it reads what the parse established and touches nothing else, so the
         // redaction above it is unaffected either way.
+        // The authorship reading sits above the verdict and still below any redaction, so that it judges the words the
+        // message carried rather than the words a scanner rewrote in it. It is wrapped unconditionally as well: a
+        // deployment that turned the reading off resolves the profile that reads nothing, which records the same
+        // not-assessed state as a message with no readable body.
         services.AddScoped(provider =>
         {
-            IEmailMimeReader reader = new SenderTrustEvaluatingEmailMimeReader(
-                new MimeKitEmailMimeReader(
-                    provider.GetRequiredService<EmailMimeExtractionOptions>(),
-                    provider.GetRequiredService<ITrustedAuthenticationAuthorityReader>()),
-                provider.GetRequiredService<ISenderTrustPolicyReader>());
+            IEmailMimeReader reader = new MachineAuthorshipEvaluatingEmailMimeReader(
+                new SenderTrustEvaluatingEmailMimeReader(
+                    new MimeKitEmailMimeReader(
+                        provider.GetRequiredService<EmailMimeExtractionOptions>(),
+                        provider.GetRequiredService<ITrustedAuthenticationAuthorityReader>()),
+                    provider.GetRequiredService<ISenderTrustPolicyReader>()),
+                provider.GetRequiredService<MachineAuthorshipProfile>());
 
             return provider.GetRequiredService<SensitiveContentDerivationGuard>() is { IsActive: true } guard
                 ? new RedactingEmailMimeReader(reader, guard)

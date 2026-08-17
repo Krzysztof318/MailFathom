@@ -5,6 +5,7 @@
 using System.ComponentModel;
 using MailFathom.Application.Emails.Summaries;
 using MailFathom.Domain.Emails;
+using MailFathom.Mcp.Tools.Authorship;
 using MailFathom.Mcp.Tools.Senders;
 
 namespace MailFathom.Mcp.Tools.Summaries;
@@ -70,6 +71,14 @@ internal sealed record ListedEmailSummary
     /// </remarks>
     public required ReportedSenderVerification SenderVerification { get; init; }
 
+    /// <summary>Gets how much the email's own text read as machine written.</summary>
+    /// <remarks>
+    /// A second, independent reading beside the sender verdict and never a refinement of it: that one is about who sent
+    /// the email and this one is about how its text was written. A listing carries the reading and not the signals
+    /// behind it, which the single-email read publishes.
+    /// </remarks>
+    public required ReportedMachineAuthorship MachineAuthorship { get; init; }
+
     /// <summary>Gets the <c>To</c> addresses in header order.</summary>
     [Description("The To addresses in header order. Cc and Reply-To are searchable but not listed, and recipient display names are not returned; the full participant set belongs to a single-email read.")]
     public required IReadOnlyList<string> ToAddresses { get; init; }
@@ -118,6 +127,7 @@ internal sealed record ListedEmailSummary
             SenderAddress = summary.SenderAddress,
             SenderDisplayName = summary.SenderDisplayName,
             SenderVerification = ReportedSenderVerification.From(summary.SenderVerification),
+            MachineAuthorship = ReportedMachineAuthorship.From(summary.MachineAuthorship),
             ToAddresses = summary.ToAddresses,
             SentAt = summary.SentAt,
             ReceivedAt = summary.ReceivedAt,
