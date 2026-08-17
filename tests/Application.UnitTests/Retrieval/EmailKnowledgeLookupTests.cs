@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.Emails.Search;
+using MailFathom.Application.Emails.Summaries;
 using MailFathom.Application.Retrieval;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
@@ -54,6 +55,7 @@ public sealed class EmailKnowledgeLookupTests
         StoredEmailId = StoredEmailId.Create(Guid.CreateVersion7()),
         AccountId = MailAccountId.Create("work"),
         FolderAlias = MailFolderAlias.Create("inbox"),
+        SenderVerification = SenderVerification.NotEstablished,
         Text = "the invoice is attached",
     };
 }

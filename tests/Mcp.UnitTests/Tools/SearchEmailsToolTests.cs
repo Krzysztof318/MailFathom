@@ -14,10 +14,12 @@ using MailFathom.Application.SensitiveContent.Egress;
 using MailFathom.Application.Synchronization.Checkpoints;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
+using MailFathom.Domain.Emails.Authentication;
 using MailFathom.Domain.Failures;
 using MailFathom.Domain.Folders;
 using MailFathom.Mcp.Tools;
 using MailFathom.Mcp.Tools.Results;
+using MailFathom.Mcp.Tools.Summaries;
 using MailFathom.Mcp.UnitTests.TestDoubles;
 using MailFathom.TestSupport;
 using Microsoft.Extensions.Time.Testing;
@@ -350,6 +352,30 @@ public sealed class SearchEmailsToolTests
         Assert.Equal(["the **invoice** for March", "your **invoice** is attached"], published.Snippets);
     }
 
+    /// <summary>A search publishes the sender verdict by republishing the listing's summary rather than a shape of its own.</summary>
+    /// <remarks>
+    /// The assertion is against the summary the listing tool would publish for the same email, so a client written
+    /// against a listing needs nothing new to read a match's verdict.
+    /// </remarks>
+    [Fact]
+    public async Task SearchEmailsAsync_MatchedEmail_RepublishesTheListingsSenderVerdict()
+    {
+        // Arrange
+        var summary = SummaryOf(EmailIdentityAt(1), new DateTimeOffset(2026, 3, 1, 8, 0, 0, TimeSpan.Zero));
+        var tool = ToolOver(new StubEmailSearchIndexReader(
+            new EmailSearchMatch(summary, RelevanceRank: 0.5f, Snippets: [])));
+
+        // Act
+        var result = await tool.SearchEmailsAsync(Query, cancellationToken: TestContext.Current.CancellationToken);
+
+        // Assert
+        var published = Assert.Single(result.Matches);
+        Assert.Equal(
+            ListedEmailSummary.From(summary, PublishedAccountNames.From(new StubMailAccountCatalog(ServedAccountId)))
+                .SenderVerification,
+            published.Summary.SenderVerification);
+    }
+
     /// <summary>An email matched on its subject or a participant carries no extract, because the summary publishes both whole.</summary>
     [Fact]
     public async Task SearchEmailsAsync_MatchWithNoIndexedBodyText_PublishesNoSnippets()
@@ -559,6 +585,12 @@ public sealed class SearchEmailsToolTests
         Attachments = StoredEmailAttachmentSummary.None,
         ContentAvailability = StoredEmailContentAvailability.Available,
         RemoteFlags = RemoteEmailFlagSnapshot.NeverObserved,
+        SenderVerification = new SenderVerification
+        {
+            AuthorAuthentication = AuthorAuthenticationOutcome.Authenticated,
+            DeploymentTrust = SenderTrustLevel.Unknown,
+        },
+        SenderAuthenticationEvidence = SenderAuthenticationEvidence.None,
     };
 
     private static MailboxFolderFreshness FreshnessOf(string folderAlias, DateTimeOffset? synchronizedAt) => new(

@@ -8,11 +8,13 @@ using MailFathom.Application.Emails.Embeddings;
 using MailFathom.Application.Emails.Mailboxes;
 using MailFathom.Application.Emails.Search;
 using MailFathom.Application.Emails.SearchEmails;
+using MailFathom.Application.Emails.Summaries;
 using MailFathom.Application.Retrieval;
 using MailFathom.Application.SensitiveContent.Egress;
 using MailFathom.Application.Synchronization.Checkpoints;
 using MailFathom.Application.UnitTests.TestDoubles;
 using MailFathom.Domain.Accounts;
+using MailFathom.Domain.Emails.Authentication;
 using MailFathom.Domain.Folders;
 using MailFathom.TestSupport;
 using Microsoft.Extensions.Time.Testing;
@@ -99,6 +101,34 @@ public sealed class MailboxKnowledgeSearchTests
         Assert.Equal("the invoice", passage.Subject);
         Assert.Equal(FirstJuly, passage.ReceivedAt);
         Assert.Equal("the invoice is attached", passage.Text);
+    }
+
+    /// <summary>A citation says whether the message it quotes was verified, and this is the hop that carries the verdict to it.</summary>
+    [Fact]
+    public async Task FindPassagesAsync_AMatch_CarriesTheSenderVerdictItsSummaryWasStoredWith()
+    {
+        // Arrange
+        var matched = SyntheticEmailSummaries.Create(
+            FirstJuly,
+            senderVerification: new SenderVerification
+            {
+                AuthorAuthentication = AuthorAuthenticationOutcome.Authenticated,
+                DeploymentTrust = SenderTrustLevel.Trusted,
+            });
+        var index = new InMemoryEmailSearchIndex().With(matched, snippets: "the invoice is attached");
+        var search = SearchOver(index);
+
+        // Act
+        var passages = (await search.FindPassagesAsync(
+            EveryAccount,
+            EmailKnowledgeQuery.ForText("invoice"),
+            TestContext.Current.CancellationToken)).Passages;
+
+        // Assert
+        var passage = Assert.Single(passages);
+
+        Assert.Equal(AuthorAuthenticationOutcome.Authenticated, passage.SenderVerification.AuthorAuthentication);
+        Assert.Equal(SenderTrustLevel.Trusted, passage.SenderVerification.DeploymentTrust);
     }
 
     /// <summary>The count is the bound on how many messages one question can draw on, and it is asked of the search itself.</summary>

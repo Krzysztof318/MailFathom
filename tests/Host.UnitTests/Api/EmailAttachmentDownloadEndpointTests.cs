@@ -370,6 +370,8 @@ public sealed class EmailAttachmentDownloadEndpointTests
         ToAddresses = ["reader@example.test"],
         SizeOctets = 1024,
         RemoteFlags = RemoteEmailFlagSnapshot.NeverObserved,
+        SenderVerification = SenderVerification.NotEstablished,
+        SenderAuthenticationEvidence = SenderAuthenticationEvidence.None,
         ContentAvailability = StoredEmailContentAvailability.Available,
         Attachments = new StoredEmailAttachmentSummary(
             AttachmentCount: 1,

@@ -5,6 +5,7 @@
 using System.ComponentModel;
 using MailFathom.Application.Emails.Summaries;
 using MailFathom.Domain.Emails;
+using MailFathom.Mcp.Tools.Senders;
 
 namespace MailFathom.Mcp.Tools.Summaries;
 
@@ -50,12 +51,20 @@ internal sealed record ListedEmailSummary
     public string? Subject { get; init; }
 
     /// <summary>Gets the sender address as the email wrote it, or <see langword="null" /> when it carried no usable one.</summary>
-    [Description("The sender address as written by the email, or null when it carried no usable sender address.")]
+    [Description("The sender address as written by the email, or null when it carried no usable sender address. This is a claim the email made about itself and nothing here verified it; senderVerification is what says whether anything did.")]
     public string? SenderAddress { get; init; }
 
     /// <summary>Gets the sender display name, or <see langword="null" /> when the email carried none.</summary>
     [Description("The display name the sender wrote, or null when the header carried none.")]
     public string? SenderDisplayName { get; init; }
+
+    /// <summary>Gets what was established about the author the email displays, and what this deployment made of it.</summary>
+    /// <remarks>
+    /// It sits beside the sender address deliberately: the address is what the email wrote about itself, and this is
+    /// what a trusted server established and what this deployment recognized. A listing carries the verdict and not the
+    /// evidence behind it, which the single-email read publishes.
+    /// </remarks>
+    public required ReportedSenderVerification SenderVerification { get; init; }
 
     /// <summary>Gets the <c>To</c> addresses in header order.</summary>
     [Description("The To addresses in header order. Cc and Reply-To are searchable but not listed, and recipient display names are not returned; the full participant set belongs to a single-email read.")]
@@ -103,6 +112,7 @@ internal sealed record ListedEmailSummary
             Subject = summary.Subject,
             SenderAddress = summary.SenderAddress,
             SenderDisplayName = summary.SenderDisplayName,
+            SenderVerification = ReportedSenderVerification.From(summary.SenderVerification),
             ToAddresses = summary.ToAddresses,
             SentAt = summary.SentAt,
             ReceivedAt = summary.ReceivedAt,

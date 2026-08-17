@@ -308,7 +308,8 @@ public sealed class MailboxQuestionReader
                     SensitiveContentEgressPoint.McpSnippet,
                     passage.Subject,
                     cancellationToken),
-                passage.ReceivedAt));
+                passage.ReceivedAt,
+                passage.SenderVerification));
         }
 
         return cited;

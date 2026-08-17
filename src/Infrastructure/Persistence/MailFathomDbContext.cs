@@ -397,7 +397,7 @@ internal sealed class MailFathomDbContext : DbContext
             // by the length a resolver accepts, which the domain value already refuses to exceed. Each enum carries a
             // database default naming the value that establishes nothing, because that is what is true of a row written
             // before this deployment read the header: the migration that adds the columns fills every stored message in
-            // with it, and a mailbox re-reads its own raw MIME through the extraction backfill.
+            // with it, and a mailbox re-reads its own raw MIME through a re-derivation pass.
             entity.Property(email => email.SenderAuthenticationOutcome)
                 .HasConversion<string>()
                 .HasMaxLength(64)
@@ -422,6 +422,7 @@ internal sealed class MailFathomDbContext : DbContext
             entity.Property(email => email.DkimSignerDomain).HasMaxLength(StoredEmailEntity.MaximumDomainLength);
             entity.Property(email => email.SpfMailFromDomain).HasMaxLength(StoredEmailEntity.MaximumDomainLength);
             entity.Property(email => email.AuthenticatedAuthorDomain).HasMaxLength(StoredEmailEntity.MaximumDomainLength);
+            entity.Property(email => email.DisplayedAuthorDomain).HasMaxLength(StoredEmailEntity.MaximumDomainLength);
 
             // What this deployment made of that verdict, stored the same way and defaulted the same way: a row written
             // before authors were judged at all recognized nobody, which is exactly what the two defaults say. The

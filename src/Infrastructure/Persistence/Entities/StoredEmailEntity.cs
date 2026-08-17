@@ -80,8 +80,8 @@ internal sealed class StoredEmailEntity
     /// nothing is ever without.
     /// </para>
     /// <para>
-    /// The whole group is written by extraction from the stored raw MIME and is re-derivable from it, which is what the
-    /// extraction backfill does after a trusted authority is configured for an account that had none.
+    /// The whole group is written by extraction from the stored raw MIME and is re-derivable from it, which is what a
+    /// re-derivation pass does after a trusted authority is configured for an account that had none.
     /// </para>
     /// </remarks>
     public SenderAuthenticationOutcome SenderAuthenticationOutcome { get; set; }
@@ -102,6 +102,20 @@ internal sealed class StoredEmailEntity
     /// signature belongs to another, and a reader asking which is which would otherwise have to re-parse the raw MIME.
     /// </remarks>
     public string? SpfMailFromDomain { get; set; }
+
+    /// <summary>Gets or sets the domain the message displayed in <c>From</c>, absent where it wrote no usable one.</summary>
+    /// <remarks>
+    /// The <c>From</c> header alone, which is not the same address as <see cref="SenderAddress" />: a timeline names a
+    /// message's sender from <c>Sender</c> where no author was written, while this is the domain a mail client displays
+    /// and therefore the one an impersonation controls. Deriving it from the address column would be wrong for exactly
+    /// those messages and would re-parse a header on a read path besides.
+    /// <para>
+    /// It overlaps <see cref="AuthenticatedAuthorDomain" /> and does not replace it. That column carries the domain a
+    /// trusted server stood behind and is absent whenever nothing established the author, which is the case a reader
+    /// most needs the displayed domain for; this one carries what the message claimed whether or not anything held.
+    /// </para>
+    /// </remarks>
+    public string? DisplayedAuthorDomain { get; set; }
 
     /// <summary>Gets or sets the DMARC result the trusted header reported, or that it reported none.</summary>
     public DmarcOutcome DmarcOutcome { get; set; }

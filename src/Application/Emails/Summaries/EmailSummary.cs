@@ -58,6 +58,22 @@ public sealed record EmailSummary
     /// <summary>Gets the comparison forms of the <c>To</c> addresses, in header order.</summary>
     public IReadOnlyList<string> ToAddresses { get; init; } = [];
 
+    /// <summary>Gets what was established about the author the message displays, and what this deployment made of it.</summary>
+    /// <remarks>
+    /// Carried by the summary rather than read separately because it is what a reader weighs a listed message by, and
+    /// because the single-email read is built from this same summary — so a listing and a read cannot disagree about
+    /// one message.
+    /// </remarks>
+    public required SenderVerification SenderVerification { get; init; }
+
+    /// <summary>Gets what the verdict above was reached from, which only a single-email read publishes.</summary>
+    /// <remarks>
+    /// Projected with the summary rather than fetched by a second query, because one projection is what keeps every
+    /// read path publishing the same columns. A listing carries it without publishing it: a listing exists to let a
+    /// reader recognize a message, and the evidence is for judging one already found.
+    /// </remarks>
+    public required SenderAuthenticationEvidence SenderAuthenticationEvidence { get; init; }
+
     /// <summary>Gets what the email carries besides its body.</summary>
     public required StoredEmailAttachmentSummary Attachments { get; init; }
 

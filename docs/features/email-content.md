@@ -98,6 +98,24 @@ fact whether it named one email or ten.
 | `AttachmentSummary` | The counts for what the message carries besides its body, absent when nobody has counted them |
 | `Attachments` | One entry per attachment, re-derived from the stored raw MIME, each carrying a link to fetch it or the reason it carries none |
 | `RemoteFlags` | The flags a server last showed, and when they were read |
+| `SenderVerification` | What was established about the author the message displays, and what this deployment made of them |
+| `SenderAuthenticationEvidence` | What that conclusion was reached from: the authenticated domain, the displayed author's domain, the check that established the first, and the DMARC result |
+
+### The sender verdict is read from the row, and only here is its evidence published
+
+Both values come from the summary the read already loaded rather than from the parse, because both are conclusions
+reached when the message was stored. A read evaluates nothing: it resolves no DNS, verifies no signature, and does not
+re-read the `Authentication-Results` header the verdict came from. That holds for a message whose raw MIME was never
+stored too — the body says why there is none, and the verdict beside it is the same one a listing publishes.
+
+The verdict pair is what every read tool publishes. The evidence is what only this one does, because it is how a reader
+judges a verdict rather than what a reader acts on, and a listing exists to let somebody recognize a message rather than
+to weigh one they have already found. The authenticated domain and the displayed author's domain are read beside the
+verdict rather than against each other: the first is whichever identity authenticated the transport, so the two differ
+on ordinary mail a provider relayed and signed as itself, and `authorAuthentication` is what says the displayed author
+was not established. Each value states its own absence, since a message nothing authenticated names no authenticated
+domain and one displaying no usable `From` mailbox names no displayed one. [Sender authentication](sender-authentication.md#what-the-read-tools-publish) holds what
+each value means and what it deliberately does not claim.
 
 ### Headers come from the message, not from the row
 
@@ -351,8 +369,8 @@ ordinary mail never reaches a second pass.
 Where [sensitive-content scanning](sensitive-content-scanning.md#reading-a-message-is-scanned-in-flight) is switched on,
 what the message's author wrote is scanned on every read and returned with each detection replaced by
 `[redacted:<category>]`: both body representations, the subject, and each participant's display name. The addresses
-beside those names, the identifiers, the sizes, the flags, and every attachment's file name are left as they are, on the
-line that page draws between a routing identity and free text.
+beside those names, the identifiers, the sizes, the flags, the two domains the sender verdict's evidence publishes, and
+every attachment's file name are left as they are, on the line that page draws between a routing identity and free text.
 
 The display names of the first 40 named participants of a message are scanned, and past that the address is published
 with no display name at all. A scan is a round trip where the personal-data analyzer runs in a container of its own, and

@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.Emails.Mailboxes;
+using MailFathom.Application.Emails.Summaries;
 using MailFathom.Application.Persistence;
 using MailFathom.Application.Retrieval;
 using MailFathom.Application.Retrieval.AskMail;
@@ -258,6 +259,7 @@ public sealed class MailAnsweringAuditTrailTests : IDisposable
         FolderAlias = MailFolderAlias.Create("inbox"),
         Subject = "Quarterly invoice",
         ReceivedAt = StartedAt,
+        SenderVerification = SenderVerification.NotEstablished,
         Text = "the invoice is attached",
     };
 

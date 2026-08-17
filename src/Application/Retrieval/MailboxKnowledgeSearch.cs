@@ -114,6 +114,7 @@ public sealed class MailboxKnowledgeSearch : IEmailKnowledgeSearch
             FolderAlias = summary.FolderAlias,
             Subject = summary.Subject,
             ReceivedAt = summary.ReceivedAt,
+            SenderVerification = summary.SenderVerification,
             Text = this.Bounded(string.Join(SnippetSeparator, match.Snippets)),
         };
     }

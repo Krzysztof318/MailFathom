@@ -342,10 +342,15 @@ Each passage is a bounded extract plus the identity an answer is traced through:
 - the stable local message identifier, which is the same one every other read names an email by;
 - the account and the folder alias it was read from;
 - the subject and the received time, where the message carried them;
+- what was established about the author the message displays, and what this deployment made of them;
 - the extract itself, already cut to the bound above.
 
 Nothing else travels. The participants, the size, the flags, and the attachment summary that a listing publishes are
 dropped before a provider is reached, because an answer does not need them.
+
+The sender verdict rides with the passage so a citation can state it without reading the message a second time, and a
+provider never sees it: the envelope a passage is formatted into names the message, the account, the folder, the
+received time, and the subject, and carries the extract. The verdict reaches the caller instead, on the citation.
 
 A message whose body yielded no text — encrypted mail, or mail whose content lives entirely in an attachment — can match
 on its subject or its participants and still produce no extract. Such a match is dropped rather than sent as an
@@ -485,6 +490,11 @@ The citations are one per email rather than one per passage. A run makes several
 than one of them; a reader given a list of sources wants the messages, not the number of times each was found. Neither
 one carries an extract: the passage has already reached a provider, and returning it to the caller as well would publish
 mail content from a call whose result is an answer.
+
+Each citation does carry the sender verdict, in the shape a listing publishes it in and without the evidence behind it.
+An answer is worth what the mail behind it is worth, so a reader deciding whether to act on a claim is told whether the
+message it came from had an author anybody established and whether this deployment recognizes that author. What the
+verdict is reached from stays with the single-email read the citation resolves through.
 
 ## When a deployment answers questions at all
 

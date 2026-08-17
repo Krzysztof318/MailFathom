@@ -4,12 +4,15 @@
 
 using MailFathom.Application.Accounts;
 using MailFathom.Application.Emails.Mailboxes;
+using MailFathom.Application.Emails.Summaries;
 using MailFathom.Application.Retrieval;
 using MailFathom.Application.Retrieval.AskMail;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
+using MailFathom.Domain.Emails.Authentication;
 using MailFathom.Domain.Folders;
 using MailFathom.Mcp.Tools;
+using MailFathom.Mcp.Tools.Senders;
 using MailFathom.Mcp.UnitTests.TestDoubles;
 using MailFathom.TestSupport;
 using Xunit;
@@ -108,6 +111,48 @@ public sealed class AskMailToolTests
             });
     }
 
+    /// <summary>A citation says what was established about the author of the message a claim was drawn from.</summary>
+    /// <remarks>
+    /// The pair and nothing else: the evidence behind it belongs to the single-email read the citation points at, and
+    /// an answer is not the place to publish a domain the reader did not ask to see.
+    /// </remarks>
+    [Fact]
+    public async Task AskMailAsync_ARunThatRetrievedMail_PublishesTheSenderVerdictOfEachCitedEmail()
+    {
+        // Arrange
+        var answerer = new StubMailQuestionAnswerer().Answering(
+            "They agreed to pay 400.",
+            PassageOf(
+                1,
+                new SenderVerification
+                {
+                    AuthorAuthentication = AuthorAuthenticationOutcome.Authenticated,
+                    DeploymentTrust = SenderTrustLevel.Trusted,
+                }),
+            PassageOf(
+                2,
+                new SenderVerification
+                {
+                    AuthorAuthentication = AuthorAuthenticationOutcome.Failed,
+                    DeploymentTrust = SenderTrustLevel.Unknown,
+                }));
+        var tool = ToolOver(answerer);
+
+        // Act
+        var result = await tool.AskMailAsync(Question, cancellationToken: TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(
+            [
+                (AuthorAuthenticationState.Authenticated, DeploymentTrustState.Trusted),
+                (AuthorAuthenticationState.Failed, DeploymentTrustState.Unknown),
+            ],
+            [
+                .. result.Citations.Select(static citation =>
+                    (citation.SenderVerification.AuthorAuthentication, citation.SenderVerification.DeploymentTrust)),
+            ]);
+    }
+
     /// <summary>
     /// A question asked in one language about mail written in another is the ordinary case for a multilingual mailbox,
     /// and nothing this boundary owns reads either language: the question travels as it was asked, the citations are
@@ -200,7 +245,7 @@ public sealed class AskMailToolTests
         var tool = ToolOver(
             new StubMailQuestionAnswerer().Answering(
                 "An answer.",
-                [.. Enumerable.Range(1, 4).Select(PassageOf)]),
+                [.. Enumerable.Range(1, 4).Select(position => PassageOf(position))]),
             MailAnswerBounds.Create(20_000, 2));
 
         // Act
@@ -296,13 +341,14 @@ public sealed class AskMailToolTests
             AnsweringDeployment.AccountCatalog());
     }
 
-    private static EmailKnowledgePassage PassageOf(int position) => new()
+    private static EmailKnowledgePassage PassageOf(int position, SenderVerification? senderVerification = null) => new()
     {
         StoredEmailId = StoredEmailId.Create(EmailIdentityAt(position)),
         AccountId = MailAccountId.Create(AnsweringDeployment.ServedAccountId),
         FolderAlias = MailFolderAlias.Create("INBOX"),
         Subject = "Quarterly invoice",
         ReceivedAt = Now,
+        SenderVerification = senderVerification ?? SenderVerification.NotEstablished,
         Text = "an extract",
     };
 

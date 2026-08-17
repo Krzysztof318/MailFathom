@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Application.Emails.Summaries;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Folders;
@@ -41,6 +42,14 @@ public sealed record EmailKnowledgePassage
 
     /// <summary>Gets when the last receiving hop recorded the message, or <see langword="null" /> when no header carried a usable date.</summary>
     public DateTimeOffset? ReceivedAt { get; init; }
+
+    /// <summary>Gets what was established about the author of the message the extract came from.</summary>
+    /// <remarks>
+    /// It travels with the passage so that a citation can state it without a second read of the message. Nothing in the
+    /// retrieval path acts on it and nothing puts it in front of a model: what a provider receives is the extract, and
+    /// this reaches the caller instead, as part of saying where a claim came from.
+    /// </remarks>
+    public required SenderVerification SenderVerification { get; init; }
 
     /// <summary>Gets the extract itself, already cut to the size one passage may carry.</summary>
     public required string Text { get; init; }

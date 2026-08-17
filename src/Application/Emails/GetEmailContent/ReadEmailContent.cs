@@ -86,4 +86,17 @@ public sealed record ReadEmailContent
     /// <summary>Gets the flags a mail server last showed for the email, and when they were read.</summary>
     /// <remarks>Reading content never changes them: the whole operation is served from local storage and speaks to no mail server.</remarks>
     public required RemoteEmailFlagSnapshot RemoteFlags { get; init; }
+
+    /// <summary>Gets what was established about the author the message displays, and what this deployment made of it.</summary>
+    /// <remarks>
+    /// The same pair a listing carries, taken from the same summary, so the two reads cannot disagree about one message.
+    /// </remarks>
+    public required SenderVerification SenderVerification { get; init; }
+
+    /// <summary>Gets what the author conclusion above was reached from.</summary>
+    /// <remarks>
+    /// A single-email read is where the evidence belongs: it is how a reader judges the verdict rather than what they
+    /// act on, and it is read from the stored columns rather than by re-reading the message's headers.
+    /// </remarks>
+    public required SenderAuthenticationEvidence SenderAuthenticationEvidence { get; init; }
 }

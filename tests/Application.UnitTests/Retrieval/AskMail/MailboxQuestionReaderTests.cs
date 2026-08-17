@@ -8,6 +8,7 @@ using MailFathom.Application.Chat;
 using MailFathom.Application.Emails.Embeddings;
 using MailFathom.Application.Emails.Mailboxes;
 using MailFathom.Application.Emails.Search;
+using MailFathom.Application.Emails.Summaries;
 using MailFathom.Application.Retrieval;
 using MailFathom.Application.Retrieval.AskMail;
 using MailFathom.Application.Retrieval.AskMail.Audit;
@@ -17,6 +18,7 @@ using MailFathom.Application.UnitTests.TestDoubles;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Answering.Audit;
 using MailFathom.Domain.Emails;
+using MailFathom.Domain.Emails.Authentication;
 using MailFathom.Domain.Folders;
 using MailFathom.TestSupport;
 using Microsoft.Extensions.Time.Testing;
@@ -273,7 +275,15 @@ public sealed class MailboxQuestionReaderTests
     public async Task AnswerQuestionAsync_ACitedEmail_CarriesTheIdentityAndTheFieldsThatRecognizeIt()
     {
         // Arrange
-        var answerer = new RecordingMailQuestionAnswerer().Answering("An answer.", PassageOf(1, "an extract"));
+        var cited = PassageOf(
+            1,
+            "an extract",
+            senderVerification: new SenderVerification
+            {
+                AuthorAuthentication = AuthorAuthenticationOutcome.Authenticated,
+                DeploymentTrust = SenderTrustLevel.Trusted,
+            });
+        var answerer = new RecordingMailQuestionAnswerer().Answering("An answer.", cited);
         var reader = ReaderOver(answerer);
 
         // Act
@@ -286,6 +296,8 @@ public sealed class MailboxQuestionReaderTests
         Assert.Equal(MailFolderAlias.Create("INBOX"), citation.FolderAlias);
         Assert.Equal("Quarterly invoice", citation.Subject);
         Assert.Equal(Now, citation.ReceivedAt);
+        Assert.Equal(AuthorAuthenticationOutcome.Authenticated, citation.SenderVerification.AuthorAuthentication);
+        Assert.Equal(SenderTrustLevel.Trusted, citation.SenderVerification.DeploymentTrust);
     }
 
     /// <summary>Retrieval finding nothing is an ordinary outcome, and the answer that says so is a real answer.</summary>
@@ -614,15 +626,19 @@ public sealed class MailboxQuestionReaderTests
     private static Task<AskMailResult> AnswerAsync(MailboxQuestionReader reader, AskMailRequest request) =>
         reader.AnswerQuestionAsync(request, TestContext.Current.CancellationToken);
 
-    private static EmailKnowledgePassage PassageOf(int position, string text) => new()
-    {
-        StoredEmailId = StoredEmailId.Create(EmailIdentityAt(position)),
-        AccountId = MailAccountId.Create(ServedAccountId),
-        FolderAlias = MailFolderAlias.Create("INBOX"),
-        Subject = "Quarterly invoice",
-        ReceivedAt = Now,
-        Text = text,
-    };
+    private static EmailKnowledgePassage PassageOf(
+        int position,
+        string text,
+        SenderVerification? senderVerification = null) => new()
+        {
+            StoredEmailId = StoredEmailId.Create(EmailIdentityAt(position)),
+            AccountId = MailAccountId.Create(ServedAccountId),
+            FolderAlias = MailFolderAlias.Create("INBOX"),
+            Subject = "Quarterly invoice",
+            ReceivedAt = Now,
+            SenderVerification = senderVerification ?? SenderVerification.NotEstablished,
+            Text = text,
+        };
 
     /// <summary>Names one email by its position, so the same run of a test always uses the same identifiers.</summary>
     private static Guid EmailIdentityAt(int position) => new($"00000000-0000-0000-0000-{position:D12}");
