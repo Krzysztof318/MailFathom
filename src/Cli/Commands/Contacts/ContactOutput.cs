@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Cli.Administration.Contacts;
+using MailFathom.Cli.Output;
 
 namespace MailFathom.Cli.Commands.Contacts;
 
@@ -34,51 +35,57 @@ internal static class ContactOutput
         ArgumentNullException.ThrowIfNull(console);
         ArgumentNullException.ThrowIfNull(contact);
 
-        console.WriteLine($"Contact:   {contact.Id:D}");
-        console.WriteLine($"Name:      {contact.DisplayName}");
-        console.WriteLine($"Origin:    {contact.Origin}");
-
         var addresses = contact.Addresses ?? [];
 
-        if (addresses.Count == 0)
-        {
-            console.WriteLine("Addresses: none reported");
-        }
-
-        foreach (var (address, position) in addresses.Select((address, position) => (address, position)))
-        {
-            var label = position == 0 ? "Addresses:" : "          ";
-            var preferred = string.Equals(address, contact.PreferredAddress, StringComparison.Ordinal)
-                ? "  (preferred)"
-                : string.Empty;
-
-            console.WriteLine($"{label} {address}{preferred}");
-        }
+        CliDetails details = new();
+        details.Add("Contact", $"{contact.Id:D}");
+        details.Add("Name", contact.DisplayName ?? "none recorded");
+        details.Add("Origin", contact.Origin ?? "unreported");
+        details.Add("Addresses", addresses.Count == 0 ? ["none reported"] : [.. addresses.Select(address => Mark(address, contact))]);
 
         if (contact.Note is { Length: > 0 } note)
         {
-            console.WriteLine($"Note:      {note}");
+            details.Add("Note", note);
         }
 
-        console.WriteLine($"Recorded:  {contact.RecordedAt:u}");
-        console.WriteLine($"Amended:   {contact.AmendedAt:u}");
+        details.Add("Recorded", $"{contact.RecordedAt:u}");
+        details.Add("Amended", $"{contact.AmendedAt:u}");
+
+        console.Write(details);
     }
 
-    /// <summary>Prints one contact as a line of a listing.</summary>
+    /// <summary>Prints one page of the book as a listing.</summary>
     /// <param name="console">The terminal to write to.</param>
-    /// <param name="contact">The contact to print.</param>
+    /// <param name="contacts">The contacts to print, in the order the deployment served them.</param>
     /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
     /// <remarks>
     /// The preferred address alone rather than every address a person uses. A listing answers who is in the book, and a
     /// page that unfolded every address would put most of the book's contents on a screen the operator was scanning.
     /// </remarks>
-    internal static void WriteSummary(ICliConsole console, ContactRecord contact)
+    internal static void WriteListing(ICliConsole console, IReadOnlyList<ContactRecord> contacts)
     {
         ArgumentNullException.ThrowIfNull(console);
-        ArgumentNullException.ThrowIfNull(contact);
+        ArgumentNullException.ThrowIfNull(contacts);
 
-        console.WriteLine($"{contact.Id:D}  {contact.DisplayName} <{contact.PreferredAddress}>  ({contact.Origin})");
+        CliTable listing = new("Contact", "Name", "Preferred address", "Origin");
+
+        foreach (var contact in contacts)
+        {
+            listing.AddRow(
+                $"{contact.Id:D}",
+                contact.DisplayName ?? "none recorded",
+                contact.PreferredAddress ?? "none reported",
+                contact.Origin ?? "unreported");
+        }
+
+        console.Write(listing);
     }
+
+    /// <summary>Marks the address the deployment serves first, where it sits rather than as a value of its own.</summary>
+    private static string Mark(string address, ContactRecord contact) =>
+        string.Equals(address, contact.PreferredAddress, StringComparison.Ordinal)
+            ? $"{address}  (preferred)"
+            : address;
 
     /// <summary>Reports what one write to the book produced, printing the record it wrote or the reason it did not.</summary>
     /// <param name="context">What the command needs from its surroundings.</param>

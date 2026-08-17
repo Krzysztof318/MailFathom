@@ -473,8 +473,16 @@ public sealed class LoginCommandTests : IDisposable
         // Assert
         Assert.Equal(0, exitCode);
         Assert.Empty(handler.RecordedRequests);
-        Assert.Contains(this.console.Lines, line => line.StartsWith("  production", StringComparison.Ordinal));
-        Assert.Contains(this.console.Lines, line => line.StartsWith("* staging", StringComparison.Ordinal));
+        // The name is read out of the Profile column rather than out of the row, so a value that arrived under the wrong
+        // heading fails here instead of passing on a row-wide match.
+        var listing = DrawnListing.ReadFrom(this.console.Lines, "In use", "Profile", "Endpoint", "Credential");
+
+        Assert.Contains(
+            listing.Rows,
+            row => !row.StartsWith('*') && listing.Cell(row, "Profile") == "production");
+        Assert.Contains(
+            listing.Rows,
+            row => row.StartsWith('*') && listing.Cell(row, "Profile") == "staging");
     }
 
     [Fact]

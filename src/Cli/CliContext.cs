@@ -33,7 +33,7 @@ internal sealed record CliContext(
     /// <summary>Builds the context the command runs under in production.</summary>
     /// <returns>The context.</returns>
     internal static CliContext ForTerminal() => new(
-        new SystemCliConsole(),
+        SystemCliConsole.ForTerminal(),
         new CredentialStore(CredentialStore.DefaultPath(), new TokenProtector(CredentialStore.DefaultKeyPath())),
         DeploymentTransport.Open,
         redirectUri => new LoopbackRedirectAwaiter(redirectUri),

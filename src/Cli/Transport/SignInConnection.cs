@@ -133,19 +133,19 @@ internal sealed class SignInConnection : IDisposable
                 $"{this.address.GetLeftPart(UriPartial.Authority)} presented a certificate this machine does not trust ({presented.ValidationFailure}), and there is no terminal to ask on. Pass {AllowanceOption} to accept whatever certificate this deployment presents and pin it to the profile.");
         }
 
-        this.console.WriteError(string.Empty);
-        this.console.WriteError($"{this.address.GetLeftPart(UriPartial.Authority)} presented a certificate this machine does not trust:");
-        this.console.WriteError(string.Empty);
+        this.console.WriteWarning(string.Empty);
+        this.console.WriteWarning($"{this.address.GetLeftPart(UriPartial.Authority)} presented a certificate this machine does not trust:");
+        this.console.WriteWarning(string.Empty);
 
         foreach (var line in presented.Lines())
         {
-            this.console.WriteError(line);
+            this.console.WriteWarning(line);
         }
 
-        this.console.WriteError(string.Empty);
-        this.console.WriteError("Accepting it stores this fingerprint on the profile. Every later command then accepts this certificate and refuses any other,");
-        this.console.WriteError("so a deployment that renews or replaces its certificate is signed in to again rather than trusted silently.");
-        this.console.WriteError(string.Empty);
+        this.console.WriteWarning(string.Empty);
+        this.console.WriteWarning("Accepting it stores this fingerprint on the profile. Every later command then accepts this certificate and refuses any other,");
+        this.console.WriteWarning("so a deployment that renews or replaces its certificate is signed in to again rather than trusted silently.");
+        this.console.WriteWarning(string.Empty);
 
         return this.console.Confirm("Trust this certificate for this profile? [y/N]: ");
     }

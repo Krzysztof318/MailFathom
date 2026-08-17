@@ -151,7 +151,8 @@ public sealed class EmbeddingCommandTests : IDisposable
         Assert.Equal(CliExitCode.Success, exitCode);
         Assert.Contains(
             this.console.Lines,
-            line => line.Contains("Next pass: due at 2026-08-08 12:00:30Z", StringComparison.Ordinal));
+            line => line.StartsWith("Next pass:", StringComparison.Ordinal)
+                && line.Contains("due at 2026-08-08 12:00:30Z", StringComparison.Ordinal));
     }
 
     /// <summary>A deployment whose walk is turned off schedules nothing, and the line says which setting does that.</summary>

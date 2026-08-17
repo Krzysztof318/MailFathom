@@ -902,7 +902,7 @@ internal sealed class AdminApiClient
 
         if (agreement.Concern is { } warning)
         {
-            this.console.WriteError(warning);
+            this.console.WriteWarning(warning);
         }
     }
 

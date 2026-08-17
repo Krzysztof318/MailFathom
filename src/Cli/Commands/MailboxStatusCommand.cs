@@ -5,6 +5,7 @@
 using System.CommandLine;
 using MailFathom.Cli.Administration;
 using MailFathom.Cli.Administration.Mailboxes;
+using MailFathom.Cli.Output;
 
 namespace MailFathom.Cli.Commands;
 
@@ -51,17 +52,21 @@ internal static class MailboxStatusCommand
         var status = await new AdminApiClient(transport, context.Console)
             .ReadMailboxSynchronizationStatusAsync(profile.Token, cancellationToken);
 
-        context.Console.WriteLine($"{profile.Name} ({profile.Endpoint.GetLeftPart(UriPartial.Authority)})");
-        context.Console.WriteLine($"Synchronization: {DescribeSwitch(status.SynchronizationEnabled)}");
-
         var accounts = status.Accounts ?? [];
+
+        CliDetails deployment = new();
+        deployment.Add("Deployment", $"{profile.Name} ({profile.Endpoint.GetLeftPart(UriPartial.Authority)})");
+        deployment.Add("Synchronization", DescribeSwitch(status.SynchronizationEnabled));
 
         if (accounts.Count == 0)
         {
-            context.Console.WriteLine("Accounts:        none configured, so this deployment fetches no mail at all.");
+            deployment.Add("Accounts", "none configured, so this deployment fetches no mail at all.");
+            context.Console.Write(deployment);
 
             return CliExitCode.Success;
         }
+
+        context.Console.Write(deployment);
 
         foreach (var account in accounts)
         {
@@ -81,44 +86,58 @@ internal static class MailboxStatusCommand
         ? "on"
         : "off — this deployment fetches no mail, and everything below is what it stored before that.";
 
+    /// <summary>Writes one account as what it is doing, then the folders it is doing it to.</summary>
+    /// <remarks>
+    /// The account's own readings are a record and its folders are a listing, which is why the two are drawn as
+    /// different shapes: an operator reads the account's phase and backoff once, and scans the folders for the one that
+    /// has stopped.
+    /// </remarks>
     private static void WriteAccount(CliContext context, MailboxAccountSynchronization account)
     {
         context.Console.WriteLine(string.Empty);
-        context.Console.WriteLine($"{account.Account ?? "an unnamed account"}");
-        context.Console.WriteLine($"  Phase:    {account.DescribePhase()}");
-        context.Console.WriteLine($"  Backoff:  {account.DescribeBackoff()}");
-        context.Console.WriteLine($"  Last run: {account.LastRun?.Describe() ?? "none finished since this deployment started"}");
+
+        CliDetails details = new();
+        details.Add("Account", account.Account ?? "an unnamed account");
+        details.Add("Phase", account.DescribePhase());
+        details.Add("Backoff", account.DescribeBackoff());
+        details.Add("Last run", account.LastRun?.Describe() ?? "none finished since this deployment started");
 
         var folders = account.Folders ?? [];
 
         if (folders.Count == 0)
         {
-            context.Console.WriteLine("  Folders:  none mapped, so no folder of this account is synchronized.");
+            details.Add("Folders", "none mapped, so no folder of this account is synchronized.");
+            context.Console.Write(details);
 
             return;
         }
 
-        context.Console.WriteLine("  Folders:");
+        context.Console.Write(details);
+        context.Console.WriteLine(string.Empty);
+        WriteFolders(context, folders);
+    }
+
+    /// <summary>Writes the account's folders as the two readings that only mean something together.</summary>
+    /// <remarks>
+    /// The progress column says how far the folder is and when it last moved; the last-run column says what happened the
+    /// last time a run tried. A folder whose progress stopped a day ago and whose last turn succeeded has nothing left
+    /// to fetch; one whose progress stopped a day ago and whose turns keep failing is stuck, and only the pair says
+    /// which — which is why they are columns of one listing rather than two readings printed apart.
+    /// </remarks>
+    private static void WriteFolders(CliContext context, IReadOnlyList<MailboxFolderSynchronization> folders)
+    {
+        CliTable listing = new("Folder", "Progress", "Last run");
 
         foreach (var folder in folders)
         {
-            WriteFolder(context, folder);
+            var mirrored = folder.Mirrored ? string.Empty : " (not mirrored, so no run schedules it)";
+
+            listing.AddRow(
+                $"{folder.Alias ?? "an unnamed folder"}{mirrored}",
+                folder.DescribeProgress(),
+                folder.LastRun?.Describe() ?? "none since this deployment started");
         }
-    }
 
-    /// <summary>Writes one folder as the two readings that only mean something together.</summary>
-    /// <remarks>
-    /// The progress line says how far the folder is and when it last moved; the turn line says what happened the last
-    /// time a run tried. A folder whose progress stopped a day ago and whose last turn succeeded has nothing left to
-    /// fetch; one whose progress stopped a day ago and whose turns keep failing is stuck, and only the pair says which.
-    /// </remarks>
-    private static void WriteFolder(CliContext context, MailboxFolderSynchronization folder)
-    {
-        var alias = folder.Alias ?? "an unnamed folder";
-        var mirrored = folder.Mirrored ? string.Empty : " (not mirrored, so no run schedules it)";
-
-        context.Console.WriteLine($"    {alias}{mirrored}");
-        context.Console.WriteLine($"      Progress: {folder.DescribeProgress()}");
-        context.Console.WriteLine($"      Last run: {folder.LastRun?.Describe() ?? "none since this deployment started"}");
+        context.Console.Write(listing);
     }
 }

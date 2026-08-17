@@ -5,6 +5,7 @@
 using System.CommandLine;
 using MailFathom.Cli.Administration;
 using MailFathom.Cli.Administration.Rules;
+using MailFathom.Cli.Output;
 
 namespace MailFathom.Cli.Commands.Rules;
 
@@ -70,13 +71,18 @@ internal static class ListRulesCommand
 
         context.Console.WriteLine(string.Empty);
 
+        CliTable listing = new("Rule", "Applies to", "Runs on", "A match");
+
         foreach (var rule in rules)
         {
-            context.Console.WriteLine($"{rule.Name}");
-            context.Console.WriteLine($"  Applies to: {rule.DescribeScope()}");
-            context.Console.WriteLine($"  Runs on:    {rule.DescribeTriggers()}");
-            context.Console.WriteLine($"  A match:    {rule.DescribeActions()}");
+            listing.AddRow(
+                rule.Name ?? "an unnamed rule",
+                rule.DescribeScope(),
+                rule.DescribeTriggers(),
+                rule.DescribeActions());
         }
+
+        context.Console.Write(listing);
     }
 
     /// <summary>States whether the configuration on disk is the one the running set was read from.</summary>
