@@ -2,6 +2,8 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Domain.Delivery;
+
 namespace MailFathom.Application.Mail.Delivery.Composition;
 
 /// <summary>States everything an author decides about one message, and nothing this system decides for them.</summary>
@@ -46,4 +48,14 @@ public sealed record AuthoredEmail
 
     /// <summary>Gets the files the author attached, which is ordinarily none.</summary>
     public IReadOnlyList<AuthoredEmailAttachment> Attachments { get; init; } = [];
+
+    /// <summary>Gets the conversation this message answers, which is <see cref="OutgoingThreadPlacement.None" /> for a message that answers nothing.</summary>
+    /// <remarks>
+    /// It sits beside the authored fields and is not one of them. Nobody writes these identifiers: a boundary that
+    /// answers a stored email names that email, and the placement is derived from the headers the stored copy carried,
+    /// so the value that reaches here is the answered message's own identity rather than a caller's statement about it.
+    /// Composing it here is what keeps every header this system writes in one place — a second path that appended
+    /// <c>In-Reply-To</c> to a composed message would be a second answer to the question this one settles.
+    /// </remarks>
+    public OutgoingThreadPlacement Threading { get; init; } = OutgoingThreadPlacement.None;
 }

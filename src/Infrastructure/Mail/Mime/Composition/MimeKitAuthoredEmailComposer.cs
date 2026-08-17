@@ -363,6 +363,7 @@ internal sealed class MimeKitAuthoredEmailComposer(
         message.Subject = authored.Subject;
         message.Date = timeProvider.GetUtcNow();
         message.MessageId = messageId.Value;
+        PlaceInThread(message, authored.Threading);
         message.Body = BuildBody(authored);
 
         var format = FormatOptions.Default.Clone();
@@ -411,6 +412,34 @@ internal sealed class MimeKitAuthoredEmailComposer(
             [.. placements.Select(static placement => placement.Recipient)]);
 
         return AuthoredEmailComposition.Composed(new ComposedOutgoingEmail(request, messageId, composed.ToArray()));
+    }
+
+    /// <summary>Writes the two headers a receiving client threads the message by, for a message that answers another.</summary>
+    /// <remarks>
+    /// <para>
+    /// Both headers are written or neither is, because they answer one question between them and a client reading only
+    /// one of them is ordinary. A message answering nothing writes neither, which is what a mail parser reads as a
+    /// conversation's first message rather than as a message whose ancestry is unknown.
+    /// </para>
+    /// <para>
+    /// The identifiers were reduced to what a header can carry before they arrived, so nothing here repairs one. What
+    /// this adds is the delimiters: the angle brackets belong to the header rather than to the identity, and are
+    /// written by the mail library at the one place that knows the header's own syntax.
+    /// </para>
+    /// </remarks>
+    private static void PlaceInThread(MimeMessage message, OutgoingThreadPlacement threading)
+    {
+        if (!threading.IsThreaded)
+        {
+            return;
+        }
+
+        message.InReplyTo = threading.InReplyTo;
+
+        foreach (var ancestor in threading.References)
+        {
+            message.References.Add(ancestor);
+        }
     }
 
     /// <summary>Builds the body an author wrote, as the plain text alone or as an alternative of both representations.</summary>
