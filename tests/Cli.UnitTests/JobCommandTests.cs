@@ -51,6 +51,35 @@ public sealed class JobCommandTests : IDisposable
             line => line.Contains("Permanent PayloadUnreadable after 5 attempt(s)", StringComparison.Ordinal));
     }
 
+    /// <summary>Every value lands under the heading naming it, which is the whole of what the column order is worth.</summary>
+    /// <remarks>
+    /// The listing replaced a labelled block, where the label beside each value said which reading it was. A row carries
+    /// no labels, so two columns exchanged leave every value present and every row-wide assertion passing — this is the
+    /// one that would fail.
+    /// </remarks>
+    [Fact]
+    public async Task DeadLetters_AStoppedJob_SetsEveryReadingUnderItsOwnHeading()
+    {
+        // Arrange
+        using var deployment = FakeJobDeployment.Serving(
+            FakeJobDeployment.Page(FakeJobDeployment.DeadLetter(Job)));
+
+        // Act
+        await this.RunAsync(deployment, "jobs", "dead-letters", "--endpoint", Endpoint);
+
+        // Assert
+        var listing = DrawnListing.ReadFrom(
+            this.console.Lines, "Stopped", "Job", "Kind", "Failed", "Work", "Queued");
+        var row = Assert.Single(listing.Rows);
+
+        Assert.Equal("2026-08-13 09:30:00Z", listing.Cell(row, "Stopped"));
+        Assert.Equal(Job.ToString("D"), listing.Cell(row, "Job"));
+        Assert.Equal("classify-email-spam", listing.Cell(row, "Kind"));
+        Assert.Equal("Permanent PayloadUnreadable after 5 attempt(s)", listing.Cell(row, "Failed"));
+        Assert.Equal("account:work|email:1 for work", listing.Cell(row, "Work"));
+        Assert.Equal("2026-08-13 09:00:00Z", listing.Cell(row, "Queued"));
+    }
+
     /// <summary>An operator reading a stopped queue needs to be told what to do with it, in the words they would type.</summary>
     [Fact]
     public async Task DeadLetters_AStoppedJob_NamesTheTwoDecisionsAvailableForIt()

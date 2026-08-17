@@ -61,7 +61,7 @@ gh api repos/<owner>/<repo>/license --jq '.license.spdx_id + "  " + .html_url'
 
 ## Redistributed with MailFathom
 
-A framework-dependent publish of `src/Host` emits 84 assemblies, seven of which are MailFathom's own. The 77 third-party assemblies below are what a binary, container, or source release has to carry notices for. `src/Cli` is published beside it as the `mfctl` administration command and shares that graph apart from two packages of its own, recorded in the last two rows. Versions are the ones the host's own graph resolves, which is not always the version pinned in `Directory.Packages.props`: nearest-wins resolution can raise a pin that is only a floor.
+A framework-dependent publish of `src/Host` emits 84 assemblies, seven of which are MailFathom's own. The 77 third-party assemblies below are what a binary, container, or source release has to carry notices for. `src/Cli` is published beside it as the `mfctl` administration command and shares that graph apart from three packages of its own, recorded in the last three rows. Versions are the ones the host's own graph resolves, which is not always the version pinned in `Directory.Packages.props`: nearest-wins resolution can raise a pin that is only a floor.
 
 | Component and exact version | Use in this repository | License terms verified | Compatibility decision and obligations | Sources reviewed |
 |---|---|---|---|---|

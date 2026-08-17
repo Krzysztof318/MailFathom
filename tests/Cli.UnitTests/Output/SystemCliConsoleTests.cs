@@ -109,15 +109,60 @@ public sealed class SystemCliConsoleTests
         Assert.Contains(EscapeSequence, error.ToString(), StringComparison.Ordinal);
     }
 
+    /// <summary>Proves a question is asked where the answer is typed rather than in what a redirected run captures.</summary>
+    /// <remarks>
+    /// The destination is the whole point of the question going through this class at all: a prompt written to standard
+    /// output would land in the file an operator piped the result into, and they would then be waiting on a question
+    /// they never saw. It carries no newline, because the answer is typed on the same line.
+    /// </remarks>
+    [Fact]
+    public void Confirm_AQuestion_AsksOnStandardErrorAndReadsTheAnswerFromTheGivenStream()
+    {
+        // Arrange
+        StringWriter output = new();
+        StringWriter error = new();
+        var console = Console(output, error, answer: "y");
+
+        // Act
+        var answered = console.Confirm("Sign in over an unprotected connection anyway? [y/N]: ");
+
+        // Assert
+        Assert.True(answered);
+        Assert.Empty(output.ToString());
+        Assert.Equal("Sign in over an unprotected connection anyway? [y/N]: ", error.ToString());
+    }
+
+    /// <summary>Proves the default is no, which is what makes an unread or interrupted answer safe.</summary>
+    [Fact]
+    public void Confirm_NoAnswer_DeclinesAndStillAsks()
+    {
+        // Arrange
+        StringWriter output = new();
+        StringWriter error = new();
+        var console = Console(output, error);
+
+        // Act
+        var answered = console.Confirm("Erase every stored copy? [y/N]: ");
+
+        // Assert
+        Assert.False(answered);
+        Assert.Equal("Erase every stored copy? [y/N]: ", error.ToString());
+    }
+
     /// <summary>What a marked line opens with, and the whole of what a stream permitting no colour must never carry.</summary>
     private const string EscapeSequence = "\u001b";
 
-    private static SystemCliConsole Console(StringWriter output, StringWriter error, bool colouredError = false) =>
+    private static SystemCliConsole Console(
+        StringWriter output,
+        StringWriter error,
+        bool colouredError = false,
+        string answer = "") =>
         new(
             output,
             new CliTerminal(PermitsColour: false),
             error,
-            new CliTerminal(colouredError));
+            new CliTerminal(colouredError),
+            new StringReader(answer));
 
     private static IReadOnlyList<string> Lines(StringWriter writer) =>
         [.. writer.ToString().Split('\n').SkipLast(1).Select(line => line.TrimEnd('\r'))];

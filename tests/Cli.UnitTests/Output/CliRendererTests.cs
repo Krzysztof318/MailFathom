@@ -203,6 +203,58 @@ public sealed class CliRendererTests
         Assert.Equal(["Rule", "[red]archive[/]"], Lines(writer));
     }
 
+    /// <summary>Proves a column heading is marked and the values under it are not.</summary>
+    /// <remarks>
+    /// The heading is the third of the four things colour marks, and it is the one an assertion is easiest to leave out
+    /// of: every other listing test reads a redirected stream, where the mark is withheld by design. What makes the mark
+    /// worth having is exactly the contrast asserted here — the heading names the column and the values fill it.
+    /// </remarks>
+    [Fact]
+    public void Write_ListingOnAStreamThatPermitsColour_MarksTheHeadingsAndNotTheValues()
+    {
+        // Arrange
+        StringWriter writer = new();
+        CliRenderer renderer = new(writer, Coloured);
+        CliTable listing = new("Profile", "Endpoint");
+        listing.AddRow("production", "https://deployment.example.test");
+
+        // Act
+        renderer.Write(listing);
+
+        // Assert
+        var drawn = Lines(writer);
+        Assert.Contains(EscapeSequence, drawn[0], StringComparison.Ordinal);
+        Assert.Contains("Profile", drawn[0], StringComparison.Ordinal);
+        Assert.DoesNotContain(EscapeSequence, drawn[1], StringComparison.Ordinal);
+        Assert.Contains("production", drawn[1], StringComparison.Ordinal);
+    }
+
+    /// <summary>Proves the same of a record's label, which is the fourth thing colour marks.</summary>
+    [Fact]
+    public void Write_RecordOnAStreamThatPermitsColour_MarksTheLabelAndNotTheValue()
+    {
+        // Arrange
+        StringWriter writer = new();
+        CliRenderer renderer = new(writer, Coloured);
+        CliDetails details = new();
+        details.Add("Contact", "a-contact");
+
+        // Act
+        renderer.Write(details);
+
+        // Assert
+        var drawn = Assert.Single(Lines(writer));
+        Assert.Contains(EscapeSequence, drawn, StringComparison.Ordinal);
+        Assert.Contains("Contact:", drawn, StringComparison.Ordinal);
+
+        // The value sits after the last escape sequence, so nothing marked it.
+        Assert.EndsWith("a-contact", drawn, StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            EscapeSequence,
+            drawn[drawn.LastIndexOf("a-contact", StringComparison.Ordinal)..],
+            StringComparison.Ordinal);
+    }
+
     /// <summary>Proves a value too long for any terminal reaches the operator whole rather than folded.</summary>
     /// <remarks>
     /// A refresh token and an authorization URL are both written as ordinary lines, and both can be longer than a

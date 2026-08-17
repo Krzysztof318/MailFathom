@@ -82,29 +82,36 @@ internal sealed class SystemCliConsole : ICliConsole
     private readonly CliRenderer output;
     private readonly CliRenderer diagnostics;
     private readonly TextWriter questions;
+    private readonly TextReader answers;
 
     /// <summary>Initializes a new instance of the <see cref="SystemCliConsole" /> class.</summary>
     /// <param name="output">Where a command's result is written.</param>
     /// <param name="outputTerminal">What that stream accepts.</param>
     /// <param name="error">Where guidance, cautions, failures, and questions are written.</param>
     /// <param name="errorTerminal">What that stream accepts.</param>
+    /// <param name="answers">Where an answer to a question, and a piped credential, are read from.</param>
     /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
     /// <remarks>
     /// The streams are given rather than taken from the process, which is what lets a test read back the bytes an
     /// operator would have seen — above all whether an escape sequence was written at all, which is the whole of the
-    /// promise made to a redirected run and is unprovable against the process's own console.
+    /// promise made to a redirected run and is unprovable against the process's own console. The answer stream is given
+    /// for the same reason and for one more: a test that redirected the process's own input would be writing to state
+    /// every other test in the run shares.
     /// </remarks>
     internal SystemCliConsole(
         TextWriter output,
         CliTerminal outputTerminal,
         TextWriter error,
-        CliTerminal errorTerminal)
+        CliTerminal errorTerminal,
+        TextReader answers)
     {
         ArgumentNullException.ThrowIfNull(error);
+        ArgumentNullException.ThrowIfNull(answers);
 
         this.output = new CliRenderer(output, outputTerminal);
         this.diagnostics = new CliRenderer(error, errorTerminal);
         this.questions = error;
+        this.answers = answers;
     }
 
     /// <summary>Builds the terminal the command runs against in production.</summary>
@@ -113,7 +120,8 @@ internal sealed class SystemCliConsole : ICliConsole
         Console.Out,
         CliTerminal.ForStandardOutput(),
         Console.Error,
-        CliTerminal.ForStandardError());
+        CliTerminal.ForStandardError(),
+        Console.In);
 
     /// <inheritdoc />
     public void WriteLine(string message) => this.output.WriteLine(message, CliEmphasis.None);
@@ -146,7 +154,7 @@ internal sealed class SystemCliConsole : ICliConsole
     {
         this.questions.Write(question);
 
-        var answer = Console.In.ReadLine()?.Trim() ?? string.Empty;
+        var answer = this.answers.ReadLine()?.Trim() ?? string.Empty;
 
         return answer.Equals("y", StringComparison.OrdinalIgnoreCase)
             || answer.Equals("yes", StringComparison.OrdinalIgnoreCase);
@@ -167,7 +175,7 @@ internal sealed class SystemCliConsole : ICliConsole
     {
         if (Console.IsInputRedirected)
         {
-            return Console.In.ReadLine()?.Trim() ?? string.Empty;
+            return this.answers.ReadLine()?.Trim() ?? string.Empty;
         }
 
         this.questions.Write(prompt);

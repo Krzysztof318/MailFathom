@@ -32,6 +32,13 @@ public sealed class ContactCommandTests : IDisposable
 
     private static readonly string Identity = FakeContactDeployment.ContactIdentity.ToString("D");
 
+    /// <summary>One page of the book holding a contact the deployment reports nothing optional about.</summary>
+    /// <remarks>Written here rather than through the fixture, whose builder supplies a name, an address, and an origin for every contact it makes.</remarks>
+    private const string SparseContactPage =
+        """
+        {"contacts":[{"id":"3f2504e0-4f89-11d3-9a0c-0305e82c3301","displayName":null,"addresses":[],"preferredAddress":null,"note":null,"origin":null,"recordedAt":"2026-08-01T10:00:00+00:00","amendedAt":"2026-08-02T11:00:00+00:00"}],"nextCursor":null}
+        """;
+
     private readonly string storeDirectory =
         Path.Combine(Path.GetTempPath(), $"mailfathom-contact-tests-{Guid.NewGuid():N}");
 
@@ -191,6 +198,67 @@ public sealed class ContactCommandTests : IDisposable
         Assert.All(
             this.console.Errors,
             line => Assert.DoesNotContain("nobody@example.test", line, StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>Every value lands under the heading naming it, which is the whole of what the column order is worth.</summary>
+    /// <remarks>
+    /// The listing replaced a line per contact whose fields were separated by punctuation, so nothing but position now
+    /// says which reading a cell is. Two contacts rather than one, because a single row cannot show that the order is
+    /// the same for every record.
+    /// </remarks>
+    [Fact]
+    public async Task List_APageOfTheBook_SetsEveryContactUnderItsOwnHeading()
+    {
+        // Arrange
+        using var deployment = FakeContactDeployment.Holding(
+            page: FakeContactDeployment.Page(nextCursor: null, "Anna Kowalska", "Jan Nowak"));
+
+        // Act
+        var exitCode = await this.RunAsync(deployment, "contact", "list", "--endpoint", Endpoint);
+
+        // Assert
+        Assert.Equal(CliExitCode.Success, exitCode);
+
+        var listing = DrawnListing.ReadFrom(
+            this.console.Lines, "Contact", "Name", "Preferred address", "Origin");
+
+        Assert.Equal(2, listing.Rows.Count);
+        Assert.Equal(
+            ["Anna Kowalska", "Jan Nowak"],
+            listing.Rows.Select(row => listing.Cell(row, "Name")));
+        Assert.Equal(
+            ["person0@example.test", "person1@example.test"],
+            listing.Rows.Select(row => listing.Cell(row, "Preferred address")));
+        Assert.All(listing.Rows, row => Assert.Equal("Asserted", listing.Cell(row, "Origin")));
+        Assert.All(
+            listing.Rows,
+            row => Assert.True(Guid.TryParse(listing.Cell(row, "Contact"), out _)));
+    }
+
+    /// <summary>What an absent value reads as, which is a sentence rather than a cell the operator has to interpret.</summary>
+    /// <remarks>
+    /// A listing draws every cell whether the deployment reported one or not, so a contact with no name would otherwise
+    /// leave a gap that reads as a column having shifted rather than as a name nobody recorded.
+    /// </remarks>
+    [Fact]
+    public async Task List_AContactTheDeploymentReportsLittleAbout_NamesWhatIsMissingInEveryCell()
+    {
+        // Arrange
+        using var deployment = FakeContactDeployment.Holding(page: SparseContactPage);
+
+        // Act
+        var exitCode = await this.RunAsync(deployment, "contact", "list", "--endpoint", Endpoint);
+
+        // Assert
+        Assert.Equal(CliExitCode.Success, exitCode);
+
+        var listing = DrawnListing.ReadFrom(
+            this.console.Lines, "Contact", "Name", "Preferred address", "Origin");
+        var row = Assert.Single(listing.Rows);
+
+        Assert.Equal("none recorded", listing.Cell(row, "Name"));
+        Assert.Equal("none reported", listing.Cell(row, "Preferred address"));
+        Assert.Equal("unreported", listing.Cell(row, "Origin"));
     }
 
     /// <summary>The narrowing and the page bound reach the deployment as the query it reads them from.</summary>

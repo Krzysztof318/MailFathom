@@ -475,17 +475,14 @@ public sealed class LoginCommandTests : IDisposable
         Assert.Empty(handler.RecordedRequests);
         // The name is read out of the Profile column rather than out of the row, so a value that arrived under the wrong
         // heading fails here instead of passing on a row-wide match.
-        var headings = Assert.Single(
-            this.console.Lines,
-            line => line.StartsWith("In use", StringComparison.Ordinal));
-        var profileColumn = headings.IndexOf("Profile", StringComparison.Ordinal);
+        var listing = DrawnListing.ReadFrom(this.console.Lines, "In use", "Profile", "Endpoint", "Credential");
 
         Assert.Contains(
-            this.console.Lines,
-            row => !row.StartsWith('*') && NamesProfile(row, profileColumn, "production"));
+            listing.Rows,
+            row => !row.StartsWith('*') && listing.Cell(row, "Profile") == "production");
         Assert.Contains(
-            this.console.Lines,
-            row => row.StartsWith('*') && NamesProfile(row, profileColumn, "staging"));
+            listing.Rows,
+            row => row.StartsWith('*') && listing.Cell(row, "Profile") == "staging");
     }
 
     [Fact]
@@ -504,14 +501,6 @@ public sealed class LoginCommandTests : IDisposable
 
     private static Task<int> RunAsync(CliContext context, params string[] args) =>
         CliRunner.RunAsync(context, args);
-
-    /// <summary>Reads whether one row of a listing carries the given value in the column starting at the given position.</summary>
-    /// <remarks>
-    /// The position comes from the heading row, so this asserts the cell rather than the row: a name that arrived under
-    /// a different heading, or a name duplicated into an unrelated cell, is a regression and this is what sees it.
-    /// </remarks>
-    private static bool NamesProfile(string row, int profileColumn, string profile) =>
-        row.Length > profileColumn && row[profileColumn..].StartsWith(profile, StringComparison.Ordinal);
 
     private CredentialStore CreateStore() => new(
         Path.Combine(this.storeDirectory, "credentials.json"),
