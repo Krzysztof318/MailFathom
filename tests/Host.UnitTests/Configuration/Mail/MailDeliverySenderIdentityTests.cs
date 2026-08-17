@@ -1,0 +1,173 @@
+// Copyright © 2026 Krzysztof Kasprowicz
+// Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
+// Project repository: https://github.com/Krzysztof318/MailFathom
+
+using System.ComponentModel.DataAnnotations;
+using MailFathom.Domain.Accounts;
+using MailFathom.Domain.Transport;
+using MailFathom.Host.Configuration.Mail;
+using MailFathom.Infrastructure.Mail;
+using MailFathom.Infrastructure.Secrets.Discovery;
+using Xunit;
+
+namespace MailFathom.Host.UnitTests.Configuration.Mail;
+
+/// <summary>
+/// Covers who an account's outgoing mail is written from: that it is configuration rather than anything a request can
+/// reach, that a login which is already an address needs nothing said twice, and that an endpoint naming no sender at
+/// all is refused at startup rather than at the first send.
+/// </summary>
+public sealed class MailDeliverySenderIdentityTests
+{
+    private static readonly MailAccountId Primary = MailAccountId.Create("primary");
+
+    /// <summary>A provider that authenticates the mailbox by its address states the sending address once, as the login.</summary>
+    [Fact]
+    public void FindSenderIdentity_AccountWhoseUserNameIsItsAddress_SendsAsThatAddress()
+    {
+        // Arrange
+        var account = CreateAccount();
+        account.Delivery = CreateDelivery();
+        var options = CreateOptions(account);
+
+        // Act
+        var identity = options.FindSenderIdentity(Primary);
+
+        // Assert
+        Assert.Equal("mailfathom@example.test", identity?.Address.Address);
+        Assert.Equal("example.test", identity?.Domain);
+        Assert.Null(identity?.Address.DisplayName);
+    }
+
+    /// <summary>A mailbox that sends under an address it is not reached at states that address, and its name beside it.</summary>
+    [Fact]
+    public void FindSenderIdentity_EndpointNamingItsOwnSender_SendsAsThatAddressAndName()
+    {
+        // Arrange
+        var account = CreateAccount();
+        account.UserName = "relay-login";
+        account.Delivery = CreateDelivery();
+        account.Delivery.FromAddress = " office@example.test ";
+        account.Delivery.FromDisplayName = "The office";
+        var options = CreateOptions(account);
+
+        // Act
+        var identity = options.FindSenderIdentity(Primary);
+
+        // Assert
+        Assert.Equal("office@example.test", identity?.Address.Address);
+        Assert.Equal("The office", identity?.Address.DisplayName);
+    }
+
+    /// <summary>An account that configures no submission endpoint sends nothing, so there is no identity to read.</summary>
+    [Fact]
+    public void FindSenderIdentity_AccountConfiguringNoSubmissionEndpoint_ReadsNothing()
+    {
+        // Arrange
+        var options = CreateOptions(CreateAccount());
+
+        // Act and assert
+        Assert.Null(options.FindSenderIdentity(Primary));
+    }
+
+    /// <summary>An account a reload removed answers with nothing, as every per-account reader here does.</summary>
+    [Fact]
+    public void FindSenderIdentity_AccountThisDeploymentNoLongerConfigures_ReadsNothing()
+    {
+        // Arrange
+        var account = CreateAccount();
+        account.Delivery = CreateDelivery();
+        var options = CreateOptions(account);
+
+        // Act and assert
+        Assert.Null(options.FindSenderIdentity(MailAccountId.Create("secondary")));
+    }
+
+    /// <summary>
+    /// A submission endpoint whose account logs in with a bare name and which states no sending address would compose
+    /// nothing, so it is refused where an operator reads it rather than at the first send.
+    /// </summary>
+    [Fact]
+    public void Validate_SubmissionEndpointNamingNoSendingAddress_IsRefused()
+    {
+        // Arrange
+        var account = CreateAccount();
+        account.UserName = "relay-login";
+        account.Delivery = CreateDelivery();
+        var options = CreateOptions(account);
+
+        // Act
+        var results = Validate(options);
+
+        // Assert
+        var result = Assert.Single(results);
+        Assert.Contains("no address to send from", result.ErrorMessage, StringComparison.Ordinal);
+        Assert.Contains(
+            $"{nameof(MailSynchronizationAccountOptions.Delivery)}.{nameof(MailAccountDeliveryOptions.FromAddress)}",
+            result.MemberNames);
+    }
+
+    /// <summary>The same account with a sending address stated is accepted.</summary>
+    [Fact]
+    public void Validate_SubmissionEndpointStatingItsSendingAddress_ReportsNoError()
+    {
+        // Arrange
+        var account = CreateAccount();
+        account.UserName = "relay-login";
+        account.Delivery = CreateDelivery();
+        account.Delivery.FromAddress = "office@example.test";
+        var options = CreateOptions(account);
+
+        // Act
+        var results = Validate(options);
+
+        // Assert
+        Assert.Empty(results);
+    }
+
+    /// <summary>A sending address that names no mailbox is refused rather than written into a <c>From</c> header.</summary>
+    [Fact]
+    public void Validate_SendingAddressNamingNoMailbox_IsRefused()
+    {
+        // Arrange
+        var account = CreateAccount();
+        account.Delivery = CreateDelivery();
+        account.Delivery.FromAddress = "not-a-mailbox";
+        var options = CreateOptions(account);
+
+        // Act
+        var results = Validate(options);
+
+        // Assert
+        Assert.Single(results);
+        Assert.Null(options.FindSenderIdentity(Primary));
+    }
+
+    private static IReadOnlyList<ValidationResult> Validate(MailSynchronizationOptions options) =>
+        [.. options.Validate(new ValidationContext(options))];
+
+    private static MailSynchronizationOptions CreateOptions(MailSynchronizationAccountOptions account) => new()
+    {
+        Enabled = true,
+        Accounts = [account],
+    };
+
+    private static MailSynchronizationAccountOptions CreateAccount() => new()
+    {
+        AccountId = "primary",
+        DisplayName = "The primary mailbox",
+        Host = "imap.example.test",
+        UserName = "mailfathom@example.test",
+        Secrets = new MailAccountSecretOptions
+        {
+            Password = new ConfiguredSecret { SecretReference = "systemd-credential:imap-primary-password" },
+        },
+    };
+
+    private static MailAccountDeliveryOptions CreateDelivery() => new()
+    {
+        Host = "smtp.example.test",
+        Port = 587,
+        ConnectionSecurity = MailConnectionSecurity.StartTlsRequired,
+    };
+}

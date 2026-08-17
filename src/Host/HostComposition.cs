@@ -20,6 +20,7 @@ using MailFathom.Application.Folders;
 using MailFathom.Application.Jobs.Execution;
 using MailFathom.Application.Jobs.Scheduling;
 using MailFathom.Application.Mail;
+using MailFathom.Application.Mail.Delivery.Composition;
 using MailFathom.Application.Mail.Mutations;
 using MailFathom.Application.Mail.Mutations.Audit;
 using MailFathom.Application.Mail.Mutations.Convergence;
@@ -194,6 +195,12 @@ internal static class HostComposition
         builder.Services.AddOptions<EmailContentOptions>()
             .Bind(
                 builder.Configuration.GetSection("EmailContent"),
+                binderOptions => binderOptions.ErrorOnUnknownConfiguration = true)
+            .ValidateDataAnnotations()
+            .ValidateOnStart();
+        builder.Services.AddOptions<MailDeliveryOptions>()
+            .Bind(
+                builder.Configuration.GetSection(MailDeliveryOptions.SectionName),
                 binderOptions => binderOptions.ErrorOnUnknownConfiguration = true)
             .ValidateDataAnnotations()
             .ValidateOnStart();
@@ -511,6 +518,7 @@ internal static class HostComposition
         builder.Services.AddScoped<IMailAccountCatalog>(provider => provider.GetRequiredService<MailSynchronizationOptions>());
         builder.Services.AddScoped<ITrustedAuthenticationAuthorityReader>(provider => provider.GetRequiredService<MailSynchronizationOptions>());
         builder.Services.AddScoped<ISenderTrustPolicyReader>(provider => provider.GetRequiredService<MailSynchronizationOptions>());
+        builder.Services.AddScoped<IOutgoingSenderIdentityReader>(provider => provider.GetRequiredService<MailSynchronizationOptions>());
         builder.Services.AddScoped<IMailFolderParticipationReader>(provider => provider.GetRequiredService<MailSynchronizationOptions>());
         builder.Services.AddScoped<IJunkMailFolderCatalog>(provider => provider.GetRequiredService<MailSynchronizationOptions>());
         builder.Services.AddScoped<IMailFolderMappingReader>(provider => provider.GetRequiredService<MailSynchronizationOptions>());
@@ -578,6 +586,18 @@ internal static class HostComposition
                 MaxPartCount = synchronizationSettings.MaxMimePartCount,
                 MaxNestingDepth = synchronizationSettings.MaxMimeNestingDepth,
                 MaxExtractedTextCharacters = synchronizationSettings.MaxExtractedTextCharacters,
+            };
+        });
+        builder.Services.AddScoped(provider =>
+        {
+            var deliverySettings = provider.GetRequiredService<IOptions<MailDeliveryOptions>>().Value;
+            return new OutgoingEmailBounds
+            {
+                MaxRecipientCount = deliverySettings.MaxRecipientCount,
+                MaxBodyCharacters = deliverySettings.MaxBodyCharacters,
+                MaxAttachmentCount = deliverySettings.MaxAttachmentCount,
+                MaxAttachmentBytes = deliverySettings.MaxAttachmentBytes,
+                MaxMessageBytes = deliverySettings.MaxMessageBytes,
             };
         });
         builder.Services.AddScoped(provider =>

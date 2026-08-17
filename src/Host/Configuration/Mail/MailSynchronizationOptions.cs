@@ -8,6 +8,7 @@ using System.Security.Cryptography.X509Certificates;
 using MailFathom.Application.Accounts;
 using MailFathom.Application.Folders;
 using MailFathom.Application.Mail;
+using MailFathom.Application.Mail.Delivery.Composition;
 using MailFathom.Application.Mail.Mutations;
 using MailFathom.Application.Mail.Mutations.Audit;
 using MailFathom.Application.Retrieval.AskMail.Audit;
@@ -42,6 +43,7 @@ internal sealed class MailSynchronizationOptions
         IMailAccountCatalog,
         ITrustedAuthenticationAuthorityReader,
         ISenderTrustPolicyReader,
+        IOutgoingSenderIdentityReader,
         IMailFolderParticipationReader,
         IJunkMailFolderCatalog,
         IMailFolderMappingReader
@@ -473,6 +475,21 @@ internal sealed class MailSynchronizationOptions
         var account = this.FindAccount(accountId.Value);
 
         return account.Delivery.IsConfigured ? account.CreateDeliveryTransportSecurityPolicy() : null;
+    }
+
+    /// <inheritdoc />
+    public OutgoingSenderIdentity? FindSenderIdentity(MailAccountId accountId)
+    {
+        var account = this.FindConfiguredAccount(accountId);
+
+        if (account?.Delivery is not { IsConfigured: true } delivery)
+        {
+            return null;
+        }
+
+        return EmailAddress.TryCreate(delivery.FromDisplayName, delivery.ResolveFromAddress(account.UserName), out var address)
+            ? OutgoingSenderIdentity.Create(accountId, address)
+            : null;
     }
 
     /// <inheritdoc />
@@ -1487,6 +1504,19 @@ internal sealed class MailSynchronizationAccountOptions : IValidatableObject
         foreach (var result in this.ValidateDeliveryTransportSecurity())
         {
             yield return result;
+        }
+
+        // Refused at startup rather than at the first send, because an endpoint configured without a sending identity
+        // is an endpoint that will compose nothing — and an operator reads a submission block that binds and validates
+        // as one that works.
+        if (!EmailAddress.TryCreate(
+            this.Delivery.FromDisplayName,
+            this.Delivery.ResolveFromAddress(this.UserName),
+            out _))
+        {
+            yield return new ValidationResult(
+                $"Account '{this.AccountId}': the submission endpoint names no address to send from, so set Delivery.FromAddress or give the account a user name that is a mailbox address.",
+                [$"{nameof(this.Delivery)}.{nameof(MailAccountDeliveryOptions.FromAddress)}"]);
         }
 
         if (!synchronizationEnabled)
