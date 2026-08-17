@@ -321,6 +321,53 @@ public sealed class BackgroundWorkSpanTests : IDisposable
         Assert.Equal(ActivityStatusCode.Ok, span.Status);
     }
 
+    /// <summary>A turn the worker abandoned says so, rather than being published as an ordinary ending.</summary>
+    /// <remarks>
+    /// The worker isolates a cancellation on shutdown, a concurrency conflict its retries could not resolve, and an
+    /// unexpected failure so the messages behind this one are still embedded, and none of those reaches an outcome the
+    /// telemetry could name. What separates them from a turn that finished is the status alone.
+    /// </remarks>
+    [Fact]
+    public void BeginMessage_ATurnThatNeverReportedAResult_PublishesAnErrorAndNoOutcome()
+    {
+        // Arrange
+        var telemetry = new EmailEmbeddingTelemetry();
+
+        // Act
+        using (telemetry.BeginMessage())
+        {
+            // Disposed without a result, which is what each of the worker's three catch paths produces.
+        }
+
+        // Assert
+        var span = this.Abandoned(EmailEmbeddingTelemetry.MessageSpanName, EmailEmbeddingTelemetry.OutcomeTagName);
+
+        Assert.Null(span.GetTagItem(EmailEmbeddingTelemetry.PassageCountTagName));
+        Assert.Equal(ActivityStatusCode.Error, span.Status);
+    }
+
+    /// <summary>A pass the worker abandoned says so, on the same terms as a turn.</summary>
+    [Fact]
+    public void BeginPass_APassThatNeverReportedAResult_PublishesAnErrorAndNoOutcome()
+    {
+        // Arrange
+        var telemetry = new EmailEmbeddingBackfillTelemetry();
+
+        // Act
+        using (telemetry.BeginPass())
+        {
+            // Disposed without a result, which is what each of the worker's three catch paths produces.
+        }
+
+        // Assert
+        var span = this.Abandoned(
+            EmailEmbeddingBackfillTelemetry.PassSpanName,
+            EmailEmbeddingBackfillTelemetry.OutcomeTagName);
+
+        Assert.Null(span.GetTagItem(EmailEmbeddingBackfillTelemetry.PassageCountTagName));
+        Assert.Equal(ActivityStatusCode.Error, span.Status);
+    }
+
     /// <summary>None of the three spans is named after anything a mailbox holds, whatever the work touched.</summary>
     /// <remarks>
     /// The names are asserted rather than only the tags, because a span name is where a subsystem would most plausibly
@@ -372,4 +419,14 @@ public sealed class BackgroundWorkSpanTests : IDisposable
         this.published,
         activity => StringComparer.Ordinal.Equals(activity.OperationName, spanName)
             && Equals(activity.GetTagItem(tagName), expected));
+
+    /// <summary>Selects the one span of its name that reported no outcome, which is what an abandoned unit of work leaves.</summary>
+    /// <remarks>
+    /// An abandoned span carries no tag to select it by, so the absence of the outcome is what identifies it — and one
+    /// test per span name reaches this, which is what keeps the selection single.
+    /// </remarks>
+    private Activity Abandoned(string spanName, string outcomeTagName) => Assert.Single(
+        this.published,
+        activity => StringComparer.Ordinal.Equals(activity.OperationName, spanName)
+            && activity.GetTagItem(outcomeTagName) is null);
 }
