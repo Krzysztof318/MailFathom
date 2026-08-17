@@ -91,7 +91,9 @@ the caller's own query text with the embedding provider. What withholding `mailf
 going to a *chat* provider on a caller's behalf. Which grant a credential holds is written on the entry that admits it,
 and [the MCP endpoint](../operations/mcp-endpoint.md#what-a-credential-may-do) is where that is configured; a deployment
 whose entries write no grant serves both permissions to every caller, which is what makes this invisible until an
-operator narrows something.
+operator narrows something. An entry that writes no grant but sets `PermissionsFromTokenScopes` is the one exception:
+its whole surface is a ceiling rather than a grant, and each token holds only the permission names its own scopes carry
+— so a token whose client never received either is served an empty listing on an entry nobody narrowed.
 
 The protocol has no field on a tool descriptor for a required permission, and it expressly allows the returned tool set
 to vary by the authorization presented on the request — so the listing is where the decision is stated, and no extension

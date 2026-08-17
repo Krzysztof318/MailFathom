@@ -33,8 +33,10 @@ namespace MailFathom.Mcp.UnitTests.TestDoubles;
 /// <summary>Composes the MailFathom protocol surface and hands back what it advertises.</summary>
 /// <remarks>
 /// The composition is shared by every descriptor test, because the descriptors are produced by the registration rather
-/// than by any one tool: a test that built its own container would assert against a surface no host composes. The
-/// application ports are stubbed only so the container can be built; nothing here calls a tool.
+/// than by any one tool: a test that built its own container would assert against a surface no host composes. The same
+/// composition also serves a listing and a call for a stated caller, through <see cref="ComposedForCallerGranted" />,
+/// so what a test drives through the filters the registration wrote is the pipeline a host has rather than one the test
+/// assembled. The application ports are stubbed so that container can be built and so a call reaching one answers.
 /// </remarks>
 internal static class RegisteredMcpToolSurface
 {

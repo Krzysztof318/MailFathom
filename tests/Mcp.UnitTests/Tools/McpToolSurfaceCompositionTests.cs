@@ -111,6 +111,13 @@ public sealed class McpToolSurfaceCompositionTests
                 && Equals(errorCode, (int)McpErrorCode.InvalidParams));
     }
 
+    /// <summary>A call the grant permits passes both filters and reaches the tool the registration composed behind them.</summary>
+    /// <remarks>
+    /// Named under <c>list_accounts</c> because a call that completes is recorded on the process-wide meter, and the
+    /// telemetry tests are a separate collection running alongside this one: a name whose measurements one of them
+    /// counts exactly would fail there on a change made here. <c>search_emails</c> and <c>ask_mail</c> are both counted;
+    /// this one is not.
+    /// </remarks>
     [Fact]
     public async Task AddMailFathomServer_ACallTheGrantPermits_ReachesTheTool()
     {
@@ -119,7 +126,7 @@ public sealed class McpToolSurfaceCompositionTests
         var served = new CallToolResult { Content = [new TextContentBlock { Text = "served" }] };
 
         // Act
-        var result = await CalledAsync(provider, SearchEmailsTool.ToolName, served);
+        var result = await CalledAsync(provider, ListAccountsTool.ToolName, served);
 
         // Assert
         Assert.Same(served, result);
