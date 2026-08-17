@@ -136,12 +136,14 @@ entry that narrows by token scopes publishes its whole ceiling in `scopes_suppor
 configuration publishes none of its permissions, because no client can ask for one. Skip this whole paragraph if you
 write the grant in configuration instead, which is the only form available where your server cannot mint custom scopes.
 
-**A `mailfathom.mail.*` scope is in force the moment the token carries it**, so a client that never receives one is
-listed only the tools its remaining scopes permit and is answered about the rest as though they did not exist. A
-`mailfathom.admin.*` scope is not: the administrative surface reads, validates, carries and reports the grant and no
-route there consults it, so such a scope states what a credential is *meant* to reach rather than what it currently
-reaches. Create those anyway — an entry that narrows by them publishes them in `scopes_supported`, and a client that
-never receives one holds nothing under it the moment enforcement arrives.
+**A `mailfathom.mail.*` scope is in force on an entry that sets `PermissionsFromTokenScopes`, and narrows nothing on
+one that does not.** Where the entry opted in, a client that never received the scope is listed only the tools its
+remaining scopes permit and is answered about the rest as though they did not exist; where it did not, every token the
+entry admits holds the entry's whole grant whatever scopes it carries, because the deployment wrote that grant and the
+authorization server was never asked. A `mailfathom.admin.*` scope is in force nowhere yet: the administrative surface
+reads, validates, carries and reports the grant and no route there consults it, so such a scope states what a credential
+is *meant* to reach rather than what it currently reaches. Create those anyway — an entry that narrows by them publishes
+them in `scopes_supported`, and a client that never receives one holds nothing under it the moment enforcement arrives.
 
 **Decide here whether clients should hold a refresh token.** A client asks for one by naming `offline_access`, and it
 learns to ask by reading that scope in MailFathom's metadata document — so if you do not advertise it, a client asks

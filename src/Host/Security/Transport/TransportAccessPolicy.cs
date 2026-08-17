@@ -12,10 +12,11 @@ namespace MailFathom.Host.Security.Transport;
 /// <summary>What an authenticated caller must satisfy before a protected surface serves it.</summary>
 /// <remarks>
 /// <para>
-/// What a surface exposes is decided by its configuration and not by who is asking, so every caller one of these
-/// policies admits reaches the same thing. That is what makes the two questions below the whole of the boundary: a token
-/// proves which person an authorization server signed in, and this decides whether that person is one this deployment
-/// serves at all.
+/// Whether a surface is served at all is decided by its configuration and not by who is asking, so admission is the
+/// same judgement for every caller one of these policies lets through. That is what makes the two questions below the
+/// whole of the boundary: a token proves which person an authorization server signed in, and this decides whether that
+/// person is one this deployment serves at all. What an admitted caller then reaches does vary — the paragraph below on
+/// the grant says how — and it is decided past this point rather than here.
 /// </para>
 /// <para>
 /// The rule is the same for every surface, and it is the registration that differs: each surface names its own policy

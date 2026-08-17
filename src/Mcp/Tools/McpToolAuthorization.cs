@@ -33,8 +33,8 @@ namespace MailFathom.Mcp.Tools;
 /// <para>
 /// It composes with the availability rule <see cref="AskMailAdvertisement" /> applies rather than replacing it. A tool
 /// may be unavailable, unauthorized, or both; the deployment's own switch stays the authority over whether a capability
-/// exists at all, since nothing here can add a descriptor back to a listing. Removing what a caller may not reach before
-/// that switch is consulted is what keeps a caller which may not ask questions from causing the capability to be read.
+/// exists at all, since nothing here can add a descriptor back to a listing. That switch is consulted first, and this
+/// filter narrows what it left, which is the order ADR 0012 records.
 /// </para>
 /// <para>
 /// Nothing caches a listing. The set varies by caller, so a shared one would let a caller be served another's answer;
@@ -124,11 +124,21 @@ internal static class McpToolAuthorization
         PublishedTools.TryGetRequiredPermission(toolName, out var requiredPermission)
         && authorization.Permits(requiredPermission);
 
-    /// <summary>Writes the answer the server itself gives a call naming a tool it does not publish.</summary>
+    /// <summary>Writes the answer a call naming a tool this surface will not serve is refused with.</summary>
     /// <remarks>
-    /// The wording is the SDK's own and is mirrored rather than referenced, because it publishes no member to reach it
-    /// through. A release that reworded it would leave the two answers distinguishable, which is what
-    /// <c>McpToolAuthorizationTests</c> pins so the drift is a failing test rather than a disclosure nobody noticed.
+    /// <para>
+    /// The wording is copied from the SDK's own answer to an unknown tool, because it publishes no member to reach that
+    /// answer through. Nothing verifies the two still match: <c>McpToolAuthorizationTests</c> compares this method
+    /// against the literal above rather than against the SDK, so a release that reworded its message would leave the
+    /// suite green. Reaching the SDK's own dispatch needs a composed host over a real transport, which is the
+    /// integration suite rather than a unit test.
+    /// </para>
+    /// <para>
+    /// What that drift would cost is a divergence from the server's default phrasing and nothing more. No caller can
+    /// tell two refusals apart on this surface whatever the SDK says, because the filter above decides on the
+    /// permission alone: an unpermitted name and a name no tool answers to are the same case here and are both refused
+    /// before the request reaches the server, so the SDK's unknown-tool path is not reachable through this pipeline.
+    /// </para>
     /// </remarks>
     private static McpProtocolException UnknownTool(string? toolName) =>
         new($"Unknown tool: '{toolName}'", McpErrorCode.InvalidParams);
