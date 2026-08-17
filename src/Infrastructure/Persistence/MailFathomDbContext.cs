@@ -9,6 +9,7 @@ using MailFathom.Application.Jobs.Scheduling;
 using MailFathom.Application.Rules.History;
 using MailFathom.Application.SensitiveContent.Derivation;
 using MailFathom.CodeCoverage;
+using MailFathom.Domain.Delivery;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Emails.Authentication;
 using MailFathom.Domain.Mutations;
@@ -196,6 +197,29 @@ internal sealed class MailFathomDbContext : DbContext
     /// </remarks>
     internal const string ContactAddressUniqueIndexName = "ix_contact_addresses_normalized_address";
 
+    /// <summary>The constraint an outgoing email's idempotency identity is enforced by, and which a losing writer is recognized from.</summary>
+    /// <remarks>
+    /// It is the mutation identity's case with the consequence raised. Two callers asking for the same send reach the
+    /// database together and one of them violates this index; the retry then finds the winner's record and delivers
+    /// nothing further, which is the whole of what stops one authored request putting two copies of a message in
+    /// somebody's mailbox — a duplication that, unlike a local one, cannot be withdrawn afterwards.
+    /// </remarks>
+    internal const string OutgoingEmailIdentityUniqueIndexName = "ix_outgoing_emails_identity";
+
+    /// <summary>The index the outbox is read through, filtered to the sends that have not finished.</summary>
+    internal const string OutgoingEmailOutstandingIndexName = "ix_outgoing_emails_outstanding";
+
+    /// <summary>The foreign key that removes an outgoing email's recipients with the record.</summary>
+    /// <remarks>
+    /// Named because EF's convention composes one from both table names and PostgreSQL truncates an identifier at 63
+    /// characters, which would leave a permanent constraint whose name ends in a tilde.
+    /// </remarks>
+    internal const string OutgoingEmailRecipientForeignKeyName = "fk_outgoing_email_recipients_emails";
+
+    /// <summary>The foreign key that removes the stored MIME with the record that says who it was for.</summary>
+    /// <remarks>Named for the reason above: the composed name would be truncated and permanent.</remarks>
+    internal const string OutgoingEmailContentForeignKeyName = "fk_outgoing_email_contents_emails";
+
     /// <summary>The uniqueness a job's idempotency rests on, which spans every state a row can reach.</summary>
     internal const string JobIdentityUniqueIndexName = "ix_jobs_identity";
 
@@ -269,6 +293,14 @@ internal sealed class MailFathomDbContext : DbContext
     internal DbSet<MailboxRefreshTokenEntity> MailboxRefreshTokens => this.Set<MailboxRefreshTokenEntity>();
 
     internal DbSet<MailboxMutationEntity> MailboxMutations => this.Set<MailboxMutationEntity>();
+
+    internal DbSet<OutgoingEmailEntity> OutgoingEmails => this.Set<OutgoingEmailEntity>();
+
+    internal DbSet<OutgoingEmailRecipientEntity> OutgoingEmailRecipients =>
+        this.Set<OutgoingEmailRecipientEntity>();
+
+    internal DbSet<OutgoingEmailContentEntity> OutgoingEmailContents =>
+        this.Set<OutgoingEmailContentEntity>();
 
     internal DbSet<MailboxMutationAuditEntryEntity> MailboxMutationAuditEntries =>
         this.Set<MailboxMutationAuditEntryEntity>();
@@ -602,6 +634,9 @@ internal sealed class MailFathomDbContext : DbContext
         });
 
         ConfigureMailboxMutation(modelBuilder);
+        ConfigureOutgoingEmail(modelBuilder);
+        ConfigureOutgoingEmailRecipient(modelBuilder);
+        ConfigureOutgoingEmailContent(modelBuilder);
         ConfigureMailboxMutationAuditEntry(modelBuilder);
         ConfigureMailAnsweringAuditEntry(modelBuilder);
         ConfigureMailRuleExecution(modelBuilder);
@@ -1133,6 +1168,129 @@ internal sealed class MailFathomDbContext : DbContext
             .HasDatabaseName(MailboxMutationPlacementIndexName)
             .HasFilter($"\"{nameof(MailboxMutationEntity.PlacementObservedAt)}\" IS NULL");
     }
+
+    /// <summary>Declares the durable record of every message this system has been asked to send.</summary>
+    /// <remarks>
+    /// <para>
+    /// The row exists before any SMTP command is issued, which is what makes a non-atomic submission survivable: the
+    /// stage says how far the attempt got, and the one stage that means "the body went out and the answer never came
+    /// back" is written before the transmission rather than after it.
+    /// </para>
+    /// <para>
+    /// Nothing here is mail content. The account, the requester identity, the reply codes, and the stage are this
+    /// system's own or the server's own names for things, and the message itself is a row of its own that no query
+    /// listing the outbox touches. The recipients are personal data and are the one thing on this record that could not
+    /// be left out: a send cannot be resumed without knowing who is still owed it.
+    /// </para>
+    /// </remarks>
+    private static void ConfigureOutgoingEmail(ModelBuilder modelBuilder) =>
+        modelBuilder.Entity<OutgoingEmailEntity>(entity =>
+        {
+            entity.ToTable("outgoing_emails");
+            entity.HasKey(message => message.Id);
+            entity.Property(message => message.Id).ValueGeneratedNever();
+            entity.Property(message => message.MailboxAccountId).HasMaxLength(128).IsRequired();
+            entity.Property(message => message.RequesterIdentity)
+                .HasMaxLength(OutgoingEmailRequester.MaximumIdentityLength)
+                .IsRequired();
+
+            // Stored as text for the reason the mutation stage is: both stay readable in an ad-hoc audit query and
+            // survive any later reordering of their enum.
+            entity.Property(message => message.RequesterOrigin).HasConversion<string>().HasMaxLength(64).IsRequired();
+            entity.Property(message => message.Stage).HasConversion<string>().HasMaxLength(64).IsRequired();
+
+            // See the stored-email mapping: this is the PostgreSQL `xmin` system column, not a user-defined column.
+            entity.Property(message => message.ConcurrencyVersion).IsRowVersion();
+
+            entity.HasIndex(message => new
+            {
+                message.MailboxAccountId,
+                message.RequesterOrigin,
+                message.RequesterIdentity,
+            })
+                .IsUnique()
+                .HasDatabaseName(OutgoingEmailIdentityUniqueIndexName);
+
+            // Filtered to the sends that have not finished, so the structure holds what is queued and in flight rather
+            // than every message the deployment has ever sent. A refused send stays in for the reason an abandoned
+            // mutation does: giving up on it is what stops it being attempted, and it would be worth nothing if it also
+            // stopped it being seen — so the filter names the three terminal stages rather than only the successful one.
+            entity.HasIndex(message => new { message.MailboxAccountId, message.RecordedAt })
+                .HasDatabaseName(OutgoingEmailOutstandingIndexName)
+                .HasFilter(
+                    $"\"{nameof(OutgoingEmailEntity.Stage)}\" NOT IN ("
+                    + $"'{nameof(OutgoingEmailStage.Sent)}', "
+                    + $"'{nameof(OutgoingEmailStage.Refused)}', "
+                    + $"'{nameof(OutgoingEmailStage.Cancelled)}')");
+        });
+
+    /// <summary>Declares the people one outgoing email is offered to, and what the server said about each.</summary>
+    /// <remarks>
+    /// <para>
+    /// A separate table rather than arrays on the record, because each recipient carries state that changes on its own:
+    /// a message is offered per address and answered per address, so a mistyped address among five must not stop the
+    /// other four and the four who received it must not be offered it again when the fifth is retried.
+    /// </para>
+    /// <para>
+    /// Keyed by the record and the position in its recipient list. An address is personal data and a key is repeated
+    /// into every index over a table, so the ordinal keys the row instead — and it keeps the recipients in the order the
+    /// request named them, which is the order a composed message writes its headers in.
+    /// </para>
+    /// </remarks>
+    private static void ConfigureOutgoingEmailRecipient(ModelBuilder modelBuilder) =>
+        modelBuilder.Entity<OutgoingEmailRecipientEntity>(entity =>
+        {
+            entity.ToTable("outgoing_email_recipients");
+            entity.HasKey(recipient => new { recipient.OutgoingEmailId, recipient.Ordinal });
+            entity.Property(recipient => recipient.Address)
+                .HasMaxLength(OutgoingRecipient.MaximumAddressLength)
+                .IsRequired();
+
+            // Stored as text for the reason every other enum on this feature is, and required on both: a row whose text
+            // names no declared value fails the read rather than being taken as a neighbouring one by elimination.
+            entity.Property(recipient => recipient.Role).HasConversion<string>().HasMaxLength(64).IsRequired();
+            entity.Property(recipient => recipient.Status).HasConversion<string>().HasMaxLength(64).IsRequired();
+
+            // A recipient row is mutated on its own — an attempt answers about this address without touching the record
+            // above it — so the record's token would not notice two attempts settling one recipient differently.
+            entity.Property(recipient => recipient.ConcurrencyVersion).IsRowVersion();
+
+            entity.HasOne(recipient => recipient.OutgoingEmail)
+                .WithMany(message => message.Recipients)
+                .HasForeignKey(recipient => recipient.OutgoingEmailId)
+                .HasConstraintName(OutgoingEmailRecipientForeignKeyName)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+    /// <summary>Declares the raw MIME one outgoing email is transmitted as, stored once and read back per attempt.</summary>
+    /// <remarks>
+    /// <para>
+    /// A one-to-one table whose primary key is also its foreign key, which is the arrangement the incoming content table
+    /// uses and for the same reason: keeping the large binary value out of the record means listing what is queued never
+    /// loads a single message's bytes. PostgreSQL stores an oversized <c>bytea</c> out of line automatically.
+    /// </para>
+    /// <para>
+    /// The message is written once and read back rather than recomposed, because a message rebuilt between attempts
+    /// carries a different <c>Message-ID</c> and would thread as a second message in every recipient's client. The
+    /// cascade is the erasure obligation: deleting the record destroys the message it points at, so an outgoing email
+    /// cannot outlive the record that says who it was for.
+    /// </para>
+    /// </remarks>
+    private static void ConfigureOutgoingEmailContent(ModelBuilder modelBuilder) =>
+        modelBuilder.Entity<OutgoingEmailContentEntity>(entity =>
+        {
+            entity.ToTable("outgoing_email_contents");
+            entity.HasKey(content => content.OutgoingEmailId);
+            entity.Property(content => content.OutgoingEmailId).ValueGeneratedNever();
+            entity.Property(content => content.RawMime).IsRequired();
+            entity.Property(content => content.Sha256Hash).HasMaxLength(32).IsRequired();
+
+            entity.HasOne(content => content.OutgoingEmail)
+                .WithOne(message => message.Content)
+                .HasForeignKey<OutgoingEmailContentEntity>(content => content.OutgoingEmailId)
+                .HasConstraintName(OutgoingEmailContentForeignKeyName)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
 
     /// <summary>Declares the derived search document and the lexical index built over it.</summary>
     /// <remarks>

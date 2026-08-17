@@ -3,16 +3,25 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.Persistence;
+using MailFathom.Domain.Delivery;
 using MailFathom.Domain.Emails;
 
 namespace MailFathom.Application.EmailContent.Storage;
 
 /// <summary>Stores raw email content outside ordinary email metadata queries.</summary>
 /// <remarks>
+/// <para>
 /// No storage library publishes a contract for this seam, and the store behind it is expected to move from a
 /// PostgreSQL table to object storage without a use case noticing, so the port names the operation in domain terms
 /// instead. It takes the caller's session rather than opening one of its own, which is what makes a content write
 /// commit or roll back together with the metadata row it belongs to.
+/// </para>
+/// <para>
+/// Mail arriving and mail leaving are stored through the same port and are keyed differently, because they are the same
+/// kind of payload owned by two different things: a synchronized message belongs to the local row that mirrors an
+/// occurrence, and an outgoing email belongs to the record of the send it was composed for. One port is what keeps
+/// raw MIME behind one seam, so the move to object storage is one adapter's rather than two.
+/// </para>
 /// </remarks>
 public interface IEmailContentStore
 {
@@ -42,4 +51,46 @@ public interface IEmailContentStore
     /// </para>
     /// </remarks>
     Task<StoredEmailContent?> FindStoredContentAsync(StoredEmailId storedEmailId, CancellationToken cancellationToken);
+
+    /// <summary>Saves the raw MIME one outgoing email will be transmitted as, once and only once.</summary>
+    /// <param name="session">The explicit persistence session this content write participates in.</param>
+    /// <param name="outgoingEmailId">The record of the send this message was composed for.</param>
+    /// <param name="rawMime">The composed RFC 822 bytes.</param>
+    /// <param name="cancellationToken">Propagates caller cancellation.</param>
+    /// <returns>A task that completes after durable storage.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="session" /> is <see langword="null" />.</exception>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="rawMime" /> is empty.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when no outgoing record carries <paramref name="outgoingEmailId" />.</exception>
+    /// <remarks>
+    /// <para>
+    /// A message already stored for this record is left exactly as it is, and that is the contract rather than a
+    /// tolerated repeat. A retry has to transmit the bytes an earlier attempt may already have begun transmitting: a
+    /// message recomposed between attempts carries a different <c>Message-ID</c>, which turns one message into two in
+    /// every recipient's thread, and rewriting the payload under a record that is mid-transmission would change what
+    /// was sent after it was sent.
+    /// </para>
+    /// <para>
+    /// It joins the caller's session for the reason the incoming write does, and more strongly: a record whose message
+    /// was never stored has nothing to transmit, so the two commit together or neither does.
+    /// </para>
+    /// </remarks>
+    Task SaveOutgoingContentAsync(
+        IPersistenceSession session,
+        OutgoingEmailId outgoingEmailId,
+        ReadOnlyMemory<byte> rawMime,
+        CancellationToken cancellationToken);
+
+    /// <summary>Reads back the raw MIME stored for one outgoing email, with what was recorded about it.</summary>
+    /// <param name="outgoingEmailId">The record of the send.</param>
+    /// <param name="cancellationToken">Propagates caller cancellation.</param>
+    /// <returns>The stored content, or <see langword="null" /> when no content is stored for that record.</returns>
+    /// <remarks>
+    /// This is what an attempt transmits, including a retry, which is what keeps a resumed send the same message rather
+    /// than a second one that looks like it. Absent content is a defect here rather than an ordinary answer, unlike the
+    /// incoming read: an outgoing record is written together with its message, so a record without one describes a send
+    /// that can never happen — and the caller is the one that decides what to do about that.
+    /// </remarks>
+    Task<StoredEmailContent?> FindOutgoingContentAsync(
+        OutgoingEmailId outgoingEmailId,
+        CancellationToken cancellationToken);
 }

@@ -1,6 +1,6 @@
 # Stored email schema
 
-<!-- describes: src/Infrastructure/Persistence/**, src/Domain/Emails/**, src/Application/Emails/Embeddings/** -->
+<!-- describes: src/Infrastructure/Persistence/**, src/Domain/Emails/**, src/Domain/Delivery/**, src/Application/Emails/Embeddings/** -->
 
 `stored_emails` holds the normalized metadata a mailbox timeline is read from. Its raw MIME lives in a separate one-to-one table, `email_message_contents`, and the text derived from that MIME lives in a third, `email_search_documents`, so nothing that lists or filters mail ever loads a `bytea` value, a body's worth of text, or a search vector — let alone tracks one in the change tracker.
 
@@ -581,6 +581,80 @@ scope asked for again after a later release starts at the beginning rather than 
 Nothing in it is personal data. An account alias, a folder alias, a local identifier and an instant are MailFathom's own
 names for things.
 
+## The outgoing messages waiting to be sent
+
+`outgoing_emails` holds one row per message MailFathom has been asked to send, written **before** the first SMTP
+command is issued and advanced as the attempt proceeds. It is `mailbox_mutations` again in a second protocol, with the
+consequence raised: a submission is the MIME being built, an intent being recorded, a connection being opened, each
+recipient being offered, the body being transmitted, and the server answering — and a process can die between any two of
+those. One of those windows is genuinely undecidable from outside. A crash immediately after the body went out and
+immediately before the acknowledgement was recorded leaves an outbox that cannot say whether the message was delivered;
+retrying sends it twice, and not retrying loses it. Unlike a duplicated local copy, a duplicated delivery cannot be
+withdrawn from the mailbox it reached.
+
+| Column | What it records |
+|---|---|
+| `Id` | The record's identity, and what the stored message and the recipients hang on. A UUIDv7 generated from the instant the intent was written, so the outbox's own order is the identifier's |
+| `MailboxAccountId` | The account the message is submitted through and sent as. A plain column rather than a foreign key: the account row is created by the first folder binding synchronization writes, and an account configured only to send need never have synchronized anything |
+| `RequesterOrigin`, `RequesterIdentity` | The authored act that asked, by kind and by the text two requests are compared by. A rule answers with its name, the revision it was evaluated at, and the email it acted on; somebody present answers with a key of their own |
+| `Stage` | How far the submission has durably got, in the vocabulary below |
+| `MimeByteLength` | How many bytes of MIME were stored. Kept beside the record as well as on the message, so the size bound a submission server advertised can be compared against it — and the outbox listed — without reading a single queued message's `bytea` |
+| `AttemptCount` | Written before each attempt rather than after it, so an attempt that kills the process still counted |
+| `RecordedAt`, `StageChangedAt` | When the intent was written, and when the record last moved. The second is what says how long a stuck send has been stuck |
+| `LastFailureCode` | The code of the failure the last attempt ended in, null while none has. The code is kept and the message is not, because a failure message is assembled at the failure site and may repeat what a remote server wrote |
+| `LastReplyCode` | The reply code the server last answered the transmission with, null while it has answered none. A different fact from the per-recipient codes: a server accepts or refuses each address separately and then answers once for the body |
+
+`Stage` is the submission's own vocabulary rather than a generic queued and sent, because it is what a later attempt
+reads:
+
+| Stage | What it says |
+|---|---|
+| `Recorded` | The intent and the message are durable, and nothing has reached a submission server |
+| `TransmissionBegun` | The body has begun to go out and the server's answer to it was never read |
+| `Sent` | The server accepted the message for every recipient it had accepted |
+| `Refused` | Nothing will offer it again, and `LastFailureCode` says what ended it |
+| `Cancelled` | The send was withdrawn before anything was transmitted for it |
+
+`TransmissionBegun` is written **before** the transmission rather than after it, which is the whole point: announcing it
+afterwards would announce it only in the case where the crash it exists for did not happen. A record found there is not
+re-sent. Two of the terminal stages are reachable from one stage only, which is that same window read from either end —
+`Sent` follows only `TransmissionBegun`, so no row claims a delivery nothing could have produced, and `Cancelled`
+follows only `Recorded`, so no row claims a withdrawal after bytes that may already have reached somebody. A send
+stopped mid-transmission therefore ends at `Refused`, which states that nothing more will be attempted and states
+nothing about what was received.
+
+A send that has not reached a terminal stage is what a restart reads, oldest first and bounded like every other public
+query. A refused row stays in that answer for the reason an abandoned mutation does: being given up on is what stops a
+send being attempted, and it would be worth nothing if it also stopped the send being seen.
+
+`outgoing_email_recipients` holds one row per person the message is addressed to, keyed by the record and the position
+in its recipient list. A message is offered per address and answered per address, so a mistyped address among five must
+not stop the other four, and the four the message reached must not be offered it again when the fifth is retried. Each
+row carries the `Address`, the `Role` the composed message names them in — `To`, `Cc`, or `Bcc`, which reach `RCPT TO`
+identically — the `Status`, and the `LastReplyCode` and `AnsweredAt` of the last answer about them. It carries an `xmin`
+token of its own rather than relying on the record's, because an attempt answers about one address without touching the
+record above it: without one, two attempts settling the same recipient would be a last writer winning silently, and
+settling a recipient is what decides whether anybody is offered the message again.
+
+`Status` has exactly three values, and it answers exactly one question: is this recipient offered on the next attempt.
+`Accepted` means an acknowledged transmission covered them, so nothing offers them again; `Refused` means a server
+permanently refused them, so nothing offers them again and nothing reaches them; `Pending` is everybody else, which
+includes a recipient a server temporarily rejected — the reply that deferred them is recorded beside the status rather
+than encoded in it. A recipient already settled keeps the answer it has, so a late transient reply cannot undo a
+delivery that already happened.
+
+The ordinal keys the row rather than the address, for two reasons. An address is personal data and a key is repeated
+into every index over a table; and the ordinal keeps the recipients in the order the request named them, which is the
+order a composed message writes its headers in. The comparison form of the address is deliberately not stored beside it,
+unlike a received message's participants: those are filtered and grouped by address in queries the database answers,
+while these are read back with their record and compared in memory against the handful of answers one attempt produced.
+
+`outgoing_email_contents` is the message itself, in the same one-to-one arrangement `email_message_contents` has with
+`stored_emails` and for the same reason: keeping the `bytea` out of the record means listing what is queued never loads
+a single message's bytes. It is written **once** and read back for every attempt rather than recomposed, which is not an
+optimization — a message rebuilt between attempts carries a different `Message-ID` and would thread as a second message
+in every recipient's client. A second enqueue of the same identity therefore leaves the stored payload exactly as it is.
+
 ## Indexes
 
 | Index | Columns | Purpose |
@@ -605,6 +679,8 @@ names for things.
 | `ix_mailbox_mutations_outstanding` | `(MailboxAccountId, RecordedAt)` where the stage is not `Completed` | The changes an operator asks about: those in flight and those given up on |
 | `ix_mailbox_mutations_placement` | `(MailboxAccountId, DestinationFolderPath, PlacementUidValidity, PlacementUid)` where `PlacementObservedAt` is null | The question the forward pass asks of every batch it discovers: is one of these UIDs where a relocation or a copy put an email |
 | `ix_mailbox_mutation_audit_entries_mutation` | `(MutationRecordId)`, unique | One audit entry per mutation ending, whatever a repeated append attempts |
+| `ix_outgoing_emails_identity` | `(MailboxAccountId, RequesterOrigin, RequesterIdentity)`, unique | An outgoing message's idempotency identity, which is what makes the same authored request twice one delivery. It spans terminal rows deliberately: a row that was sent is what stops the same request asking again |
+| `ix_outgoing_emails_outstanding` | `(MailboxAccountId, RecordedAt)` where the stage is none of `Sent`, `Refused`, or `Cancelled` | The outbox a restart reads and an operator asks about: what is queued, what is in flight, and what has stopped. The filter names the three terminal stages rather than the successful one alone, so a refused send stays visible while the deployment's whole sending history does not |
 | `ix_mail_rule_executions_account_evaluated` | `(MailboxAccountId, EvaluatedAt, Id)` | An account's rule history newest first, and the retention pass that erases what has outlived its window. The identifier is in the key because two executions of one batch share an instant and a keyset page needs a total order to continue from |
 | `ix_mail_rule_executions_account_rule_evaluated` | `(MailboxAccountId, RuleName, EvaluatedAt, Id)` | What one rule has been concluding, which is the question a rule that never seems to fire is investigated with |
 | `ix_mail_rule_executions_email_evaluated` | `(StoredEmailId, EvaluatedAt, Id)` | Why one message is where it is, and the rows the cascade removes when that message is erased |
@@ -690,6 +766,18 @@ trace, or an error message.
 
 `contacts` and `contact_addresses` are the most concentrated personal data on this page, and the only kind that is not derived from anything: a name, the addresses somebody uses, and a note about them are an assembled record about an identified third party rather than mail that arrived. Nothing cascades into them, because nothing they hold came from a message — which is also why they have no retention window: a contact is held until somebody erases it, and erasing one removes the person and every address row through the cascade above rather than marking either. Nothing in either table reaches a log, a metric, a trace, or an error message; the contact identifier is what a failure names, and it is the one column that is not personal data.
 
+`outgoing_emails`, `outgoing_email_recipients`, and `outgoing_email_contents` are derived personal data of a kind
+nothing else on this page holds: an outgoing record says who this mailbox's owner wrote to and when, and the recipients
+it names are people other than the owner. They are stored because a send cannot be resumed without knowing who is still
+owed it, and the columns above are the minimum that supports that — which is why a recipient's display name is not among
+them, and why the record carries no subject, no body, and no header of its own. The message stays in
+`outgoing_email_contents` and is reached by identifier, so listing the outbox, advancing a stage, or answering about a
+recipient never loads it. The two cascades from `outgoing_emails` are what make erasure structural: deleting the
+record destroys the recipients and the stored message with it, so an outgoing message cannot outlive the record that
+says who it was for. Nothing in any of the three reaches a log, a metric, a trace, or an exception message — an
+exception about a recipient names the record, and the position where the row it was reading has one, rather than the
+address.
+
 `embedding_profiles` is the exception on this page: it holds no personal data at all. It describes a model, and the credential that reaches that model is configuration rather than a column here, so nothing in this table is a secret or is derived from anybody's mail.
 
 ## How this schema reaches a database
@@ -710,6 +798,7 @@ Every claim on this page that is a claim about PostgreSQL rather than about the 
 
 - The baseline migration applies to an empty database and leaves no migration pending, and the text search configuration the generated column was built with is read back out of PostgreSQL's own catalogue rather than from the model — which is what lets the startup gate refuse a database whose lexical index disagrees with the running host.
 - The unique index refuses a duplicate occurrence that neither writer could have seen, which is the PostgreSQL-side half of idempotent synchronization: two overlapping runs each stage an insert, and the database rather than the application decides that only one lands.
+- The same holds for an outgoing message's identity, where losing the race is the mechanism rather than an accident: two callers asking for one send each stage an insert, the index refuses the second, and enqueuing the same authored request twice leaves one record carrying the message the first enqueue stored rather than a recomposed one. A send left at `TransmissionBegun` is found by a later scope reading the account's outbox and reads as undecidable there, a recipient the message reached is never offered again after a partial acceptance, and deleting the record erases the stored message and the recipients with it.
 - An occurrence identified by the largest UID IMAP can hand out round-trips through its `bigint` columns unchanged.
 - Raw MIME round-trips through `bytea` with its recorded length and SHA-256 intact, including a payload large enough that PostgreSQL stores it out of line, and re-storing an occurrence replaces the one existing row rather than reading its payload back into memory.
 - The transaction a persistence session opens covers SQL the provider had already executed: a set-based update issued and then abandoned without a commit leaves the earlier payload in place.

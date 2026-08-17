@@ -1,16 +1,19 @@
 # Mail delivery
 
-<!-- describes: src/Application/Mail/Delivery/**, src/Infrastructure/Mail/MailKit/Delivery/**, src/Infrastructure/Mail/MailAccountDeliveryOptions.cs, src/Infrastructure/Mail/SmtpAccountSettings.cs, src/Host/Configuration/Mail/ConfiguredSmtpAccountSettingsProvider.cs -->
+<!-- describes: src/Application/Mail/Delivery/**, src/Domain/Delivery/**, src/Infrastructure/Mail/MailKit/Delivery/**, src/Infrastructure/Persistence/Delivery/**, src/Infrastructure/Mail/MailAccountDeliveryOptions.cs, src/Infrastructure/Mail/SmtpAccountSettings.cs, src/Host/Configuration/Mail/ConfiguredSmtpAccountSettingsProvider.cs -->
 
 Reading a mailbox and submitting to one are two capabilities against two servers, and MailFathom holds them apart.
-What exists today is the submission half's foundation: an account may declare where its mail would be submitted, and a
+What exists today is the submission half's foundation: an account may declare where its mail would be submitted, a
 **delivery session** can be opened against that server — connected, encrypted, authenticated, and asked what it will
-accept. Nothing composes a message and nothing sends one, so a deployment that configures a submission endpoint gains
-a validated endpoint and an openable session and no outbound mail.
+accept — and a send can be written down durably before anything acts on it. Nothing composes a message and nothing
+transmits one, so a deployment that configures a submission endpoint gains a validated endpoint, an openable session,
+an outbox that can hold a message, and no outbound mail.
 
-That is deliberate rather than partial. The session is the piece every later step rests on, it is the piece with a
-protocol, a credential, and a channel to get wrong, and it is provable on its own — against a real server, over each
-mode that server speaks, and against the reply codes it answers with.
+That is deliberate rather than partial. Those two are the pieces every later step rests on: the session is the piece
+with a protocol, a credential, and a channel to get wrong, and the record is the piece that decides whether a crash
+mid-send can deliver a message twice. Both are provable on their own — the session against a real server, over each
+mode that server speaks and against the reply codes it answers with, and the record against a real database, where a
+constraint rather than any code decides a race.
 
 ## The session, and who may open one
 
@@ -141,6 +144,48 @@ disagree.
 A session that cannot be established — because the dependency's circuit is open, or because transient refusals used up
 the attempts — fails with `MailDeliveryUnavailableException`, error code `27001`, naming the account.
 
+## The record a send is written down as, before anything is sent
+
+Nothing composes a message yet, and nothing transmits one. What exists beside the session is the durable state a
+transmission would be carried out against: an **outgoing record**, written before any SMTP command could be issued, and
+the message it points at.
+
+The reason is that a send is not one act. The MIME is built, an intent is recorded, a connection is opened, each
+recipient is offered and accepted or refused, the body is transmitted, and the server answers — and a process can die
+between any two of those. One of those windows cannot be decided from outside afterwards: a crash immediately after the
+body went out and immediately before the acknowledgement was recorded leaves an outbox that cannot say whether the
+message was delivered. Retrying sends it twice, and not retrying loses it. A duplicated delivery, unlike a duplicated
+local copy, cannot be withdrawn from the mailbox it reached.
+
+The record is the answer, in the same shape [remote mailbox mutations](imap-synchronization.md) use for IMAP: write the
+intent down before acting on it, and advance it as the attempt proceeds. The window is narrowed rather than closed — the
+record moves to *the transmission has begun and its outcome is unknown* **before** the transmission starts, so a row
+found in that stage on restart is recognizable and is never blindly re-sent. What is then done with such a row is not
+part of this, and neither is any retry policy.
+
+`MailOutbox.EnqueueAsync` is the one way in. It takes what was asked for and the composed message, and writes both in one
+transaction: a record whose message was never stored has nothing to transmit, and a message stored under no record is
+bytes nothing will ever read.
+
+**The same authored request arriving twice delivers once.** The identity is the sending account together with the act
+that asked — a rule with its name, its revision, and the email it acted on; or a caller with a key of their own — and it
+is enforced by a unique index rather than by any check. Two callers asking together both reach the database, the second
+insert is refused there, and the loser's retry reads back the winner's record. A caller that generates a fresh key per
+attempt has asked twice, and nothing can tell that apart from two genuine sends; what the record guarantees is that one
+key sends once.
+
+**The message is written once and read back, never recomposed.** A message rebuilt between attempts carries a different
+`Message-ID`, which threads one send as two in every recipient's client, so a second enqueue of the same identity leaves
+the stored payload exactly as it is. Raw MIME is reached through `IEmailContentStore` here as it is everywhere else, and
+nothing above that port handles it as a byte array.
+
+**A refusal is one recipient's, not the message's.** Each recipient carries its own outcome, so a mistyped address among
+five does not stop the other four, and the four the message reached are not offered it again when the fifth is retried.
+A recipient a server temporarily rejected stays outstanding with the reply that deferred them recorded beside it.
+
+[The stored email schema](../architecture/stored-email-schema.md#the-outgoing-messages-waiting-to-be-sent) holds the
+columns, the stages, and which of them each terminal stage may follow.
+
 ## What never leaves the process
 
 The rules that govern mail content govern this path too, and three things in particular stay inside it:
@@ -150,7 +195,10 @@ The rules that govern mail content govern this path too, and three things in par
 - **The mechanisms the server advertised.** They describe a server's configuration and are held out of every failure
   message, including the one raised when nothing permitted remains.
 - **Every address.** A refusal is logged as the account, the reply code, the enhanced status code, and whether it was
-  transient or permanent — never the recipient, the sender, or the text the server wrote beside its numbers.
+  transient or permanent — never the recipient, the sender, or the text the server wrote beside its numbers. The
+  outgoing record holds its recipients because a send cannot be resumed without them, and a failure about one never
+  names the address: it names the record, and the position in the recipient list where a position exists — reading a
+  stored row back names one, while an answer about somebody the record does not name has no position to give.
 
 ## What the tests establish, and where
 
@@ -166,3 +214,9 @@ are a declared size bound and eight-bit content. What the real server does settl
 account it can satisfy authenticates from the mechanisms actually on offer, and an account restricted to
 `OAUTHBEARER` — which this server does not advertise, though it advertises `XOAUTH2` — is refused before a credential
 is presented.
+
+The outgoing record is split the same way. What the shape of the state guarantees — which stages are undecidable, which
+recipients a later attempt still owes, and which terminal stage may follow which — is a unit test over the domain
+record. What only PostgreSQL can settle is in the integration suite: the index refusing an insert two transactions each
+reached without seeing the other, the second enqueue leaving the first message in place, a record left mid-transmission
+being found and read as such by a later scope, and the cascade erasing the message and the recipients with the record.

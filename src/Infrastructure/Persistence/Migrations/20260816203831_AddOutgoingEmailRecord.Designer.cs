@@ -3,6 +3,7 @@ using System;
 using MailFathom.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using NpgsqlTypes;
@@ -13,9 +14,11 @@ using Pgvector;
 namespace MailFathom.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(MailFathomDbContext))]
-    partial class MailFathomDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260816203831_AddOutgoingEmailRecord")]
+    partial class AddOutgoingEmailRecord
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -45,85 +48,6 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                     b.HasKey("Name");
 
                     b.ToTable("backfill_positions", (string)null);
-                });
-
-            modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.ContactAddressEntity", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("Address")
-                        .IsRequired()
-                        .HasMaxLength(320)
-                        .HasColumnType("character varying(320)");
-
-                    b.Property<Guid>("ContactId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("NormalizedAddress")
-                        .IsRequired()
-                        .HasMaxLength(320)
-                        .HasColumnType("character varying(320)");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("ContactId");
-
-                    b.HasIndex("NormalizedAddress")
-                        .IsUnique()
-                        .HasDatabaseName("ix_contact_addresses_normalized_address");
-
-                    b.ToTable("contact_addresses", (string)null);
-                });
-
-            modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.ContactEntity", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTimeOffset>("AmendedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<uint>("ConcurrencyVersion")
-                        .IsConcurrencyToken()
-                        .ValueGeneratedOnAddOrUpdate()
-                        .HasColumnType("xid")
-                        .HasColumnName("xmin");
-
-                    b.Property<string>("DisplayName")
-                        .IsRequired()
-                        .HasMaxLength(256)
-                        .HasColumnType("character varying(256)");
-
-                    b.Property<string>("DisplayNameSortKey")
-                        .IsRequired()
-                        .HasMaxLength(256)
-                        .HasColumnType("character varying(256)")
-                        .UseCollation("C");
-
-                    b.Property<string>("Note")
-                        .HasMaxLength(4000)
-                        .HasColumnType("character varying(4000)");
-
-                    b.Property<string>("Origin")
-                        .IsRequired()
-                        .HasMaxLength(32)
-                        .HasColumnType("character varying(32)");
-
-                    b.Property<string>("PreferredNormalizedAddress")
-                        .IsRequired()
-                        .HasMaxLength(320)
-                        .HasColumnType("character varying(320)");
-
-                    b.Property<DateTimeOffset>("RecordedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("DisplayNameSortKey", "Id")
-                        .HasDatabaseName("ix_contacts_display_name_sort_key_id");
-
-                    b.ToTable("contacts", (string)null);
                 });
 
             modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.EmailChunkEntity", b =>
@@ -1571,15 +1495,6 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                     b.ToTable("synchronization_checkpoints", (string)null);
                 });
 
-            modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.ContactAddressEntity", b =>
-                {
-                    b.HasOne("MailFathom.Infrastructure.Persistence.Entities.ContactEntity", null)
-                        .WithMany("Addresses")
-                        .HasForeignKey("ContactId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-                });
-
             modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.EmailChunkEntity", b =>
                 {
                     b.HasOne("MailFathom.Infrastructure.Persistence.Entities.StoredEmailEntity", "StoredEmail")
@@ -1785,11 +1700,6 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                         .IsRequired();
 
                     b.Navigation("MailFolder");
-                });
-
-            modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.ContactEntity", b =>
-                {
-                    b.Navigation("Addresses");
                 });
 
             modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.EmailChunkEntity", b =>

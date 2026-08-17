@@ -72,10 +72,17 @@ internal static class PersistenceConcurrencyConflicts
     /// than ending on a unique violation the caller can do nothing about.
     /// </para>
     /// <para>
-    /// The last is one address claimed by two contacts. Both writers read that nobody holds it, both insert, and the
+    /// The next is one address claimed by two contacts. Both writers read that nobody holds it, both insert, and the
     /// loser violates the index — which is what makes the retry the answer rather than a repair: it re-reads, finds
     /// the winner's contact holding the address, and reports which contact that is instead of the second caller
     /// putting one person into the book twice.
+    /// </para>
+    /// <para>
+    /// The last is the outgoing email identity, and it is the mutation identity's case with the most at stake. Two
+    /// callers asking for the same send reach the database together, one is refused here, and the retry reads back the
+    /// winner's record and the message already stored under it — which is how one authored request delivers once. A
+    /// collision left unrecognized would surface as a provider failure and leave the caller free to enqueue again, and
+    /// a second delivery is the one duplication in this system that cannot be withdrawn afterwards.
     /// </para>
     /// </remarks>
     internal static bool IsConcurrencyConflict(DbUpdateException exception) =>
@@ -93,6 +100,7 @@ internal static class PersistenceConcurrencyConflicts
                 or MailFathomDbContext.EmailChunkOrdinalUniqueIndexName
                 or MailFathomDbContext.EmailEmbeddingPrimaryKeyConstraintName
                 or MailFathomDbContext.MailRederivationPositionPrimaryKeyConstraintName
-                or MailFathomDbContext.ContactAddressUniqueIndexName,
+                or MailFathomDbContext.ContactAddressUniqueIndexName
+                or MailFathomDbContext.OutgoingEmailIdentityUniqueIndexName,
         };
 }
