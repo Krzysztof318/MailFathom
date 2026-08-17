@@ -31,6 +31,11 @@ once.
 It is also **only forward**. The script carries no reverse migrations, so it cannot undo anything, and nothing in
 MailFathom can. [Rolling back](#rolling-back) is what that leaves.
 
+And it is **UTF-8 with no byte-order mark**. `psql` does not skip one, so a marked file fails on its first statement
+with a syntax error naming a character nothing displays, which is a confusing way to be told the file is fine and the
+encoding is not. What EF Core generates does carry the mark; `scripts/build-schema-artifact.sh` removes it and refuses
+to publish a file that still has one, so an artifact attached to a release is one `psql -f` accepts.
+
 Read it before you run it. That is the whole reason the artifact is a SQL file rather than something that runs itself:
 
 ```bash
