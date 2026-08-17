@@ -312,8 +312,10 @@ see.
 
 How large a message this deployment is willing to compose. The submission endpoints above are per account because they
 are different servers; these are one answer for the whole installation, because what a mailbox may send is a policy an
-operator holds once. Every message is measured against both these numbers and whatever the submission server itself
-advertised, and the smaller of the two decides.
+operator holds once. `MaxMessageBytes` is the only one of them the submission server has an answer to as well, through
+the size it advertises on connection, and a composed message is measured against both with the smaller deciding. The
+other four are this deployment's alone: no server advertises how many people a message may be addressed to or how many
+files it may carry, so a small server bound is no protection against either.
 
 | Key | Type | Default | Constraint | Change |
 | --- | --- | --- | --- | --- |

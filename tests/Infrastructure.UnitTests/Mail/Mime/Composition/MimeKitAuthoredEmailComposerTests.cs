@@ -288,6 +288,28 @@ public sealed class MimeKitAuthoredEmailComposerTests
             MailFathomErrorCode.OutgoingEmailHeaderInjected);
     }
 
+    /// <summary>The declared media type becomes a header of that same part, so it is read for a break exactly as the name is.</summary>
+    [Fact]
+    public void Compose_AttachmentMediaTypeCarryingALineBreak_IsRefused()
+    {
+        // Arrange
+        var composer = CreateComposer();
+        var authored = Authored() with
+        {
+            Attachments = [new AuthoredEmailAttachment("report.csv", $"text/plain{Injection}", new byte[] { 1, 2, 3 })],
+        };
+
+        // Act
+        var composition = composer.Compose(Account, Requester(), authored, Capabilities());
+
+        // Assert
+        AssertRefused(
+            composition,
+            AuthoredEmailRefusalReason.HeaderInjected,
+            AuthoredEmailField.Attachment,
+            MailFathomErrorCode.OutgoingEmailHeaderInjected);
+    }
+
     /// <summary>An address the submission server cannot carry is refused before anything is transmitted.</summary>
     [Fact]
     public void Compose_InternationalizedAddressAgainstServerWithoutSupport_IsRefused()
@@ -577,6 +599,33 @@ public sealed class MimeKitAuthoredEmailComposerTests
 
         // Assert
         AssertBoundExceeded(composition, AuthoredEmailField.Attachment, Bounds().MaxAttachmentBytes);
+    }
+
+    /// <summary>
+    /// Files that are each small enough and few enough still carry more octets together than the message may be
+    /// transmitted as, and that is answered on the octets the author supplied rather than after they are expanded.
+    /// </summary>
+    [Fact]
+    public void Compose_AttachmentsTogetherLargerThanTheMessageBound_IsRefusedNamingTheMessageBound()
+    {
+        // Arrange
+        var bounds = Bounds() with { MaxMessageBytes = 200 };
+        var authored = Authored() with
+        {
+            Attachments =
+            [
+                .. Enumerable.Range(0, bounds.MaxAttachmentCount).Select(index => new AuthoredEmailAttachment(
+                    $"file-{index}.bin",
+                    "application/octet-stream",
+                    new byte[bounds.MaxAttachmentBytes])),
+            ],
+        };
+
+        // Act
+        var composition = CreateComposer(bounds).Compose(Account, Requester(), authored, Capabilities());
+
+        // Assert
+        AssertBoundExceeded(composition, AuthoredEmailField.Message, bounds.MaxMessageBytes);
     }
 
     /// <summary>

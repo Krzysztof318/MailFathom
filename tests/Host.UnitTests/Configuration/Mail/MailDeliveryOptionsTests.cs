@@ -80,6 +80,82 @@ public sealed class MailDeliveryOptionsTests
         Assert.Contains(nameof(MailDeliveryOptions.MaxRecipientCount), result.MemberNames);
     }
 
+    /// <summary>A body bound outside what the reference publishes is refused rather than composed against.</summary>
+    [Theory]
+    [InlineData(0)]
+    [InlineData(10_000_001)]
+    public void Validate_BodyLengthOutsideTheDocumentedRange_IsRefused(int maxBodyCharacters)
+    {
+        // Arrange
+        var options = new MailDeliveryOptions { MaxBodyCharacters = maxBodyCharacters };
+
+        // Act
+        var results = ValidateWithDataAnnotations(options);
+
+        // Assert
+        Assert.Contains(
+            results,
+            result => result.MemberNames.Contains(nameof(MailDeliveryOptions.MaxBodyCharacters)));
+    }
+
+    /// <summary>Attaching nothing is a deployment's choice; attaching a negative number of files is not a bound.</summary>
+    [Theory]
+    [InlineData(-1)]
+    [InlineData(101)]
+    public void Validate_AttachmentCountOutsideTheDocumentedRange_IsRefused(int maxAttachmentCount)
+    {
+        // Arrange
+        var options = new MailDeliveryOptions { MaxAttachmentCount = maxAttachmentCount };
+
+        // Act
+        var results = ValidateWithDataAnnotations(options);
+
+        // Assert
+        Assert.Contains(
+            results,
+            result => result.MemberNames.Contains(nameof(MailDeliveryOptions.MaxAttachmentCount)));
+    }
+
+    /// <summary>A per-file bound outside what the reference publishes is refused wherever the whole-message bound sits.</summary>
+    [Theory]
+    [InlineData(0L)]
+    [InlineData(104_857_601L)]
+    public void Validate_AttachmentSizeOutsideTheDocumentedRange_IsRefused(long maxAttachmentBytes)
+    {
+        // Arrange
+        var options = new MailDeliveryOptions
+        {
+            MaxAttachmentBytes = maxAttachmentBytes,
+            MaxMessageBytes = 200L * 1024 * 1024,
+        };
+
+        // Act
+        var results = ValidateWithDataAnnotations(options);
+
+        // Assert
+        Assert.Contains(
+            results,
+            result => result.MemberNames.Contains(nameof(MailDeliveryOptions.MaxAttachmentBytes)));
+    }
+
+    /// <summary>A whole-message bound outside what the reference publishes is refused rather than composed against.</summary>
+    [Theory]
+    [InlineData(0L)]
+    [InlineData(209_715_201L)]
+    public void Validate_MessageSizeOutsideTheDocumentedRange_IsRefused(long maxMessageBytes)
+    {
+        // Arrange
+        var options = new MailDeliveryOptions { MaxAttachmentCount = 0, MaxMessageBytes = maxMessageBytes };
+
+        // Act
+        var results = ValidateWithDataAnnotations(options);
+
+        // Assert
+        Assert.Contains(
+            results,
+            result => result.MemberNames.Contains(nameof(MailDeliveryOptions.MaxMessageBytes)));
+    }
+
     private static IReadOnlyList<ValidationResult> Validate(MailDeliveryOptions options) =>
         [.. options.Validate(new ValidationContext(options))];
 

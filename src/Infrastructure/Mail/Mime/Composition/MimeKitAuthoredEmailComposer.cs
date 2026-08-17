@@ -203,6 +203,17 @@ internal sealed class MimeKitAuthoredEmailComposer(
                 bounds.MaxAttachmentBytes);
         }
 
+        // The whole-message bound is measured on what the message became, which means assembling every part and
+        // transfer-encoding it first. Content already past that bound before any of it happens is refused here instead,
+        // because encoding only ever makes the octets more numerous, never fewer.
+        if (authored.Attachments.Sum(static attachment => (long)attachment.Content.Length) > bounds.MaxMessageBytes)
+        {
+            return AuthoredEmailComposition.Refused(
+                AuthoredEmailRefusalReason.BoundExceeded,
+                AuthoredEmailField.Message,
+                bounds.MaxMessageBytes);
+        }
+
         return authored.Attachments.Any(static attachment =>
             string.IsNullOrWhiteSpace(attachment.FileName) || !ContentType.TryParse(attachment.MediaType, out _))
             ? AuthoredEmailComposition.Refused(

@@ -1,6 +1,6 @@
 # Mail delivery
 
-<!-- describes: src/Application/Mail/Delivery/**, src/Domain/Delivery/**, src/Infrastructure/Mail/MailKit/Delivery/**, src/Infrastructure/Mail/Mime/Composition/**, src/Infrastructure/Persistence/Delivery/**, src/Infrastructure/Mail/MailAccountDeliveryOptions.cs, src/Infrastructure/Mail/SmtpAccountSettings.cs, src/Host/Configuration/Mail/ConfiguredSmtpAccountSettingsProvider.cs, src/Host/Configuration/Mail/MailDeliveryOptions.cs -->
+<!-- describes: src/Application/Mail/Delivery/**, src/Domain/Delivery/**, src/Infrastructure/Mail/MailKit/Delivery/**, src/Infrastructure/Mail/Mime/Composition/**, src/Infrastructure/Persistence/Delivery/**, src/Infrastructure/Mail/MailAccountDeliveryOptions.cs, src/Infrastructure/Mail/SmtpAccountSettings.cs, src/Host/Configuration/Mail/ConfiguredSmtpAccountSettingsProvider.cs, src/Host/Configuration/Mail/MailDeliveryOptions.cs, src/Host/Configuration/Mail/MailSynchronizationOptions.cs -->
 
 Reading a mailbox and submitting to one are two capabilities against two servers, and MailFathom holds them apart.
 What exists today is the submission half up to the point of transmission: an account may declare where its mail would be
@@ -187,9 +187,12 @@ deriving one from the octets would be this system asserting what somebody else's
 **And some are bounds.** A recipient count, a body length, an attachment count, a per-file size, and a whole-message
 size are all the deployment's numbers rather than whatever a caller passed, and each is checked before a connection is
 worth opening. `MailDelivery` in [the configuration reference](../operations/configuration-reference.md#maildelivery)
-holds each of them; the submission server's own advertised `SIZE` is checked beside them rather than in place of them,
-so whichever is smaller decides. The whole-message bound is measured on the composed bytes, because transfer encoding,
-headers, and boundaries are the difference between what an author supplied and what a server is offered.
+holds each of them. The whole-message bound is the one a server has an answer to as well: the `SIZE` it advertised is
+checked beside that number rather than in place of it, so whichever is smaller decides, while the other four are the
+deployment's alone because nothing on the far side advertises them. It is measured on the composed bytes, because
+transfer encoding, headers, and boundaries are the difference between what an author supplied and what a server is
+offered — and files whose octets already exceed it together are refused before the assembly that would expand them,
+since encoding only ever makes them more numerous.
 
 **One mailbox is offered once.** Somebody an author named in two headers is placed in the more visible one — `To`, then
 `Cc`, then `Bcc` — and the later mention is dropped, because a person meant to be seen must not be hidden from the other
