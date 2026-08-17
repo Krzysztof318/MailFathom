@@ -467,12 +467,16 @@ function createViewer() {
 // A figure opens at the size the page drew it at, reduced only where that size does not fit over the page.
 // Opening it larger than the page had it would be a second layout of the drawing the reader is looking at,
 // and opening a tall one unreduced would put its head and its foot outside the viewer before a gesture has
-// been made.
+// been made. The floor is the one every zoom already stops at: a drawing several times the height of the
+// viewport — a long diagram on a phone held sideways — would otherwise open below it, and the first zoom
+// out would then raise the scale to the floor and enlarge the figure it was asked to shrink.
 function openingScaleFor(asDrawn) {
-  return Math.min(
+  const fitted = Math.min(
     1,
     openWidthShare * window.innerWidth / asDrawn.width,
     openHeightShare * window.innerHeight / asDrawn.height)
+
+  return Math.max(minimumScale, fitted)
 }
 
 function controlButton(icon, title, onClick) {
