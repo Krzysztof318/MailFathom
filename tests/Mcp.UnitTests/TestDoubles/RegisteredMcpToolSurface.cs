@@ -36,7 +36,8 @@ namespace MailFathom.Mcp.UnitTests.TestDoubles;
 /// than by any one tool: a test that built its own container would assert against a surface no host composes. The same
 /// composition also serves a listing and a call for a stated caller, through <see cref="ComposedForCallerGranted" />,
 /// so what a test drives through the filters the registration wrote is the pipeline a host has rather than one the test
-/// assembled. The application ports are stubbed so that container can be built and so a call reaching one answers.
+/// assembled. The application ports are stubbed so that container can be built; a call driven through these filters
+/// ends at a stand-in handler rather than at a tool.
 /// </remarks>
 internal static class RegisteredMcpToolSurface
 {
@@ -106,7 +107,9 @@ internal static class RegisteredMcpToolSurface
         services.AddSingleton(
             authorization
             ?? AccessAuthorizations.ForCallerGranted([.. MailFathomPermission.PublishedFor(ProtectedSurface.Mail)]));
-        services.AddSingleton(TimeProvider.System);
+        // A fake rather than the system clock because the reporter on the call path reads it: a composed call would
+        // otherwise be timed against the wall clock and publish a real duration onto the process-wide histogram.
+        services.AddSingleton<TimeProvider>(new FakeTimeProvider());
         services.AddSingleton<IStoredEmailTimelineReader>(new StubStoredEmailTimelineReader());
         services.AddSingleton<ISynchronizationFreshnessReader>(new StubSynchronizationFreshnessReader());
         services.AddSingleton<IStoredEmailSummaryReader>(new StubStoredEmailSummaryReader());

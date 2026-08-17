@@ -111,15 +111,16 @@ public sealed class McpToolSurfaceCompositionTests
                 && Equals(errorCode, (int)McpErrorCode.InvalidParams));
     }
 
-    /// <summary>A call the grant permits passes both filters and reaches the tool the registration composed behind them.</summary>
+    /// <summary>A call the grant permits passes both registered filters untouched and is served whatever lies behind them.</summary>
     /// <remarks>
-    /// Named under <c>list_accounts</c> because a call that completes is recorded on the process-wide meter, and the
-    /// telemetry tests are a separate collection running alongside this one: a name whose measurements one of them
-    /// counts exactly would fail there on a change made here. <c>search_emails</c> and <c>ask_mail</c> are both counted;
-    /// this one is not.
+    /// The pipeline here ends at a stand-in handler rather than at SDK dispatch, so what this establishes is that
+    /// neither filter refused the call — not that a tool ran. Named under <c>list_accounts</c> because a call that
+    /// completes is recorded on the process-wide meter, and the telemetry tests are a separate collection running
+    /// alongside this one: a name whose measurements one of them counts exactly would fail there on a change made here.
+    /// <c>search_emails</c> and <c>ask_mail</c> are both counted; this one is not.
     /// </remarks>
     [Fact]
-    public async Task AddMailFathomServer_ACallTheGrantPermits_ReachesTheTool()
+    public async Task AddMailFathomServer_ACallTheGrantPermits_IsNotRefusedByTheFilters()
     {
         // Arrange
         await using var provider = RegisteredMcpToolSurface.ComposedForCallerGranted(MailFathomPermission.MailRead);
