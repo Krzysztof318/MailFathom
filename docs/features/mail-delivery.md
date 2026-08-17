@@ -181,8 +181,11 @@ address has no such encoding.
 **Some are what the message is made of.** A plain-text body is required and an HTML alternative is optional; where both
 exist the message is a proper `multipart/alternative`, and the plain text is the author's own rather than a reading of
 the markup — a body produced by stripping tags is text nobody wrote, and every recipient whose client prefers plain text
-would read that instead of the message. Each attachment carries the media type its author declared it as, because
-deriving one from the octets would be this system asserting what somebody else's file is.
+would read that instead of the message. Required means written rather than merely supplied, so a blank plain text is
+refused instead of composed — sending nothing to those same recipients is the worse half of what the rule exists to
+prevent — and an alternative present but blank is refused for the same reason read from the other side. Each attachment
+carries the media type its author declared it as, because deriving one from the octets would be this system asserting
+what somebody else's file is.
 
 **And some are bounds.** A recipient count, a body length, an attachment count, a per-file size, and a whole-message
 size are all the deployment's numbers rather than whatever a caller passed, and each is checked before a connection is

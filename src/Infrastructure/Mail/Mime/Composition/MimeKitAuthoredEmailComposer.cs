@@ -82,6 +82,11 @@ internal sealed class MimeKitAuthoredEmailComposer(
             return injectionRefusal;
         }
 
+        if (RefuseBodiesNobodyWrote(authored) is { } emptyBodyRefusal)
+        {
+            return emptyBodyRefusal;
+        }
+
         if (this.RefuseBodiesBeyondBounds(authored) is { } bodyRefusal)
         {
             return bodyRefusal;
@@ -174,6 +179,30 @@ internal sealed class MimeKitAuthoredEmailComposer(
             role,
             "An outgoing recipient is named in one of the declared headers."),
     };
+
+    /// <summary>Refuses a message whose text nobody wrote, and an alternative that would be offered empty.</summary>
+    /// <remarks>
+    /// The type requires a plain-text body, and a blank string satisfies the compiler rather than the requirement. What
+    /// composing one would produce is the outcome the plain text exists to prevent, only worse: a recipient whose client
+    /// prefers plain text is shown nothing at all instead of the message, and a body derived from the markup is exactly
+    /// what this system refuses to invent for them. An alternative present but blank is the same failure read from the
+    /// other side, so it is refused rather than offered to the clients that would choose it.
+    /// </remarks>
+    private static AuthoredEmailComposition? RefuseBodiesNobodyWrote(AuthoredEmail authored)
+    {
+        if (string.IsNullOrWhiteSpace(authored.PlainTextBody))
+        {
+            return AuthoredEmailComposition.Refused(
+                AuthoredEmailRefusalReason.FieldUnusable,
+                AuthoredEmailField.PlainTextBody);
+        }
+
+        return authored.HtmlBody is { } htmlBody && string.IsNullOrWhiteSpace(htmlBody)
+            ? AuthoredEmailComposition.Refused(
+                AuthoredEmailRefusalReason.FieldUnusable,
+                AuthoredEmailField.HtmlBody)
+            : null;
+    }
 
     /// <summary>Refuses a body larger than this deployment composes.</summary>
     private AuthoredEmailComposition? RefuseBodiesBeyondBounds(AuthoredEmail authored)

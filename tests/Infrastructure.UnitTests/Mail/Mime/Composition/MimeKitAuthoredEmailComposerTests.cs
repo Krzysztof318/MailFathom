@@ -553,6 +553,51 @@ public sealed class MimeKitAuthoredEmailComposerTests
         AssertBoundExceeded(composition, AuthoredEmailField.Recipients, Bounds().MaxRecipientCount);
     }
 
+    /// <summary>
+    /// An author who wrote only markup has written no message this system composes, so the markup is refused rather
+    /// than sent beside a plain text that would show every client preferring it nothing at all.
+    /// </summary>
+    [Theory]
+    [InlineData("")]
+    [InlineData("   \r\n\t")]
+    public void Compose_MarkupBesideAPlainTextNobodyWrote_IsRefused(string plainTextBody)
+    {
+        // Arrange
+        var authored = Authored() with
+        {
+            PlainTextBody = plainTextBody,
+            HtmlBody = "<p>The quarterly report is attached.</p>",
+        };
+
+        // Act
+        var composition = CreateComposer().Compose(Account, Requester(), authored, Capabilities());
+
+        // Assert
+        AssertRefused(
+            composition,
+            AuthoredEmailRefusalReason.FieldUnusable,
+            AuthoredEmailField.PlainTextBody,
+            MailFathomErrorCode.OutgoingEmailFieldUnusable);
+    }
+
+    /// <summary>An alternative offered blank is the same failure read from the other side, and is refused as one.</summary>
+    [Fact]
+    public void Compose_AlternativeThatWouldBeOfferedBlank_IsRefused()
+    {
+        // Arrange
+        var authored = Authored() with { HtmlBody = "   " };
+
+        // Act
+        var composition = CreateComposer().Compose(Account, Requester(), authored, Capabilities());
+
+        // Assert
+        AssertRefused(
+            composition,
+            AuthoredEmailRefusalReason.FieldUnusable,
+            AuthoredEmailField.HtmlBody,
+            MailFathomErrorCode.OutgoingEmailFieldUnusable);
+    }
+
     /// <summary>Each body is bounded on its own, so a long one of either kind is refused against its own field.</summary>
     [Fact]
     public void Compose_PlainTextBodyBeyondTheConfiguredLength_IsRefusedNamingIt()

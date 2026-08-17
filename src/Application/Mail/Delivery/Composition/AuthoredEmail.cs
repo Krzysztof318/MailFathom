@@ -33,10 +33,15 @@ public sealed record AuthoredEmail
     public required string Subject { get; init; }
 
     /// <summary>Gets the plain-text body the author wrote, which every composed message carries.</summary>
+    /// <remarks>A blank one is refused rather than composed, because <c>required</c> says the compiler saw a string.</remarks>
     public required string PlainTextBody { get; init; }
 
     /// <summary>Gets the HTML alternative the author wrote, or <see langword="null" /> when they wrote none.</summary>
-    /// <remarks>Present makes the composed message a <c>multipart/alternative</c> of the two bodies; absent makes it the plain text alone.</remarks>
+    /// <remarks>
+    /// Present makes the composed message a <c>multipart/alternative</c> of the two bodies; absent makes it the plain
+    /// text alone. Present and blank is neither, and is refused: the clients that prefer markup would be offered an
+    /// empty message while the text sat beside it unread.
+    /// </remarks>
     public string? HtmlBody { get; init; }
 
     /// <summary>Gets the files the author attached, which is ordinarily none.</summary>
