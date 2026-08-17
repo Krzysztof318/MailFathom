@@ -125,6 +125,7 @@ public sealed class TransportAuthorizedPrincipalSourceTests
 
         // Assert
         Assert.Equal(AuthorizedPrincipalKind.Caller, principal?.Kind);
+        Assert.Equal(TransportCallerIdentity.AnonymousCaller, principal?.Identity);
         Assert.Equal(
             MailFathomPermission.PublishedFor(surface).ToHashSet(),
             principal?.Permissions);
