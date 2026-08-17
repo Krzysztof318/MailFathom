@@ -17,8 +17,9 @@ namespace MailFathom.Application.Rules;
 /// one.
 /// </para>
 /// <para>
-/// The reading is not asynchronous and does not fail, for the reason the source it reads gives: a candidate rule set that
-/// could not be proven usable never becomes the current one.
+/// The reading is not asynchronous, and the rule set itself cannot fail to be produced, for the reason the source it
+/// reads gives: a candidate rule set that could not be proven usable never becomes the current one. What the reading
+/// does refuse is a caller whose grant does not carry the permission, which it raises rather than reports.
 /// </para>
 /// </remarks>
 public sealed class MailRuleSetReader

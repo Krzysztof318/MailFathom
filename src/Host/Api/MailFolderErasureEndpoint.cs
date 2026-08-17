@@ -23,8 +23,9 @@ namespace MailFathom.Host.Api;
 /// <para>
 /// It is here rather than on the MCP surface for the reason every administrative route is: erasing a mailbox's worth of
 /// mail is not something a model reasons over, and what bounds administrative access is what should bound it.
-/// <strong>It is published under <c>mailfathom.admin.erase</c>, which nothing else asks for</strong>, so the one
-/// operation that disposes of stored mail is reachable by a credential provisioned for it and by no other.
+/// <strong>It is published under <c>mailfathom.admin.erase</c></strong>, the grant this deployment allocates to
+/// disposing of what it holds — this route and the erasure of one person from the contact book — so a credential that
+/// reads, operates, or spends does not reach it.
 /// </para>
 /// <para>
 /// One request is one bounded pass, and the command repeats it. The bound is the one the backward pass over stored mail

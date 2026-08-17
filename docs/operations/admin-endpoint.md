@@ -87,6 +87,15 @@ nothing publishes fails startup, naming the entry and the position in the list, 
 read as a narrower grant than you meant; so is a name the same grant already carries. A `mailfathom.mail.*` name is
 refused for a second reason as well — it belongs to the MCP surface and would grant nothing on this one.
 
+**Three `mfctl` commands make two requests and therefore need two permissions.** The table below publishes one
+permission per route, and a command that reads before it writes reaches two routes: `mfctl contact delete` reads the
+person before erasing them, so it needs `mailfathom.admin.audit.read` beside `mailfathom.admin.erase`;
+`mfctl contact edit` reads the record it is about to amend, so it needs the same read beside
+`mailfathom.admin.operate`; and `mfctl mailbox rewind` always reads what a rewind would cost, including under `--yes`,
+so it needs `mailfathom.admin.read` beside `mailfathom.admin.operate`. A credential granted only the permission the operation is published under meets the
+refusal at the first request and nothing is done — which is the safe half of it, and still not what the operator
+intended.
+
 `GET /api/admin/session` sits outside the model and needs no permission. It reports the credential the caller already
 presented, the version this deployment already publishes, and the permissions that credential holds — all of which it
 brought or could ask about itself — and it is what every command reads first, `mfctl login` included. Requiring a

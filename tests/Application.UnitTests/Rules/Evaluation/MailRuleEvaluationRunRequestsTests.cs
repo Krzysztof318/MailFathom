@@ -22,6 +22,10 @@ public sealed class MailRuleEvaluationRunRequestsTests
     private static readonly DateTimeOffset RequestedAt = new(2026, 4, 2, 11, 0, 0, TimeSpan.Zero);
     private static readonly MailAccountId Account = MailAccountId.Create("work");
 
+    /// <summary>What a scheduled occasion is dispatched under, which is what the deployment's own process reaches this with.</summary>
+    private static readonly AccessAuthorization ProcessItself =
+        AccessAuthorizations.ForPrincipal(AuthorizedPrincipal.Process);
+
     private readonly InMemoryMailRuleEvaluationRunStore runStore = new();
     private readonly FakeTimeProvider timeProvider = new(RequestedAt);
 
@@ -84,7 +88,8 @@ public sealed class MailRuleEvaluationRunRequestsTests
     public async Task SubmitScheduledAsync_AccountWithNoRunOutstanding_RecordsAScheduledRun()
     {
         // Act
-        var request = await this.CreateRequests().SubmitScheduledAsync(Account, TestContext.Current.CancellationToken);
+        var request = await this.CreateRequests(ProcessItself)
+            .SubmitScheduledAsync(Account, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.True(request.Accepted);
@@ -108,7 +113,8 @@ public sealed class MailRuleEvaluationRunRequestsTests
         });
 
         // Act
-        var request = await this.CreateRequests().SubmitScheduledAsync(Account, TestContext.Current.CancellationToken);
+        var request = await this.CreateRequests(ProcessItself)
+            .SubmitScheduledAsync(Account, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.False(request.Accepted);
@@ -152,7 +158,8 @@ public sealed class MailRuleEvaluationRunRequestsTests
         });
 
         // Act
-        var request = await this.CreateRequests().SubmitScheduledAsync(Account, TestContext.Current.CancellationToken);
+        var request = await this.CreateRequests(ProcessItself)
+            .SubmitScheduledAsync(Account, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.False(request.Accepted);
@@ -205,13 +212,50 @@ public sealed class MailRuleEvaluationRunRequestsTests
     public async Task SubmitScheduledAsync_TheProcessItself_RecordsARunWithoutHoldingAnyPermission()
     {
         // Arrange
-        var requests = this.CreateRequests(AccessAuthorizations.ForPrincipal(principal: null));
+        var requests = this.CreateRequests(ProcessItself);
 
         // Act
         var request = await requests.SubmitScheduledAsync(Account, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.True(request.Accepted);
+        Assert.Empty(AuthorizedPrincipal.Process.Permissions);
+    }
+
+    /// <summary>Holding no grant is not what admits the scheduled path, so a caller reaching it is refused rather than starting a mailbox-wide walk.</summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task SubmitScheduledAsync_ACallerRatherThanTheProcess_IsRefusedWhateverItWasGranted(bool grantedEverything)
+    {
+        // Arrange
+        MailFathomPermission[] granted = grantedEverything
+            ? [.. MailFathomPermission.All.Where(permission => permission.Surface == ProtectedSurface.Administration)]
+            : [];
+        var requests = this.CreateRequests(AccessAuthorizations.ForCallerGranted(granted));
+
+        // Act
+        await Assert.ThrowsAsync<PrincipalNotAuthorizedException>(() =>
+            requests.SubmitScheduledAsync(Account, TestContext.Current.CancellationToken));
+
+        // Assert
+        Assert.Null(this.runStore.Find(Account));
+        Assert.Empty(this.runStore.Saves);
+    }
+
+    /// <summary>An entrypoint that stated nothing about what admitted the work is the case the check exists to fail on.</summary>
+    [Fact]
+    public async Task SubmitScheduledAsync_AnEntrypointThatStatedNoPrincipal_IsRefusedRatherThanTreatedAsTheProcess()
+    {
+        // Arrange
+        var requests = this.CreateRequests(AccessAuthorizations.ForPrincipal(principal: null));
+
+        // Act
+        await Assert.ThrowsAsync<PrincipalNotAuthorizedException>(() =>
+            requests.SubmitScheduledAsync(Account, TestContext.Current.CancellationToken));
+
+        // Assert
+        Assert.Null(this.runStore.Find(Account));
     }
 
     private MailRuleEvaluationRunRequests CreateRequests(AccessAuthorization? authorization = null)

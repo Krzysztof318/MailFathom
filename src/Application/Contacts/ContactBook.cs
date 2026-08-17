@@ -10,11 +10,11 @@ using MailFathom.Domain.Emails;
 
 namespace MailFathom.Application.Contacts;
 
-/// <summary>The acts a contact book supports: read it, record a person, amend one, promote one, erase one, and export one.</summary>
+/// <summary>The acts a contact book supports: read it — a page of it, one person, or whoever holds an address — record a person, amend one, promote one, erase one, and export one.</summary>
 /// <remarks>
 /// <para>
 /// Every surface over the book — the administration tool, the MCP tools, and collection from arriving mail — performs
-/// these five acts and no others, which is what keeps the origin rule from being a convention each of them remembers.
+/// these six acts and no others, which is what keeps the origin rule from being a convention each of them remembers.
 /// A writer names the origin it acts under, and a contact is amendable only by a writer of its own: collection never
 /// touches what an owner wrote down, and an owner promotes a collected contact rather than editing it in place.
 /// Promotion names the writer for the same reason, so the act of taking a record on is the owner's rather than something

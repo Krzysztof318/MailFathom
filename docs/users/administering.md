@@ -172,7 +172,8 @@ It holds mailfathom.admin.read, mailfathom.admin.operate.
 Documentation for that version: https://krzysztof318.github.io/MailFathom/v0.2.0/
 ```
 
-A credential is granted a set of named permissions on the deployment, and each command needs one of them. Signing in
+A credential is granted a set of named permissions on the deployment, and each command needs the one its operation is
+published under — two, for the three commands that read something before they change it. Signing in
 needs none, so a key that reads `It holds no administrative permission` still signs in and is refused everywhere else —
 which is how a credential is retired without its entry being removed. When a command is refused for want of one, it
 names the permission to add and where it is written, so the answer is to widen that credential's grant rather than to

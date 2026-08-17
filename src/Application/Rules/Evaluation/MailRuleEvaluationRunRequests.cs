@@ -78,8 +78,9 @@ public sealed class MailRuleEvaluationRunRequests
     /// </para>
     /// <para>
     /// This is the operator's own request, so it asks for the grant that covers making the deployment do work — a pass
-    /// over a whole mailbox changes mail on the server. <see cref="SubmitScheduledAsync" /> asks for nothing, because
-    /// what reaches it is this process on a rule's own declared occasion rather than a caller.
+    /// over a whole mailbox changes mail on the server. <see cref="SubmitScheduledAsync" /> asks for no permission and
+    /// for the process itself instead, because what reaches it is this process on a rule's own declared occasion rather
+    /// than a caller.
     /// </para>
     /// </remarks>
     public Task<MailRuleEvaluationRunRequest> SubmitAsync(
@@ -115,15 +116,21 @@ public sealed class MailRuleEvaluationRunRequests
     /// mailbox work nobody needs — which is the guarantee the mechanism dispatching this occasion also makes about the
     /// job it enqueued.
     /// <para>
-    /// It asks for no permission, deliberately. What reaches it is a job this deployment enqueued from a rule's own
-    /// declared schedule, so there is no caller to hold one, and requiring an administrative grant here would mean the
-    /// schedule ran under a credential nobody presented.
+    /// It asks for no permission, deliberately, and requires the process itself instead. What reaches it is a job this
+    /// deployment enqueued from a rule's own declared schedule, so there is no caller to hold a grant, and requiring an
+    /// administrative one here would mean the schedule ran under a credential nobody presented. Requiring the process
+    /// identity is what makes that an admitted case rather than an unasked question: a caller reaching this method from
+    /// an entrypoint added later is refused instead of starting a mailbox-wide pass under no grant at all.
     /// </para>
     /// </remarks>
+    /// <exception cref="PrincipalNotAuthorizedException">Thrown when anything but this deployment's own process reached the use case.</exception>
     public Task<MailRuleEvaluationRunRequest> SubmitScheduledAsync(
         MailAccountId accountId,
-        CancellationToken cancellationToken) =>
-        this.commitPolicy.CommitAsync(
+        CancellationToken cancellationToken)
+    {
+        this.authorization.RequireProcessIdentity();
+
+        return this.commitPolicy.CommitAsync(
             async (session, attemptCancellationToken) =>
             {
                 var scheduled = new MailRuleEvaluationRun
@@ -136,6 +143,7 @@ public sealed class MailRuleEvaluationRunRequests
                 return await this.StartAsync(session, scheduled, attemptCancellationToken);
             },
             cancellationToken);
+    }
 
     /// <summary>Starts the run unless the account's row already holds one this request must not replace.</summary>
     /// <param name="session">The session the write is staged in.</param>

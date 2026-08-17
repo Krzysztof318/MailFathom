@@ -88,13 +88,22 @@ internal sealed record ContactPageResponse(IReadOnlyList<ContactResponse> Contac
 
 /// <summary>What one write to the book produced.</summary>
 /// <param name="Outcome">How the write ended, by the name the application's own outcome carries.</param>
-/// <param name="Contact">The record the outcome is about, or nothing where the book held none.</param>
+/// <param name="Contact">The record as written, present exactly when the write was performed.</param>
 /// <param name="AddressHolder">The contact already holding an address the write claimed, present exactly when that is what refused it.</param>
 /// <remarks>
+/// <para>
 /// A refusal is answered with <c>200</c> and a named outcome rather than a status code, because each one is something
 /// the caller reports to its owner and continues from rather than a request that was malformed. Only the holder's
 /// identity is named: answering with somebody else's record would hand a third party out as a side effect of a refused
 /// write.
+/// </para>
+/// <para>
+/// A refusal carries no record for the same reason, including the two the book can only reach by reading one — a write
+/// the contact's origin refuses, and a promotion of somebody already asserted. The routes that write are published
+/// under <c>mailfathom.admin.operate</c> and reading the book is <c>mailfathom.admin.audit.read</c>, so echoing the
+/// held record back would serve a read to a grant that does not admit it, and a refused write is where that would be
+/// least visible. What the caller is told is what it has to act on: which outcome refused the write.
+/// </para>
 /// </remarks>
 internal sealed record ContactWriteResponse(string Outcome, ContactResponse? Contact, Guid? AddressHolder)
 {
@@ -108,7 +117,7 @@ internal sealed record ContactWriteResponse(string Outcome, ContactResponse? Con
 
         return new ContactWriteResponse(
             result.Outcome.ToString(),
-            result.Contact is null ? null : ContactResponse.For(result.Contact),
+            result is { Outcome: ContactWriteOutcome.Written, Contact: { } written } ? ContactResponse.For(written) : null,
             result.AddressHolder?.Value);
     }
 }
