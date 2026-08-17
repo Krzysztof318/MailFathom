@@ -97,15 +97,15 @@ internal sealed class RecordingCliConsole : ICliConsole
 
     /// <summary>Draws one shape the way a redirected run would see it, and returns what was drawn line by line.</summary>
     /// <remarks>
-    /// The colour is off and the width is the redirected one, which is what an assertion here needs: the recorded lines
-    /// are then the text itself, with nothing in them that depends on the terminal the suite happens to run under. The
-    /// final newline closes the last line rather than opening another, so it is dropped.
+    /// The colour is off, which is what an assertion here needs: the recorded lines are then the text itself, with
+    /// nothing in them that depends on the terminal the suite happens to run under. The final newline closes the last
+    /// line rather than opening another, so it is dropped.
     /// </remarks>
     private static IReadOnlyList<string> Draw(Action<CliRenderer> drawing)
     {
         using StringWriter writer = new();
 
-        drawing(new CliRenderer(writer, new CliTerminal(PermitsColour: false, CliTerminal.WidthWhenRedirected)));
+        drawing(new CliRenderer(writer, new CliTerminal(PermitsColour: false)));
 
         return [.. writer.ToString().Split('\n').SkipLast(1).Select(line => line.TrimEnd('\r'))];
     }

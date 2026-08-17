@@ -107,7 +107,7 @@ internal static class RuleHistoryCommand
                 execution.Rule ?? "an unnamed rule",
                 execution.DescribeOutcome(),
                 $"{execution.Email}",
-                $"{execution.Revision} ({execution.Trigger}, {execution.DescribeDuration()})",
+                $"{execution.Revision ?? "not yet bound"} ({execution.Trigger ?? "an unrecorded walk"}, {execution.DescribeDuration()})",
                 execution.DescribeReadFacts(),
                 execution.DescribeActions());
         }

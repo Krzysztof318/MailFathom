@@ -24,6 +24,16 @@ internal sealed class CliRenderer
     /// <summary>How far one column is set from the next, which is what replaces the padding a command used to write into its own strings.</summary>
     private const int ColumnGap = 2;
 
+    /// <summary>The width the drawing is laid out in, chosen so that no value a command writes ever reaches it.</summary>
+    /// <remarks>
+    /// A layout sized to the terminal folds a run of characters with nowhere to break, and it folds it by writing a real
+    /// newline into the value. An authorization URL and an OAuth refresh token are both written as ordinary lines and
+    /// both can be longer than a window is wide, so a width taken from the terminal would put a line break inside the one
+    /// kind of value an operator has to copy out intact. Nothing here wraps for that reason, which leaves the wrapping
+    /// where it was before any of this drawing existed: the terminal's own, which reflows rather than rewrites.
+    /// </remarks>
+    private const int WidthNoValueReaches = int.MaxValue;
+
     private static readonly Style CautionStyle = new(Color.Yellow);
     private static readonly Style FailureStyle = new(Color.Red);
     private static readonly Style LabelStyle = new(Color.Teal);
@@ -53,7 +63,7 @@ internal sealed class CliRenderer
             Out = new AnsiConsoleOutput(new TrimmedLineWriter(writer)),
         });
 
-        this.console.Profile.Width = terminal.Width;
+        this.console.Profile.Width = WidthNoValueReaches;
     }
 
     /// <summary>Draws one line.</summary>

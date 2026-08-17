@@ -111,6 +111,13 @@ public sealed class TransportTrustSignInTests : IDisposable
         Assert.Contains(
             this.console.Errors,
             line => line.StartsWith($"{SecureEndpoint} presented a certificate", StringComparison.Ordinal));
+
+        // A caution rather than a failure, because nothing has failed: the operator is being asked. Marking it as a
+        // failure would put it in red beside the refusals below, which is the one distinction this prompt depends on.
+        Assert.Contains(
+            this.console.Warnings,
+            line => line.StartsWith($"{SecureEndpoint} presented a certificate", StringComparison.Ordinal));
+        Assert.Empty(this.console.Failures);
     }
 
     [Fact]
@@ -130,6 +137,14 @@ public sealed class TransportTrustSignInTests : IDisposable
         Assert.Empty(store.Read().Profiles);
         Assert.Contains(
             this.console.Errors,
+            line => line.Contains("certificate was refused", StringComparison.Ordinal));
+
+        // The refusal is the failure, and it is the only line here that is one.
+        Assert.Contains(
+            this.console.Failures,
+            line => line.Contains("certificate was refused", StringComparison.Ordinal));
+        Assert.DoesNotContain(
+            this.console.Warnings,
             line => line.Contains("certificate was refused", StringComparison.Ordinal));
     }
 
@@ -222,6 +237,13 @@ public sealed class TransportTrustSignInTests : IDisposable
         Assert.Contains(
             this.console.Errors,
             line => line.StartsWith($"{ClearTextEndpoint} is an HTTP address", StringComparison.Ordinal));
+
+        // A caution rather than a failure. The sign-in succeeded, so a line in the colour failures carry would say the
+        // opposite of what happened, and this is the prompt an operator must not read past.
+        Assert.Contains(
+            this.console.Warnings,
+            line => line.StartsWith($"{ClearTextEndpoint} is an HTTP address", StringComparison.Ordinal));
+        Assert.Empty(this.console.Failures);
     }
 
     /// <summary>The question is asked from the address alone, before anything is sent, so a deployment that would have redirected never gets to answer it.</summary>
@@ -260,6 +282,12 @@ public sealed class TransportTrustSignInTests : IDisposable
         Assert.Empty(store.Read().Profiles);
         Assert.Contains(
             this.console.Errors,
+            line => line.Contains("Transport protection was refused", StringComparison.Ordinal));
+        Assert.Contains(
+            this.console.Failures,
+            line => line.Contains("Transport protection was refused", StringComparison.Ordinal));
+        Assert.DoesNotContain(
+            this.console.Warnings,
             line => line.Contains("Transport protection was refused", StringComparison.Ordinal));
     }
 

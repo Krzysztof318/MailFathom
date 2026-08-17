@@ -367,7 +367,8 @@ Embed the mailbox under that model? [y/N]
 
 The estimate is on standard output and the question is on standard error, which is the split every command here keeps:
 what a redirected invocation captures is the reading, and the person who started it still reads the question, the
-guidance, and the failures. Colour marks the last two and nothing else, and a run whose output is redirected or whose
+guidance, and the failures. Colour marks a failure and a caution, and on a reading it marks a column heading and a label
+naming a value; guidance carries none, and neither does anything else. A run whose output is redirected or whose
 environment sets `NO_COLOR` is written without escape sequences at all.
 
 The prompt is the default and `--yes` is the exception, for scripted use. An invocation whose input is redirected and

@@ -115,9 +115,9 @@ public sealed class SystemCliConsoleTests
     private static SystemCliConsole Console(StringWriter output, StringWriter error, bool colouredError = false) =>
         new(
             output,
-            new CliTerminal(PermitsColour: false, CliTerminal.WidthWhenRedirected),
+            new CliTerminal(PermitsColour: false),
             error,
-            new CliTerminal(colouredError, CliTerminal.WidthWhenRedirected));
+            new CliTerminal(colouredError));
 
     private static IReadOnlyList<string> Lines(StringWriter writer) =>
         [.. writer.ToString().Split('\n').SkipLast(1).Select(line => line.TrimEnd('\r'))];

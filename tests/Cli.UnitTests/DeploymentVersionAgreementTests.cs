@@ -162,6 +162,12 @@ public sealed class DeploymentVersionAgreementTests : IDisposable
         Assert.Contains(
             this.console.Errors,
             line => line.Contains("another release line", StringComparison.Ordinal));
+
+        // The other half of the same distinction: this one refuses the command, so it is a failure and not a caution.
+        Assert.Contains(
+            this.console.Failures,
+            line => line.Contains("another release line", StringComparison.Ordinal));
+        Assert.Empty(this.console.Warnings);
     }
 
     /// <summary>A build difference is a sentence and not a refusal, so the command it was reported on still runs.</summary>
@@ -180,6 +186,13 @@ public sealed class DeploymentVersionAgreementTests : IDisposable
             this.console.Errors,
             line => line.Contains("not the same build and problems may occur", StringComparison.Ordinal));
         Assert.Contains(this.console.Lines, line => line.Contains("accepts the stored credential", StringComparison.Ordinal));
+
+        // A caution, because the command ran and answered. Reporting a build difference in the colour a failure carries
+        // would say the reading below it is untrustworthy, which is exactly what this concern does not claim.
+        Assert.Contains(
+            this.console.Warnings,
+            line => line.Contains("not the same build and problems may occur", StringComparison.Ordinal));
+        Assert.Empty(this.console.Failures);
     }
 
     /// <summary>

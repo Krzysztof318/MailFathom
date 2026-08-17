@@ -25,7 +25,8 @@ restart.
 
 **What it prints is meant to be read and safe to capture.** A command that answers with a list of records lays them out
 as a table with column headings, one that answers about a single thing sets its values beside the labels naming them,
-and colour marks failures and cautions and nothing else — so a failure does not read as a result. The result goes to
+and colour marks four things and nothing else: a failure, a caution, a column heading, and a label naming a value — so a
+failure does not read as a result, and a heading does not read as one of the values under it. The result goes to
 standard output and everything else, including the questions and the guidance, to standard error, so redirecting a
 command captures the answer alone. A redirected run, and any run whose environment sets `NO_COLOR`, is written with no
 escape sequences at all.

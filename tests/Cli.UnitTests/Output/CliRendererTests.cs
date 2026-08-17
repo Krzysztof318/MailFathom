@@ -203,12 +203,51 @@ public sealed class CliRendererTests
         Assert.Equal(["Rule", "[red]archive[/]"], Lines(writer));
     }
 
+    /// <summary>Proves a value too long for any terminal reaches the operator whole rather than folded.</summary>
+    /// <remarks>
+    /// A refresh token and an authorization URL are both written as ordinary lines, and both can be longer than a
+    /// terminal is wide. A drawing that folded one would put a newline inside a value an operator is told to copy, so
+    /// what this asserts is that no width the layout could be sized to is ever reached.
+    /// </remarks>
+    [Fact]
+    public void WriteLine_ValueLongerThanAnyTerminal_WritesItOnOneLine()
+    {
+        // Arrange
+        StringWriter writer = new();
+        CliRenderer renderer = new(writer, Redirected);
+        var token = new string('t', 4096);
+
+        // Act
+        renderer.WriteLine(token, CliEmphasis.None);
+
+        // Assert
+        Assert.Equal([token], Lines(writer));
+    }
+
+    /// <summary>Proves the same of a value inside a listing, where the layout has a second reason to break one.</summary>
+    [Fact]
+    public void Write_CellLongerThanAnyTerminal_KeepsTheRowOnOneLine()
+    {
+        // Arrange
+        StringWriter writer = new();
+        CliRenderer renderer = new(writer, Redirected);
+        var address = new string('a', 4096);
+        CliTable listing = new("Endpoint");
+        listing.AddRow(address);
+
+        // Act
+        renderer.Write(listing);
+
+        // Assert
+        Assert.Equal(["Endpoint", address], Lines(writer));
+    }
+
     /// <summary>What a marked line opens with, and the whole of what a stream permitting no colour must never carry.</summary>
     private const string EscapeSequence = "\u001b";
 
-    private static CliTerminal Redirected => new(PermitsColour: false, CliTerminal.WidthWhenRedirected);
+    private static CliTerminal Redirected => new(PermitsColour: false);
 
-    private static CliTerminal Coloured => new(PermitsColour: true, CliTerminal.WidthWhenRedirected);
+    private static CliTerminal Coloured => new(PermitsColour: true);
 
     private static IReadOnlyList<string> Lines(StringWriter writer) =>
         [.. writer.ToString().Split('\n').SkipLast(1).Select(line => line.TrimEnd('\r'))];
