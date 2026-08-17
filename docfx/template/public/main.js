@@ -18,6 +18,11 @@ const zoomStep = 1.2
 const minimumScale = 0.2
 const maximumScale = 40
 
+// The share of the viewport a figure larger than it opens into. The frame around it sits outside that
+// share, which is what the remainder leaves room for.
+const openWidthShare = 0.92
+const openHeightShare = 0.88
+
 export default {
   iconLinks: [
     {
@@ -218,8 +223,8 @@ function renderVersionNotice(layout, manifest, current) {
 
 // A diagram is drawn at the width of the article, which is the one measurement that has nothing to
 // do with how much detail it holds. The viewer opens it over the page at whatever size the reader
-// needs, and every gesture below moves one transform on one element: the wheel and the buttons
-// scale it about the pointer, a drag translates it, and Escape or the backdrop puts the page back.
+// needs: the wheel and the buttons scale it about the pointer, a drag translates it, and Escape or
+// the backdrop puts the page back.
 function installFigureViewer() {
   let viewer = null
 
@@ -265,15 +270,31 @@ function createViewer() {
   const pointers = new Map()
   let lastPointerSpread = 0
 
-  const applyTransform = () => {
-    stage.style.transform = `translate(${offsetX}px, ${offsetY}px) scale(${scale})`
+  // The figure the zoom resizes, the width it was drawn at on the page, and the scale it opens at.
+  // Carrying the zoom in a width rather than in the transform is what keeps an enlarged diagram sharp:
+  // the stage is a compositor layer, a layer is rasterized once at the size it is given, and a `scale()`
+  // over one stretches that bitmap however much vector art is inside it. A width is laid out instead, so
+  // the SVG is drawn again at every step and an image is resampled from its own pixels rather than from
+  // the copy the layer kept. The transform is left to carry the panning, which changes no raster size.
+  let zoomedFigure = null
+  let drawnSize = null
+  let openScale = 1
+
+  const applyView = () => {
+    stage.style.transform = zoomedFigure
+      ? `translate(${offsetX}px, ${offsetY}px)`
+      : `translate(${offsetX}px, ${offsetY}px) scale(${scale})`
+
+    if (zoomedFigure) {
+      zoomedFigure.style.width = `${drawnSize.width * scale}px`
+    }
   }
 
   const reset = () => {
-    scale = 1
+    scale = openScale
     offsetX = 0
     offsetY = 0
-    applyTransform()
+    applyView()
   }
 
   // Zooming about a point keeps whatever is under it still, which is what makes a wheel over the
@@ -288,7 +309,7 @@ function createViewer() {
     offsetX = clientX - centreX - (clientX - centreX - offsetX) * applied
     offsetY = clientY - centreY - (clientY - centreY - offsetY) * applied
     scale = next
-    applyTransform()
+    applyView()
   }
 
   const zoomAtCentre = factor => {
@@ -299,6 +320,7 @@ function createViewer() {
   const close = () => {
     root.hidden = true
     stage.replaceChildren()
+    zoomedFigure = null
     pointers.clear()
     document.body.classList.remove('mf-viewer-open')
   }
@@ -343,7 +365,7 @@ function createViewer() {
     if (pointers.size === 1) {
       offsetX += event.clientX - previous.clientX
       offsetY += event.clientY - previous.clientY
-      applyTransform()
+      applyView()
       return
     }
 
@@ -372,6 +394,22 @@ function createViewer() {
   root.addEventListener('pointercancel', releasePointer)
   root.addEventListener('dblclick', reset)
 
+  // The size a figure fits into is the viewport's, so a window that changes size changes it. A reader
+  // who has zoomed is left where they are and reaches the new fit through the reset they already have;
+  // one who has not is following the fit, and a rotated phone is exactly when they need it followed.
+  window.addEventListener('resize', () => {
+    if (root.hidden || !zoomedFigure) {
+      return
+    }
+
+    const wasAtOpenScale = scale === openScale
+    openScale = openingScaleFor(drawnSize)
+
+    if (wasAtOpenScale) {
+      reset()
+    }
+  })
+
   document.addEventListener('keydown', event => {
     if (root.hidden) {
       return
@@ -390,14 +428,51 @@ function createViewer() {
 
   return {
     open(figure) {
+      const frame = document.createElement('div')
+      frame.className = 'mf-viewer-frame'
+
       const copy = figure.cloneNode(true)
       copy.removeAttribute('id')
-      stage.replaceChildren(copy)
+      frame.appendChild(copy)
+      stage.replaceChildren(frame)
+
+      // A Mermaid diagram is an `<svg>` inside the `<pre>` that was clicked, and it is the SVG rather than
+      // the `<pre>` that has a size worth stating. Either it or an image carries an aspect ratio, so a
+      // width is the whole of the instruction and the height follows from it — and both the article's cap
+      // on that width and Mermaid's own are withdrawn, since each holds the drawing at the one size the
+      // viewer exists to leave behind. A `<pre>` Mermaid has not drawn into yet has neither, and keeps the
+      // transform below so that its gestures still do something.
+      zoomedFigure = copy.matches('img') ? copy : copy.querySelector('svg')
+      const asDrawn = (figure.matches('img') ? figure : figure.querySelector('svg'))?.getBoundingClientRect()
+
+      if (zoomedFigure && asDrawn?.width > 0) {
+        zoomedFigure.style.maxWidth = 'none'
+        zoomedFigure.style.maxHeight = 'none'
+        zoomedFigure.style.height = 'auto'
+        drawnSize = asDrawn
+        openScale = openingScaleFor(asDrawn)
+      } else {
+        zoomedFigure = null
+        drawnSize = null
+        openScale = 1
+      }
+
       reset()
       root.hidden = false
       document.body.classList.add('mf-viewer-open')
     }
   }
+}
+
+// A figure opens at the size the page drew it at, reduced only where that size does not fit over the page.
+// Opening it larger than the page had it would be a second layout of the drawing the reader is looking at,
+// and opening a tall one unreduced would put its head and its foot outside the viewer before a gesture has
+// been made.
+function openingScaleFor(asDrawn) {
+  return Math.min(
+    1,
+    openWidthShare * window.innerWidth / asDrawn.width,
+    openHeightShare * window.innerHeight / asDrawn.height)
 }
 
 function controlButton(icon, title, onClick) {
