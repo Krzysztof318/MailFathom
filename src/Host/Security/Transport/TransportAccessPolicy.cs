@@ -34,10 +34,11 @@ namespace MailFathom.Host.Security.Transport;
 /// <para>
 /// What an admitted caller may then <em>do</em> is a separate question and is not asked here. The permissions its
 /// credential's configuration entry granted travel on the principal this judges, written by whichever scheme
-/// authenticated it, so that admission stays one shared judgement while each surface enforces the grant in the terms its
-/// own callers are answered in. <see cref="TransportGrant" /> is how they are read back, through the caller the
-/// application layer is handed: the MCP surface serves each caller the tools its grant permits and answers a call for
-/// any other as a tool that does not exist.
+/// authenticated it, so that admission stays one shared judgement while each surface comes to enforce the grant in the
+/// terms its own callers are answered in. <see cref="TransportGrant" /> is how one is read back, through the caller the
+/// application layer is handed. The MCP surface is the one doing so today: it serves each caller the tools its grant
+/// permits and answers a call for any other as a tool that does not exist. No administrative route consults a
+/// permission yet, so a grant reaches that surface carried and reported rather than enforced.
 /// </para>
 /// </remarks>
 internal static class TransportAccessPolicy

@@ -128,9 +128,9 @@ internal static class McpToolAuthorization
     /// <remarks>
     /// <para>
     /// The wording is copied from the SDK's own answer to an unknown tool, because it publishes no member to reach that
-    /// answer through. Nothing verifies the two still match: <c>McpToolAuthorizationTests</c> compares this method
-    /// against the literal above rather than against the SDK, so a release that reworded its message would leave the
-    /// suite green. Reaching the SDK's own dispatch needs a composed host over a real transport, which is the
+    /// answer through. Nothing verifies the two still match: <c>McpToolAuthorizationTests</c> compares what this method
+    /// produces against a literal of its own rather than against the SDK, so a release that reworded its message would
+    /// leave the suite green. Reaching the SDK's own dispatch needs a composed host over a real transport, which is the
     /// integration suite rather than a unit test.
     /// </para>
     /// <para>
