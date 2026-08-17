@@ -24,6 +24,48 @@ internal static class CliOptions
     /// <summary>The environment variable naming the deployment, so a shell can state it once for a session.</summary>
     internal const string EndpointVariable = "MAILFATHOM_ENDPOINT";
 
+    /// <summary>The environment variable that turns the invocation log off for a shell session.</summary>
+    internal const string LogVariable = "MAILFATHOM_LOG";
+
+    /// <summary>The one value of <see cref="LogVariable" /> that means anything.</summary>
+    /// <remarks>
+    /// Every other value, including an empty one, leaves the log on. A variable that failed an invocation over a typo
+    /// would make a diagnostic aid something that can break a command, and a variable with several spellings for
+    /// <c>off</c> is one an operator has to remember the accepted list of.
+    /// </remarks>
+    internal const string LogOff = "off";
+
+    /// <summary>The name of the option that turns the invocation log off for one invocation.</summary>
+    /// <remarks>Named as a constant because the value is read back by name rather than through the instance, which is what lets the option be built per command tree like every other one here.</remarks>
+    internal const string NoLogName = "--no-log";
+
+    /// <summary>Builds the option that turns the invocation log off for one invocation.</summary>
+    /// <returns>The option.</returns>
+    /// <remarks>Recursive, so that it is accepted after the subcommand as well — which is where an operator reaching for it will type it.</remarks>
+    internal static Option<bool> NoLog() => new(NoLogName)
+    {
+        Description = $"Do not record this invocation in the local log. A shell turns it off for a session with ${LogVariable}={LogOff}.",
+        Recursive = true,
+    };
+
+    /// <summary>Decides whether this invocation is recorded in the local log.</summary>
+    /// <param name="parseResult">What the operator typed, parsed.</param>
+    /// <param name="logVariable">What <see cref="LogVariable" /> holds, or <see langword="null" /> when it is unset.</param>
+    /// <returns><see langword="true" /> when the invocation is recorded.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="parseResult" /> is <see langword="null" />.</exception>
+    /// <remarks>
+    /// The same order every other input here follows: what an operator typed beats what their shell was told, and the
+    /// default is on. The variable is a parameter rather than read here, so that neither this nor a test driving a whole
+    /// invocation depends on the process environment every test in an assembly shares.
+    /// </remarks>
+    internal static bool RecordsInvocation(ParseResult parseResult, string? logVariable)
+    {
+        ArgumentNullException.ThrowIfNull(parseResult);
+
+        return !parseResult.GetValue<bool>(NoLogName)
+            && !StringComparer.OrdinalIgnoreCase.Equals(logVariable, LogOff);
+    }
+
     /// <summary>Builds the option naming which deployment to reach.</summary>
     /// <returns>The option.</returns>
     internal static Option<string?> Endpoint() => new("--endpoint")

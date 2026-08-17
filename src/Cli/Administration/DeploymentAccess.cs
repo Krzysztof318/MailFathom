@@ -4,6 +4,7 @@
 
 using MailFathom.Cli.Authorization;
 using MailFathom.Cli.Credentials;
+using MailFathom.Cli.Diagnostics;
 using MailFathom.Cli.Transport;
 
 namespace MailFathom.Cli.Administration;
@@ -32,16 +33,25 @@ internal sealed class DeploymentAccess
     private readonly CredentialStore store;
     private readonly Func<Uri, StoredTransportTrust, DeploymentTransport> openTransport;
     private readonly TimeProvider timeProvider;
+    private readonly CliInvocationRecord? invocation;
 
     /// <summary>Initializes access over the store, the transport, and the clock a command was given.</summary>
     /// <param name="store">Where the profiles live.</param>
     /// <param name="openTransport">Opens a transport aimed at one address; this type disposes what it opens.</param>
     /// <param name="timeProvider">Decides whether the stored access token is still usable.</param>
-    /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
+    /// <param name="invocation">What this invocation is recording, so its log line names the deployment acted on; <see langword="null" /> records nothing.</param>
+    /// <exception cref="ArgumentNullException">Thrown when an argument other than <paramref name="invocation" /> is <see langword="null" />.</exception>
+    /// <remarks>
+    /// This is the one place that knows which deployment a command settled on, because settling it is what this type
+    /// does — the option, the environment variable, and the stored default are reconciled here and nowhere else. That
+    /// is why the record is threaded to here rather than read off the argument list, where the answer would be absent
+    /// for every invocation that relied on the default.
+    /// </remarks>
     internal DeploymentAccess(
         CredentialStore store,
         Func<Uri, StoredTransportTrust, DeploymentTransport> openTransport,
-        TimeProvider timeProvider)
+        TimeProvider timeProvider,
+        CliInvocationRecord? invocation = null)
     {
         ArgumentNullException.ThrowIfNull(store);
         ArgumentNullException.ThrowIfNull(openTransport);
@@ -50,6 +60,7 @@ internal sealed class DeploymentAccess
         this.store = store;
         this.openTransport = openTransport;
         this.timeProvider = timeProvider;
+        this.invocation = invocation;
     }
 
     /// <summary>Settles which deployment a command acts on, renewing its access token when the stored one is spent.</summary>
@@ -60,6 +71,8 @@ internal sealed class DeploymentAccess
     internal async Task<SignedInProfile> ReachAsync(string? requestedDeployment, CancellationToken cancellationToken)
     {
         var profile = this.store.Resolve(requestedDeployment);
+
+        this.invocation?.ReachedDeployment(profile.Name);
 
         if (profile.KeyPair is { } keyPair)
         {

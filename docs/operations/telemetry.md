@@ -1,6 +1,6 @@
 # Telemetry and the Aspire dashboard
 
-<!-- describes: src/Application/Observability/**, src/Common/Observability/**, src/Host/Observability/**, src/Host/ServiceDefaultsExtensions.cs, src/Host/Hosting/Workers/**, src/Infrastructure/Observability/**, src/Infrastructure/Mail/MailKit/MailKitImapClientFactory.cs, src/Infrastructure/HostApplicationBuilderExtensions.cs, src/Mcp/Observability/**, src/AppHost/**, src/AI/ProviderAdapters/OpenAiCompatibleClientFactory.cs -->
+<!-- describes: src/Application/Observability/**, src/Common/Observability/**, src/Host/Observability/**, src/Host/ServiceDefaultsExtensions.cs, src/Host/Hosting/Workers/**, src/Infrastructure/Observability/**, src/Infrastructure/Mail/MailKit/MailKitImapClientFactory.cs, src/Infrastructure/HostApplicationBuilderExtensions.cs, src/Mcp/Observability/**, src/Cli/Diagnostics/**, src/AppHost/**, src/AI/ProviderAdapters/OpenAiCompatibleClientFactory.cs -->
 
 The host instruments itself with OpenTelemetry throughout — logs, metrics, and traces — and exports none of it unless
 the environment names a destination. Today exactly one environment does that out of the box: a local run under the
@@ -696,8 +696,19 @@ listener in a binary published trimmed and self-contained for the sake of holdin
 traces an operator correlates by time is the cheaper answer, and the deployment's own spans are the ones that carry
 what the act actually did.
 
-What the command writes instead is its own output, to the terminal the operator ran it in. That is not a telemetry
-signal and is not collected anywhere; it is the answer to the command, read by the person who typed it.
+What the command writes instead is its own output, to the terminal the operator ran it in, and one line per invocation
+to a file beside its credential store. Neither is a telemetry signal and neither is collected anywhere: the first is the
+answer to the command, read by the person who typed it, and the second is the only durable record that the command ran
+at all, which is what an operator has left once the scrollback is gone. [What the command records about
+itself](admin-endpoint.md#what-the-command-records-about-itself) states the path, the fields, and the two ways to turn
+it off.
+
+That file is held to the half of the rule below that is about disclosure and not to the half that is about a collector,
+and the difference is worth being exact about. No credential and no mail reaches it, exactly as here. A deployment's own
+address does — through the operator's name for a profile, and through a failure line quoting what they typed — which
+this page forbids in every signal above. What makes that sound there and not here is the boundary each one crosses: an
+exported signal leaves the machine for a store somebody else may read, and this file stays in the operator's own
+directory beside a credential store that already records every profile's endpoint in clear.
 
 ## What no signal carries, and what holds every signal to it
 

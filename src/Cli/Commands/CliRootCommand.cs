@@ -121,8 +121,11 @@ internal static class CliRootCommand
             ExportContactCommand.Create(context),
         };
 
+        // The only option the root owns. It governs what the runner does once a command has finished rather than
+        // anything a command does, so it is declared once and made recursive rather than added to each of them.
         return new RootCommand($"MailFathom administration tool ({version.Version}).")
         {
+            CliOptions.NoLog(),
             LoginCommand.Create(context),
             LogoutCommand.Create(context),
             SwitchCommand.Create(context),

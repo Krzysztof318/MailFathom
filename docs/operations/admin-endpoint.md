@@ -1304,6 +1304,79 @@ your machine can read the key too, and on Linux nothing prevents that; the file 
 encryption answers the copy. Holding the credential in the platform's own secret service is tracked as
 [#318](https://github.com/Krzysztof318/MailFathom/issues/318).
 
+## What the command records about itself
+
+Every invocation appends one line to a log beside the credential store, and that file is the only durable record of
+what `mfctl` did. The command holds no exporter and opens no span, so once your terminal's scrollback is gone nothing
+else on the machine answers *what did I run against that deployment, when, and how did it end*.
+
+| Platform | Path |
+| --- | --- |
+| Linux | `$XDG_CONFIG_HOME/MailFathom/mfctl.log`, or `~/.config/MailFathom/mfctl.log` |
+| Windows | `%APPDATA%\MailFathom\mfctl.log` |
+
+One record per line, as JSON, so `tail`, `grep`, and `jq` each work on it without a parser that spans lines:
+
+```console
+$ tail -1 ~/.config/MailFathom/mfctl.log
+{"at":"2026-08-17T09:41:22.184+00:00","command":"mfctl contact delete","outcome":"Failed","durationMilliseconds":412,"exitCode":1,"deployment":"production","failure":"The deployment answered 404 rather than a contact."}
+```
+
+`command` is the path of names `mfctl` declares and `deployment` is your own name for the profile the command settled
+on. A field the invocation has nothing for is left out rather than written as a null.
+
+`outcome` is one of four, and the last two are what makes this file worth having when something goes wrong:
+
+| `outcome` | What happened | What else the record carries |
+| --- | --- | --- |
+| `Completed` | The command did what you asked | `exitCode` `0` |
+| `Failed` | Something you can act on, already printed to your terminal | `exitCode` `1`, and `failure` with that same line |
+| `Faulted` | The command raised something that is a defect rather than your mistake | `fault` with the type of it, and no exit code |
+| `Cancelled` | You stopped it before it finished, and it stopped where it was | no exit code |
+
+`fault` is the type's name and nothing else about it — not the message, which is written for whoever will fix the
+defect and quotes what the code was working on, and not the stack, which is frames rather than data but would end the
+one-record-per-line shape. The stack itself went to your terminal, so what the log adds is that the crash happened at
+all, when, under which command, and what kind it was.
+
+`folder erase` and `mailbox rederive` are the exception to the last row, and deliberately. Both work through a mailbox
+in passes, so an interruption leaves a partial result rather than nothing: each catches the interruption itself, tells
+you how much it got through and that running it again continues from there, and reports that as a failure. Their
+records read `Failed` with that sentence, which is the more useful of the two answers — `Cancelled` would say you
+stopped it and not what it had done by then.
+
+**No credential and no mail is in it.** A credential never reaches a failure message in the first place, because those
+are written to be shown on your terminal. Mail is out by the split the command already keeps: what you asked for goes
+to standard output — a contact, an address, a subject — and `failure` is read back from the failure lines alone, which
+is narrower still than the stream carrying them: the guidance a command writes while it works and the cautions it
+raises are their own kinds and are passed over. Those failure sentences already avoid naming a person, for the same
+reason the log exists: a refusal that named one would end up in a file wherever the command is run from a script.
+
+**Your own deployment can be named in it.** `command` carries no argument value, but the other two fields are not blind
+to where a deployment is. `deployment` is your name for the profile, and a sign-in that passed no `--name` is named
+after the deployment's own host. `failure` is the line the command already printed, and several of those quote the
+address or the alias you typed — `Not signed in to https://…` is the common one, and an invocation the parser refused
+outright carries whichever token it refused. Scrubbing both was considered and
+rejected: this file sits beside `credentials.json`, which records every profile's endpoint in clear, so a log naming
+none of them would be protecting an address the same directory already holds, at the cost of the field you read the log
+for. Treat the file as you treat that directory, which is to say read it before you paste it anywhere.
+
+It is created readable by its owner alone, on the same terms and for the same reason the credential store is, and it is
+bounded at one mebibyte: past that the current file becomes `mfctl.log.1`, replacing whatever was there, and a new one
+starts — so the log occupies at most two mebibytes however long you administer a deployment for. Every field of variable
+length is bounded as well — `failure`, `fault`, and the `deployment` name you chose — so one record stays one line.
+There is no retention policy beyond that, because retention for files on your own machine is yours to decide rather
+than this command's.
+
+Turn it off for one invocation with `--no-log`, which is accepted after the subcommand as well, and for a shell session
+with `MAILFATHOM_LOG=off`. What you typed beats what your shell was told, and the default is on; every other value of
+the variable leaves the log on rather than failing a command over a typo in it.
+
+A record that cannot be written — a read-only home directory, a full disk — is reported as one line on standard error
+and changes nothing else. The command's exit code and its own output stay exactly what they would have been, because
+the command's job is the command. Deleting the directory is not one of those cases: every append recreates it, so
+removing the log is a way to start a new one rather than a way to turn it off.
+
 ## Troubleshooting
 
 | What you see | What it means |

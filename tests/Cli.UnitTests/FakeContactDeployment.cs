@@ -27,19 +27,23 @@ internal static class FakeContactDeployment
     /// <param name="page">What a listing answers, or <see langword="null" /> where the test asks for none.</param>
     /// <param name="erasure">What an erasure answers, or <see langword="null" /> where the test asks for none.</param>
     /// <param name="export">What an export answers, or <see langword="null" /> where the test asks for none.</param>
+    /// <param name="version">The release this deployment reports, or <see langword="null" /> for the command's own.</param>
     /// <returns>The deployment.</returns>
     /// <remarks>
     /// The session route is answered unconditionally, because every command settles the two versions there before its
     /// own operation and a double serving the contact routes alone would report a deployment nothing can be
-    /// administered on.
+    /// administered on. That settling is also the one thing a contact command does before its own work, which is why
+    /// the version is stated here at all: a test about what a command writes before it refuses has no other way to make
+    /// it write anything.
     /// </remarks>
     internal static FakeHttpMessageHandler Holding(
         string? lookup = null,
         string? write = null,
         string? page = null,
         string? erasure = null,
-        string? export = null) =>
-        new((request, _) => Task.FromResult(Answer(request, lookup, write, page, erasure, export)));
+        string? export = null,
+        string? version = null) =>
+        new((request, _) => Task.FromResult(Answer(request, lookup, write, page, erasure, export, version)));
 
     /// <summary>Writes the body a read of one contact answers with.</summary>
     /// <param name="displayName">The name the contact carries.</param>
@@ -168,7 +172,8 @@ internal static class FakeContactDeployment
         string? write,
         string? page,
         string? erasure,
-        string? export)
+        string? export,
+        string? version)
     {
         var path = request.RequestUri?.AbsolutePath;
 
@@ -176,7 +181,7 @@ internal static class FakeContactDeployment
         {
             return Json(
                 HttpStatusCode.OK,
-                FakeAdminEndpoint.SessionBody("workstation", FakeAdminEndpoint.CommandVersion));
+                FakeAdminEndpoint.SessionBody("workstation", version ?? FakeAdminEndpoint.CommandVersion));
         }
 
         if (path == AdminEndpointRoutes.ContactsPath)

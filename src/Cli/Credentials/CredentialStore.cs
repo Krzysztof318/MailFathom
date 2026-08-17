@@ -44,17 +44,13 @@ internal sealed class CredentialStore
 
     /// <summary>Reports where the store lives for the operator running the command.</summary>
     /// <returns>The absolute path of the credentials file.</returns>
-    /// <remarks>
-    /// <see cref="Environment.SpecialFolder.ApplicationData" /> resolves to <c>$XDG_CONFIG_HOME</c> or
-    /// <c>~/.config</c> on Linux and to <c>%APPDATA%</c> on Windows, so one call gives the right per-user location on
-    /// both without a platform branch here.
-    /// </remarks>
-    internal static string DefaultPath() => Path.Combine(DefaultDirectory(), "credentials.json");
+    /// <remarks><see cref="OperatorDirectory" /> holds where that is on each platform, and why everything the command owns on a machine lives in one directory.</remarks>
+    internal static string DefaultPath() => Path.Combine(OperatorDirectory.Resolve(), "credentials.json");
 
     /// <summary>Reports where the key sealing the stored tokens lives.</summary>
     /// <returns>The absolute path of the key file.</returns>
     /// <remarks>Beside the store rather than inside it, so the file an operator might copy or paste into a support bundle is not the file that opens it.</remarks>
-    internal static string DefaultKeyPath() => Path.Combine(DefaultDirectory(), "credentials.key");
+    internal static string DefaultKeyPath() => Path.Combine(OperatorDirectory.Resolve(), "credentials.key");
 
     /// <summary>Reads every profile and which one is the default.</summary>
     /// <returns>The stored state, empty when the operator has never signed in.</returns>
@@ -350,10 +346,6 @@ internal sealed class CredentialStore
                 session.Resource,
                 session.Scope)
             : null;
-
-    private static string DefaultDirectory() => Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData, Environment.SpecialFolderOption.DoNotVerify),
-        "MailFathom");
 
     /// <summary>Replaces the store with a new one, in a way an interrupted process cannot leave half written.</summary>
     /// <remarks>

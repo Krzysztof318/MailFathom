@@ -181,6 +181,11 @@ internal static class LoginCommand
             keyPair,
             connection.Trust);
 
+        // Named here rather than by the access seam every other command goes through, because a sign-in establishes a
+        // profile instead of resolving one — so without this the command that gives a deployment its name is the one
+        // whose own record does not carry it.
+        context.Invocation.ReachedDeployment(profileName);
+
         context.Console.WriteLine(
             $"Signed in to {endpoint.GetLeftPart(UriPartial.Authority)} as '{credentialName}' (MailFathom {deploymentSession.Version}), saved as profile '{profileName}' and selected.{DescribeTransport(connection.Trust)}");
 
