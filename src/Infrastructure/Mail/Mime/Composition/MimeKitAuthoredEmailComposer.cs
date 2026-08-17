@@ -37,6 +37,16 @@ internal sealed class MimeKitAuthoredEmailComposer(
     OutgoingEmailBounds bounds,
     TimeProvider timeProvider) : IAuthoredEmailComposer
 {
+    /// <summary>The number of headers one mailbox can be named in, which is the most a resolution can reduce away.</summary>
+    /// <remarks>
+    /// Resolution drops a repeated mention rather than a person, so the resolved count is never the authored one. It
+    /// can only fall this far, though: naming somebody in all three headers is the whole of what redundancy means here,
+    /// and a further mention of an address already named in the same header says nothing at all. That is what lets the
+    /// authored list be measured before it is parsed — the deployment's number times this one is the largest list any
+    /// acceptable message could have been written as.
+    /// </remarks>
+    private const int AddressableHeaderCount = 3;
+
     /// <summary>The two characters that end a header, and which therefore may not appear inside one.</summary>
     /// <remarks>
     /// A folded continuation needs no member of its own: folding is a line break followed by whitespace, so refusing
@@ -233,7 +243,9 @@ internal sealed class MimeKitAuthoredEmailComposer(
     /// </para>
     /// <para>
     /// The count is measured after that resolution, because what it bounds is the number of people the server is asked
-    /// to accept rather than the number of times they were written down.
+    /// to accept rather than the number of times they were written down. The authored list is measured against
+    /// <see cref="AddressableHeaderCount"/> times that bound before any of it is parsed, so the parsing itself stays
+    /// bounded by the deployment's own number rather than by whatever the author supplied.
     /// </para>
     /// </remarks>
     private AuthoredEmailComposition? ResolveRecipients(
@@ -242,6 +254,14 @@ internal sealed class MimeKitAuthoredEmailComposer(
         out IReadOnlyList<PlacedRecipient> placements)
     {
         placements = [];
+
+        if (authoredRecipients.Count > bounds.MaxRecipientCount * AddressableHeaderCount)
+        {
+            return AuthoredEmailComposition.Refused(
+                AuthoredEmailRefusalReason.BoundExceeded,
+                AuthoredEmailField.Recipients,
+                bounds.MaxRecipientCount);
+        }
 
         var placed = new List<PlacedRecipient>(authoredRecipients.Count);
         var alreadyPlaced = new HashSet<EmailAddress>();

@@ -527,6 +527,32 @@ public sealed class MimeKitAuthoredEmailComposerTests
         AssertBoundExceeded(composition, AuthoredEmailField.Recipients, Bounds().MaxRecipientCount);
     }
 
+    /// <summary>
+    /// Resolution can only drop repeated mentions, and one mailbox is worth naming in three headers at most — so a
+    /// list longer than three times the bound is refused on its authored length, before any of it is parsed.
+    /// </summary>
+    [Fact]
+    public void Compose_MoreMentionsThanRedundancyCouldExplain_IsRefusedOnTheAuthoredLength()
+    {
+        // Arrange
+        var mentions = (Bounds().MaxRecipientCount * 3) + 1;
+        var authored = Authored() with
+        {
+            Recipients =
+            [
+                .. Enumerable.Range(0, mentions).Select(_ => new AuthoredEmailRecipient(
+                    OutgoingRecipientRole.To,
+                    "anna@example.test")),
+            ],
+        };
+
+        // Act
+        var composition = CreateComposer().Compose(Account, Requester(), authored, Capabilities());
+
+        // Assert
+        AssertBoundExceeded(composition, AuthoredEmailField.Recipients, Bounds().MaxRecipientCount);
+    }
+
     /// <summary>Each body is bounded on its own, so a long one of either kind is refused against its own field.</summary>
     [Fact]
     public void Compose_PlainTextBodyBeyondTheConfiguredLength_IsRefusedNamingIt()

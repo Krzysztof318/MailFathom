@@ -197,7 +197,9 @@ since encoding only ever makes them more numerous.
 **One mailbox is offered once.** Somebody an author named in two headers is placed in the more visible one — `To`, then
 `Cc`, then `Bcc` — and the later mention is dropped, because a person meant to be seen must not be hidden from the other
 recipients by an accident of ordering. A blind recipient is offered to the server exactly as any other is; what makes
-them blind is that the transmitted headers do not name them.
+them blind is that the transmitted headers do not name them. The count that is bounded is therefore the resolved one,
+since a repeated mention is not a further person — but the authored list is measured against three times that bound
+before any of it is read, because three headers is the whole of what a repetition can mean.
 
 **A refusal names the field and the limit, and never the value.** An address, a subject, and a body are personal data of
 the people a message is between, so nothing that reaches a log line, a metric, or an exception carries them. The codes
