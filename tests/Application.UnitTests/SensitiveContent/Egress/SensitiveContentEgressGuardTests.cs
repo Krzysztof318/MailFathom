@@ -42,7 +42,9 @@ public sealed class SensitiveContentEgressGuardTests
         using var egress = ScanningSensitiveContentEgress.Finding(Marker, this.timeProvider);
 
         // Act
-        using (egress.Guard.BeginGuardedOperation(SensitiveContentEgressPoint.McpEmailContent))
+        using (var scan = egress.Guard.BeginGuardedOperation(
+            SensitiveContentEgressPoint.McpEmailContent,
+            TestContext.Current.CancellationToken))
         {
             await egress.Guard.GuardAsync(
                 SensitiveContentEgressPoint.McpEmailContent,
@@ -52,6 +54,8 @@ public sealed class SensitiveContentEgressGuardTests
                 SensitiveContentEgressPoint.McpEmailContent,
                 ["a subject", "a display name"],
                 TestContext.Current.CancellationToken);
+
+            scan.Completed();
         }
 
         // Assert
@@ -60,6 +64,7 @@ public sealed class SensitiveContentEgressGuardTests
         Assert.Equal(SensitiveContentEgressPoint.McpEmailContent, operation.EgressPoint);
         Assert.Equal(3, operation.GuardedTextCount);
         Assert.False(operation.WasRefused);
+        Assert.True(operation.WasCompleted);
         Assert.True(operation.WasClosed);
     }
 
@@ -71,12 +76,16 @@ public sealed class SensitiveContentEgressGuardTests
         using var egress = ScanningSensitiveContentEgress.Finding(Marker, this.timeProvider);
 
         // Act
-        using (egress.Guard.BeginGuardedOperation(SensitiveContentEgressPoint.McpSnippet))
+        using (var scan = egress.Guard.BeginGuardedOperation(
+            SensitiveContentEgressPoint.McpSnippet,
+            TestContext.Current.CancellationToken))
         {
             await egress.Guard.GuardAsync(
                 SensitiveContentEgressPoint.McpSnippet,
                 "inside",
                 TestContext.Current.CancellationToken);
+
+            scan.Completed();
         }
 
         await egress.Guard.GuardAsync(
@@ -97,7 +106,9 @@ public sealed class SensitiveContentEgressGuardTests
         using var egress = ScanningSensitiveContentEgress.Unavailable(this.timeProvider);
 
         // Act
-        using (egress.Guard.BeginGuardedOperation(SensitiveContentEgressPoint.McpSnippet))
+        using (egress.Guard.BeginGuardedOperation(
+            SensitiveContentEgressPoint.McpSnippet,
+            TestContext.Current.CancellationToken))
         {
             await Assert.ThrowsAsync<SensitiveContentScannerUnavailableException>(
                 () => egress.Guard.GuardAsync(
@@ -110,7 +121,42 @@ public sealed class SensitiveContentEgressGuardTests
         var operation = Assert.Single(egress.Telemetry.Operations);
 
         Assert.True(operation.WasRefused);
+        Assert.False(operation.WasCompleted);
         Assert.Equal(0, operation.GuardedTextCount);
+    }
+
+    /// <summary>
+    /// A scan the caller walked away from never reports completing, which is what separates it from one that guarded
+    /// everything the payload was going to publish. Nothing else can tell the two apart: both leave through disposal.
+    /// </summary>
+    [Fact]
+    public async Task BeginGuardedOperation_AnOperationLeftThroughAnUnexpectedFailure_NeverReportsCompleting()
+    {
+        // Arrange
+        using var egress = ScanningSensitiveContentEgress.Finding(Marker, this.timeProvider);
+
+        // Act
+        await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+        {
+            using var scan = egress.Guard.BeginGuardedOperation(
+                SensitiveContentEgressPoint.McpEmailContent,
+                TestContext.Current.CancellationToken);
+
+            await egress.Guard.GuardAsync(
+                SensitiveContentEgressPoint.McpEmailContent,
+                "a body",
+                TestContext.Current.CancellationToken);
+
+            throw new InvalidOperationException("The consumer failed after guarding one text.");
+        });
+
+        // Assert
+        var operation = Assert.Single(egress.Telemetry.Operations);
+
+        Assert.False(operation.WasCompleted);
+        Assert.False(operation.WasRefused);
+        Assert.Equal(1, operation.GuardedTextCount);
+        Assert.True(operation.WasClosed);
     }
 
     /// <summary>An opt-in nobody took opens no operation either, so a deployment that scans nothing reports nothing.</summary>
@@ -122,8 +168,11 @@ public sealed class SensitiveContentEgressGuardTests
         var guard = new SensitiveContentEgressGuard(redactor: null, telemetry, this.timeProvider);
 
         // Act
-        using (guard.BeginGuardedOperation(SensitiveContentEgressPoint.ChatPrompt))
+        using (var scan = guard.BeginGuardedOperation(
+            SensitiveContentEgressPoint.ChatPrompt,
+            TestContext.Current.CancellationToken))
         {
+            scan.Completed();
         }
 
         // Assert

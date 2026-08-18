@@ -372,12 +372,14 @@ neither would otherwise be a duration with nothing under it.
 
 | Span | Where it is opened | What it carries |
 | --- | --- | --- |
-| `rank_mailbox_search` | Inside `search_mailbox`, and inside an answering run's own retrieval | The same two tags the reads above carry, with the count being the candidates the ranking produced rather than the window returned |
-| `scan_sensitive_content` | Wherever a read guards a payload before publishing it | `mailfathom.sensitive_content.egress_point`, `…texts` as how many texts the operation scanned, and `…outcome` as `succeeded` or `refused` |
+| `rank_mailbox_search` | Inside `search_mailbox`, and inside an answering run's own retrieval | The same two tags the reads above carry, with the count being the candidates the ranking scored rather than the window returned |
+| `scan_sensitive_content` | Wherever a read guards a payload before publishing it | `mailfathom.sensitive_content.egress_point`, `…texts` as how many texts the operation scanned, and `…outcome` as `succeeded`, `refused`, `cancelled`, or `failed` |
 
 The ranking's count is deliberately the ranking's rather than the read's. A hybrid search asks each side for four times
-the window so the fusion has agreement to observe, so a call returning ten matches having ranked eighty candidates is
-the ordinary case, and the two numbers side by side are what separate a slow fusion from a wide one.
+the window so the fusion has agreement to observe, so a call returning ten matches having scored eighty candidates —
+forty from each side — is the ordinary case, and the two numbers side by side are what separate a slow fusion from a
+wide one. A lexical-only search ranks exactly the window it returns, so there the two numbers agree, which is itself
+the answer to which of the two rankings ran.
 
 **The scan is spanned per guarded operation and never per guarded value.** One `get_email_content` call scans a body
 representation, a subject, and a display name for every email it names, so a span apiece would report each of those as
@@ -385,8 +387,14 @@ quick while the read they compose stayed slow — and the instruments under
 [what guarding an egress point publishes](#what-guarding-an-egress-point-publishes) already answer at the level of a
 value. The operation is the payload a use case is about to publish: one message's content, one page of a listing, one
 window of results, one conversation's subjects. A deployment with both scanner switches off opens none of them, because
-nothing is constructed on that path at all. A `refused` ending is not an error status: a scanner that could not answer
-stopped the egress on purpose, and the read above it carries the failure.
+nothing is constructed on that path at all.
+
+The four endings exist because every way a scan stops leaves the same way a scan that worked does. `refused` is not an
+error status — a scanner that could not answer stopped the egress on purpose, and the read above it carries the failure
+— and neither is `cancelled`, which is a client or a shutdown rather than anything the scanner did. `failed` is what is
+left: an operation that neither finished nor was stopped, which is the scanner having faulted, and it is the one that
+marks the span as an error. Reporting that as a success is what would rule the scanner out of an investigation it
+belongs in.
 
 Four instruments answer over all of those reads what that span answers about one, and cover the write beside it.
 `mailfathom.mail.content.read.bytes` and `mailfathom.mail.content.write.bytes` are how large the messages moving through

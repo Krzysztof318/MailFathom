@@ -39,7 +39,7 @@ public sealed class JobRecordMappingTests
     {
         // Arrange
         var entity = ClaimedRow();
-        entity.EnqueuedTraceParent = "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01";
+        entity.EnqueuedTraceParent = "00-4bf92f3577b34da6a3ce929d0e0e4736-1a2b3c4d5e6f7081-01";
         entity.EnqueuedTraceState = "vendor=state";
 
         // Act
@@ -47,7 +47,7 @@ public sealed class JobRecordMappingTests
 
         // Assert
         Assert.NotNull(job.EnqueuedTrace);
-        Assert.Equal("00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01", job.EnqueuedTrace.TraceParent);
+        Assert.Equal("00-4bf92f3577b34da6a3ce929d0e0e4736-1a2b3c4d5e6f7081-01", job.EnqueuedTrace.TraceParent);
         Assert.Equal("vendor=state", job.EnqueuedTrace.TraceState);
     }
 

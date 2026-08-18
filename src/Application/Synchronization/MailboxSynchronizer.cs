@@ -174,13 +174,15 @@ public sealed class MailboxSynchronizer
         var persistedCheckpoint =
             await this.checkpointStore.GetCheckpointAsync(accountId, folder.Id, cancellationToken);
 
-        await using var mailboxSession = await this.OpenSessionAsync(
+        var opened = await this.OpenSessionAsync(
             accountId,
             folder,
             transportSecurityPolicy,
             cancellationToken);
 
-        var uidValidity = await mailboxSession.GetUidValidityAsync(cancellationToken);
+        await using var mailboxSession = opened.Session;
+
+        var uidValidity = opened.UidValidity;
         var checkpoint = persistedCheckpoint?.UidValidity == uidValidity
             ? persistedCheckpoint
             : SynchronizationCheckpoint.None(uidValidity);
@@ -420,13 +422,14 @@ public sealed class MailboxSynchronizer
         return resolutionResult;
     }
 
-    /// <summary>Opens the read-only session the rest of the run works over, as a stage of the run.</summary>
+    /// <summary>Opens the read-only session the rest of the run works over, and reads what it is bound to.</summary>
     /// <remarks>
     /// The stage is the opening and not the session's lifetime: connecting, negotiating transport security,
-    /// authenticating, and selecting the folder is the part that waits on a mail server, and everything afterwards is
-    /// reported by the stage that issued it.
+    /// authenticating, selecting the folder, and asking which incarnation of it the server is serving is the part that
+    /// waits on a mail server, and everything afterwards is reported by the stage that issued it. The validity is read
+    /// here rather than by the caller so that a server slow to answer it is attributable to a stage at all.
     /// </remarks>
-    private async Task<IMailboxSession> OpenSessionAsync(
+    private async Task<(IMailboxSession Session, ImapUidValidity UidValidity)> OpenSessionAsync(
         MailAccountId accountId,
         MailFolderResolution folder,
         MailTransportSecurityPolicy transportSecurityPolicy,
@@ -440,9 +443,22 @@ public sealed class MailboxSynchronizer
             transportSecurityPolicy,
             cancellationToken);
 
-        phase.Completed();
+        try
+        {
+            var uidValidity = await session.GetUidValidityAsync(cancellationToken);
 
-        return session;
+            phase.Completed();
+
+            return (session, uidValidity);
+        }
+        catch
+        {
+            // The caller only takes ownership of a session this stage hands back, so one opened and then left
+            // unreadable is released here rather than surviving the run that could not use it.
+            await session.DisposeAsync();
+
+            throw;
+        }
     }
 
     /// <summary>Asks the mail server for one batch of the mail that follows the checkpoint, as a stage of the run.</summary>

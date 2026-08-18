@@ -55,31 +55,48 @@ public sealed class RecordingSensitiveContentEgressTelemetryTests
     }
 
     [Fact]
-    public void BeginGuardedOperation_TextsAndARefusalReportedIntoIt_AreKeptOnTheOperationTheyBelongTo()
+    public void BeginGuardedOperation_WhatWasReportedIntoEachOperation_IsKeptOnTheOperationItBelongsTo()
     {
         // Arrange
         var telemetry = new RecordingSensitiveContentEgressTelemetry();
 
         // Act
-        using (var operation = telemetry.BeginGuardedOperation(SensitiveContentEgressPoint.McpEmailContent))
+        using (var refused = telemetry.BeginGuardedOperation(
+            SensitiveContentEgressPoint.McpEmailContent,
+            TestContext.Current.CancellationToken))
         {
-            operation.TextGuarded();
-            operation.TextGuarded();
-            operation.Refused();
+            refused.TextGuarded();
+            refused.TextGuarded();
+            refused.Refused();
         }
 
-        using (telemetry.BeginGuardedOperation(SensitiveContentEgressPoint.McpSnippet))
+        using (var stopped = telemetry.BeginGuardedOperation(
+            SensitiveContentEgressPoint.McpSnippet,
+            TestContext.Current.CancellationToken))
         {
+            stopped.TextGuarded();
+        }
+
+        using (var succeeded = telemetry.BeginGuardedOperation(
+            SensitiveContentEgressPoint.ChatPrompt,
+            TestContext.Current.CancellationToken))
+        {
+            succeeded.Completed();
         }
 
         // Assert
         Assert.Equal(
             [
-                (SensitiveContentEgressPoint.McpEmailContent, 2, true, true),
-                (SensitiveContentEgressPoint.McpSnippet, 0, false, true),
+                (SensitiveContentEgressPoint.McpEmailContent, 2, true, false, true),
+                (SensitiveContentEgressPoint.McpSnippet, 1, false, false, true),
+                (SensitiveContentEgressPoint.ChatPrompt, 0, false, true, true),
             ],
-            telemetry.Operations.Select(operation =>
-                (operation.EgressPoint, operation.GuardedTextCount, operation.WasRefused, operation.WasClosed)));
+            telemetry.Operations.Select(operation => (
+                operation.EgressPoint,
+                operation.GuardedTextCount,
+                operation.WasRefused,
+                operation.WasCompleted,
+                operation.WasClosed)));
     }
 
     [Fact]

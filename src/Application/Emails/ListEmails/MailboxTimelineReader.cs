@@ -171,7 +171,9 @@ public sealed class MailboxTimelineReader
         }
 
         // One report for the page rather than one per summary, because the page is what a caller waits for.
-        using var scan = this.egressGuard.BeginGuardedOperation(SensitiveContentEgressPoint.McpSnippet);
+        using var scan = this.egressGuard.BeginGuardedOperation(
+            SensitiveContentEgressPoint.McpSnippet,
+            cancellationToken);
 
         var guarded = new List<EmailSummary>(page.Count);
 
@@ -189,6 +191,8 @@ public sealed class MailboxTimelineReader
                     cancellationToken),
             });
         }
+
+        scan.Completed();
 
         return guarded;
     }

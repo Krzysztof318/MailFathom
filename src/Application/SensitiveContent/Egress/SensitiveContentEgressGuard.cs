@@ -78,7 +78,8 @@ public sealed class SensitiveContentEgressGuard
 
     /// <summary>Opens the report of one guarded operation, and reports every text guarded inside it as part of it.</summary>
     /// <param name="egressPoint">Where the texts this operation guards are going.</param>
-    /// <returns>The scope, which the caller disposes when the operation's guarding is done.</returns>
+    /// <param name="cancellationToken">The caller's token, which separates an operation a shutdown stopped from one that broke.</param>
+    /// <returns>The operation, which the caller tells it finished and then disposes.</returns>
     /// <remarks>
     /// <para>
     /// The operation is the payload a consumer is about to publish — one message's content, one page of a listing, one
@@ -90,19 +91,21 @@ public sealed class SensitiveContentEgressGuard
     /// through this guard.
     /// </para>
     /// </remarks>
-    public IDisposable BeginGuardedOperation(SensitiveContentEgressPoint egressPoint)
+    public EgressOperation BeginGuardedOperation(
+        SensitiveContentEgressPoint egressPoint,
+        CancellationToken cancellationToken)
     {
         if (this.redactor is null)
         {
-            return InertOperation.Instance;
+            return EgressOperation.Inert;
         }
 
         var previous = this.currentOperation.Value;
-        var scope = this.telemetry.BeginGuardedOperation(egressPoint);
+        var scope = this.telemetry.BeginGuardedOperation(egressPoint, cancellationToken);
 
         this.currentOperation.Value = scope;
 
-        return new OpenOperation(this, scope, previous);
+        return new EgressOperation(this, scope, previous);
     }
 
     /// <summary>Guards one text about to cross out of this deployment.</summary>
@@ -268,43 +271,56 @@ public sealed class SensitiveContentEgressGuard
         }
     }
 
-    /// <summary>The operation of a deployment that scans nothing, which reports nothing and costs one shared instance.</summary>
-    private sealed class InertOperation : IDisposable
-    {
-        internal static readonly InertOperation Instance = new();
-
-        private InertOperation()
-        {
-        }
-
-        public void Dispose()
-        {
-            // An operation nothing was reported for, on a deployment where nothing is scanned.
-        }
-    }
-
     /// <summary>Keeps one guarded operation current for as long as its consumer is guarding into it.</summary>
     /// <remarks>
     /// The previous operation is restored rather than cleared, so a consumer that guards a payload while assembling
-    /// another one leaves the outer report intact instead of ending it early.
+    /// another one leaves the outer report intact instead of ending it early. A deployment that scans nothing receives
+    /// <see cref="Inert" />, which reports nothing and costs one shared instance.
     /// </remarks>
-    private sealed class OpenOperation(
-        SensitiveContentEgressGuard guard,
-        ISensitiveContentGuardScope scope,
-        ISensitiveContentGuardScope? previous) : IDisposable
+    public sealed class EgressOperation : IDisposable
     {
+        private readonly SensitiveContentEgressGuard? guard;
+        private readonly ISensitiveContentGuardScope? scope;
+        private readonly ISensitiveContentGuardScope? previous;
+
         private bool closed;
 
+        private EgressOperation()
+        {
+        }
+
+        internal EgressOperation(
+            SensitiveContentEgressGuard guard,
+            ISensitiveContentGuardScope scope,
+            ISensitiveContentGuardScope? previous)
+        {
+            this.guard = guard;
+            this.scope = scope;
+            this.previous = previous;
+        }
+
+        /// <summary>Gets the operation of a deployment that scans nothing.</summary>
+        internal static EgressOperation Inert { get; } = new();
+
+        /// <summary>Records that the consumer guarded everything the payload was going to publish.</summary>
+        /// <remarks>
+        /// Called before the payload is returned rather than by disposal, because every way a scan ends badly — a
+        /// refusal, a cancelled shutdown, a scanner that faulted — leaves through the same <c>using</c> as a scan that
+        /// worked. Only the consumer knows which of the two happened.
+        /// </remarks>
+        public void Completed() => this.scope?.Completed();
+
+        /// <inheritdoc />
         public void Dispose()
         {
-            if (this.closed)
+            if (this.closed || this.guard is null || this.scope is null)
             {
                 return;
             }
 
             this.closed = true;
-            guard.currentOperation.Value = previous;
-            scope.Dispose();
+            this.guard.currentOperation.Value = this.previous;
+            this.scope.Dispose();
         }
     }
 }

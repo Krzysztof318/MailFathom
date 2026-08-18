@@ -10,7 +10,7 @@ namespace MailFathom.Application.UnitTests.Jobs;
 /// <summary>Covers the trace a job carries from the enqueue to the attempt that runs it hours later.</summary>
 public sealed class JobTraceContextTests
 {
-    private const string TraceParent = "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01";
+    private const string TraceParent = "00-4bf92f3577b34da6a3ce929d0e0e4736-1a2b3c4d5e6f7081-01";
 
     [Fact]
     public void FromTraceParent_APropagatedContext_KeepsBothValues()
@@ -54,6 +54,27 @@ public sealed class JobTraceContextTests
 
         // Assert
         Assert.Null(context);
+    }
+
+    /// <summary>
+    /// The specification's own longest value is a value, so both ceilings are exclusive of nothing: a context of
+    /// exactly the maximum length is the ordinary case rather than the one the bound was written against, and an
+    /// off-by-one in either check would silently stop linking every attempt.
+    /// </summary>
+    [Fact]
+    public void FromTraceParent_ValuesOfExactlyTheMaximumLength_KeepsBoth()
+    {
+        // Arrange
+        var longestTraceParent = new string('0', JobTraceContext.MaximumTraceParentLength);
+        var longestTraceState = new string('a', JobTraceContext.MaximumTraceStateLength);
+
+        // Act
+        var context = JobTraceContext.FromTraceParent(longestTraceParent, longestTraceState);
+
+        // Assert
+        Assert.NotNull(context);
+        Assert.Equal(longestTraceParent, context.TraceParent);
+        Assert.Equal(longestTraceState, context.TraceState);
     }
 
     /// <summary>The link survives without the vendor list, so an oversized one is dropped rather than truncated into a malformed one.</summary>

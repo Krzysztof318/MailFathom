@@ -24,4 +24,13 @@ public interface ISensitiveContentGuardScope : IDisposable
 
     /// <summary>Records that a scanner could not answer, which refuses the operation rather than serving it unscanned.</summary>
     void Refused();
+
+    /// <summary>Records that the operation guarded everything it was going to, which is what separates it from one that stopped.</summary>
+    /// <remarks>
+    /// A scan reaches its consumer as an exception rather than as a result — a refusal, a cancelled shutdown, a
+    /// scanner that faulted — so the values scanned so far say nothing about whether the operation finished. Without
+    /// this the count of an interrupted operation would be published as an operation that succeeded with fewer texts,
+    /// which is the reading an operator would use to rule the scanner out.
+    /// </remarks>
+    void Completed();
 }

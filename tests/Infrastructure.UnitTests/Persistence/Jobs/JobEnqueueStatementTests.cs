@@ -141,7 +141,7 @@ public sealed class JobEnqueueStatementTests
     {
         // Arrange
         var enqueuedTrace = JobTraceContext.FromTraceParent(
-            "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
+            "00-4bf92f3577b34da6a3ce929d0e0e4736-1a2b3c4d5e6f7081-01",
             "vendor=state");
 
         // Act
@@ -156,7 +156,7 @@ public sealed class JobEnqueueStatementTests
         Assert.Contains("\"EnqueuedTraceParent\", \"EnqueuedTraceState\"", statement.Format, StringComparison.Ordinal);
         Assert.Contains(
             statement.GetArguments(),
-            argument => Equals(argument, "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"));
+            argument => Equals(argument, "00-4bf92f3577b34da6a3ce929d0e0e4736-1a2b3c4d5e6f7081-01"));
         Assert.Contains(statement.GetArguments(), argument => Equals(argument, "vendor=state"));
     }
 

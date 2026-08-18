@@ -42,9 +42,11 @@ internal sealed class RecordingSensitiveContentEgressTelemetry : ISensitiveConte
         this.refused.Add(new RefusedEgress(egressPoint, scanner));
 
     /// <inheritdoc />
-    public ISensitiveContentGuardScope BeginGuardedOperation(SensitiveContentEgressPoint egressPoint)
+    public ISensitiveContentGuardScope BeginGuardedOperation(
+        SensitiveContentEgressPoint egressPoint,
+        CancellationToken cancellationToken)
     {
-        var operation = new GuardedOperation(egressPoint);
+        var operation = new GuardedOperation(egressPoint, cancellationToken);
         this.operations.Add(operation);
 
         return operation;
@@ -61,16 +63,25 @@ internal sealed class RecordingSensitiveContentEgressTelemetry : ISensitiveConte
 
     /// <summary>One guarded operation and what was reported into it before its scope was closed.</summary>
     /// <param name="egressPoint">Where the texts this operation guarded were going.</param>
-    internal sealed class GuardedOperation(SensitiveContentEgressPoint egressPoint) : ISensitiveContentGuardScope
+    /// <param name="cancellationToken">The token the consumer opened the operation with, which a test reads to tell a shutdown apart.</param>
+    internal sealed class GuardedOperation(
+        SensitiveContentEgressPoint egressPoint,
+        CancellationToken cancellationToken) : ISensitiveContentGuardScope
     {
         /// <summary>Gets where the texts this operation guarded were going.</summary>
         public SensitiveContentEgressPoint EgressPoint => egressPoint;
+
+        /// <summary>Gets the token the consumer opened the operation with.</summary>
+        public CancellationToken CancellationToken => cancellationToken;
 
         /// <summary>Gets how many texts were scanned inside this operation.</summary>
         public int GuardedTextCount { get; private set; }
 
         /// <summary>Gets whether a scanner refused the operation.</summary>
         public bool WasRefused { get; private set; }
+
+        /// <summary>Gets whether the consumer reported the operation as having guarded everything it was going to.</summary>
+        public bool WasCompleted { get; private set; }
 
         /// <summary>Gets whether the scope was closed, which a guarded operation always is.</summary>
         public bool WasClosed { get; private set; }
@@ -80,6 +91,9 @@ internal sealed class RecordingSensitiveContentEgressTelemetry : ISensitiveConte
 
         /// <inheritdoc />
         public void Refused() => this.WasRefused = true;
+
+        /// <inheritdoc />
+        public void Completed() => this.WasCompleted = true;
 
         /// <inheritdoc />
         public void Dispose() => this.WasClosed = true;

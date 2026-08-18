@@ -350,13 +350,19 @@ public sealed class EmailContentReader
 
         // One report for the message rather than one per field: a header block and every body representation of one
         // email are what a reader waits for, and a span apiece would report each as quick while the read stayed slow.
-        using var scan = this.egressGuard.BeginGuardedOperation(SensitiveContentEgressPoint.McpEmailContent);
+        using var scan = this.egressGuard.BeginGuardedOperation(
+            SensitiveContentEgressPoint.McpEmailContent,
+            cancellationToken);
 
-        return content with
+        var guarded = content with
         {
             Headers = await this.GuardedAsync(content.Headers, cancellationToken),
             Body = await this.GuardedAsync(content.Body, cancellationToken),
         };
+
+        scan.Completed();
+
+        return guarded;
     }
 
     /// <summary>Scans the two things a header block carries that a message's author wrote.</summary>

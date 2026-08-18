@@ -95,7 +95,7 @@ public sealed class BackgroundWorkSpanTests : IDisposable
         // Arrange
         var telemetry = new JobQueueTelemetry();
         var enqueued = JobTraceContext.FromTraceParent(
-            "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
+            "00-4bf92f3577b34da6a3ce929d0e0e4736-1a2b3c4d5e6f7081-01",
             traceState: null);
 
         // Act
@@ -109,7 +109,7 @@ public sealed class BackgroundWorkSpanTests : IDisposable
         var link = Assert.Single(span.Links);
 
         Assert.Equal("4bf92f3577b34da6a3ce929d0e0e4736", link.Context.TraceId.ToHexString());
-        Assert.Equal("00f067aa0ba902b7", link.Context.SpanId.ToHexString());
+        Assert.Equal("1a2b3c4d5e6f7081", link.Context.SpanId.ToHexString());
         Assert.NotEqual(link.Context.TraceId, span.TraceId);
     }
 

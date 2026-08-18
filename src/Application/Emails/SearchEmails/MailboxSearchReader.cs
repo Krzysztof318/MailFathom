@@ -261,7 +261,9 @@ public sealed class MailboxSearchReader
         // One report for the window rather than one per field: a caller waits for the whole scan of what it is about
         // to receive, and a subject, a display name, and a set of snippets apiece would report each as quick while the
         // read they compose stayed slow.
-        using var scan = this.egressGuard.BeginGuardedOperation(SensitiveContentEgressPoint.McpSnippet);
+        using var scan = this.egressGuard.BeginGuardedOperation(
+            SensitiveContentEgressPoint.McpSnippet,
+            cancellationToken);
 
         var guarded = new List<EmailSearchMatch>(matches.Count);
 
@@ -286,6 +288,8 @@ public sealed class MailboxSearchReader
                 Snippets = snippets,
             });
         }
+
+        scan.Completed();
 
         return guarded;
     }
@@ -338,7 +342,9 @@ public sealed class MailboxSearchReader
 
         var fused = ReciprocalRankFusion.Fuse(lexicalCandidates, semanticCandidates, resultLimit);
 
-        ranking.Completed(fused.Count);
+        // What the ranking produced rather than what the search returns: the fused window is bounded by the result
+        // limit, so reporting it would publish a number that never differs from the count on the read above.
+        ranking.Completed(lexicalCandidates.Count + semanticCandidates.Count);
 
         return (fused, EmailSearchRetrievalMode.Hybrid, semantic.Capability);
     }

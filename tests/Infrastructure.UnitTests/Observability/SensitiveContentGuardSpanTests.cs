@@ -51,11 +51,14 @@ public sealed class SensitiveContentGuardSpanTests : IDisposable
         var telemetry = new SensitiveContentEgressTelemetry();
 
         // Act
-        using (var operation = telemetry.BeginGuardedOperation(SensitiveContentEgressPoint.McpEmailContent))
+        using (var operation = telemetry.BeginGuardedOperation(
+            SensitiveContentEgressPoint.McpEmailContent,
+            TestContext.Current.CancellationToken))
         {
             operation.TextGuarded();
             operation.TextGuarded();
             operation.TextGuarded();
+            operation.Completed();
         }
 
         // Assert
@@ -75,7 +78,9 @@ public sealed class SensitiveContentGuardSpanTests : IDisposable
         var telemetry = new SensitiveContentEgressTelemetry();
 
         // Act
-        using (var operation = telemetry.BeginGuardedOperation(SensitiveContentEgressPoint.McpSnippet))
+        using (var operation = telemetry.BeginGuardedOperation(
+            SensitiveContentEgressPoint.McpSnippet,
+            TestContext.Current.CancellationToken))
         {
             operation.Refused();
         }
@@ -104,9 +109,12 @@ public sealed class SensitiveContentGuardSpanTests : IDisposable
         {
             readSpan = Activity.Current;
 
-            using (var operation = telemetry.BeginGuardedOperation(SensitiveContentEgressPoint.McpEmailContent))
+            using (var operation = telemetry.BeginGuardedOperation(
+                SensitiveContentEgressPoint.McpEmailContent,
+                TestContext.Current.CancellationToken))
             {
                 operation.TextGuarded();
+                operation.Completed();
             }
 
             read.Completed(1);
@@ -115,5 +123,49 @@ public sealed class SensitiveContentGuardSpanTests : IDisposable
         // Assert
         Assert.NotNull(readSpan);
         Assert.Equal(readSpan.SpanId, Assert.Single(this.published).ParentSpanId);
+    }
+
+    /// <summary>A scan that stopped without a scanner refusing it is the scanner having faulted, which is not a success.</summary>
+    [Fact]
+    public void BeginGuardedOperation_AnOperationThatReportedNothing_PublishesItAsFailed()
+    {
+        // Arrange
+        var telemetry = new SensitiveContentEgressTelemetry();
+
+        // Act
+        using (var operation = telemetry.BeginGuardedOperation(
+            SensitiveContentEgressPoint.McpSnippet,
+            TestContext.Current.CancellationToken))
+        {
+            operation.TextGuarded();
+        }
+
+        // Assert
+        var span = Assert.Single(this.published);
+
+        Assert.Equal("failed", span.GetTagItem("mailfathom.sensitive_content.outcome"));
+        Assert.Equal(ActivityStatusCode.Error, span.Status);
+        Assert.Equal(1, span.GetTagItem("mailfathom.sensitive_content.texts"));
+    }
+
+    /// <summary>A read the host stopped is not a scanner that broke, so a cancelled operation carries no error.</summary>
+    [Fact]
+    public void BeginGuardedOperation_AnOperationTheHostStopped_PublishesItAsCancelled()
+    {
+        // Arrange
+        var telemetry = new SensitiveContentEgressTelemetry();
+        using var shutdown = new CancellationTokenSource();
+
+        // Act
+        using (telemetry.BeginGuardedOperation(SensitiveContentEgressPoint.McpEmailContent, shutdown.Token))
+        {
+            shutdown.Cancel();
+        }
+
+        // Assert
+        var span = Assert.Single(this.published);
+
+        Assert.Equal("cancelled", span.GetTagItem("mailfathom.sensitive_content.outcome"));
+        Assert.Equal(ActivityStatusCode.Ok, span.Status);
     }
 }

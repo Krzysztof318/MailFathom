@@ -23,7 +23,7 @@ public enum MailSynchronizationPhase
     /// <summary>Turning the configured alias into the folder the mail server advertises for it.</summary>
     ResolveFolder = 0,
 
-    /// <summary>Opening the read-only mail session the rest of the run works over, and reading what it is bound to.</summary>
+    /// <summary>Opening the read-only mail session the rest of the run works over, and reading which incarnation of the folder it is bound to.</summary>
     OpenSession = 1,
 
     /// <summary>Walking the folder forward: discovering mail, retrieving what it stores, and committing the checkpoint.</summary>

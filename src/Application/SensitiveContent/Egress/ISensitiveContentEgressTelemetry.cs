@@ -36,11 +36,14 @@ public interface ISensitiveContentEgressTelemetry
 
     /// <summary>Opens the report of one guarded operation, which is what a caller actually waits on.</summary>
     /// <param name="egressPoint">Where the texts this operation guards are going.</param>
+    /// <param name="cancellationToken">The caller's token, read as the scope is disposed to tell a shutdown from an operation that broke.</param>
     /// <returns>The scope, which the caller must dispose exactly once and inside which the scanning happens.</returns>
     /// <remarks>
     /// The instruments above answer over every guarded text of a deployment; this answers what one operation cost the
     /// caller in front of it. Both are needed and neither substitutes for the other: a percentile over values says a
     /// scan is quick while a read that ran fifty of them was not.
     /// </remarks>
-    ISensitiveContentGuardScope BeginGuardedOperation(SensitiveContentEgressPoint egressPoint);
+    ISensitiveContentGuardScope BeginGuardedOperation(
+        SensitiveContentEgressPoint egressPoint,
+        CancellationToken cancellationToken);
 }
