@@ -50,6 +50,105 @@ public sealed class AccessAuthorizationTests
         Assert.Equal(MailFathomErrorCode.PrincipalNotAuthorized, refusal.ErrorCode);
     }
 
+    /// <summary>An act two surfaces perform is reached from either half, which is what the alternative exists for.</summary>
+    [Theory]
+    [InlineData(nameof(MailFathomPermission.AdminOperate))]
+    [InlineData(nameof(MailFathomPermission.MailContactsWrite))]
+    public void RequireAnyPermission_CallerGrantedEitherAlternative_Permits(string granted)
+    {
+        // Arrange
+        var held = granted == nameof(MailFathomPermission.AdminOperate)
+            ? MailFathomPermission.AdminOperate
+            : MailFathomPermission.MailContactsWrite;
+
+        var authorization = AuthorizationOver(AuthorizedPrincipal.Caller(ConfiguredCredentialName, [held]));
+
+        // Act
+        var refusal = Record.Exception(() => authorization.RequireAnyPermission(
+            MailFathomPermission.AdminOperate,
+            MailFathomPermission.MailContactsWrite));
+
+        // Assert
+        Assert.Null(refusal);
+    }
+
+    /// <summary>An alternative is not a widening: a grant holding neither name is refused exactly as one name would refuse it.</summary>
+    [Fact]
+    public void RequireAnyPermission_CallerGrantedNeitherAlternative_Refuses()
+    {
+        // Arrange
+        var authorization = AuthorizationOver(
+            AuthorizedPrincipal.Caller(ConfiguredCredentialName, [MailFathomPermission.MailContactsRead]));
+
+        // Act
+        var refusal = Assert.Throws<PrincipalNotAuthorizedException>(() => authorization.RequireAnyPermission(
+            MailFathomPermission.AdminOperate,
+            MailFathomPermission.MailContactsWrite));
+
+        // Assert
+        Assert.Equal(MailFathomErrorCode.PrincipalNotAuthorized, refusal.ErrorCode);
+    }
+
+    /// <summary>An operator diagnosing a refusal needs the name they could have granted, not the one from the half this caller cannot reach.</summary>
+    [Fact]
+    public void RequireAnyPermission_CallerGrantedNeither_RefusesNamingTheAlternativeOnItsOwnSurface()
+    {
+        // Arrange
+        var authorization = AuthorizationOver(
+            AuthorizedPrincipal.Caller(ConfiguredCredentialName, [MailFathomPermission.MailContactsRead]));
+
+        // Act
+        var refusal = Assert.Throws<PrincipalNotAuthorizedException>(() => authorization.RequireAnyPermission(
+            MailFathomPermission.AdminOperate,
+            MailFathomPermission.MailContactsWrite));
+
+        // Assert
+        Assert.Equal(MailFathomPermission.MailContactsWrite, refusal.RequiredPermission);
+    }
+
+    /// <summary>A caller granted nothing has no surface to read, so the refusal names the alternative the use case listed first.</summary>
+    [Fact]
+    public void RequireAnyPermission_CallerGrantedNothing_RefusesNamingTheFirstAlternative()
+    {
+        // Arrange
+        var authorization = AuthorizationOver(AuthorizedPrincipal.Caller(ConfiguredCredentialName, []));
+
+        // Act
+        var refusal = Assert.Throws<PrincipalNotAuthorizedException>(() => authorization.RequireAnyPermission(
+            MailFathomPermission.AdminOperate,
+            MailFathomPermission.MailContactsWrite));
+
+        // Assert
+        Assert.Equal(MailFathomPermission.AdminOperate, refusal.RequiredPermission);
+    }
+
+    /// <summary>Work no caller requested is admitted by its kind rather than by a grant, so holding a name is not what reaches this.</summary>
+    [Fact]
+    public void RequireAnyPermission_ProcessIdentity_RefusesBothAlternatives()
+    {
+        // Arrange
+        var authorization = AuthorizationOver(AuthorizedPrincipal.Process);
+
+        // Act, Assert
+        Assert.Throws<PrincipalNotAuthorizedException>(() => authorization.RequireAnyPermission(
+            MailFathomPermission.AdminOperate,
+            MailFathomPermission.MailContactsWrite));
+    }
+
+    /// <summary>The unspecified default names no act, so listing it as an alternative is a defect in the use case rather than a refusal.</summary>
+    [Fact]
+    public void RequireAnyPermission_AnUnspecifiedAlternative_IsRejectedAsAnArgument()
+    {
+        // Arrange
+        var authorization = AuthorizationOver(
+            AuthorizedPrincipal.Caller(ConfiguredCredentialName, [MailFathomPermission.AdminOperate]));
+
+        // Act, Assert
+        Assert.Throws<ArgumentException>(() => authorization.RequireAnyPermission(
+            MailFathomPermission.AdminOperate,
+            default));
+    }
+
     /// <summary>An entry an operator emptied grants nothing, and a credential it admits is refused every operation.</summary>
     [Fact]
     public void RequirePermission_CallerGrantedNothing_Refuses()

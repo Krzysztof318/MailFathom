@@ -32,12 +32,19 @@ namespace MailFathom.Application.Contacts;
 /// somebody using it.
 /// </para>
 /// <para>
-/// Every act states the grant it is reached under, because the administrative endpoint is the surface that performs them
-/// today and a check that lived only in its routes would be one a second entrypoint forgets. Reading the book is
-/// <see cref="MailFathomPermission.AdminAuditRead" />, since a collected contact is somebody this deployment learned
-/// about from correspondence rather than a report of its own state; writing one is
+/// Every act states the grant it is reached under, because a check that lived only in a route would be one a second
+/// entrypoint forgets. Reading the book is <see cref="MailFathomPermission.AdminAuditRead" />, since a collected contact
+/// is somebody this deployment learned about from correspondence rather than a report of its own state; writing one is
 /// <see cref="MailFathomPermission.AdminOperate" />; and erasing a person is
-/// <see cref="MailFathomPermission.AdminErase" />, beside the erasure of stored mail. Collection from arriving mail is
+/// <see cref="MailFathomPermission.AdminErase" />, beside the erasure of stored mail.
+/// </para>
+/// <para>
+/// Two surfaces perform this book's writes and each publishes them under a name of its own, so recording, amending, and
+/// erasing admit the administrative grant above <em>or</em> <see cref="MailFathomPermission.MailContactsWrite" />, which
+/// is what an agent reaching the contact tools holds. The halves are disjoint, so requiring one name would leave the act
+/// reachable from the operator and dead from the protocol. The alternative stops where the act does: promoting a
+/// collected contact stays the operator's alone, because taking a record on is the owner's judgement about somebody
+/// collection inferred, and exporting one answers a data-subject request rather than an agent's question. Collection from arriving mail is
 /// work no caller requests, so when it reaches this book the act it uses states that kind of principal beside the grant;
 /// nothing here decides that in advance.
 /// </para>
@@ -134,7 +141,9 @@ public sealed class ContactBook
     {
         ArgumentNullException.ThrowIfNull(newContact);
 
-        this.authorization.RequirePermission(MailFathomPermission.AdminOperate);
+        this.authorization.RequireAnyPermission(
+            MailFathomPermission.AdminOperate,
+            MailFathomPermission.MailContactsWrite);
 
         var recordedAt = this.timeProvider.GetUtcNow();
         var contact = Contact.Create(
@@ -175,7 +184,9 @@ public sealed class ContactBook
     {
         ArgumentNullException.ThrowIfNull(amendment);
 
-        this.authorization.RequirePermission(MailFathomPermission.AdminOperate);
+        this.authorization.RequireAnyPermission(
+            MailFathomPermission.AdminOperate,
+            MailFathomPermission.MailContactsWrite);
 
         return this.commitPolicy.CommitAsync(
             async (session, token) =>
@@ -279,7 +290,9 @@ public sealed class ContactBook
     /// </remarks>
     public Task<ContactErasure> EraseAsync(ContactId contactId, CancellationToken cancellationToken)
     {
-        this.authorization.RequirePermission(MailFathomPermission.AdminErase);
+        this.authorization.RequireAnyPermission(
+            MailFathomPermission.AdminErase,
+            MailFathomPermission.MailContactsWrite);
 
         return this.commitPolicy.CommitAsync(
             (session, token) => this.store.EraseAsync(session, contactId, token),

@@ -50,7 +50,7 @@ internal sealed class StubContactBook
 
     /// <summary>Gets the use case the write tools call.</summary>
     public ContactBookWriter Writer => new(
-        new ContactBook(this.Store, this.Directory, this.CommitPolicy(), this.timeProvider),
+        new ContactBook(this.Store, this.Directory, this.CommitPolicy(), this.timeProvider, Authorization()),
         Authorization());
 
     /// <summary>Builds a contact the book could be holding.</summary>

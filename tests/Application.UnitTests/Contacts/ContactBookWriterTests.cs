@@ -340,7 +340,8 @@ public sealed class ContactBookWriterTests
                 book,
                 book,
                 new OptimisticConcurrencyRetryPolicy(sessionFactory, new PersistenceConcurrencyOptions(), timeProvider),
-                timeProvider),
+                timeProvider,
+                new AccessAuthorization(principals)),
             new AccessAuthorization(principals));
     }
 
