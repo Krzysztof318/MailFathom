@@ -141,6 +141,15 @@ amending and promoting are `mailfathom.admin.operate`; erasing somebody is `mail
 book needed a seventh name — what it needed was for each of its routes to be placed against the separations the six
 already draw.
 
+**The book is also written from the MCP endpoint, under that surface's own name.** Recording, amending, and erasing a
+person are performed by the contact tools as well as by these routes, so the use case behind them admits the
+administrative name above *or* `mailfathom.mail.contacts.write` — the two surfaces draw from disjoint halves, so
+requiring one would leave the act reachable from `mfctl` and refused from every agent. It is an alternative rather than
+a widening, and it stops where the act does: promoting a collected contact and exporting one are named for this surface
+alone, because taking a record on is the owner's judgement about somebody collection inferred and an export answers a
+data-subject request. [MCP tools](../features/mcp-tools.md#the-contact-book-on-this-surface) is what the other half
+publishes.
+
 ### What a refusal says
 
 A caller the endpoint admitted and a route then refuses is answered `403` with a problem document, and that document

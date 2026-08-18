@@ -612,23 +612,36 @@ The operational consequences are the ones that always applied to an unauthentica
   someone else.
 - **Restrict who can reach the address at the network layer.** A loopback bind, a firewall rule, a private network, or an
   authenticating reverse proxy are all outside MailFathom and all appropriate.
-- **Treat the whole surface as read-only but not harmless.** The tools cannot send, delete, move, or mark mail as read, so
-  the exposure is disclosure rather than modification. Disclosure of a mailbox is enough.
+- **Nothing here can touch mail, and the contact book is a different answer.** The mailbox tools cannot send, delete,
+  move, or mark mail as read, so on that half the exposure is disclosure rather than modification — and disclosure of a
+  mailbox is enough on its own. The contact tools are the half that writes: an endpoint with no `Authentication` entry
+  grants `mailfathom.mail.contacts.write` like every other permission on this surface, so anyone who can reach the port
+  can record, amend, and irreversibly erase the deployment's records about identified third parties. Narrow the entry, or
+  keep the port unreachable.
 
 ### What a credential may do
 
 Every entry in `McpEndpoint:Authentication` states what the credentials it admits may do, as `Permissions` — a list of
-names MailFathom publishes. This surface's half is two:
+names MailFathom publishes. This surface's half is four:
 
 | Permission | What it covers |
 | --- | --- |
 | `mailfathom.mail.read` | The tools that read the local mailbox copy: `list_accounts`, `list_emails`, `get_email_content`, `search_emails` |
 | `mailfathom.mail.ask` | `ask_mail`, which answers from mail content by sending it to a model provider |
+| `mailfathom.mail.contacts.read` | `list_contacts` and `get_contact`, which read the deployment's own contact book |
+| `mailfathom.mail.contacts.write` | `create_contact`, `update_contact`, and `delete_contact`, which record, amend, and erase a person in it |
 
-Neither implies the other. `mailfathom.mail.ask` is not the weaker of the two — a cited answer returns mail content — and
-`mailfathom.mail.read` is not egress-free either: where semantic retrieval is configured, `search_emails` places the
-caller's own query text with the embedding provider before anything is read back. What withholding
+No one of them implies another. `mailfathom.mail.ask` is not the weaker of the first two — a cited answer returns mail
+content — and `mailfathom.mail.read` is not egress-free either: where semantic retrieval is configured, `search_emails`
+places the caller's own query text with the embedding provider before anything is read back. What withholding
 `mailfathom.mail.ask` stops is mail content going to a *chat* provider on a caller's behalf.
+
+The two contact permissions are separate from the mailbox ones and from each other, because the book is a different body
+of personal data from the mail — an assembled record about identified third parties rather than correspondence that
+arrived — and because a credential that may look somebody up is not thereby a credential that may erase them.
+`mailfathom.mail.contacts.write` covers the erasure with the two other writes rather than standing apart: a grant that
+cannot edit the book cannot sensibly be trusted to take somebody out of it, and both `delete_contact` and
+`update_contact` advertise themselves as destructive so a client asks before calling either.
 
 **A name nothing publishes fails startup, naming the entry and the position in the list.** That is what the closed
 vocabulary buys: `mailfathom.mail.reads` is refused rather than read as a grant narrower than the one you meant. A
@@ -638,11 +651,13 @@ so a permission on the wrong one would sit in the file granting nothing. So is a
 **The grant belongs to the entry.** An entry may carry an `ApiKey`, a `PublicKey`, and an `OAuth` block at once, and
 `Permissions` applies to every credential it admits — so two credentials to be granted differently are two entries.
 
-**Writing no `Permissions` key leaves the entry holding both.** That is the default a deployment gets for configuring
-nothing, and it is why nothing about this has to be configured before the endpoint works. Writing `Permissions: []`
+**Writing no `Permissions` key leaves the entry holding all four.** That is the default a deployment gets for configuring
+nothing, and it is why nothing about this has to be configured before the endpoint works. It is also what makes a
+permission added in a later release reach an unrestricted entry on its own: the key's absence means *this surface*, not
+the names that were published the day the file was written. Writing `Permissions: []`
 grants nothing instead: the credential still authenticates and holds no capability, which is how one is retired without
-its entry being deleted. An endpoint with no `Authentication` entry at all grants both to every caller it serves, for the
-same reason — there is no entry for a grant to be written on.
+its entry being deleted. An endpoint with no `Authentication` entry at all grants all four to every caller it serves, for
+the same reason — there is no entry for a grant to be written on.
 
 **`PermissionsFromTokenScopes` turns the list into a ceiling.** On an entry whose sole block is `OAuth`, a token then
 holds the published names its scopes carry *and* the entry lists, so the authorization server decides per subject within
@@ -658,9 +673,10 @@ chosen what it holds:
 ```text
 info: MailFathom.Host.Hosting.Warnings.TransportGrantStartupReport
       The MCP endpoint entry McpEndpoint:Authentication:0 writes down no grant, so every credential it admits holds
-      mailfathom.mail.read, mailfathom.mail.ask — everything this surface publishes. Write a 'Permissions' list on the
-      entry to narrow it, or an empty one to grant nothing. A caller here is served only the tools its grant permits,
-      and a call naming any other is answered as a tool that does not exist.
+      mailfathom.mail.read, mailfathom.mail.ask, mailfathom.mail.contacts.read, mailfathom.mail.contacts.write —
+      everything this surface publishes. Write a 'Permissions' list on the entry to narrow it, or an empty one to grant
+      nothing. A caller here is served only the tools its grant permits, and a call naming any other is answered as a
+      tool that does not exist.
 ```
 
 Every line closes with what a grant on that surface does, so an operator reading back the one entry they edited learns
@@ -695,8 +711,12 @@ credential reaches by omission.
 **The endpoint asks whether this is a caller the deployment serves, and of a token also which person it names.** What an
 admitted caller may then do is the grant its entry carries, and that decides one thing: which of this surface's tools it
 is offered and may call. A credential granted `mailfathom.mail.read` alone is served the four tools that read the local
-copy and is answered about `ask_mail` as though no such tool existed; one granted `mailfathom.mail.ask` alone is served
-that tool and nothing else; one granted neither is served an empty tool list and refused every call it makes.
+copy of the mail; one granted `mailfathom.mail.ask` alone is served that tool; one granted
+`mailfathom.mail.contacts.read` alone is served `list_contacts` and `get_contact`; one granted
+`mailfathom.mail.contacts.write` alone is served `create_contact`, `update_contact`, and `delete_contact`. Each of the
+four is answered about every tool its own name does not cover as though no such tool existed, so an entry narrowed to
+the contact half reaches the contact book and nothing else, and one granted none of the four is served an empty tool
+list and refused every call it makes.
 
 **A refused caller is told nothing.** There is no message naming the permission it lacked, no field on a descriptor
 saying one is required, and no `insufficient_scope` challenge inviting a client to acquire one — even where the grant
@@ -1709,10 +1729,17 @@ findable and never serves it over the protocol.
 
 ## Verifying an enabled endpoint
 
-With the endpoint enabled, the Streamable HTTP transport answers on `/mcp` and advertises four tools, or five. Any MCP
-client that speaks Streamable HTTP can list them; `tools/list` should report `list_accounts`, `list_emails`,
-`get_email_content`, and `search_emails`, each with `readOnlyHint` true, `destructiveHint` false, `idempotentHint` true,
-and `openWorldHint` false.
+With the endpoint enabled, the Streamable HTTP transport answers on `/mcp`. Any MCP
+client that speaks Streamable HTTP can list what it advertises; `tools/list` should report `list_accounts`,
+`list_emails`, `get_email_content`, and `search_emails`, each with `readOnlyHint` true, `destructiveHint` false,
+`idempotentHint` true, and `openWorldHint` false.
+
+The five contact tools are beside them whenever the credential holds the permission each one needs, which an entry that
+writes no `Permissions` list does: `list_contacts` and `get_contact` read like the four above, while `create_contact`,
+`update_contact`, and `delete_contact` report `readOnlyHint` false, and `update_contact` and `delete_contact` report
+`destructiveHint` true.
+A contact tool missing from the listing is the grant rather than a fault — [What a credential may
+do](#what-a-credential-may-do) is what decides it, and the startup line for the entry says what it resolved to.
 
 **Verify with a credential whose entry writes no grant, or read what that entry granted first.** A listing narrows to
 the caller's grant as well as to the deployment, so a credential granted less than the whole surface is served fewer

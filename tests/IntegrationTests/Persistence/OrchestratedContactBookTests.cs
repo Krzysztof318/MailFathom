@@ -237,6 +237,54 @@ public sealed class OrchestratedContactBookTests(MailFathomOrchestrationFixture 
         Assert.Equal(walked.Count, walked.Select(contact => contact.Id).Distinct().Count());
     }
 
+    /// <summary>The search is the one read no index answers, and the only part of the query that reaches two tables at once.</summary>
+    /// <remarks>
+    /// A substitute settles what the comparison form is; what it cannot settle is that the predicate translates into SQL
+    /// at all — it reaches a stored key on the contact and a normalized address on a row joined to it, and a provider
+    /// that could not translate the second half would throw rather than serve fewer people. The names are chosen so the
+    /// matched pair is ordered against the insertion order and against one contact whose name carries the text in a
+    /// different casing from the one the caller wrote.
+    /// </remarks>
+    [Fact]
+    public async Task ReadPageAsync_ASearch_ServesTheContactsWhoseNameOrAddressCarriesTheText()
+    {
+        // Arrange
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var services = await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken);
+
+        await RecordAsync(
+            services,
+            "Zephyr Fairweather",
+            ["zephyr@search.contacts.test"],
+            ContactOrigin.Asserted,
+            cancellationToken);
+
+        await RecordAsync(
+            services,
+            "Ingrid Nordahl",
+            ["fairweather.ingrid@search.contacts.test"],
+            ContactOrigin.Asserted,
+            cancellationToken);
+
+        await RecordAsync(
+            services,
+            "Ingrid Sorensen",
+            ["sorensen@search.contacts.test"],
+            ContactOrigin.Asserted,
+            cancellationToken);
+
+        // Act
+        var matched = await SearchAsync(services, "fairweather", cancellationToken);
+        var matchedNothing = await SearchAsync(services, "nobody-writes-this@search.contacts.test", cancellationToken);
+
+        // Assert
+        Assert.Equal(
+            ["Ingrid Nordahl", "Zephyr Fairweather"],
+            matched.Contacts.Select(contact => contact.DisplayName.Value));
+        Assert.Empty(matchedNothing.Contacts);
+        Assert.Null(matchedNothing.NextCursor);
+    }
+
     /// <summary>An amendment is the whole record: what it stops naming is removed, and the address it releases is free.</summary>
     [Fact]
     public async Task AmendAsync_DroppingAnAddress_RemovesItsRowAndReleasesItToAnotherContact()
@@ -347,7 +395,16 @@ public sealed class OrchestratedContactBookTests(MailFathomOrchestrationFixture 
         int pageSize,
         CancellationToken cancellationToken) => services.InScopeAsync(
             (scope, token) => scope.GetRequiredService<IContactDirectory>().ReadPageAsync(
-                ContactQuery.Create(ContactOrigin.Collected, pageSize, cursor),
+                ContactQuery.Create(ContactOrigin.Collected, search: null, pageSize, cursor),
+                token),
+            cancellationToken);
+
+    private static Task<ContactPage> SearchAsync(
+        OrchestratedMailFathomServices services,
+        string search,
+        CancellationToken cancellationToken) => services.InScopeAsync(
+            (scope, token) => scope.GetRequiredService<IContactDirectory>().ReadPageAsync(
+                ContactQuery.Create(origin: null, ContactSearch.Create(search), pageSize: 20, cursor: null),
                 token),
             cancellationToken);
 

@@ -4,6 +4,7 @@
 
 using System.Collections.Frozen;
 using MailFathom.Domain.Access;
+using MailFathom.Mcp.Tools.Contacts;
 
 namespace MailFathom.Mcp.Tools;
 
@@ -31,6 +32,11 @@ internal static class PublishedTools
             [GetEmailContentTool.ToolName] = GetEmailContentTool.RequiredPermission,
             [SearchEmailsTool.ToolName] = SearchEmailsTool.RequiredPermission,
             [AskMailTool.ToolName] = AskMailTool.RequiredPermission,
+            [ListContactsTool.ToolName] = ListContactsTool.RequiredPermission,
+            [GetContactTool.ToolName] = GetContactTool.RequiredPermission,
+            [CreateContactTool.ToolName] = CreateContactTool.RequiredPermission,
+            [UpdateContactTool.ToolName] = UpdateContactTool.RequiredPermission,
+            [DeleteContactTool.ToolName] = DeleteContactTool.RequiredPermission,
         }.ToFrozenDictionary(StringComparer.Ordinal);
 
     /// <summary>Determines whether a name a caller sent is one of the tools this surface publishes.</summary>

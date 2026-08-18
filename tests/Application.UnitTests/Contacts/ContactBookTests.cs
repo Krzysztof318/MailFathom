@@ -319,7 +319,7 @@ public sealed class ContactBookTests
 
         // Act
         var refusal = await Assert.ThrowsAsync<PrincipalNotAuthorizedException>(() =>
-            book.ReadPageAsync(ContactQuery.Create(origin: null, pageSize: null, cursor: null), TestContext.Current.CancellationToken));
+            book.ReadPageAsync(ContactQuery.Create(origin: null, search: null, pageSize: null, cursor: null), TestContext.Current.CancellationToken));
 
         // Assert
         Assert.Equal(MailFathomPermission.AdminAuditRead, refusal.RequiredPermission);
@@ -359,6 +359,65 @@ public sealed class ContactBookTests
 
         // Assert
         Assert.Equal(MailFathomPermission.AdminErase, refusal.RequiredPermission);
+    }
+
+    /// <summary>The protocol reaches the same writes the operator does, under the name its own surface publishes.</summary>
+    /// <remarks>
+    /// The two halves are disjoint, so a caller admitted by the MCP endpoint can never hold an administrative name
+    /// however broadly its entry is granted. Requiring one would leave these acts reachable from <c>mfctl</c> and dead
+    /// from every contact tool, which is the failure this asserts against.
+    /// </remarks>
+    [Fact]
+    public async Task RecordAsync_ACallerGrantedOnlyTheProtocolWrite_WritesTheContact()
+    {
+        // Arrange
+        var book = BookOver(
+            new InMemoryContactBookStore(),
+            authorization: AccessAuthorizations.ForCallerGranted(MailFathomPermission.MailContactsWrite));
+
+        // Act
+        var result = await book.RecordAsync(
+            NewContactOf("Ada Lovelace", ["ada@example.test"]),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.NotNull(result.Contact);
+    }
+
+    /// <summary>Erasure is the other act both surfaces perform, and the alternative admits it under either name.</summary>
+    [Fact]
+    public async Task EraseAsync_ACallerGrantedOnlyTheProtocolWrite_IsNotRefusedByTheGrant()
+    {
+        // Arrange
+        var book = BookOver(
+            new InMemoryContactBookStore(),
+            authorization: AccessAuthorizations.ForCallerGranted(MailFathomPermission.MailContactsWrite));
+
+        // Act
+        var refusal = await Record.ExceptionAsync(() =>
+            book.EraseAsync(ContactId.Create(Guid.CreateVersion7(Now)), TestContext.Current.CancellationToken));
+
+        // Assert
+        Assert.Null(refusal);
+    }
+
+    /// <summary>Taking a collected record on is the owner's judgement about somebody collection inferred, so the alternative stops short of it.</summary>
+    [Fact]
+    public async Task PromoteAsync_ACallerGrantedOnlyTheProtocolWrite_IsRefusedWithTheTransportAbsent()
+    {
+        // Arrange
+        var book = BookOver(
+            new InMemoryContactBookStore(),
+            authorization: AccessAuthorizations.ForCallerGranted(MailFathomPermission.MailContactsWrite));
+
+        // Act
+        var refusal = await Assert.ThrowsAsync<PrincipalNotAuthorizedException>(() => book.PromoteAsync(
+            ContactId.Create(Guid.CreateVersion7(Now)),
+            ContactOrigin.Asserted,
+            TestContext.Current.CancellationToken));
+
+        // Assert
+        Assert.Equal(MailFathomPermission.AdminOperate, refusal.RequiredPermission);
     }
 
     private static ContactBook BookOver(

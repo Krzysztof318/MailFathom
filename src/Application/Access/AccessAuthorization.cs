@@ -71,6 +71,55 @@ public sealed class AccessAuthorization
         }
     }
 
+    /// <summary>Requires that an admitted caller holding either of two named capabilities is what reached this use case.</summary>
+    /// <param name="first">One capability the operation is published under.</param>
+    /// <param name="second">The other capability the operation is published under.</param>
+    /// <exception cref="ArgumentException">Thrown when either argument names no published capability, which is a defect in the calling use case rather than a refusal.</exception>
+    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the work was reached under no principal, under a principal that is not a caller, or by a caller whose grant omits both capabilities.</exception>
+    /// <remarks>
+    /// <para>
+    /// This is for a use case two surfaces perform, where each publishes the act under a name of its own. The surfaces
+    /// draw from disjoint halves, so a caller admitted by one of them can never hold the other's name however broadly it
+    /// is granted — requiring a single permission there would mean the use case was reachable from one entrypoint and
+    /// dead from the other. Writing the contact book is the case: an operator reaches it under
+    /// <see cref="MailFathomPermission.AdminOperate" /> and an agent under
+    /// <see cref="MailFathomPermission.MailContactsWrite" />, and the act is the same act.
+    /// </para>
+    /// <para>
+    /// It is an alternative rather than a widening, so it is written where the act genuinely belongs to both surfaces and
+    /// nowhere else. An act only one of them performs keeps <see cref="RequirePermission" />, which is why promoting a
+    /// collected contact and exporting one stay named for the administrative surface alone.
+    /// </para>
+    /// <para>
+    /// A refusal names the alternative belonging to the surface the caller's own grant is written on, so an operator
+    /// diagnosing one is told the name they could have granted rather than the one from the half they cannot reach. A
+    /// caller granted nothing at all has no surface to read, and is told <paramref name="first" />.
+    /// </para>
+    /// </remarks>
+    public void RequireAnyPermission(MailFathomPermission first, MailFathomPermission second)
+    {
+        if (!first.IsSpecified || !second.IsSpecified)
+        {
+            throw new ArgumentException(
+                "A use case must require published permissions rather than the unspecified default.",
+                !first.IsSpecified ? nameof(first) : nameof(second));
+        }
+
+        var principal = this.RequirePrincipal();
+
+        if (principal.Kind != AuthorizedPrincipalKind.Caller)
+        {
+            throw PrincipalNotAuthorizedException.WrongPrincipalKind(AuthorizedPrincipalKind.Caller);
+        }
+
+        if (principal.Holds(first) || principal.Holds(second))
+        {
+            return;
+        }
+
+        throw PrincipalNotAuthorizedException.MissingPermission(RefusedAlternative(principal, first, second));
+    }
+
     /// <summary>Answers the same question <see cref="RequirePermission" /> asks, for a boundary that has to decide rather than refuse.</summary>
     /// <param name="permission">The capability being asked about.</param>
     /// <returns><see langword="true" /> when an admitted caller holding that capability is what reached this work.</returns>
@@ -105,6 +154,21 @@ public sealed class AccessAuthorization
     /// only that a signature rather than an unidentified caller is what got here.
     /// </remarks>
     public void RequireSignedCapability() => this.RequireKind(AuthorizedPrincipalKind.SignedCapability);
+
+    /// <summary>Picks which of two alternatives a refusal names: the one on the surface the caller's own grant is written on.</summary>
+    /// <param name="principal">The caller the work was reached under.</param>
+    /// <param name="first">The alternative named when neither matches the caller's surface.</param>
+    /// <param name="second">The other alternative.</param>
+    /// <returns>The permission to report as missing.</returns>
+    private static MailFathomPermission RefusedAlternative(
+        AuthorizedPrincipal principal,
+        MailFathomPermission first,
+        MailFathomPermission second)
+    {
+        var surfaces = principal.Permissions.Select(static permission => permission.Surface).ToHashSet();
+
+        return surfaces.Contains(first.Surface) || !surfaces.Contains(second.Surface) ? first : second;
+    }
 
     private void RequireKind(AuthorizedPrincipalKind admittedKind)
     {

@@ -4,6 +4,7 @@
 
 using MailFathom.Domain.Access;
 using MailFathom.Mcp.Tools;
+using MailFathom.Mcp.Tools.Contacts;
 using MailFathom.Mcp.UnitTests.TestDoubles;
 using MailFathom.TestSupport;
 using Microsoft.Extensions.DependencyInjection;
@@ -53,6 +54,40 @@ public sealed class McpToolSurfaceCompositionTests
         // Assert
         Assert.Contains(AskMailTool.ToolName, listing.Tools.Select(static tool => tool.Name));
         Assert.Contains(SearchEmailsTool.ToolName, listing.Tools.Select(static tool => tool.Name));
+    }
+
+    /// <summary>The two halves of the contact grant are separate permissions, so a reader's grant must reach the readers and stop there.</summary>
+    [Fact]
+    public async Task AddMailFathomServer_ACallerGrantedOnlyTheContactReadingGrant_IsListedTheContactReadersAlone()
+    {
+        // Arrange
+        await using var provider = RegisteredMcpToolSurface.ComposedForCallerGranted(
+            MailFathomPermission.MailContactsRead);
+
+        // Act
+        var listing = await ListedToolsAsync(provider);
+
+        // Assert
+        var listed = listing.Tools.Select(static tool => tool.Name).Order(StringComparer.Ordinal).ToArray();
+
+        Assert.Equal([GetContactTool.ToolName, ListContactsTool.ToolName], listed);
+    }
+
+    /// <summary>Erasing a person is behind the writing grant, so a reader asking for it is answered as it is about any tool it was not offered.</summary>
+    [Fact]
+    public async Task AddMailFathomServer_TheErasingToolCalledWithTheContactReadingGrant_IsAnsweredAsAnUnknownTool()
+    {
+        // Arrange
+        await using var provider = RegisteredMcpToolSurface.ComposedForCallerGranted(
+            MailFathomPermission.MailContactsRead);
+
+        // Act
+        var refusal = await Assert.ThrowsAsync<McpProtocolException>(() =>
+            CalledAsync(provider, DeleteContactTool.ToolName));
+
+        // Assert
+        Assert.Equal($"Unknown tool: '{DeleteContactTool.ToolName}'", refusal.Message);
+        Assert.Equal(McpErrorCode.InvalidParams, refusal.ErrorCode);
     }
 
     [Fact]

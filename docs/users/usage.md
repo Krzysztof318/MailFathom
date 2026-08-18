@@ -2,27 +2,29 @@
 
 <!-- describes: src/Mcp/Tools/** -->
 
-MailFathom publishes five MCP tools, and together they are the whole surface: an agent can see which mailboxes exist,
-list mail, read one message, search, and ask a question — nothing else. This page is the user's view of that surface:
-what each tool answers, what every result carries, what the deliberate limits are, and how to read a failure. The full
-contracts — every argument, every field, every bound — live in [MCP tools](../features/mcp-tools.md) and the feature
-pages it links, and this page does not restate them.
+MailFathom publishes ten MCP tools, and together they are the whole surface: an agent can see which mailboxes exist,
+list mail, read one message, search, ask a question, and keep the deployment's own contact book — nothing else. This
+page is the user's view of that surface: what each tool answers, what every result carries, what the deliberate limits
+are, and how to read a failure. The full contracts — every argument, every field, every bound — live in
+[MCP tools](../features/mcp-tools.md) and the feature pages it links, and this page does not restate them.
 
-Four of the five are always within the deployment's reach. `ask_mail` needs a chat model and an embedding model
-configured and working, so a deployment that has neither does not offer it at all; its absence from a tool listing is
-that deployment saying it cannot answer questions rather than something being broken.
+Four of the five mailbox tools are always within the deployment's reach. `ask_mail` needs a chat model and an embedding
+model configured and working, so a deployment that has neither does not offer it at all; its absence from a tool listing
+is that deployment saying it cannot answer questions rather than something being broken.
 
-Which of them *you* are offered is a second question, and its answer is the grant on the credential you connected with.
-A tool that grant does not permit is absent from the listing, and calling it anyway is answered as though no such tool
-existed — nothing names the permission that was missing, so a shorter tool list than this page describes is a question
-for whoever configured the deployment:
+Which of the ten *you* are offered is a second question, and its answer is the grant on the credential you connected
+with. A tool that grant does not permit is absent from the listing, and calling it anyway is answered as though no such
+tool existed — nothing names the permission that was missing, so a shorter tool list than this page describes is a
+question for whoever configured the deployment:
 [what a credential may do](../operations/mcp-endpoint.md#what-a-credential-may-do). A deployment that wrote no grant,
-which is the default, offers everything it has.
+which is the default, offers everything it has, and the five contact tools are part of that everything.
 
 ## The model behind every call
 
-A tool call reads the **local copy** that synchronization maintains. Nothing in a request reaches a mail server, so a
-call is fast, works while the server is unreachable, and cannot mark anything as read — locally or remotely. The price
+A mailbox tool call reads the **local copy** that synchronization maintains. Nothing in a request reaches a mail server,
+so a call is fast, works while the server is unreachable, and cannot mark anything as read — locally or remotely. That
+holds for the contact tools too, including the three that write: what they change is a table in MailFathom's own
+database, and no mail and no mail server is touched by any of them. The price
 of that model is freshness, which is why every listing and every search carries `folderFreshness`: one entry per
 folder in scope, stating when synchronization last committed progress there, or that it never has. An agent that reads
 mail without reading that field will eventually present an empty folder as an empty mailbox.
@@ -274,6 +276,31 @@ in it that sends, deletes, moves, or marks mail as read, and it reaches no mail 
 [Mail answering](../features/mail-answering.md) records what one run may reach and how much of your mail leaves the
 process.
 
+## The contact tools — a book of people, not addresses
+
+Five tools over MailFathom's own contact book: `list_contacts` pages it by name, `get_contact` resolves one person by
+identifier or by any address they use, and `create_contact`, `update_contact`, and `delete_contact` maintain it. The
+record is a person with the addresses they use rather than an address with a name attached, which is what lets an agent
+answer "who is this from" for somebody who writes from three of them.
+
+`get_contact` by address is the one worth building a habit around: it is an index lookup, it is exact, and at most one
+person in the book can answer it. Searching for an address in `list_contacts` finds the same person more slowly and
+finds others besides.
+
+Three of them change state, so they carry the annotations that make a client pause. `create_contact` is not idempotent —
+the book mints the identity, and calling it twice for one person records them once and then answers
+`addressHeldByAnotherContact`, naming who holds the address. `update_contact` states the **whole** record rather than
+the change: an address the new record does not name is removed, and an omitted note clears the one held, so read the
+contact first and send it back with the change. It is destructive for exactly that reason, and a client that asks
+before calling a destructive tool will ask here. `delete_contact` is destructive and cannot be undone; it erases the
+person and every address recorded with them, and answers with how many went.
+
+Two limits are worth knowing before an agent is pointed at the book. A record this deployment collected from arriving
+mail is not an agent's to amend — that call answers `contactWasCollected`, and taking such a record on is the operator's
+act at `mfctl`. And the book is somebody's list of real people: a name, an address, and above all a note are things
+about a third party rather than facts about your mail, so what an agent writes there is what you asked it to write
+down.
+
 ## Reading a failure
 
 An expected failure comes back as a tool error in one shape — a stable five-digit code and one safe sentence:
@@ -293,7 +320,11 @@ The codes a user meets in practice:
 | `51006` | A content read named the same message twice | Remove the repeat; results are not served twice |
 | `51007` | A content read named both `storedEmailIds` and `threadId`, or neither | Name exactly one of them; which you meant is not something the server guesses |
 | `51008` | A `threadId` is no identifier this system issues — blank, truncated, or invented | Pass the `threadId` a listing, a search, or a read actually returned |
+| `51009` | A contact listing's page size, origin, or search text is not one the book serves | Stay within 1–200 contacts, name `asserted` or `collected`, keep the search to at most 320 characters |
+| `51010` | A contact was named with text that is no identifier and no usable address | Pass a `contactId` a listing or a write returned, or an address on its own — and exactly one of the two |
+| `51011` | A contact record breaks a rule the book holds | The message names the rule: a missing name, no address, a preferred address the record does not name, a value over its limit |
 | `52001` / `52002` | A cursor this system did not issue, or one reused after the filters changed | Restart the walk from the first page |
+| `52003` | A contact listing's cursor is not one this system issued | Restart the walk; changing the search or the origin mid-walk is allowed and is not what caused it |
 | `53001` | The named account is not served here | Call `list_accounts` and use an `accountId` or `displayName` it returns |
 | `53002` | No such email in the local copy | The identifier is stale, or the mail was removed; list again |
 | `53003` | A folder was named by a role no folder in scope carries | Name the folder's alias instead, or ask the operator to map the role on that account |
@@ -306,7 +337,9 @@ The codes a user meets in practice:
 the message they concern, because a content read answers for each message it was given rather than failing whole.
 
 Refusals are deliberately uninformative in one direction: an account that does not exist and an account that is not
-yours are the same answer, so the tool surface cannot be used to discover what a deployment serves.
+yours are the same answer, so the tool surface cannot be used to discover what a deployment serves. A contact tool your
+credential was not granted follows the same rule from the other end — it is missing from the tool listing, and calling
+it anyway is answered as an unknown tool rather than as a permission you lack.
 
 ## What the deployment sees, and what it does not
 

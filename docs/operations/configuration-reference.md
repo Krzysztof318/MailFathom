@@ -1184,6 +1184,8 @@ disjoint halves, and the name says which half it belongs to.
 | --- | --- | --- |
 | `mailfathom.mail.read` | MCP | The tools that read the local mailbox copy: `list_accounts`, `list_emails`, `get_email_content`, `search_emails`. Where semantic retrieval is configured, searching places the caller's own query text with the embedding provider, so this is not an egress-free grant |
 | `mailfathom.mail.ask` | MCP | `ask_mail`, which answers from mail content by sending it to a model provider. It does not imply `mailfathom.mail.read`, and granting it is granting access to mail |
+| `mailfathom.mail.contacts.read` | MCP | `list_contacts` and `get_contact`, which read the deployment's own contact book: names, addresses, and the notes an owner wrote about identified third parties |
+| `mailfathom.mail.contacts.write` | MCP | `create_contact`, `update_contact`, and `delete_contact`, which record, amend, and erase a person in that book. The erasure is here rather than apart, because a grant that cannot edit the book cannot be trusted to take somebody out of it |
 | `mailfathom.admin.read` | administrative | The reads reporting the deployment's own state and no mail: what synchronization is doing, embedding status and the activation preview, the loaded rules, a run's progress, what a rewind would cost, the stopped-job list |
 | `mailfathom.admin.audit.read` | administrative | Everything derived from somebody's mail: the mailbox-mutation audit, the answering audit, the rules history, the spam classifications, and reading the contact book |
 | `mailfathom.admin.operate` | administrative | Asking the deployment to do work it can already do: running rules, classifying an account, retrying or dropping a stopped job, cancelling a reindex, rewinding synchronization, re-deriving stored mail, writing to the contact book |
@@ -1206,12 +1208,16 @@ terminal — [what the endpoint serves](admin-endpoint.md#what-the-endpoint-serv
 published under.
 
 **An absent `Permissions` key and an empty list are opposites.** Writing no key at all leaves the entry holding
-everything its surface publishes, which is what makes a first deployment work before it is governed and what leaves an
-existing deployment unchanged on upgrade. Writing `Permissions: []` grants nothing, which is how a credential is retired
-without deleting its entry: it still authenticates, and on the administrative surface it still reads
-`GET /api/admin/session`, which needs no permission because it reports only what the caller already presented — and
-which is where an operator reads that the credential now holds nothing. Everything else is refused: an emptied grant is
-served an empty tool list on the MCP endpoint and reaches no administrative route at all.
+everything its surface publishes, which is what makes a first deployment work before it is governed. The key's absence
+means *this surface* rather than the names published the day the file was written, so a permission added in a later
+release reaches an unrestricted entry on its own — the contact tools are the worked example, since an entry that wrote
+no key gains `mailfathom.mail.contacts.read` and `mailfathom.mail.contacts.write` on upgrade alone, and with the second
+of those a credential that can record, amend, and irreversibly erase what this deployment holds about identified third
+parties. Writing `Permissions: []` grants nothing, which is how a credential is retired without deleting its entry: it
+still authenticates, and on the administrative surface it still reads `GET /api/admin/session`, which needs no
+permission because it reports only what the caller already presented — and which is where an operator reads that the
+credential now holds nothing. Everything else is refused: an emptied grant is served an empty tool list on the MCP
+endpoint and reaches no administrative route at all.
 
 **A surface with no `Authentication` entry at all grants that surface's whole half**, because there is no entry for a
 grant to be written on. That is the unauthenticated posture the startup warning already reports.
