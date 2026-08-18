@@ -87,21 +87,21 @@ public sealed class StoredMailRederivationHandler : IJobHandler
 
         StoredMailScope scope = new(named.ToAccountId(), named.ToFolderAlias());
 
-        if (await this.runStore.FindAsync(scope, cancellationToken) is not { IsOutstanding: true })
+        if (await this.runStore.FindAsync(scope, cancellationToken) is not { IsOutstanding: true } run)
         {
             return;
         }
 
         using var runScope = this.telemetry.BeginRun(scope.Account, scope.Folder);
 
-        if (await this.WalkAsync(scope, runScope, cancellationToken))
+        if (await this.WalkAsync(run.RunId, scope, runScope, cancellationToken))
         {
             runScope.ReachedEndOfScope();
 
             return;
         }
 
-        await this.HandOnAsync(scope, named, runScope);
+        await this.HandOnAsync(run.RunId, scope, named, runScope);
     }
 
     /// <summary>Runs passes until the scope is exhausted, the run ends beneath this attempt, or the attempt is stopped.</summary>
@@ -113,6 +113,7 @@ public sealed class StoredMailRederivationHandler : IJobHandler
     /// the caller reaches it on this path as well.
     /// </remarks>
     private async Task<bool> WalkAsync(
+        StoredMailRederivationRunId runId,
         StoredMailScope scope,
         IStoredMailRederivationRunScope runScope,
         CancellationToken cancellationToken)
@@ -125,7 +126,7 @@ public sealed class StoredMailRederivationHandler : IJobHandler
 
                 using (var passScope = runScope.BeginPass())
                 {
-                    pass = await this.rederivation.RunAsync(scope, cancellationToken);
+                    pass = await this.rederivation.RunAsync(runId, scope, cancellationToken);
                     passScope.Completed(pass);
                 }
 
@@ -134,9 +135,11 @@ public sealed class StoredMailRederivationHandler : IJobHandler
                     return true;
                 }
 
-                // The run is gone from under this attempt when an overlapping one reached the end of the scope first.
-                // There is nothing left to carry and nothing to hand on, so the attempt ends as the one that finished.
-                if (await this.runStore.FindAsync(scope, cancellationToken) is not { IsOutstanding: true })
+                // The run is gone from under this attempt when an overlapping one reached the end of the scope first,
+                // and replaced when the operator has since asked for another. There is nothing left to carry and
+                // nothing to hand on either way, so the attempt ends as the one that finished.
+                if (await this.runStore.FindAsync(scope, cancellationToken) is not { IsOutstanding: true } current
+                    || current.RunId != runId)
                 {
                     return true;
                 }
@@ -164,6 +167,7 @@ public sealed class StoredMailRederivationHandler : IJobHandler
     /// </para>
     /// </remarks>
     private async Task HandOnAsync(
+        StoredMailRederivationRunId runId,
         StoredMailScope scope,
         StoredMailScopeJobPayload payload,
         IStoredMailRederivationRunScope runScope)
@@ -171,7 +175,8 @@ public sealed class StoredMailRederivationHandler : IJobHandler
         var next = await this.commitPolicy.CommitAsync(
             async (session, attemptCancellationToken) =>
             {
-                if (await this.runStore.FindAsync(scope, attemptCancellationToken) is not { IsOutstanding: true } run)
+                if (await this.runStore.FindAsync(scope, attemptCancellationToken) is not { IsOutstanding: true } run
+                    || run.RunId != runId)
                 {
                     return null;
                 }

@@ -112,7 +112,8 @@ public sealed class StoredMailRederivation
         this.authorization = authorization;
     }
 
-    /// <summary>Runs one bounded pass over the scope's stored mail.</summary>
+    /// <summary>Runs one bounded pass over the scope's stored mail, for the run that asked for it.</summary>
+    /// <param name="runId">The run this pass advances, which every write it makes is conditional on still being the scope's.</param>
     /// <param name="scope">The account, and the one folder of it, whose stored mail is re-read.</param>
     /// <param name="cancellationToken">Cancels the pass between batches and between emails.</param>
     /// <returns>What this pass re-derived, and whether the scope still holds mail a further pass would reach.</returns>
@@ -130,8 +131,15 @@ public sealed class StoredMailRederivation
     /// asked for where the operator is — <see cref="StoredMailRederivationRequests" /> — and requiring the process
     /// identity here is what makes a caller reaching this method from an entrypoint added later a refusal rather than a
     /// mailbox-wide pass under no grant at all.
+    /// <para>
+    /// A pass whose run is over reports nothing remaining and commits nothing further. That is what an attempt whose
+    /// lease was believed lost looks like from here — another attempt reached the end of the scope while this one was
+    /// still reading — and there is nothing left for this pass to do, because the scope belongs to whatever run the
+    /// operator asks for next rather than to this one.
+    /// </para>
     /// </remarks>
     public async Task<StoredMailRederivationPass> RunAsync(
+        StoredMailRederivationRunId runId,
         StoredMailScope scope,
         CancellationToken cancellationToken)
     {
@@ -155,7 +163,7 @@ public sealed class StoredMailRederivation
 
             if (batch.Count == 0)
             {
-                await this.FinishAsync(scope, cancellationToken);
+                await this.FinishAsync(runId, scope, cancellationToken);
 
                 return new StoredMailRederivationPass(
                     rederivedCount,
@@ -166,7 +174,14 @@ public sealed class StoredMailRederivation
 
             var outcome = await this.ReadBatchAsync(batch, readByteCount, cancellationToken);
 
-            await this.CommitBatchAsync(scope, outcome, cancellationToken);
+            if (!await this.CommitBatchAsync(runId, scope, outcome, cancellationToken))
+            {
+                return new StoredMailRederivationPass(
+                    rederivedCount,
+                    unreadableCount,
+                    missingContentCount,
+                    EmailsRemain: false);
+            }
 
             position = outcome.LastProcessedEmailId;
             rederivedCount += outcome.Rederivations.Count;
@@ -180,7 +195,7 @@ public sealed class StoredMailRederivation
             // finished before anything has looked behind it.
             if (batch.Count < BatchSize && outcome.ProcessedEmailCount == batch.Count)
             {
-                await this.FinishAsync(scope, cancellationToken);
+                await this.FinishAsync(runId, scope, cancellationToken);
 
                 return new StoredMailRederivationPass(
                     rederivedCount,
@@ -277,8 +292,9 @@ public sealed class StoredMailRederivation
         (metadata.Text.OriginalText?.Length ?? 0) + (metadata.Text.TrimmedText?.Length ?? 0);
 
     /// <summary>Commits one batch's re-readings, the position they reached, and what the run has now re-read.</summary>
+    /// <returns><see langword="false" /> when the run this pass advances is over, in which case nothing was written.</returns>
     /// <remarks>
-    /// The three are one transaction because the position is what the next attempt resumes past: counts written
+    /// The three writes are one transaction because the position is what the next attempt resumes past: counts written
     /// afterwards would be lost by a process killed in between, and the mail behind them would never be walked again
     /// either, so the figure an operator reads would be permanently short of what was really done. An attempt is
     /// stopped mid-pass as a matter of course rather than exceptionally — the execution timeout is what ends most of
@@ -287,14 +303,28 @@ public sealed class StoredMailRederivation
     /// The run is re-read inside the commit and added to, never written back from a reading taken before the batch,
     /// because two attempts of one run can overlap for as long as it takes a lost lease to be noticed.
     /// </para>
+    /// <para>
+    /// That same overlap is why a run that is no longer the scope's outstanding one abandons the whole batch rather
+    /// than part of it. Writing the position without the counts would report less than was really re-read, and writing
+    /// either against a scope this pass no longer walks is worse than losing the batch: a position left behind for a
+    /// run that has ended is one the next run resumes from, so the mail in front of it would silently never be
+    /// re-read. Nothing is lost by dropping the batch, because re-deriving is a reading of bytes that do not change and
+    /// whoever walks the scope next takes it again.
+    /// </para>
     /// </remarks>
-    private Task CommitBatchAsync(
+    private Task<bool> CommitBatchAsync(
+        StoredMailRederivationRunId runId,
         StoredMailScope scope,
         BatchReadOutcome outcome,
         CancellationToken cancellationToken) =>
         this.concurrencyRetryPolicy.CommitAsync(
             async (persistenceSession, attemptCancellationToken) =>
             {
+                if (await this.FindAdvancingRunAsync(runId, scope, attemptCancellationToken) is not { } run)
+                {
+                    return false;
+                }
+
                 foreach (var rederivation in outcome.Rederivations)
                 {
                     await this.rederivationStore.ApplyRederivedMetadataAsync(
@@ -310,11 +340,6 @@ public sealed class StoredMailRederivation
                     outcome.LastProcessedEmailId,
                     attemptCancellationToken);
 
-                if (await this.runStore.FindAsync(scope, attemptCancellationToken) is not { IsOutstanding: true } run)
-                {
-                    return;
-                }
-
                 await this.runStore.SaveAsync(
                     persistenceSession,
                     run with
@@ -324,6 +349,8 @@ public sealed class StoredMailRederivation
                         MissingContentEmailCount = run.MissingContentEmailCount + outcome.MissingContentEmailCount,
                     },
                     attemptCancellationToken);
+
+                return true;
             },
             cancellationToken);
 
@@ -332,21 +359,25 @@ public sealed class StoredMailRederivation
     /// The cursor is removed and the run is ended in one transaction, for the reason the batch commits its counts with
     /// its position: a walk whose cursor is gone while its run is still outstanding reads as a run nothing is carrying,
     /// and one whose run ended while its cursor stands would have the next request resume behind where this one
-    /// finished.
+    /// finished. A run that is no longer the scope's outstanding one ends nothing and clears nothing, because both
+    /// belong to whichever run the scope has now.
     /// </remarks>
-    private Task FinishAsync(StoredMailScope scope, CancellationToken cancellationToken) =>
+    private Task FinishAsync(
+        StoredMailRederivationRunId runId,
+        StoredMailScope scope,
+        CancellationToken cancellationToken) =>
         this.concurrencyRetryPolicy.CommitAsync(
             async (persistenceSession, attemptCancellationToken) =>
             {
+                if (await this.FindAdvancingRunAsync(runId, scope, attemptCancellationToken) is not { } run)
+                {
+                    return;
+                }
+
                 await this.rederivationStore.ClearResumePositionAsync(
                     persistenceSession,
                     scope,
                     attemptCancellationToken);
-
-                if (await this.runStore.FindAsync(scope, attemptCancellationToken) is not { IsOutstanding: true } run)
-                {
-                    return;
-                }
 
                 await this.runStore.SaveAsync(
                     persistenceSession,
@@ -354,6 +385,23 @@ public sealed class StoredMailRederivation
                     attemptCancellationToken);
             },
             cancellationToken);
+
+    /// <summary>Reads the scope's run back, and answers with it only while it is still the one this pass advances.</summary>
+    /// <returns>The run as it now stands, or <see langword="null" /> when the pass no longer has one to write to.</returns>
+    /// <remarks>
+    /// Two things make the answer null and they are the same thing at different distances: the run ended, or it ended
+    /// and the operator has since asked for another over the same scope. Neither is a failure — both mean the mail this
+    /// pass was reading for is somebody else's to account for now.
+    /// </remarks>
+    private async Task<StoredMailRederivationRun?> FindAdvancingRunAsync(
+        StoredMailRederivationRunId runId,
+        StoredMailScope scope,
+        CancellationToken cancellationToken)
+    {
+        var run = await this.runStore.FindAsync(scope, cancellationToken);
+
+        return run is { IsOutstanding: true } && run.RunId == runId ? run : null;
+    }
 
     /// <summary>Pairs one email with what re-reading its MIME produced.</summary>
     private sealed record CompletedRederivation(StoredEmailId StoredEmailId, ExtractedEmailMetadata Metadata);
