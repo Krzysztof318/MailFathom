@@ -140,8 +140,13 @@ public sealed class TransportSecurityExtensionsTests
         Assert.Null(context.Result);
     }
 
+    /// <summary>
+    /// A surface registers its own schemes and claims nothing about the application. There is one default scheme and
+    /// one authentication middleware running it over every request, so a surface holding it would be authenticating the
+    /// other surface's requests with its own handlers — which is what the composition root's own scheme exists to stop.
+    /// </summary>
     [Fact]
-    public void AddTransportAuthentication_TheSurfacesRoutingScheme_IsTheDefaultAnAnonymousRequestReaches()
+    public void AddTransportAuthentication_ASurface_LeavesTheApplicationDefaultUnclaimed()
     {
         // Arrange
         var services = new ServiceCollection();
@@ -153,7 +158,7 @@ public sealed class TransportSecurityExtensionsTests
         using var composed = services.BuildServiceProvider();
         var authentication = composed.GetRequiredService<IOptions<AuthenticationOptions>>().Value;
 
-        Assert.Equal(TransportSurface.Mcp.RoutingSchemeName, authentication.DefaultScheme);
+        Assert.Null(authentication.DefaultScheme);
     }
 
     /// <summary>
@@ -268,13 +273,13 @@ public sealed class TransportSecurityExtensionsTests
     }
 
     /// <summary>
-    /// Each surface's registration sets the application's one default scheme, so registering two leaves the later one
-    /// holding it. This is the hazard the host pins around: `UseAuthentication` populates `HttpContext.User` with the
-    /// default scheme, and the MCP rate limiter partitions on that user — so a default belonging to the other surface
-    /// would collapse every authenticated MCP client into the shared anonymous bucket without failing anything.
+    /// And registering two surfaces leaves it unclaimed as well, so which surface was composed first decides nothing.
+    /// It used to: the later registration held the default, and with it the scheme the authentication middleware ran to
+    /// populate the principal the MCP rate limiter partitions on — so enabling the administrative endpoint silently
+    /// collapsed every authenticated MCP client into the shared anonymous bucket.
     /// </summary>
     [Fact]
-    public void AddTransportAuthentication_TwoSurfaces_LeavesTheLaterRegistrationHoldingTheApplicationDefault()
+    public void AddTransportAuthentication_TwoSurfaces_LeaveTheApplicationDefaultUnclaimed()
     {
         // Arrange
         var services = new ServiceCollection();
@@ -286,33 +291,7 @@ public sealed class TransportSecurityExtensionsTests
         // Assert
         using var composed = services.BuildServiceProvider();
 
-        Assert.Equal(
-            TransportSurface.Admin.RoutingSchemeName,
-            composed.GetRequiredService<IOptions<AuthenticationOptions>>().Value.DefaultScheme);
-    }
-
-    /// <summary>
-    /// And the correction the host applies: stating the default explicitly wins over whichever registration ran last,
-    /// so enabling the administrative endpoint cannot change which scheme an MCP request is authenticated against.
-    /// </summary>
-    [Fact]
-    public void AddTransportAuthentication_TheDefaultSchemeStatedAfterwards_OverridesTheRegistrationOrder()
-    {
-        // Arrange
-        var services = new ServiceCollection();
-        AddApiKeyAuthentication(services, TransportSurface.Mcp);
-        AddApiKeyAuthentication(services, TransportSurface.Admin);
-
-        // Act: what the composition root does once both endpoints have registered.
-        services.Configure<AuthenticationOptions>(
-            authenticationOptions => authenticationOptions.DefaultScheme = TransportSurface.Mcp.RoutingSchemeName);
-
-        // Assert
-        using var composed = services.BuildServiceProvider();
-
-        Assert.Equal(
-            TransportSurface.Mcp.RoutingSchemeName,
-            composed.GetRequiredService<IOptions<AuthenticationOptions>>().Value.DefaultScheme);
+        Assert.Null(composed.GetRequiredService<IOptions<AuthenticationOptions>>().Value.DefaultScheme);
     }
 
     /// <summary>

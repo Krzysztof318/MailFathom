@@ -3,14 +3,13 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.Diagnostics.CodeAnalysis;
-using System.Xml.Linq;
 using MailFathom.Application.Access;
 using MailFathom.Host.Hosting;
 using MailFathom.Host.Hosting.Startup;
 using MailFathom.Host.Security.Transport;
+using MailFathom.Host.UnitTests.TestDoubles;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.DataProtection.KeyManagement;
-using Microsoft.AspNetCore.DataProtection.Repositories;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
@@ -440,17 +439,4 @@ public sealed class HostCompositionTests
     private static bool IsOwned(Type type) =>
         type.Assembly.GetName().Name?.StartsWith("MailFathom.", StringComparison.Ordinal) is true
         || (type.IsGenericType && type.GetGenericArguments().Any(IsOwned));
-
-    /// <summary>Where the framework's data protection keys go while a composition is being asserted.</summary>
-    /// <remarks>Nothing here protects anything, so the repository is never read from and never written to; it exists so the key manager settles on something that is not a directory in somebody's home.</remarks>
-    private sealed class KeysHeldInMemory : IXmlRepository
-    {
-        private readonly List<XElement> elements = [];
-
-        /// <inheritdoc />
-        public IReadOnlyCollection<XElement> GetAllElements() => this.elements.AsReadOnly();
-
-        /// <inheritdoc />
-        public void StoreElement(XElement element, string friendlyName) => this.elements.Add(element);
-    }
 }

@@ -56,16 +56,11 @@ internal static partial class TransportSecurityExtensions
     /// selected, and what the caller may do afterwards is what that same entry wrote down.
     /// </para>
     /// <para>
-    /// The routing scheme becomes the application's default, so every part of the pipeline that asks for "the" scheme
-    /// reaches the one place that knows how many schemes there are, and nothing downstream names an individual scheme.
-    /// </para>
-    /// <para>
-    /// There is one application-wide default, which is what a second surface has to plan around: calling this twice
-    /// leaves the later registration's routing scheme as the default, and with it the scheme
-    /// <c>UseAuthentication</c> runs to populate <c>HttpContext.User</c>. Authorization is unaffected, because each
-    /// surface's policy names its own routing scheme explicitly rather than relying on the default — but a surface
-    /// registered second must scope its authentication middleware to its own routes rather than adding a second global
-    /// one, or requests to the first surface would be pre-authenticated under the second's schemes.
+    /// Nothing here decides what the application authenticates with by default. There is one such default and one
+    /// authentication middleware running it over every request, so a surface claiming it would be claiming the other
+    /// surface's requests as well, and which surface held it would come down to registration order.
+    /// <see cref="DefaultTransportAuthentication" /> is that decision, taken once by the composition root; what a
+    /// surface registers is the schemes its own routes are judged by and the policy that names them.
     /// </para>
     /// </remarks>
     internal static AuthenticationBuilder AddTransportAuthentication(
@@ -87,7 +82,7 @@ internal static partial class TransportSecurityExtensions
         var publicKeys = TransportAuthenticationConfiguration.PublicKeysIn(methods);
         var oauthMethods = TransportAuthenticationConfiguration.OAuthMethodsIn(methods);
 
-        var authentication = services.AddAuthentication(surface.RoutingSchemeName);
+        var authentication = services.AddAuthentication();
 
         AddRoutingScheme(authentication, surface, apiKeys, publicKeys, oauthMethods, challengeSchemeName);
 

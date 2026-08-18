@@ -72,7 +72,6 @@ using MailFathom.Infrastructure.Resilience;
 using MailFathom.Infrastructure.Rules;
 using MailFathom.Infrastructure.Secrets.Resolution;
 using MailFathom.Mcp;
-using Microsoft.AspNetCore.Authentication;
 using Microsoft.Extensions.Options;
 
 namespace MailFathom.Host;
@@ -1321,16 +1320,16 @@ internal static class HostComposition
                 kestrelOptions.ApplicationServices.GetRequiredService<HealthEndpointCertificate>));
         }
 
-        // Both endpoints call AddAuthentication, and each call sets the application's one default scheme, so the default
-        // is otherwise whichever surface was registered last. It is stated here instead, because the thing that depends
-        // on it is not obvious from either registration: UseAuthentication, which the request pipeline in Program.cs
-        // runs, populates HttpContext.User with the default scheme, and the MCP rate limiter partitions on that user.
-        // Left to ordering, enabling the administrative endpoint would silently collapse every authenticated MCP client
-        // into the shared anonymous bucket — no failure, just a limit that stopped being per-client.
-        if (mcpEndpointSettings is { Enabled: true, RequiresAuthentication: true })
+        // Last, once every surface has registered its own schemes, because what the application authenticates with by
+        // default is a decision about the application: the pipeline runs one authentication middleware over every
+        // request, and no surface's scheme can stand there without offering the other surface's credentials to its
+        // handlers. Registered whenever any surface authenticates, the administrative one alone included — the
+        // middleware is what stops minimal hosting inserting one of its own ahead of forwarded-header processing, and
+        // that insertion follows from the authentication services existing rather than from which surface added them.
+        if (mcpEndpointSettings is { Enabled: true, RequiresAuthentication: true }
+            || adminEndpointSettings is { Enabled: true, RequiresAuthentication: true })
         {
-            builder.Services.Configure<AuthenticationOptions>(
-                authenticationOptions => authenticationOptions.DefaultScheme = TransportSurface.Mcp.RoutingSchemeName);
+            builder.Services.AddDefaultTransportAuthentication();
         }
 
         return new ComposedHostSurfaces(
