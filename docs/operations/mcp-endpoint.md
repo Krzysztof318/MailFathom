@@ -724,8 +724,10 @@ came from a token's scopes and its authorization server could in principle mint 
 caller may do, and a refusal it could tell apart from an unknown tool would say that a capability exists which you chose
 not to offer it. Diagnosing a client that stopped working is therefore done from this deployment's own record rather
 than from what the client received: every refusal is counted by `mailfathom.authorization.refusals` and written as a
-warning naming the credential and the permission it lacked, which
-[telemetry](telemetry.md#what-an-authorization-refusal-records) describes in full.
+warning naming the credential it was refused, and the permission the grant omits wherever the tool the call named
+publishes one — a call naming no tool this surface publishes is refused for no permission and its warning names none,
+which is how a client on a stale or misspelled name reads apart from one asking for what it was never granted.
+[Telemetry](telemetry.md#what-an-authorization-refusal-records) describes both in full.
 
 **Which mailboxes a caller reaches is not something a credential decides.** Every tool call resolves the accounts the
 configured owner controls and refuses anything outside them, whichever credential got the caller in, and no setting
