@@ -43,6 +43,11 @@
     <ProjectReference Include="..\..\src\AppHost\AppHost.csproj" />
     <ProjectReference Include="..\..\src\Infrastructure\Infrastructure.csproj" />
 
+    <!-- The composition root itself, because one test class starts its request pipeline in this process rather than as
+         an orchestrated resource: a middleware order is assembled while a host starts, and a shape that changes which
+         middleware exists cannot be driven through a process the app model configured once. -->
+    <ProjectReference Include="..\..\src\Host\Host.csproj" />
+
     <!-- The local derivations persistence writes but may not reference, which a composition root supplies and which
          this suite therefore has to supply too. -->
     <ProjectReference Include="..\..\src\AI\AI.csproj" />

@@ -851,11 +851,12 @@ is the key table.
 
 Two things differ here, and both follow from where the credential is judged:
 
-- **The burst is the endpoint's, not one caller's.** These routes carry no authentication middleware of their own — the
-  credential is judged by the authorization middleware, which runs *behind* the limiter so that a request about to be
-  refused for a wrong key has still spent capacity. There is therefore no identity to partition on when the limiter
-  counts, and every administrative caller shares one bucket. Size `TokenCapacity` as what the whole endpoint may burst
-  to rather than what one operator may.
+- **The burst is the endpoint's, not one caller's.** These routes are pre-authenticated by nothing — the authentication
+  middleware in front of the pipeline deliberately leaves an administrative request anonymous, and the credential is
+  judged by the authorization middleware, which runs *behind* the limiter so that a request about to be refused for a
+  wrong key has still spent capacity. There is therefore no identity to partition on when the limiter counts, and every
+  administrative caller shares one bucket. Size `TokenCapacity` as what the whole endpoint may burst to rather than what
+  one operator may.
 - **Neither endpoint's traffic reaches the other's limits.** The partitions are keyed per surface, so a key spelled the
   same way under both sections is two independent buckets, and an agent that exhausted the MCP endpoint's capacity has
   taken nothing from the surface you would use to stop it.
