@@ -75,7 +75,7 @@ The `account` fact stays available and is a different tool. The filter decides w
 rule that does run say something about which account it is running for — `account == 'work' ? … : …` inside a condition
 that applies to several.
 
-[Configuration reference](../operations/configuration-reference.md#mailrules) lists every key of the section with its
+[Mail configuration](../operations/configuration-mail.md#mailrules) lists every key of the section with its
 type, default, and constraint.
 
 ## Which triggers run a rule

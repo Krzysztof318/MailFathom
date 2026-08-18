@@ -47,7 +47,7 @@ whenever an interval chosen while there was nothing to embed happens to expire, 
 
 Each entry of `Embeddings:Endpoints` declares a whole geometry — provider, model, model version, dimension, distance
 metric, and how a passage is prepared — beside the endpoint address and the credential. [Configuration
-reference](../operations/configuration-reference.md#embeddings) is the inventory.
+reference](../operations/configuration-ai.md#embeddings) is the inventory.
 
 The geometry is repeated per endpoint rather than stated once for the chain, and that is the point rather than
 duplication to tidy away. It is what makes a disagreement expressible, and therefore refusable.
@@ -79,7 +79,7 @@ name the operator chose, and it is what a log record, a metric tag, a resilience
 
 ### What each setting decides
 
-The [configuration reference](../operations/configuration-reference.md#embeddings) is the inventory — every key, its
+The [AI configuration](../operations/configuration-ai.md#embeddings) is the inventory — every key, its
 type, its default, and its bound. What follows is the part a table cannot carry: which question each value answers.
 
 **Identity and routing are separate settings.** `Provider`, `Model`, and `ModelVersion` name the vendor and the model

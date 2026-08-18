@@ -71,7 +71,7 @@ answer wherever that port is published. Turning `HealthEndpoints:Enabled` off ch
 is served, and turning every surface off is refused, because a process binding no listener at all would fall back to
 Kestrel's own default address.
 
-[Where each surface is served](configuration-reference.md#where-each-surface-is-served) records the whole arrangement.
+[Where each surface is served](configuration-endpoints.md#where-each-surface-is-served) records the whole arrangement.
 
 ## The three probes
 
@@ -154,7 +154,7 @@ limiting. That is the stated posture, not an omission:
   request by the route prefix it arrived under and explicitly applies no limit to one belonging to neither surface.
 
 **One bound does reach this listener**, and it is the exception that proves how the rule above is drawn.
-[`ConnectionLimits`](configuration-reference.md#connectionlimits) is a ceiling on connections rather than on requests,
+[`ConnectionLimits`](configuration-endpoints.md#connectionlimits) is a ceiling on connections rather than on requests,
 and a connection is accepted before routing has decided which listener it was for — so unlike every limit named above,
 it cannot recognize a probe and cannot be made to exempt one. The framework exposes no per-listener form of it.
 

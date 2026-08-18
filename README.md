@@ -184,6 +184,7 @@ in the repository instead. The ones you are most likely to want first:
 | --- | --- |
 | [User guide](https://krzysztof318.github.io/MailFathom/users/README.html) | Install, configure, run, and use MailFathom |
 | [Configuration reference](https://krzysztof318.github.io/MailFathom/operations/configuration-reference.html) | Every user-settable option, its default, and whether changing it needs a restart |
+| [Permissions](https://krzysztof318.github.io/MailFathom/operations/permissions.html) | What a credential may do: the published names, how a grant is written, and what a refusal says |
 | [MCP endpoint](https://krzysztof318.github.io/MailFathom/operations/mcp-endpoint.html) | Authentication, TLS, browser origins, client certificates, rate limits |
 | [MCP tools](https://krzysztof318.github.io/MailFathom/features/mcp-tools.html) | The tool contracts, their arguments and results, and the stable error codes |
 | [IMAP synchronization](https://krzysztof318.github.io/MailFathom/features/imap-synchronization.html) | What a run stores, how it reconciles, and what it never touches |

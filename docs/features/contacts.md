@@ -104,7 +104,7 @@ An account can record the people it corresponds with as its mail is synchronized
 it on, and switched on per account**, because what it produces is derived personal data about people who never dealt
 with MailFathom: an instance nobody asked never accumulates one, and a deployment reading a work mailbox and a personal
 one decides separately for each. [Configuration §
-`MailSynchronization:Accounts[].ContactCollection`](../operations/configuration-reference.md#contact-collection) holds
+`MailSynchronization:Accounts[].ContactCollection`](../operations/configuration-mail.md#contact-collection) holds
 the keys and their bounds.
 
 Collection runs inside the synchronization pass that stored the message, after the transaction that stored it committed.

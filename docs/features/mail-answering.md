@@ -9,7 +9,7 @@ answer carries back.
 The `ask_mail` MCP tool is how a caller reaches it, and [MCP tools § `ask_mail`](mcp-tools.md#ask_mail) documents that
 surface — the arguments, the citations, and when the tool is advertised at all. What one question may spend, and how
 much of a mailbox may leave the process to answer it, is [§ What one question may spend](#what-one-question-may-spend)
-below; [`MailAnswering`](../operations/configuration-reference.md#mailanswering) holds the keys.
+below; [`MailAnswering`](../operations/configuration-ai.md#mailanswering) holds the keys.
 
 ## The model asks for mail; nothing is pushed at it
 
@@ -70,7 +70,7 @@ run concludes that the mailbox does not answer. The extra lookups are ordinary l
 
 It cannot be left to retrieval, because the lexical half of retrieval matches a word against a word. The index is built
 with one PostgreSQL text search configuration for the whole deployment —
-[`Persistence:TextSearchConfiguration`](../operations/configuration-reference.md#persistence-and-the-connection-string),
+[`Persistence:TextSearchConfiguration`](../operations/configuration-runtime.md#persistence-and-the-connection-string),
 `simple` by default, which neither stems a word nor drops a stop word — so it stems for one language at most, and a
 lookup worded in the language of the question reaches mail written in that language and in no other. Whether the vector
 half bridges the gap depends on the declared embedding model, which a deployment chose for other reasons. A run that
@@ -263,7 +263,7 @@ Retrieval decides what is plausible; this decides what is relevant.
 
 **It is off by default, and off is a supported deployment.** With the pass off, retrieval hands over the fused ranking
 exactly as hybrid search produced it — cheaper, faster, fully deterministic — which is what every instance did before
-this existed. [`Chat:RelevanceFilter`](../operations/configuration-reference.md#chat) holds the keys.
+this existed. [`Chat:RelevanceFilter`](../operations/configuration-ai.md#chat) holds the keys.
 
 ### What it costs
 

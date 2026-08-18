@@ -162,7 +162,7 @@ socket a client connects to is the socket Kestrel opened, which is what keeps a 
 certificate — a conversation with the host itself. The probe listener is pinned to loopback deliberately, because the
 probes answer without a credential and nothing on a local network has any business asking them — which is also why it is a socket of
 its own here rather than the MCP endpoint's. A shared socket is one socket, so the probes would answer wherever the MCP
-endpoint does. The integration topology shares one deliberately, and [what that couples](configuration-reference.md#which-settings-a-shared-socket-couples)
+endpoint does. The integration topology shares one deliberately, and [what that couples](configuration-endpoints.md#which-settings-a-shared-socket-couples)
 is the same list a deployment reads.
 
 Both ports are stated by the app model the same way: a TCP endpoint that injects itself into the host's own setting —
@@ -769,7 +769,7 @@ An absent address means the provider library's own default, which is what a firs
 
 The chat adapter's two tests each run **twice**, once over each of the provider's two request APIs, because each is a distinct wire protocol against the same endpoint and a surface nobody called is one whose first failure reaches an operator instead of this suite. Which API a call goes to is therefore not a variable a run sets; the declared model has to serve both, which the first-party and cloud endpoints do for a request carrying no tools, and a contract request carries none. The four chat calls a requested run makes are two answers and two refusals, and a refusal is answered before a model runs, so it costs a round trip and no tokens.
 
-`MAILFATHOM_CHAT_REASONING_EFFORT` is the chat adapter's one optional choice, carrying whatever level the model documents, exactly as [`Chat:ReasoningEffort`](configuration-reference.md#chat) does. Unset by default, which sends what the tests always sent. A value the provider does not recognize fails the run as a refused request rather than passing quietly, which is the point of pointing a run at a reasoning model in the first place.
+`MAILFATHOM_CHAT_REASONING_EFFORT` is the chat adapter's one optional choice, carrying whatever level the model documents, exactly as [`Chat:ReasoningEffort`](configuration-ai.md#chat) does. Unset by default, which sends what the tests always sent. A value the provider does not recognize fails the run as a refused request rather than passing quietly, which is the point of pointing a run at a reasoning model in the first place.
 
 [ADR 0006](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0006-embedding-profile-identity-lifecycle-and-activation-cost.md) holds the reasoning, and `tests/AGENTS.md` states how such a test is written.
 

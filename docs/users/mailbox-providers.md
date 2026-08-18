@@ -78,7 +78,7 @@ the credential block, and, in one case, `TransportSecurity`:
 
 A service that will not accept a password takes an `OAuth` block in place of `Secrets` instead;
 [mailbox OAuth § configuring the account](../operations/mailbox-oauth.md#configuring-the-account) holds that form in
-full, and no section below repeats it. [Configuration reference § `MailSynchronization`](../operations/configuration-reference.md#mailsynchronization)
+full, and no section below repeats it. [Mail configuration § `MailSynchronization`](../operations/configuration-mail.md#mailsynchronization)
 is the inventory of every key named on this page, with its type, default, and constraint.
 
 ## What is the same everywhere
@@ -408,7 +408,7 @@ and no less right.
 - [Getting started](getting-started.md) — the whole path from an installed instance to a first tool call
 - [Mailbox OAuth](../operations/mailbox-oauth.md) — registering an application, obtaining a refresh token, and the
   `OAuth` block every token-bearing account above takes
-- [Configuration reference § `MailSynchronization`](../operations/configuration-reference.md#mailsynchronization) —
+- [Mail configuration § `MailSynchronization`](../operations/configuration-mail.md#mailsynchronization) —
   every key named here, with its constraint and whether changing it needs a restart
 - [IMAP synchronization](../features/imap-synchronization.md) — what a run actually does with a mailbox
 - [Secret provisioning](../operations/secret-provisioning.md) — how a `SecretReference` is backed by material

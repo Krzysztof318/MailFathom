@@ -65,7 +65,7 @@ Four properties hold for every tool and are proven by test rather than asserted 
   default at most 20 000 characters of
   answer citing at most 20 emails, having read at most 20 000 characters of mail to write it, and `list_contacts` pages
   at 200 people. A caller can never raise any of them, and the `ask_mail` set is the operator's to lower or raise in
-  [`MailAnswering`](../operations/configuration-reference.md#mailanswering).
+  [`MailAnswering`](../operations/configuration-ai.md#mailanswering).
 
 One property holds for ten of the eleven and is stated where it stops. `list_accounts`, `list_emails`,
 `get_email_content`, `search_emails`, and the six contact tools are within reach of every deployment, because local
@@ -81,31 +81,14 @@ omits every tool the caller's grant does not permit, and a call naming one of th
 call naming a tool that does not exist: the same JSON-RPC error, the same code, and nothing about the caller, the
 credential, the permission, or what a different caller would have been served.
 
-| Tool | Permission it requires |
-|---|---|
-| `list_accounts` | `mailfathom.mail.read` |
-| `list_emails` | `mailfathom.mail.read` |
-| `get_email_content` | `mailfathom.mail.read` |
-| `search_emails` | `mailfathom.mail.read` |
-| `ask_mail` | `mailfathom.mail.ask` |
-| `list_contacts` | `mailfathom.mail.contacts.read` |
-| `get_contact` | `mailfathom.mail.contacts.read` |
-| `create_contact` | `mailfathom.mail.contacts.write` |
-| `update_contact` | `mailfathom.mail.contacts.write` |
-| `delete_contact` | `mailfathom.mail.contacts.write` |
-| `promote_contact` | `mailfathom.mail.contacts.write` |
-
-No permission implies another. `mailfathom.mail.ask` is not the weaker of the mail pair — a cited answer returns mail
-content — and `mailfathom.mail.read` is not egress-free: where semantic retrieval is configured, `search_emails` places
-the caller's own query text with the embedding provider. What withholding `mailfathom.mail.ask` stops is mail content
-going to a *chat* provider on a caller's behalf. The contact pair splits the same way and along a sharper line: the
-reading half lets an agent resolve who somebody is, and the writing half lets it change the record and erase a person
-irreversibly, so a deployment that wants the first grants only the first. Which grant a credential holds is written on
-the entry that admits it, and [the MCP endpoint](../operations/mcp-endpoint.md#what-a-credential-may-do) is where that
-is configured; a deployment whose entries write no grant serves every permission to every caller, which is what makes
-this invisible until an operator narrows something. An entry that writes no grant but sets `PermissionsFromTokenScopes`
-is the one exception: its whole surface is a ceiling rather than a grant, and each token holds only the permission names
-its own scopes carry — so a token whose client received none is served an empty listing on an entry nobody narrowed.
+[Which tool each name covers](../operations/permissions.md#which-tool-each-name-covers) is the mapping, one row per
+tool, and the page around it is the model those four names belong to: what each one reaches, and why no permission here
+implies another. Which grant a credential holds is written on the entry that admits it, and
+[the MCP endpoint](../operations/mcp-endpoint.md#what-a-credential-may-do) is where that is configured; a deployment
+whose entries write no grant serves every permission to every caller, which is what makes this invisible until an
+operator narrows something. An entry that writes no grant but sets `PermissionsFromTokenScopes` is the one exception:
+its whole surface is a ceiling rather than a grant, and each token holds only the permission names its own scopes carry
+— so a token whose client received none is served an empty listing on an entry nobody narrowed.
 
 The protocol has no field on a tool descriptor for a required permission, and it expressly allows the returned tool set
 to vary by the authorization presented on the request — so the listing is where the decision is stated, and no extension

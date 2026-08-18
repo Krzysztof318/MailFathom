@@ -8,7 +8,7 @@
 > the product's documentation is right.
 
 The personal-data scanner asks its analyzer in every language named once for the whole deployment by
-[`SensitiveContent:PersonalDataAnalyzer:Languages`](configuration-reference.md#sensitivecontent). A mailbox is not
+[`SensitiveContent:PersonalDataAnalyzer:Languages`](configuration-ai.md#sensitivecontent). A mailbox is not
 single-language — a Polish deployment receives English mail and an English one receives Polish mail — so this page
 states what each language buys, what it leaves unreachable, and what it actually takes to add one.
 [The personal-data scanner](../features/sensitive-content-scanning.md#the-personal-data-scanner) records what the
@@ -230,7 +230,7 @@ text. Then move `MappingRevision` in the same file, because a changed mapping is
 **Then pay for the revision.** Moving it changes the detector revision every finding carries, and the derivation stamp
 computed from it, so every message already indexed reads as derived under a different configuration. The startup report
 counts them and
-[`SensitiveContent:RebuildStaleDerivedData`](configuration-reference.md#sensitivecontent) is what re-derives them — one
+[`SensitiveContent:RebuildStaleDerivedData`](configuration-ai.md#sensitivecontent) is what re-derives them — one
 full re-extraction, re-chunking, and re-embedding of the affected messages, billed again on a hosted embedding
 endpoint. That is the honest price of a new recognizer, and it is the reason to add the ones a deployment needs in one
 change rather than one at a time.

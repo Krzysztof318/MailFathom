@@ -243,7 +243,7 @@ What that means in practice:
 
 [ADR 0002](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0002-configuration-reading-mapping-and-reload-boundary.md)
 classifies this group as reloadable for new operations and states the rules a reloadable group follows;
-[configuration reference § `Chat`](../operations/configuration-reference.md#chat) marks each key.
+[AI configuration § `Chat`](../operations/configuration-ai.md#chat) marks each key.
 
 ## Bounds every call carries
 

@@ -10,7 +10,8 @@ PostgreSQL and applies the schema on its own.
 
 The examples write configuration as JSON. Every setting can arrive as an environment variable instead — `:` becomes
 `__`, so `MailSynchronization:Enabled` is `MailSynchronization__Enabled` — and the
-[configuration reference](../operations/configuration-reference.md) lists every key used below.
+[configuration reference](../operations/configuration-reference.md) maps every key used below to the page that
+states it.
 
 ## 1. Provision the secrets
 

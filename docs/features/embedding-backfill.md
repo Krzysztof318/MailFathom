@@ -121,7 +121,7 @@ every passage the instance holds.
 
 `EmbeddingBackfill:Enabled` stops the spending within one interval and loses nothing. What has been embedded stays
 embedded, and what has not is found again by the same question whenever it is turned back on.
-[Configuration reference](../operations/configuration-reference.md#embeddingbackfill) holds the defaults and the ranges.
+[AI configuration](../operations/configuration-ai.md#embeddingbackfill) holds the defaults and the ranges.
 
 An instance that has activated no profile reaches no mail: there is no vector space for a passage to be missing from,
 so the pass ends before it reads a message. An instance whose configured model is not the one the generation records

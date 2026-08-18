@@ -281,7 +281,7 @@ while no token has been stored, and stops being read once one has.
 
 The stored token is held in the database, sealed under the deployment's data-encryption key — see
 [secret provisioning](secret-provisioning.md) for the key and
-[the configuration reference](configuration-reference.md#dataencryption) for its section. An account whose deployment
+[`DataEncryption`](configuration-runtime.md#dataencryption) for its section. An account whose deployment
 configures no key ring can still authenticate from its configured reference; it is the moment a rotation arrives that
 needs the key, and without one the rotation is logged as an error and the account keeps running on the token it
 already had.
@@ -338,6 +338,6 @@ the account eventually answers `invalid_grant`, and the repair is to authorize t
 
 - [Configuring a mailbox at your provider](../users/mailbox-providers.md) — the address, the port, and the credential
   kind each popular mail service publishes
-- [Configuration reference](configuration-reference.md) — every key in the `OAuth` block
+- [Mail configuration](configuration-mail.md#oauth--oauth) — every key in the `OAuth` block
 - [Secret provisioning](secret-provisioning.md) — how a reference is backed by material
 - [IMAP synchronization](../features/imap-synchronization.md) — the transport security policy the token path does not relax

@@ -249,7 +249,7 @@ that provider, and declaring one at all is their decision rather than yours.
 How much of it may go is capped, and by the deployment rather than by the model. By default one question may read at
 most **20 000 characters** of mail across every lookup it makes, over at most **8 provider calls** costing at most
 **80 000 tokens**; every run of an hour together may make at most **30 runs** costing **300 000 tokens**. An operator
-lowers or raises those in [`MailAnswering`](../operations/configuration-reference.md#mailanswering) — you cannot, and
+lowers or raises those in [`MailAnswering`](../operations/configuration-ai.md#mailanswering) — you cannot, and
 neither can the model.
 
 Five parts of the result are worth reading before an agent presents it:
