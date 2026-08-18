@@ -205,19 +205,16 @@ name is put into its ASCII A-labels wherever it comes from, so an entry written 
 that carried `xn--bcher-kva.example`. A name no encoder accepts is refused rather than compared as it arrived, because
 a value nothing else can produce would match nothing and look like an author who is simply not on a list.
 
-**The list has two halves and one matcher reads both.** Configuration holds what an operator declared when they set the
-deployment up; a store holds what somebody added while it was running, because the useful act when a reader meets a
-warning on mail from a correspondent they trust is to trust them, and editing a file and restarting is not that act. An
-entry in either half recognizes, and neither can undo the other — configuration is not editable at runtime and the
-store is not editable by a configuration reload. Where both name one author the configured half is reported, so a
-deployment's declared trust is never described as something added later. The stored half and the surfaces that edit it
-are [issue #760](https://github.com/Krzysztof318/MailFathom/issues/760); until it exists the effective list is the
-configured one.
+**The list is what configuration declares, and nothing else adds to it.** An operator writes it when they set the
+deployment up, and no surface edits it while the deployment runs — not `mfctl`, not a tool on the MCP surface, and
+nothing a model can reach. So recognizing a new correspondent is a configuration change like any other: it is picked up
+by a reload, and the next extraction judges against it — mail already stored keeps the verdict the list it was judged
+under produced, which is what the revision below is for.
 
 An entry that names neither a domain nor an address, names both, writes one nothing can compare, or asks for subdomains
 on an address **fails startup**, naming the account and the entry's position and never the value it holds. The
 alternative is indistinguishable afterwards: a list nobody wrote and a list whose entries match nothing both leave
-every author unknown, and an operator would meet the difference as mail that never stops carrying a warning.
+every author unknown, and an operator would meet the difference as mail whose authors never stop reading as unknown.
 
 ### The verdict outlives the list
 
@@ -225,7 +222,7 @@ The answer is stored on the message rather than decided when the message is read
 ask whether an author is trusted without re-evaluating a policy that may since have changed. What makes that legible is
 the **policy revision** recorded beside it: a digest of the effective list, so two verdicts carrying different revisions
 were reached under different lists, and one carrying none was never put to a policy at all. Reordering a list is not a
-change to it and produces the same revision; adding to either half produces a different one.
+change to it and produces the same revision; adding an entry to it produces a different one.
 
 Adding a domain therefore does not silently rewrite what a reader was already shown. What re-judges mail already stored
 is [`mfctl mailbox rederive`](imap-synchronization.md#bringing-stored-mail-up-to-a-later-release), the same deliberate
