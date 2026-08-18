@@ -337,8 +337,8 @@ is described.
 **The listing carries the verdict and the single-email read carries the evidence.** A listing exists to let a reader
 recognize a message and already narrows `Cc` and `Reply-To` away, and the two outcomes are what a caller branches on;
 the domains, the method, the DMARC result, and who reached the verdict are how a reader judges it rather than acts on
-it, so they sit with the rest of the headers, on the read of a message somebody has already found. Both domains are published in the
-comparison form the columns hold — upper-cased, and an internationalized name in its ASCII form. A `null` domain is an
+it, so they sit with the rest of the headers, on the read of a message somebody has already found. Both domains are
+published in the comparison form the columns hold — upper-cased, and an internationalized name in its ASCII form. A `null` domain is an
 ordinary outcome rather than missing data: nothing authenticated, or the message wrote no usable `From` mailbox.
 
 **The two domains differing is not by itself a spoofed author.** The authenticated one is whichever identity
